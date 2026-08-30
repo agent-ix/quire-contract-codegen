@@ -42,14 +42,16 @@ Retained evidence: `evidence/foundation-3536b8bc82a3-20260830T224639Z/sha256sums
 | interface-001 | provisional input, operation, output, diagnostic, and evidence contract specified | compatibility tests pending | reconcile with accepted IR and runtime interfaces |
 | TestMatrix | 29 acceptance criteria mapped to seven planned semantic cases; placeholder tests explicitly unbound | all semantic cases pending | authoritative IR corpus and runtime release unavailable |
 | AP/AD/CAC/MP/AA-001 | intended use, architecture, contract, measurements, and open claim specified | independent and human review pending | governance, dependency, CI, and release evidence open |
+| PLAN-001 | typed foundation, dependency, semantic, parity, and human-release tasks with explicit statuses | Task-001/002 done; Task-003 in progress; Task-004 through Task-007 not started | IR candidate, reviews, implementation, and human authority remain open |
 
 ## Foundation evidence result
 
 The retained bundle records a clean source revision and successful specification validation,
-formatting, Clippy, unit/integration tests, license policy, unsafe-code audit, metadata capture, and
-warning-denied documentation generation. Its checksum manifest verifies all 36 captured files; the
-local input and manifest schemas, the exact PGM-01 candidate schema, and its custom validator all
-accept their respective records with zero errors.
+formatting, Clippy, unit/integration tests, explicit Rust 1.75 compatibility, license policy,
+unsafe-code audit, metadata capture, and warning-denied documentation generation. The local input
+schema now rejects unknown tool and dependency fields and requires exact PGM/runtime identities.
+The checksum manifest, local schemas, exact PGM-01 candidate schema, and custom validator all accept
+their respective records with zero errors.
 
 The current placeholder crate tests establish only scaffold health. They do not satisfy any semantic
 test case or close the assurance claim.
@@ -72,6 +74,6 @@ test case or close the assurance claim.
 
 ## Conclusion
 
-The foundation specification and local evidence procedure are ready for draft review. Semantic
-implementation and release claims are not ready. Rebase and dependency reconciliation are required
-before any semantic child leaves draft.
+The 39-document foundation specification, typed plan bundle, and local evidence procedure are ready
+for draft review. Semantic implementation and release claims are not ready. Rebase and dependency
+reconciliation are required before any semantic child leaves draft.

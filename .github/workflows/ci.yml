@@ -15,6 +15,9 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Install MSRV
+        uses: dtolnay/rust-toolchain@1.75.0
+
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
@@ -27,11 +30,14 @@ jobs:
       - name: Test
         run: cargo test
 
+      - name: Rust 1.75 compatibility
+        run: cargo +1.75.0 check --lib
+
       - name: Validate specification and planning
         run: |
           npm install --global @agent-ix/quire-cli@0.31.0 @agent-ix/quoin@0.22.5
           quoin module ensure-defaults
-          quire validate --scope . 'spec/**/*.md' 'planning/**/*.md'
+          quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'
 
       - name: Unsafe audit
         run: bash scripts/check_unsafe_comments.sh

@@ -20,9 +20,9 @@ accepted upstream revisions.
 make ci
 ```
 
-This runs formatting, specification validation, Clippy, tests, license checks, and the unsafe-code
-audit. CI workflows are manual-only; remote runs must be deliberately dispatched and retained when
-they are used as evidence.
+This runs formatting, specification/plan validation, Clippy, tests, an explicit Rust 1.75
+compatibility check, license checks, and the unsafe-code audit. CI workflows are manual-only; remote
+runs must be deliberately dispatched and retained when they are used as evidence.
 
 To collect a checksummed local foundation evidence bundle from a clean commit:
 

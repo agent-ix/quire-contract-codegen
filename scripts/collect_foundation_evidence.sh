@@ -32,14 +32,17 @@ run_and_retain() {
 git rev-parse HEAD >"$evidence_dir/source-revision.txt"
 echo "$source_state" >"$evidence_dir/source-state.txt"
 rustc --version --verbose >"$evidence_dir/rustc-version.txt"
+rustc +1.75.0 --version --verbose >"$evidence_dir/msrv-rustc-version.txt"
 cargo --version --verbose >"$evidence_dir/cargo-version.txt"
 python3 --version >"$evidence_dir/python-version.txt"
 python3 -c 'import jsonschema; print(jsonschema.__version__)' >"$evidence_dir/jsonschema-version.txt"
 quire provenance --pretty >"$evidence_dir/quire-provenance.json"
-run_and_retain quire-validate quire validate --scope . 'spec/**/*.md' 'planning/**/*.md'
+run_and_retain quire-validate \
+  quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'
 run_and_retain fmt cargo fmt --all -- --check
 run_and_retain clippy cargo clippy --all-targets -- -D warnings
 run_and_retain test cargo test
+run_and_retain msrv cargo +1.75.0 check --lib
 run_and_retain deny cargo deny check licenses
 run_and_retain unsafe-audit bash scripts/check_unsafe_comments.sh
 run_and_retain metadata cargo metadata --format-version 1

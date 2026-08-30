@@ -1,11 +1,14 @@
 ---
-id: Plan-001
-title: "Contract codegen v0.1 implementation plan"
-type: Plan
-status: active
+id: REV-005
+title: "Contract codegen v0.1 plan-bundle migration"
+type: Review
 ---
 
-# Contract codegen v0.1 implementation plan
+# Contract codegen v0.1 plan-bundle migration
+
+The mechanically checkable plan is retained at `plan/PLAN-001-codegen-v01/plan.md`. Its task files
+separate completed foundation work, dependency reconciliation in progress, semantic work that must
+not start without the IR candidate, and the human-owned release decision.
 
 ## Dependency DAG
 
@@ -18,7 +21,7 @@ runtime helpers (#3 / PR #5) -------+-> oracles/manifests (#4)
                                          +--> vacuity/coverage (#5) ----+
 ```
 
-## Foundation plan bundle
+## Historical step mapping
 
 1. Validate the requirements, interface, test matrix, and five assurance artifacts with pinned Quire
    and engineering-assurance modules.

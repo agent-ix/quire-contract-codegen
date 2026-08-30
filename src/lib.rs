@@ -1,5 +1,8 @@
 //! Deterministic Rust, property-test, proof, and evidence generation from Quire contracts.
 
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+
 /// Placeholder entry point.
 pub fn hello() -> &'static str {
     "hello from quire_contract_codegen"

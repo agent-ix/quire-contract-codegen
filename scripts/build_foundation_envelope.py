@@ -88,13 +88,14 @@ def build(evidence_dir: Path) -> None:
         "sourceState": source_state,
         "phase": "foundation",
         "commands": [
-            "quire validate --scope . 'spec/**/*.md' 'planning/**/*.md'",
+            "quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'",
             "python3 scripts/validate_json_schema.py schemas/foundation-evidence-input-v1.schema.json collection-input.json",
             "python3 scripts/validate_json_schema.py schemas/foundation-evidence-manifest-v1.schema.json evidence-manifest.json",
             "python3 scripts/validate_json_schema.py $PGM01_SCHEMA evidence-envelope.json (when available)",
             "cargo fmt --all -- --check",
             "cargo clippy --all-targets -- -D warnings",
             "cargo test",
+            "cargo +1.75.0 check --lib",
             "cargo deny check licenses",
             "bash scripts/check_unsafe_comments.sh",
             "cargo metadata --format-version 1",
@@ -114,6 +115,9 @@ def build(evidence_dir: Path) -> None:
                 (evidence_dir / "quire-provenance.json").read_text(encoding="utf-8")
             )["cli"]["version"],
             "rustc": (evidence_dir / "rustc-version.txt")
+            .read_text(encoding="utf-8")
+            .splitlines()[0],
+            "rust-msrv": (evidence_dir / "msrv-rustc-version.txt")
             .read_text(encoding="utf-8")
             .splitlines()[0],
         },
@@ -162,6 +166,7 @@ def build(evidence_dir: Path) -> None:
                 "fmt",
                 "clippy",
                 "test",
+                "msrv",
                 "deny",
                 "unsafe-audit",
                 "metadata",

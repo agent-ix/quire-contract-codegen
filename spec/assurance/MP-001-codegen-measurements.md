@@ -34,10 +34,12 @@ states, and injected publication failure points.
 
 ## Collection Procedure
 
-Foundation runs use `scripts/collect_foundation_evidence.sh`. Implementation plans will extend this
-with a stable candidate runner that records source and dependency revisions, tool/backend versions,
-configuration, corpus/input digests, repeated bundle digests, compile/proptest/Kani/coverage results,
-fault-injection outcomes, differential dispositions, and output digests beneath `evidence/`.
+Foundation runs use `scripts/collect_foundation_evidence.sh`. They record the current toolchain and
+the explicit Rust 1.75 compatibility lane, validate requirements plus the typed plan bundle, and
+retain exact provisional dependency identities. Implementation plans will extend this with a stable
+candidate runner that records source and dependency revisions, tool/backend versions, configuration,
+corpus/input digests, repeated bundle digests, compile/proptest/Kani/coverage results, fault-injection
+outcomes, differential dispositions, and output digests beneath `evidence/`.
 
 ## Interpretation
 

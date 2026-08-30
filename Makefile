@@ -3,6 +3,7 @@
 # =============================================================================
 
 CARGO ?= cargo
+MSRV ?= 1.75.0
 
 .PHONY: help
 help:
@@ -12,6 +13,7 @@ help:
 	@echo "  make lint             - Clippy with -D warnings"
 	@echo "  make test             - cargo test"
 	@echo "  make build            - Release build"
+	@echo "  make msrv             - Check the crate with Rust $(MSRV)"
 	@echo "  make spec             - Quire-validate the specification"
 	@echo "  make clean            - cargo clean"
 	@echo "  make deny             - cargo deny check licenses"
@@ -43,9 +45,13 @@ test:
 build:
 	$(CARGO) build --release
 
+.PHONY: msrv
+msrv:
+	$(CARGO) +$(MSRV) check --lib
+
 .PHONY: spec
 spec:
-	quire validate --scope . 'spec/**/*.md' 'planning/**/*.md'
+	quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'
 
 .PHONY: clean
 clean:
@@ -76,4 +82,4 @@ evidence-tool:
 # =============================================================================
 
 .PHONY: ci
-ci: fmt-check spec lint test deny audit-unsafe evidence-tool
+ci: fmt-check spec lint test msrv deny audit-unsafe evidence-tool
