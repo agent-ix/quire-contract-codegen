@@ -23,9 +23,9 @@ remote checks, and human decisions.
 | FND-002 | high | PGM-01 review findings and accepted governance identity remain open. | PGM-01, REV-003 |
 | FND-003 | medium | Runtime review, deliberate remote CI, CODEOWNER approval, and human release remain pending. | runtime PR #5, AA-001, REV-004 |
 
-Reviewed source revision: `a88d192ab03aadc8d2d5c55dd04119c882f99ed7`
+Reviewed source revision: `87c655011643d737d20ea09abc00b66f2ec0679e`
 
-Retained evidence: `evidence/foundation-a88d192ab03a-20260830T213405Z/sha256sums.txt`
+Retained evidence: `evidence/foundation-87c655011643-20260830T213741Z/sha256sums.txt`
 
 ## Requirement and evidence matrix
 
