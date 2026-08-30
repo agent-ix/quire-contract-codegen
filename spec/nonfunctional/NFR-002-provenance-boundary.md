@@ -28,9 +28,18 @@ would exceed the tool's authority and hide consuming-project responsibilities.
 
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
-| Missing mandatory identity fields | 0 | 0 | schema validation over every emitted artifact |
-| Generated files missing dual-license SPDX header | 0 | 0 | golden corpus inspection |
-| Silent unsupported/inconclusive states | 0 | 0 | negative and differential corpus tests |
+| Missing mandatory identity fields | 0 | 0 | contract-testing |
+| Generated files missing dual-license SPDX header | 0 | 0 | inspection |
+| Silent unsupported/inconclusive states | 0 | 0 | negative-abuse-testing |
+
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+|----|----------|--------------|
+| NFR-002-AC-1 | Every emitted artifact records the required tool, input, schema, backend, configuration, output, and digest identity. | Test (TC-001) |
+| NFR-002-AC-2 | Every generated Rust file carries the `MIT OR Apache-2.0` SPDX identity. | Test (TC-001) |
+| NFR-002-AC-3 | Unsupported and inconclusive states remain explicit rather than silently succeeding. | Test (TC-003) |
+| NFR-002-AC-4 | Generated output makes no project-specific validation, accreditation, certification, or release-approval claim. | Inspection |
 
 ## Verification
 

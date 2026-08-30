@@ -29,9 +29,17 @@ artifacts from being mistaken for a complete verification bundle.
 
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
-| Repeated bundle digest differences | 0 | 0 | repeated golden generation |
-| Partial published bundles after injected failure | 0 | 0 | fault-injection integration test |
-| Developer-owned files modified | 0 | 0 | before/after tree digest |
+| Repeated bundle digest differences | 0 | 0 | golden-approval-testing |
+| Partial published bundles after injected failure | 0 | 0 | fault-injection |
+| Developer-owned files modified | 0 | 0 | inspection |
+
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+|----|----------|--------------|
+| NFR-001-AC-1 | Identical pinned inputs and configuration produce byte-identical bundles. | Test (TC-001) |
+| NFR-001-AC-2 | An injected generation failure leaves no partially published bundle. | Test (TC-002) |
+| NFR-001-AC-3 | Generation does not modify developer-owned regions or files. | Test (TC-002) |
 
 ## Verification
 
