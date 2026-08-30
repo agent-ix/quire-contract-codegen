@@ -171,7 +171,7 @@ def build(evidence_dir: Path) -> None:
 
     envelope = {
         "schemaVersion": "quire.derivation-evidence/v1",
-        "recordId": f"codegen-foundation-{revision[:12]}",
+        "recordId": evidence_dir.name,
         "recordedAt": recorded_at,
         "producer": {
             "name": "quire-contract-codegen-foundation-collector",
