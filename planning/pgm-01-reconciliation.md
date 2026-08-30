@@ -1,3 +1,9 @@
+---
+id: REV-003
+title: "Codegen PGM-01 candidate reconciliation"
+type: Review
+---
+
 # PGM-01 candidate reconciliation
 
 PGM-01 candidate: `agent-ix/quire-contract-ir#12` at

@@ -1,4 +1,27 @@
+---
+id: SR-001
+title: "Codegen foundation gap analysis"
+type: SpecReview
+analysis: gap-analysis
+scope: "codegen requirements, assurance, dependency pins, foundation evidence, and release gates"
+review_set: subset
+---
+
 # Foundation gap analysis
+
+## Summary
+
+The specification and assurance foundation is internally consistent and locally validated. Semantic
+work remains blocked by the unavailable authoritative IR corpus and by provisional upstream review,
+remote checks, and human decisions.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-001 | high | The authoritative IR schema and conformance corpus have no candidate revision. | IR #10, FR-001 |
+| FND-002 | high | PGM-01 review findings and accepted governance identity remain open. | PGM-01, REV-003 |
+| FND-003 | medium | Runtime review, deliberate remote CI, CODEOWNER approval, and human release remain pending. | runtime PR #5, AA-001, REV-004 |
 
 Reviewed source revision: `a88d192ab03aadc8d2d5c55dd04119c882f99ed7`
 

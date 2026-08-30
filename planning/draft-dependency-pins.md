@@ -1,3 +1,9 @@
+---
+id: REV-001
+title: "Codegen draft dependency pins"
+type: Review
+---
+
 # Draft dependency pins
 
 Status: provisional; mandatory reconciliation before semantic implementation leaves draft.

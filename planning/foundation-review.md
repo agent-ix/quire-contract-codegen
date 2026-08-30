@@ -1,3 +1,9 @@
+---
+id: REV-002
+title: "Codegen foundation composite review"
+type: Review
+---
+
 # Foundation composite review
 
 Date: 2026-08-30

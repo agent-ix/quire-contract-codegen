@@ -1,3 +1,10 @@
+---
+id: Plan-001
+title: "Contract codegen v0.1 implementation plan"
+type: Plan
+status: active
+---
+
 # Contract codegen v0.1 implementation plan
 
 ## Dependency DAG

@@ -30,7 +30,7 @@ echo "$source_state" >"$evidence_dir/source-state.txt"
 rustc --version --verbose >"$evidence_dir/rustc-version.txt"
 cargo --version --verbose >"$evidence_dir/cargo-version.txt"
 quire provenance --pretty >"$evidence_dir/quire-provenance.json"
-run_and_retain quire-validate quire validate --scope . 'spec/**/*.md'
+run_and_retain quire-validate quire validate --scope . 'spec/**/*.md' 'planning/**/*.md'
 run_and_retain fmt cargo fmt --all -- --check
 run_and_retain clippy cargo clippy --all-targets -- -D warnings
 run_and_retain test cargo test

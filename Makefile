@@ -45,7 +45,7 @@ build:
 
 .PHONY: spec
 spec:
-	quire validate --scope . 'spec/**/*.md'
+	quire validate --scope . 'spec/**/*.md' 'planning/**/*.md'
 
 .PHONY: clean
 clean:
