@@ -104,6 +104,12 @@ def build(evidence_dir: Path) -> None:
             "cargo": (evidence_dir / "cargo-version.txt")
             .read_text(encoding="utf-8")
             .splitlines()[0],
+            "jsonschema": (evidence_dir / "jsonschema-version.txt")
+            .read_text(encoding="utf-8")
+            .strip(),
+            "python": (evidence_dir / "python-version.txt")
+            .read_text(encoding="utf-8")
+            .strip(),
             "quire": json.loads(
                 (evidence_dir / "quire-provenance.json").read_text(encoding="utf-8")
             )["cli"]["version"],
