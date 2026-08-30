@@ -17,7 +17,7 @@ PGM01_CANDIDATE_REVISION = "7f8130d3fdb160a98a7a7f445cc1eb7419a3c179"
 PGM01_ENVELOPE_SCHEMA_DIGEST = (
     "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
 )
-RUNTIME_CANDIDATE_REVISION = "87f75757e9b6687cf0502c0c55969a13ec10f924"
+RUNTIME_CANDIDATE_REVISION = "534691f5c8f21fd2457118a83add96cc2e265b49"
 INPUT_SCHEMA = ROOT / "schemas" / "foundation-evidence-input-v1.schema.json"
 MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.json"
 COLLECTOR = ROOT / "scripts" / "collect_foundation_evidence.sh"

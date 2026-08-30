@@ -60,7 +60,7 @@ test case or close the assurance claim.
   reconciled; review, merge, and final identity reconciliation remain open.
 - The authoritative IR schema/corpus (`agent-ix/quire-contract-ir#10`) has no candidate revision.
 - Runtime PR #5 is provisionally pinned at
-  `87f75757e9b6687cf0502c0c55969a13ec10f924`; current remote checks, review, final
+  `534691f5c8f21fd2457118a83add96cc2e265b49`; current remote checks, review, final
   reconciliation, and release remain open.
 - The manual-only CI workflow change is provided by codegen PR #8. This branch is stacked on that
   exact commit and must be rebased onto `main` after PR #8 merges.
