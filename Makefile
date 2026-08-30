@@ -12,6 +12,7 @@ help:
 	@echo "  make lint             - Clippy with -D warnings"
 	@echo "  make test             - cargo test"
 	@echo "  make build            - Release build"
+	@echo "  make spec             - Quire-validate the specification"
 	@echo "  make clean            - cargo clean"
 	@echo "  make deny             - cargo deny check licenses"
 	@echo "  make audit-unsafe     - Enforce // SAFETY: comments on unsafe blocks"
@@ -41,6 +42,10 @@ test:
 build:
 	$(CARGO) build --release
 
+.PHONY: spec
+spec:
+	quire validate --scope . 'spec/**/*.md'
+
 .PHONY: clean
 clean:
 	$(CARGO) clean
@@ -66,4 +71,4 @@ audit-unsafe:
 # =============================================================================
 
 .PHONY: ci
-ci: fmt-check lint test deny audit-unsafe
+ci: fmt-check spec lint test deny audit-unsafe
