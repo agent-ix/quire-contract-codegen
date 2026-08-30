@@ -13,11 +13,11 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PGM01_CANDIDATE_REVISION = "7f8130d3fdb160a98a7a7f445cc1eb7419a3c179"
+PGM01_CANDIDATE_REVISION = "e928ce3703d238856544c65bc4aa7c30ea16dac1"
 PGM01_ENVELOPE_SCHEMA_DIGEST = (
     "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
 )
-RUNTIME_CANDIDATE_REVISION = "00486e4645d6c19f3e82a9dbf5422863b4e6bdc4"
+RUNTIME_CANDIDATE_REVISION = "5bdb26feb0b310405bf7ac7f94bf128869386898"
 INPUT_SCHEMA = ROOT / "schemas" / "foundation-evidence-input-v1.schema.json"
 MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.json"
 COLLECTOR = ROOT / "scripts" / "collect_foundation_evidence.sh"
