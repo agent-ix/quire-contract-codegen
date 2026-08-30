@@ -23,9 +23,9 @@ remote checks, and human decisions.
 | FND-002 | high | PGM-01 review findings and accepted governance identity remain open. | PGM-01, REV-003 |
 | FND-003 | medium | Runtime review, deliberate remote CI, CODEOWNER approval, and human release remain pending. | runtime PR #5, AA-001, REV-004 |
 
-Reviewed source revision: `87c655011643d737d20ea09abc00b66f2ec0679e`
+Reviewed source revision: `5ca054beccdc8a9d449e9e8104824026d3365575`
 
-Retained evidence: `evidence/foundation-87c655011643-20260830T213741Z/sha256sums.txt`
+Retained evidence: `evidence/foundation-5ca054beccdc-20260830T214724Z/sha256sums.txt`
 
 ## Requirement and evidence matrix
 
@@ -40,6 +40,7 @@ Retained evidence: `evidence/foundation-87c655011643-20260830T213741Z/sha256sums
 | NFR-001 | zero-difference and zero-partial-publication thresholds specified | repeated golden and fault-injection runs pending | implementation unavailable |
 | NFR-002 | identity, license, qualification, and explicit-state boundaries specified | schema and corpus inspection pending | released dependency identities unavailable |
 | interface-001 | provisional input, operation, output, diagnostic, and evidence contract specified | compatibility tests pending | reconcile with accepted IR and runtime interfaces |
+| TestMatrix | 29 acceptance criteria mapped to seven planned semantic cases; placeholder tests explicitly unbound | all semantic cases pending | authoritative IR corpus and runtime release unavailable |
 | AP/AD/CAC/MP/AA-001 | intended use, architecture, contract, measurements, and open claim specified | independent and human review pending | governance, dependency, CI, and release evidence open |
 
 ## Foundation evidence result
