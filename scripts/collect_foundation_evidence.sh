@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-evidence_dir="${1:-evidence/foundation-candidate}"
+if [[ $# -gt 0 ]]; then
+  evidence_dir="$1"
+else
+  evidence_revision="$(git rev-parse --short=12 HEAD)"
+  evidence_timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  evidence_dir="evidence/foundation-${evidence_revision}-${evidence_timestamp}"
+fi
+if [[ -e "$evidence_dir" ]]; then
+  echo "refusing to overwrite retained evidence: $evidence_dir" >&2
+  exit 2
+fi
 if git diff --quiet && git diff --cached --quiet; then
   source_state=clean
 else

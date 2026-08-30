@@ -17,7 +17,7 @@ PGM01_CANDIDATE_REVISION = "0b8669b80f98b6c11954f922b32d9edae8a11983"
 PGM01_ENVELOPE_SCHEMA_DIGEST = (
     "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
 )
-RUNTIME_CANDIDATE_REVISION = "7f72129eb700eb5e26822e384521f7f85239fa5a"
+RUNTIME_CANDIDATE_REVISION = "87f75757e9b6687cf0502c0c55969a13ec10f924"
 INPUT_SCHEMA = ROOT / "schemas" / "foundation-evidence-input-v1.schema.json"
 MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.json"
 COLLECTOR = ROOT / "scripts" / "collect_foundation_evidence.sh"
@@ -255,11 +255,10 @@ def build(evidence_dir: Path) -> None:
 
 
 def main() -> int:
-    evidence_dir = (
-        Path(sys.argv[1])
-        if len(sys.argv) > 1
-        else ROOT / "evidence" / "foundation-candidate"
-    )
+    if len(sys.argv) != 2:
+        print("usage: build_foundation_envelope.py EVIDENCE_DIR", file=sys.stderr)
+        return 2
+    evidence_dir = Path(sys.argv[1])
     build(evidence_dir)
     return 0
 

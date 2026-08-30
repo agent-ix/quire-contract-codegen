@@ -1,8 +1,9 @@
 # Retained evidence
 
-Foundation evidence is produced by `scripts/collect_foundation_evidence.sh`. It identifies the exact
-source state and every provisional upstream dependency. It proves only specification/baseline gates;
-it cannot support semantic generation, parity, or release claims.
+Foundation evidence is produced by `scripts/collect_foundation_evidence.sh`. By default it creates a
+new revision-and-UTC-timestamp-scoped directory and refuses to overwrite an existing record. It
+identifies the exact source state and every provisional upstream dependency. It proves only
+specification/baseline gates; it cannot support semantic generation, parity, or release claims.
 
 The collector emits canonical `quire.derivation-evidence/v1` JSON plus separately versioned
 foundation-input and manifest schemas. Set `PGM01_VALIDATOR` to the reviewed IR repository's
