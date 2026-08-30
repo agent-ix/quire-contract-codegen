@@ -42,7 +42,10 @@ diagnostics:
   terminal_states: [generated, unsupported, invalid-input, backend-unavailable, io-failed, inconclusive]
   rule: no non-generated state may be converted into a complete artifact claim
 identity_envelope:
-  required: [requirement, revision, input digest, schema, tool, backend, configuration, output digest]
+  schema: quire.derivation-evidence/v1
+  required: [producer, inputs, backend, outputs, parameters digest, environment, provenance, result]
+  terminal_states: [conclusive, inconclusive, unsupported, rejected, timed-out, pending, error]
+  rule: omitted backend identity is invalid; in-process lowering uses kind none with a reason
 compatibility:
   draft_pins: must be reconciled before leaving draft
   generated_runtime_dependency: quire-contract-runtime plus declared customer types only

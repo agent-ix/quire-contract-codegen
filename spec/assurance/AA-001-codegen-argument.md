@@ -32,7 +32,7 @@ participants:
 challenges:
   - id: challenge-draft-dependencies
     target: claim-codegen-v01
-    statement: PGM-01 IR corpus and runtime dependencies are not yet released or reconciled
+    statement: PGM-01 and runtime are only provisionally reconciled and the IR corpus is unavailable
     status: open
     owner: human-release-owner
 relationships:
@@ -60,5 +60,6 @@ dependencies, protected CI, retained measurements, gap analysis, open assumption
 
 ## Challenges
 
-PGM-01, the IR corpus, and runtime helpers remain draft. Their eventual identities and contracts must
-be reconciled before semantic implementation leaves draft or this claim can be considered.
+PGM-01 and runtime helpers are pinned and provisionally reconciled, while the IR corpus remains
+unavailable. Their accepted identities and contracts must be reconciled before semantic
+implementation leaves draft or this claim can be considered.

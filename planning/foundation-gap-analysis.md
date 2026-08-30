@@ -30,10 +30,12 @@ test case or close the assurance claim.
 
 ## Open dependencies and remote evidence
 
-- PGM-01 (`agent-ix/quire-contract-ir#3`) remains open.
+- PGM-01 PR #12 is pinned at `0b8669b80f98b6c11954f922b32d9edae8a11983` and provisionally
+  reconciled; review, merge, and final identity reconciliation remain open.
 - The authoritative IR schema/corpus (`agent-ix/quire-contract-ir#10`) has no candidate revision.
 - Runtime PR #5 is provisionally pinned at
-  `4392a2385f95defdeef2ee883fcc8024cab1d168`; review and release remain open.
+  `7f72129eb700eb5e26822e384521f7f85239fa5a`; current remote checks, review, final
+  reconciliation, and release remain open.
 - The manual-only CI workflow change is provided by codegen PR #8. This branch is stacked on that
   exact commit and must be rebased onto `main` after PR #8 merges.
 - Default-branch protection was observed and retained in

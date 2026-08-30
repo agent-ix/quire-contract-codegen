@@ -16,7 +16,8 @@ help:
 	@echo "  make clean            - cargo clean"
 	@echo "  make deny             - cargo deny check licenses"
 	@echo "  make audit-unsafe     - Enforce // SAFETY: comments on unsafe blocks"
-	@echo "  make ci               - All CI gates locally (fmt-check + lint + test + deny + audit-unsafe)"
+	@echo "  make evidence-tool    - Syntax-check the PGM-01 evidence builder"
+	@echo "  make ci               - All local CI gates"
 
 # =============================================================================
 # Format / Lint / Test
@@ -66,9 +67,13 @@ cargo-audit:
 audit-unsafe:
 	bash scripts/check_unsafe_comments.sh
 
+.PHONY: evidence-tool
+evidence-tool:
+	python3 -m py_compile scripts/build_foundation_envelope.py
+
 # =============================================================================
 # Composite
 # =============================================================================
 
 .PHONY: ci
-ci: fmt-check spec lint test deny audit-unsafe
+ci: fmt-check spec lint test deny audit-unsafe evidence-tool

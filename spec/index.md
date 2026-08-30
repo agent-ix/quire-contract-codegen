@@ -6,12 +6,12 @@ component_type: rust-library
 implementation_language: rust
 tags: [contract-codegen, rust, proptest, kani, assurance]
 depends_on:
-  - ix://agent-ix/quire-contract-ir/issues/3
+  - ix://agent-ix/quire-contract-ir/PGM-01
   - ix://agent-ix/quire-contract-ir/issues/10
   - ix://agent-ix/quire-contract-runtime/issues/3
 standards_alignment: [iso-iec-ieee-29148]
 relationships:
-  - target: ix://agent-ix/quire-contract-ir/issues/3
+  - target: ix://agent-ix/quire-contract-ir/PGM-01
     type: depends_on
     cardinality: "1:1"
   - target: ix://agent-ix/quire-contract-ir/issues/10
@@ -70,8 +70,8 @@ bind the intended use, trusted boundary, risks, measurement policy, and open hum
 ## References
 
 - [Program umbrella](https://github.com/agent-ix/quire-contract-ir/issues/1).
-- [PGM-01 governance gate](https://github.com/agent-ix/quire-contract-ir/issues/3), referenced rather
-  than redefined here.
+- [PGM-01 governance gate](https://github.com/agent-ix/quire-contract-ir/issues/3), identified as
+  `ix://agent-ix/quire-contract-ir/PGM-01`; this specification does not redefine it.
 - [IR schema and corpus gate](https://github.com/agent-ix/quire-contract-ir/issues/10).
 - [Runtime helper gate](https://github.com/agent-ix/quire-contract-runtime/issues/3).
 - [Codegen epic](https://github.com/agent-ix/quire-contract-codegen/issues/7).

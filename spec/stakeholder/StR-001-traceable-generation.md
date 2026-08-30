@@ -30,4 +30,4 @@ inconclusive or unsupported state visible to human decision makers.
 ## Dependencies
 
 The governing compatibility, provenance, evidence, and qualification policy is PGM-01 at
-`ix://agent-ix/quire-contract-ir/issues/3`.
+`ix://agent-ix/quire-contract-ir/PGM-01`.

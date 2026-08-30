@@ -1,0 +1,17 @@
+# PGM-01 candidate reconciliation
+
+PGM-01 candidate: `agent-ix/quire-contract-ir#12` at
+`0b8669b80f98b6c11954f922b32d9edae8a11983`.
+
+Envelope schema: `quire.derivation-evidence/v1`, SHA-256
+`0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256`.
+
+The foundation adopts the canonical policy URI, direct-development-tool classification, required
+producer/input/backend/output/environment/provenance/result identities, typed non-success states,
+dual-license boundary, exact development pins, and open human authority. Generated Rust is separately
+classified as linked runtime and remains subject to consuming-project verification.
+
+The foundation evidence envelope validates against the exact PGM-01 candidate. This is provisional:
+PGM-01 review and merge, the authoritative IR schema/corpus, runtime review, deliberate remote CI,
+CODEOWNER approval, and the human source-release decision remain open. Final dependency identities
+must be reconciled before semantic implementation leaves draft.

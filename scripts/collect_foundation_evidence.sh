@@ -20,18 +20,6 @@ echo "$source_state" >"$evidence_dir/source-state.txt"
 rustc --version --verbose >"$evidence_dir/rustc-version.txt"
 cargo --version --verbose >"$evidence_dir/cargo-version.txt"
 quire provenance --pretty >"$evidence_dir/quire-provenance.json"
-{
-  echo "schema=contract-evidence-envelope-v1"
-  echo "phase=foundation"
-  echo "tool=quire-contract-codegen/scripts/collect_foundation_evidence.sh"
-  echo "input.source_revision=$(git rev-parse HEAD)"
-  echo "input.source_state=$source_state"
-  echo "input.governance=agent-ix/quire-contract-ir#3-open"
-  echo "input.ir_corpus=agent-ix/quire-contract-ir#10-open-no-candidate"
-  echo "input.runtime=agent-ix/quire-contract-runtime#5-head-4392a2385f95defdeef2ee883fcc8024cab1d168"
-  echo "output.identity=sha256sums.txt"
-} >"$evidence_dir/evidence-envelope.txt"
-
 run_and_retain quire-validate quire validate --scope . 'spec/**/*.md'
 run_and_retain fmt cargo fmt --all -- --check
 run_and_retain clippy cargo clippy --all-targets -- -D warnings
@@ -40,6 +28,16 @@ run_and_retain deny cargo deny check licenses
 run_and_retain unsafe-audit bash scripts/check_unsafe_comments.sh
 run_and_retain metadata cargo metadata --format-version 1
 run_and_retain rustdoc env RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps
+
+python3 scripts/build_foundation_envelope.py "$evidence_dir"
+
+if [[ -n "${PGM01_VALIDATOR:-}" ]]; then
+  run_and_retain pgm01-envelope \
+    python3 "$PGM01_VALIDATOR" --fixture "$evidence_dir/evidence-envelope.json"
+  echo passed >"$evidence_dir/pgm01-envelope-status.txt"
+else
+  echo skipped-unavailable >"$evidence_dir/pgm01-envelope-status.txt"
+fi
 
 (
   cd "$evidence_dir"

@@ -1,9 +1,0 @@
-schema=contract-evidence-envelope-v1
-phase=foundation
-tool=quire-contract-codegen/scripts/collect_foundation_evidence.sh
-input.source_revision=c1b8990a159732619ba6533deed583dfd27cd86a
-input.source_state=clean
-input.governance=agent-ix/quire-contract-ir#3-open
-input.ir_corpus=agent-ix/quire-contract-ir#10-open-no-candidate
-input.runtime=agent-ix/quire-contract-runtime#5-head-4392a2385f95defdeef2ee883fcc8024cab1d168
-output.identity=sha256sums.txt

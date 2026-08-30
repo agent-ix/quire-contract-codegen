@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/agent-ix/quire-contract-codegen/schemas/foundation-evidence-input-v1.schema.json",
+  "title": "Codegen foundation evidence input v1",
+  "description": "SPDX-License-Identifier: MIT OR Apache-2.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sourceRevision", "sourceState", "phase", "commands", "tools", "dependencies"],
+  "properties": {
+    "schemaVersion": {"const": "quire.codegen-foundation-evidence-input/v1"},
+    "sourceRevision": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "sourceState": {"enum": ["clean", "modified"]},
+    "phase": {"const": "foundation"},
+    "commands": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "tools": {"type": "object", "minProperties": 1},
+    "dependencies": {"type": "object", "minProperties": 1}
+  }
+}
