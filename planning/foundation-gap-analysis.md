@@ -23,9 +23,9 @@ remote checks, and human decisions.
 | FND-002 | high | PGM-01 review findings and accepted governance identity remain open. | PGM-01, REV-003 |
 | FND-003 | medium | Runtime review, deliberate remote CI, CODEOWNER approval, and human release remain pending. | runtime PR #5, AA-001, REV-004 |
 
-Reviewed source revision: `3536b8bc82a3e12c4df3824c44616677b90db874`
+Reviewed source revision: `8a4537d32002e1f2e984508ec8d89b300215855d`
 
-Retained evidence: `evidence/foundation-3536b8bc82a3-20260830T224639Z/sha256sums.txt`
+Retained evidence: `evidence/foundation-8a4537d32002-20260830T225332Z/sha256sums.txt`
 
 ## Requirement and evidence matrix
 
@@ -50,8 +50,8 @@ The retained bundle records a clean source revision and successful specification
 formatting, Clippy, unit/integration tests, explicit Rust 1.75 compatibility, license policy,
 unsafe-code audit, metadata capture, and warning-denied documentation generation. The local input
 schema now rejects unknown tool and dependency fields and requires exact PGM/runtime identities.
-The checksum manifest, local schemas, exact PGM-01 candidate schema, and custom validator all accept
-their respective records with zero errors.
+All 39 checksum entries verify; the local schemas, exact PGM-01 candidate schema, and custom
+validator all accept their respective records with zero errors.
 
 The current placeholder crate tests establish only scaffold health. They do not satisfy any semantic
 test case or close the assurance claim.
