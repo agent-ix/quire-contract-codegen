@@ -23,9 +23,9 @@ remote checks, and human decisions.
 | FND-002 | high | PGM-01 review findings and accepted governance identity remain open. | PGM-01, REV-003 |
 | FND-003 | medium | Runtime review, deliberate remote CI, CODEOWNER approval, and human release remain pending. | runtime PR #5, AA-001, REV-004 |
 
-Reviewed source revision: `fcdcc0c1593b8194ec01cbda2a8562ed121d943d`
+Reviewed source revision: `86eed791a2d49698148b95be3ee67faed2c49444`
 
-Retained evidence: `evidence/foundation-fcdcc0c1593b-20260830T220427Z/sha256sums.txt`
+Retained evidence: `evidence/foundation-86eed791a2d4-20260830T220953Z/sha256sums.txt`
 
 ## Requirement and evidence matrix
 
@@ -47,7 +47,7 @@ Retained evidence: `evidence/foundation-fcdcc0c1593b-20260830T220427Z/sha256sums
 
 The retained bundle records a clean source revision and successful specification validation,
 formatting, Clippy, unit/integration tests, license policy, unsafe-code audit, metadata capture, and
-warning-denied documentation generation. Its checksum manifest verifies all 35 captured files; the
+warning-denied documentation generation. Its checksum manifest verifies all 36 captured files; the
 local input and manifest schemas, the exact PGM-01 candidate schema, and its custom validator all
 accept their respective records with zero errors.
 
