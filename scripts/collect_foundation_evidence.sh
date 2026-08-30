@@ -17,6 +17,10 @@ if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
   exit 2
 fi
 source_state=clean
+if ! python3 -c 'import jsonschema' >/dev/null 2>&1; then
+  echo "jsonschema is required for evidence collection" >&2
+  exit 2
+fi
 mkdir -p "$evidence_dir"
 
 run_and_retain() {
@@ -29,6 +33,7 @@ git rev-parse HEAD >"$evidence_dir/source-revision.txt"
 echo "$source_state" >"$evidence_dir/source-state.txt"
 rustc --version --verbose >"$evidence_dir/rustc-version.txt"
 cargo --version --verbose >"$evidence_dir/cargo-version.txt"
+python3 -c 'import jsonschema; print(jsonschema.__version__)' >"$evidence_dir/jsonschema-version.txt"
 quire provenance --pretty >"$evidence_dir/quire-provenance.json"
 run_and_retain quire-validate quire validate --scope . 'spec/**/*.md' 'planning/**/*.md'
 run_and_retain fmt cargo fmt --all -- --check
@@ -40,6 +45,21 @@ run_and_retain metadata cargo metadata --format-version 1
 run_and_retain rustdoc env RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps
 
 python3 scripts/build_foundation_envelope.py "$evidence_dir"
+run_and_retain input-schema \
+  python3 scripts/validate_json_schema.py \
+  schemas/foundation-evidence-input-v1.schema.json "$evidence_dir/collection-input.json"
+run_and_retain manifest-schema \
+  python3 scripts/validate_json_schema.py \
+  schemas/foundation-evidence-manifest-v1.schema.json "$evidence_dir/evidence-manifest.json"
+
+if [[ -n "${PGM01_SCHEMA:-}" ]]; then
+  run_and_retain pgm01-schema \
+    python3 scripts/validate_json_schema.py \
+    "$PGM01_SCHEMA" "$evidence_dir/evidence-envelope.json"
+  echo passed >"$evidence_dir/pgm01-schema-status.txt"
+else
+  echo skipped-unavailable >"$evidence_dir/pgm01-schema-status.txt"
+fi
 
 if [[ -n "${PGM01_VALIDATOR:-}" ]]; then
   run_and_retain pgm01-envelope \

@@ -69,7 +69,7 @@ audit-unsafe:
 
 .PHONY: evidence-tool
 evidence-tool:
-	python3 -m py_compile scripts/build_foundation_envelope.py
+	python3 -m py_compile scripts/build_foundation_envelope.py scripts/validate_json_schema.py
 
 # =============================================================================
 # Composite
