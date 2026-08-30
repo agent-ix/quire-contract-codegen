@@ -86,7 +86,7 @@ def build(evidence_dir: Path) -> None:
         "sourceState": source_state,
         "phase": "foundation",
         "commands": [
-            "quire validate --scope . spec/**/*.md",
+            "quire validate --scope . 'spec/**/*.md' 'planning/**/*.md'",
             "cargo fmt --all -- --check",
             "cargo clippy --all-targets -- -D warnings",
             "cargo test",
