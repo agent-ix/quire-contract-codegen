@@ -12,11 +12,11 @@ if [[ -e "$evidence_dir" ]]; then
   echo "refusing to overwrite retained evidence: $evidence_dir" >&2
   exit 2
 fi
-if git diff --quiet && git diff --cached --quiet; then
-  source_state=clean
-else
-  source_state=modified
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  echo "refusing to collect evidence from a modified or untracked source tree" >&2
+  exit 2
 fi
+source_state=clean
 mkdir -p "$evidence_dir"
 
 run_and_retain() {
