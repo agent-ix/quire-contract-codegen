@@ -1,6 +1,6 @@
 # Foundation gap analysis
 
-Reviewed source revision: `c1b8990a159732619ba6533deed583dfd27cd86a`
+Reviewed source revision: `8db0acefa23d57741ad632cb8377183e832d8c4b`
 
 Retained evidence: `evidence/foundation-candidate/sha256sums.txt`
 
@@ -23,7 +23,8 @@ Retained evidence: `evidence/foundation-candidate/sha256sums.txt`
 
 The retained bundle records a clean source revision and successful specification validation,
 formatting, Clippy, unit/integration tests, license policy, unsafe-code audit, metadata capture, and
-warning-denied documentation generation. Its checksum manifest verifies all 22 captured files.
+warning-denied documentation generation. Its checksum manifest verifies all 27 captured files, and
+the exact PGM-01 candidate validator accepts the canonical envelope with zero errors.
 
 The current placeholder crate tests establish only scaffold health. They do not satisfy any semantic
 test case or close the assurance claim.
