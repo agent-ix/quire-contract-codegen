@@ -36,8 +36,11 @@ test case or close the assurance claim.
   `4392a2385f95defdeef2ee883fcc8024cab1d168`; review and release remain open.
 - The manual-only CI workflow change is provided by codegen PR #8. This branch is stacked on that
   exact commit and must be rebased onto `main` after PR #8 merges.
-- A deliberately dispatched remote CI run, branch-protection record, independent review, and human
-  source-release decision remain pending.
+- Default-branch protection was observed and retained in
+  `evidence/foundation-remote/branch-protection.md`: strict `Rust Checks` and `License Check`, one
+  CODEOWNER approval, administrator enforcement, conversation resolution, and no force push or
+  deletion. A deliberately dispatched remote CI run, approval, and human source-release decision
+  remain pending.
 
 ## Conclusion
 
