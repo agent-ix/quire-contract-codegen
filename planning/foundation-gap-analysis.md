@@ -23,9 +23,9 @@ remote checks, and human decisions.
 | FND-002 | high | PGM-01 review findings and accepted governance identity remain open. | PGM-01, REV-003 |
 | FND-003 | medium | Runtime review, deliberate remote CI, CODEOWNER approval, and human release remain pending. | runtime PR #5, AA-001, REV-004 |
 
-Reviewed source revision: `b90d6d5946e5720bac32ed1b3c903cf727f57cae`
+Reviewed source revision: `fcdcc0c1593b8194ec01cbda2a8562ed121d943d`
 
-Retained evidence: `evidence/foundation-b90d6d5946e5-20260830T220017Z/sha256sums.txt`
+Retained evidence: `evidence/foundation-fcdcc0c1593b-20260830T220427Z/sha256sums.txt`
 
 ## Requirement and evidence matrix
 
@@ -47,8 +47,9 @@ Retained evidence: `evidence/foundation-b90d6d5946e5-20260830T220017Z/sha256sums
 
 The retained bundle records a clean source revision and successful specification validation,
 formatting, Clippy, unit/integration tests, license policy, unsafe-code audit, metadata capture, and
-warning-denied documentation generation. Its checksum manifest verifies all 27 captured files, and
-the exact PGM-01 candidate validator accepts the canonical envelope with zero errors.
+warning-denied documentation generation. Its checksum manifest verifies all 35 captured files; the
+local input and manifest schemas, the exact PGM-01 candidate schema, and its custom validator all
+accept their respective records with zero errors.
 
 The current placeholder crate tests establish only scaffold health. They do not satisfy any semantic
 test case or close the assurance claim.
