@@ -1,8 +1,8 @@
 # Foundation gap analysis
 
-Reviewed source revision: `8db0acefa23d57741ad632cb8377183e832d8c4b`
+Reviewed source revision: `a88d192ab03aadc8d2d5c55dd04119c882f99ed7`
 
-Retained evidence: `evidence/foundation-8db0acefa23d-20260830T212921Z/sha256sums.txt`
+Retained evidence: `evidence/foundation-a88d192ab03a-20260830T213405Z/sha256sums.txt`
 
 ## Requirement and evidence matrix
 
