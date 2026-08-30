@@ -56,7 +56,7 @@ test case or close the assurance claim.
 
 ## Open dependencies and remote evidence
 
-- PGM-01 PR #12 is pinned at `0b8669b80f98b6c11954f922b32d9edae8a11983` and provisionally
+- PGM-01 PR #12 is pinned at `7f8130d3fdb160a98a7a7f445cc1eb7419a3c179` and provisionally
   reconciled; review, merge, and final identity reconciliation remain open.
 - The authoritative IR schema/corpus (`agent-ix/quire-contract-ir#10`) has no candidate revision.
 - Runtime PR #5 is provisionally pinned at
