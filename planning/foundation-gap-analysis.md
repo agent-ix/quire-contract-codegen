@@ -63,6 +63,10 @@ zero because these tests make no code-generation claim.
 The current placeholder crate tests establish only scaffold health. They do not satisfy any semantic
 test case or close the assurance claim.
 
+The historical record `evidence/historical/foundation-a7790d225746-20260831T154248Z` is deliberately
+quarantined: its PGM-01 custom-validator lane failed closed because the invoking Python environment
+lacked the pinned RFC 3339 validator. It is retained as failure evidence and is not a candidate pass.
+
 ## Open dependencies and remote evidence
 
 - PGM-01 PR #12 is merged at `7dac9d8c19952412b56a0347387666e2ca81e01d`. Its tree is
