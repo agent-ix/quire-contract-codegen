@@ -12,15 +12,14 @@ review_set: subset
 ## Summary
 
 The specification and assurance foundation is internally consistent and locally validated. Semantic
-work remains blocked by the unavailable authoritative IR corpus and by provisional upstream review,
-remote checks, and human decisions.
+work remains blocked by the unavailable authoritative IR corpus and by runtime review, remote checks,
+and human decisions.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 |---|---|---|---|
 | FND-001 | high | The authoritative IR schema and conformance corpus have no candidate revision. | IR #10, FR-001 |
-| FND-002 | high | PGM-01 review findings and accepted governance identity remain open. | PGM-01, REV-003 |
 | FND-003 | medium | Runtime review, deliberate remote CI, CODEOWNER approval, and human release remain pending. | runtime PR #5, AA-001, REV-004 |
 
 Reviewed source revision: `3b3820cf5b6ab4591409dac4f22512437e165613`
@@ -50,7 +49,7 @@ The retained bundle records a clean source revision and successful specification
 formatting, Clippy, unit/integration tests, explicit Rust 1.75 compatibility, license policy,
 unsafe-code audit, metadata capture, and warning-denied documentation generation. The local input
 schema now rejects unknown tool and dependency fields and requires exact PGM/runtime identities.
-All 39 checksum entries verify; the local schemas, exact PGM-01 candidate schema, and custom
+All 39 checksum entries verify; the local schemas, exact merged PGM-01 schema, and custom
 validator all accept their respective records with zero errors.
 
 The foundation evidence toolchain is owned by MP-001 and tested independently of the semantic
@@ -64,11 +63,12 @@ test case or close the assurance claim.
 
 ## Open dependencies and remote evidence
 
-- PGM-01 PR #12 is pinned at `d8d376d887c40255e87ef9656bc0faf79216b321` and provisionally
-  reconciled; review, merge, and final identity reconciliation remain open.
+- PGM-01 PR #12 is merged at `7dac9d8c19952412b56a0347387666e2ca81e01d`. Its tree is
+  byte-identical to reviewed head `d8d376d887c40255e87ef9656bc0faf79216b321`; the complete merged-main
+  release check passes, and the exact merged identity and schema digest are reconciled locally.
 - The authoritative IR schema/corpus (`agent-ix/quire-contract-ir#10`) has no candidate revision.
 - Runtime PR #5 is provisionally pinned at
-  `177b5e7cec3e884a0a6bccaab74cb04bc9cf3895`; current remote checks, review, final
+  `978e9b5fc8d88cc33380c3e6805d4bef38a5ff17`; current remote checks, review, final
   reconciliation, and release remain open.
 - Manual-only CI PR #8 is merged into `main`. This branch preserves its history and is merged with
   that current main base; a deliberately dispatched protected run remains pending.

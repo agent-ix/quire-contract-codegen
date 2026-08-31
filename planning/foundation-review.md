@@ -13,7 +13,7 @@ corpus issue #10, and runtime issue #3 / draft PR #5.
 
 | Review dimension | Result | Evidence or disposition |
 |---|---|---|
-| Dependency | draft-clear | PGM-01 PR #12 and runtime PR #5 are pinned and provisionally reconciled; the IR corpus has no candidate. Every provisional identity must be reconciled after merge. |
+| Dependency | draft-clear | Merged PGM-01 is pinned and reconciled; runtime PR #5 is pinned and provisionally reconciled; the IR corpus has no candidate. Every remaining provisional identity must be reconciled after merge. |
 | Risk | clear | AP-001 and AD-001 enumerate semantic drift, silent loss, nondeterminism, proof gaps, vacuity, atomicity, and provenance risks. |
 | Evidence | clear | MP-001 fixes populations, repetitions, exact tool/dependency identities, failure retention, and the distinction between foundation and semantic evidence. |
 | Integrity | clear | Shared lowering plan, no success fallback, proof dependency closure, source-region observation, and atomic publication are required. |

@@ -13,14 +13,14 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PGM01_CANDIDATE_REVISION = "d8d376d887c40255e87ef9656bc0faf79216b321"
+PGM01_CANDIDATE_REVISION = "7dac9d8c19952412b56a0347387666e2ca81e01d"
 PGM01_ENVELOPE_SCHEMA_DIGEST = (
     "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
 )
 PGM01_ENVELOPE_SCHEMA = (
     ROOT / "schemas" / "pgm01-derivation-evidence-envelope-v1.schema.json"
 )
-RUNTIME_CANDIDATE_REVISION = "177b5e7cec3e884a0a6bccaab74cb04bc9cf3895"
+RUNTIME_CANDIDATE_REVISION = "978e9b5fc8d88cc33380c3e6805d4bef38a5ff17"
 INPUT_SCHEMA = ROOT / "schemas" / "foundation-evidence-input-v1.schema.json"
 MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.json"
 COLLECTOR = ROOT / "scripts" / "collect_foundation_evidence.sh"
@@ -195,7 +195,6 @@ def build(evidence_dir: Path) -> None:
         "artifacts": entries,
         "limitations": [
             "foundation evidence does not establish semantic code-generation conformance",
-            "PGM-01 candidate is under review and must be reconciled again after merge",
             "authoritative IR schema and corpus have no candidate revision",
             "runtime candidate is draft and requires final reconciliation",
             "remote CI, CODEOWNER approval, and the human source-release decision are pending",
