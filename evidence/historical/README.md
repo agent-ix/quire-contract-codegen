@@ -38,6 +38,9 @@ may support the current foundation statement.
 - `retired-round5-boundary-hardening/foundation-35f526287109-20260831T203710Z` was the prior
   pending authority. It predates trusted Python/tool identity, positive transcript corroboration,
   exact matrix tuples, behavioral gate probes, and the review-visible anchor delta controls.
+- `retired-round5-boundary-hardening/foundation-dcc215fac22f-20260831T224253Z` was a passing
+  intermediate authority superseded when four remaining critical gate call sites received direct
+  behavioral fixtures. Its in-band disposition retracts it from the current claim set.
 
 ## Machine-checked record census
 
@@ -75,6 +78,7 @@ The verifier requires this exact bidirectional census to match every retained hi
 - `foundation-b90d6d5946e5-20260830T220017Z`
 - `foundation-cf16bd39aab7-20260831T022900Z`
 - `foundation-cf40e894221c-20260831T163108Z`
+- `foundation-dcc215fac22f-20260831T224253Z`
 - `foundation-e1463f3f7719-20260831T010208Z`
 - `foundation-e76fd5eb6ddb-20260831T001807Z`
 - `foundation-e8c701cfe024-20260831T002430Z`

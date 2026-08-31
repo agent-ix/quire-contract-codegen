@@ -9,7 +9,7 @@ a77796359902538902bcb4cf6642d1ad2e631c5f04bbc8c1fcb7ecba8209c52c  ./coverage.std
 9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa  ./deny.status.txt
 a9633919034425d54c7f51b7cd0b66482e06765a814aa0bb863422e6120c64eb  ./deny.stderr
 f1a0fca39d4280363937aabd77783990ea6480bd9ca257816de3b68fc8efa845  ./deny.stdout
-e18497cb9c72abd17415eec44c7ca86f397021edaf228abac8499d517cf7ad9c  ./evidence-envelope.json
+7013a457f6d75683625c134a3702e7cdaad849e75be39f1c82044192ea888bba  ./evidence-envelope.json
 a90111eb9754365fffc894adde8ad2e0c07d85dd451c37aca9d6659fbdbfac67  ./evidence-manifest.json
 9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa  ./evidence-tool.status.txt
 434ca2e2e43d249dcc3b30dd1a7ca28cb8c7f96b60a3965a46a15d72015387c8  ./evidence-tool.stderr
