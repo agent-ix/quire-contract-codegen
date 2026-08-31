@@ -11,13 +11,17 @@ digests, checkout revision, and Python package set are retained. CI workflows ar
 hosted CI is currently deferred and no remote result is claimed by these records.
 
 The current authoritative record is
-`foundation-cf40e894221c-20260831T163108Z`, collected from clean source revision
-`cf40e894221c1028b70e01cbaff56bf64512b809`. It records 16/16 passing outcomes, both
-PGM-01 validators, the exact IR validator checkout and digests, and 68/68 verified checksums.
+`foundation-984594e48a0c-20260831T172037Z`, collected from clean source revision
+`984594e48a0c773a67108432a74ae38e6f50c17d`. It records 15 passing outcomes, one explicitly
+inconclusive coverage-status outcome, a `pending` overall result, both PGM-01 validators, the exact
+IR validator checkout and digests, and 69/69 verified checksums.
 
-Run `make verify-evidence` to verify every direct `evidence/foundation-*` record. The verifier checks
-the complete file/checksum census, envelope and manifest schemas, every manifest artifact digest and
-size, local envelope input/output digests, source-identity agreement, and the outcome/status census.
+Run `make verify-evidence` with the exact packages in `requirements-evidence.txt` to verify the
+committed `evidence/ANCHORS` record-set boundary. The verifier checks the complete file/checksum
+census, the recursively anchored historical and remote trees, envelope and manifest schemas plus
+formats, every manifest artifact digest and size, local envelope input/output digests,
+source-identity agreement, external PGM-01 schema identity, and independently re-derived outcome
+values, result status, summary, and limitations.
 
 Directories below `evidence/historical/` are quarantined development history and are not
 authoritative. In particular, `historical/untrusted-pre-exit-status/` contains records whose
