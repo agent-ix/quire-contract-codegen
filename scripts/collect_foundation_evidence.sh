@@ -1,6 +1,67 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+run_and_retain() {
+  local name="$1"
+  shift
+  set +e
+  "$@" >"$evidence_dir/$name.stdout" 2>"$evidence_dir/$name.stderr"
+  local status=$?
+  set -e
+  echo "$status" >"$evidence_dir/$name.status.txt"
+  if (( status != 0 )); then
+    collection_failed=1
+  fi
+  return 0
+}
+
+record_status_word() {
+  local numeric_status="$1"
+  local word_status="$2"
+  if [[ "$(<"$numeric_status")" == 0 ]]; then
+    echo passed >"$word_status"
+  else
+    echo failed >"$word_status"
+  fi
+}
+
+envelope_matches_sha256() {
+  local expected="$1"
+  [[ "$(sha256sum "$evidence_dir/evidence-envelope.json")" == "$expected" ]]
+}
+
+if [[ "${1:-}" == "--self-test" ]]; then
+  self_test_dir="$(mktemp -d)"
+  trap 'rm -rf -- "$self_test_dir"' EXIT
+  evidence_dir="$self_test_dir"
+  collection_failed=0
+
+  run_and_retain passing true
+  [[ "$(<"$evidence_dir/passing.status.txt")" == 0 ]]
+  (( collection_failed == 0 ))
+
+  run_and_retain failing false
+  [[ "$(<"$evidence_dir/failing.status.txt")" != 0 ]]
+  (( collection_failed == 1 ))
+
+  record_status_word "$evidence_dir/passing.status.txt" "$evidence_dir/passing-word.txt"
+  record_status_word "$evidence_dir/failing.status.txt" "$evidence_dir/failing-word.txt"
+  [[ "$(<"$evidence_dir/passing-word.txt")" == passed ]]
+  [[ "$(<"$evidence_dir/failing-word.txt")" == failed ]]
+
+  echo stable >"$evidence_dir/evidence-envelope.json"
+  self_test_sha256="$(sha256sum "$evidence_dir/evidence-envelope.json")"
+  envelope_matches_sha256 "$self_test_sha256"
+  echo changed >>"$evidence_dir/evidence-envelope.json"
+  if envelope_matches_sha256 "$self_test_sha256"; then
+    echo "collector fixed-point self-test accepted a changed envelope" >&2
+    exit 1
+  fi
+
+  echo "foundation collector fail-closed self-test passed"
+  exit 0
+fi
+
 if [[ $# -gt 0 ]]; then
   evidence_dir="$1"
 else
@@ -23,20 +84,6 @@ if ! python3 -c 'import jsonschema' >/dev/null 2>&1; then
 fi
 mkdir -p "$evidence_dir"
 collection_failed=0
-
-run_and_retain() {
-  local name="$1"
-  shift
-  set +e
-  "$@" >"$evidence_dir/$name.stdout" 2>"$evidence_dir/$name.stderr"
-  local status=$?
-  set -e
-  echo "$status" >"$evidence_dir/$name.status.txt"
-  if (( status != 0 )); then
-    collection_failed=1
-  fi
-  return 0
-}
 
 git rev-parse HEAD >"$evidence_dir/source-revision.txt"
 echo "$source_state" >"$evidence_dir/source-state.txt"
@@ -73,11 +120,9 @@ run_schema_validators() {
     run_and_retain pgm01-schema \
       python3 scripts/validate_json_schema.py \
       "$PGM01_SCHEMA" "$evidence_dir/evidence-envelope.json"
-    if [[ "$(<"$evidence_dir/pgm01-schema.status.txt")" == 0 ]]; then
-      echo passed >"$evidence_dir/pgm01-schema-status.txt"
-    else
-      echo failed >"$evidence_dir/pgm01-schema-status.txt"
-    fi
+    record_status_word \
+      "$evidence_dir/pgm01-schema.status.txt" \
+      "$evidence_dir/pgm01-schema-status.txt"
   else
     echo skipped-unavailable >"$evidence_dir/pgm01-schema-status.txt"
   fi
@@ -85,11 +130,9 @@ run_schema_validators() {
   if [[ -n "${PGM01_VALIDATOR:-}" ]]; then
     run_and_retain pgm01-envelope \
       python3 "$PGM01_VALIDATOR" --fixture "$evidence_dir/evidence-envelope.json"
-    if [[ "$(<"$evidence_dir/pgm01-envelope.status.txt")" == 0 ]]; then
-      echo passed >"$evidence_dir/pgm01-envelope-status.txt"
-    else
-      echo failed >"$evidence_dir/pgm01-envelope-status.txt"
-    fi
+    record_status_word \
+      "$evidence_dir/pgm01-envelope.status.txt" \
+      "$evidence_dir/pgm01-envelope-status.txt"
   else
     echo skipped-unavailable >"$evidence_dir/pgm01-envelope-status.txt"
   fi
@@ -101,7 +144,7 @@ python3 scripts/build_foundation_envelope.py "$evidence_dir"
 run_schema_validators
 validated_envelope_sha256="$(sha256sum "$evidence_dir/evidence-envelope.json")"
 python3 scripts/build_foundation_envelope.py "$evidence_dir"
-if [[ "$(sha256sum "$evidence_dir/evidence-envelope.json")" != "$validated_envelope_sha256" ]]; then
+if ! envelope_matches_sha256 "$validated_envelope_sha256"; then
   echo "foundation evidence envelope changed after final validation" >&2
   collection_failed=1
 fi

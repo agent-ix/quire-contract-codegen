@@ -70,7 +70,7 @@ test case or close the assurance claim.
   release check passes, and the exact merged identity and schema digest are reconciled locally.
 - The authoritative IR schema/corpus (`agent-ix/quire-contract-ir#10`) has no candidate revision.
 - Runtime PR #5 is provisionally pinned at
-  `7eb0bd41e6301057f8055aa14f96c22d1f30a269`; seven review rounds are processed and its
+  `cab833b196b5d7f1261188b7186498780ea7dc90`; eight review rounds are processed and its
   24 executed local outcomes plus both merged-PGM validators pass in an 88/88-checksum record.
   Current remote checks, follow-up review, final reconciliation, and release remain open.
 - Manual-only CI PR #8 is merged into `main`. This branch preserves its history and is merged with

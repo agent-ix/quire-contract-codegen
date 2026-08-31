@@ -38,7 +38,9 @@ Foundation runs use `scripts/collect_foundation_evidence.sh`. They record the cu
 the explicit Rust 1.75 compatibility lane, validate requirements plus the typed plan bundle, and
 retain exact provisional dependency identities. Every invoked foundation gate retains stdout,
 stderr, and its numeric exit status; the builder derives outcomes from those records, represents
-missing records as inconclusive, and never manufactures a pass from a command name. The foundation
+missing records as inconclusive, and rejects zero-status records whose retained transcripts contain
+command-specific failure markers. The collector self-test exercises nonzero propagation and checksum
+fixed-point detection; the builder never manufactures a pass from a command name. The foundation
 builder derives and verifies the digest of the vendored PGM-01 envelope schema; unit tests exercise
 dependency-pin agreement, envelope identities, roles, digests, extensions, pin mismatch failure,
 outcome truthfulness, and accepted/rejected local schema validation. These tests establish

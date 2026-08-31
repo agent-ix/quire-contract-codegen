@@ -20,7 +20,7 @@ PGM01_ENVELOPE_SCHEMA_DIGEST = (
 PGM01_ENVELOPE_SCHEMA = (
     ROOT / "schemas" / "pgm01-derivation-evidence-envelope-v1.schema.json"
 )
-RUNTIME_CANDIDATE_REVISION = "7eb0bd41e6301057f8055aa14f96c22d1f30a269"
+RUNTIME_CANDIDATE_REVISION = "cab833b196b5d7f1261188b7186498780ea7dc90"
 INPUT_SCHEMA = ROOT / "schemas" / "foundation-evidence-input-v1.schema.json"
 MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.json"
 COLLECTOR = ROOT / "scripts" / "collect_foundation_evidence.sh"
@@ -42,6 +42,19 @@ COMMAND_TRANSCRIPTS = (
     ("pgm01-schema", "pgm01-schema"),
     ("pgm01-envelope", "pgm01-envelope"),
 )
+VALIDATOR_TRANSCRIPTS = (
+    "pgm01-pinned-schema",
+    "input-schema",
+    "manifest-schema",
+    "pgm01-schema",
+    "pgm01-envelope",
+)
+PASS_CONTRADICTION_MARKERS = {
+    "clippy": ("error: could not compile",),
+    "test": ("test result: FAILED", "error: test failed"),
+    "msrv": ("error: could not compile",),
+    "rustdoc": ("error: could not document",),
+}
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -91,7 +104,34 @@ def command_outcomes(evidence_dir: Path) -> list[dict[str, str]]:
                 exit_status = int(status_path.read_text(encoding="utf-8").strip())
             except ValueError as error:
                 raise ValueError(f"invalid exit status in {status_path}") from error
-            status = "passed" if exit_status == 0 else "failed"
+            if exit_status == 0:
+                transcript_paths = (
+                    evidence_dir / f"{transcript}.stdout",
+                    evidence_dir / f"{transcript}.stderr",
+                )
+                if not all(path.exists() for path in transcript_paths):
+                    status = "inconclusive"
+                else:
+                    combined = "\n".join(
+                        path.read_text(encoding="utf-8", errors="replace")
+                        for path in transcript_paths
+                    )
+                    contradiction = next(
+                        (
+                            marker
+                            for marker in PASS_CONTRADICTION_MARKERS.get(name, ())
+                            if marker in combined
+                        ),
+                        None,
+                    )
+                    if contradiction is not None:
+                        raise ValueError(
+                            f"passed status for {name} contradicts retained transcript: "
+                            f"{contradiction}"
+                        )
+                    status = "passed"
+            else:
+                status = "failed"
         outcomes.append({"name": name, "status": status})
     return outcomes
 
@@ -208,7 +248,7 @@ def build(evidence_dir: Path) -> None:
         "pgm01-envelope-status.txt",
         "sha256sums.txt",
     }
-    for _, transcript in COMMAND_TRANSCRIPTS[-5:]:
+    for transcript in VALIDATOR_TRANSCRIPTS:
         excluded.update(
             {
                 f"{transcript}.status.txt",

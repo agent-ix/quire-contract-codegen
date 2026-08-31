@@ -14,6 +14,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILDER_PATH = ROOT / "scripts" / "build_foundation_envelope.py"
+COLLECTOR_PATH = ROOT / "scripts" / "collect_foundation_evidence.sh"
 VALIDATOR_PATH = ROOT / "scripts" / "validate_json_schema.py"
 
 
@@ -120,6 +121,40 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertEqual(envelope["result"]["status"], "inconclusive")
             self.assertNotIn("all executed", envelope["result"]["summary"])
 
+    def test_passed_status_cannot_contradict_retained_transcript(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_dir = Path(directory) / "foundation-fixture"
+            evidence_dir.mkdir()
+            self.write_fixture_inputs(evidence_dir)
+            (evidence_dir / "test.stdout").write_text(
+                "test result: FAILED. 0 passed; 7 failed\n", encoding="utf-8"
+            )
+
+            with self.assertRaisesRegex(ValueError, "contradicts retained transcript"):
+                builder.build(evidence_dir)
+
+    def test_validator_transcript_exclusions_are_explicitly_named(self) -> None:
+        expected = {
+            "pgm01-pinned-schema",
+            "input-schema",
+            "manifest-schema",
+            "pgm01-schema",
+            "pgm01-envelope",
+        }
+        self.assertEqual(set(builder.VALIDATOR_TRANSCRIPTS), expected)
+        declared = {transcript for _, transcript in builder.COMMAND_TRANSCRIPTS}
+        self.assertTrue(expected.issubset(declared))
+
+    def test_collector_fail_closed_self_test(self) -> None:
+        completed = subprocess.run(
+            ["bash", str(COLLECTOR_PATH), "--self-test"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("foundation collector fail-closed self-test passed", completed.stdout)
+
     @staticmethod
     def read_json(path: Path):
         return json.loads(path.read_text(encoding="utf-8"))
@@ -141,6 +176,8 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             (evidence_dir / f"{transcript}.status.txt").write_text(
                 "0\n", encoding="utf-8"
             )
+            (evidence_dir / f"{transcript}.stdout").write_text("", encoding="utf-8")
+            (evidence_dir / f"{transcript}.stderr").write_text("", encoding="utf-8")
         (evidence_dir / "metadata.stdout").write_text(
             json.dumps(
                 {"packages": [{"name": "quire-contract-codegen", "version": "0.1.0"}]}
