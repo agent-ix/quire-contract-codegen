@@ -22,9 +22,9 @@ and human decisions.
 | FND-001 | high | The authoritative IR schema and conformance corpus have no candidate revision. | IR #10, FR-001 |
 | FND-003 | medium | Runtime review, deliberate remote CI, CODEOWNER approval, and human release remain pending. | runtime PR #5, AA-001, REV-004 |
 
-Reviewed source revision: `3b3820cf5b6ab4591409dac4f22512437e165613`
-
-Retained evidence: `evidence/foundation-3b3820cf5b6a-20260830T230214Z/sha256sums.txt`
+Source identity is recorded once in each immutable evidence bundle's `source-revision.txt` and
+manifest. This mutable review document deliberately does not duplicate a source hash or record path
+that would become stale on its own next commit.
 
 ## Requirement and evidence matrix
 
@@ -49,7 +49,8 @@ The retained bundle records a clean source revision and successful specification
 formatting, Clippy, unit/integration tests, explicit Rust 1.75 compatibility, license policy,
 unsafe-code audit, metadata capture, and warning-denied documentation generation. The local input
 schema now rejects unknown tool and dependency fields and requires exact PGM/runtime identities.
-All 39 checksum entries verify; the local schemas, exact merged PGM-01 schema, and custom
+All 41 checksum entries verify in the current source-bound record; the local schemas, exact merged
+PGM-01 schema, and custom
 validator all accept their respective records with zero errors.
 
 The foundation evidence toolchain is owned by MP-001 and tested independently of the semantic
@@ -81,5 +82,5 @@ test case or close the assurance claim.
 ## Conclusion
 
 The 39-document foundation specification, typed plan bundle, and local evidence procedure are ready
-for draft review. Semantic implementation and release claims are not ready. Rebase and dependency
-reconciliation are required before any semantic child leaves draft.
+for draft review. Semantic implementation and release claims are not ready. Runtime/IR dependency
+reconciliation is required before any semantic child leaves draft.

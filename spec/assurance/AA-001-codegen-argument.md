@@ -32,7 +32,7 @@ participants:
 challenges:
   - id: challenge-draft-dependencies
     target: claim-codegen-v01
-    statement: PGM-01 and runtime are only provisionally reconciled and the IR corpus is unavailable
+    statement: PGM-01 is merged and reconciled, while runtime remains provisional and the IR corpus is unavailable
     status: open
     owner: human-release-owner
 relationships:
@@ -60,6 +60,6 @@ dependencies, protected CI, retained measurements, gap analysis, open assumption
 
 ## Challenges
 
-PGM-01 and runtime helpers are pinned and provisionally reconciled, while the IR corpus remains
-unavailable. Their accepted identities and contracts must be reconciled before semantic
-implementation leaves draft or this claim can be considered.
+Merged PGM-01 is pinned and reconciled. Runtime helpers remain provisionally pinned, and the IR
+corpus remains unavailable. The runtime and IR identities and contracts must be reconciled before
+semantic implementation leaves draft or this claim can be considered.
