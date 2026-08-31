@@ -2,6 +2,7 @@
 # Enforce that every `unsafe {` block in src/ has a `// SAFETY:` comment within
 # the 3 lines preceding it. Pre-existing exemptions live in the baseline file
 # below; regenerate with `--update-baseline`.
+# Implements: NFR-002
 set -euo pipefail
 
 baseline_file="scripts/unsafe_comment_baseline.txt"
@@ -11,14 +12,20 @@ if [[ "${1:-}" == "--update-baseline" ]]; then
   update_baseline=true
 fi
 
-if [[ ! -d src ]]; then
+search_roots=()
+for candidate in src tests benches examples; do
+  if [[ -d "$candidate" ]]; then
+    search_roots+=("$candidate")
+  fi
+done
+if [[ ${#search_roots[@]} -eq 0 ]]; then
   exit 0
 fi
 
 unsafe_lines=()
 while IFS= read -r line; do
   unsafe_lines+=("$line")
-done < <(grep -rEn 'unsafe[[:space:]]*\{' src 2>/dev/null || true)
+done < <(grep -rEn 'unsafe[[:space:]]*\{' "${search_roots[@]}" 2>/dev/null || true)
 
 if [[ ${#unsafe_lines[@]} -eq 0 ]]; then
   exit 0

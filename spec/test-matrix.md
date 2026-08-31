@@ -25,6 +25,18 @@ type: TestMatrix
 | FR-005 | FR-005-AC-3 | Inspection | 🚧 Planned |
 | FR-005 | FR-005-AC-4 | TC-007 | 🚧 Planned |
 
+The current coverage selector expects a `Status` column while the TestMatrix structure requires
+`Coverage Status` (upstream spec-artifacts-process #77). Until that conflict is resolved, the
+foundation evidence test requires every functional row to remain `🚧 Planned`; any transition is a
+human-reviewed matrix change and must replace that temporary control with backed-test verification.
+
+## Stakeholder Requirement Coverage
+
+| Stakeholder Req | Trace to US/FR | Test/Validation | Coverage Status |
+|---|---|---|---|
+| StR-001 | StR-001-VC-1, FR-001 | TC-001 | 🚧 Planned |
+| StR-001 | StR-001-VC-2, FR-003, FR-004 | TC-007 | 🚧 Planned |
+
 ## Test Case Summary
 
 | Test ID | Title | Type | Priority | Traces To | Status |

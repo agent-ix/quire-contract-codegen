@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -16,6 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BUILDER_PATH = ROOT / "scripts" / "build_foundation_envelope.py"
 COLLECTOR_PATH = ROOT / "scripts" / "collect_foundation_evidence.sh"
 VALIDATOR_PATH = ROOT / "scripts" / "validate_json_schema.py"
+VERIFIER_PATH = ROOT / "scripts" / "verify_foundation_evidence.py"
 
 
 def load_builder():
@@ -30,10 +33,30 @@ def load_builder():
 builder = load_builder()
 
 
+def load_verifier():
+    spec = importlib.util.spec_from_file_location("foundation_evidence_verifier", VERIFIER_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not load foundation evidence verifier")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+verifier = load_verifier()
+
+
 class FoundationEvidenceBuilderTests(unittest.TestCase):
     def test_evidence_tools_have_measurement_plan_ownership(self) -> None:
-        for path in (BUILDER_PATH, VALIDATOR_PATH):
-            self.assertIn("# Implements: MP-001", path.read_text(encoding="utf-8"), path.name)
+        tools = sorted((ROOT / "scripts").glob("*.py")) + sorted(
+            (ROOT / "scripts").glob("*.sh")
+        )
+        self.assertGreaterEqual(len(tools), 5)
+        for path in tools:
+            self.assertRegex(
+                path.read_text(encoding="utf-8"),
+                r"(?m)^# Implements: [A-Za-z0-9-]+$",
+                path.name,
+            )
 
     def test_dependency_pins_match_vendored_schema_and_planning(self) -> None:
         self.assertEqual(
@@ -43,11 +66,20 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
         pgm_text = (ROOT / "planning/pgm-01-reconciliation.md").read_text(encoding="utf-8")
         pins_text = (ROOT / "planning/draft-dependency-pins.md").read_text(encoding="utf-8")
         gap_text = (ROOT / "planning/foundation-gap-analysis.md").read_text(encoding="utf-8")
+        cac_text = (ROOT / "spec/assurance/CAC-001-codegen-contract.md").read_text(
+            encoding="utf-8"
+        )
         for text, label in ((pgm_text, "PGM reconciliation"), (pins_text, "dependency pins")):
             self.assertIn(builder.PGM01_CANDIDATE_REVISION, text, label)
             self.assertIn(builder.PGM01_ENVELOPE_SCHEMA_DIGEST, text, label)
         for text, label in ((pins_text, "dependency pins"), (gap_text, "gap analysis")):
             self.assertIn(builder.RUNTIME_CANDIDATE_REVISION, text, label)
+        for revision in (
+            builder.PGM01_CANDIDATE_REVISION,
+            builder.IR_CANDIDATE_REVISION,
+            builder.RUNTIME_CANDIDATE_REVISION,
+        ):
+            self.assertIn(revision, cac_text)
 
     def test_pgm01_pin_mismatch_fails_closed(self) -> None:
         with mock.patch.object(builder, "PGM01_ENVELOPE_SCHEMA_DIGEST", "0" * 64):
@@ -68,11 +100,20 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
 
             dependencies = collection_input["dependencies"]
             self.assertEqual(dependencies["runtimeCandidateRevision"], builder.RUNTIME_CANDIDATE_REVISION)
+            self.assertEqual(
+                dependencies["irCorpus"],
+                f"agent-ix/quire-contract-ir@{builder.IR_CANDIDATE_REVISION}",
+            )
             self.assertEqual(dependencies["pgm01"]["candidateRevision"], builder.PGM01_CANDIDATE_REVISION)
             self.assertEqual(
                 dependencies["pgm01"]["envelopeSchemaDigest"]["value"],
                 builder.PGM01_ENVELOPE_SCHEMA_DIGEST,
             )
+            self.assertEqual(
+                dependencies["pgm01"]["validatorRevision"],
+                builder.IR_CANDIDATE_REVISION,
+            )
+            self.assertEqual(len(envelope["inputs"]), 3)
             self.assertEqual(manifest["sourceRevision"], "a" * 40)
             self.assertIn(
                 {"name": "pgm01-pinned-schema", "status": "passed"},
@@ -133,6 +174,65 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "contradicts retained transcript"):
                 builder.build(evidence_dir)
 
+    def test_new_retained_failure_is_included_by_outcome_census(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_dir = Path(directory) / "foundation-fixture"
+            evidence_dir.mkdir()
+            self.write_fixture_inputs(evidence_dir)
+            (evidence_dir / "audit.status.txt").write_text("101\n", encoding="utf-8")
+            (evidence_dir / "audit.stdout").write_text("", encoding="utf-8")
+            (evidence_dir / "audit.stderr").write_text(
+                "error: 3 vulnerabilities found\n", encoding="utf-8"
+            )
+
+            builder.build(evidence_dir)
+
+            manifest = self.read_json(evidence_dir / "evidence-manifest.json")
+            envelope = self.read_json(evidence_dir / "evidence-envelope.json")
+            self.assertIn(
+                {"name": "audit", "status": "failed"}, manifest["outcomes"]
+            )
+            self.assertEqual(envelope["result"]["status"], "inconclusive")
+
+    def test_collector_and_declared_command_sets_agree(self) -> None:
+        collector = COLLECTOR_PATH.read_text(encoding="utf-8").split(
+            'quire provenance --pretty >"$evidence_dir/quire-provenance.json"', 1
+        )[1]
+        collected = set(
+            re.findall(r"(?m)^\s*run_and_retain ([a-z0-9-]+)(?: |$)", collector)
+        )
+        declared = {transcript for _, transcript in builder.COMMAND_TRANSCRIPTS}
+        self.assertEqual(collected, declared)
+
+    def test_every_declared_command_has_contradiction_markers(self) -> None:
+        declared = {name for name, _ in builder.COMMAND_TRANSCRIPTS}
+        self.assertEqual(declared, set(builder.PASS_CONTRADICTION_MARKERS))
+
+    def test_functional_coverage_rows_remain_planned_until_upstream_fix(self) -> None:
+        matrix = (ROOT / "spec" / "test-matrix.md").read_text(encoding="utf-8")
+        table = matrix.split("## Functional Requirement Coverage", 1)[1].split(
+            "## Stakeholder Requirement Coverage", 1
+        )[0]
+        rows = [line for line in table.splitlines() if line.startswith("| FR-")]
+        self.assertGreater(len(rows), 0)
+        for row in rows:
+            cells = [cell.strip() for cell in row.strip("|").split("|")]
+            self.assertEqual(cells[-1], "🚧 Planned", row)
+
+    def test_checksum_verifier_detects_transcript_tampering(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            record = Path(directory)
+            transcript = record / "test.stdout"
+            transcript.write_text("1 passed\n", encoding="utf-8")
+            digest = hashlib.sha256(transcript.read_bytes()).hexdigest()
+            (record / "sha256sums.txt").write_text(
+                f"{digest}  ./test.stdout\n", encoding="utf-8"
+            )
+            self.assertEqual(verifier.verify_checksums(record), 1)
+            transcript.write_text("999 passed\n", encoding="utf-8")
+            with self.assertRaisesRegex(verifier.EvidenceError, "checksum mismatch"):
+                verifier.verify_checksums(record)
+
     def test_validator_transcript_exclusions_are_explicitly_named(self) -> None:
         expected = {
             "pgm01-pinned-schema",
@@ -167,6 +267,12 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             "cargo-version.txt": "cargo 1.94.1\n",
             "jsonschema-version.txt": "3.2.0\n",
             "python-version.txt": "Python 3.10.12\n",
+            "python-packages.txt": "jsonschema==3.2.0\nrfc3339-validator==0.1.4\nrfc3986-validator==0.1.1\n",
+            "pgm01-schema-path.txt": "/tmp/quire-contract-ir/schemas/derivation-evidence-envelope-v1.schema.json\n",
+            "pgm01-schema-sha256.txt": builder.PGM01_ENVELOPE_SCHEMA_DIGEST + "\n",
+            "pgm01-validator-path.txt": "/tmp/quire-contract-ir/scripts/validate_governance.py\n",
+            "pgm01-validator-sha256.txt": "b" * 64 + "\n",
+            "pgm01-revision.txt": builder.IR_CANDIDATE_REVISION + "\n",
             "rustc-version.txt": "rustc 1.94.1\nhost: x86_64-unknown-linux-gnu\n",
             "msrv-rustc-version.txt": "rustc 1.75.0\nhost: x86_64-unknown-linux-gnu\n",
         }

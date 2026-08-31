@@ -15,11 +15,12 @@
     "tools": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cargo", "jsonschema", "python", "quire", "rustc", "rust-msrv"],
+      "required": ["cargo", "jsonschema", "python", "python-packages", "quire", "rustc", "rust-msrv"],
       "properties": {
         "cargo": {"type": "string", "minLength": 1},
         "jsonschema": {"type": "string", "minLength": 1},
         "python": {"type": "string", "minLength": 1},
+        "python-packages": {"type": "string", "minLength": 1},
         "quire": {"type": "string", "minLength": 1},
         "rustc": {"type": "string", "minLength": 1},
         "rust-msrv": {"type": "string", "minLength": 1}
@@ -33,12 +34,17 @@
         "pgm01": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["policy", "candidateRevision", "envelopeSchema", "envelopeSchemaDigest"],
+          "required": ["policy", "candidateRevision", "envelopeSchema", "envelopeSchemaDigest", "schemaPath", "schemaDigest", "validatorPath", "validatorDigest", "validatorRevision"],
           "properties": {
             "policy": {"const": "ix://agent-ix/quire-contract-ir/PGM-01"},
             "candidateRevision": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
             "envelopeSchema": {"const": "quire.derivation-evidence/v1"},
-            "envelopeSchemaDigest": {"$ref": "#/definitions/digest"}
+            "envelopeSchemaDigest": {"$ref": "#/definitions/digest"},
+            "schemaPath": {"type": "string", "minLength": 1},
+            "schemaDigest": {"$ref": "#/definitions/digest"},
+            "validatorPath": {"type": "string", "minLength": 1},
+            "validatorDigest": {"$ref": "#/definitions/digest"},
+            "validatorRevision": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"}
           }
         },
         "irCorpus": {"type": "string", "minLength": 1},

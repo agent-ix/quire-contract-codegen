@@ -19,6 +19,9 @@ help:
 	@echo "  make deny             - cargo deny check licenses"
 	@echo "  make audit-unsafe     - Enforce // SAFETY: comments on unsafe blocks"
 	@echo "  make evidence-tool    - Test the foundation evidence toolchain and pins"
+	@echo "  make verify-evidence  - Re-verify every authoritative retained evidence record"
+	@echo "  make coverage         - Report specification-to-test coverage"
+	@echo "  make rustdoc          - Build warning-free API documentation"
 	@echo "  make ci               - All local CI gates"
 
 # =============================================================================
@@ -75,12 +78,24 @@ audit-unsafe:
 
 .PHONY: evidence-tool
 evidence-tool:
-	python3 -m py_compile scripts/build_foundation_envelope.py scripts/validate_json_schema.py
-	python3 -m unittest discover -s tests -p 'test_*.py'
+	python3 -m py_compile scripts/build_foundation_envelope.py scripts/validate_json_schema.py scripts/verify_foundation_evidence.py
+	python3 -m unittest discover -s tests -p '*.py'
+
+.PHONY: verify-evidence
+verify-evidence:
+	python3 scripts/verify_foundation_evidence.py
+
+.PHONY: coverage
+coverage:
+	quire coverage --scope .
+
+.PHONY: rustdoc
+rustdoc:
+	RUSTDOCFLAGS=-Dwarnings $(CARGO) doc --no-deps
 
 # =============================================================================
 # Composite
 # =============================================================================
 
 .PHONY: ci
-ci: fmt-check spec lint test msrv deny audit-unsafe evidence-tool
+ci: fmt-check spec lint test msrv deny audit-unsafe rustdoc coverage evidence-tool verify-evidence

@@ -11,22 +11,36 @@ review_set: subset
 
 ## Summary
 
-The specification and assurance foundation is internally consistent and locally validated. Semantic
-work remains blocked by the unavailable authoritative IR corpus. The runtime source is merged and its
-exact reviewed tree is reconciled, while its merged-main manual checks and human decision remain open.
+The specification and assurance foundation is locally validated, but it is not release-ready. An IR
+schema/corpus candidate now exists at PR #19 and remains under review. The runtime source is merged
+and its exact reviewed tree is reconciled, while its human source-release decision remains open.
+
+## Verdict
+
+**FAIL.** FND-001 is a high-severity open dependency finding, semantic TestMatrix rows remain planned,
+and the human source-release decision is pending. This verdict cannot become PASS from local
+foundation gates alone.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 |---|---|---|---|
-| FND-001 | high | The authoritative IR schema and conformance corpus have no candidate revision. | IR #10, FR-001 |
-| FND-003 | medium | Runtime PR #5 is merged with the exact reviewed tree; deliberate merged-main CI and the human source-release decision remain pending. | runtime PR #5, AA-001, REV-004 |
+| FND-001 | high | The authoritative IR schema and conformance corpus candidate exists but has not completed review or acceptance. | IR PR #19, FR-001 |
+| FND-003 | medium | Runtime PR #5 is merged with the exact reviewed tree; hosted CI is deferred and the human source-release decision remains pending. | runtime PR #5, AA-001, REV-004 |
+| FND-004 | low | Stable rustfmt omits nightly-only import grouping options, so import grouping is not enforced. | `rustfmt.toml`, L-1 |
+| FND-005 | low | License, unsafe, MSRV, and scaffold-test gates are intentionally low-signal while the crate has no dependencies and only placeholder code. | `Makefile`, L-4 |
+
+FND-001 now has candidate PR #19 at
+`37eb00153d5c139ebc01622b6e12a4ab79256f88`, but remains open until that candidate is reviewed and
+accepted. FND-002 was retired in commit `e1463f3f7719` as a stale duplicate; its identity is retained
+in this history note and is not reused. Hosted CI clauses in FND-003 are deferred by operator
+direction; the human decision remains open.
 
 Source identity is recorded once in each immutable evidence bundle's `source-revision.txt` and
 manifest. This mutable review document deliberately does not duplicate a source hash or record path
 that would become stale on its own next commit.
 
-## Requirement and evidence matrix
+## Coverage
 
 | Requirement | Foundation disposition | Semantic verification | Remaining gap |
 |---|---|---|---|
@@ -39,7 +53,7 @@ that would become stale on its own next commit.
 | NFR-001 | zero-difference and zero-partial-publication thresholds specified | repeated golden and fault-injection runs pending | implementation unavailable |
 | NFR-002 | identity, license, qualification, and explicit-state boundaries specified | schema and corpus inspection pending | released dependency identities unavailable |
 | interface-001 | provisional input, operation, output, diagnostic, and evidence contract specified | compatibility tests pending | reconcile with accepted IR and runtime interfaces |
-| TestMatrix | 29 acceptance criteria mapped to seven planned semantic cases; placeholder tests explicitly unbound | all semantic cases pending | authoritative IR corpus and runtime release unavailable |
+| TestMatrix | all 27 FR acceptance criteria and both StR validation criteria map to planned tests or inspections; placeholder tests explicitly unbound | all semantic cases pending | IR candidate review and runtime release unavailable |
 | AP/AD/CAC/MP/AA-001 | intended use, architecture, contract, measurements, and open claim specified | independent and human review pending | governance, dependency, CI, and release evidence open |
 | PLAN-001 | typed foundation, dependency, semantic, parity, and human-release tasks with explicit statuses | Task-001/002 done; Task-003 in progress; Task-004 through Task-007 not started | IR candidate, reviews, implementation, and human authority remain open |
 
@@ -49,7 +63,7 @@ The retained bundle records a clean source revision and successful specification
 formatting, Clippy, unit/integration tests, explicit Rust 1.75 compatibility, license policy,
 unsafe-code audit, metadata capture, and warning-denied documentation generation. The local input
 schema now rejects unknown tool and dependency fields and requires exact PGM/runtime identities.
-All checksum entries verify in the current source-bound record; the local schemas, exact merged
+All 56 checksum entries verify in the current source-bound record; the local schemas, exact merged
 PGM-01 schema, and custom
 validator all accept their respective records with zero errors.
 
@@ -63,7 +77,10 @@ zero because these tests make no code-generation claim.
 The current placeholder crate tests establish only scaffold health. They do not satisfy any semantic
 test case or close the assurance claim.
 
-The historical record `evidence/historical/foundation-a7790d225746-20260831T154248Z` is deliberately
+The 24 pre-exit-status records under `evidence/historical/untrusted-pre-exit-status/` are deliberately
+quarantined and are not authoritative: their historical `conclusive` claims were not derived from
+retained numeric statuses. The historical record
+`evidence/historical/foundation-a7790d225746-20260831T154248Z` is likewise deliberately
 quarantined: its PGM-01 custom-validator lane failed closed because the invoking Python environment
 lacked the pinned RFC 3339 validator. It is retained as failure evidence and is not a candidate pass.
 
@@ -72,19 +89,21 @@ lacked the pinned RFC 3339 validator. It is retained as failure evidence and is 
 - PGM-01 PR #12 is merged at `7dac9d8c19952412b56a0347387666e2ca81e01d`. Its tree is
   byte-identical to reviewed head `d8d376d887c40255e87ef9656bc0faf79216b321`; the complete merged-main
   release check passes, and the exact merged identity and schema digest are reconciled locally.
-- The authoritative IR schema/corpus (`agent-ix/quire-contract-ir#10`) has no candidate revision.
+- The authoritative IR schema/corpus candidate is PR #19 at
+  `37eb00153d5c139ebc01622b6e12a4ab79256f88`; it remains open and unreviewed.
 - Runtime PR #5 is merged at `e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3`. Its tree is
   byte-identical to the round-10-reviewed head `4e0edec972c7e1431cf0d81ed8346a0ab8817af7`;
-  every finding is closed, and its 24 executed local outcomes plus both merged-PGM validators pass
-  in an 88/88-checksum record. A deliberately dispatched merged-main run and the human runtime
-  source-release decision remain open.
-- Manual-only CI PR #8 is merged into `main`. This branch preserves its history and is merged with
-  that current main base; a deliberately dispatched protected run remains pending.
+  every finding is closed, and its 25 executed local outcomes plus both merged-PGM validators pass
+  in a 91/91-checksum record. Hosted CI is deferred; the human runtime source-release decision
+  remains open.
+- Manual-only CI PR #8 is merged into `main`. This branch also changes the required `Rust Checks`
+  definition by adding MSRV and specification steps; those workflow changes have never executed on
+  this branch. Hosted CI is intentionally deferred by operator direction.
 - Default-branch protection was observed and retained in
   `evidence/foundation-remote/branch-protection.md`: strict `Rust Checks` and `License Check`, one
-  CODEOWNER approval, administrator enforcement, conversation resolution, and no force push or
-  deletion. A deliberately dispatched remote CI run, approval, and human source-release decision
-  remain pending.
+  CODEOWNER approval, conversation resolution, and no force push or deletion. Administrator
+  enforcement is disabled, so an authorized administrator can merge without required checks or an
+  approval. Hosted CI, independent approval, and the human source-release decision remain pending.
 
 ## Conclusion
 

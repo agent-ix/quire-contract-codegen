@@ -26,7 +26,8 @@ runtime helpers (#3 / PR #5) -------+-> oracles/manifests (#4)
 1. Validate the requirements, interface, test matrix, and five assurance artifacts with pinned Quire
    and engineering-assurance modules.
 2. Retain foundation CI, license, branch-protection, provenance, and draft-dependency evidence.
-3. Keep semantic children in Backlog while PGM-01, IR corpus, and runtime are draft.
+3. Keep semantic children in Backlog while the IR corpus candidate and runtime release decision are
+   under review.
 4. Rebase or rebranch onto reviewed upstream revisions; reconcile schemas, names, evidence envelopes,
    feature contracts, and expected diagnostics before moving issue #4 into Specify.
 5. Implement one dependency-ready child at a time with requirement-tagged tests and plan deltas.
