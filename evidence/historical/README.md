@@ -32,6 +32,9 @@ may support the current foundation statement.
   runner could report success without executing `unittest` cases and that the retained control set
   did not yet cover the accepted IR merge, bidirectional matrix census, or Make invocation guards.
   Its in-band historical disposition retracts it from the authoritative claim set.
+- `foundation-3cd2918c62e5-20260831T224142Z` is a failed-closed Round 5 collection. Its unsafe
+  audit correctly returned nonzero but exposed that the scanner interpreted a Rust source snippet
+  inside a Python negative fixture as live Rust; the successor restricts that audit to `*.rs`.
 
 ## Machine-checked record census
 
@@ -45,6 +48,7 @@ The verifier requires this exact bidirectional census to match every retained hi
 - `foundation-374a6a3060ad-20260831T163004Z`
 - `foundation-38363fe7ed34-20260830T232349Z`
 - `foundation-3b3820cf5b6a-20260830T230214Z`
+- `foundation-3cd2918c62e5-20260831T224142Z`
 - `foundation-51cf32624db0-20260830T223315Z`
 - `foundation-5ca054beccdc-20260830T214724Z`
 - `foundation-65da338d8149-20260831T001333Z`

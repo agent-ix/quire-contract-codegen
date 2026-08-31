@@ -26,7 +26,7 @@ fi
 unsafe_lines=()
 while IFS= read -r line; do
   unsafe_lines+=("$line")
-done < <(grep -rEn 'unsafe[[:space:]]*\{' "${search_roots[@]}" 2>/dev/null || true)
+done < <(grep -rEn --include='*.rs' 'unsafe[[:space:]]*\{' "${search_roots[@]}" 2>/dev/null || true)
 
 if [[ ${#unsafe_lines[@]} -eq 0 ]]; then
   echo "unsafe audit passed"
