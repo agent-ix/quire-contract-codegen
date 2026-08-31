@@ -26,6 +26,22 @@ MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.jso
 COLLECTOR = ROOT / "scripts" / "collect_foundation_evidence.sh"
 BUILDER = Path(__file__).resolve()
 SCHEMA_VALIDATOR = ROOT / "scripts" / "validate_json_schema.py"
+COMMAND_TRANSCRIPTS = (
+    ("quire-validate", "quire-validate"),
+    ("fmt", "fmt"),
+    ("clippy", "clippy"),
+    ("test", "test"),
+    ("msrv", "msrv"),
+    ("deny", "deny"),
+    ("unsafe-audit", "unsafe-audit"),
+    ("metadata", "metadata"),
+    ("rustdoc", "rustdoc"),
+    ("pgm01-pinned-schema", "pgm01-pinned-schema"),
+    ("input-schema", "input-schema"),
+    ("manifest-schema", "manifest-schema"),
+    ("pgm01-schema", "pgm01-schema"),
+    ("pgm01-envelope", "pgm01-envelope"),
+)
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -53,6 +69,31 @@ def verified_pgm01_schema_digest() -> str:
             f"expected {PGM01_ENVELOPE_SCHEMA_DIGEST}, got {actual}"
         )
     return actual
+
+
+def command_outcomes(evidence_dir: Path) -> list[dict[str, str]]:
+    outcomes = []
+    for name, transcript in COMMAND_TRANSCRIPTS:
+        status_path = evidence_dir / f"{transcript}.status.txt"
+        availability_path = evidence_dir / f"{transcript}-status.txt"
+        availability = (
+            availability_path.read_text(encoding="utf-8").strip()
+            if availability_path.exists()
+            else None
+        )
+        if availability == "skipped-unavailable":
+            outcomes.append({"name": name, "status": availability})
+            continue
+        if not status_path.exists():
+            status = "inconclusive"
+        else:
+            try:
+                exit_status = int(status_path.read_text(encoding="utf-8").strip())
+            except ValueError as error:
+                raise ValueError(f"invalid exit status in {status_path}") from error
+            status = "passed" if exit_status == 0 else "failed"
+        outcomes.append({"name": name, "status": status})
+    return outcomes
 
 
 def hash_parameter_files() -> str:
@@ -92,12 +133,17 @@ def build(evidence_dir: Path) -> None:
     package = next(
         item for item in metadata["packages"] if item["name"] == "quire-contract-codegen"
     )
-    recorded_at = (
-        dt.datetime.now(dt.timezone.utc)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+    recorded_at_path = evidence_dir / "recorded-at.txt"
+    if recorded_at_path.exists():
+        recorded_at = recorded_at_path.read_text(encoding="utf-8").strip()
+    else:
+        recorded_at = (
+            dt.datetime.now(dt.timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        recorded_at_path.write_text(recorded_at + "\n", encoding="utf-8")
 
     collection_input = {
         "schemaVersion": "quire.codegen-foundation-evidence-input/v1",
@@ -162,6 +208,15 @@ def build(evidence_dir: Path) -> None:
         "pgm01-envelope-status.txt",
         "sha256sums.txt",
     }
+    for _, transcript in COMMAND_TRANSCRIPTS[-5:]:
+        excluded.update(
+            {
+                f"{transcript}.status.txt",
+                f"{transcript}.stderr",
+                f"{transcript}.stdout",
+                f"{transcript}-status.txt",
+            }
+        )
     entries = []
     for path in sorted(evidence_dir.iterdir(), key=lambda item: item.name):
         if path.is_file() and path.name not in excluded:
@@ -173,25 +228,12 @@ def build(evidence_dir: Path) -> None:
                 }
             )
 
+    outcomes = command_outcomes(evidence_dir)
     manifest = {
         "schemaVersion": "quire.codegen-foundation-evidence-manifest/v1",
         "sourceRevision": revision,
         "collectedAt": recorded_at,
-        "outcomes": [
-            {"name": name, "status": "passed"}
-            for name in (
-                "quire-validate",
-                "fmt",
-                "clippy",
-                "test",
-                "msrv",
-                "deny",
-                "unsafe-audit",
-                "metadata",
-                "rustdoc",
-                "pgm01-pinned-schema",
-            )
-        ],
+        "outcomes": outcomes,
         "artifacts": entries,
         "limitations": [
             "foundation evidence does not establish semantic code-generation conformance",
@@ -203,6 +245,21 @@ def build(evidence_dir: Path) -> None:
     manifest_path = evidence_dir / "evidence-manifest.json"
     write_json(manifest_path, manifest)
 
+    failed = [item["name"] for item in outcomes if item["status"] == "failed"]
+    inconclusive = [
+        item["name"] for item in outcomes if item["status"] == "inconclusive"
+    ]
+    if failed:
+        result_status = "inconclusive"
+        result_summary = f"{len(failed)} codegen foundation checks failed"
+    elif inconclusive:
+        result_status = "pending"
+        result_summary = f"{len(inconclusive)} foundation check outcomes are inconclusive"
+    else:
+        result_status = "conclusive"
+        result_summary = (
+            "all executed codegen foundation checks passed; semantic claims are out of scope"
+        )
     envelope = {
         "schemaVersion": "quire.derivation-evidence/v1",
         "recordId": evidence_dir.name,
@@ -268,10 +325,8 @@ def build(evidence_dir: Path) -> None:
             "reviewers": ["@kreneskyp"],
         },
         "result": {
-            "status": "conclusive",
-            "summary": (
-                "all collected codegen foundation checks passed; semantic claims are out of scope"
-            ),
+            "status": result_status,
+            "summary": result_summary,
             "requirementRefs": ["PGM-01-R08", "PGM-01-R09", "MP-001"],
         },
         "extensions": {

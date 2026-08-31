@@ -102,6 +102,24 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             )
             self.assertEqual(envelope["parametersDigest"]["value"], builder.hash_parameter_files())
 
+    def test_build_records_failed_and_missing_commands_without_a_pass_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_dir = Path(directory) / "foundation-fixture"
+            evidence_dir.mkdir()
+            self.write_fixture_inputs(evidence_dir)
+            (evidence_dir / "clippy.status.txt").write_text("101\n", encoding="utf-8")
+            (evidence_dir / "fmt.status.txt").unlink()
+
+            builder.build(evidence_dir)
+
+            manifest = self.read_json(evidence_dir / "evidence-manifest.json")
+            envelope = self.read_json(evidence_dir / "evidence-envelope.json")
+            outcomes = {item["name"]: item["status"] for item in manifest["outcomes"]}
+            self.assertEqual(outcomes["clippy"], "failed")
+            self.assertEqual(outcomes["fmt"], "inconclusive")
+            self.assertEqual(envelope["result"]["status"], "inconclusive")
+            self.assertNotIn("all executed", envelope["result"]["summary"])
+
     @staticmethod
     def read_json(path: Path):
         return json.loads(path.read_text(encoding="utf-8"))
@@ -119,6 +137,10 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
         }
         for name, value in values.items():
             (evidence_dir / name).write_text(value, encoding="utf-8")
+        for _, transcript in builder.COMMAND_TRANSCRIPTS:
+            (evidence_dir / f"{transcript}.status.txt").write_text(
+                "0\n", encoding="utf-8"
+            )
         (evidence_dir / "metadata.stdout").write_text(
             json.dumps(
                 {"packages": [{"name": "quire-contract-codegen", "version": "0.1.0"}]}

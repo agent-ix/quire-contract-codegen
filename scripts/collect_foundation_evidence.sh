@@ -22,11 +22,20 @@ if ! python3 -c 'import jsonschema' >/dev/null 2>&1; then
   exit 2
 fi
 mkdir -p "$evidence_dir"
+collection_failed=0
 
 run_and_retain() {
   local name="$1"
   shift
+  set +e
   "$@" >"$evidence_dir/$name.stdout" 2>"$evidence_dir/$name.stderr"
+  local status=$?
+  set -e
+  echo "$status" >"$evidence_dir/$name.status.txt"
+  if (( status != 0 )); then
+    collection_failed=1
+  fi
+  return 0
 }
 
 git rev-parse HEAD >"$evidence_dir/source-revision.txt"
@@ -48,33 +57,53 @@ run_and_retain unsafe-audit bash scripts/check_unsafe_comments.sh
 run_and_retain metadata cargo metadata --format-version 1
 run_and_retain rustdoc env RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps
 
-python3 scripts/build_foundation_envelope.py "$evidence_dir"
-run_and_retain pgm01-pinned-schema \
-  python3 scripts/validate_json_schema.py \
-  schemas/pgm01-derivation-evidence-envelope-v1.schema.json \
-  "$evidence_dir/evidence-envelope.json"
-run_and_retain input-schema \
-  python3 scripts/validate_json_schema.py \
-  schemas/foundation-evidence-input-v1.schema.json "$evidence_dir/collection-input.json"
-run_and_retain manifest-schema \
-  python3 scripts/validate_json_schema.py \
-  schemas/foundation-evidence-manifest-v1.schema.json "$evidence_dir/evidence-manifest.json"
-
-if [[ -n "${PGM01_SCHEMA:-}" ]]; then
-  run_and_retain pgm01-schema \
+run_schema_validators() {
+  run_and_retain pgm01-pinned-schema \
     python3 scripts/validate_json_schema.py \
-    "$PGM01_SCHEMA" "$evidence_dir/evidence-envelope.json"
-  echo passed >"$evidence_dir/pgm01-schema-status.txt"
-else
-  echo skipped-unavailable >"$evidence_dir/pgm01-schema-status.txt"
-fi
+    schemas/pgm01-derivation-evidence-envelope-v1.schema.json \
+    "$evidence_dir/evidence-envelope.json"
+  run_and_retain input-schema \
+    python3 scripts/validate_json_schema.py \
+    schemas/foundation-evidence-input-v1.schema.json "$evidence_dir/collection-input.json"
+  run_and_retain manifest-schema \
+    python3 scripts/validate_json_schema.py \
+    schemas/foundation-evidence-manifest-v1.schema.json "$evidence_dir/evidence-manifest.json"
 
-if [[ -n "${PGM01_VALIDATOR:-}" ]]; then
-  run_and_retain pgm01-envelope \
-    python3 "$PGM01_VALIDATOR" --fixture "$evidence_dir/evidence-envelope.json"
-  echo passed >"$evidence_dir/pgm01-envelope-status.txt"
-else
-  echo skipped-unavailable >"$evidence_dir/pgm01-envelope-status.txt"
+  if [[ -n "${PGM01_SCHEMA:-}" ]]; then
+    run_and_retain pgm01-schema \
+      python3 scripts/validate_json_schema.py \
+      "$PGM01_SCHEMA" "$evidence_dir/evidence-envelope.json"
+    if [[ "$(<"$evidence_dir/pgm01-schema.status.txt")" == 0 ]]; then
+      echo passed >"$evidence_dir/pgm01-schema-status.txt"
+    else
+      echo failed >"$evidence_dir/pgm01-schema-status.txt"
+    fi
+  else
+    echo skipped-unavailable >"$evidence_dir/pgm01-schema-status.txt"
+  fi
+
+  if [[ -n "${PGM01_VALIDATOR:-}" ]]; then
+    run_and_retain pgm01-envelope \
+      python3 "$PGM01_VALIDATOR" --fixture "$evidence_dir/evidence-envelope.json"
+    if [[ "$(<"$evidence_dir/pgm01-envelope.status.txt")" == 0 ]]; then
+      echo passed >"$evidence_dir/pgm01-envelope-status.txt"
+    else
+      echo failed >"$evidence_dir/pgm01-envelope-status.txt"
+    fi
+  else
+    echo skipped-unavailable >"$evidence_dir/pgm01-envelope-status.txt"
+  fi
+}
+
+python3 scripts/build_foundation_envelope.py "$evidence_dir"
+run_schema_validators
+python3 scripts/build_foundation_envelope.py "$evidence_dir"
+run_schema_validators
+validated_envelope_sha256="$(sha256sum "$evidence_dir/evidence-envelope.json")"
+python3 scripts/build_foundation_envelope.py "$evidence_dir"
+if [[ "$(sha256sum "$evidence_dir/evidence-envelope.json")" != "$validated_envelope_sha256" ]]; then
+  echo "foundation evidence envelope changed after final validation" >&2
+  collection_failed=1
 fi
 
 (
@@ -83,3 +112,8 @@ fi
     | sort -z \
     | xargs -0 sha256sum >sha256sums.txt
 )
+
+if (( collection_failed != 0 )); then
+  echo "one or more retained foundation evidence commands failed" >&2
+  exit 1
+fi

@@ -55,9 +55,10 @@ validator all accept their respective records with zero errors.
 
 The foundation evidence toolchain is owned by MP-001 and tested independently of the semantic
 TestMatrix. Its vendored PGM-01 schema digest must match the executable pin; its PGM/runtime pins must
-agree with the planning reviews; and fixture tests cover envelope identities, roles, digests,
-extensions, fail-closed pin mismatch, and local validator acceptance/rejection. Semantic coverage
-remains zero because these tests make no code-generation claim.
+agree with the planning reviews; every declared outcome is derived from a retained exit status; and
+fixture tests cover envelope identities, roles, digests, extensions, fail-closed pin mismatch,
+failure/inconclusive truthfulness, and local validator acceptance/rejection. Semantic coverage remains
+zero because these tests make no code-generation claim.
 
 The current placeholder crate tests establish only scaffold health. They do not satisfy any semantic
 test case or close the assurance claim.
