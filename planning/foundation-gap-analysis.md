@@ -70,8 +70,8 @@ test case or close the assurance claim.
 - Runtime PR #5 is provisionally pinned at
   `cc2d2188ea897a9570039f05b7f9401a770fe5fe`; current remote checks, review, final
   reconciliation, and release remain open.
-- The manual-only CI workflow change is provided by codegen PR #8. This branch is stacked on that
-  exact commit and must be rebased onto `main` after PR #8 merges.
+- Manual-only CI PR #8 is merged into `main`. This branch preserves its history and is merged with
+  that current main base; a deliberately dispatched protected run remains pending.
 - Default-branch protection was observed and retained in
   `evidence/foundation-remote/branch-protection.md`: strict `Rust Checks` and `License Check`, one
   CODEOWNER approval, administrator enforcement, conversation resolution, and no force push or
