@@ -49,7 +49,7 @@ The retained bundle records a clean source revision and successful specification
 formatting, Clippy, unit/integration tests, explicit Rust 1.75 compatibility, license policy,
 unsafe-code audit, metadata capture, and warning-denied documentation generation. The local input
 schema now rejects unknown tool and dependency fields and requires exact PGM/runtime identities.
-All 41 checksum entries verify in the current source-bound record; the local schemas, exact merged
+All checksum entries verify in the current source-bound record; the local schemas, exact merged
 PGM-01 schema, and custom
 validator all accept their respective records with zero errors.
 
