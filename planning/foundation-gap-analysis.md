@@ -64,11 +64,11 @@ test case or close the assurance claim.
 
 ## Open dependencies and remote evidence
 
-- PGM-01 PR #12 is pinned at `942670a0db78be57cfa9bdd6d04302b453781a49` and provisionally
+- PGM-01 PR #12 is pinned at `d8d376d887c40255e87ef9656bc0faf79216b321` and provisionally
   reconciled; review, merge, and final identity reconciliation remain open.
 - The authoritative IR schema/corpus (`agent-ix/quire-contract-ir#10`) has no candidate revision.
 - Runtime PR #5 is provisionally pinned at
-  `d423de45ad093dfe074dba29f6e6fd330f330e3d`; current remote checks, review, final
+  `177b5e714527fb6c05df7ca0d81699bbdc01ea2d`; current remote checks, review, final
   reconciliation, and release remain open.
 - Manual-only CI PR #8 is merged into `main`. This branch preserves its history and is merged with
   that current main base; a deliberately dispatched protected run remains pending.

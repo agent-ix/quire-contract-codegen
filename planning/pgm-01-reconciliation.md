@@ -7,7 +7,7 @@ type: Review
 # PGM-01 candidate reconciliation
 
 PGM-01 candidate: `agent-ix/quire-contract-ir#12` at
-`942670a0db78be57cfa9bdd6d04302b453781a49`.
+`d8d376d887c40255e87ef9656bc0faf79216b321`.
 
 Envelope schema: `quire.derivation-evidence/v1`, SHA-256
 `0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256`.
@@ -23,10 +23,13 @@ CODEOWNER approval, and the human source-release decision remain open. Final dep
 must be reconciled before semantic implementation leaves draft.
 
 The current candidate retains the same envelope schema digest. Its policy repository gates pass
-21/21 Quire documents, 26/26 backed criteria, the 13/13 Draft 7 corpus, and all seven schema/format
+21/21 Quire documents, 28/28 backed criteria, the 13/13 Draft 7 corpus, and all seven schema/format
 mutation probes. The foundation envelope is accepted by both the candidate schema and its custom
 validator with zero errors. PGM-01's remaining review findings stay open and are not converted into
 codegen claims.
+
+The candidate's release-only verifier also matches its unique retained record across 66/66 complete
+HEAD/worktree inputs and 5/5 committed outputs, including the published PGM evidence-manifest schema.
 
 The exact candidate schema is vendored at
 `schemas/pgm01-derivation-evidence-envelope-v1.schema.json`. The foundation builder derives its
