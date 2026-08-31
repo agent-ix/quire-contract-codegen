@@ -19,6 +19,7 @@ for candidate in src tests benches examples; do
   fi
 done
 if [[ ${#search_roots[@]} -eq 0 ]]; then
+  echo "unsafe audit passed"
   exit 0
 fi
 
@@ -28,6 +29,7 @@ while IFS= read -r line; do
 done < <(grep -rEn 'unsafe[[:space:]]*\{' "${search_roots[@]}" 2>/dev/null || true)
 
 if [[ ${#unsafe_lines[@]} -eq 0 ]]; then
+  echo "unsafe audit passed"
   exit 0
 fi
 
@@ -56,6 +58,7 @@ if [[ "$update_baseline" == true ]]; then
 fi
 
 if [[ ${#missing_lines[@]} -eq 0 ]]; then
+  echo "unsafe audit passed"
   exit 0
 fi
 

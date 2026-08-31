@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parent.parent
 EVIDENCE_ROOT = ROOT / "evidence"
 ANCHORS = EVIDENCE_ROOT / "ANCHORS"
+ANCHOR_LINE = re.compile(r"^([0-9a-f]{64})  (.+)$")
 
 
 def sha256_file(path: Path) -> str:
@@ -36,6 +37,8 @@ def tree_digest(root: Path) -> str:
 
 
 def rendered_anchors() -> str:
+    if ANCHORS.is_symlink():
+        raise ValueError("evidence/ANCHORS must not be a symlink")
     entries: list[tuple[Path, str]] = []
     for path in EVIDENCE_ROOT.iterdir():
         if path == ANCHORS:
@@ -65,10 +68,35 @@ def rendered_anchors() -> str:
     return "\n".join(lines) + "\n"
 
 
+def anchor_entries(text: str) -> dict[str, str]:
+    entries = {}
+    for line in text.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        match = ANCHOR_LINE.fullmatch(line)
+        if match is None:
+            raise ValueError(f"invalid existing evidence anchor line: {line!r}")
+        entries[match.group(2)] = match.group(1)
+    return entries
+
+
 # Implements: MP-001
 def main() -> int:
-    ANCHORS.write_text(rendered_anchors(), encoding="utf-8")
+    if ANCHORS.is_symlink():
+        raise ValueError("evidence/ANCHORS must not be a symlink")
+    before = (
+        anchor_entries(ANCHORS.read_text(encoding="utf-8")) if ANCHORS.exists() else {}
+    )
+    rendered = rendered_anchors()
+    after = anchor_entries(rendered)
+    ANCHORS.write_text(rendered, encoding="utf-8")
     print(f"updated {ANCHORS.relative_to(ROOT)}")
+    print(f"added: {sorted(set(after) - set(before))}")
+    print(f"removed: {sorted(set(before) - set(after))}")
+    print(
+        "changed: "
+        f"{sorted(path for path in set(before) & set(after) if before[path] != after[path])}"
+    )
     return 0
 
 

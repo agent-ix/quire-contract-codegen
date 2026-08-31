@@ -9,7 +9,6 @@ import unittest
 from pathlib import Path
 from typing import TextIO
 
-
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -50,11 +49,13 @@ def run_tests(root: Path = ROOT, stream: TextIO | None = None) -> int:
     if result.testsRun == 0:
         print("no Python tests executed", file=stream or sys.stderr)
         return 1
+    if not result.wasSuccessful():
+        return 1
     print(
         f"executed {result.testsRun} Python tests from {len(paths)} files",
         file=stream or sys.stdout,
     )
-    return 0 if result.wasSuccessful() else 1
+    return 0
 
 
 # Implements: MP-001

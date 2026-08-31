@@ -2,14 +2,19 @@
 # Quire Contract Codegen Makefile
 # =============================================================================
 
-override CARGO := cargo
+TRUSTED_HOME := $(shell /usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
+override BASH := /usr/bin/bash
+override CARGO := $(TRUSTED_HOME)/.cargo/bin/cargo
 override MSRV := 1.75.0
-override PYTHON := python3
+override PYTHON := /usr/bin/python3
+override QUIRE := $(TRUSTED_HOME)/.npm-global/bin/quire
 
-observed_cargo = $(shell command -v cargo 2>/dev/null)
-rustup_proxy_cargo = $(patsubst %/,%,$(dir $(shell command -v rustup 2>/dev/null)))/cargo
-unsafe_make_directive = $(shell grep -E '^\s*\.(IGNORE|SILENT)\s*(:|$$)' '$(firstword $(MAKEFILE_LIST))' 2>/dev/null)
-ci_guard = $(if $(strip $(MAKEFLAGS)),$(error local CI refuses non-empty MAKEFLAGS),)$(if $(strip $(unsafe_make_directive)),$(error local CI refuses global recipe-control directives),)$(if $(filter-out $(rustup_proxy_cargo),$(observed_cargo)),$(error cargo must resolve to $(rustup_proxy_cargo), got $(observed_cargo)),)
+ifneq ($(filter ci,$(MAKECMDGOALS)),)
+codegen_ci_parse_status := $(shell /usr/bin/env MAKEFLAGS='$(MAKEFLAGS)' /usr/bin/python3 scripts/check_failure_propagation.py --makefile '$(firstword $(MAKEFILE_LIST))' --parse-time >/dev/null 2>&1; echo $$?)
+ifneq ($(codegen_ci_parse_status),0)
+$(error local CI parse-time integrity guard rejected this invocation)
+endif
+endif
 
 .PHONY: help
 help:
@@ -60,7 +65,7 @@ msrv:
 
 .PHONY: spec
 spec:
-	quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'
+	$(QUIRE) validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'
 
 .PHONY: clean
 clean:
@@ -80,11 +85,11 @@ cargo-audit:
 
 .PHONY: audit-unsafe
 audit-unsafe:
-	bash scripts/check_unsafe_comments.sh
+	$(BASH) scripts/check_unsafe_comments.sh
 
 .PHONY: evidence-tool
 evidence-tool:
-	$(PYTHON) -m py_compile scripts/build_foundation_envelope.py scripts/check_coverage_status.py scripts/run_python_tests.py scripts/update_evidence_anchors.py scripts/validate_json_schema.py scripts/verify_foundation_evidence.py
+	$(PYTHON) -m py_compile scripts/build_foundation_envelope.py scripts/check_coverage_status.py scripts/check_failure_propagation.py scripts/run_python_tests.py scripts/update_evidence_anchors.py scripts/validate_json_schema.py scripts/verify_foundation_evidence.py
 	$(PYTHON) scripts/run_python_tests.py
 
 .PHONY: verify-evidence
@@ -105,8 +110,7 @@ rustdoc:
 
 .PHONY: ci-guard
 ci-guard:
-	$(ci_guard)
-	@:
+	/usr/bin/python3 scripts/check_failure_propagation.py
 
 .NOTPARALLEL: ci
 .PHONY: ci

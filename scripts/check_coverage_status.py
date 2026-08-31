@@ -9,37 +9,129 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent
 TRACE_ID = re.compile(r"\b(?:TC-\d{3}|(?:N?FR|StR)-\d{3}(?:-(?:AC|VC)-\d+)?)\b")
 IGNORE_ATTRIBUTE = re.compile(r"#\[[^\]]*\bignore\b[^\]]*\]", re.DOTALL)
-MINIMUM_MATRIX_ROWS = 28
+CFG_ATTRIBUTE = re.compile(r"#\[[^\]]*\bcfg(?:_attr)?\b[^\]]*\]", re.DOTALL)
+EXPECTED_MATRIX_ROWS = (
+    ("FR-001", "FR-001-AC-1, FR-001-AC-3", "TC-001", "🚧 Planned"),
+    ("FR-001", "FR-001-AC-2", "TC-002", "🚧 Planned"),
+    ("FR-001", "FR-001-AC-4", "TC-003", "🚧 Planned"),
+    ("FR-002", "FR-002-AC-1 through FR-002-AC-4", "TC-004", "🚧 Planned"),
+    ("FR-003", "FR-003-AC-1", "TC-005", "🚧 Planned"),
+    ("FR-003", "FR-003-AC-2", "TC-007", "🚧 Planned"),
+    ("FR-003", "FR-003-AC-3", "TC-003", "🚧 Planned"),
+    ("FR-003", "FR-003-AC-4", "Inspection", "🚧 Planned"),
+    ("FR-004", "FR-004-AC-1 through FR-004-AC-3", "TC-006", "🚧 Planned"),
+    ("FR-004", "FR-004-AC-4", "Inspection", "🚧 Planned"),
+    ("FR-005", "FR-005-AC-1", "TC-002", "🚧 Planned"),
+    ("FR-005", "FR-005-AC-2", "TC-001", "🚧 Planned"),
+    ("FR-005", "FR-005-AC-3", "Inspection", "🚧 Planned"),
+    ("FR-005", "FR-005-AC-4", "TC-007", "🚧 Planned"),
+    ("NFR-001", "NFR-001-AC-1", "TC-001", "🚧 Planned"),
+    ("NFR-001", "NFR-001-AC-2, NFR-001-AC-3", "TC-002", "🚧 Planned"),
+    ("NFR-002", "NFR-002-AC-1, NFR-002-AC-2", "TC-001", "🚧 Planned"),
+    ("NFR-002", "NFR-002-AC-3", "TC-003", "🚧 Planned"),
+    ("NFR-002", "NFR-002-AC-4", "Inspection", "🚧 Planned"),
+    ("StR-001", "StR-001-VC-1, FR-001", "TC-001", "🚧 Planned"),
+    ("StR-001", "StR-001-VC-2, FR-003, FR-004", "TC-007", "🚧 Planned"),
+    (
+        "TC-001",
+        "Reproduce artifacts and manifests",
+        "Integration",
+        "P0",
+        "FR-001-AC-1, FR-001-AC-3, FR-005-AC-2, NFR-001-AC-1, NFR-002-AC-1, NFR-002-AC-2",
+        "🚧 Planned",
+    ),
+    (
+        "TC-002",
+        "Compile and publish atomically",
+        "Integration",
+        "P0",
+        "FR-001-AC-2, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3",
+        "🚧 Planned",
+    ),
+    (
+        "TC-003",
+        "Reject unsupported inputs explicitly",
+        "Integration",
+        "P0",
+        "FR-001-AC-4, FR-003-AC-3, NFR-002-AC-3",
+        "🚧 Planned",
+    ),
+    (
+        "TC-004",
+        "Preserve shaped proptest strategies",
+        "Property",
+        "P0",
+        "FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4",
+        "🚧 Planned",
+    ),
+    (
+        "TC-005",
+        "Enforce Kani proof dependencies",
+        "Analysis",
+        "P0",
+        "FR-003-AC-1",
+        "🚧 Planned",
+    ),
+    (
+        "TC-006",
+        "Distinguish vacuity and unexecuted flow",
+        "Integration",
+        "P0",
+        "FR-004-AC-1, FR-004-AC-2, FR-004-AC-3",
+        "🚧 Planned",
+    ),
+    (
+        "TC-007",
+        "Verify cross-backend semantic parity",
+        "Integration",
+        "P0",
+        "FR-003-AC-2, FR-005-AC-4",
+        "🚧 Planned",
+    ),
+)
+
+
+def rust_sources(repository_root: Path) -> list[Path]:
+    return [
+        path
+        for path in sorted(repository_root.rglob("*.rs"))
+        if not any(part in {".git", "evidence", "target"} for part in path.parts)
+    ]
+
+
+def trace_attribute_findings(
+    pattern: re.Pattern[str], label: str, repository_root: Path = ROOT
+) -> list[str]:
+    findings = []
+    for path in rust_sources(repository_root):
+        contents = path.read_text(encoding="utf-8")
+        for attribute in pattern.finditer(contents):
+            prior_item_end = max(
+                contents.rfind("\n}", 0, attribute.start()),
+                contents.rfind("\nfn ", 0, attribute.start()),
+            )
+            next_item = contents.find("\nfn ", attribute.end())
+            context_end = len(contents) if next_item < 0 else next_item
+            context = contents[prior_item_end + 1 : context_end]
+            identifiers = sorted(set(TRACE_ID.findall(context)))
+            if identifiers:
+                line = contents.count("\n", 0, attribute.start()) + 1
+                findings.append(
+                    f"{path.relative_to(repository_root)}:{line}: {label} trace-bearing test "
+                    + ", ".join(identifiers)
+                )
+    return findings
 
 
 def ignored_trace_tests(repository_root: Path = ROOT) -> list[str]:
-    findings = []
-    for root_name in ("src", "tests", "benches", "examples"):
-        root = repository_root / root_name
-        if not root.exists():
-            continue
-        for path in sorted(root.rglob("*.rs")):
-            contents = path.read_text(encoding="utf-8")
-            for attribute in IGNORE_ATTRIBUTE.finditer(contents):
-                prior_item_end = max(
-                    contents.rfind("\n}", 0, attribute.start()),
-                    contents.rfind("\nfn ", 0, attribute.start()),
-                )
-                next_item = contents.find("\nfn ", attribute.end())
-                context_end = len(contents) if next_item < 0 else next_item
-                context = contents[prior_item_end + 1 : context_end]
-                identifiers = sorted(set(TRACE_ID.findall(context)))
-                if identifiers:
-                    line = contents.count("\n", 0, attribute.start()) + 1
-                    findings.append(
-                        f"{path.relative_to(repository_root)}:{line}: ignored trace-bearing test "
-                        + ", ".join(identifiers)
-                    )
-    return findings
+    return trace_attribute_findings(IGNORE_ATTRIBUTE, "ignored", repository_root)
+
+
+def configured_trace_tests(repository_root: Path = ROOT) -> list[str]:
+    return trace_attribute_findings(CFG_ATTRIBUTE, "cfg-controlled", repository_root)
 
 
 def undeclared_matrix_ids(report: dict[str, object], matrix_text: str) -> list[str]:
@@ -52,7 +144,9 @@ def undeclared_matrix_ids(report: dict[str, object], matrix_text: str) -> list[s
     return sorted(
         identifier
         for identifier in matrix_ids
-        if (identifier.startswith("TC-") or "-AC-" in identifier or "-VC-" in identifier)
+        if (
+            identifier.startswith("TC-") or "-AC-" in identifier or "-VC-" in identifier
+        )
         and identifier not in minted
     )
 
@@ -64,20 +158,46 @@ def missing_matrix_ids(report: dict[str, object], matrix_text: str) -> list[str]
         if isinstance(item, dict)
         and isinstance(item.get("id"), str)
         and (
-            item["id"].startswith("TC-")
-            or "-AC-" in item["id"]
-            or "-VC-" in item["id"]
+            item["id"].startswith("TC-") or "-AC-" in item["id"] or "-VC-" in item["id"]
         )
     }
     return sorted(minted - set(TRACE_ID.findall(matrix_text)))
 
 
-def matrix_row_count(matrix_text: str) -> int:
-    return sum(
-        1
+def matrix_rows(matrix_text: str) -> tuple[tuple[str, ...], ...]:
+    return tuple(
+        tuple(cell.strip() for cell in line.strip("|").split("|"))
         for line in matrix_text.splitlines()
         if line.startswith(("| FR-", "| NFR-", "| StR-", "| TC-"))
     )
+
+
+def matrix_row_count(matrix_text: str) -> int:
+    return len(matrix_rows(matrix_text))
+
+
+def matrix_row_errors(matrix_text: str) -> list[str]:
+    observed = matrix_rows(matrix_text)
+    if observed == EXPECTED_MATRIX_ROWS:
+        return []
+    expected_set = set(EXPECTED_MATRIX_ROWS)
+    observed_set = set(observed)
+    errors = []
+    if any(not cell for row in observed for cell in row):
+        errors.append("matrix contains an empty verification cell")
+    if len(observed) != len(EXPECTED_MATRIX_ROWS):
+        errors.append(
+            f"matrix row census {len(observed)} differs from reviewed census "
+            f"{len(EXPECTED_MATRIX_ROWS)}"
+        )
+    if observed_set != expected_set:
+        errors.append(
+            "matrix reviewed tuple set changed: "
+            f"missing={len(expected_set - observed_set)}, extra={len(observed_set - expected_set)}"
+        )
+    elif observed != EXPECTED_MATRIX_ROWS:
+        errors.append("matrix reviewed tuple order changed")
+    return errors
 
 
 def diagnostic_reasons(report: dict[str, object]) -> list[str]:
@@ -92,9 +212,9 @@ def diagnostic_reasons(report: dict[str, object]) -> list[str]:
 
 # Implements: MP-001
 def main() -> int:
-    ignored = ignored_trace_tests()
-    if ignored:
-        for finding in ignored:
+    inactive = ignored_trace_tests() + configured_trace_tests()
+    if inactive:
+        for finding in inactive:
             print(f"COVERAGE_STATUS_CONTRADICTION: {finding}", file=sys.stderr)
         return 1
 
@@ -112,7 +232,10 @@ def main() -> int:
     try:
         report = json.loads(completed.stdout)
     except json.JSONDecodeError as error:
-        print(f"COVERAGE_STATUS_CONTRADICTION: invalid JSON report: {error}", file=sys.stderr)
+        print(
+            f"COVERAGE_STATUS_CONTRADICTION: invalid JSON report: {error}",
+            file=sys.stderr,
+        )
         return 1
     status_lies = report.get("status_lies", [])
     if status_lies:
@@ -138,13 +261,10 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    rows = matrix_row_count(matrix_text)
-    if rows < MINIMUM_MATRIX_ROWS:
-        print(
-            f"COVERAGE_STATUS_CONTRADICTION: matrix row count {rows} is below "
-            f"the reviewed floor {MINIMUM_MATRIX_ROWS}",
-            file=sys.stderr,
-        )
+    matrix_errors = matrix_row_errors(matrix_text)
+    if matrix_errors:
+        for error in matrix_errors:
+            print(f"COVERAGE_STATUS_CONTRADICTION: {error}", file=sys.stderr)
         return 1
     inconclusive = diagnostic_reasons(report)
     summary = report.get("totals", {})

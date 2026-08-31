@@ -86,6 +86,15 @@ cannot become a passed evidence outcome. The foundation collector accepts that o
 coverage outcome as a usable pending record, but never relabels it as conclusive.
 `scripts/check_unsafe_comments.sh` owns the unsafe-code census, and
 `scripts/build_foundation_envelope.py` owns deterministic outcome/result derivation and assembly.
+`scripts/check_failure_propagation.py` pins trusted local tool identities, rejects Make execution
+modifiers that suppress work, verifies the exact composite prerequisite census, substitutes a
+failing command at every mandatory recipe position, and requires substantive output from the
+coverage, Python-test, and retained-evidence verification entry points.
+The parse-time Make control rejects dry-run, touch, and ignore-error modes while explicitly allowing
+parallelism and load-limit flags (`-j`/`--jobs`, `-l`/`--load-average`, and jobserver descriptors).
+The local unsafe-comment audit is a strengthened fork of the seven-repository baseline: it scans
+tests, benches, and examples in addition to `src`, retains a reviewed baseline, and emits an
+explicit success marker. Those improvements should be upstreamed by the shared policy owner.
 
 ## Interpretation
 

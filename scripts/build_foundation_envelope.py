@@ -7,10 +7,10 @@ import datetime as dt
 import hashlib
 import json
 import platform
+import re
 import sys
 from pathlib import Path
 from typing import Any
-
 
 ROOT = Path(__file__).resolve().parent.parent
 PGM01_CANDIDATE_REVISION = "7dac9d8c19952412b56a0347387666e2ca81e01d"
@@ -52,7 +52,7 @@ VALIDATOR_TRANSCRIPTS = (
     "pgm01-envelope",
 )
 PASS_CONTRADICTION_MARKERS = {
-    "quire-validate": ("\"valid\": false", "document(s) failed structural validation"),
+    "quire-validate": ('"valid": false', "document(s) failed structural validation"),
     "fmt": ("Diff in ",),
     "clippy": ("error: could not compile",),
     "test": ("test result: FAILED", "error: test failed"),
@@ -69,9 +69,30 @@ PASS_CONTRADICTION_MARKERS = {
     "pgm01-schema": ('"valid": false',),
     "pgm01-envelope": ('"valid": false', "governance validation error:"),
 }
+PASS_CORROBORATION_MARKERS = {
+    "quire-validate": ("QUIRE_VALIDATION_PASSED",),
+    "fmt": (),
+    "clippy": ("Finished `dev` profile",),
+    "test": ("test result: ok.",),
+    "msrv": ("test result: ok.",),
+    "deny": ("advisories ok, bans ok, licenses ok, sources ok",),
+    "unsafe-audit": ("unsafe audit passed",),
+    "metadata": ('"packages"',),
+    "rustdoc": ("Generated ",),
+    "coverage": ('"statusLies": 0',),
+    "evidence-tool": ("executed ", " Python tests from "),
+    "pgm01-pinned-schema": ('"valid": true',),
+    "input-schema": ('"valid": true',),
+    "manifest-schema": ('"valid": true',),
+    "pgm01-schema": ('"valid": true',),
+    "pgm01-envelope": ('"valid": true',),
+}
 INCONCLUSIVE_TRANSCRIPT_MARKERS = {
     "coverage": ("COVERAGE_STATUS_INCONCLUSIVE",),
 }
+MINIMUM_RUST_TESTS = 2
+MINIMUM_PYTHON_TESTS = 56
+MINIMUM_TRANSCRIPT_BYTES = 8
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -87,7 +108,9 @@ def digest(value: str) -> dict[str, str]:
 
 
 def write_json(path: Path, value: Any) -> None:
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def verified_pgm01_schema_digest() -> str:
@@ -99,6 +122,55 @@ def verified_pgm01_schema_digest() -> str:
             f"expected {PGM01_ENVELOPE_SCHEMA_DIGEST}, got {actual}"
         )
     return actual
+
+
+def transcript_is_corroborated(name: str, stdout: str, stderr: str) -> bool:
+    """Require positive, command-specific evidence that a zero-exit gate did work."""
+    combined = stdout + "\n" + stderr
+    if name == "fmt":
+        return stdout == "" and stderr == ""
+    if len(stdout.encode()) + len(stderr.encode()) < MINIMUM_TRANSCRIPT_BYTES:
+        return False
+    markers = PASS_CORROBORATION_MARKERS.get(name)
+    if markers is None or not all(marker in combined for marker in markers):
+        return False
+    if name in {"test", "msrv"}:
+        passed = sum(
+            int(count)
+            for count in re.findall(r"test result: ok\. ([0-9]+) passed;", combined)
+        )
+        return passed >= MINIMUM_RUST_TESTS
+    if name == "evidence-tool":
+        match = re.search(
+            r"executed ([0-9]+) Python tests from ([0-9]+) files", combined
+        )
+        return (
+            match is not None
+            and int(match.group(1)) >= MINIMUM_PYTHON_TESTS
+            and int(match.group(2)) >= 1
+            and "\nOK\n" in combined
+        )
+    if name == "metadata":
+        try:
+            value = json.loads(stdout)
+        except json.JSONDecodeError:
+            return False
+        return isinstance(value, dict) and bool(value.get("packages"))
+    if name == "coverage":
+        try:
+            value = json.loads(stdout.splitlines()[0])
+        except (IndexError, json.JSONDecodeError):
+            return False
+        return value.get("statusLies") == 0 and isinstance(
+            value.get("totals", {}).get("total"), int
+        )
+    if name in VALIDATOR_TRANSCRIPTS:
+        try:
+            value = json.loads(stdout)
+        except json.JSONDecodeError:
+            return False
+        return value.get("valid") is True and value.get("errors") == []
+    return True
 
 
 def command_outcomes(evidence_dir: Path) -> list[dict[str, str]]:
@@ -146,10 +218,11 @@ def command_outcomes(evidence_dir: Path) -> list[dict[str, str]]:
                 if not all(path.exists() for path in transcript_paths):
                     status = "inconclusive"
                 else:
-                    combined = "\n".join(
+                    stdout, stderr = (
                         path.read_text(encoding="utf-8", errors="replace")
                         for path in transcript_paths
                     )
+                    combined = stdout + "\n" + stderr
                     contradiction = next(
                         (
                             marker
@@ -160,6 +233,8 @@ def command_outcomes(evidence_dir: Path) -> list[dict[str, str]]:
                     )
                     if contradiction is not None:
                         status = "failed"
+                    elif not transcript_is_corroborated(name, stdout, stderr):
+                        status = "inconclusive"
                     elif any(
                         marker in combined
                         for marker in INCONCLUSIVE_TRANSCRIPT_MARKERS.get(name, ())
@@ -185,9 +260,7 @@ def summarize_outcomes(
         item["name"] for item in outcomes if item["status"] == "inconclusive"
     )
     skipped = sorted(
-        item["name"]
-        for item in outcomes
-        if item["status"] == "skipped-unavailable"
+        item["name"] for item in outcomes if item["status"] == "skipped-unavailable"
     )
     limitations = [
         *(f"failed foundation outcome: {name}" for name in failed),
@@ -195,7 +268,11 @@ def summarize_outcomes(
         *(f"skipped-unavailable foundation outcome: {name}" for name in skipped),
     ]
     if failed:
-        return "rejected", f"{len(failed)} codegen foundation checks failed", limitations
+        return (
+            "rejected",
+            f"{len(failed)} codegen foundation checks failed",
+            limitations,
+        )
     if inconclusive or skipped:
         parts = []
         if inconclusive:
@@ -217,29 +294,38 @@ def summarize_outcomes(
 def parameter_files() -> list[Path]:
     """Return the complete source-and-test set controlling foundation evidence."""
     fixed_paths = {
+        ROOT / "CLAUDE.md",
         ROOT / "Cargo.toml",
         ROOT / "Cargo.lock",
         ROOT / "Makefile",
+        ROOT / "deny.toml",
         ROOT / "rust-toolchain.toml",
+        ROOT / "spec" / "test-matrix.md",
+        ROOT / "spec" / "assurance" / "MP-001-codegen-measurements.md",
         EVIDENCE_REQUIREMENTS,
         INPUT_SCHEMA,
         MANIFEST_SCHEMA,
         PGM01_ENVELOPE_SCHEMA,
     }
-    tool_paths = {
+    controlled_paths = {
         path
-        for directory in (ROOT / "scripts", ROOT / "tools")
+        for directory in (
+            ROOT / "src",
+            ROOT / "scripts",
+            ROOT / "tools",
+            ROOT / "schemas",
+        )
         if directory.exists()
         for path in directory.rglob("*")
-        if path.is_file() and path.suffix in {".py", ".sh"}
+        if path.is_file() and "__pycache__" not in path.parts
     }
     test_paths = {
         path
-        for path in (ROOT / "tests").rglob("*.py")
+        for path in (ROOT / "tests").rglob("*")
         if path.is_file() and "__pycache__" not in path.parts
     }
     return sorted(
-        fixed_paths | tool_paths | test_paths,
+        fixed_paths | controlled_paths | test_paths,
         key=lambda path: path.relative_to(ROOT).as_posix(),
     )
 
@@ -253,6 +339,15 @@ def hash_parameter_files() -> str:
         state.update(path.read_bytes())
         state.update(b"\0")
     return state.hexdigest()
+
+
+def gate_script_digests() -> dict[str, str]:
+    """Bind every executable local gate implementation into the record."""
+    return {
+        path.relative_to(ROOT).as_posix(): sha256_file(path)
+        for path in parameter_files()
+        if path.is_relative_to(ROOT / "scripts") or path.is_relative_to(ROOT / "tools")
+    }
 
 
 def foundation_limitations(outcomes: list[dict[str, str]]) -> list[str]:
@@ -295,17 +390,17 @@ def expected_manifest_artifact_names(evidence_dir: Path) -> set[str]:
 def build(evidence_dir: Path) -> None:
     pgm01_schema_digest = verified_pgm01_schema_digest()
     evidence_dir = evidence_dir.resolve()
-    recorded_pgm01_revision = (evidence_dir / "pgm01-revision.txt").read_text(
-        encoding="utf-8"
-    ).strip()
+    recorded_pgm01_revision = (
+        (evidence_dir / "ir-validator-revision.txt").read_text(encoding="utf-8").strip()
+    )
     if recorded_pgm01_revision != IR_CANDIDATE_REVISION:
         raise ValueError(
             "PGM-01 validator revision mismatch: "
             f"expected {IR_CANDIDATE_REVISION}, got {recorded_pgm01_revision}"
         )
     recorded_pgm01_schema_digest = (
-        evidence_dir / "pgm01-schema-sha256.txt"
-    ).read_text(encoding="utf-8").strip()
+        (evidence_dir / "pgm01-schema-sha256.txt").read_text(encoding="utf-8").strip()
+    )
     if recorded_pgm01_schema_digest != pgm01_schema_digest:
         raise ValueError(
             "external PGM-01 schema digest mismatch: "
@@ -316,11 +411,19 @@ def build(evidence_dir: Path) -> None:
         if evidence_dir.is_relative_to(ROOT)
         else str(evidence_dir)
     )
-    revision = (evidence_dir / "source-revision.txt").read_text(encoding="utf-8").strip()
-    source_state = (evidence_dir / "source-state.txt").read_text(encoding="utf-8").strip()
-    metadata = json.loads((evidence_dir / "metadata.stdout").read_text(encoding="utf-8"))
+    revision = (
+        (evidence_dir / "source-revision.txt").read_text(encoding="utf-8").strip()
+    )
+    source_state = (
+        (evidence_dir / "source-state.txt").read_text(encoding="utf-8").strip()
+    )
+    metadata = json.loads(
+        (evidence_dir / "metadata.stdout").read_text(encoding="utf-8")
+    )
     package = next(
-        item for item in metadata["packages"] if item["name"] == "quire-contract-codegen"
+        item
+        for item in metadata["packages"]
+        if item["name"] == "quire-contract-codegen"
     )
     recorded_at_path = evidence_dir / "recorded-at.txt"
     if recorded_at_path.exists():
@@ -339,6 +442,7 @@ def build(evidence_dir: Path) -> None:
         "sourceRevision": revision,
         "sourceState": source_state,
         "phase": "foundation",
+        "gateScripts": gate_script_digests(),
         "commands": [
             "quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'",
             "python3 scripts/validate_json_schema.py schemas/foundation-evidence-input-v1.schema.json collection-input.json",
@@ -402,7 +506,7 @@ def build(evidence_dir: Path) -> None:
                     .read_text(encoding="utf-8")
                     .strip()
                 ),
-                "validatorRevision": (evidence_dir / "pgm01-revision.txt")
+                "validatorRevision": (evidence_dir / "ir-validator-revision.txt")
                 .read_text(encoding="utf-8")
                 .strip(),
             },
@@ -447,7 +551,10 @@ def build(evidence_dir: Path) -> None:
             "version": package["version"],
             "sourceRevision": revision,
             "executableDigest": digest(sha256_file(COLLECTOR)),
-            "invocation": ["scripts/collect_foundation_evidence.sh", invocation_directory],
+            "invocation": [
+                "scripts/collect_foundation_evidence.sh",
+                invocation_directory,
+            ],
         },
         "inputs": [
             {

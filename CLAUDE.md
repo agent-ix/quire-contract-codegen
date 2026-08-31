@@ -22,6 +22,10 @@ make verify-evidence # verify the anchored authoritative and historical evidence
 make ci             # every local gate above except build, clean, and cargo-audit
 ```
 
+Evidence collection requires a completely clean Git worktree, including no untracked files. The
+collector refuses to run until work is committed or moved outside the checkout; this makes the
+recorded source revision an exact description of every input under test.
+
 ## Safety scaffolding
 
 Backported from `agent-ix/ecaz`:
@@ -29,6 +33,7 @@ Backported from `agent-ix/ecaz`:
 - `clippy.toml` pins MSRV to `1.75` and caps cognitive complexity / arg count
 - `deny.toml` allow-lists licenses and denies unknown registries/git sources
 - `scripts/check_unsafe_comments.sh` runs in CI and locally via `make audit-unsafe`. Every `unsafe {` block must have a `// SAFETY:` comment within the 3 preceding lines, or be listed in `scripts/unsafe_comment_baseline.txt`. Update the baseline with `bash scripts/check_unsafe_comments.sh --update-baseline`.
+- This unsafe-audit script intentionally strengthens the shared seven-repository version by scanning tests, benches, and examples and emitting a positive completion marker; the shared policy owner should upstream those differences.
 - `rustfmt.toml` uses stable rustfmt settings with a 100-char width. CI fails on drift.
 - `rust-toolchain.toml` pins to stable + rustfmt + clippy.
 

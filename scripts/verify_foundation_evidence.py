@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform
 import re
 import subprocess
 import sys
@@ -25,11 +26,11 @@ from build_foundation_envelope import (
     command_outcomes,
     expected_manifest_artifact_names,
     foundation_limitations,
+    gate_script_digests,
     hash_parameter_files,
     summarize_outcomes,
 )
 from validate_json_schema import EvidenceRequirementsError, checked_format_checker
-
 
 ROOT = Path(__file__).resolve().parent.parent
 EVIDENCE_ROOT = ROOT / "evidence"
@@ -38,6 +39,8 @@ MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.jso
 CHECKSUM_LINE = re.compile(r"^([0-9a-f]{64})  (.+)$")
 ANCHORS = EVIDENCE_ROOT / "ANCHORS"
 REVISION = re.compile(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])")
+FOUNDATION_RECORD_NAME = re.compile(r"^foundation-([0-9a-f]{12})-[0-9]{8}T[0-9]{6}Z$")
+HISTORICAL_RECORD_REFERENCE = re.compile(r"foundation-[0-9a-f]{12}-[0-9]{8}T[0-9]{6}Z")
 EXTERNAL_REVISIONS = {
     PGM01_CANDIDATE_REVISION,
     IR_CANDIDATE_REVISION,
@@ -141,7 +144,9 @@ def verify_checksums(record: Path) -> int:
             raise EvidenceError(f"invalid checksum line in {record.name}: {line!r}")
         path = safe_record_path(record, match.group(2))
         if path in expected:
-            raise EvidenceError(f"duplicate checksum entry in {record.name}: {path.name}")
+            raise EvidenceError(
+                f"duplicate checksum entry in {record.name}: {path.name}"
+            )
         expected[path] = match.group(1)
     actual = {path for path in record.iterdir() if path != checksum_path}
     if set(expected) != actual:
@@ -167,14 +172,20 @@ def verify_artifacts(record: Path, manifest: dict[str, Any]) -> int:
     for artifact in manifest["artifacts"]:
         path = safe_record_path(record, artifact["path"])
         if path in seen:
-            raise EvidenceError(f"duplicate manifest artifact in {record.name}: {path.name}")
+            raise EvidenceError(
+                f"duplicate manifest artifact in {record.name}: {path.name}"
+            )
         seen.add(path)
         if not path.is_file():
-            raise EvidenceError(f"missing manifest artifact in {record.name}: {path.name}")
+            raise EvidenceError(
+                f"missing manifest artifact in {record.name}: {path.name}"
+            )
         if path.stat().st_size != artifact["size"]:
             raise EvidenceError(f"manifest size mismatch in {record.name}: {path.name}")
         if sha256_file(path) != artifact["sha256"]:
-            raise EvidenceError(f"manifest digest mismatch in {record.name}: {path.name}")
+            raise EvidenceError(
+                f"manifest digest mismatch in {record.name}: {path.name}"
+            )
     expected = expected_manifest_artifact_names(record)
     observed = {path.name for path in seen}
     if observed != expected:
@@ -192,14 +203,20 @@ def verify_envelope_links(record: Path, envelope: dict[str, Any]) -> None:
             continue
         path = safe_record_path(record, uri)
         if not path.is_file():
-            raise EvidenceError(f"missing envelope artifact in {record.name}: {path.name}")
+            raise EvidenceError(
+                f"missing envelope artifact in {record.name}: {path.name}"
+            )
         expected = artifact["contentDigest"]["value"]
         if sha256_file(path) != expected:
-            raise EvidenceError(f"envelope digest mismatch in {record.name}: {path.name}")
+            raise EvidenceError(
+                f"envelope digest mismatch in {record.name}: {path.name}"
+            )
 
 
 def verify_anchors() -> list[Path]:
     """Verify the committed record-set boundary and return authoritative records."""
+    if ANCHORS.is_symlink():
+        raise EvidenceError("committed evidence/ANCHORS must not be a symlink")
     if not ANCHORS.is_file():
         raise VerificationUnavailable("committed evidence/ANCHORS is missing")
     expected: dict[Path, str] = {}
@@ -211,7 +228,9 @@ def verify_anchors() -> list[Path]:
             raise EvidenceError(f"invalid evidence anchor line: {line!r}")
         target = safe_root_path(match.group(2))
         if target in expected:
-            raise EvidenceError(f"duplicate evidence anchor: {target.relative_to(ROOT)}")
+            raise EvidenceError(
+                f"duplicate evidence anchor: {target.relative_to(ROOT)}"
+            )
         expected[target] = match.group(1)
 
     actual: set[Path] = set()
@@ -228,14 +247,18 @@ def verify_anchors() -> list[Path]:
         else:
             actual.add(path)
     if set(expected) != actual:
-        unanchored = sorted(str(path.relative_to(ROOT)) for path in actual - set(expected))
+        unanchored = sorted(
+            str(path.relative_to(ROOT)) for path in actual - set(expected)
+        )
         absent = sorted(str(path.relative_to(ROOT)) for path in set(expected) - actual)
         raise EvidenceError(
             f"evidence anchor census mismatch: unanchored={unanchored}, absent={absent}"
         )
     for path, digest in expected.items():
         if not path.exists():
-            raise EvidenceError(f"anchored evidence target is absent: {path.relative_to(ROOT)}")
+            raise EvidenceError(
+                f"anchored evidence target is absent: {path.relative_to(ROOT)}"
+            )
         observed = tree_digest(path) if path.is_dir() else sha256_file(path)
         if observed != digest:
             raise EvidenceError(
@@ -302,7 +325,9 @@ def verify_documented_revisions(records: list[Path]) -> None:
                     raise VerificationUnavailable(
                         f"documented source revision is absent from the shallow clone: {revision}"
                     )
-                raise EvidenceError(f"documented source revision does not exist in {label}: {revision}")
+                raise EvidenceError(
+                    f"documented source revision does not exist in {label}: {revision}"
+                )
 
 
 def verify_historical_dispositions() -> None:
@@ -313,25 +338,50 @@ def verify_historical_dispositions() -> None:
     }
     for path in sorted((EVIDENCE_ROOT / "historical").rglob("evidence-envelope.json")):
         envelope = load_json(path)
-        observed = envelope.get("extensions", {}).get(
-            "dev.agent-ix.codegen", {}
-        ).get("historicalDisposition")
+        observed = (
+            envelope.get("extensions", {})
+            .get("dev.agent-ix.codegen", {})
+            .get("historicalDisposition")
+        )
         if observed != expected:
             raise EvidenceError(
                 f"historical disposition missing or invalid in {path.relative_to(ROOT)}"
             )
 
 
+def verify_historical_index() -> None:
+    readmes = sorted((EVIDENCE_ROOT / "historical").rglob("README.md"))
+    documented = {
+        name
+        for path in readmes
+        for name in HISTORICAL_RECORD_REFERENCE.findall(
+            path.read_text(encoding="utf-8")
+        )
+    }
+    retained = {
+        path.parent.name
+        for path in (EVIDENCE_ROOT / "historical").rglob("evidence-envelope.json")
+    }
+    if documented != retained:
+        raise EvidenceError(
+            "historical README record census mismatch: "
+            f"undocumented={sorted(retained - documented)}, "
+            f"absent={sorted(documented - retained)}"
+        )
+
+
 # Implements: MP-001
 def verify_record(record: Path) -> tuple[int, int]:
     checksums = verify_checksums(record)
+    if checksums <= 0:
+        raise EvidenceError(f"empty checksum census in {record.name}")
     manifest = load_json(record / "evidence-manifest.json")
     envelope = load_json(record / "evidence-envelope.json")
     validate_json(manifest, MANIFEST_SCHEMA, f"{record.name} manifest")
     validate_json(envelope, ENVELOPE_SCHEMA, f"{record.name} envelope")
-    recorded_schema_digest = (record / "pgm01-schema-sha256.txt").read_text(
-        encoding="utf-8"
-    ).strip()
+    recorded_schema_digest = (
+        (record / "pgm01-schema-sha256.txt").read_text(encoding="utf-8").strip()
+    )
     vendored_schema_digest = sha256_file(ENVELOPE_SCHEMA)
     if recorded_schema_digest != vendored_schema_digest:
         raise EvidenceError(
@@ -339,8 +389,15 @@ def verify_record(record: Path) -> tuple[int, int]:
             f"recorded {recorded_schema_digest}, vendored {vendored_schema_digest}"
         )
     artifacts = verify_artifacts(record, manifest)
+    if artifacts <= 0:
+        raise EvidenceError(f"empty manifest artifact census in {record.name}")
     verify_envelope_links(record, envelope)
     revision = (record / "source-revision.txt").read_text(encoding="utf-8").strip()
+    name_match = FOUNDATION_RECORD_NAME.fullmatch(record.name)
+    if name_match is not None and not revision.startswith(name_match.group(1)):
+        raise EvidenceError(
+            f"record directory revision prefix mismatch in {record.name}: {revision}"
+        )
     identities = {
         revision,
         manifest["sourceRevision"],
@@ -348,9 +405,21 @@ def verify_record(record: Path) -> tuple[int, int]:
         envelope["provenance"]["sourceRevision"],
     }
     if len(identities) != 1:
-        raise EvidenceError(f"source revision mismatch in {record.name}: {sorted(identities)}")
+        raise EvidenceError(
+            f"source revision mismatch in {record.name}: {sorted(identities)}"
+        )
     if envelope["parametersDigest"]["value"] != hash_parameter_files():
         raise EvidenceError(f"parameters digest mismatch in {record.name}")
+    collection_input = load_json(record / "collection-input.json")
+    if collection_input["gateScripts"] != gate_script_digests():
+        raise EvidenceError(f"gate script digest mismatch in {record.name}")
+    recorded_python = (
+        (record / "python-version.txt").read_text(encoding="utf-8").strip()
+    )
+    if recorded_python != f"Python {platform.python_version()}":
+        raise EvidenceError(
+            f"Python runtime identity mismatch in {record.name}: {recorded_python}"
+        )
     retained_outcomes = {
         path.name.removesuffix(".status.txt") for path in record.glob("*.status.txt")
     }
@@ -361,7 +430,10 @@ def verify_record(record: Path) -> tuple[int, int]:
     )
     declared_outcomes = {item["name"] for item in manifest["outcomes"]}
     configured_outcomes = {transcript for _, transcript in COMMAND_TRANSCRIPTS}
-    if retained_outcomes != declared_outcomes or declared_outcomes != configured_outcomes:
+    if (
+        retained_outcomes != declared_outcomes
+        or declared_outcomes != configured_outcomes
+    ):
         raise EvidenceError(
             f"outcome census mismatch in {record.name}: "
             f"retained={sorted(retained_outcomes)}, declared={sorted(declared_outcomes)}, "
@@ -392,7 +464,12 @@ def verify_authoritative_records() -> list[tuple[int, int]]:
         raise VerificationUnavailable(
             "no authoritative foundation records are named by evidence/ANCHORS"
         )
+    if len(records) != 1:
+        raise EvidenceError(
+            f"expected exactly one authoritative foundation record, found {len(records)}"
+        )
     verify_historical_dispositions()
+    verify_historical_index()
     verify_documented_revisions(records)
     return [verify_record(record) for record in records]
 

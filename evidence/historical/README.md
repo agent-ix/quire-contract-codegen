@@ -32,3 +32,44 @@ may support the current foundation statement.
   runner could report success without executing `unittest` cases and that the retained control set
   did not yet cover the accepted IR merge, bidirectional matrix census, or Make invocation guards.
   Its in-band historical disposition retracts it from the authoritative claim set.
+
+## Machine-checked record census
+
+The verifier requires this exact bidirectional census to match every retained historical envelope:
+
+- `foundation-088a1692b78e-20260831T015600Z`
+- `foundation-113c1f17730a-20260831T003723Z`
+- `foundation-1ed7e8e0d7c0-20260831T005601Z`
+- `foundation-2753a4f93301-20260831T203535Z`
+- `foundation-3536b8bc82a3-20260830T224639Z`
+- `foundation-374a6a3060ad-20260831T163004Z`
+- `foundation-38363fe7ed34-20260830T232349Z`
+- `foundation-3b3820cf5b6a-20260830T230214Z`
+- `foundation-51cf32624db0-20260830T223315Z`
+- `foundation-5ca054beccdc-20260830T214724Z`
+- `foundation-65da338d8149-20260831T001333Z`
+- `foundation-747ceab185d8-20260831T154546Z`
+- `foundation-795455f27a70-20260830T235823Z`
+- `foundation-86a4fe771344-20260831T002340Z`
+- `foundation-86eed791a2d4-20260830T220953Z`
+- `foundation-87c655011643-20260830T213741Z`
+- `foundation-8a4537d32002-20260830T225332Z`
+- `foundation-8db0acefa23d-20260830T212921Z`
+- `foundation-96cd217bf3ae-20260830T215443Z`
+- `foundation-9796a1412e16-20260831T003007Z`
+- `foundation-984594e48a0c-20260831T172037Z`
+- `foundation-9fc65135d0ce-20260830T215714Z`
+- `foundation-a6706357c0b1-20260831T033106Z`
+- `foundation-a7790d225746-20260831T154248Z`
+- `foundation-a88d192ab03a-20260830T213405Z`
+- `foundation-b3bb8615d6f0-20260831T002835Z`
+- `foundation-b80f432105ed-20260831T193347Z`
+- `foundation-b90d6d5946e5-20260830T220017Z`
+- `foundation-cf16bd39aab7-20260831T022900Z`
+- `foundation-cf40e894221c-20260831T163108Z`
+- `foundation-e1463f3f7719-20260831T010208Z`
+- `foundation-e76fd5eb6ddb-20260831T001807Z`
+- `foundation-e8c701cfe024-20260831T002430Z`
+- `foundation-f17fdd258b87-20260831T154719Z`
+- `foundation-fc6bbcf0d392-20260831T171947Z`
+- `foundation-fcdcc0c1593b-20260830T220427Z`
