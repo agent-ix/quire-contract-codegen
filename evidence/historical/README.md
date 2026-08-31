@@ -35,6 +35,9 @@ may support the current foundation statement.
 - `foundation-3cd2918c62e5-20260831T224142Z` is a failed-closed Round 5 collection. Its unsafe
   audit correctly returned nonzero but exposed that the scanner interpreted a Rust source snippet
   inside a Python negative fixture as live Rust; the successor restricts that audit to `*.rs`.
+- `retired-round5-boundary-hardening/foundation-35f526287109-20260831T203710Z` was the prior
+  pending authority. It predates trusted Python/tool identity, positive transcript corroboration,
+  exact matrix tuples, behavioral gate probes, and the review-visible anchor delta controls.
 
 ## Machine-checked record census
 
@@ -45,6 +48,7 @@ The verifier requires this exact bidirectional census to match every retained hi
 - `foundation-1ed7e8e0d7c0-20260831T005601Z`
 - `foundation-2753a4f93301-20260831T203535Z`
 - `foundation-3536b8bc82a3-20260830T224639Z`
+- `foundation-35f526287109-20260831T203710Z`
 - `foundation-374a6a3060ad-20260831T163004Z`
 - `foundation-38363fe7ed34-20260830T232349Z`
 - `foundation-3b3820cf5b6a-20260830T230214Z`
