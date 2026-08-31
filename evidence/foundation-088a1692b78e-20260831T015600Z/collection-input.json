@@ -1,0 +1,42 @@
+{
+  "commands": [
+    "quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'",
+    "python3 scripts/validate_json_schema.py schemas/foundation-evidence-input-v1.schema.json collection-input.json",
+    "python3 scripts/validate_json_schema.py schemas/foundation-evidence-manifest-v1.schema.json evidence-manifest.json",
+    "python3 scripts/validate_json_schema.py schemas/pgm01-derivation-evidence-envelope-v1.schema.json evidence-envelope.json",
+    "python3 scripts/validate_json_schema.py $PGM01_SCHEMA evidence-envelope.json (when available)",
+    "cargo fmt --all -- --check",
+    "cargo clippy --all-targets -- -D warnings",
+    "cargo test",
+    "cargo +1.75.0 check --lib",
+    "cargo deny check licenses",
+    "bash scripts/check_unsafe_comments.sh",
+    "cargo metadata --format-version 1",
+    "RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps"
+  ],
+  "dependencies": {
+    "irCorpus": "agent-ix/quire-contract-ir#10-open-no-candidate",
+    "pgm01": {
+      "candidateRevision": "7dac9d8c19952412b56a0347387666e2ca81e01d",
+      "envelopeSchema": "quire.derivation-evidence/v1",
+      "envelopeSchemaDigest": {
+        "algorithm": "sha256",
+        "value": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
+      },
+      "policy": "ix://agent-ix/quire-contract-ir/PGM-01"
+    },
+    "runtimeCandidateRevision": "7eb0bd41e6301057f8055aa14f96c22d1f30a269"
+  },
+  "phase": "foundation",
+  "schemaVersion": "quire.codegen-foundation-evidence-input/v1",
+  "sourceRevision": "088a1692b78e8ed1a9e7eb06a4135fc095c80317",
+  "sourceState": "clean",
+  "tools": {
+    "cargo": "cargo 1.94.1 (29ea6fb6a 2026-03-24)",
+    "jsonschema": "3.2.0",
+    "python": "Python 3.10.12",
+    "quire": "0.31.0",
+    "rust-msrv": "rustc 1.75.0 (82e1608df 2023-12-21)",
+    "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)"
+  }
+}
