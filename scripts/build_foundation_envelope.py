@@ -20,7 +20,7 @@ PGM01_ENVELOPE_SCHEMA_DIGEST = (
 PGM01_ENVELOPE_SCHEMA = (
     ROOT / "schemas" / "pgm01-derivation-evidence-envelope-v1.schema.json"
 )
-RUNTIME_CANDIDATE_REVISION = "cc2d2188ea897a9570039f05b7f9401a770fe5fe"
+RUNTIME_CANDIDATE_REVISION = "d423de45ad093dfe074dba29f6e6fd330f330e3d"
 INPUT_SCHEMA = ROOT / "schemas" / "foundation-evidence-input-v1.schema.json"
 MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.json"
 COLLECTOR = ROOT / "scripts" / "collect_foundation_evidence.sh"
