@@ -13,7 +13,7 @@ failure_behaviors: [emit explicit diagnostics, retain incomplete states, publish
 version_pins:
   rust-msrv: "1.75"
   governance: agent-ix/quire-contract-ir@7dac9d8c19952412b56a0347387666e2ca81e01d
-  ir-corpus: agent-ix/quire-contract-ir@37eb00153d5c139ebc01622b6e12a4ab79256f88
+  ir-corpus: agent-ix/quire-contract-ir@5c49ebfd1c87415f74420ad047392bd03b1bd202
   runtime: agent-ix/quire-contract-runtime@e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3
 controls:
   surfaces: [library API, CLI, backend adapters, bundle validator, CI, retained evidence]

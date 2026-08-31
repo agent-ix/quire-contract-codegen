@@ -24,3 +24,8 @@ may support the current foundation statement.
   authoritative record. It was superseded because its verifier did not yet re-derive the parameter
   digest or enforce the complete manifest/limitation census. Its in-band historical disposition
   retracts it from the authoritative claim set.
+- `retired-round4-control-strengthening/foundation-b80f432105ed-20260831T193347Z` was the prior
+  pending authoritative record. It was superseded after review found that the recursive Python
+  runner could report success without executing `unittest` cases and that the retained control set
+  did not yet cover the accepted IR merge, bidirectional matrix census, or Make invocation guards.
+  Its in-band historical disposition retracts it from the authoritative claim set.

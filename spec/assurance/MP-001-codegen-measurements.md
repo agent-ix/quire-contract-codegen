@@ -36,7 +36,7 @@ states, and injected publication failure points.
 
 Foundation runs use `scripts/collect_foundation_evidence.sh`. They record the current toolchain and
 the explicit Rust 1.75 compatibility lane, validate requirements plus the typed plan bundle, and
-retain exact provisional dependency identities. Every invoked foundation gate retains stdout,
+retain exact accepted or explicitly pending dependency identities. Every invoked foundation gate retains stdout,
 stderr, and its numeric exit status; the builder derives outcomes from those records, represents
 missing records as inconclusive, and rejects zero-status records whose retained transcripts contain
 command-specific failure markers. The collector self-test exercises nonzero propagation and checksum
@@ -45,8 +45,8 @@ builder derives and verifies the digest of the vendored PGM-01 envelope schema; 
 dependency-pin agreement, envelope identities, roles, digests, extensions, pin mismatch failure,
 outcome truthfulness, and accepted/rejected local schema validation. These tests establish
 evidence-tooling behavior only and do not back a semantic TestMatrix row.
-`scripts/run_python_tests.py` recursively executes every Python test file, including tests in nested
-directories, without depending on Python package discovery. Implementation plans will extend this with a stable
+`scripts/run_python_tests.py` recursively loads and executes every `unittest` case, including cases in
+nested non-package directories, and fails if zero tests execute. Implementation plans will extend this with a stable
 candidate runner that records source and dependency revisions, tool/backend versions, configuration,
 corpus/input digests, repeated bundle digests, compile/proptest/Kani/coverage results, fault-injection
 outcomes, differential dispositions, and output digests beneath `evidence/`.
@@ -59,11 +59,17 @@ out-of-record `evidence/ANCHORS` census, deterministically maintained by
 historical/remote file, rejects added files and directories, re-derives every outcome value from its
 numeric status plus retained transcripts, re-derives the envelope result, checks manifest and
 envelope artifact links, verifies the complete manifest artifact census and exact limitations,
-re-derives the parameter digest from the controlling source files, and binds the vendored PGM-01
-schema to the digest retained from the external checkout. Behavioral tests mutate each critical
-claim independently and require rejection. A missing anchor or empty authoritative record set is
+re-derives the parameter digest from the controlling source and Python test files, and binds the
+vendored PGM-01 schema to the digest retained from the external checkout. Behavioral mutation tests
+cover outcome derivation and census, parameter and artifact census, result status and summary,
+limitations, revision availability, symlink refusal, historical disposition, and availability
+enumeration. A missing anchor or empty authoritative record set is
 verification unavailable, not success. An anchor is a committed review boundary, not proof that the
 originally retained bytes were semantically correct.
+
+Collection verifies the new record directly but does not rewrite `evidence/ANCHORS`. Updating the
+anchor census and running the complete verifier are separate, explicit review-boundary steps before
+the evidence commit.
 
 Every quarantined envelope carries a machine-readable `historicalDisposition` extension whose
 `retracted` status removes any embedded historical result from the authoritative claim set. The

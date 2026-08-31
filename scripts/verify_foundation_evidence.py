@@ -19,13 +19,16 @@ if str(SCRIPTS) not in sys.path:
 
 from build_foundation_envelope import (
     COMMAND_TRANSCRIPTS,
+    IR_CANDIDATE_REVISION,
+    PGM01_CANDIDATE_REVISION,
+    RUNTIME_CANDIDATE_REVISION,
     command_outcomes,
     expected_manifest_artifact_names,
     foundation_limitations,
     hash_parameter_files,
     summarize_outcomes,
 )
-from validate_json_schema import checked_format_checker
+from validate_json_schema import EvidenceRequirementsError, checked_format_checker
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,6 +38,14 @@ MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.jso
 CHECKSUM_LINE = re.compile(r"^([0-9a-f]{64})  (.+)$")
 ANCHORS = EVIDENCE_ROOT / "ANCHORS"
 REVISION = re.compile(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])")
+EXTERNAL_REVISIONS = {
+    PGM01_CANDIDATE_REVISION,
+    IR_CANDIDATE_REVISION,
+    RUNTIME_CANDIDATE_REVISION,
+    # Reviewed upstream heads retained beside their byte-identical accepted merges.
+    "d8d376d887c40255e87ef9656bc0faf79216b321",
+    "4e0edec972c7e1431cf0d81ed8346a0ab8817af7",
+}
 
 
 class EvidenceError(ValueError):
@@ -103,6 +114,8 @@ def validate_json(instance: dict[str, Any], schema_path: Path, label: str) -> No
     schema = load_json(schema_path)
     try:
         checker = checked_format_checker()
+    except EvidenceRequirementsError as error:
+        raise EvidenceError(str(error)) from error
     except RuntimeError as error:
         raise VerificationUnavailable(str(error)) from error
     errors = sorted(
@@ -241,13 +254,37 @@ def verify_documented_revisions(records: list[Path]) -> None:
         (record / "source-revision.txt").read_text(encoding="utf-8").strip()
         for record in records
     }
-    documents = [
+    documents = {
         EVIDENCE_ROOT / "README.md",
         *sorted((EVIDENCE_ROOT / "historical").rglob("README.md")),
-    ]
-    for document in documents:
+        ROOT / "README.md",
+        ROOT / "CLAUDE.md",
+        *sorted((ROOT / "planning").rglob("*.md")),
+        *sorted((ROOT / "plan").rglob("*.md")),
+        *sorted((ROOT / "spec").rglob("*.md")),
+    }
+    repository = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if repository.returncode != 0 or repository.stdout.strip() != "true":
+        raise VerificationUnavailable("Git object database is unavailable")
+    shallow = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if shallow.returncode != 0:
+        raise VerificationUnavailable("Git repository depth is unavailable")
+    is_shallow = shallow.stdout.strip() == "true"
+    for document in sorted(path for path in documents if path.is_file()):
         for revision in REVISION.findall(document.read_text(encoding="utf-8")):
-            if revision in record_revisions:
+            if revision in record_revisions or revision in EXTERNAL_REVISIONS:
                 continue
             resolved = subprocess.run(
                 ["git", "cat-file", "-e", f"{revision}^{{commit}}"],
@@ -261,9 +298,11 @@ def verify_documented_revisions(records: list[Path]) -> None:
                     if document.is_relative_to(ROOT)
                     else str(document)
                 )
-                raise EvidenceError(
-                    f"documented source revision does not exist in {label}: {revision}"
-                )
+                if is_shallow:
+                    raise VerificationUnavailable(
+                        f"documented source revision is absent from the shallow clone: {revision}"
+                    )
+                raise EvidenceError(f"documented source revision does not exist in {label}: {revision}")
 
 
 def verify_historical_dispositions() -> None:
@@ -364,7 +403,7 @@ def main() -> int:
     except VerificationUnavailable as error:
         print(f"foundation evidence verification unavailable: {error}", file=sys.stderr)
         return 2
-    except (EvidenceError, KeyError, OSError, TypeError) as error:
+    except (EvidenceError, KeyError, OSError, TypeError, ValueError) as error:
         print(f"foundation evidence verification failed: {error}", file=sys.stderr)
         return 1
     print(

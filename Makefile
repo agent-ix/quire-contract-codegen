@@ -6,6 +6,11 @@ override CARGO := cargo
 override MSRV := 1.75.0
 override PYTHON := python3
 
+observed_cargo = $(shell command -v cargo 2>/dev/null)
+rustup_proxy_cargo = $(patsubst %/,%,$(dir $(shell command -v rustup 2>/dev/null)))/cargo
+unsafe_make_directive = $(shell grep -E '^\s*\.(IGNORE|SILENT)\s*(:|$$)' '$(firstword $(MAKEFILE_LIST))' 2>/dev/null)
+ci_guard = $(if $(strip $(MAKEFLAGS)),$(error local CI refuses non-empty MAKEFLAGS),)$(if $(strip $(unsafe_make_directive)),$(error local CI refuses global recipe-control directives),)$(if $(filter-out $(rustup_proxy_cargo),$(observed_cargo)),$(error cargo must resolve to $(rustup_proxy_cargo), got $(observed_cargo)),)
+
 .PHONY: help
 help:
 	@echo "Available targets:"
@@ -98,5 +103,11 @@ rustdoc:
 # Composite
 # =============================================================================
 
+.PHONY: ci-guard
+ci-guard:
+	$(ci_guard)
+	@:
+
+.NOTPARALLEL: ci
 .PHONY: ci
-ci: fmt-check spec lint test msrv deny audit-unsafe rustdoc coverage evidence-tool verify-evidence
+ci: ci-guard fmt-check spec lint test msrv deny audit-unsafe rustdoc coverage evidence-tool verify-evidence

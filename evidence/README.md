@@ -15,6 +15,8 @@ directly by `evidence/ANCHORS`. Its envelope and `source-revision.txt` carry the
 The record retains every foundation outcome, both PGM-01 validators, and the exact IR validator
 checkout and digests. Coverage remains explicitly inconclusive while upstream status-column
 classification is unavailable, so the overall foundation result is `pending`, never conclusive.
+Collection verifies a new record directly but does not rewrite `evidence/ANCHORS`; updating the
+anchor census and running the complete verifier are separate review-boundary steps before commit.
 
 Run `make verify-evidence` with the exact packages in `requirements-evidence.txt` to verify the
 committed `evidence/ANCHORS` record-set boundary. The verifier checks the complete file/checksum

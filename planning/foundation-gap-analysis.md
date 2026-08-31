@@ -12,28 +12,25 @@ review_set: subset
 ## Summary
 
 The specification and assurance foundation is locally validated, but it is not release-ready. An IR
-schema/corpus candidate now exists at PR #19 and remains under review. The runtime source is merged
+schema/corpus is accepted at IR PR #19 and pinned exactly. The runtime source is merged
 and its exact reviewed tree is reconciled, while its human source-release decision remains open.
 
 ## Verdict
 
-**FAIL.** FND-001 is a high-severity open dependency finding, semantic TestMatrix rows remain planned,
-and the human source-release decision is pending. This verdict cannot become PASS from local
-foundation gates alone.
+**FAIL.** Semantic TestMatrix rows remain planned and the human source-release decision is pending.
+This verdict cannot become PASS from local foundation gates alone.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 |---|---|---|---|
-| FND-001 | high | The authoritative IR schema and conformance corpus candidate exists but has not completed review or acceptance. | IR PR #19, FR-001 |
+| FND-001 | high | Closed: the authoritative IR schema and conformance corpus is accepted and pinned to the exact PR #19 merge. | IR PR #19, FR-001 |
 | FND-003 | medium | Runtime PR #5 is merged with the exact reviewed tree; hosted CI is deferred and the human source-release decision remains pending. | runtime PR #5, AA-001, REV-004 |
 | FND-004 | low | Stable rustfmt omits nightly-only import grouping options, so import grouping is not enforced. | `rustfmt.toml`, L-1 |
 | FND-005 | low | License, unsafe, MSRV, and scaffold-test gates are intentionally low-signal while the crate has no dependencies and only placeholder code. | `Makefile`, L-4 |
 
-FND-001 retains reviewed PR #19 snapshot
-`37eb00153d5c139ebc01622b6e12a4ab79256f88`. The PR has since advanced beyond that snapshot under an
-explicit REQUEST CHANGES / NOT MERGEABLE review, so the dependency remains open until an accepted
-identity exists. FND-002 was retired in commit `e1463f3f7719` as a stale duplicate; its identity is retained
+FND-001 is closed at accepted IR PR #19 merge
+`5c49ebfd1c87415f74420ad047392bd03b1bd202`. FND-002 was retired in commit `e1463f3f7719` as a stale duplicate; its identity is retained
 in this history note and is not reused. Hosted CI clauses in FND-003 are deferred by operator
 direction; the human decision remains open.
 
@@ -96,7 +93,7 @@ zero because these tests make no code-generation claim.
 | N-12 | Closed: checksum census diagnostics distinguish unlisted entries from absent declared entries. |
 | N-13 | Closed: security-relevant Make command/toolchain variables use non-overridable exact values. |
 | N-14 | Closed: transcript contradiction derives a durable failed outcome instead of aborting assembly before sealing. |
-| N-15 | Disclosed: `37eb0015…` is a reviewed snapshot, not the current or accepted IR head; reconciliation remains mandatory. |
+| N-15 | Closed: the dependency is reconciled to accepted IR PR #19 merge `5c49ebfd…`. |
 | N-16 | Closed: reviewer-of-record is an explicit collection input; the extension states that this role is not GitHub approval. |
 | N-17 | Deferred by operator direction: hosted CI and workflow ownership belong to the separate manual-CI agent; local gate documentation is synchronized. |
 | N-18 | Closed: any nested entry changes the recursively anchored historical tree, while any directory inside an authoritative flat record violates its checksum census. |
@@ -120,9 +117,8 @@ the defect, the collector exited nonzero, and the corrected record supersedes th
 - PGM-01 PR #12 is merged at `7dac9d8c19952412b56a0347387666e2ca81e01d`. Its tree is
   byte-identical to reviewed head `d8d376d887c40255e87ef9656bc0faf79216b321`; the complete merged-main
   release check passes, and the exact merged identity and schema digest are reconciled locally.
-- The codegen pin is reviewed PR #19 snapshot
-  `37eb00153d5c139ebc01622b6e12a4ab79256f88`. The moving PR head is explicitly not mergeable;
-  neither revision is accepted, so the pin must be reconciled again before a semantic draft lands.
+- The codegen IR pin is accepted PR #19 merge
+  `5c49ebfd1c87415f74420ad047392bd03b1bd202`, pinned exactly in planning and the evidence builder.
 - Runtime PR #5 is merged at `e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3`. Its tree is
   byte-identical to the round-10-reviewed head `4e0edec972c7e1431cf0d81ed8346a0ab8817af7`;
   every finding is closed, and its 25 executed local outcomes plus both merged-PGM validators pass

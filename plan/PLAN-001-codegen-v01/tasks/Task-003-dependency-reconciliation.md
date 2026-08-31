@@ -2,7 +2,7 @@
 id: Task-003
 title: "Upstream dependency reconciliation"
 type: Task
-status: in_progress
+status: done
 track: A
 priority: P0
 relationships:
@@ -18,5 +18,6 @@ semantic implementation begins.
 
 ## Current State
 
-PGM-01 and runtime candidates are provisionally pinned. IR issue #10 has no candidate revision, so
-this task cannot complete and Task-004 must remain not started.
+PGM-01, runtime, and IR are pinned to merged revisions. IR PR #19 was accepted and merged as
+`5c49ebfd1c87415f74420ad047392bd03b1bd202`; Task-004 must consume that exact identity and its locked
+dependency graph.

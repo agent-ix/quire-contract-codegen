@@ -18,9 +18,9 @@ dual-license boundary, exact development pins, and open human authority. Generat
 classified as linked runtime and remains subject to consuming-project verification.
 
 The foundation evidence envelope validates against the exact merged PGM-01 revision. The
-authoritative IR schema/corpus candidate at PR #19, independent review, and the human source-release
-decision remain open; hosted CI is deferred by operator direction. Those dependency identities must
-be reconciled before semantic implementation leaves draft.
+authoritative IR schema/corpus is accepted at PR #19 merge
+`5c49ebfd1c87415f74420ad047392bd03b1bd202`; the human runtime source-release decision remains open,
+and hosted CI is deferred by operator direction.
 
 The merged revision's tree is byte-identical to reviewed PR #12 head
 `d8d376d887c40255e87ef9656bc0faf79216b321`, so the reviewed schema and policy content are

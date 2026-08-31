@@ -21,16 +21,21 @@ REQUIRED_FORMATS = {"date-time", "uri", "uri-reference"}
 REQUIREMENTS = Path(__file__).resolve().parent.parent / "requirements-evidence.txt"
 
 
-def pinned_requirements(path: Path = REQUIREMENTS) -> dict[str, str]:
+class EvidenceRequirementsError(ValueError):
+    """Raised when the repository-owned evidence requirements are malformed."""
+
+
+def pinned_requirements(path: Path | None = None) -> dict[str, str]:
+    path = REQUIREMENTS if path is None else path
     pins = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line or line.startswith("#") or line.count("==") != 1:
-            raise RuntimeError(f"invalid evidence requirement line: {line!r}")
+            raise EvidenceRequirementsError(f"invalid evidence requirement line: {line!r}")
         name, version = line.split("==", 1)
         pins[name] = version
     expected = {name.replace("_", "-"): version for name, version in REQUIRED_PACKAGES.items()}
     if {name.replace("_", "-"): version for name, version in pins.items()} != expected:
-        raise RuntimeError(
+        raise EvidenceRequirementsError(
             f"requirements-evidence.txt does not match required schema packages: {pins}"
         )
     return pins

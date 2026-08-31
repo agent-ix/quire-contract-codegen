@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import hashlib
+import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -113,6 +115,12 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             builder.RUNTIME_CANDIDATE_REVISION,
         ):
             self.assertIn(revision, cac_text)
+
+    def test_parameter_digest_includes_python_tests(self) -> None:
+        self.assertIn(
+            ROOT / "tests" / "test_foundation_evidence_tooling.py",
+            builder.parameter_files(),
+        )
 
     def test_pgm01_pin_mismatch_fails_closed(self) -> None:
         with mock.patch.object(builder, "PGM01_ENVELOPE_SCHEMA_DIGEST", "0" * 64):
@@ -275,6 +283,22 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             coverage_checker.diagnostic_reasons(report),
             ["future-open-vocabulary-reason"],
         )
+        self.assertEqual(
+            coverage_checker.missing_matrix_ids(
+                report,
+                "| FR-001 | FR-001-AC-1 | TC-001 |",
+            ),
+            [],
+        )
+        self.assertEqual(
+            coverage_checker.missing_matrix_ids(report, "| FR-001 | FR-001-AC-1 |"),
+            ["TC-001"],
+        )
+        matrix = (ROOT / "spec" / "test-matrix.md").read_text(encoding="utf-8")
+        self.assertGreaterEqual(
+            coverage_checker.matrix_row_count(matrix),
+            coverage_checker.MINIMUM_MATRIX_ROWS,
+        )
 
     def test_ignored_trace_detector_has_no_fixed_line_window(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -283,6 +307,13 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             source.parent.mkdir(parents=True)
             source.write_text(
                 "// Verifies: TC-001\n" + ("\n" * 20) + "#[ignore]\n#[test]\nfn ignored() {}\n",
+                encoding="utf-8",
+            )
+            findings = coverage_checker.ignored_trace_tests(root)
+            self.assertEqual(len(findings), 1)
+            self.assertIn("TC-001", findings[0])
+            source.write_text(
+                "// Verifies: TC-001\n#[cfg_attr(all(), ignore)]\n#[test]\nfn ignored() {}\n",
                 encoding="utf-8",
             )
             findings = coverage_checker.ignored_trace_tests(root)
@@ -301,15 +332,6 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             limitations,
             ["skipped-unavailable foundation outcome: validator"],
         )
-
-    def test_verifier_rederives_outcome_values(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            evidence_dir = Path(directory)
-            self.write_fixture_inputs(evidence_dir)
-            derived = builder.command_outcomes(evidence_dir)
-            declared = [dict(item) for item in derived]
-            declared[0]["status"] = "failed"
-            self.assertNotEqual(derived, declared)
 
     def test_verifier_accepts_complete_fixture_and_rejects_mutated_outcome(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -348,6 +370,46 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
                 with self.assertRaisesRegex(verifier.EvidenceError, message):
                     verifier.verify_record(record)
 
+    def test_verifier_rejects_mutated_outcome_census_and_result_summary(self) -> None:
+        for mutation, message in (
+            ("outcome-census", "outcome census mismatch"),
+            ("result-summary", "result summary mismatch"),
+        ):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                record = self.make_sealed_record(Path(directory))
+                manifest = self.read_json(record / "evidence-manifest.json")
+                envelope = self.read_json(record / "evidence-envelope.json")
+                if mutation == "outcome-census":
+                    manifest["outcomes"] = manifest["outcomes"][:-1]
+                else:
+                    envelope["result"]["summary"] = "fabricated summary"
+                self.write_json(record / "evidence-manifest.json", manifest)
+                self.write_json(record / "evidence-envelope.json", envelope)
+                self.relink_and_seal(record)
+                with self.assertRaisesRegex(verifier.EvidenceError, message):
+                    verifier.verify_record(record)
+
+    def test_verifier_rejects_symlinked_record_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            record = self.make_sealed_record(Path(directory))
+            transcript = record / "test.stdout"
+            target = record.parent / "outside.txt"
+            target.write_text("substituted\n", encoding="utf-8")
+            transcript.unlink()
+            transcript.symlink_to(target)
+            with self.assertRaisesRegex(verifier.EvidenceError, "symlink"):
+                verifier.verify_checksums(record)
+
+    def test_availability_status_enum_rejects_unknown_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            record = Path(directory)
+            self.write_fixture_inputs(record)
+            (record / "pgm01-envelope-status.txt").write_text(
+                "fabricated\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "invalid availability status"):
+                builder.command_outcomes(record)
+
     def test_word_status_disagreement_and_real_failure_markers_fail(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             record = Path(directory)
@@ -380,17 +442,77 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
         ignored = [line for line in makefile.splitlines() if line.startswith("\t-")]
         self.assertEqual(ignored, [])
         self.assertIn(
-            "ci: fmt-check spec lint test msrv deny audit-unsafe rustdoc coverage evidence-tool verify-evidence",
+            "ci: ci-guard fmt-check spec lint test msrv deny audit-unsafe rustdoc coverage evidence-tool verify-evidence",
             makefile,
         )
+        for arguments in (("-i", "-n", "ci"), ("--eval=.IGNORE:", "-n", "ci")):
+            completed = subprocess.run(
+                ["make", *arguments],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0, arguments)
+            self.assertIn("local CI refuses", completed.stderr)
+        with tempfile.TemporaryDirectory() as directory:
+            cargo = Path(directory) / "cargo"
+            cargo.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            cargo.chmod(0o755)
+            environment = dict(os.environ)
+            for variable in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL"):
+                environment.pop(variable, None)
+            environment["PATH"] = f"{directory}:{environment['PATH']}"
+            completed = subprocess.run(
+                ["make", "ci"],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("cargo must resolve", completed.stderr)
 
-    def test_recursive_runner_discovers_nested_tests(self) -> None:
+    def test_collector_leaves_anchor_update_as_separate_boundary(self) -> None:
+        collector = COLLECTOR_PATH.read_text(encoding="utf-8")
+        self.assertNotIn("scripts/update_evidence_anchors.py", collector)
+        self.assertIn("update evidence/ANCHORS as a separate review-boundary step", collector)
+
+    def test_recursive_runner_executes_nested_testcases_without_main(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             nested = root / "tests" / "nested" / "test_hidden.py"
             nested.parent.mkdir(parents=True)
-            nested.write_text("raise SystemExit(0)\n", encoding="utf-8")
+            nested.write_text(
+                "import unittest\n"
+                "class Hidden(unittest.TestCase):\n"
+                "    def test_failure(self):\n"
+                "        self.assertEqual(1, 2)\n",
+                encoding="utf-8",
+            )
             self.assertEqual(runner.discover_test_files(root), [nested])
+            output = io.StringIO()
+            self.assertEqual(runner.run_tests(root, output), 1)
+            self.assertIn("FAILED", output.getvalue())
+            nested.write_text(
+                "import unittest\n"
+                "class Hidden(unittest.TestCase):\n"
+                "    def test_success(self):\n"
+                "        self.assertEqual(1, 1)\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(runner.run_tests(root, io.StringIO()), 0)
+
+    def test_recursive_runner_rejects_zero_executed_tests(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            empty = root / "tests" / "test_empty.py"
+            empty.parent.mkdir(parents=True)
+            empty.write_text("# no tests\n", encoding="utf-8")
+            output = io.StringIO()
+            self.assertEqual(runner.run_tests(root, output), 1)
+            self.assertIn("no Python tests executed", output.getvalue())
 
     def test_documented_nonexistent_revision_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -400,6 +522,45 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             with mock.patch.object(verifier, "EVIDENCE_ROOT", evidence_root):
                 with self.assertRaisesRegex(verifier.EvidenceError, "does not exist"):
                     verifier.verify_documented_revisions([])
+
+    def test_documented_revision_check_is_unavailable_without_git(self) -> None:
+        failed = subprocess.CompletedProcess(["git"], 128, "", "not a repository")
+        with mock.patch.object(verifier.subprocess, "run", return_value=failed):
+            with self.assertRaisesRegex(verifier.VerificationUnavailable, "Git object"):
+                verifier.verify_documented_revisions([])
+
+    def test_nonlocal_documented_revisions_are_explicitly_allowlisted(self) -> None:
+        documents = [
+            ROOT / "README.md",
+            ROOT / "CLAUDE.md",
+            *sorted((ROOT / "planning").rglob("*.md")),
+            *sorted((ROOT / "plan").rglob("*.md")),
+            *sorted((ROOT / "spec").rglob("*.md")),
+        ]
+        for document in (path for path in documents if path.is_file()):
+            for revision in verifier.REVISION.findall(document.read_text(encoding="utf-8")):
+                resolved = subprocess.run(
+                    ["git", "cat-file", "-e", f"{revision}^{{commit}}"],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                )
+                if resolved.returncode != 0:
+                    self.assertIn(revision, verifier.EXTERNAL_REVISIONS, document)
+
+    def test_verifier_main_formats_plain_builder_value_errors(self) -> None:
+        output = io.StringIO()
+        with (
+            mock.patch.object(
+                verifier,
+                "verify_authoritative_records",
+                side_effect=ValueError("invalid availability status"),
+            ),
+            mock.patch.object(verifier.sys, "stderr", output),
+        ):
+            self.assertEqual(verifier.main(), 1)
+        self.assertIn("verification failed: invalid availability status", output.getvalue())
+        self.assertNotIn("Traceback", output.getvalue())
 
     def test_anchor_verifier_rejects_rename_deletion_addition_and_digest_drift(self) -> None:
         for mutation in ("rename", "delete", "addition", "digest-drift"):
@@ -589,8 +750,33 @@ class SchemaValidatorTests(unittest.TestCase):
                 self.fail("could not load schema validator")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            with self.assertRaisesRegex(RuntimeError, "does not match"):
+            with self.assertRaisesRegex(module.EvidenceRequirementsError, "does not match"):
                 module.pinned_requirements(requirements)
+
+    def test_required_formats_and_checksum_syntax_are_not_neuterable(self) -> None:
+        spec = importlib.util.spec_from_file_location("schema_validator_formats", VALIDATOR_PATH)
+        if spec is None or spec.loader is None:
+            self.fail("could not load schema validator")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.REQUIRED_FORMATS, {"date-time", "uri", "uri-reference"})
+        checker = module.checked_format_checker()
+        self.assertTrue(module.REQUIRED_FORMATS.issubset(checker.checkers))
+        self.assertIsNone(verifier.CHECKSUM_LINE.fullmatch("0" * 63 + "  ./file"))
+        self.assertIsNotNone(verifier.CHECKSUM_LINE.fullmatch("0" * 64 + "  ./file"))
+
+    def test_malformed_requirements_are_evidence_failure_not_unavailability(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements = root / "requirements.txt"
+            requirements.write_text("# malformed repository input\n", encoding="utf-8")
+            schema = root / "schema.json"
+            schema.write_text('{"type":"object"}\n', encoding="utf-8")
+            requirements_module = sys.modules[verifier.checked_format_checker.__module__]
+            with mock.patch.object(requirements_module, "REQUIREMENTS", requirements):
+                with self.assertRaises(verifier.EvidenceError) as caught:
+                    verifier.validate_json({}, schema, "fixture")
+            self.assertNotIsInstance(caught.exception, verifier.VerificationUnavailable)
 
     def test_validator_accepts_valid_and_reports_invalid_path(self) -> None:
         schema = {

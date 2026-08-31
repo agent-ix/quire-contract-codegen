@@ -20,7 +20,7 @@ PGM01_ENVELOPE_SCHEMA_DIGEST = (
 PGM01_ENVELOPE_SCHEMA = (
     ROOT / "schemas" / "pgm01-derivation-evidence-envelope-v1.schema.json"
 )
-IR_CANDIDATE_REVISION = "37eb00153d5c139ebc01622b6e12a4ab79256f88"
+IR_CANDIDATE_REVISION = "5c49ebfd1c87415f74420ad047392bd03b1bd202"
 RUNTIME_CANDIDATE_REVISION = "e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3"
 INPUT_SCHEMA = ROOT / "schemas" / "foundation-evidence-input-v1.schema.json"
 MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.json"
@@ -214,7 +214,8 @@ def summarize_outcomes(
     )
 
 
-def hash_parameter_files() -> str:
+def parameter_files() -> list[Path]:
+    """Return the complete source-and-test set controlling foundation evidence."""
     fixed_paths = {
         ROOT / "Cargo.toml",
         ROOT / "Cargo.lock",
@@ -232,7 +233,19 @@ def hash_parameter_files() -> str:
         for path in directory.rglob("*")
         if path.is_file() and path.suffix in {".py", ".sh"}
     }
-    paths = sorted(fixed_paths | tool_paths, key=lambda path: path.relative_to(ROOT).as_posix())
+    test_paths = {
+        path
+        for path in (ROOT / "tests").rglob("*.py")
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+    return sorted(
+        fixed_paths | tool_paths | test_paths,
+        key=lambda path: path.relative_to(ROOT).as_posix(),
+    )
+
+
+def hash_parameter_files() -> str:
+    paths = parameter_files()
     state = hashlib.sha256()
     for path in paths:
         state.update(str(path.relative_to(ROOT)).encode("utf-8"))
@@ -246,7 +259,6 @@ def foundation_limitations(outcomes: list[dict[str, str]]) -> list[str]:
     _, _, outcome_limitations = summarize_outcomes(outcomes)
     return [
         "foundation evidence does not establish semantic code-generation conformance",
-        "authoritative IR schema and corpus candidate remains under review",
         "runtime source is merged; its human source-release decision remains pending",
         "hosted CI is intentionally deferred by operator direction",
         *outcome_limitations,

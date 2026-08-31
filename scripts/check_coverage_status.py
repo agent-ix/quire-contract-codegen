@@ -12,6 +12,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TRACE_ID = re.compile(r"\b(?:TC-\d{3}|(?:N?FR|StR)-\d{3}(?:-(?:AC|VC)-\d+)?)\b")
+IGNORE_ATTRIBUTE = re.compile(r"#\[[^\]]*\bignore\b[^\]]*\]", re.DOTALL)
+MINIMUM_MATRIX_ROWS = 28
 
 
 def ignored_trace_tests(repository_root: Path = ROOT) -> list[str]:
@@ -21,15 +23,20 @@ def ignored_trace_tests(repository_root: Path = ROOT) -> list[str]:
         if not root.exists():
             continue
         for path in sorted(root.rglob("*.rs")):
-            lines = path.read_text(encoding="utf-8").splitlines()
-            for index, line in enumerate(lines):
-                if "#[ignore" not in line:
-                    continue
-                context = "\n".join(lines)
+            contents = path.read_text(encoding="utf-8")
+            for attribute in IGNORE_ATTRIBUTE.finditer(contents):
+                prior_item_end = max(
+                    contents.rfind("\n}", 0, attribute.start()),
+                    contents.rfind("\nfn ", 0, attribute.start()),
+                )
+                next_item = contents.find("\nfn ", attribute.end())
+                context_end = len(contents) if next_item < 0 else next_item
+                context = contents[prior_item_end + 1 : context_end]
                 identifiers = sorted(set(TRACE_ID.findall(context)))
                 if identifiers:
+                    line = contents.count("\n", 0, attribute.start()) + 1
                     findings.append(
-                        f"{path.relative_to(repository_root)}:{index + 1}: ignored trace-bearing test "
+                        f"{path.relative_to(repository_root)}:{line}: ignored trace-bearing test "
                         + ", ".join(identifiers)
                     )
     return findings
@@ -47,6 +54,29 @@ def undeclared_matrix_ids(report: dict[str, object], matrix_text: str) -> list[s
         for identifier in matrix_ids
         if (identifier.startswith("TC-") or "-AC-" in identifier or "-VC-" in identifier)
         and identifier not in minted
+    )
+
+
+def missing_matrix_ids(report: dict[str, object], matrix_text: str) -> list[str]:
+    minted = {
+        item.get("id")
+        for item in report.get("minted_targets", [])
+        if isinstance(item, dict)
+        and isinstance(item.get("id"), str)
+        and (
+            item["id"].startswith("TC-")
+            or "-AC-" in item["id"]
+            or "-VC-" in item["id"]
+        )
+    }
+    return sorted(minted - set(TRACE_ID.findall(matrix_text)))
+
+
+def matrix_row_count(matrix_text: str) -> int:
+    return sum(
+        1
+        for line in matrix_text.splitlines()
+        if line.startswith(("| FR-", "| NFR-", "| StR-", "| TC-"))
     )
 
 
@@ -91,14 +121,28 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    dangling = undeclared_matrix_ids(
-        report,
-        (ROOT / "spec/test-matrix.md").read_text(encoding="utf-8"),
-    )
+    matrix_text = (ROOT / "spec/test-matrix.md").read_text(encoding="utf-8")
+    dangling = undeclared_matrix_ids(report, matrix_text)
     if dangling:
         print(
             "COVERAGE_STATUS_CONTRADICTION: matrix references undeclared ids: "
             + ", ".join(dangling),
+            file=sys.stderr,
+        )
+        return 1
+    missing = missing_matrix_ids(report, matrix_text)
+    if missing:
+        print(
+            "COVERAGE_STATUS_CONTRADICTION: minted ids absent from matrix: "
+            + ", ".join(missing),
+            file=sys.stderr,
+        )
+        return 1
+    rows = matrix_row_count(matrix_text)
+    if rows < MINIMUM_MATRIX_ROWS:
+        print(
+            f"COVERAGE_STATUS_CONTRADICTION: matrix row count {rows} is below "
+            f"the reviewed floor {MINIMUM_MATRIX_ROWS}",
             file=sys.stderr,
         )
         return 1

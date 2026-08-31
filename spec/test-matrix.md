@@ -31,6 +31,16 @@ foundation evidence test requires every functional, stakeholder, and test-case r
 `🚧 Planned`; any transition is a human-reviewed matrix change and must replace that temporary
 control with backed-test verification.
 
+## Nonfunctional Requirement Coverage
+
+| Nonfunctional Req | Acceptance Criteria | Test/Inspection | Coverage Status |
+|---|---|---|---|
+| NFR-001 | NFR-001-AC-1 | TC-001 | 🚧 Planned |
+| NFR-001 | NFR-001-AC-2, NFR-001-AC-3 | TC-002 | 🚧 Planned |
+| NFR-002 | NFR-002-AC-1, NFR-002-AC-2 | TC-001 | 🚧 Planned |
+| NFR-002 | NFR-002-AC-3 | TC-003 | 🚧 Planned |
+| NFR-002 | NFR-002-AC-4 | Inspection | 🚧 Planned |
+
 ## Stakeholder Requirement Coverage
 
 | Stakeholder Req | Trace to US/FR | Test/Validation | Coverage Status |

@@ -197,5 +197,9 @@ if (( collection_failed != 0 )); then
   exit 1
 fi
 
-python3 scripts/update_evidence_anchors.py
-python3 scripts/verify_foundation_evidence.py
+python3 -c '
+import pathlib, sys
+from scripts.verify_foundation_evidence import verify_record
+verify_record(pathlib.Path(sys.argv[1]))
+' "$evidence_dir"
+echo "collected and verified $evidence_dir; update evidence/ANCHORS as a separate review-boundary step"
