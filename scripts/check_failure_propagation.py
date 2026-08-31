@@ -35,7 +35,7 @@ CI_PROBES = set(CI_ORDER) - {GUARD_TARGET}
 TARGET = re.compile(r"^([A-Za-z0-9_.-]+):(?:\s+(.*?))?\s*$")
 SHELL_CONTROL = re.compile(r"&&|\|\||[;|&]")
 MAKEFLAGS_ASSIGNMENT = re.compile(r"^\s*MAKEFLAGS\s*(?::|\+|\?)?=\s*(.*)$")
-MINIMUM_PYTHON_TESTS = 56
+MINIMUM_PYTHON_TESTS = 60
 
 
 def trusted_home() -> Path:

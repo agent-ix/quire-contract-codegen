@@ -496,6 +496,19 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             ):
                 verifier.verify_record(record)
 
+    def test_verifier_enforces_collection_input_envelope_link(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            record = self.make_sealed_record(Path(directory))
+            with (record / "collection-input.json").open(
+                "a", encoding="utf-8"
+            ) as stream:
+                stream.write("\n")
+            self.relink_and_seal(record)
+            with self.assertRaisesRegex(
+                verifier.EvidenceError, "envelope digest mismatch"
+            ):
+                verifier.verify_record(record)
+
     def test_record_directory_prefix_and_positive_censuses_are_enforced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             record = self.make_sealed_record(Path(directory))
@@ -805,6 +818,29 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertEqual(runner.run_tests(root, output), 1)
             self.assertIn("no Python tests executed", output.getvalue())
 
+    def test_runner_main_propagates_the_suite_status(self) -> None:
+        with mock.patch.object(runner, "run_tests", return_value=1):
+            self.assertEqual(runner.main(), 1)
+
+    def test_builder_and_coverage_entry_points_do_substantive_work(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_dir = Path(directory)
+            self.write_fixture_inputs(evidence_dir)
+            with mock.patch.object(
+                builder.sys, "argv", [str(BUILDER_PATH), str(evidence_dir)]
+            ):
+                self.assertEqual(builder.main(), 0)
+            self.assertTrue((evidence_dir / "evidence-envelope.json").is_file())
+        completed = subprocess.run(
+            ["/usr/bin/python3", str(COVERAGE_PATH)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(json.loads(completed.stdout.splitlines()[0])["statusLies"], 0)
+
     def test_documented_nonexistent_revision_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             evidence_root = Path(directory)
@@ -1096,8 +1132,8 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             "coverage.stdout": json.dumps({"statusLies": 0, "totals": {"total": 28}})
             + "\n",
             "coverage.stderr": "COVERAGE_STATUS_INCONCLUSIVE: unavailable\n",
-            "evidence-tool.stdout": "executed 56 Python tests from 1 files\n",
-            "evidence-tool.stderr": "Ran 56 tests\n\nOK\n",
+            "evidence-tool.stdout": "executed 60 Python tests from 1 files\n",
+            "evidence-tool.stderr": "Ran 60 tests\n\nOK\n",
         }
         valid = json.dumps({"errors": [], "valid": True}) + "\n"
         for transcript in builder.VALIDATOR_TRANSCRIPTS:
@@ -1116,6 +1152,12 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
 
 
 class SchemaValidatorTests(unittest.TestCase):
+    def test_foundation_schemas_reject_empty_objects(self) -> None:
+        for schema in (builder.INPUT_SCHEMA, builder.MANIFEST_SCHEMA):
+            with self.subTest(schema=schema.name):
+                with self.assertRaisesRegex(verifier.EvidenceError, "schema violation"):
+                    verifier.validate_json({}, schema, "negative fixture")
+
     def test_requirements_file_must_exactly_match_executable_pins(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             requirements = Path(directory) / "requirements.txt"
