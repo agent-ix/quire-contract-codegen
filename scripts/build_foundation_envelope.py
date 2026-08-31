@@ -25,10 +25,6 @@ RUNTIME_CANDIDATE_REVISION = "e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3"
 INPUT_SCHEMA = ROOT / "schemas" / "foundation-evidence-input-v1.schema.json"
 MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.json"
 COLLECTOR = ROOT / "scripts" / "collect_foundation_evidence.sh"
-BUILDER = Path(__file__).resolve()
-SCHEMA_VALIDATOR = ROOT / "scripts" / "validate_json_schema.py"
-EVIDENCE_VERIFIER = ROOT / "scripts" / "verify_foundation_evidence.py"
-COVERAGE_STATUS_CHECKER = ROOT / "scripts" / "check_coverage_status.py"
 EVIDENCE_REQUIREMENTS = ROOT / "requirements-evidence.txt"
 COMMAND_TRANSCRIPTS = (
     ("quire-validate", "quire-validate"),
@@ -56,13 +52,13 @@ VALIDATOR_TRANSCRIPTS = (
     "pgm01-envelope",
 )
 PASS_CONTRADICTION_MARKERS = {
-    "quire-validate": ("\"valid\": false", "validation failed"),
+    "quire-validate": ("\"valid\": false", "document(s) failed structural validation"),
     "fmt": ("Diff in ",),
     "clippy": ("error: could not compile",),
     "test": ("test result: FAILED", "error: test failed"),
     "msrv": ("error: could not compile",),
     "deny": ("error:", "FAILED"),
-    "unsafe-audit": ("unsafe audit failed", "missing // SAFETY:"),
+    "unsafe-audit": ("unsafe audit failed", "missing SAFETY comment near"),
     "metadata": ("error:", "error["),
     "rustdoc": ("error: could not document",),
     "coverage": ("COVERAGE_STATUS_CONTRADICTION",),
@@ -133,6 +129,8 @@ def command_outcomes(evidence_dir: Path) -> list[dict[str, str]]:
         if availability == "skipped-unavailable":
             outcomes.append({"name": name, "status": availability})
             continue
+        if availability is not None and availability not in {"passed", "failed"}:
+            raise ValueError(f"invalid availability status in {availability_path}")
         if not status_path.exists():
             status = "inconclusive"
         else:
@@ -171,6 +169,9 @@ def command_outcomes(evidence_dir: Path) -> list[dict[str, str]]:
                         status = "passed"
             else:
                 status = "failed"
+            expected_word = "passed" if exit_status == 0 else "failed"
+            if availability is not None and availability != expected_word:
+                status = "failed"
         outcomes.append({"name": name, "status": status})
     return outcomes
 
@@ -194,17 +195,16 @@ def summarize_outcomes(
         *(f"skipped-unavailable foundation outcome: {name}" for name in skipped),
     ]
     if failed:
-        return "inconclusive", f"{len(failed)} codegen foundation checks failed", limitations
-    if inconclusive:
+        return "rejected", f"{len(failed)} codegen foundation checks failed", limitations
+    if inconclusive or skipped:
+        parts = []
+        if inconclusive:
+            parts.append(f"{len(inconclusive)} inconclusive")
+        if skipped:
+            parts.append(f"{len(skipped)} skipped-unavailable")
         return (
             "pending",
-            f"{len(inconclusive)} foundation check outcomes are inconclusive",
-            limitations,
-        )
-    if skipped:
-        return (
-            "pending",
-            f"{len(skipped)} foundation checks were skipped because tooling was unavailable",
+            "foundation outcomes: " + ", ".join(parts),
             limitations,
         )
     return (
@@ -215,21 +215,24 @@ def summarize_outcomes(
 
 
 def hash_parameter_files() -> str:
-    paths = (
+    fixed_paths = {
         ROOT / "Cargo.toml",
         ROOT / "Cargo.lock",
         ROOT / "Makefile",
         ROOT / "rust-toolchain.toml",
-        COLLECTOR,
-        BUILDER,
-        SCHEMA_VALIDATOR,
-        EVIDENCE_VERIFIER,
-        COVERAGE_STATUS_CHECKER,
         EVIDENCE_REQUIREMENTS,
         INPUT_SCHEMA,
         MANIFEST_SCHEMA,
         PGM01_ENVELOPE_SCHEMA,
-    )
+    }
+    tool_paths = {
+        path
+        for directory in (ROOT / "scripts", ROOT / "tools")
+        if directory.exists()
+        for path in directory.rglob("*")
+        if path.is_file() and path.suffix in {".py", ".sh"}
+    }
+    paths = sorted(fixed_paths | tool_paths, key=lambda path: path.relative_to(ROOT).as_posix())
     state = hashlib.sha256()
     for path in paths:
         state.update(str(path.relative_to(ROOT)).encode("utf-8"))
@@ -237,6 +240,43 @@ def hash_parameter_files() -> str:
         state.update(path.read_bytes())
         state.update(b"\0")
     return state.hexdigest()
+
+
+def foundation_limitations(outcomes: list[dict[str, str]]) -> list[str]:
+    _, _, outcome_limitations = summarize_outcomes(outcomes)
+    return [
+        "foundation evidence does not establish semantic code-generation conformance",
+        "authoritative IR schema and corpus candidate remains under review",
+        "runtime source is merged; its human source-release decision remains pending",
+        "hosted CI is intentionally deferred by operator direction",
+        *outcome_limitations,
+    ]
+
+
+def expected_manifest_artifact_names(evidence_dir: Path) -> set[str]:
+    excluded = {
+        "collection-input.json",
+        "evidence-envelope.json",
+        "evidence-manifest.json",
+        "pgm01-envelope.stderr",
+        "pgm01-envelope.stdout",
+        "pgm01-envelope-status.txt",
+        "sha256sums.txt",
+    }
+    for transcript in VALIDATOR_TRANSCRIPTS:
+        excluded.update(
+            {
+                f"{transcript}.status.txt",
+                f"{transcript}.stderr",
+                f"{transcript}.stdout",
+                f"{transcript}-status.txt",
+            }
+        )
+    return {
+        path.name
+        for path in evidence_dir.iterdir()
+        if path.is_file() and path.name not in excluded
+    }
 
 
 # Implements: MP-001
@@ -361,27 +401,10 @@ def build(evidence_dir: Path) -> None:
     input_path = evidence_dir / "collection-input.json"
     write_json(input_path, collection_input)
 
-    excluded = {
-        "collection-input.json",
-        "evidence-envelope.json",
-        "evidence-manifest.json",
-        "pgm01-envelope.stderr",
-        "pgm01-envelope.stdout",
-        "pgm01-envelope-status.txt",
-        "sha256sums.txt",
-    }
-    for transcript in VALIDATOR_TRANSCRIPTS:
-        excluded.update(
-            {
-                f"{transcript}.status.txt",
-                f"{transcript}.stderr",
-                f"{transcript}.stdout",
-                f"{transcript}-status.txt",
-            }
-        )
+    artifact_names = expected_manifest_artifact_names(evidence_dir)
     entries = []
     for path in sorted(evidence_dir.iterdir(), key=lambda item: item.name):
-        if path.is_file() and path.name not in excluded:
+        if path.name in artifact_names:
             entries.append(
                 {
                     "path": path.name,
@@ -391,20 +414,14 @@ def build(evidence_dir: Path) -> None:
             )
 
     outcomes = command_outcomes(evidence_dir)
-    result_status, result_summary, outcome_limitations = summarize_outcomes(outcomes)
+    result_status, result_summary, _ = summarize_outcomes(outcomes)
     manifest = {
         "schemaVersion": "quire.codegen-foundation-evidence-manifest/v1",
         "sourceRevision": revision,
         "collectedAt": recorded_at,
         "outcomes": outcomes,
         "artifacts": entries,
-        "limitations": [
-            "foundation evidence does not establish semantic code-generation conformance",
-            "authoritative IR schema and corpus candidate remains under review",
-            "runtime source is merged; its human source-release decision remains pending",
-            "hosted CI is intentionally deferred by operator direction",
-            *outcome_limitations,
-        ],
+        "limitations": foundation_limitations(outcomes),
     }
     manifest_path = evidence_dir / "evidence-manifest.json"
     write_json(manifest_path, manifest)

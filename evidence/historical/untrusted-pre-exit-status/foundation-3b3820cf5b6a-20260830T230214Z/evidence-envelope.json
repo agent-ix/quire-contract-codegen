@@ -19,7 +19,12 @@
       "pgm01CandidateRevision": "e928ce3703d238856544c65bc4aa7c30ea16dac1",
       "phase": "foundation",
       "reviewState": "pending",
-      "sourceState": "clean"
+      "sourceState": "clean",
+      "historicalDisposition": {
+        "authoritative": false,
+        "reason": "superseded historical foundation record",
+        "status": "retracted"
+      }
     }
   },
   "inputs": [

@@ -181,7 +181,14 @@ fi
     | xargs -0 sha256sum >sha256sums.txt
 )
 
-if [[ "$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["result"]["status"])' "$evidence_dir/evidence-envelope.json")" != conclusive ]]; then
+if ! python3 -c '
+import json, sys
+manifest = json.load(open(sys.argv[1]))
+envelope = json.load(open(sys.argv[2]))
+nonpassing = [item for item in manifest["outcomes"] if item["status"] != "passed"]
+accepted_pending = nonpassing == [{"name": "coverage", "status": "inconclusive"}]
+raise SystemExit(0 if envelope["result"]["status"] == "conclusive" or (envelope["result"]["status"] == "pending" and accepted_pending) else 1)
+' "$evidence_dir/evidence-manifest.json" "$evidence_dir/evidence-envelope.json"; then
   collection_failed=1
 fi
 
@@ -189,3 +196,6 @@ if (( collection_failed != 0 )); then
   echo "one or more retained foundation evidence commands failed" >&2
   exit 1
 fi
+
+python3 scripts/update_evidence_anchors.py
+python3 scripts/verify_foundation_evidence.py

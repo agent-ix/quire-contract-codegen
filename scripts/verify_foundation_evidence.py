@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,7 +17,14 @@ SCRIPTS = Path(__file__).resolve().parent
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from build_foundation_envelope import command_outcomes, summarize_outcomes
+from build_foundation_envelope import (
+    COMMAND_TRANSCRIPTS,
+    command_outcomes,
+    expected_manifest_artifact_names,
+    foundation_limitations,
+    hash_parameter_files,
+    summarize_outcomes,
+)
 from validate_json_schema import checked_format_checker
 
 
@@ -26,6 +34,7 @@ ENVELOPE_SCHEMA = ROOT / "schemas" / "pgm01-derivation-evidence-envelope-v1.sche
 MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.json"
 CHECKSUM_LINE = re.compile(r"^([0-9a-f]{64})  (.+)$")
 ANCHORS = EVIDENCE_ROOT / "ANCHORS"
+REVISION = re.compile(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])")
 
 
 class EvidenceError(ValueError):
@@ -92,7 +101,10 @@ def load_json(path: Path) -> dict[str, Any]:
 
 def validate_json(instance: dict[str, Any], schema_path: Path, label: str) -> None:
     schema = load_json(schema_path)
-    checker = checked_format_checker()
+    try:
+        checker = checked_format_checker()
+    except RuntimeError as error:
+        raise VerificationUnavailable(str(error)) from error
     errors = sorted(
         Draft7Validator(schema, format_checker=checker).iter_errors(instance),
         key=lambda error: (list(error.absolute_path), error.message),
@@ -126,6 +138,8 @@ def verify_checksums(record: Path) -> int:
             f"checksum census mismatch in {record.name}: unlisted={unlisted}, absent={absent}"
         )
     for path, digest in expected.items():
+        if path.is_symlink():
+            raise EvidenceError(f"symlink is not allowed in retained evidence: {path}")
         observed = sha256_file(path)
         if observed != digest:
             raise EvidenceError(
@@ -148,6 +162,13 @@ def verify_artifacts(record: Path, manifest: dict[str, Any]) -> int:
             raise EvidenceError(f"manifest size mismatch in {record.name}: {path.name}")
         if sha256_file(path) != artifact["sha256"]:
             raise EvidenceError(f"manifest digest mismatch in {record.name}: {path.name}")
+    expected = expected_manifest_artifact_names(record)
+    observed = {path.name for path in seen}
+    if observed != expected:
+        raise EvidenceError(
+            f"manifest artifact census mismatch in {record.name}: "
+            f"missing={sorted(expected - observed)}, extra={sorted(observed - expected)}"
+        )
     return len(seen)
 
 
@@ -215,6 +236,53 @@ def verify_anchors() -> list[Path]:
     )
 
 
+def verify_documented_revisions(records: list[Path]) -> None:
+    record_revisions = {
+        (record / "source-revision.txt").read_text(encoding="utf-8").strip()
+        for record in records
+    }
+    documents = [
+        EVIDENCE_ROOT / "README.md",
+        *sorted((EVIDENCE_ROOT / "historical").rglob("README.md")),
+    ]
+    for document in documents:
+        for revision in REVISION.findall(document.read_text(encoding="utf-8")):
+            if revision in record_revisions:
+                continue
+            resolved = subprocess.run(
+                ["git", "cat-file", "-e", f"{revision}^{{commit}}"],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+            )
+            if resolved.returncode != 0:
+                label = (
+                    str(document.relative_to(ROOT))
+                    if document.is_relative_to(ROOT)
+                    else str(document)
+                )
+                raise EvidenceError(
+                    f"documented source revision does not exist in {label}: {revision}"
+                )
+
+
+def verify_historical_dispositions() -> None:
+    expected = {
+        "authoritative": False,
+        "status": "retracted",
+        "reason": "superseded historical foundation record",
+    }
+    for path in sorted((EVIDENCE_ROOT / "historical").rglob("evidence-envelope.json")):
+        envelope = load_json(path)
+        observed = envelope.get("extensions", {}).get(
+            "dev.agent-ix.codegen", {}
+        ).get("historicalDisposition")
+        if observed != expected:
+            raise EvidenceError(
+                f"historical disposition missing or invalid in {path.relative_to(ROOT)}"
+            )
+
+
 # Implements: MP-001
 def verify_record(record: Path) -> tuple[int, int]:
     checksums = verify_checksums(record)
@@ -242,6 +310,8 @@ def verify_record(record: Path) -> tuple[int, int]:
     }
     if len(identities) != 1:
         raise EvidenceError(f"source revision mismatch in {record.name}: {sorted(identities)}")
+    if envelope["parametersDigest"]["value"] != hash_parameter_files():
+        raise EvidenceError(f"parameters digest mismatch in {record.name}")
     retained_outcomes = {
         path.name.removesuffix(".status.txt") for path in record.glob("*.status.txt")
     }
@@ -251,10 +321,12 @@ def verify_record(record: Path) -> tuple[int, int]:
         if not path.name.endswith(".status.txt")
     )
     declared_outcomes = {item["name"] for item in manifest["outcomes"]}
-    if retained_outcomes != declared_outcomes:
+    configured_outcomes = {transcript for _, transcript in COMMAND_TRANSCRIPTS}
+    if retained_outcomes != declared_outcomes or declared_outcomes != configured_outcomes:
         raise EvidenceError(
             f"outcome census mismatch in {record.name}: "
-            f"retained={sorted(retained_outcomes)}, declared={sorted(declared_outcomes)}"
+            f"retained={sorted(retained_outcomes)}, declared={sorted(declared_outcomes)}, "
+            f"configured={sorted(configured_outcomes)}"
         )
     derived_outcomes = command_outcomes(record)
     if manifest["outcomes"] != derived_outcomes:
@@ -262,7 +334,7 @@ def verify_record(record: Path) -> tuple[int, int]:
             f"outcome value mismatch in {record.name}: "
             f"derived={derived_outcomes}, declared={manifest['outcomes']}"
         )
-    result_status, result_summary, outcome_limitations = summarize_outcomes(derived_outcomes)
+    result_status, result_summary, _ = summarize_outcomes(derived_outcomes)
     if envelope["result"]["status"] != result_status:
         raise EvidenceError(
             f"result status mismatch in {record.name}: "
@@ -270,19 +342,25 @@ def verify_record(record: Path) -> tuple[int, int]:
         )
     if envelope["result"]["summary"] != result_summary:
         raise EvidenceError(f"result summary mismatch in {record.name}")
-    if not set(outcome_limitations).issubset(set(manifest["limitations"])):
-        raise EvidenceError(f"derived outcome limitations missing in {record.name}")
+    if manifest["limitations"] != foundation_limitations(derived_outcomes):
+        raise EvidenceError(f"manifest limitations mismatch in {record.name}")
     return checksums, artifacts
+
+
+def verify_authoritative_records() -> list[tuple[int, int]]:
+    records = verify_anchors()
+    if not records:
+        raise VerificationUnavailable(
+            "no authoritative foundation records are named by evidence/ANCHORS"
+        )
+    verify_historical_dispositions()
+    verify_documented_revisions(records)
+    return [verify_record(record) for record in records]
 
 
 def main() -> int:
     try:
-        records = verify_anchors()
-        if not records:
-            raise VerificationUnavailable(
-                "no authoritative foundation records are named by evidence/ANCHORS"
-            )
-        totals = [verify_record(record) for record in records]
+        totals = verify_authoritative_records()
     except VerificationUnavailable as error:
         print(f"foundation evidence verification unavailable: {error}", file=sys.stderr)
         return 2
@@ -290,7 +368,7 @@ def main() -> int:
         print(f"foundation evidence verification failed: {error}", file=sys.stderr)
         return 1
     print(
-        f"verified {len(records)} authoritative records, "
+        f"verified {len(totals)} authoritative records, "
         f"{sum(item[0] for item in totals)} checksums, "
         f"{sum(item[1] for item in totals)} manifest artifacts"
     )

@@ -20,6 +20,7 @@ COLLECTOR_PATH = ROOT / "scripts" / "collect_foundation_evidence.sh"
 VALIDATOR_PATH = ROOT / "scripts" / "validate_json_schema.py"
 VERIFIER_PATH = ROOT / "scripts" / "verify_foundation_evidence.py"
 COVERAGE_PATH = ROOT / "scripts" / "check_coverage_status.py"
+RUNNER_PATH = ROOT / "scripts" / "run_python_tests.py"
 MEASUREMENT_PLAN = ROOT / "spec" / "assurance" / "MP-001-codegen-measurements.md"
 
 
@@ -47,10 +48,38 @@ def load_verifier():
 verifier = load_verifier()
 
 
+def load_runner():
+    spec = importlib.util.spec_from_file_location("recursive_python_test_runner", RUNNER_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not load recursive Python test runner")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+runner = load_runner()
+
+
+def load_coverage_checker():
+    spec = importlib.util.spec_from_file_location("coverage_status_checker", COVERAGE_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not load coverage status checker")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+coverage_checker = load_coverage_checker()
+
+
 class FoundationEvidenceBuilderTests(unittest.TestCase):
     def test_evidence_tools_have_measurement_plan_ownership(self) -> None:
-        tools = sorted((ROOT / "scripts").glob("*.py")) + sorted(
-            (ROOT / "scripts").glob("*.sh")
+        tools = sorted(
+            path
+            for directory in (ROOT / "scripts", ROOT / "tools")
+            if directory.exists()
+            for path in directory.rglob("*")
+            if path.is_file() and path.suffix in {".py", ".sh"}
         )
         self.assertGreaterEqual(len(tools), 5)
         plan = MEASUREMENT_PLAN.read_text(encoding="utf-8")
@@ -60,7 +89,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
                 r"(?m)^# Implements: [A-Za-z0-9-]+$",
                 path.name,
             )
-            self.assertIn(f"`scripts/{path.name}`", plan, path.name)
+            self.assertIn(f"`{path.relative_to(ROOT)}`", plan, path.name)
 
     def test_dependency_pins_match_vendored_schema_and_planning(self) -> None:
         self.assertEqual(
@@ -163,7 +192,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             outcomes = {item["name"]: item["status"] for item in manifest["outcomes"]}
             self.assertEqual(outcomes["clippy"], "failed")
             self.assertEqual(outcomes["fmt"], "inconclusive")
-            self.assertEqual(envelope["result"]["status"], "inconclusive")
+            self.assertEqual(envelope["result"]["status"], "rejected")
             self.assertNotIn("all executed", envelope["result"]["summary"])
 
     def test_passed_status_contradiction_is_retained_as_failure(self) -> None:
@@ -181,7 +210,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             envelope = self.read_json(evidence_dir / "evidence-envelope.json")
             outcomes = {item["name"]: item["status"] for item in manifest["outcomes"]}
             self.assertEqual(outcomes["test"], "failed")
-            self.assertEqual(envelope["result"]["status"], "inconclusive")
+            self.assertEqual(envelope["result"]["status"], "rejected")
 
     def test_new_retained_failure_is_included_by_outcome_census(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -201,7 +230,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertIn(
                 {"name": "audit", "status": "failed"}, manifest["outcomes"]
             )
-            self.assertEqual(envelope["result"]["status"], "inconclusive")
+            self.assertEqual(envelope["result"]["status"], "rejected")
 
     def test_collector_and_declared_command_sets_agree(self) -> None:
         collector = COLLECTOR_PATH.read_text(encoding="utf-8").split(
@@ -229,6 +258,37 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             cells = [cell.strip() for cell in row.strip("|").split("|")]
             self.assertEqual(cells[-1], "🚧 Planned", row)
 
+    def test_coverage_checker_rejects_unminted_ids_and_every_diagnostic_reason(self) -> None:
+        report = {
+            "minted_targets": [{"id": "TC-001"}, {"id": "FR-001-AC-1"}],
+            "diagnostics": [{"reason": "future-open-vocabulary-reason"}],
+        }
+        self.assertEqual(
+            coverage_checker.undeclared_matrix_ids(
+                report,
+                "| FR-001 | FR-001-AC-1 | TC-001 |\n"
+                "| FR-999 | FR-999-AC-1 | TC-999 |",
+            ),
+            ["FR-999-AC-1", "TC-999"],
+        )
+        self.assertEqual(
+            coverage_checker.diagnostic_reasons(report),
+            ["future-open-vocabulary-reason"],
+        )
+
+    def test_ignored_trace_detector_has_no_fixed_line_window(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "tests" / "ignored.rs"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                "// Verifies: TC-001\n" + ("\n" * 20) + "#[ignore]\n#[test]\nfn ignored() {}\n",
+                encoding="utf-8",
+            )
+            findings = coverage_checker.ignored_trace_tests(root)
+            self.assertEqual(len(findings), 1)
+            self.assertIn("TC-001", findings[0])
+
     def test_skipped_outcome_forces_pending_result_and_limitation(self) -> None:
         outcomes = [
             {"name": "test", "status": "passed"},
@@ -250,6 +310,171 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             declared = [dict(item) for item in derived]
             declared[0]["status"] = "failed"
             self.assertNotEqual(derived, declared)
+
+    def test_verifier_accepts_complete_fixture_and_rejects_mutated_outcome(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            record = self.make_sealed_record(Path(directory))
+            verifier.verify_record(record)
+            manifest = self.read_json(record / "evidence-manifest.json")
+            manifest["outcomes"][0]["status"] = "failed"
+            self.write_json(record / "evidence-manifest.json", manifest)
+            self.relink_and_seal(record)
+            with self.assertRaisesRegex(verifier.EvidenceError, "outcome value mismatch"):
+                verifier.verify_record(record)
+
+    def test_verifier_rejects_mutated_result_parameters_limitations_and_artifacts(self) -> None:
+        mutations = (
+            ("result", "result status mismatch"),
+            ("parameters", "parameters digest mismatch"),
+            ("limitations", "manifest limitations mismatch"),
+            ("artifacts", "manifest artifact census mismatch"),
+        )
+        for mutation, message in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                record = self.make_sealed_record(Path(directory))
+                envelope = self.read_json(record / "evidence-envelope.json")
+                manifest = self.read_json(record / "evidence-manifest.json")
+                if mutation == "result":
+                    envelope["result"]["status"] = "pending"
+                elif mutation == "parameters":
+                    envelope["parametersDigest"]["value"] = "0" * 64
+                elif mutation == "limitations":
+                    manifest["limitations"] = manifest["limitations"][:-1]
+                else:
+                    manifest["artifacts"] = manifest["artifacts"][:-1]
+                self.write_json(record / "evidence-manifest.json", manifest)
+                self.write_json(record / "evidence-envelope.json", envelope)
+                self.relink_and_seal(record)
+                with self.assertRaisesRegex(verifier.EvidenceError, message):
+                    verifier.verify_record(record)
+
+    def test_word_status_disagreement_and_real_failure_markers_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            record = Path(directory)
+            self.write_fixture_inputs(record)
+            (record / "pgm01-schema-status.txt").write_text("failed\n", encoding="utf-8")
+            (record / "quire-validate.stdout").write_text(
+                "2 document(s) failed structural validation\n", encoding="utf-8"
+            )
+            (record / "unsafe-audit.stderr").write_text(
+                "missing SAFETY comment near line 1\n", encoding="utf-8"
+            )
+            outcomes = {item["name"]: item["status"] for item in builder.command_outcomes(record)}
+            self.assertEqual(outcomes["pgm01-schema"], "failed")
+            self.assertEqual(outcomes["quire-validate"], "failed")
+            self.assertEqual(outcomes["unsafe-audit"], "failed")
+
+    def test_combined_pending_summary_counts_both_categories(self) -> None:
+        status, summary, _ = builder.summarize_outcomes(
+            [
+                {"name": "coverage", "status": "inconclusive"},
+                {"name": "validator", "status": "skipped-unavailable"},
+            ]
+        )
+        self.assertEqual(status, "pending")
+        self.assertIn("1 inconclusive", summary)
+        self.assertIn("1 skipped-unavailable", summary)
+
+    def test_make_recipes_cannot_ignore_gate_failures(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        ignored = [line for line in makefile.splitlines() if line.startswith("\t-")]
+        self.assertEqual(ignored, [])
+        self.assertIn(
+            "ci: fmt-check spec lint test msrv deny audit-unsafe rustdoc coverage evidence-tool verify-evidence",
+            makefile,
+        )
+
+    def test_recursive_runner_discovers_nested_tests(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            nested = root / "tests" / "nested" / "test_hidden.py"
+            nested.parent.mkdir(parents=True)
+            nested.write_text("raise SystemExit(0)\n", encoding="utf-8")
+            self.assertEqual(runner.discover_test_files(root), [nested])
+
+    def test_documented_nonexistent_revision_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_root = Path(directory)
+            (evidence_root / "historical").mkdir()
+            (evidence_root / "README.md").write_text("deadbeef" * 5, encoding="utf-8")
+            with mock.patch.object(verifier, "EVIDENCE_ROOT", evidence_root):
+                with self.assertRaisesRegex(verifier.EvidenceError, "does not exist"):
+                    verifier.verify_documented_revisions([])
+
+    def test_anchor_verifier_rejects_rename_deletion_addition_and_digest_drift(self) -> None:
+        for mutation in ("rename", "delete", "addition", "digest-drift"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                evidence_root = root / "evidence"
+                evidence_root.mkdir()
+                readme = evidence_root / "README.md"
+                readme.write_text("anchored\n", encoding="utf-8")
+                anchors = evidence_root / "ANCHORS"
+                anchors.write_text(
+                    f"{verifier.sha256_file(readme)}  evidence/README.md\n",
+                    encoding="utf-8",
+                )
+                with (
+                    mock.patch.object(verifier, "ROOT", root),
+                    mock.patch.object(verifier, "EVIDENCE_ROOT", evidence_root),
+                    mock.patch.object(verifier, "ANCHORS", anchors),
+                ):
+                    self.assertEqual(verifier.verify_anchors(), [])
+                    if mutation == "rename":
+                        readme.rename(evidence_root / "RENAMED.md")
+                    elif mutation == "delete":
+                        readme.unlink()
+                    elif mutation == "addition":
+                        (evidence_root / "added.txt").write_text("new\n", encoding="utf-8")
+                    else:
+                        readme.write_text("changed\n", encoding="utf-8")
+                    with self.assertRaises(verifier.EvidenceError):
+                        verifier.verify_anchors()
+
+    def test_missing_or_empty_authoritative_anchor_set_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence_root = root / "evidence"
+            evidence_root.mkdir()
+            anchors = evidence_root / "ANCHORS"
+            with (
+                mock.patch.object(verifier, "ROOT", root),
+                mock.patch.object(verifier, "EVIDENCE_ROOT", evidence_root),
+                mock.patch.object(verifier, "ANCHORS", anchors),
+            ):
+                with self.assertRaises(verifier.VerificationUnavailable):
+                    verifier.verify_anchors()
+                anchors.write_text("", encoding="utf-8")
+                with self.assertRaises(verifier.VerificationUnavailable):
+                    verifier.verify_authoritative_records()
+
+    def test_every_historical_envelope_requires_in_band_retraction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            historical = root / "evidence" / "historical" / "record"
+            historical.mkdir(parents=True)
+            envelope_path = historical / "evidence-envelope.json"
+            disposition = {
+                "authoritative": False,
+                "status": "retracted",
+                "reason": "superseded historical foundation record",
+            }
+            self.write_json(
+                envelope_path,
+                {"extensions": {"dev.agent-ix.codegen": {"historicalDisposition": disposition}}},
+            )
+            with (
+                mock.patch.object(verifier, "ROOT", root),
+                mock.patch.object(verifier, "EVIDENCE_ROOT", root / "evidence"),
+            ):
+                verifier.verify_historical_dispositions()
+                disposition["status"] = "conclusive"
+                self.write_json(
+                    envelope_path,
+                    {"extensions": {"dev.agent-ix.codegen": {"historicalDisposition": disposition}}},
+                )
+                with self.assertRaisesRegex(verifier.EvidenceError, "disposition"):
+                    verifier.verify_historical_dispositions()
 
     def test_checksum_verifier_detects_transcript_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -292,6 +517,32 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
         return json.loads(path.read_text(encoding="utf-8"))
 
     @staticmethod
+    def write_json(path: Path, value: object) -> None:
+        path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    @classmethod
+    def make_sealed_record(cls, root: Path) -> Path:
+        record = root / "foundation-fixture"
+        record.mkdir()
+        cls.write_fixture_inputs(record)
+        builder.build(record)
+        cls.relink_and_seal(record)
+        return record
+
+    @classmethod
+    def relink_and_seal(cls, record: Path) -> None:
+        envelope = cls.read_json(record / "evidence-envelope.json")
+        envelope["outputs"][0]["contentDigest"]["value"] = builder.sha256_file(
+            record / "evidence-manifest.json"
+        )
+        cls.write_json(record / "evidence-envelope.json", envelope)
+        lines = []
+        for path in sorted(record.iterdir(), key=lambda item: item.name):
+            if path.is_file() and path.name != "sha256sums.txt":
+                lines.append(f"{builder.sha256_file(path)}  ./{path.name}\n")
+        (record / "sha256sums.txt").write_text("".join(lines), encoding="utf-8")
+
+    @staticmethod
     def write_fixture_inputs(evidence_dir: Path) -> None:
         values = {
             "source-revision.txt": "a" * 40 + "\n",
@@ -329,6 +580,18 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
 
 
 class SchemaValidatorTests(unittest.TestCase):
+    def test_requirements_file_must_exactly_match_executable_pins(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            requirements = Path(directory) / "requirements.txt"
+            requirements.write_text("jsonschema==3.2.0\n", encoding="utf-8")
+            spec = importlib.util.spec_from_file_location("schema_validator", VALIDATOR_PATH)
+            if spec is None or spec.loader is None:
+                self.fail("could not load schema validator")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            with self.assertRaisesRegex(RuntimeError, "does not match"):
+                module.pinned_requirements(requirements)
+
     def test_validator_accepts_valid_and_reports_invalid_path(self) -> None:
         schema = {
             "$schema": "http://json-schema.org/draft-07/schema#",

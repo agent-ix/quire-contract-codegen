@@ -44,7 +44,9 @@ fixed-point detection; the builder never manufactures a pass from a command name
 builder derives and verifies the digest of the vendored PGM-01 envelope schema; unit tests exercise
 dependency-pin agreement, envelope identities, roles, digests, extensions, pin mismatch failure,
 outcome truthfulness, and accepted/rejected local schema validation. These tests establish
-evidence-tooling behavior only and do not back a semantic TestMatrix row. Implementation plans will extend this with a stable
+evidence-tooling behavior only and do not back a semantic TestMatrix row.
+`scripts/run_python_tests.py` recursively executes every Python test file, including tests in nested
+directories, without depending on Python package discovery. Implementation plans will extend this with a stable
 candidate runner that records source and dependency revisions, tool/backend versions, configuration,
 corpus/input digests, repeated bundle digests, compile/proptest/Kani/coverage results, fault-injection
 outcomes, differential dispositions, and output digests beneath `evidence/`.
@@ -52,19 +54,30 @@ outcomes, differential dispositions, and output digests beneath `evidence/`.
 ## Evidence Verification Control
 
 `scripts/verify_foundation_evidence.py` is the independent retained-record verifier. It requires the
-out-of-record `evidence/ANCHORS` census, verifies each anchored checksum manifest and every nested
+out-of-record `evidence/ANCHORS` census, deterministically maintained by
+`scripts/update_evidence_anchors.py`, verifies each anchored checksum manifest and every nested
 historical/remote file, rejects added files and directories, re-derives every outcome value from its
 numeric status plus retained transcripts, re-derives the envelope result, checks manifest and
-envelope artifact links, and binds the vendored PGM-01 schema to the digest retained from the
-external checkout. A missing anchor or empty authoritative record set is verification unavailable,
-not success. An anchor is a committed review boundary, not proof that the originally retained bytes
-were semantically correct.
+envelope artifact links, verifies the complete manifest artifact census and exact limitations,
+re-derives the parameter digest from the controlling source files, and binds the vendored PGM-01
+schema to the digest retained from the external checkout. Behavioral tests mutate each critical
+claim independently and require rejection. A missing anchor or empty authoritative record set is
+verification unavailable, not success. An anchor is a committed review boundary, not proof that the
+originally retained bytes were semantically correct.
+
+Every quarantined envelope carries a machine-readable `historicalDisposition` extension whose
+`retracted` status removes any embedded historical result from the authoritative claim set. The
+verifier requires that exact disposition on every historical envelope; the recursively anchored
+historical tree prevents it from being removed without detection.
 
 `scripts/validate_json_schema.py` fails closed unless every package in
 `requirements-evidence.txt` and every required format checker is present. The collector records the
 installed package set. `scripts/check_coverage_status.py` gates contradicted status rows and ignored
-trace-bearing Rust tests; while upstream status-column classification remains unavailable it emits
-an explicit inconclusive marker, so a zero process exit cannot become a passed evidence outcome.
+trace-bearing Rust tests, rejects matrix acceptance/test identifiers absent from the minted trace
+population, and treats every reported diagnostic reason as inconclusive. While upstream status-column
+classification remains unavailable it emits an explicit inconclusive marker, so a zero process exit
+cannot become a passed evidence outcome. The foundation collector accepts that one disclosed pending
+coverage outcome as a usable pending record, but never relabels it as conclusive.
 `scripts/check_unsafe_comments.sh` owns the unsafe-code census, and
 `scripts/build_foundation_envelope.py` owns deterministic outcome/result derivation and assembly.
 

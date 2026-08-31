@@ -31,7 +31,7 @@ foundation gates alone.
 | FND-005 | low | License, unsafe, MSRV, and scaffold-test gates are intentionally low-signal while the crate has no dependencies and only placeholder code. | `Makefile`, L-4 |
 
 FND-001 retains reviewed PR #19 snapshot
-`37eb00153d5c139ebc01622b6e12a4ab79256f88`. The PR has since advanced to `db24d900…` under an
+`37eb00153d5c139ebc01622b6e12a4ab79256f88`. The PR has since advanced beyond that snapshot under an
 explicit REQUEST CHANGES / NOT MERGEABLE review, so the dependency remains open until an accepted
 identity exists. FND-002 was retired in commit `e1463f3f7719` as a stale duplicate; its identity is retained
 in this history note and is not reused. Hosted CI clauses in FND-003 are deferred by operator
@@ -121,7 +121,7 @@ the defect, the collector exited nonzero, and the corrected record supersedes th
   byte-identical to reviewed head `d8d376d887c40255e87ef9656bc0faf79216b321`; the complete merged-main
   release check passes, and the exact merged identity and schema digest are reconciled locally.
 - The codegen pin is reviewed PR #19 snapshot
-  `37eb00153d5c139ebc01622b6e12a4ab79256f88`. Current head `db24d900…` is explicitly not mergeable;
+  `37eb00153d5c139ebc01622b6e12a4ab79256f88`. The moving PR head is explicitly not mergeable;
   neither revision is accepted, so the pin must be reconciled again before a semantic draft lands.
 - Runtime PR #5 is merged at `e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3`. Its tree is
   byte-identical to the round-10-reviewed head `4e0edec972c7e1431cf0d81ed8346a0ab8817af7`;

@@ -18,10 +18,27 @@ REQUIRED_PACKAGES = {
     "rfc3986-validator": "0.1.1",
 }
 REQUIRED_FORMATS = {"date-time", "uri", "uri-reference"}
+REQUIREMENTS = Path(__file__).resolve().parent.parent / "requirements-evidence.txt"
+
+
+def pinned_requirements(path: Path = REQUIREMENTS) -> dict[str, str]:
+    pins = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line or line.startswith("#") or line.count("==") != 1:
+            raise RuntimeError(f"invalid evidence requirement line: {line!r}")
+        name, version = line.split("==", 1)
+        pins[name] = version
+    expected = {name.replace("_", "-"): version for name, version in REQUIRED_PACKAGES.items()}
+    if {name.replace("_", "-"): version for name, version in pins.items()} != expected:
+        raise RuntimeError(
+            f"requirements-evidence.txt does not match required schema packages: {pins}"
+        )
+    return pins
 
 
 def checked_format_checker() -> FormatChecker:
     """Return a format checker only when every pinned implementation is present."""
+    pinned_requirements()
     for package, expected in REQUIRED_PACKAGES.items():
         try:
             actual = importlib.metadata.version(package)

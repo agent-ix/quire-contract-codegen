@@ -12,13 +12,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TRACE_ID = re.compile(r"\b(?:TC-\d{3}|(?:N?FR|StR)-\d{3}(?:-(?:AC|VC)-\d+)?)\b")
-INCONCLUSIVE_REASONS = {"status-column-matches-nothing", "hollow-denominator"}
 
 
-def ignored_trace_tests() -> list[str]:
+def ignored_trace_tests(repository_root: Path = ROOT) -> list[str]:
     findings = []
     for root_name in ("src", "tests", "benches", "examples"):
-        root = ROOT / root_name
+        root = repository_root / root_name
         if not root.exists():
             continue
         for path in sorted(root.rglob("*.rs")):
@@ -26,14 +25,39 @@ def ignored_trace_tests() -> list[str]:
             for index, line in enumerate(lines):
                 if "#[ignore" not in line:
                     continue
-                context = "\n".join(lines[max(0, index - 10) : index + 8])
+                context = "\n".join(lines)
                 identifiers = sorted(set(TRACE_ID.findall(context)))
                 if identifiers:
                     findings.append(
-                        f"{path.relative_to(ROOT)}:{index + 1}: ignored trace-bearing test "
+                        f"{path.relative_to(repository_root)}:{index + 1}: ignored trace-bearing test "
                         + ", ".join(identifiers)
                     )
     return findings
+
+
+def undeclared_matrix_ids(report: dict[str, object], matrix_text: str) -> list[str]:
+    minted = {
+        item.get("id")
+        for item in report.get("minted_targets", [])
+        if isinstance(item, dict)
+    }
+    matrix_ids = set(TRACE_ID.findall(matrix_text))
+    return sorted(
+        identifier
+        for identifier in matrix_ids
+        if (identifier.startswith("TC-") or "-AC-" in identifier or "-VC-" in identifier)
+        and identifier not in minted
+    )
+
+
+def diagnostic_reasons(report: dict[str, object]) -> list[str]:
+    return sorted(
+        {
+            item.get("reason")
+            for item in report.get("diagnostics", [])
+            if isinstance(item, dict) and isinstance(item.get("reason"), str)
+        }
+    )
 
 
 # Implements: MP-001
@@ -67,13 +91,18 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    inconclusive = sorted(
-        {
-            item.get("reason")
-            for item in report.get("diagnostics", [])
-            if item.get("reason") in INCONCLUSIVE_REASONS
-        }
+    dangling = undeclared_matrix_ids(
+        report,
+        (ROOT / "spec/test-matrix.md").read_text(encoding="utf-8"),
     )
+    if dangling:
+        print(
+            "COVERAGE_STATUS_CONTRADICTION: matrix references undeclared ids: "
+            + ", ".join(dangling),
+            file=sys.stderr,
+        )
+        return 1
+    inconclusive = diagnostic_reasons(report)
     summary = report.get("totals", {})
     print(json.dumps({"statusLies": 0, "totals": summary}, sort_keys=True))
     if inconclusive:

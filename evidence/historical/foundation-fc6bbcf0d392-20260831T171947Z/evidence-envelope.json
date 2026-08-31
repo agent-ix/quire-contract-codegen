@@ -20,7 +20,12 @@
       "phase": "foundation",
       "reviewState": "pending",
       "reviewerRole": "reviewer-of-record; not a GitHub approval",
-      "sourceState": "clean"
+      "sourceState": "clean",
+      "historicalDisposition": {
+        "authoritative": false,
+        "reason": "superseded historical foundation record",
+        "status": "retracted"
+      }
     }
   },
   "inputs": [
