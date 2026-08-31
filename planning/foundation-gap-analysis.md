@@ -83,6 +83,10 @@ retained numeric statuses. The historical record
 `evidence/historical/foundation-a7790d225746-20260831T154248Z` is likewise deliberately
 quarantined: its PGM-01 custom-validator lane failed closed because the invoking Python environment
 lacked the pinned RFC 3339 validator. It is retained as failure evidence and is not a candidate pass.
+The failed first hardening record
+`evidence/historical/foundation-374a6a3060ad-20260831T163004Z` is also quarantined: all three PGM-01
+lanes rejected an invalid external-validator schema version (`3` instead of `v3`). The schema caught
+the defect, the collector exited nonzero, and the corrected record supersedes this attempt.
 
 ## Open dependencies and remote evidence
 

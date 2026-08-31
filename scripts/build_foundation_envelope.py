@@ -417,7 +417,7 @@ def build(evidence_dir: Path) -> None:
                 "mediaType": "text/x-python",
                 "schema": {
                     "id": "python-source",
-                    "version": "3",
+                    "version": "v3",
                     "digest": digest(
                         (evidence_dir / "pgm01-validator-sha256.txt")
                         .read_text(encoding="utf-8")
