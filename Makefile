@@ -2,8 +2,9 @@
 # Quire Contract Codegen Makefile
 # =============================================================================
 
-CARGO ?= cargo
-MSRV ?= 1.75.0
+override CARGO := cargo
+override MSRV := 1.75.0
+override PYTHON := python3
 
 .PHONY: help
 help:
@@ -78,16 +79,16 @@ audit-unsafe:
 
 .PHONY: evidence-tool
 evidence-tool:
-	python3 -m py_compile scripts/build_foundation_envelope.py scripts/validate_json_schema.py scripts/verify_foundation_evidence.py
-	python3 -m unittest discover -s tests -p '*.py'
+	$(PYTHON) -m py_compile scripts/build_foundation_envelope.py scripts/check_coverage_status.py scripts/validate_json_schema.py scripts/verify_foundation_evidence.py
+	$(PYTHON) -m unittest discover -s tests -p '*.py'
 
 .PHONY: verify-evidence
 verify-evidence:
-	python3 scripts/verify_foundation_evidence.py
+	$(PYTHON) scripts/verify_foundation_evidence.py
 
 .PHONY: coverage
 coverage:
-	quire coverage --scope .
+	$(PYTHON) scripts/check_coverage_status.py
 
 .PHONY: rustdoc
 rustdoc:

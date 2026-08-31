@@ -82,6 +82,11 @@ fi
 source_state=clean
 : "${PGM01_SCHEMA:?PGM01_SCHEMA must name the pinned PGM-01 envelope schema}"
 : "${PGM01_VALIDATOR:?PGM01_VALIDATOR must name the pinned PGM-01 validator}"
+: "${REVIEWER_OF_RECORD:?REVIEWER_OF_RECORD must name the accountable reviewer as @login}"
+if [[ ! "$REVIEWER_OF_RECORD" =~ ^@[A-Za-z0-9-]+$ ]]; then
+  echo "REVIEWER_OF_RECORD must match @login" >&2
+  exit 2
+fi
 pgm01_schema_path="$(realpath "$PGM01_SCHEMA")"
 pgm01_validator_path="$(realpath "$PGM01_VALIDATOR")"
 if [[ ! -f "$pgm01_schema_path" || ! -f "$pgm01_validator_path" ]]; then
@@ -97,8 +102,8 @@ case "$pgm01_schema_path" in
   "$pgm01_repo"/*) ;;
   *) echo "PGM-01 schema and validator must come from the same checkout" >&2; exit 2 ;;
 esac
-if ! python3 -c 'import jsonschema' >/dev/null 2>&1; then
-  echo "jsonschema is required for evidence collection" >&2
+if ! python3 -c 'from scripts.validate_json_schema import checked_format_checker; checked_format_checker()' >/dev/null 2>&1; then
+  echo "the exact requirements-evidence.txt schema packages are required" >&2
   exit 2
 fi
 mkdir -p "$evidence_dir"
@@ -106,6 +111,7 @@ collection_failed=0
 
 git rev-parse HEAD >"$evidence_dir/source-revision.txt"
 echo "$source_state" >"$evidence_dir/source-state.txt"
+echo "$REVIEWER_OF_RECORD" >"$evidence_dir/reviewer-of-record.txt"
 rustc --version --verbose >"$evidence_dir/rustc-version.txt"
 rustc +1.75.0 --version --verbose >"$evidence_dir/msrv-rustc-version.txt"
 cargo --version --verbose >"$evidence_dir/cargo-version.txt"
@@ -128,7 +134,7 @@ run_and_retain deny cargo deny check licenses
 run_and_retain unsafe-audit bash scripts/check_unsafe_comments.sh
 run_and_retain metadata cargo metadata --format-version 1
 run_and_retain rustdoc env RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps
-run_and_retain coverage quire coverage --scope .
+run_and_retain coverage python3 scripts/check_coverage_status.py
 run_and_retain evidence-tool make evidence-tool
 
 run_schema_validators() {
@@ -174,6 +180,10 @@ fi
     | sort -z \
     | xargs -0 sha256sum >sha256sums.txt
 )
+
+if [[ "$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["result"]["status"])' "$evidence_dir/evidence-envelope.json")" != conclusive ]]; then
+  collection_failed=1
+fi
 
 if (( collection_failed != 0 )); then
   echo "one or more retained foundation evidence commands failed" >&2

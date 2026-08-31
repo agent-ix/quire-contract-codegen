@@ -19,6 +19,8 @@ BUILDER_PATH = ROOT / "scripts" / "build_foundation_envelope.py"
 COLLECTOR_PATH = ROOT / "scripts" / "collect_foundation_evidence.sh"
 VALIDATOR_PATH = ROOT / "scripts" / "validate_json_schema.py"
 VERIFIER_PATH = ROOT / "scripts" / "verify_foundation_evidence.py"
+COVERAGE_PATH = ROOT / "scripts" / "check_coverage_status.py"
+MEASUREMENT_PLAN = ROOT / "spec" / "assurance" / "MP-001-codegen-measurements.md"
 
 
 def load_builder():
@@ -51,12 +53,14 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             (ROOT / "scripts").glob("*.sh")
         )
         self.assertGreaterEqual(len(tools), 5)
+        plan = MEASUREMENT_PLAN.read_text(encoding="utf-8")
         for path in tools:
             self.assertRegex(
                 path.read_text(encoding="utf-8"),
                 r"(?m)^# Implements: [A-Za-z0-9-]+$",
                 path.name,
             )
+            self.assertIn(f"`scripts/{path.name}`", plan, path.name)
 
     def test_dependency_pins_match_vendored_schema_and_planning(self) -> None:
         self.assertEqual(
@@ -162,7 +166,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertEqual(envelope["result"]["status"], "inconclusive")
             self.assertNotIn("all executed", envelope["result"]["summary"])
 
-    def test_passed_status_cannot_contradict_retained_transcript(self) -> None:
+    def test_passed_status_contradiction_is_retained_as_failure(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             evidence_dir = Path(directory) / "foundation-fixture"
             evidence_dir.mkdir()
@@ -171,8 +175,13 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
                 "test result: FAILED. 0 passed; 7 failed\n", encoding="utf-8"
             )
 
-            with self.assertRaisesRegex(ValueError, "contradicts retained transcript"):
-                builder.build(evidence_dir)
+            builder.build(evidence_dir)
+
+            manifest = self.read_json(evidence_dir / "evidence-manifest.json")
+            envelope = self.read_json(evidence_dir / "evidence-envelope.json")
+            outcomes = {item["name"]: item["status"] for item in manifest["outcomes"]}
+            self.assertEqual(outcomes["test"], "failed")
+            self.assertEqual(envelope["result"]["status"], "inconclusive")
 
     def test_new_retained_failure_is_included_by_outcome_census(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -208,16 +217,39 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
         declared = {name for name, _ in builder.COMMAND_TRANSCRIPTS}
         self.assertEqual(declared, set(builder.PASS_CONTRADICTION_MARKERS))
 
-    def test_functional_coverage_rows_remain_planned_until_upstream_fix(self) -> None:
+    def test_all_matrix_rows_remain_planned_until_upstream_fix(self) -> None:
         matrix = (ROOT / "spec" / "test-matrix.md").read_text(encoding="utf-8")
-        table = matrix.split("## Functional Requirement Coverage", 1)[1].split(
-            "## Stakeholder Requirement Coverage", 1
-        )[0]
-        rows = [line for line in table.splitlines() if line.startswith("| FR-")]
+        rows = [
+            line
+            for line in matrix.splitlines()
+            if line.startswith(("| FR-", "| StR-", "| TC-"))
+        ]
         self.assertGreater(len(rows), 0)
         for row in rows:
             cells = [cell.strip() for cell in row.strip("|").split("|")]
             self.assertEqual(cells[-1], "🚧 Planned", row)
+
+    def test_skipped_outcome_forces_pending_result_and_limitation(self) -> None:
+        outcomes = [
+            {"name": "test", "status": "passed"},
+            {"name": "validator", "status": "skipped-unavailable"},
+        ]
+        status, summary, limitations = builder.summarize_outcomes(outcomes)
+        self.assertEqual(status, "pending")
+        self.assertIn("skipped", summary)
+        self.assertEqual(
+            limitations,
+            ["skipped-unavailable foundation outcome: validator"],
+        )
+
+    def test_verifier_rederives_outcome_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_dir = Path(directory)
+            self.write_fixture_inputs(evidence_dir)
+            derived = builder.command_outcomes(evidence_dir)
+            declared = [dict(item) for item in derived]
+            declared[0]["status"] = "failed"
+            self.assertNotEqual(derived, declared)
 
     def test_checksum_verifier_detects_transcript_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -264,6 +296,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
         values = {
             "source-revision.txt": "a" * 40 + "\n",
             "source-state.txt": "clean\n",
+            "reviewer-of-record.txt": "@kreneskyp\n",
             "cargo-version.txt": "cargo 1.94.1\n",
             "jsonschema-version.txt": "3.2.0\n",
             "python-version.txt": "Python 3.10.12\n",
@@ -321,6 +354,22 @@ class SchemaValidatorTests(unittest.TestCase):
             result = json.loads(rejected.stdout)
             self.assertFalse(result["valid"])
             self.assertEqual(result["errors"][0]["path"], "$.value")
+
+    def test_validator_rejects_invalid_date_time_format(self) -> None:
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["recordedAt"],
+            "properties": {"recordedAt": {"type": "string", "format": "date-time"}},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            schema_path = root / "schema.json"
+            instance_path = root / "instance.json"
+            schema_path.write_text(json.dumps(schema), encoding="utf-8")
+            instance_path.write_text('{"recordedAt":"NOT-A-TIMESTAMP"}', encoding="utf-8")
+            rejected = self.run_validator(schema_path, instance_path)
+            self.assertEqual(rejected.returncode, 1, rejected.stderr)
 
     @staticmethod
     def run_validator(schema_path: Path, instance_path: Path) -> subprocess.CompletedProcess[str]:

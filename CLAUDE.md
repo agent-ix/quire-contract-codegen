@@ -10,10 +10,16 @@ make fmt-check      # verify formatting (CI gate)
 make lint           # clippy with -D warnings
 make test           # cargo test
 make build          # release build
+make msrv           # compile the library with exact Rust 1.75.0
+make spec           # validate specification, planning, and typed-plan documents
 make clean          # cargo clean
 make deny           # cargo deny check licenses
 make audit-unsafe   # check that every unsafe block has a // SAFETY: comment
-make ci             # fmt-check + lint + test + deny + audit-unsafe
+make rustdoc        # build warning-free API documentation
+make coverage       # reject coverage-status contradictions; report unavailable classification
+make evidence-tool  # test the evidence builder, validators, verifier, and ownership controls
+make verify-evidence # verify the anchored authoritative and historical evidence set
+make ci             # every local gate above except build, clean, and cargo-audit
 ```
 
 ## Safety scaffolding

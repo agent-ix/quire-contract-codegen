@@ -4,10 +4,46 @@
 from __future__ import annotations
 
 import json
+import importlib.metadata
 import sys
 from pathlib import Path
 
-from jsonschema import Draft7Validator
+import jsonschema
+from jsonschema import Draft7Validator, FormatChecker
+
+
+REQUIRED_PACKAGES = {
+    "jsonschema": "3.2.0",
+    "rfc3339-validator": "0.1.4",
+    "rfc3986-validator": "0.1.1",
+}
+REQUIRED_FORMATS = {"date-time", "uri", "uri-reference"}
+
+
+def checked_format_checker() -> FormatChecker:
+    """Return a format checker only when every pinned implementation is present."""
+    for package, expected in REQUIRED_PACKAGES.items():
+        try:
+            actual = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError as error:
+            raise RuntimeError(f"required schema package {package} is not installed") from error
+        if actual != expected:
+            raise RuntimeError(
+                f"expected schema package {package} {expected}, found {actual}"
+            )
+    if jsonschema.__version__ != REQUIRED_PACKAGES["jsonschema"]:
+        raise RuntimeError(
+            f"expected jsonschema {REQUIRED_PACKAGES['jsonschema']}, "
+            f"found {jsonschema.__version__}"
+        )
+    checker = FormatChecker()
+    missing = REQUIRED_FORMATS.difference(checker.checkers)
+    if missing:
+        raise RuntimeError(
+            "required JSON Schema format checkers are unavailable: "
+            + ", ".join(sorted(missing))
+        )
+    return checker
 
 
 def display_path(parts: list[object]) -> str:
@@ -25,9 +61,10 @@ def main() -> int:
 
     schema = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     instance = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+    checker = checked_format_checker()
     Draft7Validator.check_schema(schema)
     errors = sorted(
-        Draft7Validator(schema).iter_errors(instance),
+        Draft7Validator(schema, format_checker=checker).iter_errors(instance),
         key=lambda error: [str(part) for part in error.absolute_path],
     )
     result = {

@@ -30,9 +30,10 @@ foundation gates alone.
 | FND-004 | low | Stable rustfmt omits nightly-only import grouping options, so import grouping is not enforced. | `rustfmt.toml`, L-1 |
 | FND-005 | low | License, unsafe, MSRV, and scaffold-test gates are intentionally low-signal while the crate has no dependencies and only placeholder code. | `Makefile`, L-4 |
 
-FND-001 now has candidate PR #19 at
-`37eb00153d5c139ebc01622b6e12a4ab79256f88`, but remains open until that candidate is reviewed and
-accepted. FND-002 was retired in commit `e1463f3f7719` as a stale duplicate; its identity is retained
+FND-001 retains reviewed PR #19 snapshot
+`37eb00153d5c139ebc01622b6e12a4ab79256f88`. The PR has since advanced to `db24d900…` under an
+explicit REQUEST CHANGES / NOT MERGEABLE review, so the dependency remains open until an accepted
+identity exists. FND-002 was retired in commit `e1463f3f7719` as a stale duplicate; its identity is retained
 in this history note and is not reused. Hosted CI clauses in FND-003 are deferred by operator
 direction; the human decision remains open.
 
@@ -59,13 +60,17 @@ that would become stale on its own next commit.
 
 ## Foundation evidence result
 
-The retained bundle records a clean source revision and successful specification validation,
-formatting, Clippy, unit/integration tests, explicit Rust 1.75 compatibility, license policy,
-unsafe-code audit, metadata capture, and warning-denied documentation generation. The local input
-schema now rejects unknown tool and dependency fields and requires exact PGM/runtime identities.
-All 68 checksum entries verify in the current source-bound record; the local schemas, exact merged
-PGM-01 schema, and custom
-validator all accept their respective records with zero errors.
+Round 2 invalidated the former authoritative record set: its checksums proved that retained bytes had
+not changed, but the verifier did not independently derive outcome values or bind the set of records.
+Those six records are now under `evidence/historical/retired-pre-derivation-verifier/` and cannot
+support a current claim. The current procedure requires a committed `evidence/ANCHORS` census,
+re-derives outcome values and the envelope result, binds every validator transcript, validates JSON
+Schema formats with exact dependencies, and seals the complete historical and remote trees.
+
+Because upstream coverage status classification currently reports that it could not perform the
+measurement, the coverage command is retained as `inconclusive` even when its process exits zero.
+Consequently, the current foundation result is truthfully `pending`, not `conclusive`; local compile,
+test, audit, documentation, and schema lanes may pass without upgrading that unavailable measurement.
 
 The foundation evidence toolchain is owned by MP-001 and tested independently of the semantic
 TestMatrix. Its vendored PGM-01 schema digest must match the executable pin; its PGM/runtime pins must
@@ -73,6 +78,28 @@ agree with the planning reviews; every declared outcome is derived from a retain
 fixture tests cover envelope identities, roles, digests, extensions, fail-closed pin mismatch,
 failure/inconclusive truthfulness, and local validator acceptance/rejection. Semantic coverage remains
 zero because these tests make no code-generation claim.
+
+## Review Round 2 disposition
+
+| Finding | Disposition |
+|---|---|
+| N-1 | Closed: the verifier re-runs outcome derivation and compares complete name/status values plus the derived result and limitations. |
+| N-2 | Closed: anchored checksum manifests bind all validator status files and transcripts outside each record. |
+| N-3 | Closed: exact evidence requirements and required `date-time`, `uri`, and `uri-reference` format implementations fail closed. |
+| N-4 | Closed: `evidence/ANCHORS` is a set-equality boundary; missing/empty verification has a distinct unavailable exit. Historical and remote trees are sealed recursively. |
+| N-5 | Closed: any skipped outcome forces `pending` and a named limitation. |
+| N-6/N-7 | Closed locally: structured coverage output gates status lies and emits a real inconclusive marker when classification is unavailable. |
+| N-8 | Closed locally: ignored Rust tests carrying nearby trace identities fail the coverage-status gate. |
+| N-9 | Closed: MP-001 specifies each evidence script and verifier limits; the ownership test requires the actual filename in the plan. |
+| N-10 | Closed: every record's externally captured PGM-01 schema digest must match the vendored schema used by verification. |
+| N-11 | Partially closed: format validation uses the strict upstream pattern; ecosystem consolidation remains PGM-02 work. |
+| N-12 | Closed: checksum census diagnostics distinguish unlisted entries from absent declared entries. |
+| N-13 | Closed: security-relevant Make command/toolchain variables use non-overridable exact values. |
+| N-14 | Closed: transcript contradiction derives a durable failed outcome instead of aborting assembly before sealing. |
+| N-15 | Disclosed: `37eb0015…` is a reviewed snapshot, not the current or accepted IR head; reconciliation remains mandatory. |
+| N-16 | Closed: reviewer-of-record is an explicit collection input; the extension states that this role is not GitHub approval. |
+| N-17 | Deferred by operator direction: hosted CI and workflow ownership belong to the separate manual-CI agent; local gate documentation is synchronized. |
+| N-18 | Closed: any nested entry changes the recursively anchored historical tree, while any directory inside an authoritative flat record violates its checksum census. |
 
 The current placeholder crate tests establish only scaffold health. They do not satisfy any semantic
 test case or close the assurance claim.
@@ -93,8 +120,9 @@ the defect, the collector exited nonzero, and the corrected record supersedes th
 - PGM-01 PR #12 is merged at `7dac9d8c19952412b56a0347387666e2ca81e01d`. Its tree is
   byte-identical to reviewed head `d8d376d887c40255e87ef9656bc0faf79216b321`; the complete merged-main
   release check passes, and the exact merged identity and schema digest are reconciled locally.
-- The authoritative IR schema/corpus candidate is PR #19 at
-  `37eb00153d5c139ebc01622b6e12a4ab79256f88`; it remains open and unreviewed.
+- The codegen pin is reviewed PR #19 snapshot
+  `37eb00153d5c139ebc01622b6e12a4ab79256f88`. Current head `db24d900…` is explicitly not mergeable;
+  neither revision is accepted, so the pin must be reconciled again before a semantic draft lands.
 - Runtime PR #5 is merged at `e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3`. Its tree is
   byte-identical to the round-10-reviewed head `4e0edec972c7e1431cf0d81ed8346a0ab8817af7`;
   every finding is closed, and its 25 executed local outcomes plus both merged-PGM validators pass

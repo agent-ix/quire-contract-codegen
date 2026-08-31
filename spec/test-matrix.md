@@ -27,8 +27,9 @@ type: TestMatrix
 
 The current coverage selector expects a `Status` column while the TestMatrix structure requires
 `Coverage Status` (upstream spec-artifacts-process #77). Until that conflict is resolved, the
-foundation evidence test requires every functional row to remain `🚧 Planned`; any transition is a
-human-reviewed matrix change and must replace that temporary control with backed-test verification.
+foundation evidence test requires every functional, stakeholder, and test-case row to remain
+`🚧 Planned`; any transition is a human-reviewed matrix change and must replace that temporary
+control with backed-test verification.
 
 ## Stakeholder Requirement Coverage
 

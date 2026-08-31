@@ -49,6 +49,25 @@ candidate runner that records source and dependency revisions, tool/backend vers
 corpus/input digests, repeated bundle digests, compile/proptest/Kani/coverage results, fault-injection
 outcomes, differential dispositions, and output digests beneath `evidence/`.
 
+## Evidence Verification Control
+
+`scripts/verify_foundation_evidence.py` is the independent retained-record verifier. It requires the
+out-of-record `evidence/ANCHORS` census, verifies each anchored checksum manifest and every nested
+historical/remote file, rejects added files and directories, re-derives every outcome value from its
+numeric status plus retained transcripts, re-derives the envelope result, checks manifest and
+envelope artifact links, and binds the vendored PGM-01 schema to the digest retained from the
+external checkout. A missing anchor or empty authoritative record set is verification unavailable,
+not success. An anchor is a committed review boundary, not proof that the originally retained bytes
+were semantically correct.
+
+`scripts/validate_json_schema.py` fails closed unless every package in
+`requirements-evidence.txt` and every required format checker is present. The collector records the
+installed package set. `scripts/check_coverage_status.py` gates contradicted status rows and ignored
+trace-bearing Rust tests; while upstream status-column classification remains unavailable it emits
+an explicit inconclusive marker, so a zero process exit cannot become a passed evidence outcome.
+`scripts/check_unsafe_comments.sh` owns the unsafe-code census, and
+`scripts/build_foundation_envelope.py` owns deterministic outcome/result derivation and assembly.
+
 ## Interpretation
 
 Exact digest equality is required only within a declared supported profile. A missing backend, draft

@@ -28,6 +28,8 @@ COLLECTOR = ROOT / "scripts" / "collect_foundation_evidence.sh"
 BUILDER = Path(__file__).resolve()
 SCHEMA_VALIDATOR = ROOT / "scripts" / "validate_json_schema.py"
 EVIDENCE_VERIFIER = ROOT / "scripts" / "verify_foundation_evidence.py"
+COVERAGE_STATUS_CHECKER = ROOT / "scripts" / "check_coverage_status.py"
+EVIDENCE_REQUIREMENTS = ROOT / "requirements-evidence.txt"
 COMMAND_TRANSCRIPTS = (
     ("quire-validate", "quire-validate"),
     ("fmt", "fmt"),
@@ -63,13 +65,16 @@ PASS_CONTRADICTION_MARKERS = {
     "unsafe-audit": ("unsafe audit failed", "missing // SAFETY:"),
     "metadata": ("error:", "error["),
     "rustdoc": ("error: could not document",),
-    "coverage": ("[complete-but-unbacked]",),
+    "coverage": ("COVERAGE_STATUS_CONTRADICTION",),
     "evidence-tool": ("FAILED (", "Traceback (most recent call last)"),
     "pgm01-pinned-schema": ('"valid": false',),
     "input-schema": ('"valid": false',),
     "manifest-schema": ('"valid": false',),
     "pgm01-schema": ('"valid": false',),
     "pgm01-envelope": ('"valid": false', "governance validation error:"),
+}
+INCONCLUSIVE_TRANSCRIPT_MARKERS = {
+    "coverage": ("COVERAGE_STATUS_INCONCLUSIVE",),
 }
 
 
@@ -156,15 +161,57 @@ def command_outcomes(evidence_dir: Path) -> list[dict[str, str]]:
                         None,
                     )
                     if contradiction is not None:
-                        raise ValueError(
-                            f"passed status for {name} contradicts retained transcript: "
-                            f"{contradiction}"
-                        )
-                    status = "passed"
+                        status = "failed"
+                    elif any(
+                        marker in combined
+                        for marker in INCONCLUSIVE_TRANSCRIPT_MARKERS.get(name, ())
+                    ):
+                        status = "inconclusive"
+                    else:
+                        status = "passed"
             else:
                 status = "failed"
         outcomes.append({"name": name, "status": status})
     return outcomes
+
+
+def summarize_outcomes(
+    outcomes: list[dict[str, str]],
+) -> tuple[str, str, list[str]]:
+    """Derive a truthful terminal result and per-outcome limitations."""
+    failed = sorted(item["name"] for item in outcomes if item["status"] == "failed")
+    inconclusive = sorted(
+        item["name"] for item in outcomes if item["status"] == "inconclusive"
+    )
+    skipped = sorted(
+        item["name"]
+        for item in outcomes
+        if item["status"] == "skipped-unavailable"
+    )
+    limitations = [
+        *(f"failed foundation outcome: {name}" for name in failed),
+        *(f"inconclusive foundation outcome: {name}" for name in inconclusive),
+        *(f"skipped-unavailable foundation outcome: {name}" for name in skipped),
+    ]
+    if failed:
+        return "inconclusive", f"{len(failed)} codegen foundation checks failed", limitations
+    if inconclusive:
+        return (
+            "pending",
+            f"{len(inconclusive)} foundation check outcomes are inconclusive",
+            limitations,
+        )
+    if skipped:
+        return (
+            "pending",
+            f"{len(skipped)} foundation checks were skipped because tooling was unavailable",
+            limitations,
+        )
+    return (
+        "conclusive",
+        "all retained codegen foundation checks passed; semantic claims are out of scope",
+        limitations,
+    )
 
 
 def hash_parameter_files() -> str:
@@ -177,6 +224,8 @@ def hash_parameter_files() -> str:
         BUILDER,
         SCHEMA_VALIDATOR,
         EVIDENCE_VERIFIER,
+        COVERAGE_STATUS_CHECKER,
+        EVIDENCE_REQUIREMENTS,
         INPUT_SCHEMA,
         MANIFEST_SCHEMA,
         PGM01_ENVELOPE_SCHEMA,
@@ -342,6 +391,7 @@ def build(evidence_dir: Path) -> None:
             )
 
     outcomes = command_outcomes(evidence_dir)
+    result_status, result_summary, outcome_limitations = summarize_outcomes(outcomes)
     manifest = {
         "schemaVersion": "quire.codegen-foundation-evidence-manifest/v1",
         "sourceRevision": revision,
@@ -353,26 +403,12 @@ def build(evidence_dir: Path) -> None:
             "authoritative IR schema and corpus candidate remains under review",
             "runtime source is merged; its human source-release decision remains pending",
             "hosted CI is intentionally deferred by operator direction",
+            *outcome_limitations,
         ],
     }
     manifest_path = evidence_dir / "evidence-manifest.json"
     write_json(manifest_path, manifest)
 
-    failed = [item["name"] for item in outcomes if item["status"] == "failed"]
-    inconclusive = [
-        item["name"] for item in outcomes if item["status"] == "inconclusive"
-    ]
-    if failed:
-        result_status = "inconclusive"
-        result_summary = f"{len(failed)} codegen foundation checks failed"
-    elif inconclusive:
-        result_status = "pending"
-        result_summary = f"{len(inconclusive)} foundation check outcomes are inconclusive"
-    else:
-        result_status = "conclusive"
-        result_summary = (
-            "all executed codegen foundation checks passed; semantic claims are out of scope"
-        )
     envelope = {
         "schemaVersion": "quire.derivation-evidence/v1",
         "recordId": evidence_dir.name,
@@ -469,7 +505,11 @@ def build(evidence_dir: Path) -> None:
             "sourceRevision": revision,
             "candidateRevision": revision,
             "contributionMethod": "agent-assisted",
-            "reviewers": ["@kreneskyp"],
+            "reviewers": [
+                (evidence_dir / "reviewer-of-record.txt")
+                .read_text(encoding="utf-8")
+                .strip()
+            ],
         },
         "result": {
             "status": result_status,
@@ -483,6 +523,7 @@ def build(evidence_dir: Path) -> None:
                 "phase": "foundation",
                 "pgm01CandidateRevision": PGM01_CANDIDATE_REVISION,
                 "reviewState": "pending",
+                "reviewerRole": "reviewer-of-record; not a GitHub approval",
                 "sourceState": source_state,
             }
         },

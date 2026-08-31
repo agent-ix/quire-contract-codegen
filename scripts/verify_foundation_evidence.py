@@ -10,7 +10,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft7Validator, FormatChecker
+from jsonschema import Draft7Validator
+
+SCRIPTS = Path(__file__).resolve().parent
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+from build_foundation_envelope import command_outcomes, summarize_outcomes
+from validate_json_schema import checked_format_checker
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,14 +25,49 @@ EVIDENCE_ROOT = ROOT / "evidence"
 ENVELOPE_SCHEMA = ROOT / "schemas" / "pgm01-derivation-evidence-envelope-v1.schema.json"
 MANIFEST_SCHEMA = ROOT / "schemas" / "foundation-evidence-manifest-v1.schema.json"
 CHECKSUM_LINE = re.compile(r"^([0-9a-f]{64})  (.+)$")
+ANCHORS = EVIDENCE_ROOT / "ANCHORS"
 
 
 class EvidenceError(ValueError):
     """Raised when retained evidence is incomplete or inconsistent."""
 
 
+class VerificationUnavailable(EvidenceError):
+    """Raised when the committed verification boundary is unavailable."""
+
+
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def tree_digest(root: Path) -> str:
+    """Hash a directory census and every regular file beneath it."""
+    state = hashlib.sha256()
+    for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
+        if path.is_symlink():
+            raise EvidenceError(f"symlink is not allowed in retained evidence: {path}")
+        relative = path.relative_to(root).as_posix()
+        kind = b"d" if path.is_dir() else b"f"
+        if not path.is_dir() and not path.is_file():
+            raise EvidenceError(f"unsupported retained-evidence entry: {path}")
+        state.update(kind)
+        state.update(b"\0")
+        state.update(relative.encode("utf-8"))
+        state.update(b"\0")
+        if path.is_file():
+            state.update(bytes.fromhex(sha256_file(path)))
+        state.update(b"\0")
+    return state.hexdigest()
+
+
+def safe_root_path(value: str) -> Path:
+    relative = Path(value)
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise EvidenceError(f"unsafe evidence anchor path: {value!r}")
+    path = ROOT / relative
+    if not path.is_relative_to(EVIDENCE_ROOT):
+        raise EvidenceError(f"anchor escapes evidence root: {value!r}")
+    return path
 
 
 def safe_record_path(record: Path, value: str) -> Path:
@@ -50,8 +92,9 @@ def load_json(path: Path) -> dict[str, Any]:
 
 def validate_json(instance: dict[str, Any], schema_path: Path, label: str) -> None:
     schema = load_json(schema_path)
+    checker = checked_format_checker()
     errors = sorted(
-        Draft7Validator(schema, format_checker=FormatChecker()).iter_errors(instance),
+        Draft7Validator(schema, format_checker=checker).iter_errors(instance),
         key=lambda error: (list(error.absolute_path), error.message),
     )
     if errors:
@@ -75,12 +118,12 @@ def verify_checksums(record: Path) -> int:
         if path in expected:
             raise EvidenceError(f"duplicate checksum entry in {record.name}: {path.name}")
         expected[path] = match.group(1)
-    actual = {path for path in record.iterdir() if path.is_file() and path != checksum_path}
+    actual = {path for path in record.iterdir() if path != checksum_path}
     if set(expected) != actual:
-        missing = sorted(path.name for path in actual - set(expected))
-        extra = sorted(path.name for path in set(expected) - actual)
+        unlisted = sorted(path.name for path in actual - set(expected))
+        absent = sorted(path.name for path in set(expected) - actual)
         raise EvidenceError(
-            f"checksum census mismatch in {record.name}: missing={missing}, extra={extra}"
+            f"checksum census mismatch in {record.name}: unlisted={unlisted}, absent={absent}"
         )
     for path, digest in expected.items():
         observed = sha256_file(path)
@@ -121,6 +164,57 @@ def verify_envelope_links(record: Path, envelope: dict[str, Any]) -> None:
             raise EvidenceError(f"envelope digest mismatch in {record.name}: {path.name}")
 
 
+def verify_anchors() -> list[Path]:
+    """Verify the committed record-set boundary and return authoritative records."""
+    if not ANCHORS.is_file():
+        raise VerificationUnavailable("committed evidence/ANCHORS is missing")
+    expected: dict[Path, str] = {}
+    for line in ANCHORS.read_text(encoding="utf-8").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        match = CHECKSUM_LINE.fullmatch(line)
+        if match is None:
+            raise EvidenceError(f"invalid evidence anchor line: {line!r}")
+        target = safe_root_path(match.group(2))
+        if target in expected:
+            raise EvidenceError(f"duplicate evidence anchor: {target.relative_to(ROOT)}")
+        expected[target] = match.group(1)
+
+    actual: set[Path] = set()
+    for path in EVIDENCE_ROOT.iterdir():
+        if path == ANCHORS:
+            continue
+        if (
+            path.is_dir()
+            and path.name.startswith("foundation-")
+            and path.name != "foundation-remote"
+            and (path / "evidence-envelope.json").is_file()
+        ):
+            actual.add(path / "sha256sums.txt")
+        else:
+            actual.add(path)
+    if set(expected) != actual:
+        unanchored = sorted(str(path.relative_to(ROOT)) for path in actual - set(expected))
+        absent = sorted(str(path.relative_to(ROOT)) for path in set(expected) - actual)
+        raise EvidenceError(
+            f"evidence anchor census mismatch: unanchored={unanchored}, absent={absent}"
+        )
+    for path, digest in expected.items():
+        if not path.exists():
+            raise EvidenceError(f"anchored evidence target is absent: {path.relative_to(ROOT)}")
+        observed = tree_digest(path) if path.is_dir() else sha256_file(path)
+        if observed != digest:
+            raise EvidenceError(
+                f"evidence anchor mismatch for {path.relative_to(ROOT)}: "
+                f"expected {digest}, got {observed}"
+            )
+    return sorted(
+        path.parent
+        for path in expected
+        if path.name == "sha256sums.txt" and path.parent.name.startswith("foundation-")
+    )
+
+
 # Implements: MP-001
 def verify_record(record: Path) -> tuple[int, int]:
     checksums = verify_checksums(record)
@@ -128,6 +222,15 @@ def verify_record(record: Path) -> tuple[int, int]:
     envelope = load_json(record / "evidence-envelope.json")
     validate_json(manifest, MANIFEST_SCHEMA, f"{record.name} manifest")
     validate_json(envelope, ENVELOPE_SCHEMA, f"{record.name} envelope")
+    recorded_schema_digest = (record / "pgm01-schema-sha256.txt").read_text(
+        encoding="utf-8"
+    ).strip()
+    vendored_schema_digest = sha256_file(ENVELOPE_SCHEMA)
+    if recorded_schema_digest != vendored_schema_digest:
+        raise EvidenceError(
+            f"PGM-01 schema anchor mismatch in {record.name}: "
+            f"recorded {recorded_schema_digest}, vendored {vendored_schema_digest}"
+        )
     artifacts = verify_artifacts(record, manifest)
     verify_envelope_links(record, envelope)
     revision = (record / "source-revision.txt").read_text(encoding="utf-8").strip()
@@ -153,24 +256,36 @@ def verify_record(record: Path) -> tuple[int, int]:
             f"outcome census mismatch in {record.name}: "
             f"retained={sorted(retained_outcomes)}, declared={sorted(declared_outcomes)}"
         )
+    derived_outcomes = command_outcomes(record)
+    if manifest["outcomes"] != derived_outcomes:
+        raise EvidenceError(
+            f"outcome value mismatch in {record.name}: "
+            f"derived={derived_outcomes}, declared={manifest['outcomes']}"
+        )
+    result_status, result_summary, outcome_limitations = summarize_outcomes(derived_outcomes)
+    if envelope["result"]["status"] != result_status:
+        raise EvidenceError(
+            f"result status mismatch in {record.name}: "
+            f"derived={result_status}, declared={envelope['result']['status']}"
+        )
+    if envelope["result"]["summary"] != result_summary:
+        raise EvidenceError(f"result summary mismatch in {record.name}")
+    if not set(outcome_limitations).issubset(set(manifest["limitations"])):
+        raise EvidenceError(f"derived outcome limitations missing in {record.name}")
     return checksums, artifacts
 
 
-def authoritative_records() -> list[Path]:
-    return sorted(
-        path
-        for path in EVIDENCE_ROOT.glob("foundation-*")
-        if path.is_dir() and (path / "evidence-envelope.json").is_file()
-    )
-
-
 def main() -> int:
-    records = authoritative_records()
-    if not records:
-        print("no authoritative foundation evidence records found", file=sys.stderr)
-        return 1
     try:
+        records = verify_anchors()
+        if not records:
+            raise VerificationUnavailable(
+                "no authoritative foundation records are named by evidence/ANCHORS"
+            )
         totals = [verify_record(record) for record in records]
+    except VerificationUnavailable as error:
+        print(f"foundation evidence verification unavailable: {error}", file=sys.stderr)
+        return 2
     except (EvidenceError, KeyError, OSError, TypeError) as error:
         print(f"foundation evidence verification failed: {error}", file=sys.stderr)
         return 1
