@@ -20,6 +20,9 @@ may support the current foundation statement.
 - `foundation-fc6bbcf0d392-20260831T171947Z` is an honest failed-closed collection with four
   failed foundation checks and an `inconclusive` result. It demonstrates that clippy, test, MSRV,
   and rustdoc failures were retained rather than deleted; it is not authoritative evidence.
+- `foundation-2753a4f93301-20260831T203535Z` is an honest failed-closed collection whose four Rust
+  lanes could not write the sandbox-external Cargo target directory. Its `rejected` result retains
+  those failures; a successor collection uses an explicit writable local target directory.
 - `retired-pre-parameter-binding/foundation-984594e48a0c-20260831T172037Z` was the prior pending
   authoritative record. It was superseded because its verifier did not yet re-derive the parameter
   digest or enforce the complete manifest/limitation census. Its in-band historical disposition

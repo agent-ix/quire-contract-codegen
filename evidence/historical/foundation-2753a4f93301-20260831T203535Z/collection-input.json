@@ -1,0 +1,57 @@
+{
+  "commands": [
+    "quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'",
+    "python3 scripts/validate_json_schema.py schemas/foundation-evidence-input-v1.schema.json collection-input.json",
+    "python3 scripts/validate_json_schema.py schemas/foundation-evidence-manifest-v1.schema.json evidence-manifest.json",
+    "python3 scripts/validate_json_schema.py schemas/pgm01-derivation-evidence-envelope-v1.schema.json evidence-envelope.json",
+    "python3 scripts/validate_json_schema.py $PGM01_SCHEMA evidence-envelope.json",
+    "python3 $PGM01_VALIDATOR --fixture evidence-envelope.json",
+    "cargo fmt --all -- --check",
+    "cargo clippy --all-targets -- -D warnings",
+    "cargo test",
+    "cargo +1.75.0 check --lib",
+    "cargo deny check licenses",
+    "bash scripts/check_unsafe_comments.sh",
+    "cargo metadata --format-version 1",
+    "RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps",
+    "quire coverage --scope .",
+    "make evidence-tool"
+  ],
+  "dependencies": {
+    "irCorpus": "agent-ix/quire-contract-ir@5c49ebfd1c87415f74420ad047392bd03b1bd202",
+    "pgm01": {
+      "candidateRevision": "7dac9d8c19952412b56a0347387666e2ca81e01d",
+      "envelopeSchema": "quire.derivation-evidence/v1",
+      "envelopeSchemaDigest": {
+        "algorithm": "sha256",
+        "value": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
+      },
+      "policy": "ix://agent-ix/quire-contract-ir/PGM-01",
+      "schemaDigest": {
+        "algorithm": "sha256",
+        "value": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
+      },
+      "schemaPath": "/tmp/agent-b-ir-5c49-fBSnxo/repo/schemas/derivation-evidence-envelope-v1.schema.json",
+      "validatorDigest": {
+        "algorithm": "sha256",
+        "value": "1c2881d5f8800dab031f6afa26d5ad11f88a5ab42a942bc9fe0c2853b58df2f1"
+      },
+      "validatorPath": "/tmp/agent-b-ir-5c49-fBSnxo/repo/scripts/validate_governance.py",
+      "validatorRevision": "5c49ebfd1c87415f74420ad047392bd03b1bd202"
+    },
+    "runtimeCandidateRevision": "e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3"
+  },
+  "phase": "foundation",
+  "schemaVersion": "quire.codegen-foundation-evidence-input/v1",
+  "sourceRevision": "2753a4f9330145a399a15411daa4d52cbdfa07a7",
+  "sourceState": "clean",
+  "tools": {
+    "cargo": "cargo 1.94.1 (29ea6fb6a 2026-03-24)",
+    "jsonschema": "3.2.0",
+    "python": "Python 3.10.12",
+    "python-packages": "attrs==26.1.0\njsonschema==3.2.0\npip==22.0.2\npyrsistent==0.20.0\nrfc3339-validator==0.1.4\nrfc3986-validator==0.1.1\nsetuptools==59.6.0\nsix==1.17.0",
+    "quire": "0.31.0",
+    "rust-msrv": "rustc 1.75.0 (82e1608df 2023-12-21)",
+    "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)"
+  }
+}
