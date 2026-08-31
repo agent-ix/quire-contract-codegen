@@ -9,11 +9,11 @@ type: Review
 Date: 2026-08-30
 
 Scope: codegen issue #1, epic children #2 through #6, the specification under `spec/`, PGM-01, IR
-corpus issue #10, and runtime issue #3 / draft PR #5.
+corpus issue #10, and runtime issue #3 / merged PR #5.
 
 | Review dimension | Result | Evidence or disposition |
 |---|---|---|
-| Dependency | draft-clear | Merged PGM-01 is pinned and reconciled; runtime PR #5 is pinned and provisionally reconciled; the IR corpus has no candidate. Every remaining provisional identity must be reconciled after merge. |
+| Dependency | draft-clear | Merged PGM-01 is pinned and reconciled; runtime PR #5 is merged and its exact reviewed tree is reconciled, with its release decision still open; the IR corpus has no candidate. Every remaining provisional identity must be reconciled after merge. |
 | Risk | clear | AP-001 and AD-001 enumerate semantic drift, silent loss, nondeterminism, proof gaps, vacuity, atomicity, and provenance risks. |
 | Evidence | clear | MP-001 fixes populations, repetitions, exact tool/dependency identities, failure retention, and the distinction between foundation and semantic evidence. |
 | Integrity | clear | Shared lowering plan, no success fallback, proof dependency closure, source-region observation, and atomic publication are required. |

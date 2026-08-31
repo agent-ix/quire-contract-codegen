@@ -14,7 +14,7 @@ version_pins:
   rust-msrv: "1.75"
   governance: agent-ix/quire-contract-ir#3
   ir-corpus: agent-ix/quire-contract-ir#10-draft
-  runtime: agent-ix/quire-contract-runtime#5-draft
+  runtime: agent-ix/quire-contract-runtime@e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3
 controls:
   surfaces: [library API, CLI, backend adapters, bundle validator, CI, retained evidence]
   fallback: emit no backend artifact and retain an explicit diagnostic
