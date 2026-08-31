@@ -19,4 +19,6 @@ limitations for the foundation-only candidate.
 ## Completion Evidence
 
 The immutable foundation record passes local schemas plus the exact PGM-01 schema and custom
-validator while reporting semantic coverage as zero.
+validator while reporting semantic coverage as zero. The local evidence-tool lane also verifies the
+vendored governance schema digest, planning-pin agreement, envelope assembly identities, and local
+validator accept/reject behavior.

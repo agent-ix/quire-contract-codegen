@@ -17,6 +17,7 @@ def display_path(parts: list[object]) -> str:
     return path
 
 
+# Implements: MP-001
 def main() -> int:
     if len(sys.argv) != 3:
         print("usage: validate_json_schema.py SCHEMA INSTANCE", file=sys.stderr)

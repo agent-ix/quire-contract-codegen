@@ -27,3 +27,8 @@ The current candidate retains the same envelope schema digest. Its policy reposi
 mutation probes. The foundation envelope is accepted by both the candidate schema and its custom
 validator with zero errors. PGM-01's remaining review findings stay open and are not converted into
 codegen claims.
+
+The exact candidate schema is vendored at
+`schemas/pgm01-derivation-evidence-envelope-v1.schema.json`. The foundation builder derives its
+digest, fails on disagreement with the executable pin, and its MP-001 unit tests require the
+executable revision and digest to agree with this reconciliation and the dependency-pin review.

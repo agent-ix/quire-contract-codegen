@@ -36,7 +36,11 @@ states, and injected publication failure points.
 
 Foundation runs use `scripts/collect_foundation_evidence.sh`. They record the current toolchain and
 the explicit Rust 1.75 compatibility lane, validate requirements plus the typed plan bundle, and
-retain exact provisional dependency identities. Implementation plans will extend this with a stable
+retain exact provisional dependency identities. The foundation builder derives and verifies the
+digest of the vendored PGM-01 envelope schema; unit tests exercise dependency-pin agreement,
+envelope identities, roles, digests, extensions, pin mismatch failure, and accepted/rejected local
+schema validation. These tests establish evidence-tooling behavior only and do not back a semantic
+TestMatrix row. Implementation plans will extend this with a stable
 candidate runner that records source and dependency revisions, tool/backend versions, configuration,
 corpus/input digests, repeated bundle digests, compile/proptest/Kani/coverage results, fault-injection
 outcomes, differential dispositions, and output digests beneath `evidence/`.
