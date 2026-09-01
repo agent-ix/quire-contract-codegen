@@ -41,6 +41,11 @@ may support the current foundation statement.
 - `retired-round5-boundary-hardening/foundation-dcc215fac22f-20260831T224253Z` was a passing
   intermediate authority superseded when four remaining critical gate call sites received direct
   behavioral fixtures. Its in-band disposition retracts it from the current claim set.
+- `retired-round6-evidence-hardening/foundation-287b2ec32ca7-20260831T224619Z` was the prior
+  pending authority. It was superseded after review required final-state Make guards, truthful
+  collector commands, robust Rust attribute scanning, shared evidence floors, positive formatting
+  corroboration, and live re-derivation of every retained tool identity. Its in-band disposition
+  retracts it from the current claim set.
 
 ## Machine-checked record census
 
@@ -50,6 +55,7 @@ The verifier requires this exact bidirectional census to match every retained hi
 - `foundation-113c1f17730a-20260831T003723Z`
 - `foundation-1ed7e8e0d7c0-20260831T005601Z`
 - `foundation-2753a4f93301-20260831T203535Z`
+- `foundation-287b2ec32ca7-20260831T224619Z`
 - `foundation-3536b8bc82a3-20260830T224639Z`
 - `foundation-35f526287109-20260831T203710Z`
 - `foundation-374a6a3060ad-20260831T163004Z`

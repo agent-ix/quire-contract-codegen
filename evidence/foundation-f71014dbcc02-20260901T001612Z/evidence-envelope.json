@@ -27,7 +27,7 @@
     {
       "contentDigest": {
         "algorithm": "sha256",
-        "value": "42139924a91653f60f0bb1d5483c1043df2728207ce5fa8ded1f8d6bfad247a7"
+        "value": "9a86e9b917a57a44db34b4149553e2a80efac9e23f81ba12dfc6c972bb357634"
       },
       "mediaType": "application/json",
       "role": "foundation-evidence-collection-input",
@@ -80,7 +80,7 @@
     {
       "contentDigest": {
         "algorithm": "sha256",
-        "value": "207af70722bcaae39d4545e4865ac66130ca0608dd98044d3a51df935a28f5d3"
+        "value": "43eb3b260ab82935b56fbd3bc1ad9ed392031051d88d9db085ef4908a6252b57"
       },
       "mediaType": "application/json",
       "role": "codegen-foundation-evidence-manifest",
@@ -97,32 +97,32 @@
   ],
   "parametersDigest": {
     "algorithm": "sha256",
-    "value": "7bd88006635697c697306f47420266b02794a40fe4a23b49f1f480b4d11c0c3f"
+    "value": "dcb8fb7669e503e82ce3941e91847462df3f178bd938f71aabafd7659e069338"
   },
   "producer": {
     "executableDigest": {
       "algorithm": "sha256",
-      "value": "eda486f310bde8988d8ca1eeb95c21799ef1bf438d26c8ed6d030213e6f492d1"
+      "value": "22df3ab08a486156212858f1e0ee11753bc156513fe3037b6ce76c87d556dc00"
     },
     "invocation": [
       "scripts/collect_foundation_evidence.sh",
-      "evidence/foundation-287b2ec32ca7-20260831T224619Z"
+      "evidence/foundation-f71014dbcc02-20260901T001612Z"
     ],
     "name": "quire-contract-codegen-foundation-collector",
-    "sourceRevision": "287b2ec32ca7a84dfe40d3d9a9f963c487da67e8",
+    "sourceRevision": "f71014dbcc02be3b57176a29ac40668d4358ef96",
     "version": "0.1.0"
   },
   "provenance": {
-    "candidateRevision": "287b2ec32ca7a84dfe40d3d9a9f963c487da67e8",
+    "candidateRevision": "f71014dbcc02be3b57176a29ac40668d4358ef96",
     "contributionMethod": "agent-assisted",
     "repository": "https://github.com/agent-ix/quire-contract-codegen",
     "reviewers": [
       "@kreneskyp"
     ],
-    "sourceRevision": "287b2ec32ca7a84dfe40d3d9a9f963c487da67e8"
+    "sourceRevision": "f71014dbcc02be3b57176a29ac40668d4358ef96"
   },
-  "recordId": "foundation-287b2ec32ca7-20260831T224619Z",
-  "recordedAt": "2026-08-31T22:46:25Z",
+  "recordId": "foundation-f71014dbcc02-20260901T001612Z",
+  "recordedAt": "2026-09-01T00:16:26Z",
   "result": {
     "requirementRefs": [
       "PGM-01-R08",
