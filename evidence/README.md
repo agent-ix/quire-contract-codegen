@@ -36,3 +36,8 @@ available for audit rather than being deleted during the stacked-branch rebase.
 `historical/retired-harness-rebase-round6/` retains the deterministic-oracle authority with an
 in-envelope retraction. It is superseded by the source-bound harness/strategy record and remains
 available for audit as the PR #10 boundary beneath the stacked PR #12 work.
+
+`historical/retired-harness-review-round1/` retains the pre-review harness/strategy authority with
+an in-envelope retraction. It is superseded by the PR #12 Round 1 remediation record, whose source
+implements campaign conclusions, executable expected-domain binding, complete terminal states,
+and harness/strategy derivation manifests.
