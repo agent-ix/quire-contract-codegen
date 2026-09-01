@@ -60,8 +60,9 @@ control with backed-test verification.
 | TC-006 | Distinguish vacuity and unexecuted flow | Integration | P0 | FR-004-AC-1, FR-004-AC-2, FR-004-AC-3 | 🚧 Planned |
 | TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-003-AC-2, FR-005-AC-4 | 🚧 Planned |
 
-All rows are deliberately planned. The placeholder scaffold tests carry no TC identifier and do not
-back any semantic requirement.
+All rows remain deliberately planned until their complete ticket scope is independently reviewed.
+The oracle draft now carries bound implementation symbols for TC-001 through TC-003; TC-002 remains
+partial because atomic publication is not implemented, and no row is promoted by this draft alone.
 
 ## Evidence Locations
 

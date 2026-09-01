@@ -185,6 +185,20 @@ def configured_trace_tests(repository_root: Path = ROOT) -> list[str]:
     return trace_attribute_findings(CFG_ATTRIBUTE, "cfg-controlled", repository_root)
 
 
+def unowned_production_rust(repository_root: Path = ROOT) -> list[str]:
+    candidates = [repository_root / "build.rs"]
+    candidates.extend(sorted((repository_root / "src").rglob("*.rs")))
+    return [
+        str(path.relative_to(repository_root))
+        for path in candidates
+        if path.is_file()
+        and not re.search(
+            r"(?m)^// Implements: (?:N?FR|StR)-\d{3}$",
+            path.read_text(encoding="utf-8"),
+        )
+    ]
+
+
 def undeclared_matrix_ids(report: dict[str, object], matrix_text: str) -> list[str]:
     minted = {
         item.get("id")
@@ -221,6 +235,10 @@ def matrix_rows(matrix_text: str) -> tuple[tuple[str, ...], ...]:
         for line in matrix_text.splitlines()
         if line.startswith(("| FR-", "| NFR-", "| StR-", "| TC-"))
     )
+
+
+def matrix_row_count(matrix_text: str) -> int:
+    return len(matrix_rows(matrix_text))
 
 
 def matrix_row_errors(matrix_text: str) -> list[str]:
@@ -264,6 +282,14 @@ def coverage_gate(
 ) -> int:
     if runner is None:
         runner = subprocess.run
+    unowned = unowned_production_rust(repository_root)
+    if unowned:
+        print(
+            "COVERAGE_STATUS_CONTRADICTION: production Rust lacks an Implements marker: "
+            + ", ".join(unowned),
+            file=sys.stderr,
+        )
+        return 1
     inactive = ignored_trace_tests(repository_root) + configured_trace_tests(
         repository_root
     )

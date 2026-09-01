@@ -3,17 +3,14 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-/// Placeholder entry point.
-pub fn hello() -> &'static str {
-    "hello from quire_contract_codegen"
-}
+// Implements: FR-001
+mod oracle;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn hello_returns_greeting() {
-        assert!(hello().contains("quire_contract_codegen"));
-    }
-}
+pub use oracle::{
+    generate_boolean_oracle, generator_source_is_dirty, Artifact, CodegenExtension,
+    DerivationManifest, DigestIdentity, GenerationDiagnostic, GenerationEnvironment,
+    GenerationErrorCode, GenerationProvenance, GenerationResult, GenerationTerminalState,
+    ManifestArtifact, ManifestContext, NoBackend, OracleArtifactBundle, OracleRequest,
+    ProducerIdentity, SchemaIdentity, SourceRegion, GENERATOR_SOURCE_REVISION,
+    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+};

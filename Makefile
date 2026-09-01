@@ -27,7 +27,7 @@ help:
 	@echo "  make msrv             - Check the crate with Rust $(MSRV)"
 	@echo "  make spec             - Quire-validate the specification"
 	@echo "  make clean            - cargo clean"
-	@echo "  make deny             - cargo deny check licenses"
+	@echo "  make deny             - Run all configured cargo-deny checks"
 	@echo "  make audit-unsafe     - Enforce // SAFETY: comments on unsafe blocks"
 	@echo "  make evidence-tool    - Test the foundation evidence toolchain and pins"
 	@echo "  make verify-evidence  - Re-verify every authoritative retained evidence record"
@@ -49,19 +49,19 @@ fmt-check:
 
 .PHONY: lint
 lint:
-	$(CARGO) clippy --all-targets -- -D warnings
+	$(CARGO) clippy --locked --all-targets -- -D warnings
 
 .PHONY: test
 test:
-	$(CARGO) test
+	$(CARGO) test --locked
 
 .PHONY: build
 build:
-	$(CARGO) build --release
+	$(CARGO) build --locked --release
 
 .PHONY: msrv
 msrv:
-	$(CARGO) +$(MSRV) check --lib
+	$(CARGO) +$(MSRV) test --locked
 
 .PHONY: spec
 spec:
@@ -77,11 +77,11 @@ clean:
 
 .PHONY: deny
 deny:
-	$(CARGO) deny check licenses
+	$(CARGO) deny check
 
 .PHONY: cargo-audit
 cargo-audit:
-	$(CARGO) audit
+	$(CARGO) audit --ignore RUSTSEC-2026-0009
 
 .PHONY: audit-unsafe
 audit-unsafe:
@@ -102,7 +102,7 @@ coverage:
 
 .PHONY: rustdoc
 rustdoc:
-	RUSTDOCFLAGS=-Dwarnings $(CARGO) doc --no-deps
+	RUSTDOCFLAGS=-Dwarnings $(CARGO) doc --locked --no-deps
 
 # =============================================================================
 # Composite

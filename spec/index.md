@@ -50,7 +50,7 @@ derivation evidence. Generated artifacts remain traceable to one authoritative s
 ### System Description
 
 The crate consumes a versioned serialized contract package and emits a deterministic artifact bundle.
-It uses `quote`/`syn` for Rust syntax, depends generated customer code only on
+It uses a bounded deterministic renderer plus `syn` validation for Rust syntax, depends generated customer code only on
 `quire-contract-runtime` and declared customer types, adapts to proptest and Kani, and consumes LLVM
 coverage exports rather than implementing those engines.
 

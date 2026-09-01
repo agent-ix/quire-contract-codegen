@@ -17,7 +17,7 @@ and its exact reviewed tree is reconciled, while its human source-release decisi
 
 ## Verdict
 
-**FAIL.** Semantic TestMatrix rows remain planned and the human source-release decision is pending.
+**FAIL.** Semantic TestMatrix rows remain incomplete and the human source-release decision is pending.
 This verdict cannot become PASS from local foundation gates alone.
 
 ## Findings
@@ -27,7 +27,7 @@ This verdict cannot become PASS from local foundation gates alone.
 | FND-001 | high | Closed: the authoritative IR schema and conformance corpus is accepted and pinned to the exact PR #19 merge. | IR PR #19, FR-001 |
 | FND-003 | medium | Runtime PR #5 is merged with the exact reviewed tree; hosted CI is deferred and the human source-release decision remains pending. | runtime PR #5, AA-001, REV-004 |
 | FND-004 | low | Stable rustfmt omits nightly-only import grouping options, so import grouping is not enforced. | `rustfmt.toml`, L-1 |
-| FND-005 | low | License, unsafe, MSRV, and scaffold-test gates are intentionally low-signal while the crate has no dependencies and only placeholder code. | `Makefile`, L-4 |
+| FND-005 | low | Closed: license, unsafe, MSRV, and semantic test gates now exercise the implemented Boolean slice and exact locked dependencies. | `Makefile`, FR-001 |
 
 FND-001 is closed at accepted IR PR #19 merge
 `5c49ebfd1c87415f74420ad047392bd03b1bd202`. FND-002 was retired in commit `e1463f3f7719` as a stale duplicate; its identity is retained
@@ -42,18 +42,18 @@ that would become stale on its own next commit.
 
 | Requirement | Foundation disposition | Semantic verification | Remaining gap |
 |---|---|---|---|
-| StR-001 | specified and traced to FR-001 through FR-005 | demonstration pending | reconcile all released upstream identities |
-| FR-001 | deterministic oracle, manifest, diagnostic, and identity behavior specified | TC-001 through TC-003 pending | authoritative IR corpus and runtime API unavailable |
-| FR-002 | tri-state and shaped-strategy behavior specified | TC-004 pending | executable IR semantics unavailable |
-| FR-003 | Kani lowering and dependency-closure behavior specified | TC-003, TC-005, and TC-007 pending | proof mapping and authoritative corpus unavailable |
-| FR-004 | vacuity, rejection, observation, and source-map behavior specified | TC-006 pending | coverage-region schema and executable outputs unavailable |
+| StR-001 | specified and traced to FR-001 through FR-005 | Boolean slice demonstration implemented | runtime human release and remaining slices pending |
+| FR-001 | deterministic oracle, manifest, diagnostic, and identity behavior specified | TC-001 through TC-003 implemented locally | independent review pending |
+| FR-002 | tri-state and shaped-strategy behavior specified | TC-004 pending | implementation pending |
+| FR-003 | Kani lowering and dependency-closure behavior specified | TC-003 partly implemented; TC-005 and TC-007 pending | proof backend and mapping pending |
+| FR-004 | vacuity, rejection, observation, and source-map behavior specified | Boolean source regions implemented; TC-006 pending | coverage analysis pending |
 | FR-005 | atomic CLI and cross-backend parity behavior specified | TC-001, TC-002, and TC-007 pending | semantic backends not implemented |
-| NFR-001 | zero-difference and zero-partial-publication thresholds specified | repeated golden and fault-injection runs pending | implementation unavailable |
-| NFR-002 | identity, license, qualification, and explicit-state boundaries specified | schema and corpus inspection pending | released dependency identities unavailable |
-| interface-001 | provisional input, operation, output, diagnostic, and evidence contract specified | compatibility tests pending | reconcile with accepted IR and runtime interfaces |
-| TestMatrix | all 27 FR acceptance criteria and both StR validation criteria map to planned tests or inspections; placeholder tests explicitly unbound | all semantic cases pending | IR candidate review and runtime release unavailable |
+| NFR-001 | zero-difference and zero-partial-publication thresholds specified | deterministic differential generation implemented | atomic publication fault injection pending |
+| NFR-002 | identity, license, qualification, and explicit-state boundaries specified | schemas, manifests, and accepted pins inspected locally | independent review and runtime human release pending |
+| interface-001 | provisional input, operation, output, diagnostic, and evidence contract specified | accepted dependency compatibility tests implemented | independent review pending |
+| TestMatrix | all 27 FR acceptance criteria and both StR validation criteria map to planned tests or inspections; placeholder tests explicitly unbound | Boolean oracle cases implemented; remaining semantic cases pending | remaining backends and runtime release unavailable |
 | AP/AD/CAC/MP/AA-001 | intended use, architecture, contract, measurements, and open claim specified | independent and human review pending | governance, dependency, CI, and release evidence open |
-| PLAN-001 | typed foundation, dependency, semantic, parity, and human-release tasks with explicit statuses | Task-001/002 done; Task-003 in progress; Task-004 through Task-007 not started | IR candidate, reviews, implementation, and human authority remain open |
+| PLAN-001 | typed foundation, dependency, semantic, parity, and human-release tasks with explicit statuses | Task-001/002/003 done; Task-004 in progress; Task-005 through Task-007 not started | reviews, remaining implementation, and human authority remain open |
 
 ## Foundation evidence result
 
@@ -112,13 +112,41 @@ The failed first hardening record
 lanes rejected an invalid external-validator schema version (`3` instead of `v3`). The schema caught
 the defect, the collector exited nonzero, and the corrected record supersedes this attempt.
 
+## Oracle draft review disposition
+
+PR #10's first semantic review found correct observed lowering but inadequate self-detection. The
+draft now closes those implementation findings without treating the still-open IR dependency as
+accepted:
+
+| Finding | Disposition |
+|---|---|
+| F-01 | A 265-expression corpus covers every supported operator, observation state, and nested negation, compiles generated Rust against the exact runtime, compares all truth assignments with an independent evaluator, and pins every runtime function name. |
+| F-02 | The bounded renderer records every implication consequent while emitting it; two-implication and marker-alias tests assert exact inclusive lines. |
+| F-03 | Artifact symbols retain readable identities plus a digest of the full requirement/revision/clause tuple; Rust, source-map, and manifest paths are per-clause and collision-family tested. Dependency identifiers use injective byte escaping. |
+| F-04 | Per-clause manifests now validate as `quire.derivation-evidence/v1` and carry producer source revision, dirty state, lowering digest, inputs, no-backend reason, outputs, parameters, environment, provenance, and result. |
+| F-05 | `make deny` runs all configured lanes; the two exact Git origins are allowlisted and version-plus-revision pinned. |
+| F-06 | Every public generated constant and function carries a doc comment; the differential crate denies `missing_docs`. |
+| F-07 | Every implemented error code maps explicitly to an interface-001 terminal state; internal syntax/serialization faults map to `inconclusive`. |
+| F-08 | The typed plan records the early draft as a coordination deviation and makes no unverifiable external-authority claim; the preimplementation verdict is corrected to `FAIL`. |
+| F-09 | Rust gates use `--locked`; MSRV compiles the library, tests, and checked-in generated fixture on exact Rust 1.75.0. |
+| F-10 | Pretty-print indentation was replaced by a linear-space renderer with a 1,048,576-byte fail-closed per-clause bound and a depth-200 size regression test. |
+| F-11 | Only TC identifiers are attached to binding symbols; all eight Rust candidates are tagged and bound, with zero unmatched tags. Pin tests compare the constants to both dependency declarations and the lockfile. |
+| F-12 | URL/IDNA are locked to patched Rust-1.75-compatible versions. The exact reviewed IR's remaining `time` advisory has an explicit narrow waiver because the first patched version requires Rust 1.88; it must be removed with the accepted IR. |
+| F-13 | Any nonempty discharged-obligation set is rejected before lowering, with a dedicated code and a guarded-division test. |
+| F-14 | Expression identity uses the IR's canonical-expression profile and digest rather than ordinary serde field order. |
+| F-15 | Line counting includes trailing-newline semantics, SHA formatting reuses one allocation, parameter lookup uses raw identity keys, manifest types deserialize, the result is named `OracleArtifactBundle`, and the review verdict follows the high-finding rule. |
+
+The semantic TestMatrix remains planned: the Boolean slice is implemented and locally exercised, but
+atomic publication and the rest of issue #4 are incomplete, the accepted IR revision is reconciled,
+and independent rereview is pending. Hosted workflow changes remain owned by the separate CI effort.
+
 ## Open dependencies and remote evidence
 
 - PGM-01 PR #12 is merged at `7dac9d8c19952412b56a0347387666e2ca81e01d`. Its tree is
   byte-identical to reviewed head `d8d376d887c40255e87ef9656bc0faf79216b321`; the complete merged-main
   release check passes, and the exact merged identity and schema digest are reconciled locally.
 - The codegen IR pin is accepted PR #19 merge
-  `5c49ebfd1c87415f74420ad047392bd03b1bd202`, pinned exactly in planning and the evidence builder.
+  `5c49ebfd1c87415f74420ad047392bd03b1bd202`, pinned exactly in the manifest, lockfile, code, and evidence builder.
 - Runtime PR #5 is merged at `e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3`. Its tree is
   byte-identical to the round-10-reviewed head `4e0edec972c7e1431cf0d81ed8346a0ab8817af7`;
   every finding is closed, and its 25 executed local outcomes plus both merged-PGM validators pass

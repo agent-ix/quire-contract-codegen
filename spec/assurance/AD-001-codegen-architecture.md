@@ -45,6 +45,6 @@ consistency. This repository does not claim that convergence from its local cont
 
 ## Risks
 
-The IR candidate and runtime release decision remain under review; Kani syntax changes; platform formatting/path behavior can
+The runtime release decision remains under review; Kani syntax changes; platform formatting/path behavior can
 threaten reproducibility; coverage regions can drift after formatting; third-party differential
 fixtures require provenance review. These risks are measured and cannot be released away by tooling.

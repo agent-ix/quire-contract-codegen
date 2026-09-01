@@ -16,10 +16,13 @@ Verify generated source compiles against only the runtime/customer types and pub
 
 ## Test Procedure
 
-Compile representative bundles in isolated Cargo fixtures, inject failures at each staged write, and
-compare destination and developer-owned tree digests before and after each run.
+Compile the supported Boolean grammar in an isolated `rustc` fixture against only the pinned runtime
+and compare every truth assignment with an independent evaluator. When atomic publication is added,
+inject failures at each staged write and compare destination and developer-owned tree digests before
+and after each run.
 
 ## Expected Results
 
-Valid bundles compile without generator/IR dependencies; failures publish no partial bundle and modify
-no developer-owned file.
+Valid Boolean oracles compile without generator/IR dependencies and match the independent evaluator.
+The row remains planned until publication failures also leave no partial bundle and modify no
+developer-owned file.

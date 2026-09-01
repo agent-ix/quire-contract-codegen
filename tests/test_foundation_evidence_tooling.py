@@ -371,6 +371,40 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertEqual(outcomes["test"], "failed")
             self.assertEqual(envelope["result"]["status"], "rejected")
 
+    def test_metadata_json_error_type_is_not_a_false_contradiction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_dir = Path(directory) / "foundation-fixture"
+            evidence_dir.mkdir()
+            self.write_fixture_inputs(evidence_dir)
+            (evidence_dir / "metadata.stdout").write_text(
+                json.dumps(
+                    {
+                        "packages": [
+                            {
+                                "name": "quire-contract-codegen",
+                                "version": "0.1.0",
+                                "description": "uses std::error::Error",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            builder.build(evidence_dir)
+
+            manifest = self.read_json(evidence_dir / "evidence-manifest.json")
+            outcomes = {item["name"]: item["status"] for item in manifest["outcomes"]}
+            self.assertEqual(outcomes["metadata"], "passed")
+
+            (evidence_dir / "metadata.stderr").write_text(
+                "error: metadata resolution failed\n", encoding="utf-8"
+            )
+            builder.build(evidence_dir)
+            manifest = self.read_json(evidence_dir / "evidence-manifest.json")
+            outcomes = {item["name"]: item["status"] for item in manifest["outcomes"]}
+            self.assertEqual(outcomes["metadata"], "failed")
+
     def test_new_retained_failure_is_included_by_outcome_census(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             evidence_dir = Path(directory) / "foundation-fixture"
@@ -426,6 +460,21 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
         ):
             self.assertIn(command, collector)
         self.assertIn('staging_root="$(mktemp -d)"', collector)
+        self.assertIn('cp -a "$default_cargo_home/advisory-dbs"', collector)
+
+    def test_collector_runs_locked_complete_rust_gates(self) -> None:
+        collector = COLLECTOR_PATH.read_text(encoding="utf-8")
+        for command in (
+            'run_and_retain clippy "$trusted_cargo" clippy --locked --all-targets -- -D warnings',
+            'run_and_retain test "$trusted_cargo" test --locked',
+            'run_and_retain msrv "$trusted_cargo" +1.75.0 test --locked',
+            'run_and_retain deny /usr/bin/env CARGO_HOME="$deny_cargo_home" "$trusted_cargo" deny --offline --locked check',
+            'run_and_retain metadata "$trusted_cargo" metadata --locked --format-version 1',
+            'run_and_retain rustdoc /usr/bin/env RUSTDOCFLAGS=-Dwarnings "$trusted_cargo" doc --locked --no-deps',
+        ):
+            self.assertIn(command, collector)
+        self.assertIn('staging_root="$(mktemp -d)"', collector)
+        self.assertIn("retain_collection", collector)
         self.assertIn('cp -a "$default_cargo_home/advisory-dbs"', collector)
 
     def test_every_declared_command_has_contradiction_markers(self) -> None:
@@ -630,6 +679,19 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
                 self.assertEqual(coverage_checker.main(), 1)
             self.assertEqual(
                 run.call_args.args[0][0], str(coverage_checker.trusted_quire())
+            )
+
+    def test_production_rust_ownership_includes_build_script(self) -> None:
+        self.assertEqual(coverage_checker.unowned_production_rust(ROOT), [])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "src").mkdir()
+            (root / "build.rs").write_text("fn main() {}\n", encoding="utf-8")
+            (root / "src" / "lib.rs").write_text(
+                "// Implements: FR-001\n", encoding="utf-8"
+            )
+            self.assertEqual(
+                coverage_checker.unowned_production_rust(root), ["build.rs"]
             )
 
     def test_skipped_outcome_forces_pending_result_and_limitation(self) -> None:

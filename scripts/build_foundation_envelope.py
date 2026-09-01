@@ -69,7 +69,7 @@ PASS_CONTRADICTION_MARKERS = {
     "msrv": ("error: could not compile",),
     "deny": ("error:", "FAILED"),
     "unsafe-audit": ("unsafe audit failed", "missing SAFETY comment near"),
-    "metadata": ("error:", "error["),
+    "metadata": ("\nerror:", "\nerror["),
     "rustdoc": ("error: could not document",),
     "coverage": ("COVERAGE_STATUS_CONTRADICTION",),
     "evidence-tool": ("FAILED (", "Traceback (most recent call last)"),
