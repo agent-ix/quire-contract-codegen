@@ -17,7 +17,8 @@ harnesses, framing, bindings, and a proof dependency graph from the same clauses
 
 ## Inputs
 
-- Bounded executable clauses, state frame, bindings, backend version, and declared proof dependencies.
+- Bounded executable clauses, state frame, explicit Rust subject binding, backend version, and
+  declared proof dependencies.
 
 ## Outputs
 
@@ -35,7 +36,8 @@ harnesses, framing, bindings, and a proof dependency graph from the same clauses
 - Every generated assumption or stub site shall have exactly one graph edge, and every such graph
   edge shall identify a generated source site.
 - The first supported backend profile is `kani-0.67.0-function-contracts-v1`; generation records
-  `-Z function-contracts`, the exact harness selector, unwind/solver options, and output identity.
+  `-Z function-contracts`, conditional `-Z stubbing`, the exact fully qualified harness selector,
+  unwind/solver options, and output identity.
 - The first slice accepts explicit validated Boolean clauses and a validated customer subject path;
   it shall not infer a package-to-function binding absent from the accepted IR.
 

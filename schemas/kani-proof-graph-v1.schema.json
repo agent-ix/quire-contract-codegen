@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-ix.github.io/quire-contract-codegen/schemas/kani-proof-graph-v1.schema.json",
+  "title": "Quire Kani proof dependency graph v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "proofId",
+    "requirementId",
+    "requirementRevision",
+    "adapterProfile",
+    "backendVersion",
+    "options",
+    "readiness",
+    "sourceArtifactPath",
+    "sourceArtifactSha256",
+    "dependencies"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "quire.kani-proof-graph/v1"},
+    "proofId": {"type": "string", "minLength": 1},
+    "requirementId": {"type": "string", "minLength": 1},
+    "requirementRevision": {"type": "integer", "minimum": 1},
+    "adapterProfile": {"const": "kani-0.67.0-function-contracts-v1"},
+    "backendVersion": {"const": "0.67.0"},
+    "options": {
+      "type": "array",
+      "minItems": 5,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "readiness": {"enum": ["ready", "conditional", "incomplete"]},
+    "sourceArtifactPath": {"type": "string", "minLength": 1},
+    "sourceArtifactSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "dependencies": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["proofId", "kind", "state", "sourceSite"],
+        "properties": {
+          "proofId": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["required", "assumed", "stubbed"]},
+          "state": {"enum": ["passed", "missing", "failed", "assumed", "stubbed"]},
+          "sourceSite": {
+            "oneOf": [
+              {"type": "null"},
+              {"type": "string", "pattern": "^(assumption|stub):[0-9a-f]{64}$"}
+            ]
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {"const": "required"},
+              "state": {"enum": ["passed", "missing", "failed"]},
+              "sourceSite": {"type": "null"}
+            }
+          },
+          {
+            "properties": {
+              "kind": {"const": "assumed"},
+              "state": {"const": "assumed"},
+              "sourceSite": {"type": "string", "pattern": "^assumption:[0-9a-f]{64}$"}
+            }
+          },
+          {
+            "properties": {
+              "kind": {"const": "stubbed"},
+              "state": {"const": "stubbed"},
+              "sourceSite": {"type": "string", "pattern": "^stub:[0-9a-f]{64}$"}
+            }
+          }
+        ]
+      }
+    }
+  }
+}

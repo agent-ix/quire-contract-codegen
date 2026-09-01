@@ -164,7 +164,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertIn(path, builder.parameter_files())
 
     def test_shared_evidence_floors_have_reviewed_headroom(self) -> None:
-        self.assertEqual(builder.MINIMUM_RUST_TESTS, 10)
+        self.assertEqual(builder.MINIMUM_RUST_TESTS, 15)
         self.assertEqual(builder.MINIMUM_PYTHON_TESTS, 60)
         self.assertEqual(failure_checker.MINIMUM_PYTHON_TESTS, 60)
         self.assertEqual(builder.MINIMUM_TRANSCRIPT_BYTES, 16)
@@ -506,8 +506,8 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertTrue(all(item["status"] != "passed" for item in outcomes))
 
     def test_zero_or_reduced_rust_test_census_is_inconclusive(self) -> None:
-        self.assertEqual(builder.MINIMUM_RUST_TESTS, 10)
-        for passed in (0, 9):
+        self.assertEqual(builder.MINIMUM_RUST_TESTS, 15)
+        for passed in (0, 14):
             with self.subTest(
                 passed=passed
             ), tempfile.TemporaryDirectory() as directory:

@@ -67,7 +67,7 @@ oracle_slice:
   artifact_names: bounded readable prefix plus full SHA-256 requirement/revision/clause identity with per-clause source-map and manifest paths
 kani_slice:
   adapter_profile: kani-0.67.0-function-contracts-v1
-  adapter_options: [-Z function-contracts, exact harness selector, explicit unwind and solver]
+  adapter_options: [-Z function-contracts, conditional -Z stubbing, exact fully qualified harness selector, explicit unwind and solver]
   outputs: [generated Rust contract/proof source, proof dependency graph, derivation manifest]
   source_portions: [framing, binding, contract, proof harness]
   graph_edges: [required, assumed, stubbed]

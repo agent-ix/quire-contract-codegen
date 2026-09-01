@@ -5,6 +5,15 @@
 
 // Implements: FR-001
 mod oracle;
+// Implements: FR-003
+mod kani;
+
+pub use kani::{
+    generate_kani_bundle, KaniArtifactBundle, KaniBackendIdentity, KaniDerivationManifest,
+    KaniDiagnostic, KaniErrorCode, KaniExtension, KaniRequest, KaniSolver, ProofDependencyEdge,
+    ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
+    ProofReadiness, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
+};
 
 pub use oracle::{
     generate_boolean_oracle, generator_source_is_dirty, Artifact, CodegenExtension,

@@ -22,7 +22,7 @@ vacuity evidence after deterministic oracle semantics exist.
 
 ## Current slice
 
-Issue #2 starts on parallel draft `wave2-agent-b-kani`, based on the exact current deterministic
+Issue #2 starts on parallel draft `wave2-agent-b-kani-round1`, based on the exact current deterministic
 oracle head. The first slice is limited to Boolean pre/post clauses, explicit customer subject
 bindings, Kani `0.67.0` function contracts/proof harnesses, and a fail-closed proof dependency graph.
 

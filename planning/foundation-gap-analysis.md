@@ -45,7 +45,7 @@ that would become stale on its own next commit.
 | StR-001 | specified and traced to FR-001 through FR-005 | Boolean slice demonstration implemented | runtime human release and remaining slices pending |
 | FR-001 | deterministic oracle, manifest, diagnostic, and identity behavior specified | TC-001 through TC-003 implemented locally | independent review pending |
 | FR-002 | tri-state and shaped-strategy behavior specified | TC-004 pending | implementation pending |
-| FR-003 | Kani lowering and dependency-closure behavior specified | TC-003 partly implemented; TC-005 and TC-007 pending | proof backend and mapping pending |
+| FR-003 | Kani lowering and dependency-closure behavior specified | TC-003, TC-005, and bounded Kani portion of TC-007 implemented locally | exact-head review and retained evidence pending |
 | FR-004 | vacuity, rejection, observation, and source-map behavior specified | Boolean source regions implemented; TC-006 pending | coverage analysis pending |
 | FR-005 | atomic CLI and cross-backend parity behavior specified | TC-001, TC-002, and TC-007 pending | semantic backends not implemented |
 | NFR-001 | zero-difference and zero-partial-publication thresholds specified | deterministic differential generation implemented | atomic publication fault injection pending |
@@ -53,7 +53,7 @@ that would become stale on its own next commit.
 | interface-001 | provisional input, operation, output, diagnostic, and evidence contract specified | accepted dependency compatibility tests implemented | independent review pending |
 | TestMatrix | all 27 FR acceptance criteria and both StR validation criteria map to planned tests or inspections; placeholder tests explicitly unbound | Boolean oracle cases implemented; remaining semantic cases pending | remaining backends and runtime release unavailable |
 | AP/AD/CAC/MP/AA-001 | intended use, architecture, contract, measurements, and open claim specified | independent and human review pending | governance, dependency, CI, and release evidence open |
-| PLAN-001 | typed foundation, dependency, semantic, parity, and human-release tasks with explicit statuses | Task-001/002/003 done; Task-004 in progress; Task-005 through Task-007 not started | reviews, remaining implementation, and human authority remain open |
+| PLAN-001 | typed foundation, dependency, semantic, parity, and human-release tasks with explicit statuses | Task-001/002/003 done; Task-004/005 in progress; Task-006/007 not started | reviews, remaining implementation, and human authority remain open |
 
 ## Foundation evidence result
 
