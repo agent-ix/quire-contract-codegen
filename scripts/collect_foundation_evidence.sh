@@ -134,7 +134,8 @@ git -C "$pgm01_repo" rev-parse HEAD >"$evidence_dir/ir-validator-revision.txt"
 "$trusted_quire" provenance --pretty >"$evidence_dir/quire-provenance.json"
 run_and_retain quire-validate \
   "$trusted_bash" -c '"$1" validate --scope . '\''spec/**/*.md'\'' '\''planning/**/*.md'\'' '\''plan/**/*.md'\'' && echo QUIRE_VALIDATION_PASSED' _ "$trusted_quire"
-run_and_retain fmt "$trusted_cargo" fmt --all -- --check
+run_and_retain fmt \
+  "$trusted_bash" -c '"$1" fmt --all -- --check && echo FMT_CHECK_PASSED' _ "$trusted_cargo"
 run_and_retain clippy "$trusted_cargo" clippy --locked --all-targets -- -D warnings
 run_and_retain test "$trusted_cargo" test --locked
 run_and_retain msrv "$trusted_cargo" +1.75.0 test --locked

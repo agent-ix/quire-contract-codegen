@@ -7,7 +7,6 @@ import hashlib
 import io
 import json
 import os
-import platform
 import re
 import subprocess
 import sys
@@ -53,6 +52,7 @@ def load_verifier():
 
 
 verifier = load_verifier()
+LIVE_TOOL_FILES = verifier.live_tool_files()
 
 
 def load_runner():
@@ -157,8 +157,21 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             ROOT / "src" / "lib.rs",
             ROOT / "scripts" / "unsafe_comment_baseline.txt",
             ROOT / "schemas" / "foundation-evidence-input-v1.schema.json",
+            ROOT / ".gitignore",
+            ROOT / "clippy.toml",
+            ROOT / "rustfmt.toml",
         ):
             self.assertIn(path, builder.parameter_files())
+
+    def test_shared_evidence_floors_have_reviewed_headroom(self) -> None:
+        self.assertEqual(builder.MINIMUM_RUST_TESTS, 2)
+        self.assertEqual(builder.MINIMUM_PYTHON_TESTS, 60)
+        self.assertEqual(failure_checker.MINIMUM_PYTHON_TESTS, 60)
+        self.assertEqual(builder.MINIMUM_TRANSCRIPT_BYTES, 8)
+        self.assertFalse(builder.transcript_is_corroborated("fmt", "1234567", ""))
+        self.assertTrue(
+            builder.transcript_is_corroborated("fmt", "FMT_CHECK_PASSED\n", "")
+        )
 
     def test_pgm01_pin_mismatch_fails_closed(self) -> None:
         with mock.patch.object(builder, "PGM01_ENVELOPE_SCHEMA_DIGEST", "0" * 64):
@@ -229,12 +242,51 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertEqual(
                 extension["envelopeSchemaDigest"], builder.PGM01_ENVELOPE_SCHEMA_DIGEST
             )
-            self.assertEqual(
-                envelope["parametersDigest"]["value"], builder.hash_parameter_files()
+            fixed = {
+                ROOT / name
+                for name in (
+                    ".gitignore",
+                    "CLAUDE.md",
+                    "Cargo.lock",
+                    "Cargo.toml",
+                    "Makefile",
+                    "clippy.toml",
+                    "deny.toml",
+                    "requirements-evidence.txt",
+                    "rust-toolchain.toml",
+                    "rustfmt.toml",
+                    "schemas/foundation-evidence-input-v1.schema.json",
+                    "schemas/foundation-evidence-manifest-v1.schema.json",
+                    "schemas/pgm01-derivation-evidence-envelope-v1.schema.json",
+                    "spec/assurance/MP-001-codegen-measurements.md",
+                    "spec/test-matrix.md",
+                )
+            }
+            recursive = {
+                path
+                for directory_name in ("src", "scripts", "tools", "schemas", "tests")
+                for path in (ROOT / directory_name).rglob("*")
+                if path.is_file() and "__pycache__" not in path.parts
+            }
+            expected_paths = sorted(
+                fixed | recursive, key=lambda path: path.relative_to(ROOT).as_posix()
             )
-            self.assertEqual(
-                collection_input["gateScripts"], builder.gate_script_digests()
-            )
+            state = hashlib.sha256()
+            for path in expected_paths:
+                state.update(path.relative_to(ROOT).as_posix().encode())
+                state.update(b"\0")
+                state.update(path.read_bytes())
+                state.update(b"\0")
+            self.assertEqual(envelope["parametersDigest"]["value"], state.hexdigest())
+            expected_gate_scripts = {
+                path.relative_to(ROOT).as_posix(): hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
+                for path in expected_paths
+                if path.is_relative_to(ROOT / "scripts")
+                or path.is_relative_to(ROOT / "tools")
+            }
+            self.assertEqual(collection_input["gateScripts"], expected_gate_scripts)
 
     def test_verifier_rederives_gate_script_digests(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -252,6 +304,34 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 verifier.EvidenceError, "gate script digest mismatch"
             ):
+                verifier.verify_record(record)
+
+    def test_verifier_rederives_collector_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            record = self.make_sealed_record(Path(directory))
+            collection_input = self.read_json(record / "collection-input.json")
+            collection_input["commands"][0] = "true"
+            self.write_json(record / "collection-input.json", collection_input)
+            envelope = self.read_json(record / "evidence-envelope.json")
+            envelope["inputs"][0]["contentDigest"]["value"] = builder.sha256_file(
+                record / "collection-input.json"
+            )
+            self.write_json(record / "evidence-envelope.json", envelope)
+            self.relink_and_seal(record)
+            with self.assertRaisesRegex(
+                verifier.EvidenceError, "command declaration mismatch"
+            ):
+                verifier.verify_record(record)
+
+    def test_verifier_rederives_non_python_tool_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            record = self.make_sealed_record(Path(directory))
+            (record / "cargo-version.txt").write_text(
+                "cargo 0.0.0\n", encoding="utf-8"
+            )
+            builder.build(record)
+            self.relink_and_seal(record)
+            with self.assertRaisesRegex(verifier.EvidenceError, "cargo-version.txt"):
                 verifier.verify_record(record)
 
     def test_build_records_failed_and_missing_commands_without_a_pass_claim(
@@ -318,6 +398,21 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
         )
         declared = {transcript for _, transcript in builder.COMMAND_TRANSCRIPTS}
         self.assertEqual(collected, declared)
+        self.assertEqual(
+            builder.collected_commands(),
+            [
+                builder.COLLECTED_COMMANDS[name]
+                for _, name in builder.COMMAND_TRANSCRIPTS
+            ],
+        )
+
+    def test_collected_command_declaration_rejects_collector_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            collector = Path(directory) / "collector.sh"
+            collector.write_text("no commands\n", encoding="utf-8")
+            with mock.patch.object(builder, "COLLECTOR", collector):
+                with self.assertRaisesRegex(ValueError, "implementation drift"):
+                    builder.collected_commands()
 
     def test_collector_runs_locked_complete_rust_gates(self) -> None:
         collector = COLLECTOR_PATH.read_text(encoding="utf-8")
@@ -351,13 +446,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             outcomes = builder.command_outcomes(evidence_dir)
             status, _, _ = builder.summarize_outcomes(outcomes)
             self.assertNotEqual(status, "conclusive")
-            self.assertTrue(
-                all(
-                    item["status"] != "passed"
-                    for item in outcomes
-                    if item["name"] != "fmt"
-                )
-            )
+            self.assertTrue(all(item["status"] != "passed" for item in outcomes))
 
     def test_zero_or_reduced_rust_test_census_is_inconclusive(self) -> None:
         for passed in (0, builder.MINIMUM_RUST_TESTS - 1):
@@ -468,6 +557,81 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             findings = coverage_checker.ignored_trace_tests(root)
             self.assertTrue(any("notes/body.rs" in finding for finding in findings))
 
+    def test_coverage_scanner_handles_inner_attrs_nested_dirs_and_cfg_test(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            inner = root / "src" / "inner.rs"
+            nested = root / "src" / "target" / "evidence" / "nested.rs"
+            allowed = root / "tests" / "allowed.rs"
+            inner.parent.mkdir(parents=True)
+            nested.parent.mkdir(parents=True)
+            allowed.parent.mkdir(parents=True)
+            inner.write_text("#![cfg(any())]\n// Verifies: TC-001\n", encoding="utf-8")
+            nested.write_text(
+                "#[cfg(any())]\nfn hidden() { /* Verifies: TC-002 */ }\n",
+                encoding="utf-8",
+            )
+            allowed.write_text(
+                "#[cfg(test)]\nmod tests {\n    // Verifies: TC-003\n"
+                "    #[test]\n    fn traced() {}\n}\n",
+                encoding="utf-8",
+            )
+            findings = coverage_checker.configured_trace_tests(root)
+            self.assertEqual(len(findings), 2, findings)
+            self.assertTrue(any("src/inner.rs" in finding for finding in findings))
+            self.assertTrue(
+                any("src/target/evidence/nested.rs" in finding for finding in findings)
+            )
+
+    def test_cfg_controlled_external_module_uses_child_trace_context(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent = root / "src" / "lib.rs"
+            child = root / "src" / "hidden.rs"
+            parent.parent.mkdir(parents=True)
+            parent.write_text("#[cfg(any())]\nmod hidden;\n", encoding="utf-8")
+            child.write_text("// Verifies: TC-004\n", encoding="utf-8")
+            findings = coverage_checker.configured_trace_tests(root)
+            self.assertEqual(len(findings), 1, findings)
+            self.assertIn("TC-004", findings[0])
+
+    def test_coverage_main_rejects_completed_matrix_status_behaviorally(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "spec").mkdir()
+            matrix = "\n".join(
+                "| " + " | ".join(row) + " |"
+                for row in coverage_checker.EXPECTED_MATRIX_ROWS
+            ).replace("🚧 Planned", "✅ Complete", 1)
+            (root / "spec/test-matrix.md").write_text(matrix, encoding="utf-8")
+            minted = sorted(set(coverage_checker.TRACE_ID.findall(matrix)))
+            completed = subprocess.CompletedProcess(
+                ["quire"],
+                0,
+                json.dumps(
+                    {
+                        "minted_targets": [{"id": value} for value in minted],
+                        "diagnostics": [],
+                        "status_lies": [],
+                        "totals": {"total": len(minted)},
+                    }
+                ),
+                "",
+            )
+            with (
+                mock.patch.object(coverage_checker, "ROOT", root),
+                mock.patch.object(
+                    coverage_checker.subprocess, "run", return_value=completed
+                ) as run,
+                mock.patch.object(coverage_checker.sys, "argv", [str(COVERAGE_PATH)]),
+                mock.patch.object(coverage_checker.sys, "stdout", io.StringIO()),
+                mock.patch.object(coverage_checker.sys, "stderr", io.StringIO()),
+            ):
+                self.assertEqual(coverage_checker.main(), 1)
+            self.assertEqual(
+                run.call_args.args[0][0], str(coverage_checker.trusted_quire())
+            )
+
     def test_skipped_outcome_forces_pending_result_and_limitation(self) -> None:
         outcomes = [
             {"name": "test", "status": "passed"},
@@ -539,9 +703,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             )
             builder.build(record)
             self.relink_and_seal(record)
-            with self.assertRaisesRegex(
-                verifier.EvidenceError, "Python runtime identity"
-            ):
+            with self.assertRaisesRegex(verifier.EvidenceError, "python-version.txt"):
                 verifier.verify_record(record)
 
     def test_verifier_rejects_mutated_result_parameters_limitations_and_artifacts(
@@ -707,6 +869,52 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertEqual(failure_checker.makeflags_errors(value), [], value)
         for value in ("-t", "--touch", "-n", "--just-print", "-i", "--ignore-errors"):
             self.assertNotEqual(failure_checker.makeflags_errors(value), [], value)
+
+    def test_prefixed_and_late_makeflags_assignments_are_rejected(self) -> None:
+        original = (ROOT / "Makefile").read_text(encoding="utf-8")
+        assignments = (
+            "export MAKEFLAGS = -i",
+            "override MAKEFLAGS := -i",
+            "export override MAKEFLAGS = -i",
+        )
+        for assignment in assignments:
+            with self.subTest(
+                assignment=assignment
+            ), tempfile.TemporaryDirectory() as directory:
+                makefile = Path(directory) / "Makefile"
+                makefile.write_text(original + "\n" + assignment + "\n", encoding="utf-8")
+                errors = failure_checker.inspect_makefile(makefile)
+                self.assertTrue(any("unsafe MAKEFLAGS token" in error for error in errors))
+                completed = subprocess.run(
+                    ["/usr/bin/make", "-f", str(makefile), "-n", "ci"],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(completed.returncode, 0)
+
+    def test_command_line_makeflags_override_is_rejected(self) -> None:
+        completed = subprocess.run(
+            ["/usr/bin/make", "-n", "ci", "MAKEFLAGS=-i"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("parse-time integrity guard rejected", completed.stderr)
+
+    def test_makefile_includes_are_rejected(self) -> None:
+        original = (ROOT / "Makefile").read_text(encoding="utf-8")
+        for directive in ("include local.mk", "-include local.mk", "sinclude local.mk"):
+            with self.subTest(
+                directive=directive
+            ), tempfile.TemporaryDirectory() as directory:
+                makefile = Path(directory) / "Makefile"
+                makefile.write_text(original + "\n" + directive + "\n", encoding="utf-8")
+                errors = failure_checker.inspect_makefile(makefile)
+                self.assertTrue(any("includes unreviewed" in error for error in errors))
 
     def test_static_recipe_guard_rejects_suppression_and_early_exit(self) -> None:
         original = (ROOT / "Makefile").read_text(encoding="utf-8")
@@ -1101,17 +1309,17 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             "source-revision.txt": "a" * 40 + "\n",
             "source-state.txt": "clean\n",
             "reviewer-of-record.txt": "@kreneskyp\n",
-            "cargo-version.txt": "cargo 1.94.1\n",
-            "jsonschema-version.txt": "3.2.0\n",
-            "python-version.txt": f"Python {platform.python_version()}\n",
-            "python-packages.txt": "jsonschema==3.2.0\nrfc3339-validator==0.1.4\nrfc3986-validator==0.1.1\n",
+            "cargo-version.txt": LIVE_TOOL_FILES["cargo-version.txt"] + "\n",
+            "jsonschema-version.txt": LIVE_TOOL_FILES["jsonschema-version.txt"] + "\n",
+            "python-version.txt": LIVE_TOOL_FILES["python-version.txt"] + "\n",
+            "python-packages.txt": LIVE_TOOL_FILES["python-packages.txt"] + "\n",
             "pgm01-schema-path.txt": "/tmp/quire-contract-ir/schemas/derivation-evidence-envelope-v1.schema.json\n",
             "pgm01-schema-sha256.txt": builder.PGM01_ENVELOPE_SCHEMA_DIGEST + "\n",
             "pgm01-validator-path.txt": "/tmp/quire-contract-ir/scripts/validate_governance.py\n",
             "pgm01-validator-sha256.txt": "b" * 64 + "\n",
             "ir-validator-revision.txt": builder.IR_CANDIDATE_REVISION + "\n",
-            "rustc-version.txt": "rustc 1.94.1\nhost: x86_64-unknown-linux-gnu\n",
-            "msrv-rustc-version.txt": "rustc 1.75.0\nhost: x86_64-unknown-linux-gnu\n",
+            "rustc-version.txt": LIVE_TOOL_FILES["rustc-version.txt"] + "\n",
+            "msrv-rustc-version.txt": LIVE_TOOL_FILES["msrv-rustc-version.txt"] + "\n",
         }
         for name, value in values.items():
             (evidence_dir / name).write_text(value, encoding="utf-8")
@@ -1123,6 +1331,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             (evidence_dir / f"{transcript}.stderr").write_text("", encoding="utf-8")
         positive = {
             "quire-validate.stdout": "QUIRE_VALIDATION_PASSED\n",
+            "fmt.stdout": "FMT_CHECK_PASSED\n",
             "clippy.stderr": "Finished `dev` profile [unoptimized + debuginfo]\n",
             "test.stdout": "test result: ok. 10 passed; 0 failed; 0 ignored\n",
             "msrv.stdout": "test result: ok. 10 passed; 0 failed; 0 ignored\n",
@@ -1147,7 +1356,7 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             encoding="utf-8",
         )
         (evidence_dir / "quire-provenance.json").write_text(
-            json.dumps({"cli": {"version": "0.31.0"}}), encoding="utf-8"
+            LIVE_TOOL_FILES["quire-provenance.json"] + "\n", encoding="utf-8"
         )
 
 

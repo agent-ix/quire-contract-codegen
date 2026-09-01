@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import pwd
 import re
@@ -14,6 +13,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+SCRIPTS = Path(__file__).resolve().parent
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+from evidence_policy import MINIMUM_PYTHON_TESTS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 GUARD_TARGET = "ci-guard"
@@ -34,8 +39,10 @@ CI_ORDER = (
 CI_PROBES = set(CI_ORDER) - {GUARD_TARGET}
 TARGET = re.compile(r"^([A-Za-z0-9_.-]+):(?:\s+(.*?))?\s*$")
 SHELL_CONTROL = re.compile(r"&&|\|\||[;|&]")
-MAKEFLAGS_ASSIGNMENT = re.compile(r"^\s*MAKEFLAGS\s*(?::|\+|\?)?=\s*(.*)$")
-MINIMUM_PYTHON_TESTS = 60
+MAKEFLAGS_ASSIGNMENT = re.compile(
+    r"^\s*(?:(?:export|override)\s+)*MAKEFLAGS\s*(?::|\+|\?)?=\s*(.*)$"
+)
+INCLUDE_DIRECTIVE = re.compile(r"^\s*(?:-?include|sinclude)(?:\s|$)")
 
 
 def trusted_home() -> Path:
@@ -119,6 +126,8 @@ def inspect_makefile(makefile: Path) -> list[str]:
     if tuple(observed_order) != CI_ORDER:
         errors.append(f"ci prerequisite order/census drift: observed={observed_order}")
     for number, line in enumerate(text.splitlines(), start=1):
+        if INCLUDE_DIRECTIVE.match(line):
+            errors.append(f"Makefile:{number} includes unreviewed Make control text")
         if re.match(r"^\s*\.(?:IGNORE|SILENT)\s*(?::|$)", line):
             errors.append(
                 f"Makefile:{number} declares a global recipe-control directive"
@@ -249,7 +258,11 @@ def probe_command_positions(makefile: Path) -> list[str]:
 def inspect_gate_outputs() -> list[str]:
     """Execute independent gate entry points and require substantive positive output."""
     commands = {
-        "coverage": ["/usr/bin/python3", "scripts/check_coverage_status.py"],
+        "coverage": [
+            "/usr/bin/python3",
+            "scripts/check_coverage_status.py",
+            "--self-test",
+        ],
         "evidence-tool": ["/usr/bin/python3", "scripts/run_python_tests.py"],
         "verify-evidence": [
             "/usr/bin/python3",
@@ -270,20 +283,8 @@ def inspect_gate_outputs() -> list[str]:
             errors.append(f"{name} entry point failed its integrity probe")
             continue
         if name == "coverage":
-            try:
-                first_line = completed.stdout.splitlines()[0]
-                report = json.loads(first_line)
-            except (IndexError, json.JSONDecodeError):
-                errors.append(
-                    "coverage entry point emitted no parseable positive summary"
-                )
-            else:
-                if report.get("statusLies") != 0 or not isinstance(
-                    report.get("totals", {}).get("total"), int
-                ):
-                    errors.append(
-                        "coverage entry point emitted an invalid positive summary"
-                    )
+            if "coverage behavioral self-test passed" not in completed.stdout:
+                errors.append("coverage entry point did not reject its status mutation")
         elif name == "evidence-tool":
             match = re.search(r"executed (\d+) Python tests from (\d+) files", combined)
             if (

@@ -3,16 +3,25 @@
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import pwd
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TRACE_ID = re.compile(r"\b(?:TC-\d{3}|(?:N?FR|StR)-\d{3}(?:-(?:AC|VC)-\d+)?)\b")
-IGNORE_ATTRIBUTE = re.compile(r"#\[[^\]]*\bignore\b[^\]]*\]", re.DOTALL)
-CFG_ATTRIBUTE = re.compile(r"#\[[^\]]*\bcfg(?:_attr)?\b[^\]]*\]", re.DOTALL)
+IGNORE_ATTRIBUTE = re.compile(r"#!?\[[^\]]*\bignore\b[^\]]*\]", re.DOTALL)
+CFG_ATTRIBUTE = re.compile(r"#!?\[[^\]]*\bcfg(?:_attr)?\b[^\]]*\]", re.DOTALL)
+ITEM = re.compile(
+    r"(?m)^(?P<indent>[ \t]*)(?:pub(?:\([^)]*\))?\s+)?"
+    r"(?:(?:async|const|unsafe)\s+|extern(?:\s+\"[^\"]+\")?\s+)*"
+    r"(?P<kind>fn|mod)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
+)
 EXPECTED_MATRIX_ROWS = (
     ("FR-001", "FR-001-AC-1, FR-001-AC-3", "TC-001", "🚧 Planned"),
     ("FR-001", "FR-001-AC-2", "TC-002", "🚧 Planned"),
@@ -98,8 +107,53 @@ def rust_sources(repository_root: Path) -> list[Path]:
     return [
         path
         for path in sorted(repository_root.rglob("*.rs"))
-        if not any(part in {".git", "evidence", "target"} for part in path.parts)
+        if path.relative_to(repository_root).parts[0]
+        not in {".git", "evidence", "target"}
     ]
+
+
+def trusted_quire() -> Path:
+    home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+    return home / ".npm-global" / "bin" / "quire"
+
+
+def item_context(contents: str, attribute: re.Match[str], source: Path) -> str:
+    """Return the complete Rust item controlled by an outer attribute."""
+    if contents[attribute.start() :].startswith("#!["):
+        return contents
+    item = ITEM.search(contents, attribute.end())
+    prior_closes = list(re.finditer(r"(?m)^[ \t]*}\s*$", contents[: attribute.start()]))
+    context_start = prior_closes[-1].end() if prior_closes else 0
+    if item is None:
+        return contents[context_start:]
+    declaration_end = contents.find("\n", item.end())
+    declaration_end = len(contents) if declaration_end < 0 else declaration_end
+    declaration = contents[item.start() : declaration_end]
+    if item.group("kind") == "mod" and ";" in declaration:
+        candidates = (
+            source.with_name(f"{item.group('name')}.rs"),
+            source.with_name(item.group("name")) / "mod.rs",
+        )
+        child = next((path for path in candidates if path.is_file()), None)
+        child_text = child.read_text(encoding="utf-8") if child is not None else ""
+        return contents[context_start:declaration_end] + "\n" + child_text
+    opening = contents.find("{", item.end())
+    if opening < 0:
+        return contents[context_start:declaration_end]
+    depth = 0
+    for index in range(opening, len(contents)):
+        if contents[index] == "{":
+            depth += 1
+        elif contents[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return contents[context_start : index + 1]
+    return contents[context_start:]
+
+
+def literal_cfg_test(attribute: str) -> bool:
+    normalized = re.sub(r"\s+", "", attribute)
+    return re.fullmatch(r"#\[cfg\(test\)\]", normalized) is not None
 
 
 def trace_attribute_findings(
@@ -109,13 +163,10 @@ def trace_attribute_findings(
     for path in rust_sources(repository_root):
         contents = path.read_text(encoding="utf-8")
         for attribute in pattern.finditer(contents):
-            prior_item_end = max(
-                contents.rfind("\n}", 0, attribute.start()),
-                contents.rfind("\nfn ", 0, attribute.start()),
-            )
-            next_item = contents.find("\nfn ", attribute.end())
-            context_end = len(contents) if next_item < 0 else next_item
-            context = contents[prior_item_end + 1 : context_end]
+            attribute_text = attribute.group(0)
+            if pattern is CFG_ATTRIBUTE and literal_cfg_test(attribute_text):
+                continue
+            context = item_context(contents, attribute, path)
             identifiers = sorted(set(TRACE_ID.findall(context)))
             if identifiers:
                 line = contents.count("\n", 0, attribute.start()) + 1
@@ -172,10 +223,6 @@ def matrix_rows(matrix_text: str) -> tuple[tuple[str, ...], ...]:
     )
 
 
-def matrix_row_count(matrix_text: str) -> int:
-    return len(matrix_rows(matrix_text))
-
-
 def matrix_row_errors(matrix_text: str) -> list[str]:
     observed = matrix_rows(matrix_text)
     if observed == EXPECTED_MATRIX_ROWS:
@@ -211,16 +258,23 @@ def diagnostic_reasons(report: dict[str, object]) -> list[str]:
 
 
 # Implements: MP-001
-def main() -> int:
-    inactive = ignored_trace_tests() + configured_trace_tests()
+def coverage_gate(
+    repository_root: Path,
+    runner=None,
+) -> int:
+    if runner is None:
+        runner = subprocess.run
+    inactive = ignored_trace_tests(repository_root) + configured_trace_tests(
+        repository_root
+    )
     if inactive:
         for finding in inactive:
             print(f"COVERAGE_STATUS_CONTRADICTION: {finding}", file=sys.stderr)
         return 1
 
-    completed = subprocess.run(
-        ["quire", "coverage", "--scope", ".", "--json"],
-        cwd=ROOT,
+    completed = runner(
+        [str(trusted_quire()), "coverage", "--scope", ".", "--json"],
+        cwd=repository_root,
         check=False,
         capture_output=True,
         text=True,
@@ -244,7 +298,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    matrix_text = (ROOT / "spec/test-matrix.md").read_text(encoding="utf-8")
+    matrix_text = (repository_root / "spec/test-matrix.md").read_text(encoding="utf-8")
     dangling = undeclared_matrix_ids(report, matrix_text)
     if dangling:
         print(
@@ -275,6 +329,42 @@ def main() -> int:
             file=sys.stderr,
         )
     return 0
+
+
+def behavioral_self_test() -> int:
+    """Mutation-test the real gate path without invoking external tooling."""
+    minted = sorted(set(TRACE_ID.findall(" ".join(" ".join(row) for row in EXPECTED_MATRIX_ROWS))))
+    report = {
+        "minted_targets": [{"id": identifier} for identifier in minted],
+        "diagnostics": [],
+        "status_lies": [],
+        "totals": {"total": len(minted)},
+    }
+    completed = subprocess.CompletedProcess(
+        [str(trusted_quire())], 0, json.dumps(report), ""
+    )
+
+    def fake_runner(*_args, **_kwargs):
+        return completed
+
+    matrix = "\n".join("| " + " | ".join(row) + " |" for row in EXPECTED_MATRIX_ROWS)
+    mutated = matrix.replace("🚧 Planned", "✅ Complete", 1)
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "spec").mkdir()
+        (root / "spec" / "test-matrix.md").write_text(mutated, encoding="utf-8")
+        if coverage_gate(root, fake_runner) == 0:
+            print("coverage behavioral self-test accepted a completed matrix mutation", file=sys.stderr)
+            return 1
+    print("coverage behavioral self-test passed")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args()
+    return behavioral_self_test() if args.self_test else coverage_gate(ROOT)
 
 
 if __name__ == "__main__":

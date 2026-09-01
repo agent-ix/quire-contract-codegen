@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import platform
+import os
+import pwd
 import re
 import subprocess
 import sys
@@ -24,6 +25,7 @@ from build_foundation_envelope import (
     PGM01_CANDIDATE_REVISION,
     RUNTIME_CANDIDATE_REVISION,
     command_outcomes,
+    collected_commands,
     expected_manifest_artifact_names,
     foundation_limitations,
     gate_script_digests,
@@ -57,6 +59,72 @@ class EvidenceError(ValueError):
 
 class VerificationUnavailable(EvidenceError):
     """Raised when the committed verification boundary is unavailable."""
+
+
+def trusted_home() -> Path:
+    return Path(pwd.getpwuid(os.getuid()).pw_dir)
+
+
+def live_tool_files() -> dict[str, str]:
+    """Re-run every recorded tool-identity command from trusted absolute paths."""
+    home = trusted_home()
+    python = "/usr/bin/python3"
+    commands = {
+        "cargo-version.txt": [str(home / ".cargo/bin/cargo"), "--version", "--verbose"],
+        "rustc-version.txt": [str(home / ".cargo/bin/rustc"), "--version", "--verbose"],
+        "msrv-rustc-version.txt": [
+            str(home / ".cargo/bin/rustc"),
+            "+1.75.0",
+            "--version",
+            "--verbose",
+        ],
+        "python-version.txt": [python, "--version"],
+        "jsonschema-version.txt": [
+            python,
+            "-c",
+            "import jsonschema; print(jsonschema.__version__)",
+        ],
+        "python-packages.txt": [python, "-m", "pip", "freeze", "--all"],
+        "quire-provenance.json": [
+            str(home / ".npm-global/bin/quire"),
+            "provenance",
+            "--pretty",
+        ],
+    }
+    observed = {}
+    for name, command in commands.items():
+        try:
+            completed = subprocess.run(
+                command, check=False, capture_output=True, text=True
+            )
+        except OSError as error:
+            raise VerificationUnavailable(f"cannot re-derive {name}: {error}") from error
+        if completed.returncode != 0:
+            raise VerificationUnavailable(
+                f"cannot re-derive {name}: exit {completed.returncode}"
+            )
+        observed[name] = completed.stdout.strip()
+    return observed
+
+
+def verify_tool_identities(record: Path, collection_input: dict[str, Any]) -> None:
+    live = live_tool_files()
+    for name, observed in live.items():
+        retained = (record / name).read_text(encoding="utf-8").strip()
+        if retained != observed:
+            raise EvidenceError(f"live tool identity mismatch in {record.name}: {name}")
+    retained_quire = json.loads(live["quire-provenance.json"])
+    expected_tools = {
+        "cargo": live["cargo-version.txt"].splitlines()[0],
+        "jsonschema": live["jsonschema-version.txt"],
+        "python": live["python-version.txt"],
+        "python-packages": live["python-packages.txt"],
+        "quire": retained_quire["cli"]["version"],
+        "rustc": live["rustc-version.txt"].splitlines()[0],
+        "rust-msrv": live["msrv-rustc-version.txt"].splitlines()[0],
+    }
+    if collection_input.get("tools") != expected_tools:
+        raise EvidenceError(f"collection tool identities mismatch in {record.name}")
 
 
 def sha256_file(path: Path) -> str:
@@ -413,13 +481,9 @@ def verify_record(record: Path) -> tuple[int, int]:
     collection_input = load_json(record / "collection-input.json")
     if collection_input["gateScripts"] != gate_script_digests():
         raise EvidenceError(f"gate script digest mismatch in {record.name}")
-    recorded_python = (
-        (record / "python-version.txt").read_text(encoding="utf-8").strip()
-    )
-    if recorded_python != f"Python {platform.python_version()}":
-        raise EvidenceError(
-            f"Python runtime identity mismatch in {record.name}: {recorded_python}"
-        )
+    if collection_input.get("commands") != collected_commands():
+        raise EvidenceError(f"collection command declaration mismatch in {record.name}")
+    verify_tool_identities(record, collection_input)
     retained_outcomes = {
         path.name.removesuffix(".status.txt") for path in record.glob("*.status.txt")
     }

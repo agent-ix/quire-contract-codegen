@@ -45,6 +45,11 @@ builder derives and verifies the digest of the vendored PGM-01 envelope schema; 
 dependency-pin agreement, envelope identities, roles, digests, extensions, pin mismatch failure,
 outcome truthfulness, and accepted/rejected local schema validation. These tests establish
 evidence-tooling behavior only and do not back a semantic TestMatrix row.
+Every zero-exit transcript also requires command-specific positive corroboration. Formatting uses an
+explicit `FMT_CHECK_PASSED` marker after `cargo fmt --check`; Rust test transcripts must report at
+least 2 passed tests, the Python runner must report at least 60 passed tests, and every positive
+transcript must retain at least 8 bytes. These shared floors are defined by
+`scripts/evidence_policy.py` and mutation-tested, so an empty or reduced transcript is inconclusive.
 `scripts/run_python_tests.py` recursively loads and executes every `unittest` case, including cases in
 nested non-package directories, and fails if zero tests execute. Implementation plans will extend this with a stable
 candidate runner that records source and dependency revisions, tool/backend versions, configuration,
@@ -60,7 +65,10 @@ historical/remote file, rejects added files and directories, re-derives every ou
 numeric status plus retained transcripts, re-derives the envelope result, checks manifest and
 envelope artifact links, verifies the complete manifest artifact census and exact limitations,
 re-derives the parameter digest from the controlling source and Python test files, and binds the
-vendored PGM-01 schema to the digest retained from the external checkout. Behavioral mutation tests
+vendored PGM-01 schema to the digest retained from the external checkout. It also re-runs and exactly
+compares all seven retained tool identities (Cargo, rustc, MSRV rustc, Python, jsonschema, installed
+Python packages, and Quire provenance) and re-derives the command declaration from the collector.
+Behavioral mutation tests
 cover outcome derivation and census, parameter and artifact census, result status and summary,
 limitations, revision availability, symlink refusal, historical disposition, and availability
 enumeration. A missing anchor or empty authoritative record set is
@@ -90,7 +98,8 @@ coverage outcome as a usable pending record, but never relabels it as conclusive
 modifiers that suppress work, verifies the exact composite prerequisite census, substitutes a
 failing command at every mandatory recipe position, and requires substantive output from the
 coverage, Python-test, and retained-evidence verification entry points.
-The parse-time Make control rejects dry-run, touch, and ignore-error modes while explicitly allowing
+The parse-time Make control rejects dry-run, touch, and ignore-error modes, included Makefiles, and
+command-line or in-file `MAKEFLAGS` overrides while explicitly allowing
 parallelism and load-limit flags (`-j`/`--jobs`, `-l`/`--load-average`, and jobserver descriptors).
 The local unsafe-comment audit is a strengthened fork of the seven-repository baseline: it scans
 tests, benches, and examples in addition to `src`, retains a reviewed baseline, and emits an

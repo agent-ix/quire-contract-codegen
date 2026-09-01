@@ -12,6 +12,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
+SCRIPTS = Path(__file__).resolve().parent
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+from evidence_policy import (  # noqa: E402
+    MINIMUM_PYTHON_TESTS,
+    MINIMUM_RUST_TESTS,
+    MINIMUM_TRANSCRIPT_BYTES,
+)
+
 ROOT = Path(__file__).resolve().parent.parent
 PGM01_CANDIDATE_REVISION = "7dac9d8c19952412b56a0347387666e2ca81e01d"
 PGM01_ENVELOPE_SCHEMA_DIGEST = (
@@ -71,7 +81,7 @@ PASS_CONTRADICTION_MARKERS = {
 }
 PASS_CORROBORATION_MARKERS = {
     "quire-validate": ("QUIRE_VALIDATION_PASSED",),
-    "fmt": (),
+    "fmt": ("FMT_CHECK_PASSED",),
     "clippy": ("Finished `dev` profile",),
     "test": ("test result: ok.",),
     "msrv": ("test result: ok.",),
@@ -90,9 +100,43 @@ PASS_CORROBORATION_MARKERS = {
 INCONCLUSIVE_TRANSCRIPT_MARKERS = {
     "coverage": ("COVERAGE_STATUS_INCONCLUSIVE",),
 }
-MINIMUM_RUST_TESTS = 2
-MINIMUM_PYTHON_TESTS = 60
-MINIMUM_TRANSCRIPT_BYTES = 8
+COLLECTED_COMMANDS = {
+    "quire-validate": "quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' && echo QUIRE_VALIDATION_PASSED",
+    "fmt": "cargo fmt --all -- --check && echo FMT_CHECK_PASSED",
+    "clippy": "cargo clippy --locked --all-targets -- -D warnings",
+    "test": "cargo test --locked",
+    "msrv": "cargo +1.75.0 test --locked",
+    "deny": "CARGO_HOME=<isolated> cargo deny --offline --locked check",
+    "unsafe-audit": "bash scripts/check_unsafe_comments.sh",
+    "metadata": "cargo metadata --locked --format-version 1",
+    "rustdoc": "RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps",
+    "coverage": "python3 scripts/check_coverage_status.py",
+    "evidence-tool": "make evidence-tool",
+    "pgm01-pinned-schema": "python3 scripts/validate_json_schema.py schemas/pgm01-derivation-evidence-envelope-v1.schema.json evidence-envelope.json",
+    "input-schema": "python3 scripts/validate_json_schema.py schemas/foundation-evidence-input-v1.schema.json collection-input.json",
+    "manifest-schema": "python3 scripts/validate_json_schema.py schemas/foundation-evidence-manifest-v1.schema.json evidence-manifest.json",
+    "pgm01-schema": "python3 scripts/validate_json_schema.py <PGM01_SCHEMA> evidence-envelope.json",
+    "pgm01-envelope": "python3 <PGM01_VALIDATOR> --fixture evidence-envelope.json",
+}
+
+COLLECTOR_COMMAND_FRAGMENTS = {
+    "quire-validate": "run_and_retain quire-validate \\\n  \"$trusted_bash\" -c",
+    "fmt": "run_and_retain fmt \\\n  \"$trusted_bash\" -c '\"$1\" fmt --all -- --check && echo FMT_CHECK_PASSED'",
+    "clippy": 'run_and_retain clippy "$trusted_cargo" clippy --locked --all-targets -- -D warnings',
+    "test": 'run_and_retain test "$trusted_cargo" test --locked',
+    "msrv": 'run_and_retain msrv "$trusted_cargo" +1.75.0 test --locked',
+    "deny": 'run_and_retain deny /usr/bin/env CARGO_HOME="$deny_cargo_home" "$trusted_cargo" deny --offline --locked check',
+    "unsafe-audit": 'run_and_retain unsafe-audit "$trusted_bash" scripts/check_unsafe_comments.sh',
+    "metadata": 'run_and_retain metadata "$trusted_cargo" metadata --locked --format-version 1',
+    "rustdoc": 'run_and_retain rustdoc /usr/bin/env RUSTDOCFLAGS=-Dwarnings "$trusted_cargo" doc --locked --no-deps',
+    "coverage": 'run_and_retain coverage "$trusted_python" scripts/check_coverage_status.py',
+    "evidence-tool": "run_and_retain evidence-tool /usr/bin/make evidence-tool",
+    "pgm01-pinned-schema": "run_and_retain pgm01-pinned-schema \\",
+    "input-schema": "run_and_retain input-schema \\",
+    "manifest-schema": "run_and_retain manifest-schema \\",
+    "pgm01-schema": "run_and_retain pgm01-schema \\",
+    "pgm01-envelope": "run_and_retain pgm01-envelope \\",
+}
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -127,8 +171,6 @@ def verified_pgm01_schema_digest() -> str:
 def transcript_is_corroborated(name: str, stdout: str, stderr: str) -> bool:
     """Require positive, command-specific evidence that a zero-exit gate did work."""
     combined = stdout + "\n" + stderr
-    if name == "fmt":
-        return stdout == "" and stderr == ""
     if len(stdout.encode()) + len(stderr.encode()) < MINIMUM_TRANSCRIPT_BYTES:
         return False
     markers = PASS_CORROBORATION_MARKERS.get(name)
@@ -298,7 +340,10 @@ def parameter_files() -> list[Path]:
         ROOT / "Cargo.toml",
         ROOT / "Cargo.lock",
         ROOT / "Makefile",
+        ROOT / ".gitignore",
+        ROOT / "clippy.toml",
         ROOT / "deny.toml",
+        ROOT / "rustfmt.toml",
         ROOT / "rust-toolchain.toml",
         ROOT / "spec" / "test-matrix.md",
         ROOT / "spec" / "assurance" / "MP-001-codegen-measurements.md",
@@ -348,6 +393,22 @@ def gate_script_digests() -> dict[str, str]:
         for path in parameter_files()
         if path.is_relative_to(ROOT / "scripts") or path.is_relative_to(ROOT / "tools")
     }
+
+
+def collected_commands() -> list[str]:
+    """Return commands in transcript order after binding them to the collector."""
+    configured = [transcript for _, transcript in COMMAND_TRANSCRIPTS]
+    if set(configured) != set(COLLECTED_COMMANDS):
+        raise ValueError("collected command census differs from transcript census")
+    collector_text = COLLECTOR.read_text(encoding="utf-8")
+    missing = [
+        name
+        for name, fragment in COLLECTOR_COMMAND_FRAGMENTS.items()
+        if fragment not in collector_text
+    ]
+    if missing:
+        raise ValueError(f"collector command implementation drift: {missing}")
+    return [COLLECTED_COMMANDS[name] for name in configured]
 
 
 def foundation_limitations(outcomes: list[dict[str, str]]) -> list[str]:
@@ -443,24 +504,7 @@ def build(evidence_dir: Path) -> None:
         "sourceState": source_state,
         "phase": "foundation",
         "gateScripts": gate_script_digests(),
-        "commands": [
-            "quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'",
-            "python3 scripts/validate_json_schema.py schemas/foundation-evidence-input-v1.schema.json collection-input.json",
-            "python3 scripts/validate_json_schema.py schemas/foundation-evidence-manifest-v1.schema.json evidence-manifest.json",
-            "python3 scripts/validate_json_schema.py schemas/pgm01-derivation-evidence-envelope-v1.schema.json evidence-envelope.json",
-            "python3 scripts/validate_json_schema.py $PGM01_SCHEMA evidence-envelope.json",
-            "python3 $PGM01_VALIDATOR --fixture evidence-envelope.json",
-            "cargo fmt --all -- --check",
-            "cargo clippy --all-targets -- -D warnings",
-            "cargo test",
-            "cargo +1.75.0 check --lib",
-            "cargo deny check licenses",
-            "bash scripts/check_unsafe_comments.sh",
-            "cargo metadata --format-version 1",
-            "RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps",
-            "quire coverage --scope .",
-            "make evidence-tool",
-        ],
+        "commands": collected_commands(),
         "tools": {
             "cargo": (evidence_dir / "cargo-version.txt")
             .read_text(encoding="utf-8")

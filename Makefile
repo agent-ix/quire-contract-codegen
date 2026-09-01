@@ -89,7 +89,7 @@ audit-unsafe:
 
 .PHONY: evidence-tool
 evidence-tool:
-	$(PYTHON) -m py_compile scripts/build_foundation_envelope.py scripts/check_coverage_status.py scripts/check_failure_propagation.py scripts/run_python_tests.py scripts/update_evidence_anchors.py scripts/validate_json_schema.py scripts/verify_foundation_evidence.py
+	$(PYTHON) -m py_compile scripts/build_foundation_envelope.py scripts/check_coverage_status.py scripts/check_failure_propagation.py scripts/evidence_policy.py scripts/run_python_tests.py scripts/update_evidence_anchors.py scripts/validate_json_schema.py scripts/verify_foundation_evidence.py
 	$(PYTHON) scripts/run_python_tests.py
 
 .PHONY: verify-evidence
@@ -115,3 +115,11 @@ ci-guard:
 .NOTPARALLEL: ci
 .PHONY: ci
 ci: ci-guard fmt-check spec lint test msrv deny audit-unsafe rustdoc coverage evidence-tool verify-evidence
+
+# This final guard deliberately follows every assignment and include opportunity.
+ifneq ($(filter ci,$(MAKECMDGOALS)),)
+codegen_ci_final_parse_status := $(shell /usr/bin/env MAKEFLAGS='$(MAKEFLAGS)' /usr/bin/python3 scripts/check_failure_propagation.py --makefile '$(firstword $(MAKEFILE_LIST))' --parse-time >/dev/null 2>&1; echo $$?)
+ifneq ($(codegen_ci_final_parse_status),0)
+$(error local CI final parse-time integrity guard rejected this invocation)
+endif
+endif
