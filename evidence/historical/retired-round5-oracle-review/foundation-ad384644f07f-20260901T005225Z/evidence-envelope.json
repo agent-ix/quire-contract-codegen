@@ -16,6 +16,11 @@
     "dev.agent-ix.codegen": {
       "componentClass": "direct-development-tool",
       "envelopeSchemaDigest": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256",
+      "historicalDisposition": {
+        "authoritative": false,
+        "reason": "superseded historical foundation record",
+        "status": "retracted"
+      },
       "pgm01CandidateRevision": "7dac9d8c19952412b56a0347387666e2ca81e01d",
       "phase": "foundation",
       "reviewState": "pending",

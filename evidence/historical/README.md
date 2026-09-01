@@ -60,6 +60,9 @@ may support the current foundation statement.
   pending oracle authority. It was superseded after review showed that co-shadowed tools, empty
   zero-exit transcripts, suppressed Make recipes, removed Rust tests, and matrix-row substitutions
   could evade its negative-only controls. Its in-band historical disposition retracts it.
+- `retired-round5-oracle-review/foundation-ad384644f07f-20260901T005225Z` was the Round 5 oracle
+  authority. It was superseded after exact-head review found a regressed Rust census floor and
+  unguarded Make shell controls; its in-band disposition retracts it without deleting the record.
 
 ## Machine-checked record census
 
@@ -96,6 +99,7 @@ The verifier requires this exact bidirectional census to match every retained hi
 - `foundation-a6706357c0b1-20260831T033106Z`
 - `foundation-a7790d225746-20260831T154248Z`
 - `foundation-a88d192ab03a-20260830T213405Z`
+- `foundation-ad384644f07f-20260901T005225Z`
 - `foundation-b3bb8615d6f0-20260831T002835Z`
 - `foundation-b80f432105ed-20260831T193347Z`
 - `foundation-b90d6d5946e5-20260830T220017Z`
