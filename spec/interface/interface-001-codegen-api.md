@@ -18,6 +18,10 @@ operations:
     inputs: [contract package bytes, generation configuration]
     output: ArtifactBundle | DiagnosticSet
     semantics: deterministic, all-or-nothing lowering; unsupported semantics prevent false completeness
+  - name: generate_kani_bundle
+    inputs: [typed precondition, typed postcondition, explicit subject binding, backend profile, proof dependencies, manifest context]
+    output: KaniArtifactBundle | KaniDiagnosticSet
+    semantics: deterministic source, proof graph, and PGM-01 manifest; no caller-supplied completion state
   - name: write_bundle_atomic
     inputs: [ArtifactBundle, destination directory]
     output: PublishedBundleIdentity | IO diagnostic
@@ -61,9 +65,20 @@ oracle_slice:
   schemas: generated Rust and source-map outputs each identify and validate against their own versioned schema
   source_limit: 1048576 bytes per clause, enforced during rendering
   artifact_names: bounded readable prefix plus full SHA-256 requirement/revision/clause identity with per-clause source-map and manifest paths
+kani_slice:
+  adapter_profile: kani-0.67.0-function-contracts-v1
+  adapter_options: [-Z function-contracts, exact harness selector, explicit unwind and solver]
+  outputs: [generated Rust contract/proof source, proof dependency graph, derivation manifest]
+  source_portions: [framing, binding, contract, proof harness]
+  graph_edges: [required, assumed, stubbed]
+  graph_states: [passed, missing, failed, assumed, stubbed]
+  classifications: [complete, conditional, incomplete, backend-unavailable, inconclusive]
+  completion_rule: complete is derived only when every required edge passed and no assumed/stubbed edge exists
+  provenance_rule: backend version, adapter profile, options, dependency census, source digest, graph digest, and execution output identity are retained
 compatibility:
   draft_pins: must be reconciled before leaving draft
   generated_runtime_dependency: quire-contract-runtime plus declared customer types only
+  generated_kani_dependency: exact cargo-kani 0.67.0 adapter profile plus declared customer subject/types
   licensing: MIT OR Apache-2.0
   publication: disabled through the human v0.1 source-release decision
 ```

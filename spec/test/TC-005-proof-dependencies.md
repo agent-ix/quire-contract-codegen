@@ -15,10 +15,12 @@ complete-proof claims when required dependencies are not successful.
 
 ## Test Procedure
 
-Generate fixtures with complete, missing, failed, and assumed dependency edges under the pinned Kani
-adapter; execute bounded proofs and inspect graph/evidence classifications.
+Generate fixtures with complete, missing, failed, assumed, and stubbed dependency edges under the
+pinned Kani adapter. Require a bijection between generated assume/stub sites and graph edges, mutate
+each edge state, execute bounded proofs, and independently derive graph/evidence classifications.
 
 ## Expected Results
 
-Only complete successful dependency closure can support a complete proof; every assumption, version,
-option, and non-success state remains visible.
+Only a successful harness with complete required dependency closure and no assumptions/stubs can
+support `complete`; assumed/stubbed graphs are `conditional`, missing/failed graphs are `incomplete`,
+and every assumption, version, option, source site, and non-success state remains visible.

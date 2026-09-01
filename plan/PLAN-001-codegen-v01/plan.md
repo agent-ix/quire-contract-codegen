@@ -32,7 +32,7 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 | [Task-002](./tasks/Task-002-foundation-evidence.md) | Foundation evidence and gap review | done |
 | [Task-003](./tasks/Task-003-dependency-reconciliation.md) | Upstream dependency reconciliation | done |
 | [Task-004](./tasks/Task-004-oracles.md) | Deterministic oracles and manifests | in_progress |
-| [Task-005](./tasks/Task-005-backends.md) | Harness, proptest, Kani, and vacuity backends | not_started |
+| [Task-005](./tasks/Task-005-backends.md) | Harness, proptest, Kani, and vacuity backends | in_progress |
 | [Task-006](./tasks/Task-006-parity.md) | CLI, golden, differential, and parity closure | not_started |
 | [Task-007](./tasks/Task-007-human-release.md) | Human source-release decision | not_started |
 
@@ -42,3 +42,6 @@ Task-004 implementation exists in stacked draft PR #10. Task-003's dependency ga
 the branch is reconciled to accepted IR PR #19 merge `5c49ebfd1c87415f74420ad047392bd03b1bd202`.
 PR #10 remains draft until Task-004's own acceptance criteria and review findings are closed.
 Automation must not complete Task-007.
+
+Kani issue #2 proceeds as a parallel draft from the exact PR #10 oracle head while harness issue #3
+is reviewed separately. Neither backend draft promotes Task-004 or the semantic TestMatrix.

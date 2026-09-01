@@ -29,6 +29,15 @@ harnesses, framing, bindings, and a proof dependency graph from the same clauses
 - Every stubbed or assumed edge shall appear in the proof dependency graph.
 - Missing or failed required dependencies shall prevent a complete-proof classification.
 - Unstable Kani syntax shall remain isolated behind a pinned backend adapter.
+- The proof-graph classifier shall derive classification from the complete dependency graph: every required edge
+  must pass for `complete`; missing or failed required edges are `incomplete`; any assumption or stub
+  makes the result `conditional` even when the local harness succeeds.
+- Every generated assumption or stub site shall have exactly one graph edge, and every such graph
+  edge shall identify a generated source site.
+- The first supported backend profile is `kani-0.67.0-function-contracts-v1`; generation records
+  `-Z function-contracts`, the exact harness selector, unwind/solver options, and output identity.
+- The first slice accepts explicit validated Boolean clauses and a validated customer subject path;
+  it shall not infer a package-to-function binding absent from the accepted IR.
 
 ## Acceptance Criteria
 
