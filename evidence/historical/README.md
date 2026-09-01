@@ -46,6 +46,9 @@ may support the current foundation statement.
   collector commands, robust Rust attribute scanning, shared evidence floors, positive formatting
   corroboration, and live re-derivation of every retained tool identity. Its in-band disposition
   retracts it from the current claim set.
+- `retired-oracle-rebase-round6/foundation-f71014dbcc02-20260901T001612Z` was the Round 6
+  foundation authority. It is superseded by the source-bound deterministic-oracle record after the
+  stacked PR was rebased; its in-band disposition retracts it without deleting the audit history.
 
 ## Machine-checked record census
 
@@ -89,5 +92,6 @@ The verifier requires this exact bidirectional census to match every retained hi
 - `foundation-e76fd5eb6ddb-20260831T001807Z`
 - `foundation-e8c701cfe024-20260831T002430Z`
 - `foundation-f17fdd258b87-20260831T154719Z`
+- `foundation-f71014dbcc02-20260901T001612Z`
 - `foundation-fc6bbcf0d392-20260831T171947Z`
 - `foundation-fcdcc0c1593b-20260830T220427Z`

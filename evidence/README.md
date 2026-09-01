@@ -28,3 +28,7 @@ independently re-derived outcome values, result status, summary, and limitations
 Directories below `evidence/historical/` are quarantined development history and are not
 authoritative. In particular, `historical/untrusted-pre-exit-status/` contains records whose
 historical conclusive claims predate retained numeric exit statuses.
+
+`historical/retired-oracle-rebase-round6/` retains the preceding Round 6 foundation authority with
+an in-envelope retraction. It is superseded by the deterministic-oracle source record and remains
+available for audit rather than being deleted during the stacked-branch rebase.
