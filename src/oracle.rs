@@ -643,7 +643,7 @@ fn validate_manifest_context(request: &OracleRequest<'_>) -> Result<(), Vec<Gene
     Ok(())
 }
 
-fn dependency_parameters(
+pub(crate) fn dependency_parameters(
     request: &OracleRequest<'_>,
 ) -> Result<Vec<(DependencyIdentity, String)>, Vec<GenerationDiagnostic>> {
     let mut parameters = Vec::with_capacity(request.expression.dependencies().len());
@@ -938,7 +938,7 @@ fn reference_key(name: &str, observation: Option<StateObservation>) -> String {
     format!("{}:{name}:{}", name.len(), observation_name(observation))
 }
 
-fn reference_identifier(name: &str, observation: Option<StateObservation>) -> String {
+pub(crate) fn reference_identifier(name: &str, observation: Option<StateObservation>) -> String {
     format!("{}_{}", rust_component(name), observation_name(observation))
 }
 
@@ -980,7 +980,7 @@ fn readable_component(value: &str) -> String {
     result
 }
 
-fn oracle_symbol(requirement: &str, revision: u64, clause: &str) -> String {
+pub(crate) fn oracle_symbol(requirement: &str, revision: u64, clause: &str) -> String {
     let readable_requirement = readable_component(requirement)
         .chars()
         .take(24)

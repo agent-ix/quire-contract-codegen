@@ -30,6 +30,10 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Ranges, memberships, and supported correlated relations shall shape admissible strategies.
 - Residual constraints shall use explicit rejection and retain discard rates.
 - Shrinking shall preserve shaped constraints or report residual rejection.
+- Generated harnesses, rather than caller glue, shall own the ordering of pre-state snapshot,
+  precondition evaluation, subject invocation, and post-state evaluation.
+- Unsupported constraint forms shall produce a structured diagnostic.
+- Strategy generation shall not silently fall back to filtering.
 
 ## Acceptance Criteria
 
