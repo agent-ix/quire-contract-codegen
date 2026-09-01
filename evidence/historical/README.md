@@ -49,6 +49,9 @@ may support the current foundation statement.
 - `retired-oracle-rebase-round6/foundation-f71014dbcc02-20260901T001612Z` was the Round 6
   foundation authority. It is superseded by the source-bound deterministic-oracle record after the
   stacked PR was rebased; its in-band disposition retracts it without deleting the audit history.
+- `retired-harness-rebase-round6/foundation-ad384644f07f-20260901T005225Z` was the rebased
+  deterministic-oracle authority. It is superseded by the source-bound harness/strategy record;
+  its in-band disposition preserves the PR #10 boundary beneath the stacked PR #12 work.
 
 ## Machine-checked record census
 
@@ -82,6 +85,7 @@ The verifier requires this exact bidirectional census to match every retained hi
 - `foundation-a6706357c0b1-20260831T033106Z`
 - `foundation-a7790d225746-20260831T154248Z`
 - `foundation-a88d192ab03a-20260830T213405Z`
+- `foundation-ad384644f07f-20260901T005225Z`
 - `foundation-b3bb8615d6f0-20260831T002835Z`
 - `foundation-b80f432105ed-20260831T193347Z`
 - `foundation-b90d6d5946e5-20260830T220017Z`

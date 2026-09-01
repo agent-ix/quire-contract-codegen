@@ -32,3 +32,7 @@ historical conclusive claims predate retained numeric exit statuses.
 `historical/retired-oracle-rebase-round6/` retains the preceding Round 6 foundation authority with
 an in-envelope retraction. It is superseded by the deterministic-oracle source record and remains
 available for audit rather than being deleted during the stacked-branch rebase.
+
+`historical/retired-harness-rebase-round6/` retains the deterministic-oracle authority with an
+in-envelope retraction. It is superseded by the source-bound harness/strategy record and remains
+available for audit as the PR #10 boundary beneath the stacked PR #12 work.
