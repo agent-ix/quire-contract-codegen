@@ -1,0 +1,30 @@
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test exact_upstream_revisions_match_the_dependency_declarations_and_lockfile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 9 tests
+test tc_003_discharged_obligations_are_explicitly_rejected ... ok
+test tc_003_unsupported_expression_and_root_map_to_declared_terminal_states ... ok
+test tc_001_every_implication_has_an_exact_unaliased_consequent_region ... ok
+test tc_001_deep_expression_output_is_linear_and_bounded ... ok
+test tc_003_normalization_is_injective_for_dependencies_and_clause_artifacts ... ok
+test tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid ... ok
+test tc_003_source_size_limit_rejects_without_a_partial_bundle ... ok
+test tc_001_build_metadata_degrades_explicitly_outside_git ... ok
+test tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluator ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.40s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

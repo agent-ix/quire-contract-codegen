@@ -164,11 +164,11 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertIn(path, builder.parameter_files())
 
     def test_shared_evidence_floors_have_reviewed_headroom(self) -> None:
-        self.assertEqual(builder.MINIMUM_RUST_TESTS, 2)
+        self.assertEqual(builder.MINIMUM_RUST_TESTS, 10)
         self.assertEqual(builder.MINIMUM_PYTHON_TESTS, 60)
         self.assertEqual(failure_checker.MINIMUM_PYTHON_TESTS, 60)
-        self.assertEqual(builder.MINIMUM_TRANSCRIPT_BYTES, 8)
-        self.assertFalse(builder.transcript_is_corroborated("fmt", "1234567", ""))
+        self.assertEqual(builder.MINIMUM_TRANSCRIPT_BYTES, 16)
+        self.assertFalse(builder.transcript_is_corroborated("fmt", "123456789012345", ""))
         self.assertTrue(
             builder.transcript_is_corroborated("fmt", "FMT_CHECK_PASSED\n", "")
         )
@@ -448,19 +448,27 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "implementation drift"):
                     builder.collected_commands()
 
-    def test_collector_runs_locked_complete_rust_gates(self) -> None:
-        collector = COLLECTOR_PATH.read_text(encoding="utf-8")
-        for command in (
-            'run_and_retain clippy "$trusted_cargo" clippy --locked --all-targets -- -D warnings',
-            'run_and_retain test "$trusted_cargo" test --locked',
-            'run_and_retain msrv "$trusted_cargo" +1.75.0 test --locked',
-            'run_and_retain deny /usr/bin/env CARGO_HOME="$deny_cargo_home" "$trusted_cargo" deny --offline --locked check',
-            'run_and_retain metadata "$trusted_cargo" metadata --locked --format-version 1',
-            'run_and_retain rustdoc /usr/bin/env RUSTDOCFLAGS=-Dwarnings "$trusted_cargo" doc --locked --no-deps',
-        ):
-            self.assertIn(command, collector)
-        self.assertIn('staging_root="$(mktemp -d)"', collector)
-        self.assertIn('cp -a "$default_cargo_home/advisory-dbs"', collector)
+    def test_every_declared_command_binds_its_complete_collector_arguments(self) -> None:
+        original = COLLECTOR_PATH.read_text(encoding="utf-8")
+        mutations = (
+            original.replace("'spec/**/*.md'", "'wrong/**/*.md'", 1),
+            original.replace(
+                "schemas/pgm01-derivation-evidence-envelope-v1.schema.json",
+                "schemas/wrong.json",
+                1,
+            ),
+            original.replace("$evidence_dir/collection-input.json", "wrong.json", 1),
+            original.replace("$evidence_dir/evidence-manifest.json", "wrong.json", 1),
+            original.replace("$pgm01_schema_path", "$wrong_schema_path"),
+            original.replace("$pgm01_validator_path", "$wrong_validator_path"),
+        )
+        for mutation in mutations:
+            with self.subTest(), tempfile.TemporaryDirectory() as directory:
+                collector = Path(directory) / "collector.sh"
+                collector.write_text(mutation, encoding="utf-8")
+                with mock.patch.object(builder, "COLLECTOR", collector):
+                    with self.assertRaisesRegex(ValueError, "implementation drift"):
+                        builder.collected_commands()
 
     def test_collector_runs_locked_complete_rust_gates(self) -> None:
         collector = COLLECTOR_PATH.read_text(encoding="utf-8")
@@ -498,7 +506,8 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             self.assertTrue(all(item["status"] != "passed" for item in outcomes))
 
     def test_zero_or_reduced_rust_test_census_is_inconclusive(self) -> None:
-        for passed in (0, builder.MINIMUM_RUST_TESTS - 1):
+        self.assertEqual(builder.MINIMUM_RUST_TESTS, 10)
+        for passed in (0, 9):
             with self.subTest(
                 passed=passed
             ), tempfile.TemporaryDirectory() as directory:
@@ -956,6 +965,40 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
                 )
                 self.assertNotEqual(completed.returncode, 0)
 
+    def test_every_make_execution_control_form_is_rejected(self) -> None:
+        original = (ROOT / "Makefile").read_text(encoding="utf-8")
+        controls = (
+            "MAKEFLAGS ::= -i",
+            "MAKEFLAGS :::= -i",
+            "MAKEFLAGS != echo -i",
+            "$(eval MAKEFLAGS := -i)",
+            "define MAKEFLAGS\n-i\nendef",
+            "SHELL := /usr/bin/true",
+            ".SHELLFLAGS := -c true",
+            ".ONESHELL:",
+            "test: SHELL := /usr/bin/true",
+        )
+        for control in controls:
+            with self.subTest(
+                control=control
+            ), tempfile.TemporaryDirectory() as directory:
+                makefile = Path(directory) / "Makefile"
+                makefile.write_text(original + "\n" + control + "\n", encoding="utf-8")
+                errors = failure_checker.inspect_makefile(makefile)
+                self.assertNotEqual(errors, [], control)
+                environment = dict(os.environ)
+                for variable in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL"):
+                    environment.pop(variable, None)
+                completed = subprocess.run(
+                    ["/usr/bin/make", "-f", str(makefile), "-n", "ci"],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    env=environment,
+                )
+                self.assertNotEqual(completed.returncode, 0, control)
+
     def test_command_line_makeflags_override_is_rejected(self) -> None:
         completed = subprocess.run(
             ["/usr/bin/make", "-n", "ci", "MAKEFLAGS=-i"],
@@ -1012,6 +1055,19 @@ class FoundationEvidenceBuilderTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("missing unsafe comment baseline", completed.stderr)
+
+    def test_unsafe_audit_is_inconclusive_without_source_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            completed = subprocess.run(
+                ["/usr/bin/bash", str(ROOT / "scripts" / "check_unsafe_comments.sh")],
+                cwd=directory,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 2)
+            self.assertNotIn("unsafe audit passed", completed.stdout)
+            self.assertIn("inconclusive", completed.stderr)
 
     def test_empty_neutered_python_gate_outputs_are_rejected(self) -> None:
         completed = subprocess.CompletedProcess(["gate"], 0, "", "")

@@ -1,0 +1,7 @@
+   Compiling quire-contract-codegen v0.1.0 (/home/peter/dev/quire-contract-codegen)
+   Compiling quire-contract-runtime v0.1.0 (https://github.com/agent-ix/quire-contract-runtime?rev=e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3#e360dad8)
+    Finished test [unoptimized + debuginfo] target(s) in 2.94s
+     Running unittests src/lib.rs (/tmp/agent-b-codegen-target-pr10/debug/deps/quire_contract_codegen-5a90a53d7402ce66)
+     Running tests/integration.rs (/tmp/agent-b-codegen-target-pr10/debug/deps/integration-a42a527bc35a064f)
+     Running tests/oracle_generation.rs (/tmp/agent-b-codegen-target-pr10/debug/deps/oracle_generation-2e2dd27bcd76e8e2)
+   Doc-tests quire_contract_codegen

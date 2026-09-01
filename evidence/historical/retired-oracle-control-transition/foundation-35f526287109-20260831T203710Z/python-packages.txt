@@ -1,0 +1,8 @@
+attrs==26.1.0
+jsonschema==3.2.0
+pip==22.0.2
+pyrsistent==0.20.0
+rfc3339-validator==0.1.4
+rfc3986-validator==0.1.1
+setuptools==59.6.0
+six==1.17.0

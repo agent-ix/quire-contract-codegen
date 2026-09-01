@@ -39,8 +39,19 @@ CI_ORDER = (
 CI_PROBES = set(CI_ORDER) - {GUARD_TARGET}
 TARGET = re.compile(r"^([A-Za-z0-9_.-]+):(?:\s+(.*?))?\s*$")
 SHELL_CONTROL = re.compile(r"&&|\|\||[;|&]")
-MAKEFLAGS_ASSIGNMENT = re.compile(
-    r"^\s*(?:(?:export|override)\s+)*MAKEFLAGS\s*(?::|\+|\?)?=\s*(.*)$"
+MAKE_CONTROL_ASSIGNMENT = re.compile(
+    r"(?<![A-Za-z0-9_.])(?P<name>MAKEFLAGS|SHELL|\.SHELLFLAGS)\s*"
+    r"(?P<operator>:::=|::=|:=|\+=|\?=|!=|=)\s*(?P<value>.*)$"
+)
+MAKE_CONTROL_DEFINITION = re.compile(
+    r"^\s*(?:(?:export|override|private)\s+)*define\s+"
+    r"(?P<name>MAKEFLAGS|SHELL|\.SHELLFLAGS)(?:\s|$)"
+)
+PARSE_GUARD_ASSIGNMENT = re.compile(
+    r"^codegen_ci_(?:final_)?parse_status := \$\(shell /usr/bin/env "
+    r"MAKEFLAGS='\$\(MAKEFLAGS\)' /usr/bin/python3 scripts/check_failure_propagation\.py "
+    r"--makefile '\$\(firstword \$\(MAKEFILE_LIST\)\)' --parse-time >/dev/null 2>&1; "
+    r"echo \$\$\?\)$"
 )
 INCLUDE_DIRECTIVE = re.compile(r"^\s*(?:-?include|sinclude)(?:\s|$)")
 
@@ -128,16 +139,31 @@ def inspect_makefile(makefile: Path) -> list[str]:
     for number, line in enumerate(text.splitlines(), start=1):
         if INCLUDE_DIRECTIVE.match(line):
             errors.append(f"Makefile:{number} includes unreviewed Make control text")
-        if re.match(r"^\s*\.(?:IGNORE|SILENT)\s*(?::|$)", line):
+        if re.match(r"^\s*\.(?:IGNORE|SILENT|ONESHELL)\s*(?::|$)", line):
             errors.append(
                 f"Makefile:{number} declares a global recipe-control directive"
             )
-        assignment = MAKEFLAGS_ASSIGNMENT.match(line)
-        if assignment is not None:
-            errors.extend(
-                f"Makefile:{number} {error}"
-                for error in makeflags_errors(assignment.group(1))
+        if line.startswith("\t"):
+            continue
+        definition = MAKE_CONTROL_DEFINITION.match(line)
+        if definition is not None:
+            errors.append(
+                f"Makefile:{number} defines forbidden make control {definition.group('name')}"
             )
+        assignment = (
+            None
+            if PARSE_GUARD_ASSIGNMENT.fullmatch(line)
+            else MAKE_CONTROL_ASSIGNMENT.search(line)
+        )
+        if assignment is not None:
+            name = assignment.group("name")
+            if name == "MAKEFLAGS":
+                errors.extend(
+                    f"Makefile:{number} {error}"
+                    for error in makeflags_errors(assignment.group("value"))
+                )
+            else:
+                errors.append(f"Makefile:{number} assigns forbidden make control {name}")
     for target in sorted(set(CI_ORDER)):
         commands = recipes.get(target, [])
         if not commands:

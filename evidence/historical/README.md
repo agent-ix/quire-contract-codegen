@@ -49,6 +49,17 @@ may support the current foundation statement.
 - `retired-oracle-rebase-round6/foundation-f71014dbcc02-20260901T001612Z` was the Round 6
   foundation authority. It is superseded by the source-bound deterministic-oracle record after the
   stacked PR was rebased; its in-band disposition retracts it without deleting the audit history.
+- `retired-oracle-control-transition/` retains the three clean or failed-closed oracle collections
+  at `foundation-35f526287109-20260831T203710Z`,
+  `foundation-ea7ec33c48e1-20260831T204337Z`, and
+  `foundation-98a1fc3e6a94-20260831T205422Z`. They document the transition to writable-target and
+  corpus controls and remain retracted as superseded authorities.
+- `retired-oracle-corpus-census/foundation-7a536ea4af11-20260831T205745Z` retains the superseded
+  corpus-census authority and its in-band historical disposition.
+- `retired-round3-positive-corroboration/foundation-a459892ecc35-20260831T210208Z` was the prior
+  pending oracle authority. It was superseded after review showed that co-shadowed tools, empty
+  zero-exit transcripts, suppressed Make recipes, removed Rust tests, and matrix-row substitutions
+  could evade its negative-only controls. Its in-band historical disposition retracts it.
 
 ## Machine-checked record census
 
@@ -69,6 +80,7 @@ The verifier requires this exact bidirectional census to match every retained hi
 - `foundation-5ca054beccdc-20260830T214724Z`
 - `foundation-65da338d8149-20260831T001333Z`
 - `foundation-747ceab185d8-20260831T154546Z`
+- `foundation-7a536ea4af11-20260831T205745Z`
 - `foundation-795455f27a70-20260830T235823Z`
 - `foundation-86a4fe771344-20260831T002340Z`
 - `foundation-86eed791a2d4-20260830T220953Z`
@@ -78,7 +90,9 @@ The verifier requires this exact bidirectional census to match every retained hi
 - `foundation-96cd217bf3ae-20260830T215443Z`
 - `foundation-9796a1412e16-20260831T003007Z`
 - `foundation-984594e48a0c-20260831T172037Z`
+- `foundation-98a1fc3e6a94-20260831T205422Z`
 - `foundation-9fc65135d0ce-20260830T215714Z`
+- `foundation-a459892ecc35-20260831T210208Z`
 - `foundation-a6706357c0b1-20260831T033106Z`
 - `foundation-a7790d225746-20260831T154248Z`
 - `foundation-a88d192ab03a-20260830T213405Z`
@@ -91,6 +105,7 @@ The verifier requires this exact bidirectional census to match every retained hi
 - `foundation-e1463f3f7719-20260831T010208Z`
 - `foundation-e76fd5eb6ddb-20260831T001807Z`
 - `foundation-e8c701cfe024-20260831T002430Z`
+- `foundation-ea7ec33c48e1-20260831T204337Z`
 - `foundation-f17fdd258b87-20260831T154719Z`
 - `foundation-f71014dbcc02-20260901T001612Z`
 - `foundation-fc6bbcf0d392-20260831T171947Z`

@@ -1,0 +1,5 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running unittests src/lib.rs (/tmp/agent-b-codegen-target-pr10/debug/deps/quire_contract_codegen-d96066da2697cfbb)
+     Running tests/integration.rs (/tmp/agent-b-codegen-target-pr10/debug/deps/integration-0d4b23e2569599e7)
+     Running tests/oracle_generation.rs (/tmp/agent-b-codegen-target-pr10/debug/deps/oracle_generation-e9c780a900c262ab)
+   Doc-tests quire_contract_codegen

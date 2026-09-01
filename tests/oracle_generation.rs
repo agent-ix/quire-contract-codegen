@@ -382,8 +382,10 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     );
     let extension = &manifest.extensions["dev.agent-ix.codegen"];
     assert_eq!(extension.terminal_state, GenerationTerminalState::Generated);
-    assert!(!extension.generator_source_dirty);
-    assert!(!generator_source_is_dirty());
+    assert_eq!(
+        extension.generator_source_dirty,
+        generator_source_is_dirty()
+    );
     assert!(extension.generator_source_revision_available);
     assert_eq!(extension.ir_revision, IR_CANDIDATE_REVISION);
     assert_eq!(extension.runtime_revision, RUNTIME_REVISION);

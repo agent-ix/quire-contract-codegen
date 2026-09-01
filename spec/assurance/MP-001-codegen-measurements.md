@@ -47,9 +47,11 @@ outcome truthfulness, and accepted/rejected local schema validation. These tests
 evidence-tooling behavior only and do not back a semantic TestMatrix row.
 Every zero-exit transcript also requires command-specific positive corroboration. Formatting uses an
 explicit `FMT_CHECK_PASSED` marker after `cargo fmt --check`; Rust test transcripts must report at
-least 2 passed tests, the Python runner must report at least 60 passed tests, and every positive
-transcript must retain at least 8 bytes. These shared floors are defined by
-`scripts/evidence_policy.py` and mutation-tested, so an empty or reduced transcript is inconclusive.
+least the branch's complete 10-test census, the Python runner must report at least 60 passed tests,
+and every positive transcript must retain at least 16 bytes. The byte floor catches empty or
+truncated records; command-specific markers and parsers provide the substantive discrimination.
+These floors are defined by `scripts/evidence_policy.py` and mutation-tested, so a reduced transcript
+is inconclusive.
 `scripts/run_python_tests.py` recursively loads and executes every `unittest` case, including cases in
 nested non-package directories, and fails if zero tests execute. Implementation plans will extend this with a stable
 candidate runner that records source and dependency revisions, tool/backend versions, configuration,
@@ -68,6 +70,10 @@ re-derives the parameter digest from the controlling source and Python test file
 vendored PGM-01 schema to the digest retained from the external checkout. It also re-runs and exactly
 compares all seven retained tool identities (Cargo, rustc, MSRV rustc, Python, jsonschema, installed
 Python packages, and Quire provenance) and re-derives the command declaration from the collector.
+The legacy `gateScripts` field contains 11 parameter/control files, including the unsafe-comment
+baseline data file. Its live-tree digest comparison is a redundant binding already implied by the
+complete parameter digest; it is not claimed as an independent implementation or an executable-gate
+census.
 Behavioral mutation tests
 cover outcome derivation and census, parameter and artifact census, result status and summary,
 limitations, revision availability, symlink refusal, historical disposition, and availability

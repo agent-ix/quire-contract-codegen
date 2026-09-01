@@ -237,10 +237,6 @@ def matrix_rows(matrix_text: str) -> tuple[tuple[str, ...], ...]:
     )
 
 
-def matrix_row_count(matrix_text: str) -> int:
-    return len(matrix_rows(matrix_text))
-
-
 def matrix_row_errors(matrix_text: str) -> list[str]:
     observed = matrix_rows(matrix_text)
     if observed == EXPECTED_MATRIX_ROWS:
@@ -358,30 +354,89 @@ def coverage_gate(
 
 
 def behavioral_self_test() -> int:
-    """Mutation-test the real gate path without invoking external tooling."""
-    minted = sorted(set(TRACE_ID.findall(" ".join(" ".join(row) for row in EXPECTED_MATRIX_ROWS))))
-    report = {
+    """Mutation-test every interior gate path without invoking external tooling."""
+    matrix = "\n".join("| " + " | ".join(row) + " |" for row in EXPECTED_MATRIX_ROWS)
+    minted = sorted(set(TRACE_ID.findall(matrix)))
+
+    def rejected(
+        label: str,
+        *,
+        matrix_text: str = matrix,
+        report: dict[str, object] | None = None,
+        source_path: str | None = None,
+        source_text: str = "",
+    ) -> bool:
+        selected_report = report or {
+            "minted_targets": [{"id": identifier} for identifier in minted],
+            "diagnostics": [],
+            "status_lies": [],
+            "totals": {"total": len(minted)},
+        }
+        completed = subprocess.CompletedProcess(
+            [str(trusted_quire())], 0, json.dumps(selected_report), ""
+        )
+
+        def fake_runner(*_args, **_kwargs):
+            return completed
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "spec").mkdir()
+            (root / "spec" / "test-matrix.md").write_text(
+                matrix_text, encoding="utf-8"
+            )
+            if source_path is not None:
+                source = root / source_path
+                source.parent.mkdir(parents=True, exist_ok=True)
+                source.write_text(source_text, encoding="utf-8")
+            if coverage_gate(root, fake_runner) != 0:
+                return True
+        print(f"coverage behavioral self-test accepted {label} mutation", file=sys.stderr)
+        return False
+
+    base_report: dict[str, object] = {
         "minted_targets": [{"id": identifier} for identifier in minted],
         "diagnostics": [],
         "status_lies": [],
         "totals": {"total": len(minted)},
     }
-    completed = subprocess.CompletedProcess(
-        [str(trusted_quire())], 0, json.dumps(report), ""
+    status_lie_report = dict(base_report)
+    status_lie_report["status_lies"] = [{"id": "TC-001"}]
+    undeclared_report = dict(base_report)
+    undeclared_report["minted_targets"] = [
+        {"id": identifier} for identifier in minted if identifier != "TC-001"
+    ]
+    missing_report = dict(base_report)
+    missing_report["minted_targets"] = [
+        *base_report["minted_targets"],
+        {"id": "TC-999"},
+    ]
+    checks = (
+        rejected(
+            "unowned production",
+            source_path="src/lib.rs",
+            source_text="pub fn unowned() {}\n",
+        ),
+        rejected(
+            "ignored trace",
+            source_path="tests/ignored.rs",
+            source_text="// Verifies: TC-001\n#[ignore]\n#[test]\nfn hidden() {}\n",
+        ),
+        rejected(
+            "cfg-controlled trace",
+            source_path="tests/configured.rs",
+            source_text="// Verifies: TC-001\n#[cfg(any())]\n#[test]\nfn hidden() {}\n",
+        ),
+        rejected("status lie", report=status_lie_report),
+        rejected("matrix id absent from report", report=undeclared_report),
+        rejected("report id absent from matrix", report=missing_report),
+        rejected(
+            "completed matrix status",
+            matrix_text=matrix.replace("🚧 Planned", "✅ Complete", 1),
+        ),
     )
-
-    def fake_runner(*_args, **_kwargs):
-        return completed
-
-    matrix = "\n".join("| " + " | ".join(row) + " |" for row in EXPECTED_MATRIX_ROWS)
-    mutated = matrix.replace("🚧 Planned", "✅ Complete", 1)
-    with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
-        (root / "spec").mkdir()
-        (root / "spec" / "test-matrix.md").write_text(mutated, encoding="utf-8")
-        if coverage_gate(root, fake_runner) == 0:
-            print("coverage behavioral self-test accepted a completed matrix mutation", file=sys.stderr)
-            return 1
+    if not all(checks):
+        return 1
     print("coverage behavioral self-test passed")
     return 0
 

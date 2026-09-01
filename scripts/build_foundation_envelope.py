@@ -120,7 +120,7 @@ COLLECTED_COMMANDS = {
 }
 
 COLLECTOR_COMMAND_FRAGMENTS = {
-    "quire-validate": "run_and_retain quire-validate \\\n  \"$trusted_bash\" -c",
+    "quire-validate": "run_and_retain quire-validate \\\n  \"$trusted_bash\" -c '\"$1\" validate --scope . '\\''spec/**/*.md'\\'' '\\''planning/**/*.md'\\'' '\\''plan/**/*.md'\\'' && echo QUIRE_VALIDATION_PASSED' _ \"$trusted_quire\"",
     "fmt": "run_and_retain fmt \\\n  \"$trusted_bash\" -c '\"$1\" fmt --all -- --check && echo FMT_CHECK_PASSED'",
     "clippy": 'run_and_retain clippy "$trusted_cargo" clippy --locked --all-targets -- -D warnings',
     "test": 'run_and_retain test "$trusted_cargo" test --locked',
@@ -131,11 +131,11 @@ COLLECTOR_COMMAND_FRAGMENTS = {
     "rustdoc": 'run_and_retain rustdoc /usr/bin/env RUSTDOCFLAGS=-Dwarnings "$trusted_cargo" doc --locked --no-deps',
     "coverage": 'run_and_retain coverage "$trusted_python" scripts/check_coverage_status.py',
     "evidence-tool": "run_and_retain evidence-tool /usr/bin/make evidence-tool",
-    "pgm01-pinned-schema": "run_and_retain pgm01-pinned-schema \\",
-    "input-schema": "run_and_retain input-schema \\",
-    "manifest-schema": "run_and_retain manifest-schema \\",
-    "pgm01-schema": "run_and_retain pgm01-schema \\",
-    "pgm01-envelope": "run_and_retain pgm01-envelope \\",
+    "pgm01-pinned-schema": "run_and_retain pgm01-pinned-schema \\\n    \"$trusted_python\" scripts/validate_json_schema.py \\\n    schemas/pgm01-derivation-evidence-envelope-v1.schema.json \\\n    \"$evidence_dir/evidence-envelope.json\"",
+    "input-schema": "run_and_retain input-schema \\\n    \"$trusted_python\" scripts/validate_json_schema.py \\\n    schemas/foundation-evidence-input-v1.schema.json \"$evidence_dir/collection-input.json\"",
+    "manifest-schema": "run_and_retain manifest-schema \\\n    \"$trusted_python\" scripts/validate_json_schema.py \\\n    schemas/foundation-evidence-manifest-v1.schema.json \"$evidence_dir/evidence-manifest.json\"",
+    "pgm01-schema": "run_and_retain pgm01-schema \\\n    \"$trusted_python\" scripts/validate_json_schema.py \\\n    \"$pgm01_schema_path\" \"$evidence_dir/evidence-envelope.json\"",
+    "pgm01-envelope": "run_and_retain pgm01-envelope \\\n    \"$trusted_python\" \"$pgm01_validator_path\" --fixture \"$evidence_dir/evidence-envelope.json\"",
 }
 
 
