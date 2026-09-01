@@ -18,6 +18,18 @@ operations:
     inputs: [contract package bytes, generation configuration]
     output: ArtifactBundle | DiagnosticSet
     semantics: deterministic, all-or-nothing lowering; unsupported semantics prevent false completeness
+  - name: generate_tristate_harness
+    inputs: [typed precondition, typed postcondition, explicit bindings, manifest context]
+    output: GeneratedArtifactBundle | HarnessDiagnosticSet
+    semantics: source plus PGM-01 manifest, accepted-case floor, retained campaign accounting
+  - name: generate_i64_strategy
+    inputs: [requirement identity, constraint, campaign, manifest context]
+    output: GeneratedArtifactBundle | StrategyDiagnostic
+    semantics: shaped cases whose expected domain is checked against runtime VerdictKind
+  - name: generate_enum_strategy
+    inputs: [requirement identity, customer enum path and variants, campaign, manifest context]
+    output: GeneratedArtifactBundle | StrategyDiagnostic
+    semantics: finite shaped cases with an explicit quire-contract-runtime consumer dependency
   - name: write_bundle_atomic
     inputs: [ArtifactBundle, destination directory]
     output: PublishedBundleIdentity | IO diagnostic
@@ -48,6 +60,7 @@ diagnostics:
     backend-unavailable: reserved for external backends
     io-failed: reserved for atomic publication
   rule: no non-generated state may be converted into a complete artifact claim
+  fields: [stable code, terminal state, stable input path, optional preserved lower-level generation code, human detail]
 identity_envelope:
   schema: quire.derivation-evidence/v1
   required: [producer, inputs, backend, outputs, parameters digest, environment, provenance, result]
@@ -61,9 +74,16 @@ oracle_slice:
   schemas: generated Rust and source-map outputs each identify and validate against their own versioned schema
   source_limit: 1048576 bytes per clause, enforced during rendering
   artifact_names: bounded readable prefix plus full SHA-256 requirement/revision/clause identity with per-clause source-map and manifest paths
+harness_strategy_slice:
+  output: generated Rust artifact plus quire.derivation-evidence/v1 manifest
+  manifest_context: required for harness, integer-strategy, and enum-strategy generation
+  campaign_conclusion: reads accepted, rejected, failed, and discarded counters and requires at least one accepted case
+  expected_domain: generated integer cases expose a rejection expectation and verdict check; the generated harness proptest adapter requires and checks that expectation against quire_contract_runtime::VerdictKind
+  generated_crate_lints: generated crate roots deny missing documentation and compile under denied warnings
+  artifact_names: bounded readable prefix plus full SHA-256 over length-delimited request identity
 compatibility:
   draft_pins: must be reconciled before leaving draft
-  generated_runtime_dependency: quire-contract-runtime plus declared customer types only
+  generated_runtime_dependency: quire-contract-runtime, proptest, plus declared customer types only
   licensing: MIT OR Apache-2.0
   publication: disabled through the human v0.1 source-release decision
 ```

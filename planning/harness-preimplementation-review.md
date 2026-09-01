@@ -33,3 +33,20 @@ Proceed with a fail-closed first slice that generates deterministic harness and 
 uses the runtime's tri-state/accounting APIs, and tests seeded generation and shrinking behavior.
 Keep TC-004 and FR-002 matrix rows planned until the complete issue scope and independent review are
 closed.
+
+## Verdict
+
+**PASS** for the bounded FR-002 slice. The generated artifact owns execution order, campaign
+accounting and conclusion, expected-domain checking, and deterministic derivation identity. Inputs
+outside the supported binding or campaign shapes terminate as structured `unsupported` or
+`invalid-input` results without a partial artifact.
+
+## Coverage
+
+| Finding | Disposition | Verification |
+|---|---|---|
+| FND-401 | Closed: generated harness owns snapshot, precondition, invocation, and postcondition order. | Executed generated-crate tests for rejected, passed, and failed paths. |
+| FND-402 | Closed: supported populations are directly shaped and use no filtering fallback. | Seeded shrink execution for range, membership, correlation, and residual constraints. |
+| FND-403 | Closed: boundary cases include overflow-safe inside/outside values and residual exclusions with neighbors. | Generated boundary census plus full-width fail-closed test. |
+| FND-404 | Closed: expected-domain tags are checked against runtime tri-state verdicts; harness conclusion retains accepted/rejected/failed/discarded counts and enforces an accepted floor. | Executed accepted, rejected, mismatch, discard, and all-rejected conclusion tests. |
+| FND-405 | Closed within the declared slice: callers supply explicit typed clauses/bindings and PGM-01 context; no package adapter is inferred. | API inspection and deterministic manifest tests. |

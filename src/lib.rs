@@ -18,9 +18,9 @@ pub use strategy::{
 
 pub use oracle::{
     generate_boolean_oracle, generator_source_is_dirty, Artifact, CodegenExtension,
-    DerivationManifest, DigestIdentity, GenerationDiagnostic, GenerationEnvironment,
-    GenerationErrorCode, GenerationProvenance, GenerationResult, GenerationTerminalState,
-    ManifestArtifact, ManifestContext, NoBackend, OracleArtifactBundle, OracleRequest,
-    ProducerIdentity, SchemaIdentity, SourceRegion, GENERATOR_SOURCE_REVISION,
+    DerivationManifest, DigestIdentity, GeneratedArtifactBundle, GenerationDiagnostic,
+    GenerationEnvironment, GenerationErrorCode, GenerationProvenance, GenerationResult,
+    GenerationTerminalState, ManifestArtifact, ManifestContext, NoBackend, OracleArtifactBundle,
+    OracleRequest, ProducerIdentity, SchemaIdentity, SourceRegion, GENERATOR_SOURCE_REVISION,
     IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
 };

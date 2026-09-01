@@ -10,8 +10,12 @@ use sha2::{Digest as _, Sha256};
 
 use crate::{
     generate_boolean_oracle,
-    oracle::{dependency_parameters, oracle_symbol, reference_identifier},
-    Artifact, GenerationDiagnostic, ManifestContext, OracleRequest,
+    oracle::{
+        bounded_readable_component, dependency_parameters, generated_artifact_bundle,
+        length_delimited_identity, oracle_symbol, reference_identifier,
+    },
+    Artifact, GeneratedArtifactBundle, GenerationDiagnostic, GenerationErrorCode,
+    GenerationTerminalState, ManifestContext, OracleRequest,
 };
 
 /// Explicit inputs for one generated pre/post harness.
@@ -53,6 +57,22 @@ pub enum HarnessErrorCode {
     UnsupportedHarnessBinding,
     /// Generated source did not parse as Rust.
     InvalidGeneratedSyntax,
+    /// A derivation manifest could not be validated or serialized.
+    ManifestGenerationFailed,
+}
+
+impl HarnessErrorCode {
+    const fn terminal_state(self) -> GenerationTerminalState {
+        match self {
+            Self::InvalidExecutionPoint | Self::DuplicateClauseIdentity => {
+                GenerationTerminalState::InvalidInput
+            }
+            Self::UnsupportedHarnessBinding => GenerationTerminalState::Unsupported,
+            Self::ClauseGenerationFailed
+            | Self::InvalidGeneratedSyntax
+            | Self::ManifestGenerationFailed => GenerationTerminalState::Inconclusive,
+        }
+    }
 }
 
 /// Structured harness-generation failure.
@@ -61,6 +81,10 @@ pub enum HarnessErrorCode {
 pub struct HarnessDiagnostic {
     /// Stable diagnostic category.
     pub code: HarnessErrorCode,
+    /// Interface-001 terminal state for this failure.
+    pub terminal_state: GenerationTerminalState,
+    /// Preserved lower-level clause or manifest failure code, when one exists.
+    pub generation_code: Option<GenerationErrorCode>,
     /// Stable input path associated with the failure.
     pub path: String,
     /// Human-readable detail not used as machine identity.
@@ -81,10 +105,12 @@ struct HarnessBinding {
 // Implements: FR-002
 pub fn generate_tristate_harness(
     request: &HarnessRequest<'_>,
-) -> Result<Artifact, Vec<HarnessDiagnostic>> {
+) -> Result<GeneratedArtifactBundle, Vec<HarnessDiagnostic>> {
     if request.precondition_clause == request.postcondition_clause {
         return Err(vec![HarnessDiagnostic {
             code: HarnessErrorCode::DuplicateClauseIdentity,
+            terminal_state: HarnessErrorCode::DuplicateClauseIdentity.terminal_state(),
+            generation_code: None,
             path: "clauses".to_owned(),
             message: "precondition and postcondition clause identities must be distinct".to_owned(),
         }]);
@@ -129,6 +155,9 @@ pub fn generate_tristate_harness(
     let shell_symbol = format!("{base_symbol}_shell");
     let shell_adapter_symbol = format!("{shell_symbol}_proptest");
     let adapter_symbol = format!("{base_symbol}_proptest");
+    let discard_symbol = format!("{base_symbol}_record_discard");
+    let conclude_symbol = format!("{base_symbol}_conclude_campaign");
+    let summary_type = format!("{}CampaignSummary", to_upper_camel(&base_symbol));
     let precondition_symbol =
         oracle_symbol(requirement, revision, request.precondition_clause.as_str());
     let postcondition_symbol =
@@ -172,6 +201,16 @@ pub fn generate_tristate_harness(
             values.push("state".to_owned());
         }
         values.join(", ")
+    };
+    let invoke_input = if binding.inputs.is_empty() {
+        "_input"
+    } else {
+        "input"
+    };
+    let invoke_state = if binding.state.is_none() {
+        "_state"
+    } else {
+        "state"
     };
     let precondition_arguments = oracle_arguments(&precondition_parameters, &binding, false)?;
     let postcondition_arguments = oracle_arguments(&postcondition_parameters, &binding, true)?;
@@ -250,7 +289,7 @@ where\n\
         {state_argument},\n\
         |value| *value,\n\
         |{precondition_input}, {precondition_state}| {precondition_symbol}({precondition_arguments}),\n\
-        |input, state| invoke({invoke_arguments}),\n\
+        |{invoke_input}, {invoke_state}| invoke({invoke_arguments}),\n\
         |{postcondition_input}, {postcondition_pre_state}, {postcondition_post_state}| {postcondition_symbol}({postcondition_arguments}),\n\
         observations,\n\
     )\n\
@@ -259,6 +298,7 @@ where\n\
 /// Records and adapts the generated bound harness for proptest.\n\
 pub fn {adapter_symbol}<'evidence, Invoke>(\n\
     report: &mut quire_contract_runtime::CampaignReport<'static>,\n\
+    expected_rejection: bool,\n\
 {public_parameter_text}    invoke: Invoke,\n\
     observations: &'evidence mut [quire_contract_runtime::Observation<'static>; 2],\n\
 ) -> proptest::test_runner::TestCaseResult\n\
@@ -268,28 +308,102 @@ where\n\
 {state_setup}    let input = {input_value};\n\
     {shell_adapter_symbol}(\n\
         report,\n\
+        expected_rejection,\n\
         &input,\n\
         {state_argument},\n\
         |value| *value,\n\
         |{precondition_input}, {precondition_state}| {precondition_symbol}({precondition_arguments}),\n\
-        |input, state| invoke({invoke_arguments}),\n\
+        |{invoke_input}, {invoke_state}| invoke({invoke_arguments}),\n\
         |{postcondition_input}, {postcondition_pre_state}, {postcondition_post_state}| {postcondition_symbol}({postcondition_arguments}),\n\
         observations,\n\
     )\n\
+}}\n\
+\n\
+/// Complete accounting returned after the generated campaign acceptance floor is met.\n\
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]\n\
+pub struct {summary_type} {{\n\
+    /// Accepted cases, including postcondition failures.\n\
+    pub accepted: u64,\n\
+    /// Precondition-rejected cases.\n\
+    pub rejected: u64,\n\
+    /// Accepted cases that failed a postcondition.\n\
+    pub failed: u64,\n\
+    /// Framework-discarded cases.\n\
+    pub discarded: u64,\n\
+}}\n\
+\n\
+/// Records one framework-level discard in the generated campaign report.\n\
+pub fn {discard_symbol}(\n\
+    report: &mut quire_contract_runtime::CampaignReport<'static>,\n\
+) {{\n\
+    report.record_discard();\n\
+}}\n\
+\n\
+/// Enforces the generated campaign accepted-case floor and returns retained accounting.\n\
+pub fn {conclude_symbol}(\n\
+    report: &quire_contract_runtime::CampaignReport<'static>,\n\
+) -> Result<{summary_type}, proptest::test_runner::TestCaseError> {{\n\
+    const MINIMUM_ACCEPTED_CASES: u64 = 1;\n\
+    let counts = report.counts();\n\
+    let summary = {summary_type} {{\n\
+        accepted: counts.accepted(),\n\
+        rejected: counts.rejected(),\n\
+        failed: counts.failed(),\n\
+        discarded: counts.discarded(),\n\
+    }};\n\
+    if summary.accepted < MINIMUM_ACCEPTED_CASES {{\n\
+        return Err(proptest::test_runner::TestCaseError::fail(format!(\n\
+            \"generated campaign accepted {{}} cases; minimum is {{MINIMUM_ACCEPTED_CASES}}; rejected={{}} failed={{}} discarded={{}}\",\n\
+            summary.accepted, summary.rejected, summary.failed, summary.discarded,\n\
+        )));\n\
+    }}\n\
+    Ok(summary)\n\
 }}\n"
     );
     let source = format!(
-        "{}\n{}\n{}\n{}",
+        "#![deny(missing_docs)]\n//! Generated tri-state contract harness.\n{}\n{}\n{}\n{}",
         shell.contents, precondition.rust.contents, postcondition.rust.contents, facade
     );
     syn::parse_file(&source).map_err(|error| {
         vec![HarnessDiagnostic {
             code: HarnessErrorCode::InvalidGeneratedSyntax,
+            terminal_state: HarnessErrorCode::InvalidGeneratedSyntax.terminal_state(),
+            generation_code: Some(GenerationErrorCode::InvalidGeneratedSyntax),
             path: "generated.rust".to_owned(),
             message: error.to_string(),
         }]
     })?;
-    Ok(artifact(format!("src/generated/{base_symbol}.rs"), source))
+    let rust = artifact(format!("src/generated/{base_symbol}.rs"), source);
+    let revision_text = revision.to_string();
+    let input = length_delimited_identity(&[
+        requirement,
+        &revision_text,
+        request.precondition_clause.as_str(),
+        request.postcondition_clause.as_str(),
+        request.execution_point,
+        &precondition.rust.sha256,
+        &postcondition.rust.sha256,
+    ]);
+    generated_artifact_bundle(
+        &request.manifest,
+        request.requirement,
+        "generate_tristate_harness",
+        &base_symbol,
+        "typed-harness-request",
+        input.as_bytes(),
+        "generated-rust-harness",
+        "quire.codegen.rust-harness",
+        rust,
+    )
+    .map_err(|code| {
+        vec![HarnessDiagnostic {
+            code: HarnessErrorCode::ManifestGenerationFailed,
+            terminal_state: code.terminal_state(),
+            generation_code: Some(code),
+            path: "generated.manifest".to_owned(),
+            message: "harness derivation manifest could not be emitted".to_owned(),
+        }]
+    })
 }
 
 fn map_clause_diagnostics(
@@ -300,6 +414,8 @@ fn map_clause_diagnostics(
         .into_iter()
         .map(|diagnostic| HarnessDiagnostic {
             code: HarnessErrorCode::ClauseGenerationFailed,
+            terminal_state: diagnostic.terminal_state,
+            generation_code: Some(diagnostic.code),
             path: format!("{role}.{}", diagnostic.path),
             message: format!("{:?}: {}", diagnostic.code, diagnostic.message),
         })
@@ -421,6 +537,8 @@ fn oracle_arguments(
 fn binding_error(path: &str, message: &str) -> Vec<HarnessDiagnostic> {
     vec![HarnessDiagnostic {
         code: HarnessErrorCode::UnsupportedHarnessBinding,
+        terminal_state: HarnessErrorCode::UnsupportedHarnessBinding.terminal_state(),
+        generation_code: None,
         path: path.to_owned(),
         message: message.to_owned(),
     }]
@@ -437,6 +555,8 @@ fn generate_harness_shell(
     {
         return Err(HarnessDiagnostic {
             code: HarnessErrorCode::InvalidExecutionPoint,
+            terminal_state: HarnessErrorCode::InvalidExecutionPoint.terminal_state(),
+            generation_code: None,
             path: "execution_point".to_owned(),
             message: "execution point must be non-empty and contain no control characters"
                 .to_owned(),
@@ -567,6 +687,7 @@ where\n\
 /// Records and adapts one generated harness verdict for proptest.\n\
 fn {adapter_symbol}<'evidence, Input, State, Snapshot, Precondition, Invoke, Postcondition>(\n\
     report: &mut quire_contract_runtime::CampaignReport<'static>,\n\
+    expected_rejection: bool,\n\
     input: &Input,\n\
     state: &mut State,\n\
     snapshot: Snapshot,\n\
@@ -584,7 +705,19 @@ where\n\
     let verdict = {symbol}(\n\
         input, state, snapshot, precondition, invoke, postcondition, observations,\n\
     );\n\
-    quire_contract_runtime::proptest_adapter::adapt_recording(report, &verdict)\n\
+    let expectation_matches = if expected_rejection {{\n\
+        verdict.kind() == quire_contract_runtime::VerdictKind::RejectedPrecondition\n\
+    }} else {{\n\
+        verdict.kind() != quire_contract_runtime::VerdictKind::RejectedPrecondition\n\
+    }};\n\
+    let adapted = quire_contract_runtime::proptest_adapter::adapt_recording(report, &verdict);\n\
+    if !expectation_matches {{\n\
+        return Err(proptest::test_runner::TestCaseError::fail(format!(\n\
+            \"generated expected-domain mismatch: expected_rejection={{expected_rejection}} actual={{:?}}\",\n\
+            verdict.kind(),\n\
+        )));\n\
+    }}\n\
+    adapted\n\
 }}\n",
         env!("CARGO_PKG_VERSION"),
         revision.to_string(),
@@ -593,6 +726,8 @@ where\n\
 
     syn::parse_file(&source).map_err(|error| HarnessDiagnostic {
         code: HarnessErrorCode::InvalidGeneratedSyntax,
+        terminal_state: HarnessErrorCode::InvalidGeneratedSyntax.terminal_state(),
+        generation_code: Some(GenerationErrorCode::InvalidGeneratedSyntax),
         path: "generated.rust".to_owned(),
         message: error.to_string(),
     })?;
@@ -606,21 +741,28 @@ fn harness_symbol(
     precondition: &str,
     postcondition: &str,
 ) -> String {
-    let readable = requirement
-        .chars()
-        .map(|value| {
-            if value.is_ascii_alphanumeric() {
-                value.to_ascii_lowercase()
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
-    let identity = format!("{requirement}:{revision}:{precondition}:{postcondition}");
+    let readable = bounded_readable_component(requirement);
+    let revision_text = revision.to_string();
+    let identity =
+        length_delimited_identity(&[requirement, &revision_text, precondition, postcondition]);
     format!(
         "harness_{readable}_{revision}_{}",
         sha256(identity.as_bytes())
     )
+}
+
+fn to_upper_camel(value: &str) -> String {
+    value
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut characters = part.chars();
+            match characters.next() {
+                Some(first) => first.to_ascii_uppercase().to_string() + characters.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
 }
 
 fn artifact(path: String, contents: String) -> Artifact {

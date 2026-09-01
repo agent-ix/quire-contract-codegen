@@ -37,6 +37,9 @@ const SOURCE_MAP_SCHEMA: &[u8] = include_bytes!("../schemas/oracle-source-map-v1
 const RUST_ORACLE_SCHEMA: &[u8] = include_bytes!("../schemas/generated-rust-oracle-v1.schema.json");
 const ORACLE_SPEC: &[u8] = include_bytes!("../spec/functional/FR-001-deterministic-oracles.md");
 const GENERATOR_SOURCE: &[u8] = include_bytes!("oracle.rs");
+const HARNESS_SOURCE: &[u8] = include_bytes!("harness.rs");
+const STRATEGY_SOURCE: &[u8] = include_bytes!("strategy.rs");
+const HARNESS_SPEC: &[u8] = include_bytes!("../spec/functional/FR-002-tristate-proptest.md");
 const BUILD_SOURCE: &[u8] = include_bytes!("../build.rs");
 const LOCKFILE: &[u8] = include_bytes!("../Cargo.lock");
 
@@ -358,6 +361,18 @@ pub struct OracleArtifactBundle {
     pub manifest: Artifact,
 }
 
+/// Complete all-or-nothing result for one generated Rust artifact.
+///
+/// Harness and strategy slices do not currently emit clause-level source maps, but they retain the
+/// same PGM-01 producer, input, output, environment, provenance, and result identity as oracles.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedArtifactBundle {
+    /// Generated Rust source.
+    pub rust: Artifact,
+    /// Machine-readable derivation manifest.
+    pub manifest: Artifact,
+}
+
 struct RenderedExpression {
     source: String,
     implication_regions: Vec<(u32, u32)>,
@@ -593,7 +608,18 @@ fn generate_boolean_oracle_inner(
 }
 
 fn validate_manifest_context(request: &OracleRequest<'_>) -> Result<(), Vec<GenerationDiagnostic>> {
-    let context = &request.manifest;
+    if manifest_context_is_valid(&request.manifest) {
+        return Ok(());
+    }
+    Err(single_diagnostic(
+        request,
+        GenerationErrorCode::InvalidManifestContext,
+        "manifest.context",
+        "candidate revision, contribution method, reviewers, result, and requirement refs must satisfy PGM-01",
+    ))
+}
+
+pub(crate) fn manifest_context_is_valid(context: &ManifestContext<'_>) -> bool {
     let valid_revision = (40..=64).contains(&context.candidate_revision.len())
         && context
             .candidate_revision
@@ -622,25 +648,16 @@ fn validate_manifest_context(request: &OracleRequest<'_>) -> Result<(), Vec<Gene
                         .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
             })
         });
-    if !valid_revision
-        || !valid_contribution
-        || !valid_result
-        || !valid_reviewers
-        || context.result_summary.is_empty()
-        || context.requirement_refs.is_empty()
-        || context
+    valid_revision
+        && valid_contribution
+        && valid_result
+        && valid_reviewers
+        && !context.result_summary.is_empty()
+        && !context.requirement_refs.is_empty()
+        && !context
             .requirement_refs
             .iter()
             .any(|value| value.is_empty())
-    {
-        return Err(single_diagnostic(
-            request,
-            GenerationErrorCode::InvalidManifestContext,
-            "manifest.context",
-            "candidate revision, contribution method, reviewers, result, and requirement refs must satisfy PGM-01",
-        ));
-    }
-    Ok(())
 }
 
 pub(crate) fn dependency_parameters(
@@ -902,6 +919,130 @@ fn manifest(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn generated_artifact_bundle(
+    context: &ManifestContext<'_>,
+    requirement: &RequirementRef,
+    operation: &str,
+    stable_identity: &str,
+    input_role: &str,
+    input_bytes: &[u8],
+    output_role: &str,
+    output_schema: &str,
+    rust: Artifact,
+) -> Result<GeneratedArtifactBundle, GenerationErrorCode> {
+    if !manifest_context_is_valid(context) {
+        return Err(GenerationErrorCode::InvalidManifestContext);
+    }
+    let input_digest = sha256(input_bytes);
+    let identity = length_delimited_identity(&[
+        operation,
+        requirement.requirement().as_str(),
+        &requirement.revision().get().to_string(),
+        stable_identity,
+        &input_digest,
+    ]);
+    let record_digest = sha256(identity.as_bytes());
+    let parameters = format!(
+        "ir={IR_CANDIDATE_REVISION}\nruntime={RUNTIME_REVISION}\noperation={operation}\nmaximumSourceBytes={MAX_GENERATED_SOURCE_BYTES}\n"
+    );
+    let requirement_refs = context
+        .requirement_refs
+        .iter()
+        .map(|value| (*value).to_owned())
+        .collect::<BTreeSet<_>>();
+    let mut extensions = BTreeMap::new();
+    extensions.insert(
+        "dev.agent-ix.codegen".to_owned(),
+        CodegenExtension {
+            terminal_state: GenerationTerminalState::Generated,
+            generator_source_dirty: generator_source_is_dirty(),
+            generator_source_revision_available: env!("QUIRE_CODEGEN_SOURCE_REVISION_AVAILABLE")
+                == "true",
+            canonical_profile: "quire.codegen.request/v1".to_owned(),
+            expression_canonical_digest: input_digest.clone(),
+            ir_revision: IR_CANDIDATE_REVISION.to_owned(),
+            runtime_revision: RUNTIME_REVISION.to_owned(),
+            clause_id: stable_identity.to_owned(),
+            reviewer_role: "reviewer-of-record; not a GitHub approval".to_owned(),
+            maximum_source_bytes: MAX_GENERATED_SOURCE_BYTES,
+        },
+    );
+    let manifest_value = DerivationManifest {
+        schema_version: "quire.derivation-evidence/v1".to_owned(),
+        record_id: format!("{operation}:{record_digest}"),
+        recorded_at: env!("QUIRE_CODEGEN_RECORDED_AT").to_owned(),
+        producer: ProducerIdentity {
+            name: "quire-contract-codegen".to_owned(),
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+            source_revision: GENERATOR_SOURCE_REVISION.to_owned(),
+            executable_digest: digest(generator_implementation_digest()),
+            invocation: vec![operation.to_owned(), stable_identity.to_owned()],
+        },
+        inputs: vec![ManifestArtifact {
+            role: input_role.to_owned(),
+            uri: format!("urn:sha256:{input_digest}"),
+            media_type: "application/json".to_owned(),
+            schema: SchemaIdentity {
+                id: "quire.codegen.request".to_owned(),
+                version: "v1".to_owned(),
+                digest: digest(&sha256(b"quire.codegen.request/v1")),
+            },
+            content_digest: digest(&input_digest),
+        }],
+        backend: NoBackend {
+            kind: "none".to_owned(),
+            reason: "deterministic in-process Rust lowering; no external backend".to_owned(),
+        },
+        outputs: vec![ManifestArtifact {
+            role: output_role.to_owned(),
+            uri: rust.path.clone(),
+            media_type: "text/x-rust".to_owned(),
+            schema: SchemaIdentity {
+                id: output_schema.to_owned(),
+                version: "v1".to_owned(),
+                digest: digest(&sha256(output_schema.as_bytes())),
+            },
+            content_digest: digest(&rust.sha256),
+        }],
+        parameters_digest: digest(&sha256(parameters.as_bytes())),
+        environment: GenerationEnvironment {
+            target_triple: env!("QUIRE_CODEGEN_TARGET").to_owned(),
+            operating_system: env!("QUIRE_CODEGEN_TARGET_OS").to_owned(),
+            toolchain: env!("QUIRE_CODEGEN_TOOLCHAIN").to_owned(),
+            dependencies_digest: digest(lockfile_digest()),
+        },
+        provenance: GenerationProvenance {
+            repository: "https://github.com/agent-ix/quire-contract-codegen".to_owned(),
+            source_revision: GENERATOR_SOURCE_REVISION.to_owned(),
+            candidate_revision: context.candidate_revision.to_owned(),
+            contribution_method: context.contribution_method.to_owned(),
+            reviewers: context
+                .reviewers
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect(),
+        },
+        result: GenerationResult {
+            status: context.result_status.to_owned(),
+            summary: context.result_summary.to_owned(),
+            requirement_refs: requirement_refs.into_iter().collect(),
+        },
+        extensions,
+    };
+    let manifest_contents = deterministic_json(&manifest_value)
+        .map_err(|_| GenerationErrorCode::SerializationFailed)?;
+    let manifest = artifact(
+        format!(
+            "manifests/{}_{}.json",
+            bounded_readable_component(operation),
+            record_digest
+        ),
+        manifest_contents,
+    );
+    Ok(GeneratedArtifactBundle { rust, manifest })
+}
+
 fn node_name(kind: &ExpressionKind) -> &'static str {
     match kind {
         ExpressionKind::BooleanLiteral { .. } => "boolean_literal",
@@ -965,7 +1106,7 @@ fn rust_component(value: &str) -> String {
     result
 }
 
-fn readable_component(value: &str) -> String {
+pub(crate) fn bounded_readable_component(value: &str) -> String {
     let mut result = String::with_capacity(value.len());
     for byte in value.bytes() {
         if byte.is_ascii_alphanumeric() {
@@ -977,23 +1118,22 @@ fn readable_component(value: &str) -> String {
     if result.is_empty() || result.as_bytes()[0].is_ascii_digit() {
         result.insert(0, '_');
     }
-    result
+    result.chars().take(24).collect()
+}
+
+pub(crate) fn length_delimited_identity(values: &[&str]) -> String {
+    values
+        .iter()
+        .map(|value| format!("{}:{value}", value.len()))
+        .collect::<Vec<_>>()
+        .join(":")
 }
 
 pub(crate) fn oracle_symbol(requirement: &str, revision: u64, clause: &str) -> String {
-    let readable_requirement = readable_component(requirement)
-        .chars()
-        .take(24)
-        .collect::<String>();
-    let readable_clause = readable_component(clause)
-        .chars()
-        .take(24)
-        .collect::<String>();
-    let identity = format!(
-        "{}:{requirement}:{revision}:{}:{clause}",
-        requirement.len(),
-        clause.len()
-    );
+    let readable_requirement = bounded_readable_component(requirement);
+    let readable_clause = bounded_readable_component(clause);
+    let revision_text = revision.to_string();
+    let identity = length_delimited_identity(&[requirement, &revision_text, clause]);
     format!(
         "oracle_{readable_requirement}_{revision}_{readable_clause}_id_{}",
         sha256(identity.as_bytes())
@@ -1029,12 +1169,15 @@ fn generator_implementation_digest() -> &'static str {
         let mut hasher = Sha256::new();
         for value in [
             GENERATOR_SOURCE,
+            HARNESS_SOURCE,
+            STRATEGY_SOURCE,
             BUILD_SOURCE,
             LOCKFILE,
             PGM_SCHEMA,
             SOURCE_MAP_SCHEMA,
             RUST_ORACLE_SCHEMA,
             ORACLE_SPEC,
+            HARNESS_SPEC,
         ] {
             hasher.update(value.len().to_le_bytes());
             hasher.update(value);

@@ -5,9 +5,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    generate_tristate_harness, HarnessErrorCode, HarnessRequest, ManifestContext,
-    IR_CANDIDATE_REVISION,
+    generate_tristate_harness, DerivationManifest, GenerationTerminalState, HarnessErrorCode,
+    HarnessRequest, ManifestContext, IR_CANDIDATE_REVISION,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, DeclarationEnvironment, ExecutionPoint, Expression,
@@ -66,6 +67,15 @@ fn manifest_context() -> ManifestContext<'static> {
         result_summary: "test harness generated from typed Boolean clauses",
         requirement_refs: &["FR-002"],
     }
+}
+
+fn harness_function_name(source: &str) -> &str {
+    source
+        .lines()
+        .find(|line| line.starts_with("pub fn harness_") && !line.contains("_shell"))
+        .and_then(|line| line.strip_prefix("pub fn "))
+        .and_then(|signature| signature.split('<').next())
+        .unwrap()
 }
 
 fn typed_clauses() -> (DeclarationEnvironment, TypedExpression, TypedExpression) {
@@ -148,21 +158,44 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
     let first = generate_tristate_harness(&request).unwrap();
     let second = generate_tristate_harness(&request).unwrap();
     assert_eq!(first, second);
+    let derivation: DerivationManifest = serde_json::from_str(&first.manifest.contents).unwrap();
+    let manifest_value: serde_json::Value = serde_json::from_str(&first.manifest.contents).unwrap();
+    let schema: serde_json::Value = serde_json::from_str(include_str!(
+        "../schemas/pgm01-derivation-evidence-envelope-v1.schema.json"
+    ))
+    .unwrap();
+    let validator = JSONSchema::options()
+        .with_draft(Draft::Draft7)
+        .compile(&schema)
+        .unwrap();
+    let validation_errors = validator
+        .validate(&manifest_value)
+        .err()
+        .map(|errors| errors.map(|error| error.to_string()).collect::<Vec<_>>())
+        .unwrap_or_default();
+    assert!(validation_errors.is_empty(), "{validation_errors:?}");
+    assert_eq!(derivation.outputs[0].uri, first.rust.path);
+    assert_eq!(derivation.outputs[0].role, "generated-rust-harness");
+    assert!(first.rust.contents.starts_with("#![deny(missing_docs)]\n"));
     assert!(first
+        .rust
         .contents
-        .starts_with("// SPDX-License-Identifier: MIT OR Apache-2.0\n"));
-    assert!(first.contents.contains("let pre_state = snapshot(state);"));
-    assert!(first.contents.contains("oracle_fr_002_1_precondition_main"));
+        .contains("let pre_state = snapshot(state);"));
     assert!(first
+        .rust
+        .contents
+        .contains("oracle_fr_002_1_precondition_main"));
+    assert!(first
+        .rust
         .contents
         .contains("oracle_fr_002_1_postcondition_main"));
     assert!(
-        first.contents.find("if !precondition").unwrap()
-            < first.contents.find("invoke(input, state);").unwrap()
+        first.rust.contents.find("if !precondition").unwrap()
+            < first.rust.contents.find("invoke(input, state);").unwrap()
     );
     assert!(
-        first.contents.find("invoke(input, state);").unwrap()
-            < first.contents.find("if postcondition").unwrap()
+        first.rust.contents.find("invoke(input, state);").unwrap()
+            < first.rust.contents.find("if postcondition").unwrap()
     );
 
     let temporary = TemporaryDirectory::new("quire-generated-harness");
@@ -191,7 +224,7 @@ mod generated_tests {
     fn rejection_does_not_invoke_and_is_recorded() {
         let mut state = true;
         let mut observations = [blank(); 2];
-        let verdict = harness_fr_002_1_2f89c03f0df6788deed3fefbedc8619bb0293858d3c871c574ea3d2b9320657b(
+        let verdict = HARNESS_FN(
             false,
             &mut state,
             |_, _| panic!("rejected subject must not run"),
@@ -207,8 +240,9 @@ mod generated_tests {
             RevisionId::new("1"),
         ));
         let mut observations = [blank(); 2];
-        let result = harness_fr_002_1_2f89c03f0df6788deed3fefbedc8619bb0293858d3c871c574ea3d2b9320657b_proptest(
+        let result = HARNESS_FN_proptest(
             &mut report,
+            true,
             false,
             &mut state,
             |_, _| panic!("rejected subject must not run"),
@@ -219,6 +253,10 @@ mod generated_tests {
         assert_eq!(report.counts().rejected(), 1);
         assert_eq!(report.counts().failed(), 0);
         assert_eq!(report.counts().discarded(), 0);
+        assert!(HARNESS_FN_conclude_campaign(&report).is_err());
+        HARNESS_FN_record_discard(&mut report);
+        assert_eq!(report.counts().discarded(), 1);
+        assert!(HARNESS_FN_conclude_campaign(&report).is_err());
     }
 
     #[test]
@@ -229,7 +267,7 @@ mod generated_tests {
         ] {
             let mut state = true;
             let mut observations = [blank(); 2];
-            let verdict = harness_fr_002_1_2f89c03f0df6788deed3fefbedc8619bb0293858d3c871c574ea3d2b9320657b(
+            let verdict = HARNESS_FN(
                 true,
                 &mut state,
                 move |_, post| *post = next,
@@ -240,11 +278,53 @@ mod generated_tests {
             assert_eq!(verdict.context().execution_point, ExecutionPoint::new("handler:update"));
         }
     }
+
+    #[test]
+    fn accepted_campaign_concludes_with_retained_counts() {
+        let mut state = true;
+        let mut observations = [blank(); 2];
+        let mut mismatch_report = CampaignReport::new(ContractIdentity::new(
+            RequirementId::new("FR-002"),
+            RevisionId::new("1"),
+        ));
+        assert!(HARNESS_FN_proptest(
+            &mut mismatch_report,
+            true,
+            true,
+            &mut state,
+            |_, _| {},
+            &mut observations,
+        )
+        .is_err());
+        assert_eq!(mismatch_report.counts().accepted(), 1);
+
+        let mut observations = [blank(); 2];
+        let mut report = CampaignReport::new(ContractIdentity::new(
+            RequirementId::new("FR-002"),
+            RevisionId::new("1"),
+        ));
+        HARNESS_FN_proptest(
+            &mut report,
+            false,
+            true,
+            &mut state,
+            |_, _| {},
+            &mut observations,
+        )
+        .unwrap();
+        HARNESS_FN_record_discard(&mut report);
+        let summary = HARNESS_FN_conclude_campaign(&report).unwrap();
+        assert_eq!(summary.accepted, 1);
+        assert_eq!(summary.rejected, 0);
+        assert_eq!(summary.failed, 0);
+        assert_eq!(summary.discarded, 1);
+    }
 }
-"#;
+"#
+    .replace("HARNESS_FN", harness_function_name(&first.rust.contents));
     fs::write(
         temporary.0.join("src/lib.rs"),
-        format!("{}{}", first.contents, tests),
+        format!("{}{}", first.rust.contents, tests),
     )
     .unwrap();
     let output = Command::new(env!("CARGO"))
@@ -260,6 +340,140 @@ mod generated_tests {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+/// TC-004.
+#[test]
+fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings() {
+    let literal =
+        |value, at| Expression::new(ExpressionKind::BooleanLiteral { value }, span(at, at + 1));
+    let execution_pre = ExecutionPoint::Pre {
+        operation: AnchorName::new("update").unwrap(),
+    };
+    let execution_post = ExecutionPoint::Handler {
+        name: AnchorName::new("update").unwrap(),
+    };
+
+    let dependency_free_environment =
+        DeclarationEnvironment::new(requirement(), vec![], vec![], vec![]).unwrap();
+    let dependency_free_pre = dependency_free_environment
+        .check_expression(
+            &literal(true, 10),
+            &ValueType::Boolean,
+            &execution_pre,
+            true,
+        )
+        .unwrap();
+    let dependency_free_post = dependency_free_environment
+        .check_expression(
+            &literal(true, 11),
+            &ValueType::Boolean,
+            &execution_post,
+            true,
+        )
+        .unwrap();
+
+    let state_environment = DeclarationEnvironment::new(
+        requirement(),
+        vec![],
+        vec![ValueDeclaration::new(
+            SymbolName::new("state").unwrap(),
+            ValueDeclarationKind::State,
+            ValueType::Boolean,
+            span(12, 13),
+        )],
+        vec![],
+    )
+    .unwrap();
+    let state_pre = state_environment
+        .check_expression(
+            &literal(true, 13),
+            &ValueType::Boolean,
+            &execution_pre,
+            true,
+        )
+        .unwrap();
+    let state_post_expression = Expression::new(
+        ExpressionKind::ValueReference {
+            name: SymbolName::new("state").unwrap(),
+            observation: StateObservation::Post,
+        },
+        span(14, 15),
+    );
+    let state_post = state_environment
+        .check_expression(
+            &state_post_expression,
+            &ValueType::Boolean,
+            &execution_post,
+            true,
+        )
+        .unwrap();
+
+    let precondition = ClauseId::new("precondition-shape").unwrap();
+    let postcondition = ClauseId::new("postcondition-shape").unwrap();
+    let dependency_free = generate_tristate_harness(&HarnessRequest {
+        requirement: dependency_free_environment.owner(),
+        precondition_clause: &precondition,
+        postcondition_clause: &postcondition,
+        precondition: &dependency_free_pre,
+        postcondition: &dependency_free_post,
+        execution_point: "handler:dependency-free",
+        manifest: manifest_context(),
+    })
+    .unwrap();
+    let state_only = generate_tristate_harness(&HarnessRequest {
+        requirement: state_environment.owner(),
+        precondition_clause: &precondition,
+        postcondition_clause: &postcondition,
+        precondition: &state_pre,
+        postcondition: &state_post,
+        execution_point: "handler:state-only",
+        manifest: manifest_context(),
+    })
+    .unwrap();
+
+    for (name, artifact, invocation) in [
+        (
+            "dependency-free",
+            dependency_free,
+            "let verdict = HARNESS_FN(|| {}, &mut observations);",
+        ),
+        (
+            "state-only",
+            state_only,
+            "let mut state = false; let verdict = HARNESS_FN(&mut state, |state| *state = true, &mut observations);",
+        ),
+    ] {
+        let function = harness_function_name(&artifact.rust.contents);
+        let temporary = TemporaryDirectory::new(&format!("quire-generated-harness-{name}"));
+        fs::write(
+            temporary.0.join("Cargo.toml"),
+            "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3\", features = [\"proptest\"] }\n",
+        )
+        .unwrap();
+        let generated_test = format!(
+            "\n#[cfg(test)] mod generated_tests {{ use super::*; use quire_contract_runtime::{{ClauseId, ClauseKind, ClauseOutcome, Observation, VerdictKind}}; #[test] fn shape_executes() {{ let mut observations = [Observation::new(ClauseId::new(\"blank\"), ClauseKind::Guard, ClauseOutcome::NotEvaluated, None); 2]; {} assert_eq!(verdict.kind(), VerdictKind::Passed); }} }}\n",
+            invocation.replace("HARNESS_FN", function),
+        );
+        fs::write(
+            temporary.0.join("src/lib.rs"),
+            format!("{}{}", artifact.rust.contents, generated_test),
+        )
+        .unwrap();
+        let output = Command::new(env!("CARGO"))
+            .args(["test", "--offline", "--quiet"])
+            .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+            .env("RUSTFLAGS", "-Dwarnings")
+            .current_dir(&temporary.0)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "generated {name} harness did not compile and execute:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
 
 /// TC-003, TC-004.
@@ -279,6 +493,10 @@ fn tc_004_invalid_execution_point_is_a_structured_failure_without_artifact() {
     })
     .unwrap_err();
     assert_eq!(diagnostic[0].code, HarnessErrorCode::InvalidExecutionPoint);
+    assert_eq!(
+        diagnostic[0].terminal_state,
+        GenerationTerminalState::InvalidInput
+    );
     assert_eq!(diagnostic[0].path, "execution_point");
 }
 
@@ -356,5 +574,9 @@ fn tc_004_multiple_state_bindings_fail_closed() {
         diagnostics[0].code,
         HarnessErrorCode::UnsupportedHarnessBinding
     );
-    assert!(diagnostics[0].message.contains("at most one Boolean state"));
+    assert_eq!(diagnostics[0].path, "clauses.dependencies");
+    assert_eq!(
+        diagnostics[0].terminal_state,
+        GenerationTerminalState::Unsupported
+    );
 }

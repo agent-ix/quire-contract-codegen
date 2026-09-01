@@ -34,6 +34,11 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   precondition evaluation, subject invocation, and post-state evaluation.
 - Unsupported constraint forms shall produce a structured diagnostic.
 - Strategy generation shall not silently fall back to filtering.
+- Every generated harness campaign shall expose framework-discard recording and a terminal
+  conclusion that reads all counters and rejects an all-rejected/all-discarded run.
+- Generated expected-domain tags shall be executable checks against runtime tri-state verdicts.
+- Harness and strategy generation shall return deterministic source plus a PGM-01 derivation
+  manifest, or a structured non-generated terminal state with no partial bundle.
 
 ## Acceptance Criteria
 

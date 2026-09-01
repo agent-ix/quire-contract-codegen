@@ -94,12 +94,15 @@ fn expected_implementation_digest() -> String {
     let mut hasher = Sha256::new();
     for value in [
         include_bytes!("../src/oracle.rs").as_slice(),
+        include_bytes!("../src/harness.rs").as_slice(),
+        include_bytes!("../src/strategy.rs").as_slice(),
         include_bytes!("../build.rs").as_slice(),
         include_bytes!("../Cargo.lock").as_slice(),
         include_bytes!("../schemas/pgm01-derivation-evidence-envelope-v1.schema.json").as_slice(),
         include_bytes!("../schemas/oracle-source-map-v1.schema.json").as_slice(),
         include_bytes!("../schemas/generated-rust-oracle-v1.schema.json").as_slice(),
         include_bytes!("../spec/functional/FR-001-deterministic-oracles.md").as_slice(),
+        include_bytes!("../spec/functional/FR-002-tristate-proptest.md").as_slice(),
     ] {
         hasher.update(value.len().to_le_bytes());
         hasher.update(value);
@@ -268,16 +271,16 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
         first.rust.contents,
         include_str!("fixtures/generated_boolean_oracle.golden")
     );
-    assert!(!generated_boolean_oracle::oracle_fr_001_7_clause_main_id_8b66b9fc214a3463468a367a8df9b9f83fa4186fd7dff1c151462463d8081c64(true));
-    assert!(generated_boolean_oracle::oracle_fr_001_7_clause_main_id_8b66b9fc214a3463468a367a8df9b9f83fa4186fd7dff1c151462463d8081c64(false));
+    assert!(!generated_boolean_oracle::oracle_fr_001_7_clause_main_id_57741ce71ac28bb13911940353c3f67827c9429e1c21cc1becae9119641ab101(true));
+    assert!(generated_boolean_oracle::oracle_fr_001_7_clause_main_id_57741ce71ac28bb13911940353c3f67827c9429e1c21cc1becae9119641ab101(false));
     assert_eq!(
-        generated_boolean_oracle::ORACLE_FR_001_7_CLAUSE_MAIN_ID_8B66B9FC214A3463468A367A8DF9B9F83FA4186FD7DFF1C151462463D8081C64_IDENTITY
+        generated_boolean_oracle::ORACLE_FR_001_7_CLAUSE_MAIN_ID_57741CE71AC28BB13911940353C3F67827C9429E1C21CC1BECAE9119641AB101_IDENTITY
             .requirement
             .as_str(),
         "FR-001"
     );
     assert_eq!(
-        generated_boolean_oracle::ORACLE_FR_001_7_CLAUSE_MAIN_ID_8B66B9FC214A3463468A367A8DF9B9F83FA4186FD7DFF1C151462463D8081C64_CLAUSE.as_str(),
+        generated_boolean_oracle::ORACLE_FR_001_7_CLAUSE_MAIN_ID_57741CE71AC28BB13911940353C3F67827C9429E1C21CC1BECAE9119641AB101_CLAUSE.as_str(),
         "clause-main"
     );
 
