@@ -24,12 +24,29 @@ type: TestMatrix
 | FR-005 | FR-005-AC-2 | TC-001 | 🚧 Planned |
 | FR-005 | FR-005-AC-3 | Inspection | 🚧 Planned |
 | FR-005 | FR-005-AC-4 | TC-007 | 🚧 Planned |
+| FR-006 | FR-006-AC-1 | TC-008 | ✅ Covered |
+| FR-006 | FR-006-AC-2 | TC-009 | ✅ Covered |
+| FR-006 | FR-006-AC-3 | TC-010 | ✅ Covered |
+| FR-006 | FR-006-AC-4 | TC-011 | ✅ Covered |
+| FR-006 | FR-006-AC-5 | TC-012 | ✅ Covered |
+| FR-006 | FR-006-AC-6 | TC-013 | ✅ Covered |
 
 The current coverage selector expects a `Status` column while the TestMatrix structure requires
-`Coverage Status` (upstream spec-artifacts-process #77). Until that conflict is resolved, the
-foundation evidence test requires every functional, stakeholder, and test-case row to remain
-`🚧 Planned`; any transition is a human-reviewed matrix change and must replace that temporary
-control with backed-test verification.
+`Coverage Status` (upstream spec-artifacts-process #77). The local checker that used to compensate
+for that conflict was a second traceability implementation carrying a hand-copied matrix, and it went
+with the rest of the generic evidence machinery; the conflict itself is unresolved and is carried as
+an open unknown in `assurance/change-assurance.json`.
+
+Every FR-001 through FR-005, NFR, and StR row stays `🚧 Planned`. Those requirements describe
+semantic generation behaviour whose complete ticket scope has not been independently reviewed, and
+the shared-assurance migration does not review it. Promoting one of those rows is a human-reviewed
+matrix change.
+
+The FR-006 rows are the only ones this migration claims, and they are `✅ Covered` because TC-008
+through TC-013 are backed by tests in `tests/shared_assurance.rs` that invoke the gates rather than
+reimplementing them. FR-003 and FR-004 have no implementation at this revision at all, which is why
+they have no evidence suite and no proof obligation; their rows are planned in the strict sense that
+nothing has been built.
 
 ## Nonfunctional Requirement Coverage
 
@@ -59,11 +76,22 @@ control with backed-test verification.
 | TC-005 | Enforce Kani proof dependencies | Analysis | P0 | FR-003-AC-1 | 🚧 Planned |
 | TC-006 | Distinguish vacuity and unexecuted flow | Integration | P0 | FR-004-AC-1, FR-004-AC-2, FR-004-AC-3 | 🚧 Planned |
 | TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-003-AC-2, FR-005-AC-4 | 🚧 Planned |
+| TC-008 | Verify the shared component pins through the packaged matrix | Integration | P0 | FR-006-AC-1 | ✅ Covered |
+| TC-009 | Verify Quoin intake without Quoin or Quire executing a producer | Integration | P0 | FR-006-AC-2 | ✅ Covered |
+| TC-010 | Verify the sealed impact snapshot is the Quire export | Integration | P0 | FR-006-AC-3 | ✅ Covered |
+| TC-011 | Verify retained evidence is readable and unmoved | Integration | P0 | FR-006-AC-4, NFR-002-AC-1 | ✅ Covered |
+| TC-012 | Verify twelve verification outcomes stay distinguishable | Integration | P0 | FR-006-AC-5, NFR-002-AC-3 | ✅ Covered |
+| TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6 | ✅ Covered |
 
-All rows remain deliberately planned until their complete ticket scope is independently reviewed.
-The oracle draft now carries bound implementation symbols for TC-001 through TC-003; TC-002 remains
-partial because atomic publication is not implemented, and no row is promoted by this draft alone.
+TC-001 through TC-007 remain deliberately planned until their complete ticket scope is independently
+reviewed. The oracle draft carries bound implementation symbols for TC-001 through TC-003; TC-002
+remains partial because atomic publication is not implemented, and no row is promoted by that draft.
+
+TC-008 through TC-013 are the shared-assurance migration's own rows and are covered by named tests.
 
 ## Evidence Locations
 
-Each row is specified in the same-ID document under `spec/test/`; implementation evidence is pending.
+Each row is specified in the same-ID document under `spec/test/`. `spec/evidence/suites.md` is the
+suite registry: it names the command, tool and evidence kind for each suite whose results are
+transcribed. Implementation evidence for TC-001 through TC-007 is pending. TC-008 through TC-013 are
+backed by `tests/shared_assurance.rs`, whose `/// Trace:` comments are what Quire's census reads.

@@ -33,11 +33,22 @@ jobs:
       - name: Rust 1.75 compatibility
         run: cargo +1.75.0 check --lib
 
+      # These three versions are the ones the accepted Engineering Assurance
+      # compatibility matrix pins. The quoin version this step previously
+      # installed is one the matrix explicitly names incompatible, and ix-flow
+      # was absent entirely; assurance/pins.json records both, and
+      # scripts/check_shared_pins.py now fails on either.
+      #
+      # Everything resolves from the public registry. The internal mirror lags it
+      # and is not an oracle for whether a release landed. That rule is written
+      # down in assurance/pins.json rather than here, because the check that
+      # enforces it reads this file literally and would otherwise report the
+      # statement of the rule as a violation of it.
       - name: Validate specification and planning
         run: |
-          npm install --global @agent-ix/quire-cli@0.31.0 @agent-ix/quoin@0.22.5
+          npm install --global '@agent-ix/quire-cli@0.31.0' '@agent-ix/quoin@0.23.1' 'ix-flow@0.0.4'
           quoin module ensure-defaults
-          quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'
+          quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'
 
       - name: Unsafe audit
         run: bash scripts/check_unsafe_comments.sh

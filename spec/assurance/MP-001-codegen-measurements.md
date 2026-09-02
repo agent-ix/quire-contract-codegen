@@ -34,79 +34,107 @@ states, and injected publication failure points.
 
 ## Collection Procedure
 
-Foundation runs use `scripts/collect_foundation_evidence.sh`. They record the current toolchain and
-the explicit Rust 1.75 compatibility lane, validate requirements plus the typed plan bundle, and
-retain exact accepted or explicitly pending dependency identities. Every invoked foundation gate retains stdout,
-stderr, and its numeric exit status; the builder derives outcomes from those records, represents
-missing records as inconclusive, and rejects zero-status records whose retained transcripts contain
-command-specific failure markers. The collector self-test exercises nonzero propagation and checksum
-fixed-point detection; the builder never manufactures a pass from a command name. The foundation
-builder derives and verifies the digest of the vendored PGM-01 envelope schema; unit tests exercise
-dependency-pin agreement, envelope identities, roles, digests, extensions, pin mismatch failure,
-outcome truthfulness, and accepted/rejected local schema validation. These tests establish
-evidence-tooling behavior only and do not back a semantic TestMatrix row.
-Every zero-exit transcript also requires command-specific positive corroboration. Formatting uses an
-explicit `FMT_CHECK_PASSED` marker after `cargo fmt --check`; Rust test transcripts must report at
-least 2 passed tests, the Python runner must report at least 60 passed tests, and every positive
-transcript must retain at least 8 bytes. These shared floors are defined by
-`scripts/evidence_policy.py` and mutation-tested, so an empty or reduced transcript is inconclusive.
-`scripts/run_python_tests.py` recursively loads and executes every `unittest` case, including cases in
-nested non-package directories, and fails if zero tests execute. Implementation plans will extend this with a stable
-candidate runner that records source and dependency revisions, tool/backend versions, configuration,
-corpus/input digests, repeated bundle digests, compile/proptest/Kani/coverage results, fault-injection
-outcomes, differential dispositions, and output digests beneath `evidence/`.
+One target runs producers: `make assurance-inputs`. Everything downstream consumes the files it
+writes and refuses to create them, because a consumer that can produce its own input can produce a
+green run out of nothing.
+
+Five producers publish declared structured results.
+
+`cargo run --example generation_conformance` walks the bounded generation corpus and publishes
+`codegen.generation-conformance/v1`: one row per case, carrying the case's outcome, the Interface-001
+terminal state it reached, the diagnostic code it produced, the number of declared checks that held,
+and the floor those checks must meet. A case that holds every check it ran but runs fewer than its
+floor is `vacuous`, not `pass` — a corpus can go green by getting smaller, and the floor is what
+stops that. The corpus covers the oracle, harness and strategy slices and the rejection cases that
+keep `unsupported` and `invalid-input` apart, and a census row reports how many distinct diagnostics
+and terminal states the corpus actually reached.
+
+`scripts/check_upstream_pins.py --json` publishes `codegen.upstream-identity/v1`: for each declared
+upstream, the revision the crate's own constant states, the revision the dependency declaration pins,
+and the revision the lockfile resolved. The lockfile value is read from that package's own stanza
+rather than by searching the file for the manifest's answer, because a search for the answer can only
+confirm it.
+
+`quire coverage --scope . --json` is the authoritative static specification, obligation and coverage
+export. Quire exports; it never executes a producer.
+
+`scripts/legacy_evidence_view.py --json` reads every retained envelope through the pinned
+Engineering Assurance mapping and reports what came back.
+
+`rustup run 1.75.0 cargo check --locked --all-targets --message-format=json` is the MSRV build, whose
+verdict is read from cargo's own `build-finished` message rather than from its transcript.
+
+`scripts/assurance_chain.py` drives the official chain over those files. It projects
+`assurance/change-assurance.json` into Quoin's FR-063 record body, deriving only the digests that
+file's own `derived_fields` names; seals one FR-064 proof attestation per obligation, stating the
+result read out of the producer's bytes; hands those exact bytes to Quoin's intake; and asks for an
+FR-065 verification receipt. It runs `quoin` and nothing else.
 
 ## Evidence Verification Control
 
-`scripts/verify_foundation_evidence.py` is the independent retained-record verifier. It requires the
-out-of-record `evidence/ANCHORS` census, deterministically maintained by
-`scripts/update_evidence_anchors.py`, verifies each anchored checksum manifest and every nested
-historical/remote file, rejects added files and directories, re-derives every outcome value from its
-numeric status plus retained transcripts, re-derives the envelope result, checks manifest and
-envelope artifact links, verifies the complete manifest artifact census and exact limitations,
-re-derives the parameter digest from the controlling source and Python test files, and binds the
-vendored PGM-01 schema to the digest retained from the external checkout. It also re-runs and exactly
-compares all seven retained tool identities (Cargo, rustc, MSRV rustc, Python, jsonschema, installed
-Python packages, and Quire provenance) and re-derives the command declaration from the collector.
-Behavioral mutation tests
-cover outcome derivation and census, parameter and artifact census, result status and summary,
-limitations, revision availability, symlink refusal, historical disposition, and availability
-enumeration. A missing anchor or empty authoritative record set is
-verification unavailable, not success. An anchor is a committed review boundary, not proof that the
-originally retained bytes were semantically correct.
+Retention, integrity checking, audit, attestation and receipts are Quoin's. Static specification,
+obligation and coverage facts are Quire's. The read-only mapping of retained bytes is Engineering
+Assurance's. This repository retains no evidence of its own and computes no aggregate verdict.
 
-Collection verifies the new record directly but does not rewrite `evidence/ANCHORS`. Updating the
-anchor census and running the complete verifier are separate, explicit review-boundary steps before
-the evidence commit.
+Three things are measured rather than asserted.
 
-Every quarantined envelope carries a machine-readable `historicalDisposition` extension whose
-`retracted` status removes any embedded historical result from the authoritative claim set. The
-verifier requires that exact disposition on every historical envelope; the recursively anchored
-historical tree prevents it from being removed without detection.
+The execution boundary. `tests/shared_assurance.rs` runs the chain three times: once with every
+producer replaced by a logging stub, requiring the log to be empty; once with `quoin` stubbed,
+requiring the chain to fail and the log to be non-empty; and once with `quire` stubbed, requiring
+every request made of Quire to be a static read. The second run is the control — without it, an empty
+log in the first is equally consistent with `PATH` never being consulted at all.
 
-`scripts/validate_json_schema.py` fails closed unless every package in
-`requirements-evidence.txt` and every required format checker is present. The collector records the
-installed package set. `scripts/check_coverage_status.py` gates contradicted status rows and ignored
-trace-bearing Rust tests, rejects matrix acceptance/test identifiers absent from the minted trace
-population, and treats every reported diagnostic reason as inconclusive. While upstream status-column
-classification remains unavailable it emits an explicit inconclusive marker, so a zero process exit
-cannot become a passed evidence outcome. The foundation collector accepts that one disclosed pending
-coverage outcome as a usable pending record, but never relabels it as conclusive.
-`scripts/check_unsafe_comments.sh` owns the unsafe-code census, and
-`scripts/build_foundation_envelope.py` owns deterministic outcome/result derivation and assembly.
-`scripts/check_failure_propagation.py` pins trusted local tool identities, rejects Make execution
-modifiers that suppress work, verifies the exact composite prerequisite census, substitutes a
-failing command at every mandatory recipe position, and requires substantive output from the
-coverage, Python-test, and retained-evidence verification entry points.
-The parse-time Make control rejects dry-run, touch, and ignore-error modes, included Makefiles, and
-command-line or in-file `MAKEFLAGS` overrides while explicitly allowing
-parallelism and load-limit flags (`-j`/`--jobs`, `-l`/`--load-average`, and jobserver descriptors).
-The local unsafe-comment audit is a strengthened fork of the seven-repository baseline: it scans
-tests, benches, and examples in addition to `src`, retains a reviewed baseline, and emits an
-explicit success marker. Those improvements should be upstreamed by the shared policy owner.
+The declared command. Every proof obligation's declared argv must appear verbatim in
+`make -n assurance-inputs`. A declared command that is not the executed command is a lie inside a
+sealed attestation, and it is the kind of lie nothing downstream can catch, because Quoin records
+what the caller says the command was.
+
+The read-only claim over retained bytes. The compatibility view digests the whole `evidence/` tree
+before and after its run and fails if one byte moved, and separately asks Git whether any retained
+byte differs from what was committed. Those are two different claims and they are reported
+separately: "this process wrote nothing" is not "these are the bytes that were committed". Six
+mutation probes each remove one load-bearing check and require the census to notice; a probe that
+crashes is a broken probe, not a detection, and is not counted as one.
+
+## Qualification Integrity
+
+A green `make ci` is a statement about the tree as committed. It is not a statement about a tree whose
+Makefile has been edited.
+
+Make can be told to ignore failure, and one line does it: `.IGNORE:` at the top of the file, a `-`
+prefix on a recipe line, or an assignment to `SHELL` each make a recipe report success without its
+exit status being consulted. The 334-line recipe-failure policer that used to catch this went with
+the collector it was protecting.
+
+MEASURED_IGNORE_PARAGRAPH
+
+What that reaches and what it does not. Quoin binds retained inputs by digest and the chain derives
+every attested result from the producer's own bytes, so a Makefile that lies about running a producer
+yields an absent or unreadable input and the chain errors rather than passing. The gates that feed
+nothing into the chain are simply neutered. `tests/shared_assurance.rs` asserts that the committed
+Makefile declares no such directive, which protects a reviewer reading a diff; it does not make this
+file's exit code trustworthy on a tree where it has been edited, because under `.IGNORE:` that test
+also runs, also fails, and is also swallowed. The residual is recorded rather than closed, and
+tracked as agent-ix/quire-contract-codegen#14.
 
 ## Interpretation
 
 Exact digest equality is required only within a declared supported profile. A missing backend, draft
 dependency, unsupported fixture, inconclusive proof, or differential result remains a limitation, not
-a pass. Foundation evidence cannot support a semantic implementation or release decision.
+a pass.
+
+Two limitations are load-bearing and are stated here rather than left to be inferred.
+
+FR-003 and FR-004 — Kani obligation lowering and vacuity evidence — are specified and have no
+implementation at this revision. There is no suite for them and no proof obligation over them,
+because a proof obligation whose subject does not exist is the most complete false green available.
+Their TM-001 rows stay 🚧 Planned.
+
+The retained `evidence/` tree is 44 envelopes of `quire.derivation-evidence/v1`, a family the pinned
+mapping does not cover. Every one of them reads as `incompatible` with the reason "unknown PGM-01
+schema version". That is the mapping declining to interpret a shape it has never seen; it is
+reported, not converted into a pass, and not converted into a defect of those records. Filed upstream
+as agent-ix/engineering-assurance#21.
+
+This measurement plan supports neither a semantic implementation decision nor a release decision, and
+confers no validation, accreditation, or certification.
