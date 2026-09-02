@@ -1132,12 +1132,20 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
             );
         }
     }
-    // Re-derived rather than inherited. The floor was `> 20` against a walked
-    // population of 42 non-markdown readable files, leaving 22 of headroom. This
-    // change deletes 14 of them — the reader, its 11 fixtures and the two frozen
-    // schemas — and the extensionless and `.yaml` fix above adds 2, so the
-    // population is 30. The old floor would have kept passing while a third of
-    // the inspectable surface disappeared.
+    // Re-derived rather than inherited, and every figure below was taken from
+    // the walk above rather than from a document describing the layout.
+    //
+    // The floor was `> 20` against a walked population of 42 non-markdown
+    // readable files, leaving 22 of headroom. This change removes 14 of them —
+    // the reader, its 11 fixtures and the two frozen schemas — and the
+    // extensionless admission adds 2, `Makefile` and `.gitignore`. 42 − 14 + 2 =
+    // 30, and 30 is what the walk reports. The old floor would have kept passing
+    // while a third of the inspectable surface disappeared.
+    //
+    // `.yaml` adds nothing to that count today: this repository's only workflow
+    // is `.yml`. It is admitted so that renaming a workflow to the other spelling
+    // cannot carry it out of the census, which is a different job from making the
+    // number bigger, and it is not credited with any of the 2.
     assert!(
         inspected >= 26,
         "the executable and configuration census is unexpectedly small ({inspected}, \
@@ -1146,9 +1154,20 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
 
     // A total-only floor is the wrong instrument on a tree this small. `scripts`
     // and `tests` are five files each and `src` is four, so an entire directory
-    // could vanish and move the total by less than ordinary churn would — 30 to
-    // 25 is still above any floor loose enough to be usable. The per-directory
-    // guard is what actually catches a directory disappearing.
+    // could vanish and move the total by less than ordinary churn would.
+    //
+    // The guard below is built by *discovery* — the directories are whatever the
+    // walk actually found — and then compared against a declared set. That
+    // ordering is the whole point, and it was arrived at by probing the obvious
+    // version and watching it fail. A guard whose directory list is the same list
+    // the walk iterates cannot catch that list shrinking: deleting an entry
+    // removes the directory from the check and from the walk at the same moment,
+    // and the test stays green. Measured here before this form replaced it —
+    // removing the `scripts` entry left `tc_013` passing.
+    //
+    // So the names are asserted first and the counts second. A directory that
+    // empties out fails the set comparison; an entry deleted from the declared
+    // set fails it too; and a directory that merely shrinks fails its floor.
     let mut per_directory: BTreeMap<String, usize> = BTreeMap::new();
     for path in &sources {
         let Ok(relative) = path.strip_prefix(&root) else {
@@ -1157,27 +1176,42 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         if relative.extension().and_then(|value| value.to_str()) == Some("md") {
             continue;
         }
-        let top = match relative.components().count() {
-            0 | 1 => "<root>".to_owned(),
-            _ => relative
+        let top = if relative.components().count() <= 1 {
+            "<root>".to_owned()
+        } else {
+            relative
                 .components()
                 .next()
                 .map(|component| component.as_os_str().to_string_lossy().into_owned())
-                .unwrap_or_else(|| "<root>".to_owned()),
+                .unwrap_or_else(|| "<root>".to_owned())
         };
         *per_directory.entry(top).or_default() += 1;
     }
-    for (directory, floor, measured) in [
-        ("src", 4, 4),
-        ("scripts", 4, 5),
-        ("tests", 4, 5),
-        ("schemas", 3, 3),
-        ("assurance", 2, 2),
-        ("<root>", 7, 9),
-    ] {
-        let seen = per_directory.get(directory).copied().unwrap_or(0);
+
+    // Declared, and every floor beside it was measured from this walk rather than
+    // read off a document describing the layout.
+    let declared: BTreeMap<&str, (usize, usize)> = BTreeMap::from([
+        ("<root>", (7usize, 9usize)),
+        (".github", (1, 1)),
+        ("assurance", (2, 2)),
+        ("examples", (1, 1)),
+        ("schemas", (3, 3)),
+        ("scripts", (4, 5)),
+        ("src", (4, 4)),
+        ("tests", (4, 5)),
+    ]);
+    let found: BTreeSet<&str> = per_directory.keys().map(String::as_str).collect();
+    let expected: BTreeSet<&str> = declared.keys().copied().collect();
+    assert_eq!(
+        found, expected,
+        "the set of directories the census walks changed. A directory that stopped being \
+         walked, or an entry removed from the declared set, both land here — which is the \
+         failure a per-directory floor built from the walk's own list cannot see"
+    );
+    for (directory, (floor, measured)) in &declared {
+        let seen = per_directory.get(*directory).copied().unwrap_or(0);
         assert!(
-            seen >= floor,
+            seen >= *floor,
             "the census saw {seen} inspectable files under {directory}, below its floor of \
              {floor} (measured {measured} when derived). A directory that empties out is how \
              a reference census stops proving anything while its total still looks healthy"

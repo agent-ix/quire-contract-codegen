@@ -91,6 +91,24 @@ the retained records that were deleted. A filename is not a dependency, and dele
 every generation. The reviewer verified the split independently from scratch and confirmed all three
 kept schemas are `include_bytes!` and feed `executable_digest`, so removing any one fails to compile.
 
+The per-filename census, run across `src/ scripts/ tests/ assurance/ examples/ Makefile Cargo.toml
+build.rs .github/` at `origin/main`:
+
+| Schema | Hits | Where |
+|---|---|---|
+| `pgm01-derivation-evidence-envelope-v1` | **11** | `src/oracle.rs:35` (`include_bytes!` as `PGM_SCHEMA`); `tests/oracle_generation.rs` ×3 including the `executable_digest` input at :101; `tests/harness_generation.rs:164`; `tests/strategy_generation.rs:103`; plus the pins register and prose |
+| `generated-rust-oracle-v1` | **6** | `src/oracle.rs:37` (`include_bytes!`); `tests/oracle_generation.rs` ×3; the pins register; the live-schema assertion |
+| `oracle-source-map-v1` | **5** | `src/oracle.rs:36` (`include_bytes!`); `tests/oracle_generation.rs` ×2; the pins register; the live-schema assertion |
+| `foundation-evidence-input-v1` | **2** | `assurance/pins.json:50` (the freeze register) and `tests/shared_assurance.rs:1021` (the freeze test's own digest pin). **Zero executable consumers** |
+| `foundation-evidence-manifest-v1` | **2** | `assurance/pins.json:55` and `tests/shared_assurance.rs:1025`. **Zero executable consumers** |
+
+The two deleted schemas have exactly one hit in the register that records the freeze and one in the
+test that enforces it, and nothing else — the signature of an artifact kept alive only by the
+bookkeeping about it. The three kept schemas are each loaded at compile time by the generator.
+
+Separately, all 15 distinct `include_str!`/`include_bytes!` targets in the crate were resolved
+against the tree at the final head; every one exists. No include site was orphaned by the deletion.
+
 ## Findings
 
 Fourteen from the independent adversarial review of `00aa054`, plus three raised by the campaign
@@ -125,6 +143,8 @@ material and both made `make ci` fail.
 | FND-519 | high | `collect_sources` filtered on extension, and `Makefile` has no extension — so the reference census never saw the one file a Make target can live in. Appending the deleted `compat-view` target verbatim left the census green. `.yaml` was also absent, and GitHub accepts `.github/workflows/*.yaml` | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-520 | medium | three claims corrected everywhere a reader looks were left stale in `assurance/change-assurance.json`, which is the file that gets sealed and travels into the receipt | `assurance/change-assurance.json` | correct-requirement-no-evidence |
 | FND-521 | medium | the re-derived floor was total-only. `scripts` and `tests` are five files each and `src` is four, so a whole directory could vanish and move the total by less than ordinary churn | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-522 | high | the first per-directory guard read its floors from a hardcoded list, so deleting an entry removed the directory from the check and left the test green. A guard built from the same list the walk uses cannot catch that list shrinking | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-523 | low | the floor derivation credited `.yaml` with part of the population increase; both added files are extensionless | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 
 ## Dispositions
 
@@ -140,8 +160,13 @@ material and both made `make ci` fail.
 | FND-513 | **ACCEPTED**. An artifact of the uncommitted tree at review time, not of the change. The gate is revision-bound and is green on the committed tree |
 | FND-514 | **FIXED**. Not claimed closed. The epic records that it closes as moot once the campaign repositories have dropped their records, and it names four |
 | FND-515 | **FIXED**. A new probe truncates a real row of the real producer stream mid-object and calls the real adapter, requiring an error that names the line. Mutation-tested in both directions — see below |
-| FND-516 | **FIXED**. Floor re-derived from the tree as it stands: `>= 24` against a measured 28, with the derivation in the comment |
-| FND-517, FND-518 | **FIXED**. Both were defects in the FND-503..009 fixes and both were caught by `make ci` before merge |
+| FND-516 | **FIXED**. Floor re-derived from the tree as it stands: `>= 26` against a measured 30, with the arithmetic in the comment and every input taken from the walk |
+| FND-517, FND-518 | **FIXED**. Both were defects in the FND-503..FND-509 fixes and both were caught by `make ci` before merge |
+| FND-519 | **FIXED**. `collect_sources` now admits extensionless sources by name (`Makefile`, `Dockerfile`, `.gitignore`) and `.yaml` alongside `.yml`. Relayed by the campaign coordinator from a sibling's reviewer; reproduced here before fixing, and mutation-tested after |
+| FND-520 | **FIXED**. See "The sealed record, re-read last" above |
+| FND-521 | **FIXED**. A per-directory guard was added alongside the total, then rebuilt on discovery after probing found the defect below |
+| FND-522 | **FIXED**. The first per-directory guard read its floors from a hardcoded list and looked each directory up with `unwrap_or(0)`. Deleting the `scripts` entry from that list left `tc_013` green. The guard now compares the **discovered** directory set against a declared one with `assert_eq!` before any floor is applied, so a directory that stops being walked and an entry removed from the declaration both land on the same assertion |
+| FND-523 | **FIXED**. The floor derivation credited `.yaml` with part of the population increase. Measured: both added files are `Makefile` and `.gitignore`, and `.yaml` adds nothing here because this repository's only workflow is `.yml`. It is admitted so a rename cannot carry a workflow out of the census, and it is no longer credited with any of the 2 |
 
 ## Assurance Context
 
@@ -226,7 +251,9 @@ specific defect it exists to catch, and each was observed to go red:
 | `tc_013` reference census | the FND-501 stale `legacy_evidence_view.py` put back in the `make -n ci` list | **red** |
 | `tc_013` reference census | the deleted `compat-view` target appended to the `Makefile` | **red** — and **green** before FND-519 was fixed, which is how FND-519 was found |
 | `tc_013` reference census | a `.github/workflows/probe.yaml` naming the deleted reader | **red** |
-| `tc_013` per-directory floor | two files moved out of `scripts/` | **red** |
+| `tc_013` per-directory floor | two files moved out of `scripts/` (5 → 3) | **red**, via the directory floor |
+| `tc_013` directory-set guard | the `scripts` entry deleted from the declared set | **red** — and **green** against the first version of the guard, which is how FND-522 was found |
+| `tc_013` total floor | the whole of `scripts/` moved out (30 → 24) | **red** |
 | `make pins` digest check | one byte appended to `engineering_assurance/compatibility.py` | **exit 1**, naming the digest |
 
 It counts no verification state, so it does not put `malformed` back in the census by way of an error

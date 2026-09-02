@@ -186,7 +186,7 @@ acceptance criterion:
 | FND-603 | **FIXED**. The TC-011 sentence is struck and no weaker substitute is put in its place |
 | FND-604 | **FIXED** in all five. `planning/foundation-gap-analysis.md` is **ACCEPTED** unchanged as a dated historical record |
 | FND-605 | **FIXED**. The load-bearing clause is the live-schema assertion over three present files, plus a reference census over 28 files; the absence clause corroborates rather than carries |
-| FND-606 | **FIXED**. Floor re-derived at `>= 26` against a measured 30, plus a per-directory guard, because `scripts` and `tests` are five files each and a whole directory vanishing moves the total by less than ordinary churn |
+| FND-606 | **FIXED**. Floor re-derived at `>= 26` against a measured 30, plus a directory-set guard and per-directory floors. The first per-directory guard read its floors from a hardcoded list and could not catch that list shrinking; it was probed, found green on a deleted entry, and rebuilt on discovery — SR-005 FND-522. Every figure was taken from the walk: 42 − 14 + 2 = 30, and the walk reports 30 |
 | FND-609 | **FIXED**. `collect_sources` admits extensionless sources by name and `.yaml` alongside `.yml`. Reproduced before fixing: the deleted target appended to the `Makefile` left the census green |
 | FND-610 | **FIXED**. The sealed record was re-read last against every claim corrected elsewhere; SR-005 tabulates the three |
 | FND-607 | **ACCEPTED**. Recorded in FR-006-AC-5, MP-001, `assurance/README.md`, `CLAUDE.md` and a TC-012 absence assertion. It is a reduction, and it is stated as one |
