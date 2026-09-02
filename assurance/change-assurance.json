@@ -1,7 +1,7 @@
 {
   "schema_version": "quire-contract-codegen.change-assurance-declaration/v1",
-  "purpose": "What this repository states about the change under issue #18: the deletion of the deprecated PGM-01 derivation-evidence envelope schema, which the issue-16 change kept as a live output contract on a justification that did not hold -- src/oracle.rs bound it with include_bytes! and used it only as one of ten byte blobs feeding the generator identity digest, and nothing validated against it. Removing it moved that identity digest, deliberately and with no consumers to break. It follows the same authority as the issue-16 deletion of the retained evidence tree and everything that existed only to serve it, under the preservation constraint the repository owner released for the pre-stable phase on 2026-09-02 (the \"Preservation constraint released for the pre-stable phase\" section of agent-ix/engineering-assurance#7). This is a new record rather than a revision of the issue-13 shared-assurance migration record: it is a different change under a different authority, and reusing issue-13's identity would present this content as revision 1 of that declaration. revision is 1 and parent_digest is null because this record has no predecessor under its own id; the issue-13 record was sealed only into an ignored store under target/ and was never persisted, so there is no durable digest to name as a parent and none is invented.",
-  "not_an_envelope": "Quoin's packaged change-assurance-record-v1, proof-attestation-v1, and verification-receipt-v1 schemas are the shapes. This file projects into the record body Quoin requires and derives nothing beyond the digests its own derived_fields names. It is not a local evidence envelope, it retains nothing, and it computes no verdict.",
+  "purpose": "What this repository states about the change under issue #20: the migration of every generated artifact off the deprecated PGM-01 evidence envelope and onto Quoin's packaged ProofAttestationV1. The envelope's schema was deleted under issue #18, so its shape was held only by a serde struct with deny_unknown_fields and by field-by-field assertions in three integration tests -- a format emitted with no published contract at all, and, as recorded by the campaign owner in the issue that commissioned this change, the last one still produced anywhere in the eight-repository campaign -- a fact this repository cannot verify from inside itself and does not claim to have. It is not renamed: a repository-owned manifest under a new schema version would be the same divergence wearing a different name, and the repository owner has ruled that out. What each generated artifact now carries is the shared shape without `digest` and without `retained_output`, because `quoin change-assurance seal-attestation` derives both and refuses a body that supplies either; the generator produces and Quoin seals, which is the same division of labour scripts/assurance_chain.py already uses for the four proof obligations below. This is a new record rather than a revision of the issue-18 record: it is a different change, and reusing issue-18's identity would present this content as revision 1 of that declaration. revision is 1 and parent_digest is null because this record has no predecessor under its own id; the issue-18 record was sealed only into an ignored store under target/ and was never persisted, so there is no durable digest to name as a parent and none is invented.",
+  "not_an_envelope": "Quoin's packaged change-assurance-record-v1, proof-attestation-v1, and verification-receipt-v1 schemas are the shapes -- for this record, and now for every artifact the generator emits. This file projects into the record body Quoin requires and derives nothing beyond the digests its own derived_fields names. It is not a local evidence envelope, it retains nothing, and it computes no verdict.",
   "derived_fields": [
     "subject.base_revision and impact_snapshot.revision come from the candidate revision the caller names.",
     "source_connections[].revision is that same candidate revision; source_connections[].digest is read from the bytes at the declared path in `sources`.",
@@ -20,20 +20,24 @@
     "SUR-001": "spec/evidence/suites.md",
     "MP-001": "spec/assurance/MP-001-codegen-measurements.md",
     "AA-001": "spec/assurance/AA-001-codegen-argument.md",
-    "assurance-pins": "assurance/pins.json"
+    "assurance-pins": "assurance/pins.json",
+    "interface-001": "spec/interface/interface-001-codegen-api.md"
   },
   "record": {
     "schema_version": 1,
     "record_type": "change_assurance",
-    "record_id": "quire-contract-codegen/issue-18",
+    "record_id": "quire-contract-codegen/issue-20",
     "revision": 1,
     "parent_digest": null,
     "subject": {
       "repository": "agent-ix/quire-contract-codegen",
       "scope": [
         "CLAUDE.md",
+        "Cargo.toml",
+        "README.md",
         "assurance",
-        "schemas",
+        "build.rs",
+        "examples",
         "spec",
         "src",
         "tests"
@@ -79,6 +83,10 @@
       {
         "source_id": "assurance-pins",
         "kind": "other"
+      },
+      {
+        "source_id": "interface-001",
+        "kind": "api"
       }
     ],
     "impact_snapshot": {
@@ -89,6 +97,24 @@
     },
     "definition": {
       "requirements": [
+        {
+          "id": "FR-006-AC-7",
+          "statement": "No executable or configuration surface in this repository names the deprecated evidence format: neither its schema version string -- caught by its stem in both the hyphenated and the underscored spelling -- nor any of the eleven public serde types that stated that shape before its schema was deleted under issue #18. Two carve-outs, both named rather than left implicit. Markdown is outside the census: the planning documents, the reviews and CLAUDE.md are the record of what was deprecated and have to be able to name it. So is this file, which the census exempts wholesale because its job is to say what a change deleted -- so this file does not spell the format's version string either, which is the only way the criterion holds over the surface its own test cannot see.",
+          "source_ids": [
+            "FR-006",
+            "NFR-002"
+          ]
+        },
+        {
+          "id": "NFR-002-AC-1",
+          "statement": "Every emitted artifact records the required tool, input, schema, backend, configuration and output identity, in Quoin's packaged ProofAttestationV1 rather than a format this repository owns. The seventh item, the digest identity of the output bytes, is no longer recorded by the generator and is established at seal instead: `retained_output.digest` is computed by `quoin change-assurance seal-attestation` from the bytes on disk. NFR-002's statement and acceptance criterion are amended by this change to say so, rather than left standing over an artifact that no longer satisfies them. The emitted body is the packaged schema without `digest` and without `retained_output`, the two fields that command derives and refuses from a caller. Conformance is measured, not declared: TC-001 seals all four emitted body shapes -- oracle Rust, oracle source map, harness and strategy -- through the real CLI and validates each sealed result against the schema `quoin change-assurance schema` publishes, with format assertion switched on and with controls for the validator, for the byte binding, for sealing determinism and for the refusal that makes the two omissions a contract.",
+          "source_ids": [
+            "NFR-002",
+            "FR-001",
+            "FR-002",
+            "interface-001"
+          ]
+        },
         {
           "id": "FR-006-AC-1",
           "statement": "The adopted component versions are classified by the packaged Engineering Assurance compatibility matrix, not by a local restatement of it, and no install line in this repository names a version the matrix calls incompatible.",
@@ -135,7 +161,7 @@
       "preservation_constraints": [
         {
           "id": "PRESERVE-no-retained-evidence",
-          "statement": "This repository retains no evidence of its own and reintroduces none. The evidence/ tree it previously held -- 2,205 files carrying 44 envelopes of quire.derivation-evidence/v1, which the pinned compatibility mapping refused as an unknown PGM-01 schema version -- is deleted by this change, together with the reader that mapped it, its fixtures, the PROOF-legacy-compatibility obligation, the compat-view target, and the two schemas frozen only because retained records named them by SHA-256. The authority is the repository owner's 2026-09-02 release of the preservation constraint for the pre-stable phase, recorded in the \"Preservation constraint released for the pre-stable phase\" section of agent-ix/engineering-assurance#7; the epic's completion criterion and mandatory control were amended before this change. Nothing was rewritten, backdated or re-sealed: FR-006-AC-4, TC-011, SUITE-005 and the obligation were removed rather than restated over a smaller tree. The constraint re-applies unchanged when this repository moves toward stable releases, and evidence retained under it from that point is immutable.",
+          "statement": "This repository retains no evidence of its own and reintroduces none. The evidence/ tree it previously held -- 2,205 files carrying 44 envelopes of the deprecated PGM-01 evidence format, which the pinned compatibility mapping refused as an unknown schema version. That format's version string is deliberately not spelled anywhere in this file: FR-006-AC-7 requires no configuration surface to name it, this file is a configuration surface, and it is exempt from the census that measures the criterion -- so naming it here would be a violation nothing could see -- is deleted by this change, together with the reader that mapped it, its fixtures, the PROOF-legacy-compatibility obligation, the compat-view target, and the two schemas frozen only because retained records named them by SHA-256. The authority is the repository owner's 2026-09-02 release of the preservation constraint for the pre-stable phase, recorded in the \"Preservation constraint released for the pre-stable phase\" section of agent-ix/engineering-assurance#7; the epic's completion criterion and mandatory control were amended before this change. Nothing was rewritten, backdated or re-sealed: FR-006-AC-4, TC-011, SUITE-005 and the obligation were removed rather than restated over a smaller tree. The constraint re-applies unchanged when this repository moves toward stable releases, and evidence retained under it from that point is immutable.",
           "source_ids": [
             "NFR-002",
             "FR-006"
@@ -143,7 +169,7 @@
         },
         {
           "id": "PRESERVE-deterministic-generation",
-          "statement": "The deterministic Boolean oracle, tri-state harness, and shaped proptest strategy slices keep their byte-identical regeneration, their dual-licence SPDX identity, their requirement/clause traceability, their bounded source rendering and 1,048,576-byte per-clause limit, their source-region maps, and their derivation manifests. Every generated artifact still records the digest of its own bytes.",
+          "statement": "The deterministic Boolean oracle, tri-state harness, and shaped proptest strategy slices keep their byte-identical regeneration, their dual-licence SPDX identity, their requirement/clause traceability, their bounded source rendering and 1,048,576-byte per-clause limit, and their source-region maps. The generated Rust and the generated source maps are byte-for-byte what they were: this change alters no lowering. What changes is the evidence emitted beside them. The `manifests/<symbol>.json` artifact is replaced by `attestations/<symbol>.<role>.json`, and an oracle now emits two of them because a proof attestation binds one retained output and an oracle produces two artifacts. Every field remains a build-time constant or a function of the request, so regeneration stays byte-identical. The claim that every generated artifact records the digest of its own bytes is deliberately NOT restated: the deprecated envelope carried the generator's own SHA-256 of its own output, which is a self-check that can only ever agree with itself, and the shared shape puts that binding in `retained_output`, which Quoin computes from the bytes on disk when it seals. TC-001 measures the replacement, with a control showing one appended byte moves the retained digest. Ten further fields go with it and are listed here rather than left to a diff: the crate's semantic version (still in the generated Rust header, so recoverable), the input's role, media type and schema identity, the backend's free-text reason, the output's media type -- restored as `--output-media-type` in the attested command rather than left to whoever seals -- the harness and strategy output schema version and digest, the always-`generated` terminal state extension, and the reviewer-role prose. `observed_at` is the generator's own source-commit timestamp, frozen at build so that regeneration is byte-identical; it is not an observation of when generation ran, and the interface contract says so.",
           "source_ids": [
             "FR-001",
             "FR-002",
@@ -153,7 +179,7 @@
         },
         {
           "id": "PRESERVE-generation-diagnostics",
-          "statement": "Every declared GenerationErrorCode, HarnessErrorCode and StrategyErrorCode keeps the Interface-001 terminal state it declares, and a rejection still arrives with no partial artifact bundle. Generated, unsupported, invalid-input, backend-unavailable, io-failed and inconclusive stay six distinct terminal states; unsupported and invalid-input in particular are not permitted to collapse into one another.",
+          "statement": "Every declared GenerationErrorCode, HarnessErrorCode and StrategyErrorCode keeps the Interface-001 terminal state it declares, and a rejection still arrives with no partial artifact bundle. Generated, unsupported, invalid-input, backend-unavailable, io-failed and inconclusive stay six distinct terminal states; unsupported and invalid-input in particular are not permitted to collapse into one another. The attestation's `result` enum has four values and does not displace them: a bundle exists only when generation succeeded, so an attestation only ever states `passed`, and every other terminal state arrives in a diagnostic that no attestation accompanies. Three codes are renamed with the vocabulary they name, and two of the three are externally visible because the conformance producer publishes them: GenerationErrorCode's invalid_manifest_context becomes invalid_attestation_context and keeps invalid-input as its terminal state, and HarnessErrorCode's and StrategyErrorCode's ManifestGenerationFailed each become AttestationGenerationFailed and keep inconclusive.",
           "source_ids": [
             "FR-001",
             "NFR-002"
@@ -161,7 +187,7 @@
         },
         {
           "id": "PRESERVE-upstream-identity",
-          "statement": "The exact IR and runtime revisions this crate lowers against agree across the crate's own constants, the dependency declarations, and the lockfile, and every generated manifest continues to record them.",
+          "statement": "The exact IR and runtime revisions this crate lowers against agree across the crate's own constants, the dependency declarations, and the lockfile, and every emitted proof attestation continues to record them -- by value in the attested command rather than folded into a parameters digest, which states strictly more than the digest could.",
           "source_ids": [
             "NFR-002",
             "FR-001"
@@ -176,7 +202,7 @@
         },
         {
           "id": "PRESERVE-planned-matrix",
-          "statement": "Every TM-001 row for FR-001 through FR-005, NFR-001, NFR-002 and StR-001 stays 🚧 Planned. Promoting a row is a human-reviewed matrix change and this change does not make one. This change adds no row. It removes two -- the FR-006-AC-4 row and the TC-011 row -- because the acceptance criterion and the test case they name are deleted with the evidence they asserted over, and an orphan row would report as unbacked. No other row's status is touched.",
+          "statement": "Every TM-001 row for FR-001 through FR-005, NFR-001, NFR-002 and StR-001 stays 🚧 Planned. Promoting a row is a human-reviewed matrix change and this change does not make one. This change adds one row -- FR-006-AC-7, verified by TC-013 -- and removes none. `quire coverage --scope . --json` reports backed 17 of 54 at this revision and backed 16 of 53 at the base revision, an empty status_lies list on both sides, and the same 22 unbacked rows on both sides: the added row is backed by a real tracking tag and nothing became unbacked as a side effect. Row text is edited where it named the deprecated format; existing row identities are untouched, which is what the coverage binding reads. An earlier draft of this constraint said the change adds no row and restated the base figure as holding on both sides; both were false and an adversarial review caught them.",
           "source_ids": [
             "TM-001",
             "AA-001"
@@ -187,6 +213,24 @@
           "statement": "Hosted CI remains workflow_dispatch only, is not dispatched by this change, and no workflow file is modified by it.",
           "source_ids": [
             "NFR-002"
+          ]
+        },
+        {
+          "id": "PRESERVE-no-second-evidence-schema",
+          "statement": "This change mints no schema. It does not rename the deprecated evidence format, does not add a document under schemas/, and does not reimplement Quoin's canonicalisation or its BLAKE3 digest so that the generator could seal its own attestations -- which is what emitting `digest` and `retained_output` from a domain crate would have required, and is the local identity framework FR-006-AC-6 forbids. The two documents under schemas/ stay exactly two: generated-rust-oracle-v1 and oracle-source-map-v1 are domain output contracts describing the generated artifacts themselves, not evidence about them, and both remain named by the generator, named by schema identifier and digest in the command of every oracle-slice attestation, and validated against in TC-001. The harness and strategy slices name a schema identifier -- `quire.codegen.rust-harness/v1`, `quire.codegen.rust-strategy/v1` -- for which no schema document exists, and state no digest. The deprecated envelope filled that slot with the SHA-256 of the identifier string, which is the digest of a name rather than of a schema; stating nothing is the honest replacement and it is recorded here rather than glossed as if both slices named a schema.",
+          "source_ids": [
+            "FR-006",
+            "NFR-002",
+            "interface-001"
+          ]
+        },
+        {
+          "id": "PRESERVE-no-claims-about-people",
+          "statement": "The deprecated envelope carried reviewer logins, a contribution method, a free-text result summary and requirement references, all supplied by the caller. Neither shared schema has a field for any of them and they are dropped rather than rehomed into the one open map the attestation has. Requirement references belong to the record's own proof_obligations[].obligation_ids, which is where this repository's four obligations already carry them, and the result summary maps onto that obligation's own `statement`. Reviewer identity belongs to the ix-flow decision event a verification receipt binds, where the packaged receipt schema carries a single `recorded_actor` rather than a list -- so the rehoming is partial and is stated as partial. The contribution method has no field in any of the three packaged schemas and is dropped outright, not rehomed. A generated file asserting who reviewed it was a claim the generator had no basis for, and NFR-002-AC-4 already forbids release-approval claims. TC-001 asserts the emitted bytes carry none of the four.",
+          "source_ids": [
+            "NFR-002",
+            "FR-001",
+            "interface-001"
           ]
         }
       ],
@@ -300,14 +344,32 @@
         },
         {
           "id": "UNKNOWN-make-is-not-a-trust-root",
-          "statement": "A green `make ci` attests to the tree as committed, not to a tree whose Makefile has been edited. Measured on this repository at the shared-assurance migration's candidate revision (issue #13, merged as bbd5e67) with three injected defects (a rustfmt violation, a failing test assertion, and an upstream constant the crate does not declare): the control exits 2 at fmt-check, the first of eleven ci prerequisites, having run only that one; with `.IGNORE:` prepended the same tree exits 0, runs all eleven, and fails seven of them -- fmt-check, spec, lint, msrv, upstream-identity, test and assurance-chain -- each printing its diagnostic and none failing the build. assurance-chain is in that list because the chain did notice: the upstream producer's rows became not-computed, the attestation said so because the bytes said so, and the scenario requiring every producer to have reported success went red for exit 1. Make discarded it. Anything that feeds the chain is protected by digest binding and by results derived from producer bytes; the gates that feed nothing into the chain are neutered, and the structural replacement does not reach them. tests/shared_assurance.rs asserts the committed Makefile declares no such directive, which protects a diff review and not an exit code -- under .IGNORE: that test also runs, also fails, and is also swallowed. Recorded, not closed; no policer target was re-added. Filed as agent-ix/quire-contract-codegen#14. The measurement is not re-taken here and is not restated: this change leaves the ci prerequisite list at the same eleven targets and none of the seven that failed, so the counts still describe the tree. Recorded rather than closed, and no execution-control guard was re-added, by owner decision. Tracked as agent-ix/quire-contract-codegen#14.",
+          "statement": "A green `make ci` attests to the tree as committed, not to a tree whose Makefile has been edited. Measured on this repository at the shared-assurance migration's candidate revision (issue #13, merged as bbd5e67) with three injected defects (a rustfmt violation, a failing test assertion, and an upstream constant the crate does not declare): the control exits 2 at fmt-check, the first of eleven ci prerequisites, having run only that one; with `.IGNORE:` prepended the same tree exits 0, runs all eleven, and fails seven of them -- fmt-check, spec, lint, msrv, upstream-identity, test and assurance-chain -- each printing its diagnostic and none failing the build. assurance-chain is in that list because the chain did notice: the upstream producer's rows became not-computed, the attestation said so because the bytes said so, and the scenario requiring every producer to have reported success went red for exit 1. Make discarded it. Anything that feeds the chain is protected by digest binding and by results derived from producer bytes; the gates that feed nothing into the chain are neutered, and the structural replacement does not reach them. tests/shared_assurance.rs asserts the committed Makefile declares no such directive, which protects a diff review and not an exit code -- under .IGNORE: that test also runs, also fails, and is also swallowed. Recorded, not closed; no policer target was re-added. Filed as agent-ix/quire-contract-codegen#14. The measurement is not re-taken here and is not restated: this change leaves the ci prerequisite list at the same eleven targets and none of the seven that failed, so the counts still describe the tree. Recorded rather than closed, and no execution-control guard was re-added, by owner decision. Tracked as agent-ix/quire-contract-codegen#14. One qualification this change adds: the `test` target is one of the eleven and one of the seven, and it now requires the pinned Quoin CLI on PATH, because TC-001 measures the emitted attestation against the tool that owns its shape. An absent CLI is a test failure and never a skip, so this does not create a new way for the lane to report a green it did not earn.",
+          "disposition": "open",
+          "owner": "agent-ix/quire-contract-codegen"
+        },
+        {
+          "id": "UNKNOWN-attestation-proof-ids-are-generator-owned",
+          "statement": "The four proof_id values a generated attestation states (PROOF-codegen-generated-rust-oracle, PROOF-codegen-oracle-source-map, PROOF-codegen-generated-rust-harness, PROOF-codegen-generated-rust-strategy) are fixed by the generator, one per output role. A consuming package whose sealed record declares different obligation ids cannot bind these attestations to it without restating them. Letting the caller supply the ids was considered and not done: one attestation context serves two outputs of a single oracle generation, so a caller-supplied id would have to be composed with a role anyway, and a composed identity is a format. Recorded rather than closed; there is no consumer at this revision to measure the cost against.",
+          "disposition": "open",
+          "owner": "agent-ix/quire-contract-codegen"
+        },
+        {
+          "id": "UNKNOWN-record-digest-is-unverifiable-here",
+          "statement": "`record_digest` is checked for shape and not for existence: this crate has no store to resolve it against and must not acquire one. A caller can therefore emit attestations naming a record that was never sealed. That is not silently absorbed -- `quoin change-assurance receipt` refuses an attestation whose record digest does not resolve, which is where the check belongs. Both this repository's own test suite and its conformance corpus use the all-zero digest for exactly this reason: it is the one 64-hexadecimal string no sealed record can have, so neither can be mistaken for a real binding.",
+          "disposition": "open",
+          "owner": "agent-ix/quire-contract-codegen"
+        },
+        {
+          "id": "UNKNOWN-attested-command-is-not-runnable",
+          "statement": "The `command.argv` a generated attestation declares names no program that can be run. Lowering happens in process, Cargo.toml declares a library and no binary, and the cli_generate operation interface-001 specifies is unimplemented, so argv[0] is the crate name and argv[1] is a function name. The four hand-written obligations in this file declare real runnable argv; the generated ones do not, and the two are not alike. The deprecated envelope had the same property in producer.invocation, so nothing regressed -- but a proof attestation's command exists so a reader can re-run the proof, and this one cannot be re-run. Recorded rather than closed: inventing a runnable-looking argv for a program that does not exist would be worse than an honest description of an in-process call. It closes when FR-005's CLI lands.",
           "disposition": "open",
           "owner": "agent-ix/quire-contract-codegen"
         }
       ]
     },
     "review_workflow": {
-      "run_id": "quire-contract-codegen-issue-18",
+      "run_id": "quire-contract-codegen-issue-20",
       "decision_event_kind": "change_assurance.review_decided"
     }
   }

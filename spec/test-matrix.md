@@ -29,6 +29,7 @@ type: TestMatrix
 | FR-006 | FR-006-AC-3 | TC-010 | ✅ Covered |
 | FR-006 | FR-006-AC-5 | TC-012 | ✅ Covered |
 | FR-006 | FR-006-AC-6 | TC-013 | ✅ Covered |
+| FR-006 | FR-006-AC-7 | TC-013 | ✅ Covered |
 
 The current coverage selector expects a `Status` column while the TestMatrix structure requires
 `Coverage Status` (upstream spec-artifacts-process #77). The local checker that used to compensate
@@ -68,7 +69,7 @@ nothing has been built.
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
-| TC-001 | Reproduce artifacts and manifests | Integration | P0 | FR-001-AC-1, FR-001-AC-3, FR-005-AC-2, NFR-001-AC-1, NFR-002-AC-1, NFR-002-AC-2 | 🚧 Planned |
+| TC-001 | Reproduce artifacts and attestations | Integration | P0 | FR-001-AC-1, FR-001-AC-3, FR-005-AC-2, NFR-001-AC-1, NFR-002-AC-1, NFR-002-AC-2 | 🚧 Planned |
 | TC-002 | Compile and publish atomically | Integration | P0 | FR-001-AC-2, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3 | 🚧 Planned |
 | TC-003 | Reject unsupported inputs explicitly | Integration | P0 | FR-001-AC-4, FR-003-AC-3, NFR-002-AC-3 | 🚧 Planned |
 | TC-004 | Preserve shaped proptest strategies | Property | P0 | FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4 | 🚧 Planned |
@@ -79,7 +80,7 @@ nothing has been built.
 | TC-009 | Verify Quoin intake without Quoin or Quire executing a producer | Integration | P0 | FR-006-AC-2 | ✅ Covered |
 | TC-010 | Verify the sealed impact snapshot is the Quire export | Integration | P0 | FR-006-AC-3 | ✅ Covered |
 | TC-012 | Verify the demonstrable verification outcomes stay distinguishable | Integration | P0 | FR-006-AC-5, NFR-002-AC-3 | ✅ Covered |
-| TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6 | ✅ Covered |
+| TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6, FR-006-AC-7 | ✅ Covered |
 
 TC-001 through TC-007 remain deliberately planned until their complete ticket scope is independently
 reviewed. The oracle draft carries bound implementation symbols for TC-001 through TC-003; TC-002

@@ -61,6 +61,80 @@ export. Quire exports; it never executes a producer.
 `rustup run 1.75.0 cargo check --locked --all-targets --message-format=json` is the MSRV build, whose
 verdict is read from cargo's own `build-finished` message rather than from its transcript.
 
+Every generated artifact carries a proof-attestation body, and that body's conformance to the shared
+shape is measured rather than declared. `tests/oracle_generation.rs` fetches
+`proof-attestation-v1.schema.json` from `quoin change-assurance schema` — the bytes the sealing and
+verification code was written against, never a local copy — seals each emitted body over the artifact
+it accompanies through the real `quoin change-assurance seal-attestation`, and validates what comes
+back against that schema. Three controls sit beside it, because the assertion alone would be
+satisfied by a schema that accepts everything and by a sealer that hashes nothing: a sealed
+attestation with its `record_digest` replaced by a non-digest must be rejected by the validator; one
+appended byte in the retained output must move `retained_output.digest`; and a body that states
+`retained_output` itself must be refused by Quoin, which is what makes the omission of that field and
+of `digest` the shared contract rather than a local shortcut.
+
+Two of the eleven fields a proof attestation declares come from the caller; the generator states the
+other nine from what it can see. The two are the sealed record digest and the candidate revision, and
+both are checked before any artifact exists: `record_digest` against the shared schema's own digest pattern,
+and `candidate_revision` against a 40-to-64 character lowercase hexadecimal rule that is deliberately
+stricter than the shared schema's `minLength: 1`. Each rule is probed on its own against a binding
+that is valid apart from the one field under test, with a control requiring the fully valid binding
+to be accepted; a single joint probe over several bad fields shows only that some rule fired.
+
+The attestation's `result` is derived and not supplied. A bundle exists only when generation
+succeeded, so `passed` is the only honest answer, and the deprecated envelope's caller-supplied result
+status permitted a cleanly generated artifact to carry `rejected` or `timed-out`. The six
+Interface-001 terminal states are unaffected: they live in the diagnostic that arrives instead of a
+bundle, and no attestation ever accompanies one.
+
+Every check the migration to the shared shape added or repointed was measured by introducing the
+defect it exists to catch and observing it go red. Twenty-two defects, each landing on a different
+assertion, and the list is written out so the count can be re-derived rather than taken on trust:
+
+1. the attestation's schema version moved off `1`;
+2. its record type moved off `proof_attestation`;
+3. a body that states `retained_output` itself;
+4. the output schema digest dropped from the attested command;
+5. the IR revision dropped from it;
+6. the backend discriminator dropped from it;
+7. the output media type dropped from it;
+8. the canonical profile misreported in it;
+9. an input digest naming bytes other than the ones lowered;
+10. a reviewer identity reintroduced through the environment map;
+11. the record-digest half of the binding rule removed;
+12. the candidate-revision half removed;
+13. the deprecated format's name reintroduced in a Rust source file;
+14. one of the deleted serde types reintroduced by name;
+15. both attestations of one bundle claiming one path;
+16. the caller's binding ignored in favour of a different constant;
+17. the caller's binding ignored in favour of the constants its callers already use;
+18. the attestation emitted for the other artifact of the bundle;
+19. the derived result moved off `passed`;
+20. an archive build supplying a recorded time that is not RFC 3339;
+21. the harness body's schema version moved;
+22. the strategy body's record type moved.
+
+One of those probes was measured wrong the first time and is recorded here because the correction is
+the interesting part. "The caller's record digest ignored" was injected by substituting a *different*
+constant, which the conformance corpus caught on an equality check. An adversarial review then
+substituted the *same* constants the corpus supplies — the all-zero digest and `IR_CANDIDATE_REVISION`,
+both of which the generator already has — so the caller's binding was ignored completely and every
+test in this repository stayed green with 9 of 9 corpus cases passing. A value check cannot see that.
+What replaced it is differential: two generations with two different bindings, requiring exactly those
+two fields to move and everything else to stay identical. That form fails for any mutant, whatever
+constants it picks.
+
+Each defect was **committed** before its gate was run, and that detail is the measurement rather than
+an aside. `build.rs` reads `git status`, so an uncommitted edit sets `QUIRE_CODEGEN_SOURCE_DIRTY` and
+TC-001 fails on its dirty-tree assertion before reaching the assertion under test. A first pass of
+this exercise left the edits in the working tree and reported four defects "caught" by a check that
+had nothing to do with any of them.
+
+Two of these gates were also observed red by accident before they were finished, which is worth
+recording because it is stronger evidence than a deliberate probe: naming the deprecated format in a
+doc comment in `tests/shared_assurance.rs`, and then again in one in `tests/oracle_generation.rs`,
+both turned the reference census red on the first run after the name was added to it.
+
 The adapter's undecodable-bytes arm is measured rather than assumed. A probe truncates a real row of
 the real producer stream mid-object, calls the real adapter, and requires it to raise an error naming
 the truncated line — pre-adapter, because that is the only point at which the bytes have not yet been

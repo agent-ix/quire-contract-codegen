@@ -1,10 +1,6 @@
 //! Deterministic, fail-closed lowering for the first Boolean-oracle slice.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Write as _,
-    sync::OnceLock,
-};
+use std::{collections::BTreeMap, fmt::Write as _, sync::OnceLock};
 
 use quire_contract_ir::{
     BooleanOperator, CanonicalProfile, ClauseId, DependencyIdentity, DependencyKind, Expression,
@@ -52,25 +48,32 @@ pub struct OracleRequest<'a> {
     pub clause: &'a ClauseId,
     /// Validated typed expression for the clause root.
     pub expression: &'a TypedExpression,
-    /// Caller-owned provenance and bounded result claim for the emitted manifest.
-    pub manifest: ManifestContext<'a>,
+    /// Caller-owned binding for the attestations emitted with this bundle.
+    pub attestation: AttestationContext<'a>,
 }
 
-/// Caller-owned PGM-01 provenance and result fields for one generated bundle.
+/// Caller-owned binding shared by every attestation emitted with one bundle.
+///
+/// Both fields are the consuming assurance process's to state, because neither is
+/// knowable to a generator: the record is sealed by the process that reviews the
+/// change, and the candidate revision is the revision that process is reviewing.
+/// The other nine fields a proof attestation declares — the command, the tool, the
+/// environment, the time and the result — are stated here and are never accepted
+/// from a caller.
+///
+/// "Stated", not "observed", and the distinction matters for one of them.
+/// `observed_at` is the generator's own source-commit timestamp, frozen at build so
+/// that regeneration stays byte-identical; it is not an observation of when
+/// generation ran, and a consumer generating months later emits an attestation
+/// whose time predates the generation. Verification receipts derive staleness from
+/// `candidate_revision` rather than from this field, so nothing downstream is
+/// misled — but calling it an observation would be.
 #[derive(Clone, Copy, Debug)]
-pub struct ManifestContext<'a> {
-    /// Candidate revision against which the generated artifact is evaluated.
+pub struct AttestationContext<'a> {
+    /// Digest of the sealed change-assurance record these attestations bind to.
+    pub record_digest: &'a str,
+    /// Candidate revision the generated artifact is offered as evidence about.
     pub candidate_revision: &'a str,
-    /// PGM-01 contribution method (`human`, `agent-assisted`, `generated`, or `mixed`).
-    pub contribution_method: &'a str,
-    /// Accountable reviewers; these are evidence identities, not implicit approvals.
-    pub reviewers: &'a [&'a str],
-    /// PGM-01 result status chosen by the consuming assurance process.
-    pub result_status: &'a str,
-    /// Bounded result summary chosen by the consuming assurance process.
-    pub result_summary: &'a str,
-    /// Requirements supported by this result, supplied by the consuming package.
-    pub requirement_refs: &'a [&'a str],
 }
 
 /// Interface-001 terminal state for a generation result.
@@ -105,13 +108,13 @@ pub enum GenerationErrorCode {
     UnsupportedObligations,
     /// Two input identities would claim the same generated name.
     NameCollision,
-    /// Caller-supplied evidence provenance or result context is invalid.
-    InvalidManifestContext,
+    /// The caller-supplied attestation binding is invalid.
+    InvalidAttestationContext,
     /// The bounded output resource would be exceeded.
     ResourceLimitExceeded,
     /// Generated tokens did not parse as a Rust source file.
     InvalidGeneratedSyntax,
-    /// A deterministic manifest or source-map value could not be encoded.
+    /// A deterministic attestation or source-map value could not be encoded.
     SerializationFailed,
 }
 
@@ -120,7 +123,7 @@ impl GenerationErrorCode {
     #[must_use]
     pub const fn terminal_state(self) -> GenerationTerminalState {
         match self {
-            Self::NonBooleanRoot | Self::NameCollision | Self::InvalidManifestContext => {
+            Self::NonBooleanRoot | Self::NameCollision | Self::InvalidAttestationContext => {
                 GenerationTerminalState::InvalidInput
             }
             Self::UnsupportedExpression
@@ -186,74 +189,36 @@ pub struct SourceRegion {
     pub clause_id: String,
 }
 
-/// SHA-256 identity used by the PGM-01 envelope.
+/// The command a proof attestation declares (`ProofAttestationV1.command`).
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct DigestIdentity {
-    /// Digest algorithm.
-    pub algorithm: String,
-    /// Lowercase hexadecimal digest value.
-    pub value: String,
+pub struct AttestationCommand {
+    /// Argument vector, rendering the in-process invocation and every parameter it used.
+    pub argv: Vec<String>,
+    /// Directory the argv is stated relative to.
+    pub working_directory: String,
 }
 
-/// Versioned schema identity used by a manifest artifact.
+/// The tool a proof attestation declares (`ProofAttestationV1.tool`).
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct SchemaIdentity {
-    /// Stable schema name.
-    pub id: String,
-    /// Schema version.
+pub struct AttestationTool {
+    /// Producing repository.
+    pub identity: String,
+    /// Exact generator revision, in the 40-hexadecimal form the shared schema admits.
     pub version: String,
-    /// Schema content identity.
-    pub digest: DigestIdentity,
+    /// Digest over the lowering implementation, build script, lockfile, output schemas, and specs.
+    pub configuration_digest: String,
 }
 
-/// PGM-01 producer identity for the in-process generator.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct ProducerIdentity {
-    /// Producer name.
-    pub name: String,
-    /// Crate version.
-    pub version: String,
-    /// Exact Git revision used to build the generator.
-    pub source_revision: String,
-    /// Digest over the lowering implementation and dependency lock.
-    pub executable_digest: DigestIdentity,
-    /// Stable in-process invocation description.
-    pub invocation: Vec<String>,
-}
-
-/// PGM-01 input or output artifact identity.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct ManifestArtifact {
-    /// Semantic artifact role.
-    pub role: String,
-    /// Artifact URI or bundle-relative path.
-    pub uri: String,
-    /// Artifact media type.
-    pub media_type: String,
-    /// Artifact schema identity.
-    pub schema: SchemaIdentity,
-    /// Artifact content identity.
-    pub content_digest: DigestIdentity,
-}
-
-/// Explicit identity for in-process lowering without an external backend.
+/// The build environment a generation was observed in (`ProofAttestationV1.environment`).
+///
+/// The shared schema accepts any object of scalars here. This crate emits a fixed
+/// set of them, so that a field going missing is a compile error rather than a
+/// quietly smaller map.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct NoBackend {
-    /// PGM-01 no-backend discriminator.
-    pub kind: String,
-    /// Reason no external backend participates.
-    pub reason: String,
-}
-
-/// Deterministic build environment identity.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct GenerationEnvironment {
+pub struct AttestationEnvironment {
     /// Compilation target triple.
     pub target_triple: String,
     /// Compilation target operating system.
@@ -261,114 +226,96 @@ pub struct GenerationEnvironment {
     /// Rust compiler identity.
     pub toolchain: String,
     /// Exact Cargo lockfile digest.
-    pub dependencies_digest: DigestIdentity,
-}
-
-/// Source provenance for the generator invocation.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct GenerationProvenance {
-    /// Generator repository.
-    pub repository: String,
-    /// Exact producer revision.
-    pub source_revision: String,
-    /// Candidate revision reviewed by this draft.
-    pub candidate_revision: String,
-    /// Contribution method.
-    pub contribution_method: String,
-    /// Reviewer of record; this is not an approval claim.
-    pub reviewers: Vec<String>,
-}
-
-/// PGM-01 result for one successful derivation.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct GenerationResult {
-    /// Evidence result state.
-    pub status: String,
-    /// Bounded claim made by this manifest.
-    pub summary: String,
-    /// Requirements supported by the result.
-    pub requirement_refs: Vec<String>,
-}
-
-/// Codegen-specific extension carried within the PGM-01 envelope.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct CodegenExtension {
-    /// Interface-001 generation state.
-    pub terminal_state: GenerationTerminalState,
-    /// Whether build inputs differed from the recorded Git revision.
-    pub generator_source_dirty: bool,
+    pub dependencies_digest: String,
     /// Whether an exact generator revision was available from Git or archive metadata.
-    pub generator_source_revision_available: bool,
-    /// Canonical IR expression profile.
-    pub canonical_profile: String,
-    /// Canonical semantic expression digest.
-    pub expression_canonical_digest: String,
-    /// Exact IR revision.
-    pub ir_revision: String,
-    /// Exact runtime revision.
-    pub runtime_revision: String,
-    /// Stable clause identity.
-    pub clause_id: String,
-    /// Reviewer field semantics.
-    pub reviewer_role: String,
-    /// Bounded source-size policy.
-    pub maximum_source_bytes: usize,
+    pub source_revision_available: bool,
+    /// Whether build inputs differed from the recorded Git revision.
+    pub source_dirty: bool,
 }
 
-/// Complete PGM-01 derivation identity for emitted source and source map.
+/// The four results a proof attestation may state (`ProofAttestationV1.result`).
+///
+/// This is the shared vocabulary and not the generator's. A bundle exists only
+/// when generation succeeded, so this crate emits `Passed` and nothing else; the
+/// six Interface-001 terminal states stay in [`GenerationDiagnostic`], which no
+/// attestation ever accompanies.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttestationResult {
+    /// The proof obligation held.
+    Passed,
+    /// The proof obligation did not hold.
+    Failed,
+    /// The proof could not be attempted.
+    Unavailable,
+    /// The proof was attempted and reached no conclusion.
+    NotComputed,
+}
+
+/// One `ProofAttestationV1` body, emitted beside the artifact it describes.
+///
+/// This is Quoin's packaged `proof-attestation-v1.schema.json` shape without
+/// `digest` and without `retained_output`. Those two fields are not omitted by
+/// choice: `quoin change-assurance seal-attestation` derives both and **refuses a
+/// body that supplies either**, because they are statements about the retained
+/// bytes and about the sealed form, and a producer is not the thing that seals.
+/// So this crate emits the body and Quoin seals it — which is the same division
+/// of labour `scripts/assurance_chain.py` uses for this repository's four
+/// existing proof obligations.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct DerivationManifest {
-    /// PGM-01 schema identity.
-    pub schema_version: String,
-    /// Stable record identity.
-    pub record_id: String,
-    /// Deterministic source-commit timestamp.
-    pub recorded_at: String,
-    /// Generator implementation identity.
-    pub producer: ProducerIdentity,
-    /// Canonical semantic inputs.
-    pub inputs: Vec<ManifestArtifact>,
-    /// Explicit in-process backend identity.
-    pub backend: NoBackend,
-    /// Generated output identities.
-    pub outputs: Vec<ManifestArtifact>,
-    /// Generation-configuration identity.
-    pub parameters_digest: DigestIdentity,
-    /// Build environment identity.
-    pub environment: GenerationEnvironment,
-    /// Generator source provenance.
-    pub provenance: GenerationProvenance,
-    /// Bounded derivation result.
-    pub result: GenerationResult,
-    /// Namespaced codegen details.
-    pub extensions: BTreeMap<String, CodegenExtension>,
+#[serde(deny_unknown_fields)]
+pub struct ProofAttestationBody {
+    /// Shared schema version; always `1`.
+    pub schema_version: u8,
+    /// Shared record discriminator; always `proof_attestation`.
+    pub record_type: String,
+    /// Stable identity of this attestation.
+    pub attestation_id: String,
+    /// Digest of the sealed change-assurance record this attestation binds to.
+    pub record_digest: String,
+    /// Candidate revision the attestation is about.
+    pub candidate_revision: String,
+    /// Proof obligation this attestation discharges.
+    pub proof_id: String,
+    /// The generation invocation, with every parameter it used.
+    pub command: AttestationCommand,
+    /// The generator's own identity.
+    pub tool: AttestationTool,
+    /// The build environment the generation was observed in.
+    pub environment: AttestationEnvironment,
+    /// Deterministic source-commit timestamp, in RFC 3339.
+    pub observed_at: String,
+    /// The shared four-value result.
+    pub result: AttestationResult,
 }
 
 /// Complete all-or-nothing result for one supported oracle clause.
+///
+/// Two artifacts, and therefore two attestations: a proof attestation binds one
+/// retained output, so the pair the deprecated manifest packed into a single
+/// record is one attestation each.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OracleArtifactBundle {
     /// Generated Rust source.
     pub rust: Artifact,
     /// Machine-readable source-region map.
     pub source_map: Artifact,
-    /// Machine-readable derivation manifest.
-    pub manifest: Artifact,
+    /// Proof-attestation body for `rust`.
+    pub rust_attestation: Artifact,
+    /// Proof-attestation body for `source_map`.
+    pub source_map_attestation: Artifact,
 }
 
 /// Complete all-or-nothing result for one generated Rust artifact.
 ///
-/// Harness and strategy slices do not currently emit clause-level source maps, but they retain the
-/// same PGM-01 producer, input, output, environment, provenance, and result identity as oracles.
+/// Harness and strategy slices do not currently emit clause-level source maps, so
+/// they emit one generated artifact and the one attestation that binds it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedArtifactBundle {
     /// Generated Rust source.
     pub rust: Artifact,
-    /// Machine-readable derivation manifest.
-    pub manifest: Artifact,
+    /// Proof-attestation body for `rust`.
+    pub attestation: Artifact,
 }
 
 struct RenderedExpression {
@@ -459,7 +406,7 @@ pub fn generate_boolean_oracle(
 fn generate_boolean_oracle_inner(
     request: &OracleRequest<'_>,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
-    validate_manifest_context(request)?;
+    validate_attestation_context(request)?;
     if request.expression.value_type() != &ValueType::Boolean {
         return Err(single_diagnostic(
             request,
@@ -581,81 +528,105 @@ fn generate_boolean_oracle_inner(
                 error.to_string(),
             )
         })?;
-    let manifest_value = manifest(
+    let input_digest = sha256(canonical_expression.bytes().as_slice());
+    let subject = vec![
+        "--requirement".to_owned(),
+        format!("{requirement}@{revision}"),
+        "--clause".to_owned(),
+        clause.to_owned(),
+    ];
+    let identity = sha256(format!("{}:{input_digest}", sha256(symbol_text.as_bytes())).as_bytes());
+    let rust_attestation = oracle_attestation(
         request,
-        &symbol_text,
-        &rust,
-        &source_map,
-        canonical_expression.bytes().as_slice(),
+        &identity,
+        &AttestationOutput {
+            role: ORACLE_RUST_ROLE,
+            path: &rust.path,
+            media_type: "text/x-rust",
+            schema: "quire.codegen.rust-oracle/v1",
+            schema_digest: Some(rust_oracle_schema_digest()),
+        },
+        &subject,
+        &input_digest,
         &canonical_expression.digest().to_string(),
     );
-    let manifest_contents = deterministic_json(&manifest_value).map_err(|error| {
+    let source_map_attestation = oracle_attestation(
+        request,
+        &identity,
+        &AttestationOutput {
+            role: ORACLE_SOURCE_MAP_ROLE,
+            path: &source_map.path,
+            media_type: "application/json",
+            schema: "quire.codegen.oracle-source-map/v1",
+            schema_digest: Some(source_map_schema_digest()),
+        },
+        &subject,
+        &input_digest,
+        &canonical_expression.digest().to_string(),
+    );
+    let rust_attestation = attestation_artifact(&symbol_text, ORACLE_RUST_ROLE, &rust_attestation)
+        .map_err(|error| {
+            single_diagnostic(
+                request,
+                GenerationErrorCode::SerializationFailed,
+                "generated.attestation",
+                error.to_string(),
+            )
+        })?;
+    let source_map_attestation = attestation_artifact(
+        &symbol_text,
+        ORACLE_SOURCE_MAP_ROLE,
+        &source_map_attestation,
+    )
+    .map_err(|error| {
         single_diagnostic(
             request,
             GenerationErrorCode::SerializationFailed,
-            "generated.manifest",
+            "generated.attestation",
             error.to_string(),
         )
     })?;
-    let manifest = artifact(format!("manifests/{symbol_text}.json"), manifest_contents);
     Ok(OracleArtifactBundle {
         rust,
         source_map,
-        manifest,
+        rust_attestation,
+        source_map_attestation,
     })
 }
 
-fn validate_manifest_context(request: &OracleRequest<'_>) -> Result<(), Vec<GenerationDiagnostic>> {
-    if manifest_context_is_valid(&request.manifest) {
+fn validate_attestation_context(
+    request: &OracleRequest<'_>,
+) -> Result<(), Vec<GenerationDiagnostic>> {
+    if attestation_context_is_valid(&request.attestation) {
         return Ok(());
     }
     Err(single_diagnostic(
         request,
-        GenerationErrorCode::InvalidManifestContext,
-        "manifest.context",
-        "candidate revision, contribution method, reviewers, result, and requirement refs must satisfy PGM-01",
+        GenerationErrorCode::InvalidAttestationContext,
+        "attestation.context",
+        "record_digest must be 64 lowercase hexadecimal characters and candidate_revision \
+         must be a 40-to-64 character lowercase hexadecimal revision",
     ))
 }
 
-pub(crate) fn manifest_context_is_valid(context: &ManifestContext<'_>) -> bool {
-    let valid_revision = (40..=64).contains(&context.candidate_revision.len())
-        && context
-            .candidate_revision
+/// Reports whether a caller's attestation binding can be stated as it stands.
+///
+/// `record_digest` is held to the shared schema's own `digest` pattern. The
+/// `candidate_revision` rule is deliberately stricter than the shared schema,
+/// which asks only for a non-empty string: a generated artifact that names an
+/// unresolvable revision cannot be checked against anything later, and the
+/// deprecated manifest rejected exactly this input, so the rule is carried over
+/// rather than relaxed to the schema's floor.
+pub(crate) fn attestation_context_is_valid(context: &AttestationContext<'_>) -> bool {
+    is_lowercase_hexadecimal(context.record_digest, 64, 64)
+        && is_lowercase_hexadecimal(context.candidate_revision, 40, 64)
+}
+
+fn is_lowercase_hexadecimal(value: &str, minimum: usize, maximum: usize) -> bool {
+    (minimum..=maximum).contains(&value.len())
+        && value
             .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
-    let valid_contribution = matches!(
-        context.contribution_method,
-        "human" | "agent-assisted" | "generated" | "mixed"
-    );
-    let valid_result = matches!(
-        context.result_status,
-        "conclusive"
-            | "inconclusive"
-            | "unsupported"
-            | "rejected"
-            | "timed-out"
-            | "pending"
-            | "error"
-    );
-    let valid_reviewers = !context.reviewers.is_empty()
-        && context.reviewers.iter().all(|reviewer| {
-            reviewer.strip_prefix('@').is_some_and(|login| {
-                !login.is_empty()
-                    && login
-                        .bytes()
-                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-            })
-        });
-    valid_revision
-        && valid_contribution
-        && valid_result
-        && valid_reviewers
-        && !context.result_summary.is_empty()
-        && !context.requirement_refs.is_empty()
-        && !context
-            .requirement_refs
-            .iter()
-            .any(|value| value.is_empty())
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 pub(crate) fn dependency_parameters(
@@ -792,253 +763,237 @@ fn render_node(
     result.map_err(|_| resource_error(request))
 }
 
-fn manifest(
-    request: &OracleRequest<'_>,
-    symbol: &str,
-    rust: &Artifact,
-    source_map: &Artifact,
-    canonical_expression: &[u8],
-    canonical_digest: &str,
-) -> DerivationManifest {
-    let requirement = request.requirement.requirement().as_str();
-    let revision = GENERATOR_SOURCE_REVISION;
-    let implementation_digest = generator_implementation_digest();
-    let input_digest = sha256(canonical_expression);
-    let parameters = format!(
-        "ir={IR_CANDIDATE_REVISION}\nruntime={RUNTIME_REVISION}\nmaximumSourceBytes={MAX_GENERATED_SOURCE_BYTES}\n"
-    );
-    let symbol_digest = sha256(symbol.as_bytes());
-    let record_digest = sha256(format!("{symbol_digest}:{input_digest}").as_bytes());
-    let requirement_refs = request
-        .manifest
-        .requirement_refs
-        .iter()
-        .map(|value| (*value).to_owned())
-        .collect::<BTreeSet<_>>();
-    let mut extensions = BTreeMap::new();
-    extensions.insert(
-        "dev.agent-ix.codegen".to_owned(),
-        CodegenExtension {
-            terminal_state: GenerationTerminalState::Generated,
-            generator_source_dirty: generator_source_is_dirty(),
-            generator_source_revision_available: env!("QUIRE_CODEGEN_SOURCE_REVISION_AVAILABLE")
-                == "true",
-            canonical_profile: CanonicalProfile::V1.as_str().to_owned(),
-            expression_canonical_digest: canonical_digest.to_owned(),
-            ir_revision: IR_CANDIDATE_REVISION.to_owned(),
-            runtime_revision: RUNTIME_REVISION.to_owned(),
-            clause_id: request.clause.as_str().to_owned(),
-            reviewer_role: "reviewer-of-record; not a GitHub approval".to_owned(),
-            maximum_source_bytes: MAX_GENERATED_SOURCE_BYTES,
+/// `tool.identity` for every attestation this crate emits.
+///
+/// The owning repository rather than the bare crate name, because the deprecated
+/// envelope's `provenance.repository` has no field of its own in the shared shape
+/// and the tool identity is where a reader resolves `tool.version` from.
+const TOOL_IDENTITY: &str = "agent-ix/quire-contract-codegen";
+
+/// `command.argv[0]` for every attestation this crate emits.
+///
+/// The crate name, and it names no program that can be run today: lowering happens
+/// in process, `Cargo.toml` declares a library and no binary, and the `cli_generate`
+/// operation interface-001 specifies is unimplemented. The deprecated envelope had
+/// the same property in `producer.invocation` and this does not pretend otherwise.
+/// A runnable-looking `argv[0]` naming something that does not exist would be worse
+/// than an honest description of an in-process call, and the limitation is declared
+/// as `UNKNOWN-attested-command-is-not-runnable` in the change declaration.
+const TOOL_ARGV0: &str = "quire-contract-codegen";
+
+/// `command.working_directory` for every attestation this crate emits.
+const WORKING_DIRECTORY: &str = ".";
+
+/// The output role of a generated Rust oracle.
+const ORACLE_RUST_ROLE: &str = "generated-rust-oracle";
+
+/// The output role of a generated oracle source map.
+const ORACLE_SOURCE_MAP_ROLE: &str = "oracle-source-map";
+
+/// One generated artifact an attestation is about.
+struct AttestationOutput<'a> {
+    /// Semantic role, which also names the proof obligation.
+    role: &'a str,
+    /// Bundle-relative path of the artifact.
+    path: &'a str,
+    /// Media type of the artifact, stated by the generator that knows it.
+    media_type: &'a str,
+    /// Identifier of the versioned schema the artifact validates against.
+    schema: &'a str,
+    /// Digest of that schema's own bytes, when the schema is a file in this repository.
+    ///
+    /// `None` for the harness and strategy slices, which name a schema identifier
+    /// for which no schema document exists. The deprecated envelope filled that
+    /// slot with `sha256` of the identifier string — the digest of a name rather
+    /// than of a schema — and stating nothing is the honest replacement.
+    schema_digest: Option<&'a str>,
+}
+
+/// The proof obligation an output role discharges.
+fn proof_id_for(role: &str) -> String {
+    format!("PROOF-codegen-{role}")
+}
+
+/// Renders one in-process generation as the argv its attestation declares.
+///
+/// Everything the deprecated envelope carried as a `parameters_digest`, a
+/// `backend` discriminator, an `inputs[]` entry or a namespaced extension is
+/// written out here in full. A command line that names its parameters is
+/// readable and checkable where a digest over three of them was neither.
+fn generation_command(
+    operation: &str,
+    subject: &[String],
+    canonical_profile: &str,
+    input_digest: &str,
+    output: &AttestationOutput<'_>,
+) -> AttestationCommand {
+    let mut argv = vec![TOOL_ARGV0.to_owned(), operation.to_owned()];
+    argv.extend(subject.iter().cloned());
+    argv.extend([
+        "--canonical-profile".to_owned(),
+        canonical_profile.to_owned(),
+        "--input-digest".to_owned(),
+        input_digest.to_owned(),
+        "--ir-revision".to_owned(),
+        IR_CANDIDATE_REVISION.to_owned(),
+        "--runtime-revision".to_owned(),
+        RUNTIME_REVISION.to_owned(),
+        "--backend".to_owned(),
+        "none".to_owned(),
+        "--maximum-source-bytes".to_owned(),
+        MAX_GENERATED_SOURCE_BYTES.to_string(),
+        "--output-schema".to_owned(),
+        output.schema.to_owned(),
+        "--output-media-type".to_owned(),
+        output.media_type.to_owned(),
+    ]);
+    if let Some(schema_digest) = output.schema_digest {
+        argv.extend([
+            "--output-schema-digest".to_owned(),
+            schema_digest.to_owned(),
+        ]);
+    }
+    argv.extend(["--output".to_owned(), output.path.to_owned()]);
+    AttestationCommand {
+        argv,
+        working_directory: WORKING_DIRECTORY.to_owned(),
+    }
+}
+
+/// Assembles one proof-attestation body over an already-generated artifact.
+///
+/// `result` is derived rather than accepted: this function is only reached when
+/// an artifact exists, so the only honest answer is `passed`. The deprecated
+/// envelope took its result status from the caller, which permitted an artifact
+/// that generated cleanly to carry `rejected` or `timed-out`.
+fn attestation_body(
+    context: &AttestationContext<'_>,
+    identity: &str,
+    output: &AttestationOutput<'_>,
+    command: AttestationCommand,
+) -> ProofAttestationBody {
+    let proof_id = proof_id_for(output.role);
+    ProofAttestationBody {
+        schema_version: 1,
+        record_type: "proof_attestation".to_owned(),
+        attestation_id: format!("{proof_id}:{identity}"),
+        record_digest: context.record_digest.to_owned(),
+        candidate_revision: context.candidate_revision.to_owned(),
+        proof_id,
+        command,
+        tool: AttestationTool {
+            identity: TOOL_IDENTITY.to_owned(),
+            version: GENERATOR_SOURCE_REVISION.to_owned(),
+            configuration_digest: generator_implementation_digest().to_owned(),
         },
-    );
-    DerivationManifest {
-        schema_version: "quire.derivation-evidence/v1".to_owned(),
-        record_id: format!("oracle:{record_digest}"),
-        recorded_at: env!("QUIRE_CODEGEN_RECORDED_AT").to_owned(),
-        producer: ProducerIdentity {
-            name: "quire-contract-codegen".to_owned(),
-            version: env!("CARGO_PKG_VERSION").to_owned(),
-            source_revision: revision.to_owned(),
-            executable_digest: digest(implementation_digest),
-            invocation: vec![
-                "generate_boolean_oracle".to_owned(),
-                format!(
-                    "{requirement}@{}/{}",
-                    request.requirement.revision().get(),
-                    request.clause.as_str()
-                ),
-            ],
-        },
-        inputs: vec![ManifestArtifact {
-            role: "canonical-typed-expression".to_owned(),
-            uri: format!("urn:sha256:{input_digest}"),
-            media_type: "application/json".to_owned(),
-            schema: SchemaIdentity {
-                id: "quire.contract.canonical-json".to_owned(),
-                version: "v1".to_owned(),
-                digest: digest(&sha256(CanonicalProfile::V1.as_str().as_bytes())),
-            },
-            content_digest: digest(&input_digest),
-        }],
-        backend: NoBackend {
-            kind: "none".to_owned(),
-            reason: "deterministic in-process Rust lowering; no external backend".to_owned(),
-        },
-        outputs: vec![
-            ManifestArtifact {
-                role: "generated-rust-oracle".to_owned(),
-                uri: rust.path.clone(),
-                media_type: "text/x-rust".to_owned(),
-                schema: SchemaIdentity {
-                    id: "quire.codegen.rust-oracle".to_owned(),
-                    version: "v1".to_owned(),
-                    digest: digest(rust_oracle_schema_digest()),
-                },
-                content_digest: digest(&rust.sha256),
-            },
-            ManifestArtifact {
-                role: "oracle-source-map".to_owned(),
-                uri: source_map.path.clone(),
-                media_type: "application/json".to_owned(),
-                schema: SchemaIdentity {
-                    id: "quire.codegen.oracle-source-map".to_owned(),
-                    version: "v1".to_owned(),
-                    digest: digest(source_map_schema_digest()),
-                },
-                content_digest: digest(&source_map.sha256),
-            },
-        ],
-        parameters_digest: digest(&sha256(parameters.as_bytes())),
-        environment: GenerationEnvironment {
+        environment: AttestationEnvironment {
             target_triple: env!("QUIRE_CODEGEN_TARGET").to_owned(),
             operating_system: env!("QUIRE_CODEGEN_TARGET_OS").to_owned(),
             toolchain: env!("QUIRE_CODEGEN_TOOLCHAIN").to_owned(),
-            dependencies_digest: digest(lockfile_digest()),
+            dependencies_digest: lockfile_digest().to_owned(),
+            source_revision_available: env!("QUIRE_CODEGEN_SOURCE_REVISION_AVAILABLE") == "true",
+            source_dirty: generator_source_is_dirty(),
         },
-        provenance: GenerationProvenance {
-            repository: "https://github.com/agent-ix/quire-contract-codegen".to_owned(),
-            source_revision: revision.to_owned(),
-            candidate_revision: request.manifest.candidate_revision.to_owned(),
-            contribution_method: request.manifest.contribution_method.to_owned(),
-            reviewers: request
-                .manifest
-                .reviewers
-                .iter()
-                .map(|value| (*value).to_owned())
-                .collect(),
-        },
-        result: GenerationResult {
-            status: request.manifest.result_status.to_owned(),
-            summary: request.manifest.result_summary.to_owned(),
-            requirement_refs: requirement_refs.into_iter().collect(),
-        },
-        extensions,
+        observed_at: env!("QUIRE_CODEGEN_RECORDED_AT").to_owned(),
+        result: AttestationResult::Passed,
     }
+}
+
+/// The attestation body for one oracle-slice output.
+fn oracle_attestation(
+    request: &OracleRequest<'_>,
+    identity: &str,
+    output: &AttestationOutput<'_>,
+    subject: &[String],
+    input_digest: &str,
+    canonical_digest: &str,
+) -> ProofAttestationBody {
+    let mut command = generation_command(
+        "generate_boolean_oracle",
+        subject,
+        CanonicalProfile::V1.as_str(),
+        input_digest,
+        output,
+    );
+    // The canonical semantic digest of the expression, which is a different fact
+    // from the digest of its canonical bytes and was a separate extension field.
+    command.argv.extend([
+        "--expression-canonical-digest".to_owned(),
+        canonical_digest.to_owned(),
+    ]);
+    attestation_body(&request.attestation, identity, output, command)
+}
+
+/// Serializes one attestation body into the artifact emitted beside its output.
+fn attestation_artifact(
+    symbol: &str,
+    role: &str,
+    body: &ProofAttestationBody,
+) -> Result<Artifact, SerializationError> {
+    let contents = deterministic_json(body)?;
+    Ok(artifact(
+        format!("attestations/{symbol}.{role}.json"),
+        contents,
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn generated_artifact_bundle(
-    context: &ManifestContext<'_>,
+    context: &AttestationContext<'_>,
     requirement: &RequirementRef,
     operation: &str,
     stable_identity: &str,
-    input_role: &str,
     input_bytes: &[u8],
     output_role: &str,
     output_schema: &str,
     rust: Artifact,
 ) -> Result<GeneratedArtifactBundle, GenerationErrorCode> {
-    if !manifest_context_is_valid(context) {
-        return Err(GenerationErrorCode::InvalidManifestContext);
+    if !attestation_context_is_valid(context) {
+        return Err(GenerationErrorCode::InvalidAttestationContext);
     }
     let input_digest = sha256(input_bytes);
-    let identity = length_delimited_identity(&[
-        operation,
-        requirement.requirement().as_str(),
-        &requirement.revision().get().to_string(),
-        stable_identity,
-        &input_digest,
-    ]);
-    let record_digest = sha256(identity.as_bytes());
-    let parameters = format!(
-        "ir={IR_CANDIDATE_REVISION}\nruntime={RUNTIME_REVISION}\noperation={operation}\nmaximumSourceBytes={MAX_GENERATED_SOURCE_BYTES}\n"
+    let identity = sha256(
+        length_delimited_identity(&[
+            operation,
+            requirement.requirement().as_str(),
+            &requirement.revision().get().to_string(),
+            stable_identity,
+            &input_digest,
+        ])
+        .as_bytes(),
     );
-    let requirement_refs = context
-        .requirement_refs
-        .iter()
-        .map(|value| (*value).to_owned())
-        .collect::<BTreeSet<_>>();
-    let mut extensions = BTreeMap::new();
-    extensions.insert(
-        "dev.agent-ix.codegen".to_owned(),
-        CodegenExtension {
-            terminal_state: GenerationTerminalState::Generated,
-            generator_source_dirty: generator_source_is_dirty(),
-            generator_source_revision_available: env!("QUIRE_CODEGEN_SOURCE_REVISION_AVAILABLE")
-                == "true",
-            canonical_profile: "quire.codegen.request/v1".to_owned(),
-            expression_canonical_digest: input_digest.clone(),
-            ir_revision: IR_CANDIDATE_REVISION.to_owned(),
-            runtime_revision: RUNTIME_REVISION.to_owned(),
-            clause_id: stable_identity.to_owned(),
-            reviewer_role: "reviewer-of-record; not a GitHub approval".to_owned(),
-            maximum_source_bytes: MAX_GENERATED_SOURCE_BYTES,
-        },
-    );
-    let manifest_value = DerivationManifest {
-        schema_version: "quire.derivation-evidence/v1".to_owned(),
-        record_id: format!("{operation}:{record_digest}"),
-        recorded_at: env!("QUIRE_CODEGEN_RECORDED_AT").to_owned(),
-        producer: ProducerIdentity {
-            name: "quire-contract-codegen".to_owned(),
-            version: env!("CARGO_PKG_VERSION").to_owned(),
-            source_revision: GENERATOR_SOURCE_REVISION.to_owned(),
-            executable_digest: digest(generator_implementation_digest()),
-            invocation: vec![operation.to_owned(), stable_identity.to_owned()],
-        },
-        inputs: vec![ManifestArtifact {
-            role: input_role.to_owned(),
-            uri: format!("urn:sha256:{input_digest}"),
-            media_type: "application/json".to_owned(),
-            schema: SchemaIdentity {
-                id: "quire.codegen.request".to_owned(),
-                version: "v1".to_owned(),
-                digest: digest(&sha256(b"quire.codegen.request/v1")),
-            },
-            content_digest: digest(&input_digest),
-        }],
-        backend: NoBackend {
-            kind: "none".to_owned(),
-            reason: "deterministic in-process Rust lowering; no external backend".to_owned(),
-        },
-        outputs: vec![ManifestArtifact {
-            role: output_role.to_owned(),
-            uri: rust.path.clone(),
-            media_type: "text/x-rust".to_owned(),
-            schema: SchemaIdentity {
-                id: output_schema.to_owned(),
-                version: "v1".to_owned(),
-                digest: digest(&sha256(output_schema.as_bytes())),
-            },
-            content_digest: digest(&rust.sha256),
-        }],
-        parameters_digest: digest(&sha256(parameters.as_bytes())),
-        environment: GenerationEnvironment {
-            target_triple: env!("QUIRE_CODEGEN_TARGET").to_owned(),
-            operating_system: env!("QUIRE_CODEGEN_TARGET_OS").to_owned(),
-            toolchain: env!("QUIRE_CODEGEN_TOOLCHAIN").to_owned(),
-            dependencies_digest: digest(lockfile_digest()),
-        },
-        provenance: GenerationProvenance {
-            repository: "https://github.com/agent-ix/quire-contract-codegen".to_owned(),
-            source_revision: GENERATOR_SOURCE_REVISION.to_owned(),
-            candidate_revision: context.candidate_revision.to_owned(),
-            contribution_method: context.contribution_method.to_owned(),
-            reviewers: context
-                .reviewers
-                .iter()
-                .map(|value| (*value).to_owned())
-                .collect(),
-        },
-        result: GenerationResult {
-            status: context.result_status.to_owned(),
-            summary: context.result_summary.to_owned(),
-            requirement_refs: requirement_refs.into_iter().collect(),
-        },
-        extensions,
+    let output = AttestationOutput {
+        role: output_role,
+        path: &rust.path,
+        media_type: "text/x-rust",
+        schema: output_schema,
+        schema_digest: None,
     };
-    let manifest_contents = deterministic_json(&manifest_value)
-        .map_err(|_| GenerationErrorCode::SerializationFailed)?;
-    let manifest = artifact(
+    let subject = vec![
+        "--requirement".to_owned(),
         format!(
-            "manifests/{}_{}.json",
-            bounded_readable_component(operation),
-            record_digest
+            "{}@{}",
+            requirement.requirement().as_str(),
+            requirement.revision().get()
         ),
-        manifest_contents,
+        "--identity".to_owned(),
+        stable_identity.to_owned(),
+    ];
+    let command = generation_command(
+        operation,
+        &subject,
+        "quire.codegen.request/v1",
+        &input_digest,
+        &output,
     );
-    Ok(GeneratedArtifactBundle { rust, manifest })
+    let body = attestation_body(context, &identity, &output, command);
+    let attestation = attestation_artifact(
+        &format!("{}_{}", bounded_readable_component(operation), identity),
+        output_role,
+        &body,
+    )
+    .map_err(|_| GenerationErrorCode::SerializationFailed)?;
+    Ok(GeneratedArtifactBundle { rust, attestation })
 }
 
 fn node_name(kind: &ExpressionKind) -> &'static str {
@@ -1205,13 +1160,6 @@ fn source_map_schema_digest() -> &'static str {
 fn rust_oracle_schema_digest() -> &'static str {
     static VALUE: OnceLock<String> = OnceLock::new();
     cached_digest(RUST_ORACLE_SCHEMA, &VALUE)
-}
-
-fn digest(value: &str) -> DigestIdentity {
-    DigestIdentity {
-        algorithm: "sha256".to_owned(),
-        value: value.to_owned(),
-    }
 }
 
 fn line_count(value: &str) -> u32 {

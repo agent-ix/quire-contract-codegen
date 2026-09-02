@@ -8,8 +8,8 @@ use sha2::{Digest as _, Sha256};
 
 use crate::{
     oracle::{bounded_readable_component, generated_artifact_bundle, length_delimited_identity},
-    Artifact, GeneratedArtifactBundle, GenerationErrorCode, GenerationTerminalState,
-    ManifestContext,
+    Artifact, AttestationContext, GeneratedArtifactBundle, GenerationErrorCode,
+    GenerationTerminalState,
 };
 
 /// Supported integer constraint shape for one generated strategy.
@@ -78,8 +78,8 @@ pub struct StrategyRequest<'a> {
     pub constraint: StrategyConstraint<'a>,
     /// Campaign population to emit.
     pub campaign: StrategyCampaign,
-    /// PGM-01 provenance and bounded result claim for the generated artifact.
-    pub manifest: ManifestContext<'a>,
+    /// Caller-owned attestation binding for the generated artifact.
+    pub attestation: AttestationContext<'a>,
 }
 
 /// Campaign population for a customer enum membership.
@@ -111,8 +111,8 @@ pub struct EnumStrategyRequest<'a> {
     pub variants: &'a [&'a str],
     /// Campaign population to emit.
     pub campaign: EnumStrategyCampaign<'a>,
-    /// PGM-01 provenance and bounded result claim for the generated artifact.
-    pub manifest: ManifestContext<'a>,
+    /// Caller-owned attestation binding for the generated artifact.
+    pub attestation: AttestationContext<'a>,
 }
 
 /// Stable reason a strategy could not be generated.
@@ -133,8 +133,8 @@ pub enum StrategyErrorCode {
     InvalidGeneratedSyntax,
     /// The requested campaign cannot satisfy its required population shape.
     UnsupportedCampaignConstraint,
-    /// A derivation manifest could not be validated or serialized.
-    ManifestGenerationFailed,
+    /// A proof attestation could not be validated or serialized.
+    AttestationGenerationFailed,
 }
 
 impl StrategyErrorCode {
@@ -146,7 +146,7 @@ impl StrategyErrorCode {
             | Self::InvalidStrategyIdentity
             | Self::InvalidEnumIdentity => GenerationTerminalState::InvalidInput,
             Self::UnsupportedCampaignConstraint => GenerationTerminalState::Unsupported,
-            Self::InvalidGeneratedSyntax | Self::ManifestGenerationFailed => {
+            Self::InvalidGeneratedSyntax | Self::AttestationGenerationFailed => {
                 GenerationTerminalState::Inconclusive
             }
         }
@@ -161,7 +161,7 @@ pub struct StrategyDiagnostic {
     pub code: StrategyErrorCode,
     /// Interface-001 terminal state for this failure.
     pub terminal_state: GenerationTerminalState,
-    /// Preserved manifest or syntax failure code, when one exists.
+    /// Preserved attestation or syntax failure code, when one exists.
     pub generation_code: Option<GenerationErrorCode>,
     /// Stable input path associated with the failure.
     pub path: String,
@@ -281,17 +281,16 @@ pub fn {function}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n\
     })?;
     let rust = artifact(format!("src/generated/{function}.rs"), source);
     generated_artifact_bundle(
-        &request.manifest,
+        &request.attestation,
         request.requirement,
         "generate_i64_strategy",
         &function,
-        "typed-i64-strategy-request",
         identity.as_bytes(),
         "generated-rust-strategy",
-        "quire.codegen.rust-strategy",
+        "quire.codegen.rust-strategy/v1",
         rust,
     )
-    .map_err(manifest_diagnostic)
+    .map_err(attestation_diagnostic)
 }
 
 /// Generates a deterministic customer-enum membership strategy.
@@ -422,17 +421,16 @@ pub fn {function}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n\
     })?;
     let rust = artifact(format!("src/generated/{function}.rs"), source);
     generated_artifact_bundle(
-        &request.manifest,
+        &request.attestation,
         request.requirement,
         "generate_enum_strategy",
         &function,
-        "typed-enum-strategy-request",
         identity.as_bytes(),
         "generated-rust-strategy",
-        "quire.codegen.rust-strategy",
+        "quire.codegen.rust-strategy/v1",
         rust,
     )
-    .map_err(manifest_diagnostic)
+    .map_err(attestation_diagnostic)
 }
 
 fn validate_request(request: &StrategyRequest<'_>) -> Result<(), StrategyDiagnostic> {
@@ -796,12 +794,12 @@ fn diagnostic_with_generation(
     }
 }
 
-fn manifest_diagnostic(code: GenerationErrorCode) -> StrategyDiagnostic {
+fn attestation_diagnostic(code: GenerationErrorCode) -> StrategyDiagnostic {
     diagnostic_with_generation(
-        StrategyErrorCode::ManifestGenerationFailed,
+        StrategyErrorCode::AttestationGenerationFailed,
         Some(code),
-        "generated.manifest",
-        "strategy derivation manifest could not be emitted",
+        "generated.attestation",
+        "the strategy proof attestation could not be emitted",
     )
 }
 

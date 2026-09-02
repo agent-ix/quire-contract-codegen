@@ -24,11 +24,29 @@ This runs formatting, specification/plan validation, Clippy, tests, an explicit 
 compatibility check, license checks, and the unsafe-code audit. CI workflows are manual-only; remote
 runs must be deliberately dispatched and retained when they are used as evidence.
 
-To collect a checksummed local foundation evidence bundle from a clean commit:
+This repository retains no evidence of its own. `make assurance-inputs` runs the producers,
+`make assurance-chain` seals, retains and verifies their output through Quoin, and nothing in between
+computes a verdict. `assurance/README.md` is the guide.
 
-```bash
-scripts/collect_foundation_evidence.sh
-```
+The block that used to stand here invoked `scripts/collect_foundation_evidence.sh`. That collector was
+deleted on the shared-assurance migration branch and squash-merged as `bbd5e67`
+([#13](https://github.com/agent-ix/quire-contract-codegen/issues/13)), so the script has never existed
+at any commit reachable from `main` while this instruction was in the README — the squash introduced
+the reference already dangling. No census would have caught it: the reference scan in
+`tests/shared_assurance.rs` does not read Markdown, and the collector's name is not in its
+forbidden-name list either, so the file's absence is asserted while references to it are not.
+
+## Generated artifacts
+
+Every generated artifact is emitted with a proof attestation carrying Quoin's packaged
+`ProofAttestationV1` shape — one attestation per artifact, because an attestation binds exactly one
+retained output. The emitted body is that schema without `digest` and without `retained_output`:
+`quoin change-assurance seal-attestation` derives both from the retained bytes and refuses a body that
+supplies either, so the generator produces and Quoin seals.
+
+The two documents under `schemas/` are domain output contracts for the generated Rust and the
+generated source map. They describe the artifacts themselves, not evidence about them, and this
+repository owns no evidence schema.
 
 ## Release boundary
 

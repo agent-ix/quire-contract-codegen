@@ -17,7 +17,7 @@ Verify malformed, orphaned, partial, and unsupported constructs cannot yield com
 ## Test Procedure
 
 Run every negative conformance fixture through every applicable backend and inspect diagnostics,
-manifest completeness state, exit status, and staged output directory.
+attestation completeness state, exit status, and staged output directory.
 
 ## Expected Results
 

@@ -5,9 +5,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod common;
+
 use quire_contract_codegen::{
-    generate_tristate_harness, DerivationManifest, GenerationTerminalState, HarnessErrorCode,
-    HarnessRequest, ManifestContext, IR_CANDIDATE_REVISION,
+    generate_tristate_harness, AttestationContext, AttestationResult, GenerationTerminalState,
+    HarnessErrorCode, HarnessRequest, ProofAttestationBody, IR_CANDIDATE_REVISION,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, DeclarationEnvironment, ExecutionPoint, Expression,
@@ -57,14 +59,17 @@ fn span(start: u64, end: u64) -> SourceSpan {
     .unwrap()
 }
 
-fn manifest_context() -> ManifestContext<'static> {
-    ManifestContext {
+/// The record digest this test's attestations bind to.
+///
+/// No change-assurance record is sealed for a unit test, so there is no digest to
+/// name. The all-zero digest is the one 64-hexadecimal string no sealed record can
+/// have, so it cannot be mistaken for a real binding.
+const TEST_RECORD_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+fn attestation_context() -> AttestationContext<'static> {
+    AttestationContext {
+        record_digest: TEST_RECORD_DIGEST,
         candidate_revision: IR_CANDIDATE_REVISION,
-        contribution_method: "generated",
-        reviewers: &["@harness-test-reviewer"],
-        result_status: "conclusive",
-        result_summary: "test harness generated from typed Boolean clauses",
-        requirement_refs: &["FR-002"],
     }
 }
 
@@ -152,14 +157,42 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
         precondition: &precondition_expression,
         postcondition: &postcondition_expression,
         execution_point: "handler:update",
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     };
     let first = generate_tristate_harness(&request).unwrap();
     let second = generate_tristate_harness(&request).unwrap();
     assert_eq!(first, second);
-    let derivation: DerivationManifest = serde_json::from_str(&first.manifest.contents).unwrap();
-    assert_eq!(derivation.outputs[0].uri, first.rust.path);
-    assert_eq!(derivation.outputs[0].role, "generated-rust-harness");
+    let attestation: ProofAttestationBody =
+        serde_json::from_str(&first.attestation.contents).unwrap();
+    assert_eq!(attestation.schema_version, 1);
+    assert_eq!(attestation.record_type, "proof_attestation");
+    assert_eq!(attestation.result, AttestationResult::Passed);
+    assert_eq!(attestation.record_digest, TEST_RECORD_DIGEST);
+    assert_eq!(attestation.candidate_revision, IR_CANDIDATE_REVISION);
+    assert_eq!(attestation.proof_id, "PROOF-codegen-generated-rust-harness");
+    // The attestation names the artifact it is emitted beside. The deprecated
+    // envelope said this with `outputs[0].uri`; the shared shape says it in the
+    // command that produced the file, and `retained_output` binds the bytes when
+    // Quoin seals it.
+    assert_eq!(
+        attestation.command.argv.last().map(String::as_str),
+        Some(first.rust.path.as_str())
+    );
+    // The harness body is a different shape from the oracle's -- it names no schema
+    // digest, carries no expression digest, and uses a different proof obligation --
+    // so the oracle slice's round trip does not cover it. It gets its own, against
+    // the real CLI and the schema Quoin publishes.
+    let schema = common::packaged_attestation_schema();
+    let validator = common::packaged_attestation_validator(&schema);
+    let sealed_directory = TemporaryDirectory::new("quire-harness-attestation");
+    let sealed = common::seal_and_validate(
+        &first.attestation.contents,
+        &first.rust,
+        &sealed_directory.0,
+        &validator,
+    );
+    assert_eq!(sealed["retained_output"]["media_type"], "text/x-rust");
+    assert_eq!(sealed["proof_id"], "PROOF-codegen-generated-rust-harness");
     assert!(first.rust.contents.starts_with("#![deny(missing_docs)]\n"));
     assert!(first
         .rust
@@ -402,7 +435,7 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
         precondition: &dependency_free_pre,
         postcondition: &dependency_free_post,
         execution_point: "handler:dependency-free",
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap();
     let state_only = generate_tristate_harness(&HarnessRequest {
@@ -412,7 +445,7 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
         precondition: &state_pre,
         postcondition: &state_post,
         execution_point: "handler:state-only",
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap();
 
@@ -473,7 +506,7 @@ fn tc_004_invalid_execution_point_is_a_structured_failure_without_artifact() {
         precondition: &precondition_expression,
         postcondition: &postcondition_expression,
         execution_point: "bad\npoint",
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap_err();
     assert_eq!(diagnostic[0].code, HarnessErrorCode::InvalidExecutionPoint);
@@ -551,7 +584,7 @@ fn tc_004_multiple_state_bindings_fail_closed() {
         precondition: &precondition,
         postcondition: &postcondition,
         execution_point: "handler:update",
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap_err();
     assert_eq!(

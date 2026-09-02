@@ -37,6 +37,31 @@ Retention, integrity checking, audit, attestation and receipts are Quoin's. Stat
 obligation and coverage facts are Quire's. This repository retains no evidence of its own and
 computes no aggregate verdict.
 
+That applies to generated artifacts too, since #20. Each one is emitted with a proof attestation in
+Quoin's packaged `ProofAttestationV1` shape, one per artifact, because an attestation binds exactly
+one retained output — so an oracle emits two, for the Rust and for the source map. The emitted body is
+that schema without `digest` and without `retained_output`: `seal-attestation` derives both and
+refuses a body that supplies either, which is the same reason `scripts/assurance_chain.py` builds
+bodies rather than sealed records for the four proof obligations. All four body shapes — oracle Rust,
+oracle source map, harness, strategy — are sealed through the real CLI in the test suite and validated
+against the bytes `quoin change-assurance schema` publishes, with format assertion on. Nothing
+validates against a local copy, and this repository owns no evidence schema to copy.
+
+The caller supplies two fields — the sealed record digest and the candidate revision — and the
+generator states the other nine. `result` is derived rather than supplied: a bundle exists only when
+generation succeeded, so an attestation only ever says `passed`, and the six Interface-001 terminal
+states stay in the diagnostic that arrives instead of a bundle. `observed_at` is the generator's own
+source-commit time, frozen at build so regeneration stays byte-identical; it is not an observation of
+when generation ran, and `interface-001` says so.
+
+Fourteen things the deprecated envelope carried are not in the shared shape and were dropped rather
+than smuggled into `environment`, which is the one open map an attestation has. Four are worth naming
+here: reviewer logins, which belong to the ix-flow decision event a receipt binds; the contribution
+method, which has no field in any of the three packaged schemas and is dropped outright rather than
+rehomed; and the free-text result summary and requirement references, which belong to the record's own
+proof obligations. The other ten are enumerated in `interface-001`'s `not_carried` and in the change
+declaration, because "four things" was the first count written here and it was wrong by ten.
+
 There is no `evidence/` tree. It held 2,205 files — 44 envelopes of `quire.derivation-evidence/v1`,
 which the pinned compatibility mapping refused as an unknown schema version — plus the reader that
 asked the mapping, its fixtures, a proof obligation, a `compat-view` target, and two schemas frozen
@@ -82,7 +107,7 @@ src/lib.rs                 # crate root
 examples/                  # the generation conformance producer
 tests/integration.rs       # end-to-end tests
 tests/shared_assurance.rs  # FR-006 gates; /// Trace: comments are Quire's census
-schemas/                   # two live domain contracts, both included by src/oracle.rs
+schemas/                   # two live domain output contracts, both included by src/oracle.rs
 spec/                      # requirements artifacts, the test matrix, the suite registry
 reviews/                   # quire-validated SpecReview artifacts
 assurance/                 # the change declaration and the adopted pins

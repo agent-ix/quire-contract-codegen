@@ -30,7 +30,7 @@ atomically and shall retain golden, differential, and cross-backend semantic-par
 ## Behavior
 
 - The CLI shall never edit developer-owned source regions.
-- Supported platforms shall produce reproducible generated files and manifests.
+- Supported platforms shall produce reproducible generated files and attestations.
 - Every differential discrepancy shall become a fixture or documented semantic difference.
 - The Assurance Argument shall cite completed conformance evidence without closing the human claim.
 
@@ -39,7 +39,7 @@ atomically and shall retain golden, differential, and cross-backend semantic-par
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-005-AC-1 | Failed generation leaves no partial published bundle or edited developer region. | Test (TC-002) |
-| FR-005-AC-2 | Supported platforms reproduce byte-identical files and manifests. | Test (TC-001) |
+| FR-005-AC-2 | Supported platforms reproduce byte-identical files and attestations. | Test (TC-001) |
 | FR-005-AC-3 | Every differential discrepancy has a retained disposition. | Inspection |
 | FR-005-AC-4 | Executable, proptest, Kani, and coverage semantics agree or retain an explicit difference. | Test (TC-007) |
 

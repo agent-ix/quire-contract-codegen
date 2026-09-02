@@ -13,10 +13,12 @@ relationships:
 Verify that the repository-local collector, envelope builder, schema validators for shared record
 types, verifier, anchor writer, failure-propagation policer, coverage reimplementation, and
 retained-evidence reader are gone; that the three schemas deleted with the formats they described —
-the two retained records once named by digest, and the deprecated derivation-evidence envelope that
-nothing validated against — are absent and referenced by nothing; that the two live domain schemas
-are still named by the generator; and that the gates which replaced them are reachable from `ci`
-rather than merely defined.
+the two retained records once named by digest, and the deprecated PGM-01 evidence envelope that
+nothing validated against — are absent and referenced by nothing; that the deprecated evidence format
+itself is named by no executable or configuration surface, by its schema version string and by the
+two serde types that were its only remaining statement; that the two live domain schemas are still
+named by the generator; and that the gates which replaced them are reachable from `ci` rather than
+merely defined.
 
 ## Test Procedure
 
