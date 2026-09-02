@@ -18,7 +18,7 @@
     ],
     "properties": {
       "artifactPath": {"type": "string", "minLength": 1},
-      "role": {"enum": ["clause", "implication_consequent"]},
+      "role": {"enum": ["clause", "oracle_evaluation", "implication_consequent"]},
       "startLine": {"type": "integer", "minimum": 1},
       "endLine": {"type": "integer", "minimum": 1},
       "requirementId": {"type": "string", "minLength": 1},

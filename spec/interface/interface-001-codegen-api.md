@@ -35,9 +35,9 @@ operations:
     output: PublishedBundleIdentity | IO diagnostic
     semantics: replace only generator-owned bundle boundaries after complete staged validation
   - name: analyze_coverage
-    inputs: [source map, LLVM coverage export, runtime campaign report]
-    output: per-requirement vacuity and rejection report
-    semantics: exercised coverage requires observed consequent execution
+    inputs: [source-map artifact, LLVM coverage JSON bytes, producer identity, source root, runtime campaign report, test outcome, attestation context]
+    output: CoverageArtifactBundle | CoverageDiagnosticSet
+    semantics: deterministic per-requirement report plus one proof attestation; analysis consumes producer bytes and never runs or substitutes for LLVM coverage
   - name: cli_generate
     inputs: [serialized package path, destination, backend flags]
     output: stable exit status, diagnostics, and published bundle identity
@@ -92,6 +92,21 @@ harness_strategy_slice:
   expected_domain: generated integer cases expose a rejection expectation and verdict check; the generated harness proptest adapter requires and checks that expectation against quire_contract_runtime::VerdictKind
   generated_crate_lints: generated crate roots deny missing documentation and compile under denied warnings
   artifact_names: bounded readable prefix plus full SHA-256 over length-delimited request identity
+coverage_analysis_slice:
+  qualified_profile: cargo-llvm-cov 0.9.0 producing llvm.coverage.json.export version 2.0.1
+  source_map: exactly one clause envelope and one oracle_evaluation region per analyzed clause, plus every implication_consequent region; artifact digest is recomputed before use
+  llvm_export: full JSON export with type llvm.coverage.json.export, exact version 2.0.1, file segments present, and exactly one lexically normalized filename matching the generated artifact path under the caller-declared source root
+  segment_semantics: ordered LLVM segment transitions are reconstructed into active source spans; a mapped region is observed only when a positive-count, count-bearing, non-gap active span intersects it; summary percentages are never used as execution evidence
+  classification:
+    unexecuted: oracle_evaluation is not observed
+    vacuous: oracle_evaluation is observed and no mapped implication consequent is observed
+    partially_exercised: oracle_evaluation is observed and some but not all mapped implication consequents are observed
+    exercised: oracle_evaluation is observed and every mapped implication consequent is observed, or the evaluated clause contains no implication
+  campaign_report: the analyzer consumes the pinned quire-contract-runtime CampaignReport type so its complete counter set and failed-is-a-subset-of-accepted invariant are not restated by a caller-owned lookalike
+  test_outcomes: [passed, failed, aborted, not_computed]
+  independent_facts: accepted, rejected, failed, and discarded runtime counts plus test outcome are retained verbatim and never used to upgrade coverage classification
+  identity: source-map and runtime report requirement/revision must agree; report retains producer name/version, LLVM export format version, export digest, source-map digest, report schema identity, and exact requirement revision
+  invalid_input: malformed or summary-only export, unsupported format version, missing or duplicate semantic regions, ambiguous or traversing paths, digest mismatch, identity mismatch, and invalid attestation context produce stable diagnostics with no partial bundle
 compatibility:
   draft_pins: must be reconciled before leaving draft
   generated_runtime_dependency: quire-contract-runtime, proptest, plus declared customer types only

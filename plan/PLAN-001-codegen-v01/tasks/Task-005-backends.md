@@ -27,6 +27,12 @@ snapshot, subject invocation ordering, post-state evaluation, runtime `Verdict`,
 accounting boundary. Strategy generation directly shapes bounded ranges, finite memberships, and
 supported correlated relations; only explicitly residual constraints may use rejection.
 
+Issue #5 is in specification review from the shared-assurance `main` revision. Its proposed analyzer
+consumes full LLVM JSON, requires a dedicated oracle-evaluation source region, and keeps unexecuted,
+vacuous, partially exercised, and exercised classifications distinct from campaign counts and test
+outcome. No vacuity implementation begins until the exact specification head receives independent
+review.
+
 ## Guards
 
 - PR #10 remains the provisional Task-004 base; this branch must rebase to its accepted revision.
