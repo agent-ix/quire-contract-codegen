@@ -220,6 +220,10 @@ fn tc_009_the_chain_reaches_quoin_without_quoin_or_quire_executing_a_producer() 
         "refuses-a-foreign-protocol",
         "refuses-an-unnamed-outcome",
         "refuses-an-empty-stream",
+        // The undecodable-bytes arm of the adapter. Required by name because it
+        // is the branch nothing else reaches, and because the probe that used to
+        // stand where it does could not fail.
+        "refuses-an-undecodable-row-by-name",
         "accepts-the-real-run",
     ] {
         assert!(
@@ -235,7 +239,6 @@ fn tc_009_the_chain_reaches_quoin_without_quoin_or_quire_executing_a_producer() 
         "PROOF-generation-conformance",
         "PROOF-upstream-identity",
         "PROOF-quire-static-export",
-        "PROOF-legacy-compatibility",
         "PROOF-msrv",
     ] {
         assert_eq!(
@@ -298,8 +301,8 @@ fn tc_009_every_declared_proof_command_is_the_command_make_actually_runs() {
         .expect("proof_obligations");
     assert_eq!(
         obligations.len(),
-        5,
-        "the declaration names {} proof obligations; the chain and this test expect 5",
+        4,
+        "the declaration names {} proof obligations; the chain and this test expect 4",
         obligations.len()
     );
     for proof in obligations {
@@ -796,84 +799,30 @@ fn tc_010_the_sealed_records_impact_snapshot_is_the_quire_export() {
     );
 }
 
-/// Trace: TC-011, FR-006-AC-4, NFR-002-AC-1
-#[test]
-fn tc_011_retained_evidence_is_read_through_the_shared_mapping_without_moving_a_byte() {
-    let python = assurance_python();
-    let census = json_gate(&python, &["scripts/legacy_evidence_view.py", "--json"]);
-
-    // Two different claims, kept apart. The first is that this run wrote nothing;
-    // the second is that the retained bytes are the bytes that were committed.
-    // Only Git can answer the second, and it is asked rather than assumed.
-    assert!(census["evidence_bytes_moved_during_this_run"]
-        .as_array()
-        .unwrap()
-        .is_empty());
-    assert!(
-        census["uncommitted_evidence_changes"]
-            .as_array()
-            .unwrap()
-            .is_empty(),
-        "retained evidence differs from what was committed: {}",
-        census["uncommitted_evidence_changes"]
-    );
-    assert!(census["misattributed_records"]
-        .as_array()
-        .unwrap()
-        .is_empty());
-    assert_eq!(census["matched"], true);
-
-    let files = census["evidence_files_read"].as_u64().unwrap();
-    let on_disk = walk(&root().join("evidence"));
-    assert_eq!(
-        files, on_disk,
-        "the compatibility view read {files} evidence files but {on_disk} are present"
-    );
-
-    let retained = &census["retained"];
-    assert!(retained["count"].as_u64().unwrap() > 0);
-    // The honest answer for this repository. Its retained family is
-    // quire.derivation-evidence/v1, which the pinned mapping does not cover, so
-    // every envelope is refused. That refusal is reported as it stands and is not
-    // converted into a pass. Filed as agent-ix/engineering-assurance#21.
-    assert_eq!(
-        retained["outcomes"],
-        serde_json::json!(["incompatible"]),
-        "the retained-evidence outcome changed; if the shared mapping gained a \
-         derivation-evidence reader this assertion should be updated deliberately"
-    );
-
-    // The mapping must be seen to accept, or a refusal proves nothing.
-    let cases = census["cases"].as_array().unwrap();
-    assert!(
-        cases
-            .iter()
-            .any(|case| case["kind"] == "positive_control" && case["outcome"] == "lossy"),
-        "no positive control was accepted; a mapping only ever seen refusing is \
-         indistinguishable from a step that never worked"
-    );
-
-    let (code, stdout, stderr) = run(
-        &python,
-        &["scripts/legacy_evidence_view.py", "--mutation-probes"],
-    );
-    assert_eq!(
-        code, 0,
-        "a load-bearing compatibility check was removed and the census did not \
-         notice\n{stdout}\n{stderr}"
-    );
-}
-
 /// Collect every readable source file under `directory`, recursively.
 fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
     // Excluded, and each for its own reason: `.git` is not source, `target` is
-    // build output, `evidence` is immutable retained history that legitimately
-    // names the schemas its records were sealed against, and `.venv-assurance` is
-    // the pinned upstream release rather than anything this repository wrote.
-    const EXCLUDED: [&str; 4] = [".git", "target", "evidence", ".venv-assurance"];
-    let Ok(entries) = fs::read_dir(directory) else {
-        return;
-    };
+    // build output, and `.venv-assurance` is the pinned upstream release rather
+    // than anything this repository wrote. `evidence/` used to be excluded here
+    // as retained history that legitimately named the schemas its records were
+    // sealed against; it is deleted, so the exemption it needed is gone with it.
+    // `__pycache__` joins the three: it is generated, it is not authored here,
+    // and its `.pyc` files are binary. They were being read and silently dropped
+    // by the old unreadable-file `continue`, which is how the wide-encoding
+    // assertion below found them.
+    const EXCLUDED: [&str; 4] = [".git", "target", ".venv-assurance", "__pycache__"];
+    // Fail closed, exactly as the file arm does. A silent `return` here was the
+    // directory half of the same class as the unreadable-file skip: an exclusion
+    // no deny-list entry names, which also quietly lowers `inspected` and the
+    // per-directory counts. Measured: a live import inside a chmod-000 directory
+    // was invisible.
+    let entries = fs::read_dir(directory).unwrap_or_else(|error| {
+        panic!(
+            "{} could not be read ({error}); the census cannot claim to have \
+             examined what is inside it",
+            directory.display()
+        )
+    });
     for entry in entries {
         let path = entry.expect("directory entry").path();
         if path.is_dir() {
@@ -887,42 +836,76 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
             collect_sources(&path, into);
             continue;
         }
-        let extension = path.extension().and_then(|value| value.to_str());
-        if matches!(
-            extension,
-            Some("py" | "sh" | "rs" | "txt" | "toml" | "yml" | "md" | "json")
-        ) {
-            into.push(path);
+        // Deny-list, not allow-list, and that direction was chosen after an
+        // allow-list was measured failing twice.
+        //
+        // An allow-list is a list of the places a reintroduced reference has to
+        // avoid, and it only has to be incomplete once. `Makefile` has no
+        // extension, so an extension-only filter never saw the one file a Make
+        // target name can live in — appending the deleted compatibility-view
+        // target verbatim was observed to leave the census green. Naming
+        // `Makefile` back explicitly fixed that one file and left the next one:
+        // an extensionless `scripts/reintroduced_reader` is just as invisible to
+        // a filter that admits three names by hand, and a reader is exactly the
+        // kind of thing that gets committed without a suffix.
+        //
+        // So everything is scanned unless there is a reason not to. The reasons
+        // are: it is not text and would never carry a readable reference, or it
+        // is a generated lock or licence whose contents this repository does not
+        // author. Each exclusion is named individually below; the count in this
+        // comment is the length of the array, so it cannot drift from it.
+        const NOT_SCANNED: [&str; 6] = [
+            "Cargo.lock",
+            "LICENSE",
+            "LICENSE-APACHE",
+            "LICENSE-MIT",
+            "SHA256SUMS",
+            ".gitkeep",
+        ];
+        const NOT_SCANNED_EXTENSIONS: [&str; 12] = [
+            "lock", "png", "jpg", "jpeg", "gif", "ico", "pdf", "zip", "gz", "golden", "pyc", "pyo",
+        ];
+        let name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
+        let extension = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
+        // `EXCLUDED` is consulted on directories only, and in a linked worktree
+        // `.git` is a *file* pointing at the real git directory. Harmless here --
+        // it carries no forbidden name -- but an exclusion should mean what it
+        // says wherever the repository happens to be checked out.
+        if EXCLUDED.contains(&name) {
+            continue;
         }
-    }
-}
-
-fn walk(directory: &Path) -> u64 {
-    let mut count = 0;
-    for entry in fs::read_dir(directory).expect("evidence directory") {
-        let path = entry.expect("directory entry").path();
-        if path.is_dir() {
-            count += walk(&path);
-        } else {
-            count += 1;
+        if NOT_SCANNED.contains(&name) || NOT_SCANNED_EXTENSIONS.contains(&extension) {
+            continue;
         }
+        // Regular files only. A FIFO is not a directory, so it fell through to
+        // `fs::read` and blocked the whole census with no timeout -- denial
+        // rather than escape, but a walk over a working tree should not have an
+        // unbounded step in it.
+        if !path.is_file() {
+            continue;
+        }
+        into.push(path);
     }
-    count
 }
 
 /// Trace: TC-012, TC-003, FR-006-AC-5, NFR-002-AC-3
 #[test]
-fn tc_012_all_twelve_verification_outcomes_are_demonstrated_and_paired_with_controls() {
-    // The twelve states this migration must keep distinguishable. A state nobody
+fn tc_012_every_demonstrable_verification_outcome_is_demonstrated_and_paired_with_controls() {
+    // The shared vocabulary is twelve states. Ten are demonstrated on this
+    // repository's intake path and are required here. A state nobody
     // demonstrates is a state nobody would notice the loss of.
-    const REQUIRED: [&str; 12] = [
+    const REQUIRED: [&str; 10] = [
         "pass",
         "fail",
         "unavailable",
-        "unsupported",
         "inconclusive",
         "not-computed",
-        "malformed",
         "partial",
         "stale",
         "suspect",
@@ -930,23 +913,43 @@ fn tc_012_all_twelve_verification_outcomes_are_demonstrated_and_paired_with_cont
         "tampered",
     ];
 
-    let python = assurance_python();
-    let report = chain_report();
-    let census = json_gate(&python, &["scripts/legacy_evidence_view.py", "--json"]);
+    // `unsupported` and `malformed` are the other two and are deliberately
+    // absent. Measured on the pre-deletion tree, per state and per source: the
+    // assurance chain alone reached ten, and the compatibility census over the
+    // retained evidence supplied exactly these two. That census is deleted, and
+    // neither state is re-demonstrated here.
+    //
+    // `unsupported` is not in the adapter's producer vocabulary and never was. It
+    // was a property of the compatibility mapping — a retained record carrying an
+    // unknown PGM-01 schema version — and nothing on the intake path produces it.
+    // The corpus does reach an `unsupported` *Interface-001 terminal state*, and
+    // borrowing that would be exactly the collapse of two vocabularies this test
+    // exists to prevent.
+    //
+    // `malformed` is in that vocabulary, and it was still withdrawn, because
+    // being a declared key is not the same as being distinguishable. Both
+    // `ROW_RESULTS` and `CONFORMANCE_OUTCOMES` map it onto the same `fail`, so a
+    // scenario feeding the adapter a stream declaring `outcome: malformed`
+    // produces receipt reasons byte-identical to the `fail` case — which is why
+    // `non-success-states-stay-distinguishable` could not have included it. Such
+    // a scenario was written, measured, found to be `attested-failed` under
+    // another name, and removed. Keeping it would have held this list at eleven
+    // by painting one on, which is worse than ten that are real.
+    //
+    // Both claims went with the evidence rather than being restated over a weaker
+    // substitute. The protection against a silent weakening is not a manufactured
+    // demonstration; it is the assertion below that both states stay absent, so
+    // re-acquiring either goes red instead of drifting.
+    const NOT_DEMONSTRABLE_HERE: [&str; 2] = ["unsupported", "malformed"];
 
-    let mut demonstrated: BTreeSet<String> = report["states_demonstrated"]
+    let report = chain_report();
+
+    let demonstrated: BTreeSet<String> = report["states_demonstrated"]
         .as_array()
         .unwrap()
         .iter()
         .map(|value| value.as_str().unwrap().to_owned())
         .collect();
-    for case in census["cases"].as_array().unwrap() {
-        assert_eq!(
-            case["matched"], true,
-            "a compatibility case is being counted as a demonstration without matching: {case:#}"
-        );
-        demonstrated.insert(case["kind"].as_str().unwrap().replace('_', "-"));
-    }
 
     let missing: Vec<&str> = REQUIRED
         .iter()
@@ -958,6 +961,20 @@ fn tc_012_all_twelve_verification_outcomes_are_demonstrated_and_paired_with_cont
         "these verification outcomes were never demonstrated: {missing:?}; \
          demonstrated: {demonstrated:?}"
     );
+
+    // The two absent states must stay absent by measurement rather than by
+    // comment. If a later change gives one of them a real demonstration, this
+    // fails and the requirement is widened deliberately instead of drifting.
+    for state in NOT_DEMONSTRABLE_HERE {
+        assert!(
+            !demonstrated.contains(state),
+            "{state} is demonstrated again; FR-006-AC-5 and MP-001 record it as \
+             having lost its only demonstration with the retained evidence. If a \
+             real demonstration now exists, widen the requirement deliberately — \
+             but check first that the new case is distinguishable in the receipt \
+             and not another state under a second name"
+        );
+    }
 
     // Every negative names the positive control that proves the step it refuses
     // is a step that works.
@@ -982,8 +999,22 @@ fn tc_012_all_twelve_verification_outcomes_are_demonstrated_and_paired_with_cont
 
 /// Trace: TC-013, FR-006-AC-6
 #[test]
-fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothing() {
+fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unreferenced() {
     let root = root();
+
+    // Removed by a drop guard rather than by the line below alone: the census
+    // loop panics on a real finding, and a gate that litters the source tree on
+    // the way out leaves a file a later `git add -A` would commit. `.gitignore`
+    // names it too, belt and braces.
+    struct ProbeGuard(PathBuf);
+    impl Drop for ProbeGuard {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+
+    let probe_path = root.join("scripts/.census-probe.py");
+    let _probe_guard = ProbeGuard(probe_path.clone());
 
     // The generic machinery is gone, by name.
     for removed in [
@@ -998,6 +1029,11 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         "scripts/run_python_tests.py",
         "tests/test_foundation_evidence_tooling.py",
         "requirements-evidence.txt",
+        // The retained-evidence reader and its fixtures. They were kept only to
+        // read the records under evidence/; those records are deleted, so the
+        // reader that mapped them is too.
+        "scripts/legacy_evidence_view.py",
+        "tests/fixtures/legacy-compat/expectations.json",
     ] {
         assert!(
             !root.join(removed).exists(),
@@ -1005,43 +1041,35 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         );
     }
 
-    // Two evidence schemas are frozen, not deleted: every retained collection
-    // input names the first by SHA-256 and every retained manifest names the
-    // second. Removing one would not remove a generic evidence family from this
-    // repository; it would break a reference inside bytes this migration is
-    // required to leave untouched.
+    // The retained tree itself, and the two schemas that were frozen only because
+    // retained records named them by SHA-256. With the records deleted there is
+    // nothing left for those digests to keep intact, so the schemas went too.
     //
-    // The set is two and not four, and that was measured rather than inherited:
+    // The set was two and not four, and that was measured rather than inherited:
     // schemas/pgm01-derivation-evidence-envelope-v1.schema.json is a live domain
     // contract here, included by src/oracle.rs as PGM_SCHEMA and validated
-    // against on every generation. It is asserted live below for exactly that
-    // reason.
-    let frozen = [
-        (
-            "schemas/foundation-evidence-input-v1.schema.json",
-            "1f533ba87a9c883ad5b26ea24509e52c71721a7f68b2891050ab7f9630f12ab5",
-        ),
-        (
-            "schemas/foundation-evidence-manifest-v1.schema.json",
-            "05e92a537a4def39d50e0050667200fae648284afef603bcbf2c0e014e9b5be5",
-        ),
+    // against on every generation. Sharing a directory and a `pgm01` in the
+    // filename with the retained material did not make it retained material. It
+    // is asserted live below for exactly that reason.
+    let deleted_schemas = [
+        "schemas/foundation-evidence-input-v1.schema.json",
+        "schemas/foundation-evidence-manifest-v1.schema.json",
     ];
-    for (path, expected) in frozen {
-        let file = root.join(path);
+    for path in deleted_schemas {
         assert!(
-            file.is_file(),
-            "{path} was deleted; it is frozen, not removed"
-        );
-        assert_eq!(
-            sha256_of(&file),
-            expected,
-            "{path} changed; a frozen artifact is immutable"
+            !root.join(path).exists(),
+            "{path} is still present; it was frozen only for the retained records \
+             that named it, and those are deleted"
         );
     }
+    assert!(
+        !root.join("evidence").exists(),
+        "evidence/ is still present; the retained records were not deleted"
+    );
 
     // And the three live ones stay live. Asserting this is what stops a later
-    // tidy-up from folding them into the frozen set on the strength of the
-    // directory they happen to share.
+    // tidy-up from deleting them on the strength of the directory they happen to
+    // share with the two above.
     let generator = fs::read_to_string(root.join("src/oracle.rs")).unwrap();
     for live in [
         "schemas/pgm01-derivation-evidence-envelope-v1.schema.json",
@@ -1059,19 +1087,207 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         );
     }
 
-    // Nothing validates against the frozen pair any more. The census walks the
-    // repository root and excludes, rather than naming the directories it will
-    // look in: an inclusion list is a list of the places a reintroduced validator
-    // would have to avoid, and it only has to be incomplete once.
+    // Nothing references the deleted pair, or the deleted reader, any more. The
+    // census walks the repository root and excludes, rather than naming the
+    // directories it will look in: an inclusion list is a list of the places a
+    // reintroduced validator would have to avoid, and it only has to be
+    // incomplete once.
+
+    // Scanned broadly, counted narrowly, and the two are different populations
+    // on purpose.
+    //
+    // The reference scan runs over everything the walk finds — tracked and
+    // untracked alike — because untracked is exactly the state a reintroduced
+    // reader is in while someone is still writing it, and a census that only
+    // reads committed files would not see it until after it was `git add`ed.
+    //
+    // The counts below use the tracked set only. A walk-based count can be
+    // inflated by anything lying around: `proptest-regressions/*.txt` and a
+    // scratch `.json` in the repository root are both admitted by the extension
+    // filter, and two stray files are enough to restore headroom that real
+    // deletions had consumed. Scratch cannot vote on whether the census is big
+    // enough to prove anything.
+    let tracked_output = Command::new("git")
+        .args(["ls-files", "-z"])
+        .current_dir(&root)
+        .output()
+        .expect("git ls-files failed");
+    assert!(
+        tracked_output.status.success(),
+        "git ls-files failed; the census cannot tell tracked files from scratch"
+    );
+    let tracked: BTreeSet<PathBuf> = String::from_utf8_lossy(&tracked_output.stdout)
+        .split('\0')
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| root.join(entry))
+        .collect();
+    assert!(
+        !tracked.is_empty(),
+        "git ls-files reported no tracked files; the counts below would be vacuous"
+    );
+
+    // Stems, not filenames, and the rule is applied to every entry rather than
+    // to the one that prompted it.
+    //
+    // The reader was listed by its full filename, and a Python import of the
+    // same module -- the likeliest form of reintroduction -- spells it without
+    // the extension and went straight past. Fixing that one name and leaving the
+    // other ten was the same mistake at a smaller scale, and it was measured: a
+    // workflow running the deleted test by its Rust function-name spelling was
+    // green, because the list carried only the hyphenated document id while this
+    // repository's own convention for test functions is the underscored form;
+    // and the two schemas kept their full `.schema.json` filenames while the
+    // census that justified deleting them searched by the bare stem.
+    //
+    // So: suffixes stripped, and every name that has a hyphen/underscore pair in
+    // circulation carries both. A suffixed or decorated spelling is a superstring
+    // of the stem, so the stem subsumes it; the filename subsumed nothing.
+    //
+    // Only the arrays below are exempt from the census, not the prose around
+    // them, so this comment must not spell any of the names it is about.
+    // Two statements of the same list, compared. The probe below is built from
+    // `gone`, so a `gone` that loses an entry loses it from the probe too and the
+    // control agrees with itself -- measured green, which is the third time this
+    // shape has appeared in this test. `EXPECTED_GONE` is the independent second
+    // statement, and the `assert_eq!` is what a single-line deletion lands on.
+    //
+    // It does not defend against someone editing both, and nothing in one file
+    // can. It defends against the realistic failure, which is an entry quietly
+    // dropped while the control keeps reporting success.
+    const EXPECTED_GONE: [&str; 14] = [
+        "COMPAT_RESULT",
+        "FR-006-AC-4",
+        "PROOF-legacy-compatibility",
+        "SUITE-005",
+        "TC-011",
+        "compat-view",
+        "compat_view",
+        "foundation-evidence-input-v1",
+        "foundation-evidence-manifest-v1",
+        "legacy-compat",
+        "legacy-compatibility",
+        "legacy_compat",
+        "legacy_evidence_view",
+        "tc_011",
+    ];
+    let gone: Vec<&str> = deleted_schemas
+        .iter()
+        .map(|path| {
+            Path::new(path)
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .trim_end_matches(".schema.json")
+        })
+        .chain([
+            "legacy_evidence_view",
+            "legacy-compat",
+            "legacy_compat",
+            "PROOF-legacy-compatibility",
+            "compat-view",
+            "compat_view",
+            "COMPAT_RESULT",
+            "legacy-compatibility",
+            "SUITE-005",
+            "TC-011",
+            "tc_011",
+            "FR-006-AC-4",
+        ])
+        .collect();
+    assert_eq!(
+        gone.iter().copied().collect::<BTreeSet<&str>>(),
+        EXPECTED_GONE.into_iter().collect::<BTreeSet<&str>>(),
+        "the forbidden-name list changed. Every name here is a thing this change \
+         deleted, so removing one silently stops checking for it -- and the probe \
+         is built from this list, so the control below would agree"
+    );
+
+    // The probe carries **every** name in `gone`, and the control below requires
+    // each one to have been matched inside it.
+    //
+    // Carrying one name was enough to show the census sees untracked files and
+    // nothing more. `gone` could then be reduced to that single entry and the
+    // control still agreed, which is precisely the defect the directory guard's
+    // `assert_eq!` was added to fix, left standing here: a declaration whose
+    // shrinking removes the check. Nine of these names are hand-written and
+    // corroborated by nothing else, so the probe corroborates them.
+    let probe_body = format!(
+        "# Census probe, written and removed by tc_013. Never commit this file.\n\
+         # It names every deleted artifact on purpose: the census must detect each.\n\
+         {}\n",
+        gone.iter()
+            .map(|name| format!("# {name}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    fs::write(&probe_path, &probe_body).expect("write the census probe");
+    assert!(
+        !tracked.contains(&probe_path),
+        "the census probe at {} is tracked. The control below is about untracked \
+         files, and a committed probe satisfies it while the census is blind to \
+         the state a reintroduced reader is actually in",
+        probe_path.display()
+    );
+
+    // Collected after the probe is written, so the probe is in the census's own
+    // set rather than in a second walk taken on its behalf.
     let mut sources = Vec::new();
     collect_sources(&root, &mut sources);
 
-    // The claim is that nothing *validates* against them, so the assertion runs
-    // over the surfaces that can: code, configuration, and workflow files.
-    // Markdown is excluded and deliberately so — prose cannot validate anything,
-    // and this repository's planning documents are a record of the schemas they
-    // name. Two files are exempt and each says why.
+    // The claim is that nothing *reads* them, so the assertion runs over the
+    // surfaces that can: code, configuration, and workflow files. Markdown is
+    // excluded and deliberately so — prose cannot read anything, and this
+    // repository's planning documents and reviews are a record of what was
+    // deleted and why.
+    //
+    // Every name a live surface could still reach for, not just the files. An
+    // earlier form of this census listed three basenames and exempted this file
+    // wholesale, and a stale reference to the deleted reader in the `make -n ci`
+    // list two hundred lines below survived it: the exemption covered the very
+    // file the dangling reference was in. So the list is wide, and the exemption
+    // is the literal declaration below rather than the file that holds it.
+
+    // The exemptions, and they are three disjoint ranges over literal
+    // declarations rather than one span between the first and the last.
+    //
+    // The span form covered ~131 lines: the `ProbeGuard` impl, three assertion
+    // blocks, the live-schema loop and the `collect_sources` call all sat inside
+    // it, so a live `Command::new` invoking the deleted reader, inserted among
+    // them, was exempt. Measured green. Only the arrays that spell
+    // the forbidden names need an exemption, and only those get one.
+    let this_file = fs::read_to_string(root.join("tests/shared_assurance.rs")).unwrap();
+    let literal_ranges: Vec<(usize, usize)> = [
+        ("    for removed in [", "    ] {"),
+        ("    let deleted_schemas = [", "    ];"),
+        ("    const EXPECTED_GONE:", "    ];"),
+        (
+            "    let gone: Vec<&str> = deleted_schemas",
+            "        .collect();",
+        ),
+    ]
+    .iter()
+    .map(|(open, close)| {
+        let start = this_file
+            .find(open)
+            .unwrap_or_else(|| panic!("the declaration beginning {open:?} moved or was renamed"));
+        let end = this_file[start..]
+            .find(close)
+            .map(|offset| start + offset + close.len())
+            .unwrap_or_else(|| panic!("the declaration beginning {open:?} has no {close:?}"));
+        (start, end)
+    })
+    .collect();
+    for window in literal_ranges.windows(2) {
+        assert!(
+            window[0].1 <= window[1].0,
+            "the exempt ranges overlap or are out of order, so one of them is not the \
+             declaration it is meant to be: {literal_ranges:?}"
+        );
+    }
+
     let mut inspected = 0;
+    let mut probe_matched: BTreeSet<&str> = BTreeSet::new();
     for path in &sources {
         let extension = path
             .extension()
@@ -1080,37 +1296,230 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         if extension == "md" {
             continue;
         }
-        let file_name = path.file_name().and_then(|value| value.to_str());
-        // This file, because pinning the frozen pair by digest is the whole of
-        // this test; and assurance/pins.json, because it is the register that
-        // records the freeze and where each retained reference sits. Neither
-        // validates anything.
-        if file_name == Some("shared_assurance.rs") || file_name == Some("pins.json") {
-            continue;
-        }
-        // A frozen artifact naming itself is its own `$id`, not a validator.
-        if frozen.iter().any(|(schema, _)| root.join(schema) == *path) {
-            continue;
-        }
-        let Ok(source) = fs::read_to_string(path) else {
-            continue;
-        };
-        inspected += 1;
-        for (schema, _) in frozen {
-            let frozen_name = Path::new(schema).file_name().unwrap().to_str().unwrap();
-            assert!(
-                !source.contains(frozen_name),
-                "{} references the frozen artifact {frozen_name}; nothing may validate \
-                 against it",
+        // Decoded lossily rather than skipped. `read_to_string` returns `Err` on
+        // the first non-UTF-8 byte, and a `continue` there is a silent exclusion
+        // that no deny-list entry names: one `\xe9` in a comment made a live
+        // invocation of the deleted reader invisible, and three
+        // `__pycache__/*.pyc` files were already being dropped this way. It also
+        // quietly lowered `inspected` and the per-directory counts, eroding the
+        // floors at the same time. An unreadable file is a read failure and is
+        // reported; an undecodable one is decoded as far as it goes.
+        let Ok(bytes) = fs::read(path) else {
+            panic!(
+                "{} was admitted by the filter but could not be read; the census \
+                 cannot claim to have examined it",
                 path.display()
-            );
+            )
+        };
+        // Interleaved NULs mean a wide encoding, and `from_utf8_lossy` turns a
+        // UTF-16 spelling of any forbidden name into `l\0e\0g\0...` that no
+        // substring ever matches. Measured: a UTF-16 live import was invisible while the
+        // stray-byte case was caught. Rust would reject such a source file, but
+        // Python's `json` decoder autodetects UTF-16 and this repository reads
+        // JSON configuration from Python, so it is refused rather than scanned
+        // badly.
+        assert!(
+            !bytes.windows(2).any(|pair| pair[1] == 0 && pair[0] != 0),
+            "{} looks like a wide encoding (interleaved NUL bytes). The census \
+             matches byte substrings and would silently see nothing in it",
+            path.display()
+        );
+        let source = String::from_utf8_lossy(&bytes).into_owned();
+        if tracked.contains(path) {
+            inspected += 1;
+        }
+        // The change declaration is the one document whose job is to say what was
+        // deleted, so it necessarily names the obligation, the target and the
+        // criteria that went. Exempting it does not weaken the claim, because
+        // nothing in it is checked by substring search anyway: every resolvable
+        // element it carries has a stricter gate. `record_body` raises if a
+        // declared source or proof configuration path is missing, and `tc_009`
+        // requires every declared argv to appear verbatim in
+        // `make -n assurance-inputs`. A dangling path or a stale command in this
+        // file fails those, not this census.
+        // Compared by full path. A bare basename check exempted any
+        // `change-assurance.json` anywhere in the tree, so dropping one into
+        // `scripts/` bought a whole-file exemption for free.
+        if path == &root.join("assurance/change-assurance.json") {
+            continue;
+        }
+        let is_this_file = path.file_name().and_then(|value| value.to_str())
+            == Some("shared_assurance.rs")
+            && source == this_file;
+        for name in &gone {
+            // `match_indices`, not `find`. `find` returns the first occurrence
+            // only, and in this file every one of these names occurs first inside
+            // the exempt declarations below — so a `find`-based loop `continue`d
+            // on the exemption and never looked at anything after it. That made
+            // the byte range behave exactly like the whole-file exemption it
+            // replaced: six stale references appended to the end of this file
+            // were measured passing. Every occurrence is now judged on its own.
+            for (at, _) in source.match_indices(name) {
+                // Inside this test's own declarations, naming the artifact is the
+                // point. Anywhere else — including elsewhere in this same file —
+                // it is a live reference to something that does not exist.
+                if is_this_file
+                    && literal_ranges
+                        .iter()
+                        .any(|(start, end)| at >= *start && at < *end)
+                {
+                    continue;
+                }
+                // The census probe is the positive control, and it is detected
+                // here rather than asserted about somewhere else. It is a real
+                // untracked file carrying a real deleted name, judged by the real
+                // predicate on the real code path; the only thing special about
+                // it is that finding it is the expected outcome instead of a
+                // failure. A census that cannot see untracked files, or whose
+                // matching is broken, does not set this flag.
+                if path == &probe_path {
+                    probe_matched.insert(name);
+                    continue;
+                }
+                panic!(
+                    "{} references the deleted artifact {name} at byte {at}",
+                    path.display()
+                );
+            }
         }
     }
+    // The control for the untracked half of the scan.
+    //
+    // Three weaker forms were written before this one and each was measured
+    // passing while the census was blind. A second `collect_sources` call tests
+    // the walker, not the census. Asserting on the collected `sources` misses
+    // anything that narrows the set afterwards. Asserting on a `scanned` set
+    // recorded at the top of the loop misses anything that narrows it between
+    // there and the check that matters — which is where the narrowing would be.
+    //
+    // The only form that cannot be satisfied by bookkeeping is this one: the
+    // probe is an untracked file carrying a real deleted name, and the flag is
+    // set by the same `match_indices` branch that panics on every other file. To
+    // pass, the census has to have walked to an untracked file, read it, and
+    // matched a deleted name in it. There is no separate accounting to keep in
+    // step.
+    fs::remove_file(&probe_path).expect("remove the census probe");
     assert!(
-        inspected > 20,
-        "the executable and configuration census is unexpectedly small ({inspected}) \
-         to make this claim"
+        !probe_path.exists(),
+        "the census probe was not cleaned up at {}",
+        probe_path.display()
     );
+    let unmatched: Vec<&str> = gone
+        .iter()
+        .copied()
+        .filter(|name| !probe_matched.contains(name))
+        .collect();
+    assert!(
+        unmatched.is_empty(),
+        "the reference census did not detect {unmatched:?} in an untracked file that \
+         contains every forbidden name. Untracked is the state a reintroduced reader is \
+         in before anyone commits it; and a name missing here is a name the census would \
+         not have caught anywhere, so shrinking the list below lands on this assertion"
+    );
+
+    // Re-derived rather than inherited, and every figure below was taken from the
+    // walk and from `git ls-files` rather than from any document describing the
+    // layout. This repository has no `schemas/README.md` or equivalent, and no
+    // number here is sourced from prose.
+    //
+    // Measured with the deny-list above, so both sides are the same filter:
+    //
+    //     origin/main, `evidence/` excluded as it was then   45
+    //     this head                                          31
+    //     removed  14 = 1 reader + 11 fixtures + 2 schemas
+    //     added     0
+    //     45 - 14 + 0 = 31, and the census counts 31
+    //
+    // `inspected` counts a tracked file once it has been read, before the
+    // change-declaration exemption below, so it is the walked tracked count and
+    // not that count minus the exemptions. An earlier form incremented after the
+    // exemption and reported 30 while the comment claimed 31 — a derivation
+    // beside a threshold that its own arithmetic did not support, which is the
+    // exact defect this comment was rewritten to remove.
+    //
+    // The old floor was `> 20`, which would have kept passing while a third of
+    // the inspectable surface disappeared.
+    //
+    // The margin is 4 and it is chosen, not derived — no rule fixes it, and
+    // printing arithmetic that does not close would be worse than printing none.
+    // What makes 4 safe is that this floor is not the instrument that catches a
+    // directory disappearing: the set comparison and the per-directory floors
+    // below do that, and they trip on losses far smaller than 4. This number only
+    // has to catch diffuse attrition across the tree.
+    assert!(
+        inspected >= 27,
+        "the executable and configuration census is unexpectedly small ({inspected}, \
+         floor 27, measured 31 at the time it was derived) to make this claim"
+    );
+
+    // A total-only floor is the wrong instrument on a tree this small. `scripts`
+    // and `tests` are five files each and `src` is four, so an entire directory
+    // could vanish and move the total by less than ordinary churn would.
+    //
+    // The guard below is built by *discovery* — the directories are whatever the
+    // walk actually found — and then compared against a declared set. That
+    // ordering is the whole point, and it was arrived at by probing the obvious
+    // version and watching it fail. A guard whose directory list is the same list
+    // the walk iterates cannot catch that list shrinking: deleting an entry
+    // removes the directory from the check and from the walk at the same moment,
+    // and the test stays green. Measured here before this form replaced it —
+    // removing the `scripts` entry left `tc_013` passing.
+    //
+    // So the names are asserted first and the counts second. A directory that
+    // empties out fails the set comparison; an entry deleted from the declared
+    // set fails it too; and a directory that merely shrinks fails its floor.
+    let mut per_directory: BTreeMap<String, usize> = BTreeMap::new();
+    for path in &sources {
+        if !tracked.contains(path) {
+            continue;
+        }
+        let Ok(relative) = path.strip_prefix(&root) else {
+            continue;
+        };
+        if relative.extension().and_then(|value| value.to_str()) == Some("md") {
+            continue;
+        }
+        let top = if relative.components().count() <= 1 {
+            "<root>".to_owned()
+        } else {
+            relative
+                .components()
+                .next()
+                .map(|component| component.as_os_str().to_string_lossy().into_owned())
+                .unwrap_or_else(|| "<root>".to_owned())
+        };
+        *per_directory.entry(top).or_default() += 1;
+    }
+
+    // Declared, and every floor beside it was measured from this walk rather than
+    // read off a document describing the layout.
+    let declared: BTreeMap<&str, (usize, usize)> = BTreeMap::from([
+        ("<root>", (7usize, 9usize)),
+        (".github", (1, 2)),
+        ("assurance", (2, 2)),
+        ("examples", (1, 1)),
+        ("schemas", (3, 3)),
+        ("scripts", (4, 5)),
+        ("src", (4, 4)),
+        ("tests", (4, 5)),
+    ]);
+    let found: BTreeSet<&str> = per_directory.keys().map(String::as_str).collect();
+    let expected: BTreeSet<&str> = declared.keys().copied().collect();
+    assert_eq!(
+        found, expected,
+        "the set of directories the census walks changed. A directory that stopped being \
+         walked, or an entry removed from the declared set, both land here — which is the \
+         failure a per-directory floor built from the walk's own list cannot see"
+    );
+    for (directory, (floor, measured)) in &declared {
+        let seen = per_directory.get(*directory).copied().unwrap_or(0);
+        assert!(
+            seen >= *floor,
+            "the census saw {seen} inspectable files under {directory}, below its floor of \
+             {floor} (measured {measured} when derived). A directory that empties out is how \
+             a reference census stops proving anything while its total still looks healthy"
+        );
+    }
 
     // The Makefile is orchestration, not a trust root, and carries no gate that
     // polices its own execution. Target definitions are matched, not bare words.
@@ -1130,6 +1539,32 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         !makefile.contains("MAKEFLAGS"),
         "the Makefile still polices its own execution controls"
     );
+
+    // The directive scan below reads this one file, so an `include` would carry
+    // it past. Measured: a scratch `.mk` declaring `.IGNORE:` plus an `include`
+    // line left this test green while `make` on a failing recipe exited 0. Issue
+    // #14 already records that a green `make ci` says nothing about an *edited*
+    // Makefile; this assertion is about the narrower claim the scan itself
+    // makes, which was false. There is no include in this file, and adding one
+    // has to be a deliberate change that comes here first.
+    for line in makefile.lines() {
+        if line.starts_with('\t') {
+            continue;
+        }
+        let statement = line.split('#').next().unwrap_or("").trim();
+        // Matched on the directive word, not on `"include "` with a trailing
+        // space: make honours `include<TAB>file.mk` just as happily, and a
+        // one-character change put `.IGNORE:` back through an include with this
+        // test green.
+        let directive = statement.split_whitespace().next().unwrap_or("");
+        for form in ["include", "-include", "sinclude"] {
+            assert!(
+                directive != form,
+                "the Makefile includes another file, which the directive scan below \
+                 does not follow: {line}"
+            );
+        }
+    }
 
     // Make can be told to ignore failure, and a single line does it. `.IGNORE:`
     // at the top, a `-` prefix on a recipe line, or an assignment to `SHELL` each
@@ -1163,7 +1598,18 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
                  failing the build: {line}"
             );
         }
-        let assigns_shell = statement
+        // `override` and `export` are stripped first. Without that,
+        // `override SHELL := /usr/bin/true` split to the target
+        // `"override SHELL"` and passed -- and `override` is this Makefile's own
+        // house spelling, used for six variables already, so it is the likely
+        // form rather than an exotic one. Measured: with it prepended, a failing
+        // recipe exited 0 and this test stayed green.
+        let bare = statement
+            .strip_prefix("override ")
+            .or_else(|| statement.strip_prefix("export "))
+            .unwrap_or(statement)
+            .trim_start();
+        let assigns_shell = bare
             .split_once([':', '=', '?'])
             .map(|(target, _)| target.trim() == "SHELL")
             .unwrap_or(false);
@@ -1207,7 +1653,6 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         "--example generation_conformance",
         "scripts/check_upstream_pins.py",
         "scripts/check_shared_pins.py",
-        "scripts/legacy_evidence_view.py",
         "scripts/assurance_chain.py",
         "scripts/check_unsafe_comments.sh",
     ] {

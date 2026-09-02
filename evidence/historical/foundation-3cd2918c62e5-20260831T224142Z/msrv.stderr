@@ -1,5 +1,0 @@
-   Compiling quire-contract-codegen v0.1.0 (/home/peter/dev/quire-contract-codegen)
-    Finished test [unoptimized + debuginfo] target(s) in 0.32s
-     Running unittests src/lib.rs (/tmp/agent-b-codegen-pr9/debug/deps/quire_contract_codegen-e2125a7820be0407)
-     Running tests/integration.rs (/tmp/agent-b-codegen-pr9/debug/deps/integration-ceead817b1f74ce8)
-   Doc-tests quire_contract_codegen

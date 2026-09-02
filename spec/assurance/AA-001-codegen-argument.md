@@ -55,13 +55,21 @@ configuration, corpus, and platform profile. It remains open throughout foundati
 
 Specification traceability, deterministic/golden tests, atomic fault injection, compile tests, shaped
 strategy tests, bounded proofs, source-mapped coverage, cross-backend parity, differential fixtures,
-dependency/license audits, and complete evidence jointly address known failure scenarios. No single
-tool or generated manifest makes the release decision.
+dependency/license audits, and the sealed change-assurance chain jointly address known failure
+scenarios. No single tool or generated manifest makes the release decision. The argument does not
+rest on a retained evidence tree: this repository holds none, and the records it once held are
+deleted under the pre-stable preservation release (`agent-ix/engineering-assurance#7`).
 
 ## Sufficiency Decision
 
 No automated sufficiency decision is recorded. The human release owner must review reconciled
-dependencies, protected CI, retained measurements, gap analysis, open assumptions, and challenges.
+dependencies, protected CI, gap analysis, open assumptions, and challenges.
+
+"Retained measurements" was struck from that list rather than redefined. The retained evidence tree
+it named is deleted, so the item could not be satisfied, and narrowing it onto a different referent
+would be restating a claim over a weaker one. Nothing is substituted for it: this is a human release
+owner's obligation, and `planning/release-decision.md` records the same striking for the same
+reason.
 
 ## Challenges
 

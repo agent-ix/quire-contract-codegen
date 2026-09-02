@@ -64,9 +64,8 @@ help:
 	@echo "  make assurance-env    - Create the pinned shared-assurance interpreter"
 	@echo "  make assurance-inputs - Run the producers and write their structured results"
 	@echo "  make pins             - Classify the toolchain through the shared matrix"
-	@echo "  make compat-view      - Read retained evidence through the shared mapping"
 	@echo "  make assurance-chain  - Seal, retain, and verify through Quoin"
-	@echo "  make assurance        - pins + compat-view + assurance-chain"
+	@echo "  make assurance        - pins + assurance-chain"
 	@echo "  make rustdoc          - Build warning-free API documentation"
 	@echo "  make ci               - All local CI gates"
 
@@ -153,7 +152,6 @@ ASSURANCE_DIR := target/assurance
 CONFORMANCE_RESULT := $(ASSURANCE_DIR)/generation-conformance.jsonl
 UPSTREAM_RESULT := $(ASSURANCE_DIR)/upstream-identity.json
 QUIRE_EXPORT := $(ASSURANCE_DIR)/quire-static-export.json
-COMPAT_RESULT := $(ASSURANCE_DIR)/legacy-compatibility.json
 MSRV_RESULT := $(ASSURANCE_DIR)/msrv.jsonl
 REVISION ?= $(shell git rev-parse HEAD)
 
@@ -177,7 +175,6 @@ assurance-inputs: assurance-env
 	$(CARGO) run --quiet --example generation_conformance > $(CONFORMANCE_RESULT)
 	$(PYTHON) scripts/check_upstream_pins.py --json > $(UPSTREAM_RESULT)
 	$(QUIRE) coverage --scope . --json > $(QUIRE_EXPORT)
-	$(ASSURANCE_PYTHON) scripts/legacy_evidence_view.py --json > $(COMPAT_RESULT)
 	rustup run $(MSRV) $(CARGO) check --locked --all-targets \
 		--message-format=json > $(MSRV_RESULT)
 
@@ -193,17 +190,12 @@ upstream-identity:
 pins: assurance-env
 	$(ASSURANCE_PYTHON) scripts/check_shared_pins.py
 
-.PHONY: compat-view
-compat-view: assurance-env
-	$(ASSURANCE_PYTHON) scripts/legacy_evidence_view.py
-	$(ASSURANCE_PYTHON) scripts/legacy_evidence_view.py --mutation-probes
-
 .PHONY: assurance-chain
 assurance-chain: assurance-inputs
 	$(PYTHON) scripts/assurance_chain.py --candidate-revision $(REVISION)
 
 .PHONY: assurance
-assurance: pins compat-view assurance-chain
+assurance: pins assurance-chain
 
 # An operator target, not a CI gate. It writes into a Quoin evidence store, which
 # is a reviewed change rather than something a gate should do on every run.

@@ -5,7 +5,7 @@ Deterministic Rust, property-test, proof, and evidence generation from Quire con
 ## Development status
 
 This crate is in its specification-first foundation phase. The requirements, assurance plan,
-dependency pins, and retained-evidence procedure are reviewable now; semantic code generation is
+dependency pins, and shared-assurance intake procedure are reviewable now; semantic code generation is
 intentionally deferred until the upstream IR corpus and runtime interfaces are reconciled.
 
 The provisional dependency state is recorded in

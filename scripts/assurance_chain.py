@@ -17,7 +17,7 @@ It is not a verdict. It runs `quoin` and reports what `quoin` said. Where a
 scenario expects a refusal, the refusal is the expected result and the run is
 green because the tool refused, not because the tool agreed.
 
-It is not a retention store. Nothing is written under `evidence/`, nothing is
+It is not a retention store. Nothing is retained in the repository, nothing is
 committed, and the Quoin store it uses lives under `target/`, which is ignored.
 
 Exit status: 0 when every scenario, control and probe matched, 1 when one did
@@ -58,7 +58,6 @@ INPUTS = {
     "PROOF-generation-conformance": ("generation-conformance.jsonl", "application/x-ndjson"),
     "PROOF-upstream-identity": ("upstream-identity.json", "application/json"),
     "PROOF-quire-static-export": ("quire-static-export.json", "application/json"),
-    "PROOF-legacy-compatibility": ("legacy-compatibility.json", "application/json"),
     "PROOF-msrv": ("msrv.jsonl", "application/x-ndjson"),
 }
 
@@ -220,6 +219,23 @@ def adapt_conformance(raw: str) -> dict[str, Any]:
                 "outcome": CONFORMANCE_OUTCOMES[outcome],
                 "traceIds": list(row.get("traceIds", [])),
             }
+        )
+    # Every validated row reaches the transcript. This is the other half of the
+    # undecodable-row probe and it was missing: that probe truncates each row and
+    # requires a refusal naming it, which proves the adapter *enforces* on every
+    # row. It says nothing about the happy path, so an adapter that validated all
+    # nine rows and then dropped one before this list passed all eight probes
+    # while sealing eight entries out of nine -- measured, chain green.
+    #
+    # `accepts-the-real-run` recorded the entry count in its detail and compared
+    # it to nothing; the number that would have caught this was printed and
+    # discarded.
+    if len(entries) != len(lines):
+        raise ChainError(
+            f"the adapter transcribed {len(entries)} entries from {len(lines)} rows. "
+            "A row that is validated and then dropped is a row missing from the "
+            "sealed transcript, which is the failure the truncation probe is "
+            "written against and cannot see."
         )
     return {"entries": entries}
 
@@ -612,9 +628,6 @@ def _derive(proof_id: str, raw: str, path: Path) -> str:
         rows = document["entries"]
         require_measurements(document.get("protocol"), rows, path.name)
         return _rows_result(rows, path.name)
-    if proof_id == "PROOF-legacy-compatibility":
-        census = json.loads(raw)
-        return "passed" if census["matched"] else "failed"
     if proof_id == "PROOF-quire-static-export":
         export = json.loads(raw)
         # Quire's export is a static fact set, not a run, so it has no outcome
@@ -1097,8 +1110,17 @@ def adapter_probes(workspace: Path) -> list[dict[str, Any]]:
         {
             "probe": "accepts-the-real-run",
             "state": "pass",
-            "matched": bool(bound),
-            "detail": {"bound": len(bound), "entries": len(transcribed["entries"])},
+            # The entry count is compared, not merely printed. It was in this
+            # detail already and nothing read it, so the one number that would
+            # have caught an adapter dropping a validated row was reported and
+            # discarded.
+            "matched": bool(bound)
+            and len(transcribed["entries"]) == len([line for line in stream.splitlines() if line.strip()]),
+            "detail": {
+                "bound": len(bound),
+                "entries": len(transcribed["entries"]),
+                "rows": len([line for line in stream.splitlines() if line.strip()]),
+            },
         }
     )
 
@@ -1190,11 +1212,16 @@ def adapter_probes(workspace: Path) -> list[dict[str, Any]]:
     results.append(
         {
             "probe": "refuses-a-foreign-protocol",
-            # A refusal by the adapter is not one of the twelve states travelling
-            # the chain; it is the adapter declining to produce one. Labelling it
+            # A refusal by the adapter is not one of the states travelling the
+            # chain; it is the adapter declining to produce one. Labelling it
             # `unsupported` would let the census count a refusal as a
-            # demonstration. `unsupported` is demonstrated by the compatibility
-            # view, against a record that really carries an unknown schema.
+            # demonstration. `unsupported` used to be demonstrated by the
+            # compatibility view, against a retained record that really carried
+            # an unknown PGM-01 schema version. That view and those records are
+            # deleted, and `unsupported` is not in this adapter's producer
+            # vocabulary, so the state has no demonstration here and this probe
+            # does not invent one for it. Recorded as a limitation in MP-001 and
+            # asserted absent by TC-012, not papered over.
             "state": None,
             "matched": refused,
             "detail": {"protocol": "some.other.protocol/v1"},
@@ -1233,11 +1260,121 @@ def adapter_probes(workspace: Path) -> list[dict[str, Any]]:
     results.append(
         {
             "probe": "refuses-an-unnamed-outcome",
-            # Same reason. `malformed` is demonstrated by the compatibility view,
-            # against a record whose legacy field really has the wrong type.
+            # Same reason, and one more. `malformed` used to be demonstrated by
+            # the compatibility view, against a retained record whose field
+            # really had the wrong type; that view is deleted. It is not
+            # re-demonstrated here, and a scenario feeding the adapter a stream
+            # declaring `outcome: malformed` would not do it either: both
+            # ROW_RESULTS and CONFORMANCE_OUTCOMES map `malformed` onto the same
+            # `fail`, so the receipt reasons are byte-identical to the `fail`
+            # case and `non-success-states-stay-distinguishable` could not
+            # include it. Measured, and the scenario withdrawn on the strength of
+            # the measurement. Recorded as a limitation in MP-001 and asserted
+            # absent by TC-012.
             "state": None,
             "matched": unknown_refused,
             "detail": {"outcome": "probably-fine"},
+        }
+    )
+
+    # Probe 8: a row truncated mid-object is refused, and refused as undecodable
+    # bytes rather than quietly skipped.
+    #
+    # This is the branch nothing else reaches: `adapt_conformance` has a
+    # JSONDecodeError arm, and until this probe existed no case exercised it. The
+    # form matters and was arrived at the hard way. It takes the real producer
+    # stream, truncates a real row mid-object, and calls the real adapter --
+    # pre-adapter, so it observes the bytes as they arrive rather than the value
+    # they would map to. An earlier attempt in this file rewrote a row's
+    # `outcome` field to `malformed` and checked the result afterwards, which is
+    # the one place the word cannot survive: both vocabulary tables send it to
+    # `fail`. That probe could not fail and was deleted.
+    #
+    # It carries `state: None`. A refusal is the adapter declining to produce a
+    # state, not a demonstration of one, and labelling this `malformed` would put
+    # the state back in the census on the strength of an error message.
+    #
+    # Two conditions, and the second is the one with teeth: the adapter must
+    # raise, and its message must name the truncated line. A row silently dropped
+    # from the transcript would satisfy "did not appear in the output" while
+    # being exactly the failure this guards against, so a refusal that does not
+    # name the line is not counted.
+    # Two rows are truncated in two separate runs, the second and the first, and
+    # each refusal must name *its own* row. One run cannot show that.
+    #
+    # The earlier form truncated row 1 and asserted `"line 1" in error`. That
+    # condition could not fail: `adapt_conformance` decodes one line at a time, so
+    # a `json.JSONDecodeError` always reports "line 1" of the fragment it was
+    # given, and the adapter interpolates the exception. An adapter naming no row
+    # at all, and one naming a fixed wrong row, both satisfied it -- measured
+    # green in both cases. It was a word-match on the message wearing the costume
+    # of a position check.
+    #
+    # Truncating row 2 and requiring "line 2" is the discriminating form: it fails
+    # for an adapter that reports nothing, one that hard-codes a row, and one that
+    # reports the decoder's line rather than the stream's.
+    truncation_rows = [line for line in stream.splitlines() if line.strip()]
+    if len(truncation_rows) < 2:
+        raise ChainError(
+            "the conformance stream has fewer than two rows, so a probe cannot show "
+            "that a refusal names the row it refused rather than a fixed one"
+        )
+
+    def truncate_at(index: int) -> str:
+        rows = list(truncation_rows)
+        rows[index] = rows[index][: len(rows[index]) // 2]
+        try:
+            adapt_conformance("\n".join(rows))
+        except ChainError as error:
+            return str(error)
+        return ""
+
+    # Every row, not the first two.
+    #
+    # The previous form truncated rows 1 and 2 and required each refusal to name
+    # its own row. That killed the line-number tautology it was written for and
+    # generalised to nothing: an adapter enforcing only `number <= 2` and
+    # `continue`-ing afterwards passed all eight probes with the chain green,
+    # while silently dropping a row from the sealed transcript -- 8 entries
+    # transcribed from 9. That is verbatim the failure this probe's own comment
+    # claims to guard against.
+    #
+    # The adapter is pure and the corpus is nine rows, so the honest form is to
+    # truncate each row in turn and require every refusal to name that row and no
+    # other. An early exit, an off-by-one and a hard-coded row all fail it.
+    row_errors = {index: truncate_at(index) for index in range(len(truncation_rows))}
+    own_row_named = []
+    for index, message in row_errors.items():
+        line = index + 1
+        names_own = f"conformance stream line {line} is malformed" in message
+        # Matched on the adapter's own sentence, not on a bare "line N": the
+        # decoder's message is appended verbatim and always says "line 1 column
+        # ...", because it reports a position inside the single line it was
+        # handed. A bare substring test for "line 1" is true in every run and
+        # discriminates nothing -- the same trap one layer down, found by running
+        # it.
+        names_another = any(
+            f"conformance stream line {other + 1} is malformed" in message
+            for other in row_errors
+            if other != index
+        )
+        own_row_named.append(bool(message) and names_own and not names_another)
+    results.append(
+        {
+            "probe": "refuses-an-undecodable-row-by-name",
+            "state": None,
+            "matched": all(own_row_named) and len(own_row_named) == len(truncation_rows),
+            "detail": {
+                "rows_probed": len(truncation_rows),
+                "rows_naming_their_own_row_and_no_other": sum(own_row_named),
+                "errors": {str(index + 1): message for index, message in row_errors.items()},
+                "why": (
+                    "the real producer stream, truncated mid-object at every row in turn, "
+                    "through the real adapter; each refusal must name the row it refused "
+                    "and no other, so an adapter that names no row, names a fixed one, or "
+                    "stops enforcing after the first few fails"
+                ),
+            },
         }
     )
 

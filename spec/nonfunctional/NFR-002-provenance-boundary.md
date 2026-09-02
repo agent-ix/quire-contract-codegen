@@ -17,7 +17,7 @@ relationships:
 
 ## Scope
 
-Generated source, manifests, diagnostics, source maps, proof graphs, reports, and retained evidence.
+Generated source, manifests, diagnostics, source maps, proof graphs, and reports.
 
 ## Rationale
 
@@ -75,8 +75,10 @@ agent-ix/quire-contract-codegen#14.
 
 ## Verification
 
-TC-001 and TC-003 validate identities, licensing, and explicit diagnostic states. TC-011 measures that
-retained bytes are read without being written and that Git agrees they are the committed bytes.
+TC-001 and TC-003 validate identities, licensing, and explicit diagnostic states; TC-001 is where
+NFR-002-AC-1 is measured, against a manifest this crate emits. TC-011 previously measured that
+retained bytes were read without being written and that Git agreed they were the committed bytes;
+that test is removed with the records it measured, and no weaker substitute is put in its place.
 NFR-002-AC-5 is verified by the measurement recorded above and by
 `tests/shared_assurance.rs`, which asserts the committed Makefile declares no failure-suppressing
 directive. The Measurement Plan retains the exact draft or released upstream revisions used by each

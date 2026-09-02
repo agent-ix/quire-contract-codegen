@@ -21,9 +21,8 @@ make upstream-identity# check the IR and runtime revisions agree in all three pl
 make assurance-env    # create the pinned shared-assurance interpreter
 make assurance-inputs # run the producers and write their structured results
 make pins             # classify the toolchain through the packaged compatibility matrix
-make compat-view      # read retained evidence through the shared mapping
 make assurance-chain  # seal, retain, and verify through Quoin
-make assurance        # pins + compat-view + assurance-chain
+make assurance        # pins + assurance-chain
 make ci               # every local gate above except build and clean
 ```
 
@@ -35,13 +34,27 @@ produce a green run out of nothing. `assurance/README.md` is the guide; `assuran
 the adopted Engineering Assurance release and the digests of the artifacts read from it.
 
 Retention, integrity checking, audit, attestation and receipts are Quoin's. Static specification,
-obligation and coverage facts are Quire's. The read-only mapping of retained bytes is Engineering
-Assurance's. This repository retains no evidence of its own and computes no aggregate verdict.
+obligation and coverage facts are Quire's. This repository retains no evidence of its own and
+computes no aggregate verdict.
 
-Everything under `evidence/` is immutable retained history and is not written by any gate. The anchor
-writer and the verifier that read `evidence/ANCHORS` are gone; the file is left exactly as it was,
-because the constraint is that retained bytes stay unchanged and an unread census inside an immutable
-tree is a smaller problem than editing that tree to tidy it.
+There is no `evidence/` tree. It held 2,205 files — 44 envelopes of `quire.derivation-evidence/v1`,
+which the pinned compatibility mapping refused as an unknown schema version — plus the reader that
+asked the mapping, its fixtures, a proof obligation, a `compat-view` target, and two schemas frozen
+only because retained records named them by digest. All of it is deleted. The repository owner
+released the preservation constraint for the pre-stable phase on 2026-09-02; the authority is the
+"Preservation constraint released for the pre-stable phase" section of
+`agent-ix/engineering-assurance#7`, and the constraint re-applies unchanged when these repositories
+move toward stable releases.
+
+Nothing was rewritten to look as though it still verifies. FR-006-AC-4 and TC-011 are gone rather
+than restated over a smaller tree. `unsupported` and `malformed` — two of the twelve shared
+verification states, demonstrated here only by the deleted compatibility census — are withdrawn from
+FR-006-AC-5, so this repository demonstrates ten. `unsupported` is not in the adapter's producer
+vocabulary at all. `malformed` is, and was still withdrawn: the adapter maps it onto the same `fail`
+in both tables, so a scenario declaring that outcome yields a receipt byte-identical to the `fail`
+case. One was written, measured, found to be `attested-failed` under another name, and removed. What
+stops the gate weakening quietly is not a manufactured demonstration but TC-012's assertion that both
+states stay absent, so re-acquiring either goes red.
 
 ## Before trusting a green `make ci`
 
@@ -69,10 +82,9 @@ src/lib.rs                 # crate root
 examples/                  # the generation conformance producer
 tests/integration.rs       # end-to-end tests
 tests/shared_assurance.rs  # FR-006 gates; /// Trace: comments are Quire's census
-schemas/                   # three live domain contracts, two frozen evidence schemas
+schemas/                   # three live domain contracts, all included by src/oracle.rs
 spec/                      # requirements artifacts, the test matrix, the suite registry
 reviews/                   # quire-validated SpecReview artifacts
 assurance/                 # the change declaration and the adopted pins
 scripts/                   # producers and the assurance chain driver
-evidence/                  # immutable retained history; read, never written
 ```

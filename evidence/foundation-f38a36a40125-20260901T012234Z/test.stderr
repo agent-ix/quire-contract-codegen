@@ -1,7 +1,0 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
-     Running unittests src/lib.rs (/home/peter/.cargo-target/debug/deps/quire_contract_codegen-4b33c091e6a3e9b9)
-     Running tests/harness_generation.rs (/home/peter/.cargo-target/debug/deps/harness_generation-537fa76107fdc3a5)
-     Running tests/integration.rs (/home/peter/.cargo-target/debug/deps/integration-094951e917b91867)
-     Running tests/oracle_generation.rs (/home/peter/.cargo-target/debug/deps/oracle_generation-1a5036e0ae52fcb8)
-     Running tests/strategy_generation.rs (/home/peter/.cargo-target/debug/deps/strategy_generation-1e8ec9f5851c8278)
-   Doc-tests quire_contract_codegen

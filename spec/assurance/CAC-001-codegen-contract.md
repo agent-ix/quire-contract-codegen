@@ -16,7 +16,7 @@ version_pins:
   ir-corpus: agent-ix/quire-contract-ir@5c49ebfd1c87415f74420ad047392bd03b1bd202
   runtime: agent-ix/quire-contract-runtime@e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3
 controls:
-  surfaces: [library API, CLI, backend adapters, bundle validator, CI, retained evidence]
+  surfaces: [library API, CLI, backend adapters, bundle validator, CI]
   fallback: emit no backend artifact and retain an explicit diagnostic
   abstention: classify unsupported failed unavailable or inconclusive without completeness
   escalation: human release owner reviews unresolved gaps and dependency changes

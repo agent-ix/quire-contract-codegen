@@ -1,4 +1,0 @@
-    Finished test [unoptimized + debuginfo] target(s) in 0.03s
-     Running unittests src/lib.rs (/tmp/agent-b-codegen-pr9/debug/deps/quire_contract_codegen-e2125a7820be0407)
-     Running tests/integration.rs (/tmp/agent-b-codegen-pr9/debug/deps/integration-ceead817b1f74ce8)
-   Doc-tests quire_contract_codegen

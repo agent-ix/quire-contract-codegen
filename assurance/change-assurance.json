@@ -1,6 +1,6 @@
 {
   "schema_version": "quire-contract-codegen.change-assurance-declaration/v1",
-  "purpose": "What this repository states about the change under issue #13, in the shape Quoin's FR-063 record requires. Quoin owns the record schema, its digest, and its retention; this file is the author's statement that gets sealed into one.",
+  "purpose": "What this repository states about the change under issue #16: the deletion of the retained evidence tree and everything that existed only to serve it, under the preservation constraint the repository owner released for the pre-stable phase on 2026-09-02 (the \"Preservation constraint released for the pre-stable phase\" section of agent-ix/engineering-assurance#7). This is a new record rather than a revision of the issue-13 shared-assurance migration record: it is a different change under a different authority, and reusing issue-13's identity would present this content as revision 1 of that declaration. revision is 1 and parent_digest is null because this record has no predecessor under its own id; the issue-13 record was sealed only into an ignored store under target/ and was never persisted, so there is no durable digest to name as a parent and none is invented.",
   "not_an_envelope": "Quoin's packaged change-assurance-record-v1, proof-attestation-v1, and verification-receipt-v1 schemas are the shapes. This file projects into the record body Quoin requires and derives nothing beyond the digests its own derived_fields names. It is not a local evidence envelope, it retains nothing, and it computes no verdict.",
   "derived_fields": [
     "subject.base_revision and impact_snapshot.revision come from the candidate revision the caller names.",
@@ -25,22 +25,27 @@
   "record": {
     "schema_version": 1,
     "record_type": "change_assurance",
-    "record_id": "quire-contract-codegen/issue-13",
+    "record_id": "quire-contract-codegen/issue-16",
     "revision": 1,
     "parent_digest": null,
     "subject": {
       "repository": "agent-ix/quire-contract-codegen",
       "scope": [
-        "src",
+        ".gitignore",
+        "CLAUDE.md",
+        "Makefile",
+        "README.md",
+        "assurance",
+        "evidence",
         "examples",
+        "plan",
+        "planning",
+        "reviews",
         "schemas",
         "scripts",
         "spec",
-        "plan",
-        "planning",
-        "tests",
-        "assurance",
-        "Makefile"
+        "src",
+        "tests"
       ]
     },
     "source_connections": [
@@ -120,16 +125,8 @@
           ]
         },
         {
-          "id": "FR-006-AC-4",
-          "statement": "Retained evidence bytes are read through the Engineering Assurance compatibility mapping and are not modified, and the mapping's answer is reported without collapsing it into pass or fail.",
-          "source_ids": [
-            "FR-006",
-            "NFR-002"
-          ]
-        },
-        {
           "id": "FR-006-AC-5",
-          "statement": "Pass, fail, unavailable, unsupported, inconclusive, not-computed, malformed, partial, stale, suspect, vacuous, and tampered remain twelve distinguishable states across the intake path, and the generator's own Interface-001 terminal states survive alongside them rather than being collapsed into the attestation's four.",
+          "statement": "Pass, fail, unavailable, inconclusive, not-computed, partial, stale, suspect, vacuous and tampered remain ten distinguishable states across the intake path, each demonstrated by a case that produced it, and the generator's own Interface-001 terminal states survive alongside them rather than being collapsed into the attestation's four. The shared vocabulary is twelve. Measured before deletion, per state and per source: the chain alone demonstrated ten and the compatibility census over retained evidence supplied exactly unsupported and malformed. Both are withdrawn with that evidence. unsupported is not in the adapter's producer vocabulary and was raised only by the compatibility mapping; the Interface-001 terminal state of the same name is a different vocabulary and is not borrowed. malformed is a declared key but not a distinguishable state: the adapter maps it onto the same fail in both tables, so a scenario declaring that outcome yields a receipt byte-identical to the fail case. Such a scenario was written, measured and removed rather than kept to hold the count at eleven. TC-012 asserts both states stay absent.",
           "source_ids": [
             "FR-006",
             "NFR-002"
@@ -146,18 +143,11 @@
       ],
       "preservation_constraints": [
         {
-          "id": "PRESERVE-legacy-bytes",
-          "statement": "Every byte under evidence/ is unchanged by this migration: ANCHORS, README.md, foundation-remote, the authoritative record directory, and the whole historical/ tree — 2,205 files carrying 44 retained envelopes. The verifier is what was removed; the record is not.",
+          "id": "PRESERVE-no-retained-evidence",
+          "statement": "This repository retains no evidence of its own and reintroduces none. The evidence/ tree it previously held -- 2,205 files carrying 44 envelopes of quire.derivation-evidence/v1, which the pinned compatibility mapping refused as an unknown PGM-01 schema version -- is deleted by this change, together with the reader that mapped it, its fixtures, the PROOF-legacy-compatibility obligation, the compat-view target, and the two schemas frozen only because retained records named them by SHA-256. The authority is the repository owner's 2026-09-02 release of the preservation constraint for the pre-stable phase, recorded in the \"Preservation constraint released for the pre-stable phase\" section of agent-ix/engineering-assurance#7; the epic's completion criterion and mandatory control were amended before this change. Nothing was rewritten, backdated or re-sealed: FR-006-AC-4, TC-011, SUITE-005 and the obligation were removed rather than restated over a smaller tree. The constraint re-applies unchanged when this repository moves toward stable releases, and evidence retained under it from that point is immutable.",
           "source_ids": [
             "NFR-002",
             "FR-006"
-          ]
-        },
-        {
-          "id": "PRESERVE-frozen-schemas",
-          "statement": "Two artifacts under schemas/ are frozen, not deleted, because retained records name each of them by SHA-256: the foundation evidence input and manifest schemas. assurance/pins.json records the digests and where each reference sits, and nothing executable references them. The set was measured on this repository rather than inherited from a sibling. The remaining three schemas are live domain contracts: src/oracle.rs includes all three at compile time, and the generator validates every derivation manifest it emits against the PGM-01 envelope schema, so that file is a live output contract which the retained records also happen to name, not dead evidence machinery.",
-          "source_ids": [
-            "NFR-002"
           ]
         },
         {
@@ -188,14 +178,14 @@
         },
         {
           "id": "PRESERVE-no-quire-quoin-runtime-dependency",
-          "statement": "The published crate gains no runtime dependency on Quire or Quoin. The generation producer is an example target, not a library dependency, and the crate's dependency graph is unchanged by this migration.",
+          "statement": "The published crate gains no runtime dependency on Quire or Quoin. The generation producer is an example target, not a library dependency, and the crate's dependency graph is unchanged by this change.",
           "source_ids": [
             "NFR-001"
           ]
         },
         {
           "id": "PRESERVE-planned-matrix",
-          "statement": "Every TM-001 row for FR-001 through FR-005, NFR-001, NFR-002 and StR-001 stays 🚧 Planned. Promoting a row is a human-reviewed matrix change and this migration does not make one. The rows this change adds for FR-006 are the only rows it claims.",
+          "statement": "Every TM-001 row for FR-001 through FR-005, NFR-001, NFR-002 and StR-001 stays 🚧 Planned. Promoting a row is a human-reviewed matrix change and this change does not make one. This change adds no row. It removes two -- the FR-006-AC-4 row and the TC-011 row -- because the acceptance criterion and the test case they name are deleted with the evidence they asserted over, and an orphan row would report as unbacked. No other row's status is touched.",
           "source_ids": [
             "TM-001",
             "AA-001"
@@ -203,7 +193,7 @@
         },
         {
           "id": "PRESERVE-manual-ci",
-          "statement": "Hosted CI remains workflow_dispatch only and is not dispatched by this change.",
+          "statement": "Hosted CI remains workflow_dispatch only, is not dispatched by this change, and no workflow file is modified by it.",
           "source_ids": [
             "NFR-002"
           ]
@@ -269,24 +259,6 @@
           "configuration": "spec/test-matrix.md"
         },
         {
-          "proof_id": "PROOF-legacy-compatibility",
-          "statement": "All 44 retained evidence envelopes are read through the pinned Engineering Assurance mapping, their bytes are unchanged, and the mapping's answer for each is reported as it stands.",
-          "obligation_ids": [
-            "FR-006-AC-4"
-          ],
-          "evidence_kind": "Static",
-          "command": {
-            "argv": [
-              ".venv-assurance/bin/python",
-              "scripts/legacy_evidence_view.py",
-              "--json"
-            ],
-            "working_directory": "."
-          },
-          "tool_identity": "quire-contract-codegen/legacy_evidence_view",
-          "configuration": "tests/fixtures/legacy-compat/expectations.json"
-        },
-        {
           "proof_id": "PROOF-msrv",
           "statement": "The declared MSRV compiles every target of this crate at this candidate revision, against the locked dependency graph, and reports it in cargo's own JSON message stream.",
           "obligation_ids": [
@@ -318,12 +290,6 @@
           "owner": "agent-ix/engineering-assurance"
         },
         {
-          "id": "UNKNOWN-derivation-evidence-not-mapped",
-          "statement": "map_pgm01_bytes at the pinned release covers quire.pgm01-evidence v1 and v2. This repository's 44 retained envelopes are quire.derivation-evidence/v1, so the mapping refuses them as an unknown schema version. That refusal is reported as the compatibility result; no local mapper was written to make it read as a pass. Filed as agent-ix/engineering-assurance#21.",
-          "disposition": "open",
-          "owner": "agent-ix/engineering-assurance"
-        },
-        {
           "id": "UNKNOWN-human-decision-absent",
           "statement": "No ix-flow decision event exists for this change. Only the repository owner may create one, and none was synthesized, so the receipt is expected to read incomplete with a missing decision rather than complete.",
           "disposition": "open",
@@ -331,7 +297,7 @@
         },
         {
           "id": "UNKNOWN-kani-and-vacuity-are-specified-not-implemented",
-          "statement": "FR-003 (Kani obligation lowering) and FR-004 (vacuity and rejection evidence) are specified and have no implementation at this candidate revision: there is no Kani or vacuity code under src/, and every TM-001 row is 🚧 Planned. The generation producer reports on the oracle, harness and strategy slices that exist. This migration preserves the specification and the planned status and manufactures no producer for behaviour that does not exist, because a proof obligation over absent code would be the most complete false green available.",
+          "statement": "FR-003 (Kani obligation lowering) and FR-004 (vacuity and rejection evidence) are specified and have no implementation at this candidate revision: there is no Kani or vacuity code under src/, and every TM-001 row is 🚧 Planned. The generation producer reports on the oracle, harness and strategy slices that exist. This change preserves the specification and the planned status and manufactures no producer for behaviour that does not exist, because a proof obligation over absent code would be the most complete false green available.",
           "disposition": "open",
           "owner": "agent-ix/quire-contract-codegen"
         },
@@ -343,20 +309,14 @@
         },
         {
           "id": "UNKNOWN-make-is-not-a-trust-root",
-          "statement": "A green `make ci` attests to the tree as committed, not to a tree whose Makefile has been edited. Measured on this repository at this candidate revision with three injected defects (a rustfmt violation, a failing test assertion, and an upstream constant the crate does not declare): the control exits 2 at fmt-check, the first of eleven ci prerequisites, having run only that one; with `.IGNORE:` prepended the same tree exits 0, runs all eleven, and fails seven of them -- fmt-check, spec, lint, msrv, upstream-identity, test and assurance-chain -- each printing its diagnostic and none failing the build. assurance-chain is in that list because the chain did notice: the upstream producer's rows became not-computed, the attestation said so because the bytes said so, and the scenario requiring every producer to have reported success went red for exit 1. Make discarded it. Anything that feeds the chain is protected by digest binding and by results derived from producer bytes; the gates that feed nothing into the chain are neutered, and the structural replacement does not reach them. tests/shared_assurance.rs asserts the committed Makefile declares no such directive, which protects a diff review and not an exit code -- under .IGNORE: that test also runs, also fails, and is also swallowed. Recorded, not closed; no policer target was re-added. Filed as agent-ix/quire-contract-codegen#14.",
+          "statement": "A green `make ci` attests to the tree as committed, not to a tree whose Makefile has been edited. Measured on this repository at the shared-assurance migration's candidate revision (issue #13, merged as bbd5e67) with three injected defects (a rustfmt violation, a failing test assertion, and an upstream constant the crate does not declare): the control exits 2 at fmt-check, the first of eleven ci prerequisites, having run only that one; with `.IGNORE:` prepended the same tree exits 0, runs all eleven, and fails seven of them -- fmt-check, spec, lint, msrv, upstream-identity, test and assurance-chain -- each printing its diagnostic and none failing the build. assurance-chain is in that list because the chain did notice: the upstream producer's rows became not-computed, the attestation said so because the bytes said so, and the scenario requiring every producer to have reported success went red for exit 1. Make discarded it. Anything that feeds the chain is protected by digest binding and by results derived from producer bytes; the gates that feed nothing into the chain are neutered, and the structural replacement does not reach them. tests/shared_assurance.rs asserts the committed Makefile declares no such directive, which protects a diff review and not an exit code -- under .IGNORE: that test also runs, also fails, and is also swallowed. Recorded, not closed; no policer target was re-added. Filed as agent-ix/quire-contract-codegen#14. The measurement is not re-taken here and is not restated: this change leaves the ci prerequisite list at the same eleven targets and none of the seven that failed, so the counts still describe the tree. Recorded rather than closed, and no execution-control guard was re-added, by owner decision. Tracked as agent-ix/quire-contract-codegen#14.",
           "disposition": "open",
-          "owner": "agent-ix/quire-contract-codegen"
-        },
-        {
-          "id": "UNKNOWN-stacked-branch-divergence",
-          "statement": "This change supersedes PRs #9, #10 and #12. PR #12's head was never restacked onto PR #10's head, so the two differ. The divergence was read across every domain path: outside evidence/ it is confined to eight files, of which all but two are machinery this change deletes. The unsafe-audit false green was carried forward and the tautological assertion was rejected; both decisions are recorded in the reconciliation commit with the measurement behind them. The four evidence collections retained only on the unmerged variant remain fetchable on their branches, which are not deleted.",
-          "disposition": "accepted",
           "owner": "agent-ix/quire-contract-codegen"
         }
       ]
     },
     "review_workflow": {
-      "run_id": "quire-contract-codegen-issue-13",
+      "run_id": "quire-contract-codegen-issue-16",
       "decision_event_kind": "change_assurance.review_decided"
     }
   }

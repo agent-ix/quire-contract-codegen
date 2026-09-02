@@ -8,3 +8,6 @@ Cargo.lock.bak
 __pycache__/
 *.pyc
 proptest-regressions/
+# Written and removed by tc_013's census control. Present only if that test
+# panicked mid-run; never intended to be committed.
+scripts/.census-probe.py

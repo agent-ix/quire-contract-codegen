@@ -27,7 +27,6 @@ type: TestMatrix
 | FR-006 | FR-006-AC-1 | TC-008 | ✅ Covered |
 | FR-006 | FR-006-AC-2 | TC-009 | ✅ Covered |
 | FR-006 | FR-006-AC-3 | TC-010 | ✅ Covered |
-| FR-006 | FR-006-AC-4 | TC-011 | ✅ Covered |
 | FR-006 | FR-006-AC-5 | TC-012 | ✅ Covered |
 | FR-006 | FR-006-AC-6 | TC-013 | ✅ Covered |
 
@@ -79,8 +78,7 @@ nothing has been built.
 | TC-008 | Verify the shared component pins through the packaged matrix | Integration | P0 | FR-006-AC-1 | ✅ Covered |
 | TC-009 | Verify Quoin intake without Quoin or Quire executing a producer | Integration | P0 | FR-006-AC-2 | ✅ Covered |
 | TC-010 | Verify the sealed impact snapshot is the Quire export | Integration | P0 | FR-006-AC-3 | ✅ Covered |
-| TC-011 | Verify retained evidence is readable and unmoved | Integration | P0 | FR-006-AC-4, NFR-002-AC-1 | ✅ Covered |
-| TC-012 | Verify twelve verification outcomes stay distinguishable | Integration | P0 | FR-006-AC-5, NFR-002-AC-3 | ✅ Covered |
+| TC-012 | Verify the demonstrable verification outcomes stay distinguishable | Integration | P0 | FR-006-AC-5, NFR-002-AC-3 | ✅ Covered |
 | TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6 | ✅ Covered |
 
 TC-001 through TC-007 remain deliberately planned until their complete ticket scope is independently

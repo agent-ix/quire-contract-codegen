@@ -1,1 +1,0 @@
-/tmp/agent-b-ir-37eb-20260831/scripts/validate_governance.py
