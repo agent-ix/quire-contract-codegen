@@ -18,4 +18,5 @@ parity evidence after Tasks 004 and 005 complete.
 
 ## Guard
 
-No CLI or conformance implementation has started.
+The bounded generation-conformance example exists, but atomic publication, the CLI surface, golden
+bundle publication, and full cross-backend parity closure have not started.

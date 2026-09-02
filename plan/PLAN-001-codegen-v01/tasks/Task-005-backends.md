@@ -22,14 +22,17 @@ vacuity evidence after deterministic oracle semantics exist.
 
 ## Current slice
 
-Issue #3 starts in stacked draft `wave2-agent-b-harnesses`. The harness generator owns the pre-state
-snapshot, subject invocation ordering, post-state evaluation, runtime `Verdict`, and complete campaign
-accounting boundary. Strategy generation directly shapes bounded ranges, finite memberships, and
-supported correlated relations; only explicitly residual constraints may use rejection.
+The harness generator owns the pre-state snapshot, subject invocation ordering, post-state evaluation,
+runtime `Verdict`, and an owned campaign runner with accepted/rejected/failed/discarded accounting.
+Strategy generation directly shapes bounded ranges, finite memberships, enum memberships, and supported
+correlated relations, with each case carrying an expected domain outcome. The bounded Kani adapter
+reuses the exact oracle predicates, emits distinct framing/binding/contract/harness regions, derives a
+complete dependency graph, and records proof execution as `not_run`.
 
 ## Guards
 
-- PR #10 remains the provisional Task-004 base; this branch must rebase to its accepted revision.
+- The current implementation is based directly on migrated `main`; no superseded stacked evidence
+  envelope or repository-local assurance framework may return.
 - Unsupported state, constraint, or shrinking semantics fail with a structured diagnostic rather
   than falling back to an unreported filter.
-- Kani and vacuity backends remain not started within this task.
+- Kani remains a draft until independent current-head review; LLVM vacuity analysis is not started.
