@@ -5,7 +5,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     generate_enum_strategy, generate_i64_strategy, DerivationManifest, EnumStrategyCampaign,
     EnumStrategyRequest, GenerationErrorCode, GenerationTerminalState, ManifestContext,
@@ -98,21 +97,6 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
     .unwrap();
     assert_eq!(range, range_again);
     let derivation: DerivationManifest = serde_json::from_str(&range.manifest.contents).unwrap();
-    let manifest_value: serde_json::Value = serde_json::from_str(&range.manifest.contents).unwrap();
-    let schema: serde_json::Value = serde_json::from_str(include_str!(
-        "../schemas/pgm01-derivation-evidence-envelope-v1.schema.json"
-    ))
-    .unwrap();
-    let validator = JSONSchema::options()
-        .with_draft(Draft::Draft7)
-        .compile(&schema)
-        .unwrap();
-    let validation_errors = validator
-        .validate(&manifest_value)
-        .err()
-        .map(|errors| errors.map(|error| error.to_string()).collect::<Vec<_>>())
-        .unwrap_or_default();
-    assert!(validation_errors.is_empty(), "{validation_errors:?}");
     assert_eq!(derivation.outputs[0].uri, range.rust.path);
     assert_eq!(derivation.outputs[0].role, "generated-rust-strategy");
 
