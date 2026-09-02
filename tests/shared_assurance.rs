@@ -1051,6 +1051,13 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // directories it will look in: an inclusion list is a list of the places a
     // reintroduced validator would have to avoid, and it only has to be
     // incomplete once.
+    // The untracked half of the scan has to be shown to happen, or it is a
+    // property that can be lost silently. Written before the census collects, so
+    // the control can assert against the very set the census uses.
+    let probe_path = root.join("scripts/.census-probe.py");
+    const PROBE_MARKER: &str = "census-probe-marker-do-not-commit";
+    fs::write(&probe_path, format!("# {PROBE_MARKER}\n")).expect("write the census probe");
+
     let mut sources = Vec::new();
     collect_sources(&root, &mut sources);
 
@@ -1138,40 +1145,8 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         "git ls-files reported no tracked files; the counts below would be vacuous"
     );
 
-    // The untracked half of the scan has to be shown to happen, or it is a
-    // property that can be lost silently — and it has already been lost once in
-    // this file's history and recovered. Deleting the walk in favour of
-    // `git ls-files` would leave every assertion below still passing while the
-    // census stopped seeing exactly the file a reintroduction lives in first.
-    //
-    // So: write an untracked file carrying a marker, require the scan to have
-    // found it, and delete it. Self-cleaning, and it fails if the scan is
-    // narrowed to tracked files only.
-    let probe_path = root.join("scripts/.census-probe.py");
-    const PROBE_MARKER: &str = "census-probe-marker-do-not-commit";
-    fs::write(&probe_path, format!("# {PROBE_MARKER}\n")).expect("write the census probe");
-    let mut probe_sources = Vec::new();
-    collect_sources(&root, &mut probe_sources);
-    let probe_seen = probe_sources.iter().any(|candidate| {
-        candidate == &probe_path
-            && fs::read_to_string(candidate)
-                .map(|body| body.contains(PROBE_MARKER))
-                .unwrap_or(false)
-    });
-    fs::remove_file(&probe_path).expect("remove the census probe");
-    assert!(
-        !probe_path.exists(),
-        "the census probe was not cleaned up at {}",
-        probe_path.display()
-    );
-    assert!(
-        probe_seen,
-        "the reference scan did not see an untracked file. Untracked is the state a \
-         reintroduced reader is in before anyone commits it, so a scan that only reads \
-         tracked files would not notice one until it was too late to matter"
-    );
-
     let mut inspected = 0;
+    let mut scanned: BTreeSet<PathBuf> = BTreeSet::new();
     for path in &sources {
         let extension = path
             .extension()
@@ -1183,6 +1158,10 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         let Ok(source) = fs::read_to_string(path) else {
             continue;
         };
+        // Recorded here, at the point the census actually reads a file, so the
+        // control below speaks for what was scanned rather than for what was
+        // collected or for what a second walk would have found.
+        scanned.insert(path.clone());
         // The change declaration is the one document whose job is to say what was
         // deleted, so it necessarily names the obligation, the target and the
         // criteria that went. Exempting it does not weaken the claim, because
@@ -1217,6 +1196,30 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
             );
         }
     }
+    // The control for the untracked half of the scan, and it asserts against
+    // `scanned` — the set the loop above actually read — rather than against
+    // `sources`, and certainly not against a fresh call of its own.
+    //
+    // Both weaker forms were written and both were measured passing while the
+    // census was blind. A second `collect_sources` call verifies the walker can
+    // see an untracked file, which is a fact about the walker and says nothing
+    // about what the census does with it. Asserting on `sources` at collection
+    // time is better and still not enough, because anything that narrows the set
+    // between collection and use slips underneath it — that was observed, green.
+    // Only `scanned` is the census's own answer.
+    fs::remove_file(&probe_path).expect("remove the census probe");
+    assert!(
+        !probe_path.exists(),
+        "the census probe was not cleaned up at {}",
+        probe_path.display()
+    );
+    assert!(
+        scanned.contains(&probe_path),
+        "the reference census did not scan an untracked file. Untracked is the state a \
+         reintroduced reader is in before anyone commits it, so a census that only reads \
+         tracked files would not notice one until it was too late to matter"
+    );
+
     // Re-derived rather than inherited, and every figure below was taken from the
     // walk and from `git ls-files` rather than from any document describing the
     // layout. This repository has no `schemas/README.md` or equivalent, and no

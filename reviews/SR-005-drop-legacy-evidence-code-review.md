@@ -149,6 +149,7 @@ material and both made `make ci` fail.
 | FND-525 | low | the floor comment stated a margin as though it were derived, when no rule fixes it | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-526 | high | the census filter was an allow-list, so it was blind to an extensionless `scripts/reintroduced_reader` and to a `.yaml` one. Naming `Makefile` back by hand fixed one file and left the class | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-527 | medium | the untracked half of the scan had no probe. Narrowing `sources` to tracked files left every assertion passing — a property that had already been lost once could be lost again silently | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-528 | high | the control written to close FND-527 was itself a tautology, in two successive forms. It asserted a *fresh* `collect_sources` call could see an untracked file, which is a fact about the walker; narrowing the census left it green. Rewritten to assert on `sources`, it was still green, because anything narrowing the set between collection and use slips underneath | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 
 ## Dispositions
 
@@ -171,7 +172,7 @@ material and both made `make ci` fail.
 | FND-521 | **FIXED**. A per-directory guard was added alongside the total, then rebuilt on discovery after probing found the defect below |
 | FND-522 | **FIXED**. The first per-directory guard read its floors from a hardcoded list and looked each directory up with `unwrap_or(0)`. Deleting the `scripts` entry from that list left `tc_013` green. The guard now compares the **discovered** directory set against a declared one with `assert_eq!` before any floor is applied, so a directory that stops being walked and an entry removed from the declaration both land on the same assertion |
 | FND-526 | **FIXED**. The filter is now a deny-list: everything is scanned unless it is non-text or a generated lock/licence, each exclusion named individually and the count in the comment taken from the array length so it cannot drift. Probed: an extensionless reader, a `.yaml` reader and a `Makefile` target all go red |
-| FND-527 | **FIXED**. A self-cleaning positive control writes an untracked `scripts/.census-probe.py` with a marker, requires the scan to have seen it, and deletes it. Probed by narrowing the scan to tracked files: red |
+| FND-527, FND-528 | **FIXED**. The control writes an untracked `scripts/.census-probe.py`, and asserts against `scanned` — the set the census loop actually read, recorded at the point it reads each file — then deletes the probe. Not against a fresh walk, and not against `sources`: both of those were written, measured green while the census was blind, and discarded. Probed red two ways: narrowing the set between collection and use, and narrowing `collect_sources` itself to tracked files |
 | FND-524 | **FIXED**. Scanned broadly, counted narrowly. The reference scan still runs over tracked *and* untracked files, because untracked is exactly the state a reintroduced reader is in before anyone `git add`s it; the floors count `git ls-files` only, so scratch cannot vote on whether the census is large enough to prove anything. Probed in both directions |
 | FND-525 | **FIXED**. The margin of 4 is now stated as chosen rather than derived, with the reason it is safe: whole-directory loss is caught by the set comparison and the per-directory floors, not by this number. Printing arithmetic that does not close is the failure this avoids |
 | FND-523 | **FIXED**. The floor derivation credited `.yaml` with part of the population increase. Measured: both added files are `Makefile` and `.gitignore`, and `.yaml` adds nothing here because this repository's only workflow is `.yml`. It is admitted so a rename cannot carry a workflow out of the census, and it is no longer credited with any of the 2 |
@@ -266,7 +267,8 @@ specific defect it exists to catch, and each was observed to go red:
 | `tc_013` tracked-only counting | two real files removed from `scripts/`, then four untracked scratch `.json` added to restore the count | **red** — the scratch does not count, which is the point |
 | `tc_013` reference census | an **extensionless** `scripts/reintroduced_reader` naming the deleted reader | **red** — **green** under the allow-list, which is how FND-526 was found |
 | `tc_013` reference census | `scripts/reintroduced_reader.yaml` naming the deleted reader | **red** |
-| `tc_013` untracked-scan control | the scan narrowed to tracked files only | **red** |
+| `tc_013` untracked-scan control | the census set narrowed between collection and use | **red** — **green** against both earlier forms of the control, which is how FND-528 was found |
+| `tc_013` untracked-scan control | `collect_sources` itself narrowed to tracked files | **red** |
 | `make pins` digest check | one byte appended to `engineering_assurance/compatibility.py` | **exit 1**, naming the digest |
 
 It counts no verification state, so it does not put `malformed` back in the census by way of an error
@@ -288,6 +290,28 @@ last, line by line, against every claim corrected elsewhere. Three were stale:
 
 The `#14` measurement itself is untouched and no execution-control guard was re-added, per the owner
 decision recorded there. Correcting who a measurement belongs to is not restating it.
+
+## What a fix stops catching
+
+Three of the findings above — FND-519, FND-524 and FND-528 — were introduced *by* the fix for the
+finding before them. The pattern is the same each time, and it is worth stating as the rule this
+review ended up working to:
+
+> **Each fix was checked for what it started catching and not for what it stopped catching.**
+
+- The allow-list filter was extended to admit `Makefile` by name. That closed the one file and left
+  the class: an extensionless `scripts/reintroduced_reader` was still invisible. Replaced with a
+  deny-list.
+- Counting was moved off the walk to fix scratch inflating the population. That silently stopped the
+  census seeing untracked files at all — the state a reintroduced reader is in first. Split into a
+  broad scan and a narrow count.
+- A control was added for that property. It re-derived its own answer with a second walk, so it
+  verified the walker rather than the census. Rewritten against `sources`, it still missed a
+  narrowing between collection and use. Only asserting on `scanned`, recorded inside the loop at the
+  moment each file is read, actually holds.
+
+Every check in the table above was run against the specific defect it exists to catch, and three of
+them were green until they were not.
 
 ## Empty populations
 
