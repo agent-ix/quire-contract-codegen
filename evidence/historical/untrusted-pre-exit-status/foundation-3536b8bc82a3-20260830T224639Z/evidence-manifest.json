@@ -1,0 +1,163 @@
+{
+  "artifacts": [
+    {
+      "path": "cargo-version.txt",
+      "sha256": "fcfafeedf9e1047337cbc09d4b2279bbf73c68b0230dadfa2551a3122a92fe7c",
+      "size": 336
+    },
+    {
+      "path": "clippy.stderr",
+      "sha256": "02db5a66fa0c60ca8618bd08aac556eac4f3ec863e8630a0d353dba6a0f6e126",
+      "size": 72
+    },
+    {
+      "path": "clippy.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "deny.stderr",
+      "sha256": "a9633919034425d54c7f51b7cd0b66482e06765a814aa0bb863422e6120c64eb",
+      "size": 1364
+    },
+    {
+      "path": "deny.stdout",
+      "sha256": "71dadc8c8978da797b94dc581b666330c737551839c8fc820d7647130930c4b7",
+      "size": 12
+    },
+    {
+      "path": "fmt.stderr",
+      "sha256": "f649cb77b82239810205932ddccfaa8d7ff6401586a98caaba5e171f6086480e",
+      "size": 438
+    },
+    {
+      "path": "fmt.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "jsonschema-version.txt",
+      "sha256": "33bdaf9e2d6bcbde2e4e613e865e403f8fe21fc621078d34c30b0bdc7f68d903",
+      "size": 6
+    },
+    {
+      "path": "metadata.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "metadata.stdout",
+      "sha256": "1d0840c88418e66e8aedc81599562eea66bb09cdbc12e229f3df90a52087d7d5",
+      "size": 1677
+    },
+    {
+      "path": "python-version.txt",
+      "sha256": "f6b75e07f1488db28a89724a522725e3e01af3dc78f6fd365f17eb4059e41056",
+      "size": 15
+    },
+    {
+      "path": "quire-provenance.json",
+      "sha256": "6df2f8c787012733dbcaab24f8810dd127a508513ba521a852592539c938ec91",
+      "size": 664
+    },
+    {
+      "path": "quire-validate.stderr",
+      "sha256": "b490d70ffe44774238fa50820f6579c975ca17aecd4f1b03f8b24ad119f724eb",
+      "size": 689
+    },
+    {
+      "path": "quire-validate.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "rustc-version.txt",
+      "sha256": "a834181975ab3494d51a1a01e4a9d4321fecd674a52e3db3cf93b3b84b6fc2c1",
+      "size": 196
+    },
+    {
+      "path": "rustdoc.stderr",
+      "sha256": "c809826ace9ffd0151e9968005243ade5757013298aed95a5c8c0efa62f5d697",
+      "size": 251
+    },
+    {
+      "path": "rustdoc.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "source-revision.txt",
+      "sha256": "e9a561dd25a3ee9e91ab3735e5058836e0cc4cc728978ebeb28d4fa170f39145",
+      "size": 41
+    },
+    {
+      "path": "source-state.txt",
+      "sha256": "2e22da2ab13713309ac75219e525b8e06ed02f3f1963b8feef203fa25827f93d",
+      "size": 6
+    },
+    {
+      "path": "test.stderr",
+      "sha256": "0f8cf96cd383f176f95fc413f00907eea712f7615e6705a50744e19e6b0e4171",
+      "size": 360
+    },
+    {
+      "path": "test.stdout",
+      "sha256": "f2537aa76480bd33c22043e06e27d1c1aeae40633ed51ac8bf6a7724680a9d4f",
+      "size": 410
+    },
+    {
+      "path": "unsafe-audit.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "unsafe-audit.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    }
+  ],
+  "collectedAt": "2026-08-30T22:46:40Z",
+  "limitations": [
+    "foundation evidence does not establish semantic code-generation conformance",
+    "PGM-01 candidate is under review and must be reconciled again after merge",
+    "authoritative IR schema and corpus have no candidate revision",
+    "runtime candidate is draft and requires final reconciliation",
+    "remote CI, CODEOWNER approval, and the human source-release decision are pending"
+  ],
+  "outcomes": [
+    {
+      "name": "quire-validate",
+      "status": "passed"
+    },
+    {
+      "name": "fmt",
+      "status": "passed"
+    },
+    {
+      "name": "clippy",
+      "status": "passed"
+    },
+    {
+      "name": "test",
+      "status": "passed"
+    },
+    {
+      "name": "deny",
+      "status": "passed"
+    },
+    {
+      "name": "unsafe-audit",
+      "status": "passed"
+    },
+    {
+      "name": "metadata",
+      "status": "passed"
+    },
+    {
+      "name": "rustdoc",
+      "status": "passed"
+    }
+  ],
+  "schemaVersion": "quire.codegen-foundation-evidence-manifest/v1",
+  "sourceRevision": "3536b8bc82a3e12c4df3824c44616677b90db874"
+}

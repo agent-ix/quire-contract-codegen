@@ -1,0 +1,4 @@
+error: failed to open: /home/peter/.cargo-target/debug/.cargo-lock
+
+Caused by:
+  Read-only file system (os error 30)

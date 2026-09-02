@@ -1,0 +1,69 @@
+{
+  "commands": [
+    "quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'",
+    "python3 scripts/validate_json_schema.py schemas/foundation-evidence-input-v1.schema.json collection-input.json",
+    "python3 scripts/validate_json_schema.py schemas/foundation-evidence-manifest-v1.schema.json evidence-manifest.json",
+    "python3 scripts/validate_json_schema.py schemas/pgm01-derivation-evidence-envelope-v1.schema.json evidence-envelope.json",
+    "python3 scripts/validate_json_schema.py $PGM01_SCHEMA evidence-envelope.json",
+    "python3 $PGM01_VALIDATOR --fixture evidence-envelope.json",
+    "cargo fmt --all -- --check",
+    "cargo clippy --all-targets -- -D warnings",
+    "cargo test",
+    "cargo +1.75.0 check --lib",
+    "cargo deny check licenses",
+    "bash scripts/check_unsafe_comments.sh",
+    "cargo metadata --format-version 1",
+    "RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps",
+    "quire coverage --scope .",
+    "make evidence-tool"
+  ],
+  "dependencies": {
+    "irCorpus": "agent-ix/quire-contract-ir@5c49ebfd1c87415f74420ad047392bd03b1bd202",
+    "pgm01": {
+      "candidateRevision": "7dac9d8c19952412b56a0347387666e2ca81e01d",
+      "envelopeSchema": "quire.derivation-evidence/v1",
+      "envelopeSchemaDigest": {
+        "algorithm": "sha256",
+        "value": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
+      },
+      "policy": "ix://agent-ix/quire-contract-ir/PGM-01",
+      "schemaDigest": {
+        "algorithm": "sha256",
+        "value": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
+      },
+      "schemaPath": "/tmp/agent-b-ir-5c49-fBSnxo/repo/schemas/derivation-evidence-envelope-v1.schema.json",
+      "validatorDigest": {
+        "algorithm": "sha256",
+        "value": "1c2881d5f8800dab031f6afa26d5ad11f88a5ab42a942bc9fe0c2853b58df2f1"
+      },
+      "validatorPath": "/tmp/agent-b-ir-5c49-fBSnxo/repo/scripts/validate_governance.py",
+      "validatorRevision": "5c49ebfd1c87415f74420ad047392bd03b1bd202"
+    },
+    "runtimeCandidateRevision": "e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3"
+  },
+  "gateScripts": {
+    "scripts/build_foundation_envelope.py": "b1db950198def6ff2b880f10bded82f8a3bb786a19837b20d9f434dfefeeee4b",
+    "scripts/check_coverage_status.py": "83297e0648aab7d220fe067defd977b9d3955d2c31660b9f36cc0e559341c3c6",
+    "scripts/check_failure_propagation.py": "cad793fb00dace2b24c079b46ad54516a9cebe1b2b2a2e65c06628e81db5f7e7",
+    "scripts/check_unsafe_comments.sh": "5f58b5ac0fc27a68e383936f20ad3b0e591ed64f3ce0cb406f22d573fe7afd77",
+    "scripts/collect_foundation_evidence.sh": "eda486f310bde8988d8ca1eeb95c21799ef1bf438d26c8ed6d030213e6f492d1",
+    "scripts/run_python_tests.py": "da9eae39db546d48e4d1507d9d638af97a636c5d7be4504120cc0131b29bfefc",
+    "scripts/unsafe_comment_baseline.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "scripts/update_evidence_anchors.py": "3cf5a533622b469924eea7528e9bfed30b03dddd8d9e28676c6aeb686b530f7e",
+    "scripts/validate_json_schema.py": "a503b4ec471e6df720f367f378e434a98fbd832c8d4e9333dfae2c82636dc2ce",
+    "scripts/verify_foundation_evidence.py": "464789c85c1a0cfa6be01cad3b86e51e5b686501f40b156bbe39a7657991c3c3"
+  },
+  "phase": "foundation",
+  "schemaVersion": "quire.codegen-foundation-evidence-input/v1",
+  "sourceRevision": "3cd2918c62e5238d58944eca5e3eb3c1aa998611",
+  "sourceState": "clean",
+  "tools": {
+    "cargo": "cargo 1.94.1 (29ea6fb6a 2026-03-24)",
+    "jsonschema": "3.2.0",
+    "python": "Python 3.10.12",
+    "python-packages": "annotated-doc==0.0.4\nannotated-types==0.7.0\nanyio==4.12.1\nappdirs==1.4.4\nAPScheduler==4.0.0a6\nargcomplete==1.8.1\nattrs==25.4.0\nAutomat==20.2.0\nBabel==2.8.0\nbackcall==0.2.0\nbackports.asyncio.runner==1.2.0\nbackports.tarfile==1.2.0\nbcrypt==3.2.0\nbeautifulsoup4==4.10.0\nbeniget==0.4.1\nbinaryornot==0.4.3\nblack==26.3.1\nblinker==1.4\nboolean.py==5.0\nBrotli==1.0.9\nbuild==1.4.0\nCacheControl==0.14.4\ncertifi==2020.6.20\nchardet==4.0.0\ncharset-normalizer==3.4.4\ncheck-manifest==0.51\ncleo==2.1.0\nclick==8.0.3\ncloud-init==25.1.4\ncolorama==0.4.4\ncommand-not-found==0.3\nconfigobj==5.0.6\nconstantly==15.1.0\ncookiecutter==1.7.3\ncrashtest==0.4.1\ncryptography==3.4.8\ncycler==0.11.0\ncyclonedx-python-lib==11.7.0\ndbus-python==1.2.18\ndecorator==4.4.2\ndefusedxml==0.7.1\ndevpi-client==7.2.0\ndevpi-common==4.1.1\ndistlib==0.4.0\ndistro==1.7.0\ndistro-info==1.1+ubuntu0.2\ndulwich==1.1.0\ndunamai==1.26.1\nexceptiongroup==1.3.1\nfastapi==0.135.3\nfastjsonschema==2.21.2\nfilelock==3.24.3\nfindpython==0.7.1\nfonttools==4.29.1\nfs==2.4.12\ngast==0.5.2\nh11==0.16.0\nhtml5lib==1.1\nhttpcore==1.0.9\nhttplib2==0.20.2\nhttpx==0.28.1\nhyperlink==21.0.0\nidna==3.3\nimportlib_metadata==8.7.1\nincremental==21.3.0\niniconfig==2.3.0\ninstaller==0.7.0\nipython==7.31.1\n-e git+ssh://git@github.com/agent-ix/ix-workflow-runner.git@0348d0ce0c53d96fd6a7357adbdb1250d96caa1a#egg=ix_workflow_runner\njaraco.classes==3.4.0\njaraco.context==6.1.0\njaraco.functools==4.4.0\njedi==0.18.0\njeepney==0.7.1\nJinja2==3.0.3\njinja2-time==0.2.0\njiter==0.13.0\njsonpatch==1.32\njsonpointer==2.0\njsonschema==3.2.0\nkeyring==25.7.0\nkiwisolver==1.3.2\nlaunchpadlib==1.10.16\nlazr.restfulclient==0.14.4\nlazr.uri==1.0.6\nlazy==1.6\nlicense-expression==30.4.4\nlivereload==2.6.3\nlxml==4.8.0\nlz4==3.1.3+dfsg\nMarkdown==3.3.6\nmarkdown-it-py==4.0.0\nMarkupSafe==2.0.1\nmatplotlib==3.5.1\nmatplotlib-inline==0.1.3\nmaturin==1.13.3\nmdurl==0.1.2\nmkdocs==1.1.2\nmore-itertools==8.10.0\nmpmath==0.0.0\nmsgpack==1.1.2\nmypy_extensions==1.1.0\nnetifaces==0.11.0\nnumpy==1.21.5\noauthlib==3.2.0\nolefile==0.46\nopenai==2.29.0\npackageurl-python==0.17.6\npackaging==26.0\npackaging-legacy==23.0.post0\nparso==0.8.1\npastel==0.2.1\npathspec==1.1.1\npbs-installer==2026.2.11\npexpect==4.8.0\npickleshare==0.7.5\nPillow==9.0.1\npip==22.0.2\npip-api==0.0.34\npip-requirements-parser==32.0.1\npip_audit==2.10.0\npipx==1.0.0\npkginfo==1.12.1.2\nplatformdirs==4.9.2\npluggy==1.6.0\nply==3.11\npoethepoet==0.44.0\npoetry==2.3.2\npoetry-core==2.3.1\npoetry-dynamic-versioning==1.10.0\nprompt-toolkit==3.0.28\npsutil==5.9.0\npsycopg2-binary==2.9.11\nptyprocess==0.7.0\npy-serializable==2.1.0\npyasn1==0.4.8\npyasn1-modules==0.2.1\npycurl==7.44.1\npydantic==2.12.5\npydantic_core==2.41.5\nPygments==2.20.0\nPyGObject==3.42.1\nPyHamcrest==2.0.2\npyinotify==0.9.6\nPyJWT==2.3.0\npyOpenSSL==21.0.0\npyparsing==2.4.7\npypdf==6.12.1\npyproject_hooks==1.2.0\npyrsistent==0.18.1\npyserial==3.5\npytest==9.0.2\npytest-asyncio==1.3.0\npytest-mock==3.15.1\npython-apt==2.4.0+ubuntu4.1\npython-dateutil==2.8.1\npython-discovery==1.1.0\npython-slugify==4.0.0\npythran==0.10.0\npytokens==0.4.1\npytz==2022.1\nPyYAML==6.0.3\nquire==0.33.0\nRapidFuzz==3.14.3\nrequests==2.32.5\nrequests-toolbelt==1.0.0\nrespx==0.22.0\nrfc3339-validator==0.1.4\nrfc3986-validator==0.1.1\nrich==15.0.0\nruamel.yaml==0.17.16\nruamel.yaml.clib==0.2.6\nruff==0.15.12\nscipy==1.8.0\nSecretStorage==3.3.1\nservice-identity==18.1.0\nsetuptools==59.6.0\nshellingham==1.5.4\nsix==1.16.0\nsniffio==1.3.1\nsortedcontainers==2.4.0\nsoupsieve==2.3.1\nstarlette==1.0.0\nsympy==1.9\nsystemd-python==234\ntenacity==9.1.4\ntomli==2.4.0\ntomli_w==1.2.0\ntomlkit==0.14.0\ntornado==6.1\ntqdm==4.67.3\ntraitlets==5.1.1\ntrove-classifiers==2026.1.14.14\nTwisted==22.1.0\ntyping-inspection==0.4.2\ntyping_extensions==4.15.0\ntzlocal==5.3.1\nubuntu-pro-client==8001\nufoLib2==0.13.1\nufw==0.36.1\nunattended-upgrades==0.1\nunicodedata2==14.0.0\nUnidecode==1.3.3\nurllib3==2.6.3\nuserpath==1.8.0\nuuid7==0.1.0\nvirtualenv==21.0.0\nwadllib==1.3.6\nwcwidth==0.2.5\nwebencodings==0.5.1\nwheel==0.37.1\nzipp==3.23.0\nzope.interface==5.4.0\nzstandard==0.25.0",
+    "quire": "0.31.0",
+    "rust-msrv": "rustc 1.75.0 (82e1608df 2023-12-21)",
+    "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)"
+  }
+}

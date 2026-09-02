@@ -1,0 +1,5 @@
+# Complete SHA-256 census for committed codegen evidence.
+9aca98e9a4233c3f0b7e1f0e42a38547204a316fed228e4be39dbc4d097ffbc4  evidence/README.md
+84026f42f2b1ac8fa26f2302e0417cea84fd25d31ff3c6b4a414255d6b68f792  evidence/foundation-f38a36a40125-20260901T012234Z/sha256sums.txt
+597c44178903686dd5ae3e37b57a8569ef5b44d4ee99bff15585ad3a8034fafa  evidence/foundation-remote
+668b40909715dd0dffc66d20d7ed9a473263bca1f12492f4bf3dc42054a84866  evidence/historical

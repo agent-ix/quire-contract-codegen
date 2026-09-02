@@ -1,0 +1,7 @@
+    Finished test [unoptimized + debuginfo] target(s) in 0.07s
+     Running unittests src/lib.rs (target/debug/deps/quire_contract_codegen-34e5361572c04b9e)
+     Running tests/harness_generation.rs (target/debug/deps/harness_generation-7965064e17995f8e)
+     Running tests/integration.rs (target/debug/deps/integration-495ed61f9dae92ee)
+     Running tests/oracle_generation.rs (target/debug/deps/oracle_generation-533a7dc0de6a13c8)
+     Running tests/strategy_generation.rs (target/debug/deps/strategy_generation-0d93aa84f42ca237)
+   Doc-tests quire_contract_codegen

@@ -18,7 +18,16 @@ wildcards = "warn"
 
 [advisories]
 version = 2
+# The exact reviewed IR snapshot pins jsonschema 0.17.1 -> time 0.3.36. RUSTSEC-2026-0009 is
+# reachable only through an unused RFC-2822 parser; patched time >=0.3.47 requires Rust 1.88 and
+# conflicts with this crate's Rust 1.75 contract. Review by 2026-12-31, or sooner when the MSRV can
+# admit time >=0.3.47; an accepted IR revision alone is not a removal condition.
+ignore = ["RUSTSEC-2026-0009"]
 
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-git = [
+    "https://github.com/agent-ix/quire-contract-ir",
+    "https://github.com/agent-ix/quire-contract-runtime",
+]

@@ -1,0 +1,140 @@
+{
+  "backend": {
+    "kind": "none",
+    "reason": "deterministic foundation evidence packaging; invoked tools are identified in the input and manifest"
+  },
+  "environment": {
+    "dependenciesDigest": {
+      "algorithm": "sha256",
+      "value": "b939cb6c694c3f9fba16ec2ed0696aca6f200c774e51f78d5515bc4802ae0de0"
+    },
+    "operatingSystem": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "targetTriple": "x86_64-unknown-linux-gnu",
+    "toolchain": "rustc 1.94.1 (e408947bf 2026-03-25)"
+  },
+  "extensions": {
+    "dev.agent-ix.codegen": {
+      "componentClass": "direct-development-tool",
+      "envelopeSchemaDigest": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256",
+      "pgm01CandidateRevision": "7dac9d8c19952412b56a0347387666e2ca81e01d",
+      "phase": "foundation",
+      "reviewState": "pending",
+      "sourceState": "clean",
+      "historicalDisposition": {
+        "authoritative": false,
+        "reason": "superseded historical foundation record",
+        "status": "retracted"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "contentDigest": {
+        "algorithm": "sha256",
+        "value": "c39c707e77847de85a604033d88dc020ceb943dff67bdb5d1b27e3cab9521f72"
+      },
+      "mediaType": "application/json",
+      "role": "foundation-evidence-collection-input",
+      "schema": {
+        "digest": {
+          "algorithm": "sha256",
+          "value": "a3e396b63985069a90962022167f010a33cbffb813fb7074c846665aa26cc0e3"
+        },
+        "id": "quire.codegen-foundation-evidence-input",
+        "version": "v1"
+      },
+      "uri": "collection-input.json"
+    },
+    {
+      "contentDigest": {
+        "algorithm": "sha256",
+        "value": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
+      },
+      "mediaType": "application/schema+json",
+      "role": "pgm01-envelope-schema",
+      "schema": {
+        "digest": {
+          "algorithm": "sha256",
+          "value": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
+        },
+        "id": "quire.derivation-evidence",
+        "version": "v1"
+      },
+      "uri": "https://github.com/agent-ix/quire-contract-ir/blob/7dac9d8c19952412b56a0347387666e2ca81e01d/schemas/derivation-evidence-envelope-v1.schema.json"
+    },
+    {
+      "contentDigest": {
+        "algorithm": "sha256",
+        "value": "1c2881d5f8800dab031f6afa26d5ad11f88a5ab42a942bc9fe0c2853b58df2f1"
+      },
+      "mediaType": "text/x-python",
+      "role": "pgm01-governance-validator",
+      "schema": {
+        "digest": {
+          "algorithm": "sha256",
+          "value": "1c2881d5f8800dab031f6afa26d5ad11f88a5ab42a942bc9fe0c2853b58df2f1"
+        },
+        "id": "python-source",
+        "version": "3"
+      },
+      "uri": "https://github.com/agent-ix/quire-contract-ir/blob/37eb00153d5c139ebc01622b6e12a4ab79256f88/scripts/validate_governance.py"
+    }
+  ],
+  "outputs": [
+    {
+      "contentDigest": {
+        "algorithm": "sha256",
+        "value": "5d05a93f993820cc590cdc37f174f802360cf4f371e627defff9144e7b1c3865"
+      },
+      "mediaType": "application/json",
+      "role": "codegen-foundation-evidence-manifest",
+      "schema": {
+        "digest": {
+          "algorithm": "sha256",
+          "value": "05e92a537a4def39d50e0050667200fae648284afef603bcbf2c0e014e9b5be5"
+        },
+        "id": "quire.codegen-foundation-evidence-manifest",
+        "version": "v1"
+      },
+      "uri": "evidence-manifest.json"
+    }
+  ],
+  "parametersDigest": {
+    "algorithm": "sha256",
+    "value": "4cc4a0e52f402fc441ddbe40bdc66e4dd187b847d280848dd003addc4cbc7857"
+  },
+  "producer": {
+    "executableDigest": {
+      "algorithm": "sha256",
+      "value": "f30e341707826b52d3b9040f1bfd4bc33da6b8f39ae2e00741c1801a099c9bde"
+    },
+    "invocation": [
+      "scripts/collect_foundation_evidence.sh",
+      "evidence/foundation-374a6a3060ad-20260831T163004Z"
+    ],
+    "name": "quire-contract-codegen-foundation-collector",
+    "sourceRevision": "374a6a3060ad9783f3b2dc5dfb1e5345442c3618",
+    "version": "0.1.0"
+  },
+  "provenance": {
+    "candidateRevision": "374a6a3060ad9783f3b2dc5dfb1e5345442c3618",
+    "contributionMethod": "agent-assisted",
+    "repository": "https://github.com/agent-ix/quire-contract-codegen",
+    "reviewers": [
+      "@kreneskyp"
+    ],
+    "sourceRevision": "374a6a3060ad9783f3b2dc5dfb1e5345442c3618"
+  },
+  "recordId": "foundation-374a6a3060ad-20260831T163004Z",
+  "recordedAt": "2026-08-31T16:30:06Z",
+  "result": {
+    "requirementRefs": [
+      "PGM-01-R08",
+      "PGM-01-R09",
+      "MP-001"
+    ],
+    "status": "inconclusive",
+    "summary": "3 codegen foundation checks failed"
+  },
+  "schemaVersion": "quire.derivation-evidence/v1"
+}

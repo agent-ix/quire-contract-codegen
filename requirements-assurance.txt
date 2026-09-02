@@ -1,0 +1,14 @@
+# The shared assurance lane (FR-006). Install this in its OWN environment.
+#
+# It is deliberately separate from the Draft 7 lane this repository's retained
+# evidence tooling was written against (jsonschema 3.2.0, rfc3339-validator,
+# rfc3986-validator, in requirements-evidence.txt). engineering-assurance
+# declares jsonschema>=4.23,<5. Both pins are correct for their own job and
+# neither may be bent to fit the other, so they get one environment each:
+#
+#   make assurance-env  -> .venv-assurance, this file
+#
+# The pin is the accepted release from agent-ix/engineering-assurance#8, which
+# publishes engineering-assurance as a source distribution: the git tag IS the
+# released artifact. It is not a branch head and must not be replaced by one.
+engineering-assurance @ git+https://github.com/agent-ix/engineering-assurance@v0.2.0

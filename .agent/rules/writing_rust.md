@@ -4,7 +4,7 @@
 
 - `make fmt` before committing. CI gate (`make fmt-check`) is `cargo fmt -- --check` — drift fails.
 - `make lint` runs `cargo clippy --all-targets -- -D warnings`. Warnings are errors.
-- 100-char max width (rustfmt). `StdExternalCrate` import grouping with crate-level `imports_granularity`.
+- 100-char max width using stable rustfmt.
 
 ## Unsafe
 

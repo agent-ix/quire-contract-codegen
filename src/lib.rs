@@ -1,16 +1,26 @@
 //! Deterministic Rust, property-test, proof, and evidence generation from Quire contracts.
 
-/// Placeholder entry point.
-pub fn hello() -> &'static str {
-    "hello from quire_contract_codegen"
-}
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// Implements: FR-001
+mod oracle;
+// Implements: FR-002
+mod harness;
+// Implements: FR-002
+mod strategy;
 
-    #[test]
-    fn hello_returns_greeting() {
-        assert!(hello().contains("quire_contract_codegen"));
-    }
-}
+pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
+pub use strategy::{
+    generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
+    StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,
+};
+
+pub use oracle::{
+    generate_boolean_oracle, generator_source_is_dirty, Artifact, CodegenExtension,
+    DerivationManifest, DigestIdentity, GeneratedArtifactBundle, GenerationDiagnostic,
+    GenerationEnvironment, GenerationErrorCode, GenerationProvenance, GenerationResult,
+    GenerationTerminalState, ManifestArtifact, ManifestContext, NoBackend, OracleArtifactBundle,
+    OracleRequest, ProducerIdentity, SchemaIdentity, SourceRegion, GENERATOR_SOURCE_REVISION,
+    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+};

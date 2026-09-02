@@ -1,0 +1,18 @@
+warning[license-not-encountered]: license was not encountered
+  ┌─ /home/peter/dev/quire-contract-codegen/deny.toml:7:6
+  │
+7 │     "BSD-3-Clause",
+  │      ━━━━━━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+  ┌─ /home/peter/dev/quire-contract-codegen/deny.toml:8:6
+  │
+8 │     "CDLA-Permissive-2.0",
+  │      ━━━━━━━━━━━━━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+  ┌─ /home/peter/dev/quire-contract-codegen/deny.toml:9:6
+  │
+9 │     "ISC",
+  │      ━━━ unmatched license allowance
+

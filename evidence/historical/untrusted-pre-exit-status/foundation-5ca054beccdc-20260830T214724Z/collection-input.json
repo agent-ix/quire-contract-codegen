@@ -1,0 +1,34 @@
+{
+  "commands": [
+    "quire validate --scope . spec/**/*.md",
+    "cargo fmt --all -- --check",
+    "cargo clippy --all-targets -- -D warnings",
+    "cargo test",
+    "cargo deny check licenses",
+    "bash scripts/check_unsafe_comments.sh",
+    "cargo metadata --format-version 1",
+    "RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps"
+  ],
+  "dependencies": {
+    "irCorpus": "agent-ix/quire-contract-ir#10-open-no-candidate",
+    "pgm01": {
+      "candidateRevision": "0b8669b80f98b6c11954f922b32d9edae8a11983",
+      "envelopeSchema": "quire.derivation-evidence/v1",
+      "envelopeSchemaDigest": {
+        "algorithm": "sha256",
+        "value": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
+      },
+      "policy": "ix://agent-ix/quire-contract-ir/PGM-01"
+    },
+    "runtimeCandidateRevision": "87f75757e9b6687cf0502c0c55969a13ec10f924"
+  },
+  "phase": "foundation",
+  "schemaVersion": "quire.codegen-foundation-evidence-input/v1",
+  "sourceRevision": "5ca054beccdc8a9d449e9e8104824026d3365575",
+  "sourceState": "clean",
+  "tools": {
+    "cargo": "cargo 1.94.1 (29ea6fb6a 2026-03-24)",
+    "quire": "0.31.0",
+    "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)"
+  }
+}
