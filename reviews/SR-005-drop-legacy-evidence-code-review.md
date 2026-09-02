@@ -91,26 +91,54 @@ the retained records that were deleted. A filename is not a dependency, and dele
 every generation. The reviewer verified the split independently from scratch and confirmed all three
 kept schemas are `include_bytes!` and feed `executable_digest`, so removing any one fails to compile.
 
-## Findings and dispositions
+## Findings
 
-Fourteen findings from the independent adversarial review of `00aa054`.
+Fourteen from the independent adversarial review of `00aa054`, plus three raised by the campaign
+coordinator against the *fix* rather than the deletion, plus two this repository found in its own
+correction.
 
-| ID | Severity | Finding | Disposition |
-|---|---|---|---|
-| FND-001 | critical | `tc_013` still required `scripts/legacy_evidence_view.py` in the `make -n ci` plan | **FIXED** — entry removed. `make ci` also caught this |
-| FND-002 | critical | `tc_009` asserted five proof obligations; the declaration names four | **FIXED** — `5` → `4` |
-| FND-003 | high | `attested-malformed` is `attested-failed` relabelled; the "both halves asserted" claim is false | **FIXED** — scenario, control and `derive_malformed_stream` removed |
-| FND-004 | high | the paired control for `attested-malformed` cannot fail independently | **FIXED** — removed with the scenario |
-| FND-005 | high | asymmetric treatment of `unsupported` and `malformed`, with gate preservation as the stated motive | **FIXED** — `malformed` withdrawn; FR-006-AC-5 requires ten |
-| FND-006 | high | the sealed record kept issue-13's identity at revision 1 for a different change; `subject.scope` never named `evidence`; the deletion was declared in no entry | **FIXED** — record is now issue-16, `evidence` in scope, `PRESERVE-no-retained-evidence` declares the deletion and its authority |
-| FND-007 | medium | `spec/test-matrix.md` still titled TC-012 "twelve" | **FIXED** |
-| FND-008 | medium | an open human decision document had review obligations added to it | **FIXED** — the unsatisfiable item is struck and nothing substituted |
-| FND-009 | low | the deleted-artifact census listed three basenames and exempted this file wholesale | **FIXED** — nine names; exempts only the byte range of its own declaration, which is how FND-001 survived |
-| FND-010 | low | "three suites, four concerns" in `suites.md` | **FIXED** |
-| FND-011 | low | the TC-001 trace claimed an assertion on manifest `inputs` that is only a schema requirement | **FIXED** |
-| FND-012 | low | prose naming a tree that no longer exists | **FIXED** in `assurance_chain.py` and `AD-001`. `planning/foundation-gap-analysis.md` is **ACCEPTED** unchanged: it is a dated historical record and delete-never-rewrite forbids editing it |
-| FND-013 | low | the branch had no commits, so `tc_001` failed on `generator_source_dirty` | **ACCEPTED** — an artifact of the uncommitted state at review time, not of the change. The gate is revision-bound and is green on the committed tree |
-| FND-014 | low | `engineering-assurance#21` declared closed as moot without evidence | **FIXED** — not claimed closed. The epic records it closes as moot once the campaign repositories have dropped their records; it names four, so this repository does not close it unilaterally |
+Severities are the reviewer's except for FND-501 and FND-502, which the reviewer graded **critical**.
+The SpecReview vocabulary is low/medium/high, so they are recorded as `high` here and the reviewer's
+grade is stated in this sentence rather than quietly lost. Both were live references to deleted
+material and both made `make ci` fail.
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-501 | high | `tc_013` still required `scripts/legacy_evidence_view.py` in the `make -n ci` plan. The test whose purpose is "the gates that replaced them are reachable from `ci` rather than merely defined" was itself left dangling | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-502 | high | `tc_009` asserted five proof obligations against a declaration that names four | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-503 | high | `attested-malformed` was `attested-failed` under another name: both vocabulary tables map `malformed` onto `fail`, so the receipt reasons were byte-identical. One of its three conditions was a tautology over a string constructed three lines earlier | `scripts/assurance_chain.py` | correct-requirement-no-evidence |
+| FND-504 | high | its paired control was strictly implied by an existing control and could never fail independently | `scripts/assurance_chain.py` | correct-requirement-no-evidence |
+| FND-505 | high | `unsupported` and `malformed` were treated asymmetrically, with gate preservation as the stated motive in six files | `spec/functional/FR-006-shared-assurance-intake.md`, `tests/shared_assurance.rs` | wrong-requirement |
+| FND-506 | high | the sealed record kept `issue-13` at revision 1 with a null parent while carrying content for a different change under a different authority; `subject.scope` never named `evidence`, so a 2,205-file deletion sat outside the declared subject and in no entry | `assurance/change-assurance.json` | correct-requirement-no-evidence |
+| FND-507 | medium | `spec/test-matrix.md` still titled TC-012 "twelve" | `spec/test-matrix.md` | correct-requirement-no-evidence |
+| FND-508 | medium | review obligations were added to an open human decision document | `planning/release-decision.md` | wrong-requirement |
+| FND-509 | low | the deleted-artifact census listed three basenames and exempted `shared_assurance.rs` wholesale — which is how FND-501 survived it | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-510 | low | `suites.md` mapped four concerns onto three suites | `spec/evidence/suites.md` | correct-requirement-no-evidence |
+| FND-511 | low | the TC-001 trace claimed an assertion on manifest `inputs` that is only a schema requirement | `tests/oracle_generation.rs` | correct-requirement-no-evidence |
+| FND-512 | low | prose naming a tree that no longer exists | `scripts/assurance_chain.py`, `spec/assurance/AD-001-codegen-architecture.md` | correct-requirement-no-evidence |
+| FND-513 | low | `tc_001` failed on `generator_source_dirty` because the branch was uncommitted at review time | — | wrong-requirement |
+| FND-514 | low | `engineering-assurance#21` was declared closed as moot without evidence | `assurance/README.md` | correct-requirement-no-evidence |
+| FND-515 | medium | the JSONDecodeError arm of `adapt_conformance` was reached by no case. Raised by the coordinator against sibling work in the same form | `scripts/assurance_chain.py` | correct-requirement-no-evidence |
+| FND-516 | medium | the census floor `inspected > 20` was inherited unchanged while its walked population fell 42 → 28, cutting headroom from 22 to 8 | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-517 | low | `purpose` was moved into `record`, where it is an extra field; quoin refused to seal and four tests exited 2. Found by `make ci` | `assurance/change-assurance.json` | correct-requirement-no-evidence |
+| FND-518 | low | the FND-509 fix exempted only the `gone` declaration, but this test names the deleted schemas twice. Found by `make ci` | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+
+## Dispositions
+
+| Finding | Disposition |
+| --- | --- |
+| FND-501 | **FIXED**. Entry removed. `make ci` reached the same failure independently |
+| FND-502 | **FIXED**. `5` → `4` |
+| FND-503, FND-504, FND-505 | **FIXED**. The scenario, its control and `derive_malformed_stream` are removed and `malformed` is withdrawn alongside `unsupported`. FR-006-AC-5 requires ten. Not repaired — deleted, because a probe that cannot fail and a probe that is absent are the same check, and the absent one does not also make a claim |
+| FND-506 | **FIXED**. The record is `quire-contract-codegen/issue-16`, `evidence` is in `subject.scope`, and `PRESERVE-no-retained-evidence` declares the deletion and its authority. `revision` stays 1 with a null parent because this is a new record whose predecessor was sealed only into an ignored store under `target/` and never persisted; no lineage digest is invented |
+| FND-507, FND-510, FND-511, FND-512 | **FIXED**. `planning/foundation-gap-analysis.md` is **ACCEPTED** unchanged within FND-512: it is a dated historical record and delete-never-rewrite forbids editing it |
+| FND-508 | **FIXED**. The unsatisfiable item is struck and nothing is substituted for it |
+| FND-509 | **FIXED**. Nine names rather than three, and the exemption is the byte range of the test's own declarations rather than the file that holds them |
+| FND-513 | **ACCEPTED**. An artifact of the uncommitted tree at review time, not of the change. The gate is revision-bound and is green on the committed tree |
+| FND-514 | **FIXED**. Not claimed closed. The epic records that it closes as moot once the campaign repositories have dropped their records, and it names four |
+| FND-515 | **FIXED**. A new probe truncates a real row of the real producer stream mid-object and calls the real adapter, requiring an error that names the line. Mutation-tested in both directions — see below |
+| FND-516 | **FIXED**. Floor re-derived from the tree as it stands: `>= 24` against a measured 28, with the derivation in the comment |
+| FND-517, FND-518 | **FIXED**. Both were defects in the FND-503..009 fixes and both were caught by `make ci` before merge |
 
 ## Assurance Context
 
@@ -145,7 +173,7 @@ lives under `target/` and is ignored.
 |---|---|
 | `make ci` | exit 0, all 11 prerequisites |
 | `quire coverage --scope . --json` | 16/53 backed, 0 status lies, 0 new unbacked rows |
-| assurance chain | 14 scenarios, 6 controls, 7 adapter probes, all matched; 4 proofs attested `passed` |
+| assurance chain | 14 scenarios, 6 controls, 8 adapter probes, all matched; 4 proofs attested `passed` |
 | `make pins` | `accepted: true`, no artifact mismatches; probed red by a one-byte upstream edit |
 
 ## Limitations
@@ -157,6 +185,48 @@ decision, not closed.
 
 Seven mutation probes were deleted with the compatibility view. All seven degraded the mapper's view
 of retained records and had no other subject, so they went with the material they guarded. The
-chain's own seven adapter probes are unconditional inside `assurance_chain.py`, fold into
+chain's own adapter probes — now eight — are unconditional inside `assurance_chain.py`, fold into
 `report["matched"]`, and remain reachable from `ci` through `assurance-chain`. No gate vanished
 without its subject.
+
+## The replacement probe, and why it is not the one that was deleted
+
+The coordinator's warning is that finding a gap and filling it with something unfalsifiable reads
+identically to filling it properly. This repository has form: SR-003 FND-303 found that the
+twelve-state census counted `kind`, a free-text label nothing cross-checked, and the check found a
+live mislabel in the shipped tree.
+
+`attested-malformed` was that failure again, and it was deleted rather than repaired. What replaced
+it is not a state demonstration at all:
+
+| | deleted `attested-malformed` | new `refuses-an-undecodable-row-by-name` |
+|---|---|---|
+| input | a row's `outcome` field rewritten to `malformed` | a real row of the real stream truncated mid-object |
+| observed | the value **after** the adapter mapped it — the one place `malformed` cannot survive | the bytes **before** any mapping |
+| claims a state | yes, `malformed` | no, `state: None` |
+| can it fail | no. Two of three conditions were implied by the vocabulary table; one was a tautology | yes, measured |
+
+Applying the coordinator's test — name the defect, introduce it, watch it go red:
+
+| Mutation | Probe | Chain |
+|---|---|---|
+| control, unmodified | matched | matched |
+| `adapt_conformance` drops undecodable rows instead of raising | **not matched** | **not matched** |
+| it raises but without naming the line | **not matched** | **not matched** |
+| restored | matched | matched |
+
+It counts no verification state, so it does not put `malformed` back in the census by way of an error
+message. It closes a real gap instead: the `JSONDecodeError` arm of `adapt_conformance` was reached by
+no case before it.
+
+## Empty populations
+
+The clause that changed shape is TC-013's. It previously asserted the frozen schemas were *present*
+and referenced by nothing; it now asserts two schemas are *absent*. An assertion of absence over a
+population that was just deleted is satisfied by a repository that deleted everything, so it cannot
+carry the criterion alone.
+
+It does not. Three live schemas are asserted **present and still named by `src/oracle.rs`** — a
+non-empty positive population — and the reference census runs over 28 non-markdown readable files
+against a re-derived floor of 24. The deleted-schema clause is a corroborating check, not the
+load-bearing one.

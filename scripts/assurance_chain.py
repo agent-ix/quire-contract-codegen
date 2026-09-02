@@ -1251,6 +1251,55 @@ def adapter_probes(workspace: Path) -> list[dict[str, Any]]:
         }
     )
 
+    # Probe 8: a row truncated mid-object is refused, and refused as undecodable
+    # bytes rather than quietly skipped.
+    #
+    # This is the branch nothing else reaches: `adapt_conformance` has a
+    # JSONDecodeError arm, and until this probe existed no case exercised it. The
+    # form matters and was arrived at the hard way. It takes the real producer
+    # stream, truncates a real row mid-object, and calls the real adapter --
+    # pre-adapter, so it observes the bytes as they arrive rather than the value
+    # they would map to. An earlier attempt in this file rewrote a row's
+    # `outcome` field to `malformed` and checked the result afterwards, which is
+    # the one place the word cannot survive: both vocabulary tables send it to
+    # `fail`. That probe could not fail and was deleted.
+    #
+    # It carries `state: None`. A refusal is the adapter declining to produce a
+    # state, not a demonstration of one, and labelling this `malformed` would put
+    # the state back in the census on the strength of an error message.
+    #
+    # Two conditions, and the second is the one with teeth: the adapter must
+    # raise, and its message must name the truncated line. A row silently dropped
+    # from the transcript would satisfy "did not appear in the output" while
+    # being exactly the failure this guards against, so a refusal that does not
+    # name the line is not counted.
+    truncation_lines = [line for line in stream.splitlines() if line.strip()]
+    intact = truncation_lines[0]
+    truncation_lines[0] = intact[: len(intact) // 2]
+    truncation_error = ""
+    try:
+        adapt_conformance("\n".join(truncation_lines))
+    except ChainError as error:
+        truncation_error = str(error)
+    results.append(
+        {
+            "probe": "refuses-an-undecodable-row-by-name",
+            "state": None,
+            "matched": bool(truncation_error)
+            and "line 1" in truncation_error
+            and "malformed" in truncation_error,
+            "detail": {
+                "truncated_to_bytes": len(truncation_lines[0]),
+                "error": truncation_error,
+                "why": (
+                    "the real producer stream, truncated mid-object, through the real "
+                    "adapter; the refusal must name the line so a dropped row cannot "
+                    "pass as a refused one"
+                ),
+            },
+        }
+    )
+
     return results
 
 

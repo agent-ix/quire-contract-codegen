@@ -61,6 +61,13 @@ export. Quire exports; it never executes a producer.
 `rustup run 1.75.0 cargo check --locked --all-targets --message-format=json` is the MSRV build, whose
 verdict is read from cargo's own `build-finished` message rather than from its transcript.
 
+The adapter's undecodable-bytes arm is measured rather than assumed. A probe truncates a real row of
+the real producer stream mid-object, calls the real adapter, and requires it to raise an error naming
+the truncated line — pre-adapter, because that is the only point at which the bytes have not yet been
+mapped onto a coarse result. It counts no verification state: a refusal is the adapter declining to
+produce one. Its two failure directions were introduced and observed to turn it red, one where the
+adapter drops the row silently and one where it raises without naming the line.
+
 `scripts/assurance_chain.py` drives the official chain over those files. It projects
 `assurance/change-assurance.json` into Quoin's FR-063 record body, deriving only the digests that
 file's own `derived_fields` names; seals one FR-064 proof attestation per obligation, stating the

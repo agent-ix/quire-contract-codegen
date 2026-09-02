@@ -220,6 +220,10 @@ fn tc_009_the_chain_reaches_quoin_without_quoin_or_quire_executing_a_producer() 
         "refuses-a-foreign-protocol",
         "refuses-an-unnamed-outcome",
         "refuses-an-empty-stream",
+        // The undecodable-bytes arm of the adapter. Required by name because it
+        // is the branch nothing else reaches, and because the probe that used to
+        // stand where it does could not fail.
+        "refuses-an-undecodable-row-by-name",
         "accepts-the-real-run",
     ] {
         assert!(
@@ -1098,10 +1102,17 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
             );
         }
     }
+    // Re-derived rather than inherited. The floor was `> 20` against a walked
+    // population of 42 non-markdown readable files, leaving 22 of headroom. This
+    // change deletes 14 files from that population — the reader, its 11 fixtures
+    // and the two frozen schemas — taking it to 28, so the old floor would have
+    // kept passing while more than a quarter of the inspectable surface
+    // disappeared. Set at 24 against a measured 28: four files of ordinary churn,
+    // and a directory going missing is caught rather than absorbed.
     assert!(
-        inspected > 20,
-        "the executable and configuration census is unexpectedly small ({inspected}) \
-         to make this claim"
+        inspected >= 24,
+        "the executable and configuration census is unexpectedly small ({inspected}, \
+         floor 24, measured 28 at the time it was derived) to make this claim"
     );
 
     // The Makefile is orchestration, not a trust root, and carries no gate that
