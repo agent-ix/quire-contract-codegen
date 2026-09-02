@@ -21,7 +21,7 @@ sha2 = "=0.10.9"
 syn = { version = "=2.0.119", features = ["full"] }
 
 [dev-dependencies]
-jsonschema = { version = "=0.17.1", default-features = false }
+jsonschema = { version = "=0.17.1", default-features = false, features = ["draft202012"] }
 proptest = { version = "=1.5.0", default-features = false, features = ["std"] }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3", features = ["proptest"] }
 

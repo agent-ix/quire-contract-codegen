@@ -17,7 +17,7 @@ Verify repeated generation is byte-identical and every output retains complete i
 ## Test Procedure
 
 Generate each pinned corpus package repeatedly while permuting irrelevant input ordering and supported
-platform execution; compare artifact names, bytes, manifests, source maps, and bundle digests.
+platform execution; compare artifact names, bytes, attestations, source maps, and bundle digests.
 
 ## Expected Results
 

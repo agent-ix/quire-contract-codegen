@@ -997,7 +997,7 @@ fn tc_012_every_demonstrable_verification_outcome_is_demonstrated_and_paired_wit
     }
 }
 
-/// Trace: TC-013, FR-006-AC-6
+/// Trace: TC-013, FR-006-AC-6, FR-006-AC-7
 #[test]
 fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unreferenced() {
     let root = root();
@@ -1049,7 +1049,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // and with those records deleted there is nothing left for the digests to
     // keep intact.
     //
-    // The third is the deprecated derivation-evidence envelope, removed under
+    // The third is the deprecated PGM-01 evidence envelope, removed under
     // agent-ix/quire-contract-codegen#18. The change before this one kept it, on
     // the stated grounds that it was a live output contract validated on every
     // generation. It was not. `src/oracle.rs` bound it with `include_bytes!` and
@@ -1172,15 +1172,28 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // It does not defend against someone editing both, and nothing in one file
     // can. It defends against the realistic failure, which is an entry quietly
     // dropped while the control keeps reporting success.
-    const EXPECTED_GONE: [&str; 16] = [
+    const EXPECTED_GONE: [&str; 29] = [
         "COMPAT_RESULT",
+        "CodegenExtension",
+        "DerivationManifest",
+        "DigestIdentity",
         "FR-006-AC-4",
+        "GenerationEnvironment",
+        "GenerationProvenance",
+        "GenerationResult",
+        "ManifestArtifact",
+        "ManifestContext",
+        "NoBackend",
         "PGM_SCHEMA",
         "PROOF-legacy-compatibility",
+        "ProducerIdentity",
         "SUITE-005",
+        "SchemaIdentity",
         "TC-011",
         "compat-view",
         "compat_view",
+        "derivation-evidence",
+        "derivation_evidence",
         "foundation-evidence-input-v1",
         "foundation-evidence-manifest-v1",
         "legacy-compat",
@@ -1214,6 +1227,42 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
             "tc_011",
             "FR-006-AC-4",
             "PGM_SCHEMA",
+            // The deprecated evidence format itself, and the two types that were
+            // the only statement of its shape after its schema was deleted under
+            // agent-ix/quire-contract-codegen#18. The first entry is the stem of
+            // the deprecated schema version string, so it is caught wherever an
+            // executable surface writes it, in either the hyphenated or the dotted
+            // spelling -- hyphens are illegal in Rust identifiers, so the
+            // underscore form is the likelier reintroduction here and was missing
+            // until an adversarial review said so. The rest are every public serde
+            // type that stated that shape.
+            //
+            // Every one of them, not the two the migration first thought of. Eleven
+            // types were deleted with the format; naming two left nine
+            // reintroducible without tripping this census, and one of the two named
+            // -- the caller-context struct -- was not a statement of the envelope
+            // shape at all. Every generated artifact now carries Quoin's packaged
+            // ProofAttestationV1 shape instead, under
+            // agent-ix/quire-contract-codegen#20.
+            //
+            // Markdown is outside this census, deliberately and as before: the
+            // planning documents, the reviews and CLAUDE.md are the record of what
+            // was deprecated and have to be able to name it. So is
+            // assurance/change-assurance.json, exempted below. FR-006-AC-7 names
+            // both carve-outs rather than claiming a reach this census lacks.
+            "derivation-evidence",
+            "derivation_evidence",
+            "DerivationManifest",
+            "ManifestContext",
+            "ManifestArtifact",
+            "ProducerIdentity",
+            "SchemaIdentity",
+            "DigestIdentity",
+            "NoBackend",
+            "GenerationEnvironment",
+            "GenerationProvenance",
+            "GenerationResult",
+            "CodegenExtension",
         ])
         .collect();
     assert_eq!(

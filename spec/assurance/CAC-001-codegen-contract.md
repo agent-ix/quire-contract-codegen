@@ -7,7 +7,7 @@ owner: codegen-maintainers
 kind: deterministic
 responsibility: derive semantically aligned reproducible verification artifacts from one contract package
 inputs: [serialized contract package, backend configuration, customer type bindings]
-outputs: [artifact bundle, diagnostics, derivation manifest]
+outputs: [artifact bundle, diagnostics, proof attestations]
 invariants: [no silent approximation, one shared clause semantics, complete identity, atomic publication]
 failure_behaviors: [emit explicit diagnostics, retain incomplete states, publish no partial bundle]
 version_pins:

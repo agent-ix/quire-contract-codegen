@@ -11,13 +11,14 @@ relationships:
 
 ## Statement
 
-- Every emitted artifact shall identify its tool, input, schema, backend, configuration, output, and digest.
+- Every emitted artifact shall identify its tool, input, schema, backend, configuration, and output,
+  and shall be bound to the digest of its own bytes when its attestation is sealed.
 - Generated Rust shall carry `MIT OR Apache-2.0` SPDX identity.
 - No automated output shall claim project-specific validation, accreditation, certification, or human release approval.
 
 ## Scope
 
-Generated source, manifests, diagnostics, source maps, proof graphs, and reports.
+Generated source, proof attestations, diagnostics, source maps, proof graphs, and reports.
 
 ## Rationale
 
@@ -36,7 +37,7 @@ would exceed the tool's authority and hide consuming-project responsibilities.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| NFR-002-AC-1 | Every emitted artifact records the required tool, input, schema, backend, configuration, output, and digest identity. | Test (TC-001) |
+| NFR-002-AC-1 | Every emitted artifact records the required tool, input, schema, backend, configuration, and output identity, and the digest identity of its own bytes is established when its attestation is sealed. | Test (TC-001) |
 | NFR-002-AC-2 | Every generated Rust file carries the `MIT OR Apache-2.0` SPDX identity. | Test (TC-001) |
 | NFR-002-AC-3 | Unsupported and inconclusive states remain explicit rather than silently succeeding. | Test (TC-003) |
 | NFR-002-AC-4 | Generated output makes no project-specific validation, accreditation, certification, or release-approval claim. | Inspection |
@@ -76,7 +77,18 @@ agent-ix/quire-contract-codegen#14.
 ## Verification
 
 TC-001 and TC-003 validate identities, licensing, and explicit diagnostic states; TC-001 is where
-NFR-002-AC-1 is measured, against a manifest this crate emits. TC-011 previously measured that
+NFR-002-AC-1 is measured, against the proof attestations this crate emits. The
+seventh identity in the earlier statement of this requirement — the digest of the
+artifact's own bytes — is deliberately no longer the generator's. The deprecated
+envelope carried the generator's own SHA-256 of its own output, a self-check that
+could only ever agree with itself. The shared shape puts that binding in
+`retained_output.digest`, which `quoin change-assurance seal-attestation` computes
+from the bytes on disk, so the statement and the criterion above say "when its
+attestation is sealed" rather than continuing to claim the generator records it.
+What is lost by that move is stated rather than glossed: a reader holding only an
+emitted attestation and its artifact can no longer check the pairing with
+`sha256sum` alone. TC-001 measures the replacement, including a control that one
+appended byte moves the sealed digest and one that sealing is deterministic. TC-011 previously measured that
 retained bytes were read without being written and that Git agreed they were the committed bytes;
 that test is removed with the records it measured, and no weaker substitute is put in its place.
 NFR-002-AC-5 is verified by the measurement recorded above and by

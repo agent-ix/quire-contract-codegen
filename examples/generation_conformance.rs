@@ -31,10 +31,10 @@
 use std::fmt::Write as _;
 
 use quire_contract_codegen::{
-    generate_boolean_oracle, generate_i64_strategy, generate_tristate_harness,
-    GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState, HarnessErrorCode,
-    HarnessRequest, ManifestContext, OracleArtifactBundle, OracleRequest, SourceRegion,
-    StrategyCampaign, StrategyConstraint, StrategyErrorCode, StrategyRequest,
+    generate_boolean_oracle, generate_i64_strategy, generate_tristate_harness, AttestationContext,
+    AttestationResult, GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
+    HarnessErrorCode, HarnessRequest, OracleArtifactBundle, OracleRequest, ProofAttestationBody,
+    SourceRegion, StrategyCampaign, StrategyConstraint, StrategyErrorCode, StrategyRequest,
     IR_CANDIDATE_REVISION,
 };
 use quire_contract_ir::{
@@ -109,18 +109,42 @@ fn span(start: u64, end: u64) -> SourceSpan {
     .unwrap()
 }
 
-const ORACLE_REFS: [&str; 1] = ["FR-001"];
-const HARNESS_REFS: [&str; 1] = ["FR-002"];
+/// The record digest this corpus's attestations bind to.
+///
+/// A bounded corpus is not a change under review, so no change-assurance record is
+/// sealed for it and there is no digest to name. The all-zero digest is used
+/// because it is the one 64-hexadecimal string no sealed record can have: a
+/// plausible-looking value here would be a false binding, and this one cannot be
+/// mistaken for a real one.
+const CORPUS_RECORD_DIGEST: &str =
+    "0000000000000000000000000000000000000000000000000000000000000000";
 
-fn manifest(requirement_refs: &'static [&'static str]) -> ManifestContext<'static> {
-    ManifestContext {
+fn attestation() -> AttestationContext<'static> {
+    AttestationContext {
+        record_digest: CORPUS_RECORD_DIGEST,
         candidate_revision: IR_CANDIDATE_REVISION,
-        contribution_method: "generated",
-        reviewers: &["@codegen-conformance-reviewer"],
-        result_status: "conclusive",
-        result_summary: "bounded generation corpus case",
-        requirement_refs,
     }
+}
+
+/// Reads one emitted attestation and reports whether it is a well-formed
+/// `ProofAttestationV1` body bound to the context the caller supplied.
+///
+/// This is a shape check and deliberately not a conformance check against Quoin's
+/// packaged schema: the producer runs before the chain and shells out to nothing.
+/// `tests/oracle_generation.rs` seals these bytes through the real
+/// `quoin change-assurance seal-attestation` and validates the sealed result
+/// against the packaged schema.
+fn attestation_is_a_shared_body(contents: &str) -> bool {
+    let Ok(body) = serde_json::from_str::<ProofAttestationBody>(contents) else {
+        return false;
+    };
+    body.schema_version == 1
+        && body.record_type == "proof_attestation"
+        && body.result == AttestationResult::Passed
+        && body.record_digest == CORPUS_RECORD_DIGEST
+        && body.candidate_revision == IR_CANDIDATE_REVISION
+        && body.proof_id.starts_with("PROOF-codegen-")
+        && body.attestation_id.starts_with(&body.proof_id)
 }
 
 fn boolean_environment(
@@ -352,7 +376,7 @@ fn record_oracle_rejection(
 fn oracle_generated() -> Case {
     let mut case = Case::new(
         "generation::boolean-oracle",
-        6,
+        7,
         vec![
             "FR-001",
             "FR-001-AC-1",
@@ -384,7 +408,7 @@ fn oracle_generated() -> Case {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed_expression,
-        manifest: manifest(&ORACLE_REFS),
+        attestation: attestation(),
     };
 
     match generate_boolean_oracle(&request) {
@@ -423,7 +447,15 @@ fn oracle_generated() -> Case {
                 "each artifact's recorded digest is the digest of that artifact",
                 first.rust.sha256 == sha256(first.rust.contents.as_bytes())
                     && first.source_map.sha256 == sha256(first.source_map.contents.as_bytes())
-                    && first.manifest.sha256 == sha256(first.manifest.contents.as_bytes()),
+                    && first.rust_attestation.sha256
+                        == sha256(first.rust_attestation.contents.as_bytes())
+                    && first.source_map_attestation.sha256
+                        == sha256(first.source_map_attestation.contents.as_bytes()),
+            );
+            case.check(
+                "both generated artifacts carry a shared proof-attestation body",
+                attestation_is_a_shared_body(&first.rust_attestation.contents)
+                    && attestation_is_a_shared_body(&first.source_map_attestation.contents),
             );
         }
         Err(diagnostics) => {
@@ -443,7 +475,7 @@ fn oracle_generated() -> Case {
 fn harness_generated() -> Case {
     let mut case = Case::new(
         "generation::tristate-harness",
-        4,
+        5,
         vec!["FR-002", "FR-002-AC-1", "NFR-002-AC-2", "TC-004"],
     );
     case.expected_terminal_state = Some(GenerationTerminalState::Generated);
@@ -491,7 +523,7 @@ fn harness_generated() -> Case {
         precondition: &precondition,
         postcondition: &postcondition,
         execution_point: "generate",
-        manifest: manifest(&HARNESS_REFS),
+        attestation: attestation(),
     };
     match generate_tristate_harness(&request) {
         Ok(first) => {
@@ -518,7 +550,11 @@ fn harness_generated() -> Case {
             case.check(
                 "each artifact's recorded digest is the digest of that artifact",
                 first.rust.sha256 == sha256(first.rust.contents.as_bytes())
-                    && first.manifest.sha256 == sha256(first.manifest.contents.as_bytes()),
+                    && first.attestation.sha256 == sha256(first.attestation.contents.as_bytes()),
+            );
+            case.check(
+                "the generated artifact carries a shared proof-attestation body",
+                attestation_is_a_shared_body(&first.attestation.contents),
             );
         }
         Err(diagnostics) => {
@@ -537,7 +573,7 @@ fn harness_generated() -> Case {
 fn strategy_generated() -> Case {
     let mut case = Case::new(
         "generation::i64-strategy",
-        3,
+        4,
         vec!["FR-002", "FR-002-AC-2", "NFR-002-AC-2", "TC-004"],
     );
     case.expected_terminal_state = Some(GenerationTerminalState::Generated);
@@ -550,7 +586,7 @@ fn strategy_generated() -> Case {
             maximum: 8,
         },
         campaign: StrategyCampaign::Boundary,
-        manifest: manifest(&HARNESS_REFS),
+        attestation: attestation(),
     };
     match generate_i64_strategy(&request) {
         Ok(first) => {
@@ -573,7 +609,11 @@ fn strategy_generated() -> Case {
             case.check(
                 "each artifact's recorded digest is the digest of that artifact",
                 first.rust.sha256 == sha256(first.rust.contents.as_bytes())
-                    && first.manifest.sha256 == sha256(first.manifest.contents.as_bytes()),
+                    && first.attestation.sha256 == sha256(first.attestation.contents.as_bytes()),
+            );
+            case.check(
+                "the generated artifact carries a shared proof-attestation body",
+                attestation_is_a_shared_body(&first.attestation.contents),
             );
         }
         Err(diagnostic) => {
@@ -615,7 +655,7 @@ fn oracle_rejects_non_boolean_root() -> Case {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed_root,
-        manifest: manifest(&ORACLE_REFS),
+        attestation: attestation(),
     };
     record_oracle_rejection(&mut case, generate_boolean_oracle(&request));
     case
@@ -660,22 +700,22 @@ fn oracle_rejects_unsupported_expression() -> Case {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed_expression,
-        manifest: manifest(&ORACLE_REFS),
+        attestation: attestation(),
     };
     record_oracle_rejection(&mut case, generate_boolean_oracle(&request));
     case
 }
 
-/// TC-003: an invalid caller-supplied manifest context is rejected before any
-/// artifact exists, so provenance cannot be omitted by supplying nothing.
-fn oracle_rejects_invalid_manifest_context() -> Case {
+/// TC-003: an invalid caller-supplied attestation binding is rejected before any
+/// artifact exists, so a generated artifact cannot arrive bound to nothing.
+fn oracle_rejects_invalid_attestation_context() -> Case {
     let mut case = Case::new(
-        "rejection::invalid-manifest-context",
+        "rejection::invalid-attestation-context",
         2,
         vec!["FR-001-AC-4", "NFR-002-AC-1", "NFR-002-AC-3", "TC-003"],
     );
     case.expected_terminal_state = Some(GenerationTerminalState::InvalidInput);
-    case.expected_diagnostic_code = Some("invalid_manifest_context");
+    case.expected_diagnostic_code = Some("invalid_attestation_context");
     let owner = requirement("FR-001", 7);
     let environment = boolean_environment(owner, &[("enabled", ValueDeclarationKind::Input)]);
     let expression = reference("enabled", StateObservation::Current, 3);
@@ -691,13 +731,9 @@ fn oracle_rejects_invalid_manifest_context() -> Case {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed_expression,
-        manifest: ManifestContext {
+        attestation: AttestationContext {
+            record_digest: "not-a-digest",
             candidate_revision: "not-a-revision",
-            contribution_method: "unspecified",
-            reviewers: &[],
-            result_status: "complete",
-            result_summary: "",
-            requirement_refs: &[],
         },
     };
     record_oracle_rejection(&mut case, generate_boolean_oracle(&request));
@@ -750,7 +786,7 @@ fn harness_rejects_duplicate_clause_identity() -> Case {
         precondition: &precondition,
         postcondition: &postcondition,
         execution_point: "generate",
-        manifest: manifest(&HARNESS_REFS),
+        attestation: attestation(),
     };
     match generate_tristate_harness(&request) {
         Ok(_) => {
@@ -792,7 +828,7 @@ fn strategy_rejects_invalid_range() -> Case {
             maximum: -8,
         },
         campaign: StrategyCampaign::Broad,
-        manifest: manifest(&HARNESS_REFS),
+        attestation: attestation(),
     };
     match generate_i64_strategy(&request) {
         Ok(_) => {
@@ -866,7 +902,7 @@ fn diagnostic_census(rows: &[Row]) -> Case {
             GenerationTerminalState::InvalidInput,
         ),
         (
-            GenerationErrorCode::InvalidManifestContext,
+            GenerationErrorCode::InvalidAttestationContext,
             GenerationTerminalState::InvalidInput,
         ),
         (
@@ -910,7 +946,7 @@ fn main() {
         strategy_generated().into_row(),
         oracle_rejects_non_boolean_root().into_row(),
         oracle_rejects_unsupported_expression().into_row(),
-        oracle_rejects_invalid_manifest_context().into_row(),
+        oracle_rejects_invalid_attestation_context().into_row(),
         harness_rejects_duplicate_clause_identity().into_row(),
         strategy_rejects_invalid_range().into_row(),
     ];

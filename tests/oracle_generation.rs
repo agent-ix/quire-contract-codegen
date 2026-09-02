@@ -7,20 +7,24 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use common::{packaged_attestation_schema, packaged_attestation_validator, seal_attestation};
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    generate_boolean_oracle, generator_source_is_dirty, DerivationManifest, GenerationErrorCode,
-    GenerationTerminalState, ManifestContext, OracleRequest, GENERATOR_SOURCE_REVISION,
-    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    generate_boolean_oracle, generator_source_is_dirty, Artifact, AttestationContext,
+    AttestationResult, GenerationErrorCode, GenerationTerminalState, OracleRequest,
+    ProofAttestationBody, GENERATOR_SOURCE_REVISION, IR_CANDIDATE_REVISION,
+    MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
-    AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
-    ExecutionPoint, Expression, ExpressionKind, IntegerDomain, IntegerType, NumericOperator,
-    OverflowPolicy, PackageId, RequirementId, RequirementRef, RequirementRevision,
+    AnchorName, BooleanOperator, CanonicalProfile, ClauseId, ComparisonOperator,
+    DeclarationEnvironment, ExecutionPoint, Expression, ExpressionKind, IntegerDomain, IntegerType,
+    NumericOperator, OverflowPolicy, PackageId, RequirementId, RequirementRef, RequirementRevision,
     SourceDocumentId, SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation,
     SymbolName, ValueDeclaration, ValueDeclarationKind, ValueType,
 };
 use sha2::{Digest as _, Sha256};
+
+mod common;
 
 mod generated_boolean_oracle {
     include!("fixtures/generated_boolean_oracle.golden");
@@ -71,14 +75,17 @@ fn requirement() -> RequirementRef {
     )
 }
 
-fn manifest_context() -> ManifestContext<'static> {
-    ManifestContext {
+/// The record digest this test's attestations bind to.
+///
+/// No change-assurance record is sealed for a unit test, so there is no digest to
+/// name. The all-zero digest is the one 64-hexadecimal string no sealed record can
+/// have, so it cannot be mistaken for a real binding.
+const TEST_RECORD_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+fn attestation_context() -> AttestationContext<'static> {
+    AttestationContext {
+        record_digest: TEST_RECORD_DIGEST,
         candidate_revision: IR_CANDIDATE_REVISION,
-        contribution_method: "generated",
-        reviewers: &["@oracle-test-reviewer"],
-        result_status: "conclusive",
-        result_summary: "test oracle generated from a supported Boolean expression",
-        requirement_refs: &["FR-001"],
     }
 }
 
@@ -236,15 +243,15 @@ fn source_symbol(source: &str) -> &str {
 /// Trace: TC-001, NFR-002-AC-1
 ///
 /// NFR-002-AC-1 declares its verification method as Test (TC-001), and this is
-/// that test: it asserts the emitted manifest records the producer's source
-/// revision, the backend, the parameter and dependency digests, the content
-/// digest of both outputs, the schema digest of the first, and the generator's
-/// own executable digest. Manifest `inputs` are required by the envelope schema the
-/// same assertion validates against, rather than asserted field by field. The tag
-/// used to sit on the retained-evidence compatibility test instead, which read
-/// identity out of historical records rather than out of an artifact this crate
-/// emits. Those records are deleted; the tag moves to the test the requirement
-/// always named.
+/// that test: it asserts that each emitted proof attestation records the tool
+/// identity and exact generator revision, the configuration digest over the
+/// lowering implementation, the input digest and canonical profile, the backend
+/// discriminator, the bounded parameters, the output path with its media type and
+/// its schema identity and digest, and the build environment.
+///
+/// Notes on the two identities asserted differently from the deprecated envelope
+/// are in the body, not here: prose in this block is read by the coverage census as
+/// trace ids, and an identifier-shaped word written here becomes an unmatched tag.
 #[test]
 fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     let environment = boolean_environment(&["enabled"]);
@@ -262,7 +269,7 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed,
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     };
 
     let first = generate_boolean_oracle(&request).unwrap();
@@ -322,63 +329,254 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
         Some("false")
     );
 
-    let manifest: DerivationManifest = serde_json::from_str(&first.manifest.contents).unwrap();
-    let manifest_value: serde_json::Value = serde_json::from_str(&first.manifest.contents).unwrap();
-    // The manifest shape is asserted field by field below rather than against a
-    // packaged JSON Schema. The schema that used to sit here was the deprecated
-    // PGM-01 derivation-evidence envelope, deleted with the rest of that format;
-    // nothing in `src/` ever validated against it.
-    let mut extended_manifest = manifest_value.clone();
-    extended_manifest["unexpected"] = serde_json::Value::Bool(true);
-    assert!(serde_json::from_value::<DerivationManifest>(extended_manifest).is_err());
-    assert_eq!(manifest.schema_version, "quire.derivation-evidence/v1");
-    assert_eq!(manifest.backend.kind, "none");
+    let attestation: ProofAttestationBody =
+        serde_json::from_str(&first.rust_attestation.contents).unwrap();
+    let attestation_value: serde_json::Value =
+        serde_json::from_str(&first.rust_attestation.contents).unwrap();
+    let source_map_attestation: ProofAttestationBody =
+        serde_json::from_str(&first.source_map_attestation.contents).unwrap();
+
+    // A field the shared shape does not declare is refused rather than carried.
+    let mut extended = attestation_value.clone();
+    extended["unexpected"] = serde_json::Value::Bool(true);
+    assert!(serde_json::from_value::<ProofAttestationBody>(extended).is_err());
+
+    // The shared discriminators, and the two fields Quoin derives, which a body
+    // must not state. `seal-attestation` refuses a body carrying either, and the
+    // control for that refusal is at the end of this test.
+    assert_eq!(attestation.schema_version, 1);
+    assert_eq!(attestation.record_type, "proof_attestation");
+    assert!(attestation_value.get("digest").is_none());
+    assert!(attestation_value.get("retained_output").is_none());
+
+    // Identity. One attestation per generated artifact, each naming its own proof
+    // obligation, and both derived from the same request.
+    assert_eq!(attestation.proof_id, "PROOF-codegen-generated-rust-oracle");
+    assert_eq!(
+        source_map_attestation.proof_id,
+        "PROOF-codegen-oracle-source-map"
+    );
+    assert_ne!(attestation.proof_id, source_map_attestation.proof_id);
+    assert!(attestation
+        .attestation_id
+        .starts_with("PROOF-codegen-generated-rust-oracle:"));
+    assert_eq!(attestation.record_digest, TEST_RECORD_DIGEST);
+    assert_eq!(attestation.candidate_revision, IR_CANDIDATE_REVISION);
+    assert_eq!(attestation.result, AttestationResult::Passed);
+    assert_eq!(
+        attestation.observed_at, source_map_attestation.observed_at,
+        "both attestations describe one generation and must share its time"
+    );
+    // `observed_at` is the generator's own source-commit time, frozen at build so
+    // that regeneration is byte-identical. It is asserted against that commit
+    // rather than merely against itself, and against the RFC 3339 shape the shared
+    // schema requires -- the local validator below does not check `format` by
+    // default, so a malformed value would otherwise reach the CLI unchallenged.
+    let commit_time = Command::new("git")
+        .args(["show", "-s", "--format=%cI", "HEAD"])
+        .output()
+        .unwrap();
+    assert!(commit_time.status.success());
+    assert_eq!(
+        attestation.observed_at,
+        String::from_utf8(commit_time.stdout).unwrap().trim()
+    );
+
+    // The tool. `tool.version` is the exact generator revision, which is the form
+    // the shared schema's `immutable_version` admits alongside a semantic version,
+    // and it is the strongest identity available here.
     let git_head = Command::new("git")
         .args(["rev-parse", "HEAD"])
         .output()
         .unwrap();
     assert!(git_head.status.success());
     assert_eq!(
-        manifest.producer.source_revision,
+        attestation.tool.version,
         String::from_utf8(git_head.stdout).unwrap().trim()
     );
-    assert_eq!(manifest.producer.source_revision, GENERATOR_SOURCE_REVISION);
+    assert_eq!(attestation.tool.version, GENERATOR_SOURCE_REVISION);
+    assert_eq!(attestation.tool.identity, "agent-ix/quire-contract-codegen");
     assert_eq!(
-        manifest.producer.executable_digest.value,
+        attestation.tool.configuration_digest,
         expected_implementation_digest()
     );
-    let parameters = format!(
-        "ir={IR_CANDIDATE_REVISION}\nruntime={RUNTIME_REVISION}\nmaximumSourceBytes={MAX_GENERATED_SOURCE_BYTES}\n"
-    );
+
+    // The environment, including the two build-identity facts the deprecated
+    // envelope carried as namespaced extensions.
     assert_eq!(
-        manifest.parameters_digest.value,
-        sha256(parameters.as_bytes())
-    );
-    assert_eq!(
-        manifest.environment.dependencies_digest.value,
+        attestation.environment.dependencies_digest,
         sha256(include_bytes!("../Cargo.lock"))
     );
-    assert_eq!(manifest.result.status, "conclusive");
-    assert_eq!(manifest.result.requirement_refs, ["FR-001"]);
-    assert_eq!(
-        manifest.provenance.candidate_revision,
-        IR_CANDIDATE_REVISION
-    );
-    assert_eq!(manifest.provenance.contribution_method, "generated");
-    assert_eq!(manifest.provenance.reviewers, ["@oracle-test-reviewer"]);
-    assert_eq!(manifest.outputs[0].content_digest.value, first.rust.sha256);
-    assert_eq!(
-        manifest.outputs[1].content_digest.value,
-        first.source_map.sha256
-    );
-    let extension = &manifest.extensions["dev.agent-ix.codegen"];
-    assert_eq!(extension.terminal_state, GenerationTerminalState::Generated);
-    assert!(!extension.generator_source_dirty);
+    assert!(!attestation.environment.source_dirty);
     assert!(!generator_source_is_dirty());
-    assert!(extension.generator_source_revision_available);
-    assert_eq!(extension.ir_revision, IR_CANDIDATE_REVISION);
-    assert_eq!(extension.runtime_revision, RUNTIME_REVISION);
-    assert_eq!(extension.maximum_source_bytes, MAX_GENERATED_SOURCE_BYTES);
+    assert!(attestation.environment.source_revision_available);
+
+    // The command. Everything the envelope hid behind `parameters_digest`, the
+    // `backend` discriminator, the `inputs[]` entry and the codegen extension is
+    // written here in full, so each is asserted by value rather than by digest.
+    let argv = &attestation.command.argv;
+    assert_eq!(attestation.command.working_directory, ".");
+    let flag = |name: &str| -> Option<String> {
+        argv.iter()
+            .position(|item| item == name)
+            .and_then(|at| argv.get(at + 1))
+            .cloned()
+    };
+    // `argv[0]` is the crate name and `tool.identity` is the owning repository. The
+    // two differ on purpose: an argv is a program name, and the repository slug is
+    // where a reader resolves `tool.version` from.
+    assert_eq!(argv[0], "quire-contract-codegen");
+    assert_eq!(argv[1], "generate_boolean_oracle");
+    assert_eq!(flag("--requirement").as_deref(), Some("FR-001@7"));
+    assert_eq!(flag("--clause").as_deref(), Some("clause-main"));
+    assert_eq!(flag("--backend").as_deref(), Some("none"));
+    assert_eq!(
+        flag("--ir-revision").as_deref(),
+        Some(IR_CANDIDATE_REVISION)
+    );
+    assert_eq!(
+        flag("--runtime-revision").as_deref(),
+        Some(RUNTIME_REVISION)
+    );
+    // Input identity. The deprecated envelope carried this as an `inputs[]` entry
+    // whose `content_digest` nothing checked, beside a `schema.digest` that was the
+    // SHA-256 of the profile *name* rather than of any schema. Both surviving
+    // values are recomputed here from the same canonical expression the generator
+    // lowered, so an input digest naming different bytes is caught rather than
+    // merely being present.
+    let canonical = typed.canonical_expression(CanonicalProfile::V1).unwrap();
+    assert_eq!(
+        flag("--canonical-profile").as_deref(),
+        Some(CanonicalProfile::V1.as_str())
+    );
+    assert_eq!(
+        flag("--input-digest"),
+        Some(sha256(canonical.bytes().as_slice()))
+    );
+    assert_eq!(
+        flag("--expression-canonical-digest"),
+        Some(canonical.digest().to_string())
+    );
+    // One generation, two artifacts, one input: the source-map attestation must
+    // name the same input as the Rust one, or the pair does not describe a single
+    // derivation.
+    let source_map_input = {
+        let items = &source_map_attestation.command.argv;
+        items
+            .iter()
+            .position(|item| item == "--input-digest")
+            .and_then(|at| items.get(at + 1))
+            .cloned()
+    };
+    assert_eq!(flag("--input-digest"), source_map_input);
+    assert_eq!(
+        flag("--maximum-source-bytes"),
+        Some(MAX_GENERATED_SOURCE_BYTES.to_string())
+    );
+    assert_eq!(flag("--output").as_deref(), Some(first.rust.path.as_str()));
+    assert_eq!(flag("--output-media-type").as_deref(), Some("text/x-rust"));
+    assert_eq!(
+        flag("--output-schema").as_deref(),
+        Some("quire.codegen.rust-oracle/v1")
+    );
+    assert_eq!(
+        flag("--output-schema-digest"),
+        Some(sha256(include_bytes!(
+            "../schemas/generated-rust-oracle-v1.schema.json"
+        )))
+    );
+    let source_map_argv = &source_map_attestation.command.argv;
+    let source_map_flag = |name: &str| -> Option<String> {
+        source_map_argv
+            .iter()
+            .position(|item| item == name)
+            .and_then(|at| source_map_argv.get(at + 1))
+            .cloned()
+    };
+    assert_eq!(
+        source_map_flag("--output").as_deref(),
+        Some(first.source_map.path.as_str())
+    );
+    assert_eq!(
+        source_map_flag("--output-schema").as_deref(),
+        Some("quire.codegen.oracle-source-map/v1")
+    );
+    assert_eq!(
+        source_map_flag("--output-media-type").as_deref(),
+        Some("application/json")
+    );
+    assert_eq!(
+        source_map_flag("--output-schema-digest"),
+        Some(sha256(include_bytes!(
+            "../schemas/oracle-source-map-v1.schema.json"
+        )))
+    );
+
+    // What the shared shape does not carry, asserted absent rather than left to a
+    // reader's memory. Reviewer identity belongs to the ix-flow decision event a
+    // verification receipt binds; requirement references belong to the record's own
+    // proof obligations; the free-text result summary and the contribution method
+    // have no field in any of the three packaged schemas and are dropped outright.
+    // `summary` was missing from this list in the form an adversarial review read,
+    // which left one of the four documented drops unprobed.
+    for absent in [
+        "reviewer",
+        "contribution",
+        "summary",
+        "requirement_refs",
+        "requirementRefs",
+    ] {
+        assert!(
+            !first.rust_attestation.contents.contains(absent),
+            "the emitted attestation still carries {absent}"
+        );
+    }
+
+    // The caller's binding is carried through, measured differentially rather than
+    // by comparing it to a constant.
+    //
+    // Every accepting site in this repository supplies the all-zero record digest
+    // and `IR_CANDIDATE_REVISION`, both of which the generator already has. An
+    // adversarial review replaced `context.record_digest` with `"0".repeat(64)` and
+    // `context.candidate_revision` with `IR_CANDIDATE_REVISION` -- the caller's
+    // binding ignored completely -- and every test in this repository stayed green
+    // and the conformance corpus passed 9 of 9. A value check cannot see that. Two
+    // generations with two different bindings can, whatever constants either uses.
+    let other = AttestationContext {
+        record_digest: "ab".repeat(32).leak(),
+        candidate_revision: "9".repeat(48).leak(),
+    };
+    assert_ne!(other.record_digest, TEST_RECORD_DIGEST);
+    assert_ne!(other.candidate_revision, IR_CANDIDATE_REVISION);
+    let rebound = generate_boolean_oracle(&OracleRequest {
+        requirement: environment.owner(),
+        clause: &clause,
+        expression: &typed,
+        attestation: other,
+    })
+    .unwrap();
+    let rebound_attestation: ProofAttestationBody =
+        serde_json::from_str(&rebound.rust_attestation.contents).unwrap();
+    assert_eq!(rebound_attestation.record_digest, other.record_digest);
+    assert_eq!(
+        rebound_attestation.candidate_revision,
+        other.candidate_revision
+    );
+    // And only those two fields moved: the binding is carried, not mixed into the
+    // derivation. The artifacts themselves are identical, which is also the reason
+    // the attestation paths collide and neither overwrites anything it should not.
+    assert_eq!(rebound.rust, first.rust);
+    assert_eq!(rebound.source_map, first.source_map);
+    assert_eq!(rebound.rust_attestation.path, first.rust_attestation.path);
+    assert_eq!(rebound_attestation.command, attestation.command);
+    assert_eq!(rebound_attestation.tool, attestation.tool);
+    assert_eq!(rebound_attestation.environment, attestation.environment);
+    assert_eq!(
+        rebound_attestation.attestation_id,
+        attestation.attestation_id
+    );
+
+    // The generated Rust still validates against its own domain output contract.
     let rust_schema: serde_json::Value = serde_json::from_str(include_str!(
         "../schemas/generated-rust-oracle-v1.schema.json"
     ))
@@ -393,11 +591,124 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     assert!(rust_validator
         .validate(&serde_json::Value::String("fn wrong() {}".to_owned()))
         .is_err());
+
+    // And the whole point: the emitted bodies are the shared shape, measured by
+    // sealing them through the pinned Quoin CLI and validating what comes back
+    // against the schema Quoin itself publishes.
+    let directory = TemporaryDirectory::new("quire-codegen-attestation");
+    let schema = packaged_attestation_schema();
+    let validator = packaged_attestation_validator(&schema);
+
+    for (body, output) in [
+        (&first.rust_attestation, &first.rust),
+        (&first.source_map_attestation, &first.source_map),
+    ] {
+        let (code, stdout, stderr) = seal_attestation(&body.contents, output, &directory.0);
+        assert_eq!(
+            code, 0,
+            "quoin refused the emitted attestation body for {}: {stderr}",
+            output.path
+        );
+        let sealed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert!(
+            validator.validate(&sealed).is_ok(),
+            "the sealed attestation for {} does not validate against the packaged schema: {}",
+            output.path,
+            stdout
+        );
+        // The sealed form binds the exact bytes of the artifact it accompanies.
+        // That binding is Quoin's to make, and this is where it is measured.
+        assert_eq!(
+            sealed["retained_output"]["size_bytes"].as_u64().unwrap() as usize,
+            output.contents.len()
+        );
+
+        // A control for the binding. One appended byte must move the retained
+        // digest and the size; without this the assertion above is satisfied by a
+        // sealer that hashes nothing.
+        let mutated = Artifact {
+            path: output.path.clone(),
+            contents: format!("{}\n", output.contents),
+            sha256: output.sha256.clone(),
+        };
+        let (code, mutated_stdout, stderr) =
+            seal_attestation(&body.contents, &mutated, &directory.0);
+        assert_eq!(code, 0, "sealing over the mutated bytes failed: {stderr}");
+        let mutated_sealed: serde_json::Value = serde_json::from_str(&mutated_stdout).unwrap();
+        assert_ne!(
+            sealed["retained_output"]["digest"], mutated_sealed["retained_output"]["digest"],
+            "one appended byte did not change the retained-output digest"
+        );
+
+        // Sealing the same body over the same bytes twice is the same binding.
+        // Without this, "one appended byte moves the digest" is also satisfied by a
+        // sealer that returns a fresh random value every call.
+        let (code, repeated_stdout, stderr) =
+            seal_attestation(&body.contents, output, &directory.0);
+        assert_eq!(code, 0, "re-sealing the same body failed: {stderr}");
+        let repeated: serde_json::Value = serde_json::from_str(&repeated_stdout).unwrap();
+        assert_eq!(sealed, repeated, "sealing is not deterministic");
+    }
+
+    // The two artifacts of one bundle must not seal to the same retained binding.
+    let (_, rust_sealed, _) =
+        seal_attestation(&first.rust_attestation.contents, &first.rust, &directory.0);
+    let (_, map_sealed, _) = seal_attestation(
+        &first.source_map_attestation.contents,
+        &first.source_map,
+        &directory.0,
+    );
+    let rust_sealed: serde_json::Value = serde_json::from_str(&rust_sealed).unwrap();
+    let map_sealed: serde_json::Value = serde_json::from_str(&map_sealed).unwrap();
+    assert_ne!(
+        rust_sealed["retained_output"]["digest"], map_sealed["retained_output"]["digest"],
+        "the two artifacts of one bundle sealed to the same retained digest"
+    );
+    assert_eq!(rust_sealed["retained_output"]["media_type"], "text/x-rust");
     assert_eq!(
-        manifest.outputs[0].schema.digest.value,
-        sha256(include_bytes!(
-            "../schemas/generated-rust-oracle-v1.schema.json"
-        ))
+        map_sealed["retained_output"]["media_type"],
+        "application/json"
+    );
+
+    // The negative control for the validator itself. A schema that accepts
+    // everything would have made every assertion above vacuous.
+    let (_, stdout, _) =
+        seal_attestation(&first.rust_attestation.contents, &first.rust, &directory.0);
+    let mut broken: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    broken["record_digest"] = serde_json::Value::String("not-a-digest".to_owned());
+    assert!(
+        validator.validate(&broken).is_err(),
+        "the packaged schema accepted a record_digest that is not a digest"
+    );
+    let mut untimed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    untimed["observed_at"] = serde_json::Value::String("Mon Aug 31 12:00:00 2026 +0000".to_owned());
+    assert!(
+        validator.validate(&untimed).is_err(),
+        "the local validator accepted an observed_at that is not RFC 3339; the CLI \
+         refuses one, so a build emitting it would fail only downstream"
+    );
+
+    // And the reason the emitted body omits `digest` and `retained_output`: Quoin
+    // refuses a body that states either. This is what makes the omission the
+    // shared contract rather than a local shortcut.
+    let mut oversupplied: serde_json::Value = attestation_value.clone();
+    oversupplied["retained_output"] = serde_json::json!({
+        "media_type": "text/x-rust",
+        "digest": "0".repeat(64),
+        "size_bytes": 1,
+    });
+    let (code, _, stderr) = seal_attestation(
+        &serde_json::to_string(&oversupplied).unwrap(),
+        &first.rust,
+        &directory.0,
+    );
+    assert_ne!(
+        code, 0,
+        "quoin accepted a body supplying retained_output, so omitting it is not a contract"
+    );
+    assert!(
+        !stderr.trim().is_empty(),
+        "quoin refused the oversupplied body without saying why"
     );
 }
 
@@ -536,7 +847,7 @@ fn tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluato
             requirement: environment.owner(),
             clause: &clause,
             expression: &typed,
-            manifest: manifest_context(),
+            attestation: attestation_context(),
         })
         .unwrap();
         let symbol = source_symbol(&bundle.rust.contents).to_owned();
@@ -591,7 +902,7 @@ fn tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluato
             requirement: environment.owner(),
             clause: &clause,
             expression: &typed,
-            manifest: manifest_context(),
+            attestation: attestation_context(),
         })
         .unwrap();
         let symbol = source_symbol(&bundle.rust.contents);
@@ -693,7 +1004,7 @@ fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed,
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap();
     let regions: Vec<quire_contract_codegen::SourceRegion> =
@@ -729,7 +1040,7 @@ fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
         requirement: environment.owner(),
         clause: &alias_clause,
         expression: &typed_alias,
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap();
     let alias_regions: Vec<quire_contract_codegen::SourceRegion> =
@@ -781,7 +1092,7 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed,
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap_err()[0];
     assert_eq!(diagnostic.code, GenerationErrorCode::UnsupportedExpression);
@@ -805,7 +1116,7 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
         requirement: environment.owner(),
         clause: &root_clause,
         expression: &typed_root,
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap_err()[0];
     assert_eq!(root_diagnostic.code, GenerationErrorCode::NonBooleanRoot);
@@ -823,29 +1134,126 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
         GenerationTerminalState::Inconclusive
     );
 
-    let invalid_manifest = ManifestContext {
-        candidate_revision: "not-a-revision",
-        contribution_method: "unspecified",
-        reviewers: &[],
-        result_status: "complete",
-        result_summary: "",
-        requirement_refs: &[],
-    };
-    let context_diagnostic = &generate_boolean_oracle(&OracleRequest {
-        requirement: environment.owner(),
-        clause: &clause,
-        expression: &typed,
-        manifest: invalid_manifest,
-    })
-    .unwrap_err()[0];
-    assert_eq!(
-        context_diagnostic.code,
-        GenerationErrorCode::InvalidManifestContext
+    // Every rule the attestation binding enforces, probed one at a time.
+    //
+    // The previous form set six bad fields at once, which shows only that *some*
+    // rule fired. A single surviving rule satisfied it while the other five were
+    // gone, so each rule now gets a context that is valid apart from the one thing
+    // it is about, and the valid context is required to be accepted so that the
+    // probes are not all passing for the wrong reason.
+    let valid = attestation_context();
+    assert!(
+        generate_boolean_oracle(&OracleRequest {
+            requirement: environment.owner(),
+            clause: &clause,
+            expression: &typed,
+            attestation: valid,
+        })
+        .is_err(),
+        "this clause is unsupported, so it must be rejected for that and not for its binding"
     );
-    assert_eq!(
-        context_diagnostic.terminal_state,
-        GenerationTerminalState::InvalidInput
-    );
+    for (name, invalid) in [
+        (
+            "a record digest that is not hexadecimal",
+            AttestationContext {
+                record_digest: "not-a-digest",
+                ..valid
+            },
+        ),
+        (
+            "a record digest of the wrong length",
+            AttestationContext {
+                record_digest: "0123456789abcdef",
+                ..valid
+            },
+        ),
+        (
+            "an uppercase record digest",
+            AttestationContext {
+                record_digest: &"A".repeat(64),
+                ..valid
+            },
+        ),
+        (
+            "an empty record digest",
+            AttestationContext {
+                record_digest: "",
+                ..valid
+            },
+        ),
+        (
+            "a candidate revision that is not a revision",
+            AttestationContext {
+                candidate_revision: "not-a-revision",
+                ..valid
+            },
+        ),
+        (
+            "a candidate revision that is too short",
+            AttestationContext {
+                candidate_revision: "abcdef",
+                ..valid
+            },
+        ),
+        (
+            "an empty candidate revision",
+            AttestationContext {
+                candidate_revision: "",
+                ..valid
+            },
+        ),
+        (
+            "an over-length record digest",
+            AttestationContext {
+                record_digest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+                ..valid
+            },
+        ),
+        (
+            "an over-length candidate revision",
+            AttestationContext {
+                candidate_revision:
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+                ..valid
+            },
+        ),
+    ] {
+        // A supported clause, so the only thing that can reject it is the binding.
+        // With an unsupported clause every probe would pass on the clause's own
+        // rejection and none of them would be about the binding at all.
+        let supported_environment = boolean_environment(&["enabled"]);
+        let supported = supported_environment
+            .check_expression(&value("enabled", 60), &ValueType::Boolean, &pre(), true)
+            .unwrap();
+        let supported_clause = ClauseId::new("binding-probe").unwrap();
+        let supported_request = |attestation| OracleRequest {
+            requirement: supported_environment.owner(),
+            clause: &supported_clause,
+            expression: &supported,
+            attestation,
+        };
+        assert!(
+            generate_boolean_oracle(&supported_request(valid)).is_ok(),
+            "the probe clause must generate under a valid binding, or every probe \
+             below passes for the wrong reason"
+        );
+        let diagnostics = generate_boolean_oracle(&supported_request(invalid))
+            .err()
+            .unwrap_or_else(|| panic!("{name} was accepted"));
+        assert_eq!(
+            diagnostics[0].code,
+            GenerationErrorCode::InvalidAttestationContext,
+            "{name} produced {:?}",
+            diagnostics[0].code
+        );
+        assert_eq!(
+            diagnostics[0].terminal_state,
+            GenerationTerminalState::InvalidInput,
+            "{name} reached {:?}",
+            diagnostics[0].terminal_state
+        );
+        assert_eq!(diagnostics[0].path, "attestation.context", "{name}");
+    }
 }
 
 /// TC-003.
@@ -866,7 +1274,7 @@ fn tc_003_normalization_is_injective_for_dependencies_and_clause_artifacts() {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed,
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap();
     assert!(bundle.rust.contents.contains("enabled_2dflag_current"));
@@ -879,36 +1287,44 @@ fn tc_003_normalization_is_injective_for_dependencies_and_clause_artifacts() {
         .unwrap();
     let mut rust_paths = BTreeSet::new();
     let mut map_paths = BTreeSet::new();
-    let mut manifest_paths = BTreeSet::new();
+    let mut rust_attestation_paths = BTreeSet::new();
+    let mut source_map_attestation_paths = BTreeSet::new();
     for clause_value in ["Clause-A", "clause_a", "clause-a", "CLAUSE.A"] {
         let clause = ClauseId::new(clause_value).unwrap();
         let bundle = generate_boolean_oracle(&OracleRequest {
             requirement: literal_environment.owner(),
             clause: &clause,
             expression: &typed_literal,
-            manifest: manifest_context(),
+            attestation: attestation_context(),
         })
         .unwrap();
         rust_paths.insert(bundle.rust.path);
         map_paths.insert(bundle.source_map.path);
-        manifest_paths.insert(bundle.manifest.path);
+        rust_attestation_paths.insert(bundle.rust_attestation.path);
+        source_map_attestation_paths.insert(bundle.source_map_attestation.path);
     }
     assert_eq!(rust_paths.len(), 4);
     assert_eq!(map_paths.len(), 4);
-    assert_eq!(manifest_paths.len(), 4);
+    assert_eq!(rust_attestation_paths.len(), 4);
+    assert_eq!(source_map_attestation_paths.len(), 4);
+    // The two attestations of one bundle must not claim the same path either. A
+    // single generation now emits two of them, so collision within a bundle is a
+    // new way for one to overwrite the other.
+    assert!(rust_attestation_paths.is_disjoint(&source_map_attestation_paths));
 
     let long_clause = ClauseId::new("x".repeat(400)).unwrap();
     let long_bundle = generate_boolean_oracle(&OracleRequest {
         requirement: literal_environment.owner(),
         clause: &long_clause,
         expression: &typed_literal,
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap();
     for path in [
         &long_bundle.rust.path,
         &long_bundle.source_map.path,
-        &long_bundle.manifest.path,
+        &long_bundle.rust_attestation.path,
+        &long_bundle.source_map_attestation.path,
     ] {
         assert!(path.rsplit('/').next().unwrap().len() <= 255, "{path}");
     }
@@ -980,7 +1396,7 @@ fn tc_003_discharged_obligations_are_explicitly_rejected() {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed,
-        manifest: manifest_context(),
+        attestation: attestation_context(),
     })
     .unwrap_err()[0];
     assert_eq!(diagnostic.code, GenerationErrorCode::UnsupportedObligations);
@@ -1007,7 +1423,7 @@ fn tc_001_deep_expression_output_is_linear_and_bounded() {
                 requirement: environment.owner(),
                 clause: &clause,
                 expression: &typed,
-                manifest: manifest_context(),
+                attestation: attestation_context(),
             })
             .unwrap();
             assert!(bundle.rust.contents.len() < 16_384);
@@ -1037,7 +1453,7 @@ fn tc_003_source_size_limit_rejects_without_a_partial_bundle() {
                 requirement: environment.owner(),
                 clause: &clause,
                 expression: &typed,
-                manifest: manifest_context(),
+                attestation: attestation_context(),
             })
             .unwrap_err();
             assert_eq!(diagnostics.len(), 1);
@@ -1107,4 +1523,105 @@ fn tc_001_build_metadata_degrades_explicitly_outside_git() {
     ));
     assert!(output.contains("cargo:rustc-env=QUIRE_CODEGEN_SOURCE_REVISION_AVAILABLE=false"));
     assert!(output.contains("cargo:rustc-env=QUIRE_CODEGEN_SOURCE_DIRTY=true"));
+
+    // The archive timestamp now reaches `observed_at`, which the shared schema
+    // declares `format: date-time` and which `seal-attestation` enforces. Its
+    // sibling `QUIRE_CODEGEN_ARCHIVE_REVISION` was validated all along; this one was
+    // not, so an archive build supplying `git log`'s default date format produced a
+    // generator every one of whose artifacts Quoin refuses — discoverable only in a
+    // downstream repository, at seal time.
+    //
+    // Both directions are asserted, and then both are put through the real CLI,
+    // because "the build script printed a plausible string" is not the claim. The
+    // claim is that whatever it prints can be sealed.
+    let recorded_at = |value: Option<&str>| -> String {
+        let mut command = Command::new(&build_binary);
+        command
+            .current_dir(&directory.0)
+            .env("RUSTC", "rustc")
+            .env("TARGET", "x86_64-unknown-linux-gnu")
+            .env("CARGO_CFG_TARGET_OS", "linux")
+            .env("QUIRE_CODEGEN_ARCHIVE_REVISION", archive_revision)
+            .env_remove("QUIRE_CODEGEN_ARCHIVE_RECORDED_AT");
+        if let Some(value) = value {
+            command.env("QUIRE_CODEGEN_ARCHIVE_RECORDED_AT", value);
+        }
+        let run = command.output().unwrap();
+        assert!(run.status.success());
+        String::from_utf8(run.stdout)
+            .unwrap()
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("cargo:rustc-env=QUIRE_CODEGEN_RECORDED_AT=")
+                    .map(str::to_owned)
+            })
+            .expect("the build script states a recorded time")
+    };
+
+    assert_eq!(
+        recorded_at(Some("2026-08-31T00:00:00Z")),
+        "2026-08-31T00:00:00Z"
+    );
+    assert_eq!(
+        recorded_at(Some("2026-08-31T00:00:00-07:00")),
+        "2026-08-31T00:00:00-07:00"
+    );
+    for rejected in [
+        "Mon Aug 31 12:00:00 2026 +0000",
+        "2026-08-31",
+        "2026-08-31T00:00:00",
+        "not-a-time",
+        "",
+    ] {
+        assert_eq!(
+            recorded_at(Some(rejected)),
+            "1970-01-01T00:00:00Z",
+            "the build script accepted {rejected:?} as a recorded time"
+        );
+    }
+    assert_eq!(recorded_at(None), "1970-01-01T00:00:00Z");
+
+    // And the values it does emit are ones the CLI will seal. A real emitted body
+    // with each substituted in, through `quoin change-assurance seal-attestation`.
+    let probe_environment = boolean_environment(&["enabled"]);
+    let probe_typed = probe_environment
+        .check_expression(&value("enabled", 70), &ValueType::Boolean, &pre(), true)
+        .unwrap();
+    let probe_clause = ClauseId::new("recorded-at-probe").unwrap();
+    let probe = generate_boolean_oracle(&OracleRequest {
+        requirement: probe_environment.owner(),
+        clause: &probe_clause,
+        expression: &probe_typed,
+        attestation: attestation_context(),
+    })
+    .unwrap();
+    let with_time = |time: &str| -> String {
+        let mut body: serde_json::Value =
+            serde_json::from_str(&probe.rust_attestation.contents).unwrap();
+        body["observed_at"] = serde_json::Value::String(time.to_owned());
+        serde_json::to_string(&body).unwrap()
+    };
+    for accepted in [
+        "2026-08-31T00:00:00Z",
+        "2026-08-31T00:00:00-07:00",
+        "1970-01-01T00:00:00Z",
+    ] {
+        let (code, _, stderr) = seal_attestation(&with_time(accepted), &probe.rust, &directory.0);
+        assert_eq!(
+            code, 0,
+            "quoin refused a recorded time the build emits: {stderr}"
+        );
+    }
+    // The control: the value the build script now refuses is one the CLI refuses
+    // too. Without it, the loop above is satisfied by a CLI that accepts anything.
+    let (code, _, _) = seal_attestation(
+        &with_time("Mon Aug 31 12:00:00 2026 +0000"),
+        &probe.rust,
+        &directory.0,
+    );
+    assert_ne!(
+        code, 0,
+        "the CLI accepted a non-RFC-3339 observed_at, so the build-script guard \
+         guards nothing"
+    );
 }

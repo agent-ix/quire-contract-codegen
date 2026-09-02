@@ -57,7 +57,7 @@ coverage exports rather than implementing those engines.
 ### Intended Users
 
 Assurance engineers generate reproducible verification artifacts. Developers compile and execute the
-outputs. Reviewers inspect derivation manifests, diagnostics, proof dependencies, coverage evidence,
+outputs. Reviewers inspect proof attestations, diagnostics, proof dependencies, coverage evidence,
 and semantic-parity results. A human release owner alone decides source release suitability.
 
 ## Requirements Architecture

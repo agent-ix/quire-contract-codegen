@@ -18,7 +18,7 @@ permitted differential fixture has an attributed disposition.
 ## Test Procedure
 
 Execute the same canonical cases through each backend and compare normalized clause outcomes,
-diagnostics, dependencies, and identity envelopes with golden and permitted attributed fixtures.
+diagnostics, dependencies, and proof attestations with golden and permitted attributed fixtures.
 
 ## Expected Results
 

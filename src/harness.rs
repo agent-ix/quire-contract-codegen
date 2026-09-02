@@ -14,8 +14,8 @@ use crate::{
         bounded_readable_component, dependency_parameters, generated_artifact_bundle,
         length_delimited_identity, oracle_symbol, reference_identifier,
     },
-    Artifact, GeneratedArtifactBundle, GenerationDiagnostic, GenerationErrorCode,
-    GenerationTerminalState, ManifestContext, OracleRequest,
+    Artifact, AttestationContext, GeneratedArtifactBundle, GenerationDiagnostic,
+    GenerationErrorCode, GenerationTerminalState, OracleRequest,
 };
 
 /// Explicit inputs for one generated pre/post harness.
@@ -32,8 +32,8 @@ pub struct HarnessRequest<'a> {
     pub postcondition: &'a TypedExpression,
     /// Stable execution-point name reported by the runtime verdict.
     pub execution_point: &'a str,
-    /// PGM-01 context shared by both clause derivations.
-    pub manifest: ManifestContext<'a>,
+    /// Caller-owned attestation binding shared by both clause derivations.
+    pub attestation: AttestationContext<'a>,
 }
 
 struct HarnessShellRequest<'a> {
@@ -57,8 +57,8 @@ pub enum HarnessErrorCode {
     UnsupportedHarnessBinding,
     /// Generated source did not parse as Rust.
     InvalidGeneratedSyntax,
-    /// A derivation manifest could not be validated or serialized.
-    ManifestGenerationFailed,
+    /// A proof attestation could not be validated or serialized.
+    AttestationGenerationFailed,
 }
 
 impl HarnessErrorCode {
@@ -70,7 +70,7 @@ impl HarnessErrorCode {
             Self::UnsupportedHarnessBinding => GenerationTerminalState::Unsupported,
             Self::ClauseGenerationFailed
             | Self::InvalidGeneratedSyntax
-            | Self::ManifestGenerationFailed => GenerationTerminalState::Inconclusive,
+            | Self::AttestationGenerationFailed => GenerationTerminalState::Inconclusive,
         }
     }
 }
@@ -83,7 +83,7 @@ pub struct HarnessDiagnostic {
     pub code: HarnessErrorCode,
     /// Interface-001 terminal state for this failure.
     pub terminal_state: GenerationTerminalState,
-    /// Preserved lower-level clause or manifest failure code, when one exists.
+    /// Preserved lower-level clause or attestation failure code, when one exists.
     pub generation_code: Option<GenerationErrorCode>,
     /// Stable input path associated with the failure.
     pub path: String,
@@ -126,13 +126,13 @@ pub fn generate_tristate_harness(
         requirement: request.requirement,
         clause: request.precondition_clause,
         expression: request.precondition,
-        manifest: request.manifest,
+        attestation: request.attestation,
     };
     let postcondition_request = OracleRequest {
         requirement: request.requirement,
         clause: request.postcondition_clause,
         expression: request.postcondition,
-        manifest: request.manifest,
+        attestation: request.attestation,
     };
     let precondition = generate_boolean_oracle(&precondition_request)
         .map_err(|diagnostics| map_clause_diagnostics("precondition", diagnostics))?;
@@ -385,23 +385,22 @@ pub fn {conclude_symbol}(\n\
         &postcondition.rust.sha256,
     ]);
     generated_artifact_bundle(
-        &request.manifest,
+        &request.attestation,
         request.requirement,
         "generate_tristate_harness",
         &base_symbol,
-        "typed-harness-request",
         input.as_bytes(),
         "generated-rust-harness",
-        "quire.codegen.rust-harness",
+        "quire.codegen.rust-harness/v1",
         rust,
     )
     .map_err(|code| {
         vec![HarnessDiagnostic {
-            code: HarnessErrorCode::ManifestGenerationFailed,
+            code: HarnessErrorCode::AttestationGenerationFailed,
             terminal_state: code.terminal_state(),
             generation_code: Some(code),
-            path: "generated.manifest".to_owned(),
-            message: "harness derivation manifest could not be emitted".to_owned(),
+            path: "generated.attestation".to_owned(),
+            message: "the harness proof attestation could not be emitted".to_owned(),
         }]
     })
 }

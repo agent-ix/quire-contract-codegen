@@ -37,8 +37,8 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Every generated harness campaign shall expose framework-discard recording and a terminal
   conclusion that reads all counters and rejects an all-rejected/all-discarded run.
 - Generated expected-domain tags shall be executable checks against runtime tri-state verdicts.
-- Harness and strategy generation shall return deterministic source plus a PGM-01 derivation
-  manifest, or a structured non-generated terminal state with no partial bundle.
+- Harness and strategy generation shall return deterministic source plus a shared proof
+  attestation, or a structured non-generated terminal state with no partial bundle.
 
 ## Acceptance Criteria
 

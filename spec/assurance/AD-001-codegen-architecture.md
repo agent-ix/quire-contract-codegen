@@ -22,7 +22,7 @@ coverage, runtime, customer types, and human decision remain external and versio
 
 The derivation view is input package → validated lowering plan → executable/proptest/Kani/coverage
 backends → bundle validator → atomic publisher. The evidence view attaches one immutable identity
-envelope and source map to every output. The failure view retains invalid input, unsupported semantic,
+proof attestation and source map to every output. The failure view retains invalid input, unsupported semantic,
 backend unavailable, I/O failure, incomplete proof, vacuity, rejection, discard, and differential
 states without a success fallback.
 

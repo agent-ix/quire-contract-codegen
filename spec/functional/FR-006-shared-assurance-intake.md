@@ -63,6 +63,7 @@ retention store, audit store, anchor file, or aggregate verdict of its own.
 | FR-006-AC-3 | Static specification, obligation, and coverage facts come from a Quire export that names every requirement in this repository, and the sealed record's impact snapshot is that export's digest. | Test (TC-010) |
 | FR-006-AC-5 | Pass, fail, unavailable, inconclusive, not-computed, partial, stale, suspect, vacuous, and tampered are each demonstrated by a case that produced it, `unsupported` and `malformed` are demonstrated by nothing, and every negative is paired with a positive control. | Test (TC-012) |
 | FR-006-AC-6 | No repository-local generic runner, envelope builder, manifest, verifier, anchor writer, failure-propagation policer, or aggregate verdict remains, and the gates that replaced them are reachable from `ci`. | Test (TC-013) |
+| FR-006-AC-7 | No executable or configuration surface in this repository names the deprecated evidence format: neither its schema version string, in either spelling, nor any of the eleven serde types that stated that shape before its schema was deleted. Markdown and the change declaration are outside the census, and the change declaration therefore does not name the format either. | Test (TC-013) |
 
 ## Dependencies
 
@@ -98,6 +99,23 @@ ten that are real.
 
 TC-012 asserts both states stay absent, so a later change re-acquires one
 deliberately rather than drifting into it.
+
+FR-006-AC-7 is the absence half of the migration off that format. The presence
+half — that what a generated artifact carries instead is Quoin's packaged
+`ProofAttestationV1`, accepted by `quoin change-assurance seal-attestation` and
+validating against the schema `quoin change-assurance schema` publishes — is
+NFR-002-AC-1's, measured by TC-001 against artifacts this crate emits. Splitting
+them is deliberate: an absence claim over the whole tree and an identity claim
+about one emitted artifact are different populations and different measurements,
+and one criterion covering both would be satisfied by whichever half was easier.
+
+The criterion states its two carve-outs rather than claiming a reach the census
+does not have. Markdown is excluded because prose cannot read anything and this
+repository's planning documents and reviews are the record of what was removed.
+`assurance/change-assurance.json` is excluded wholesale by TC-013 because its job
+is to say what a change deleted — so the criterion also requires that file not to
+name the format, which is the only way the claim holds over the one surface its
+own test cannot see.
 
 FR-003 and FR-004 are specified and not implemented at this revision. This requirement covers the
 generation behaviour that exists; it does not create a proof obligation over absent code, because a
