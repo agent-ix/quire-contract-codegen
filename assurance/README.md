@@ -131,22 +131,37 @@ verifies. The claims that rested on those records were removed with them:
   `tests/shared_assurance.rs` asserting that both states stay **absent**, so a
   later change that re-acquires one goes red and has to argue for it.
 
-## Three schemas remain, and all three are live
+## Two schemas remain, and the third was not live after all
 
-`schemas/pgm01-derivation-evidence-envelope-v1.schema.json` looks like evidence
-machinery and is not: `src/oracle.rs` includes it at compile time as `PGM_SCHEMA`,
-the generator validates every derivation manifest it emits against it, and it is
-part of the generator's own `executable_digest`. The `pgm01` in its filename names
-the programme that governed the shape, not the records that were deleted. A
-filename is not a dependency.
+The change that deleted the retained evidence kept
+`schemas/pgm01-derivation-evidence-envelope-v1.schema.json`, describing it here
+and in `assurance/pins.json` as a live output contract that the generator
+validated every emitted derivation manifest against. That was wrong, and it is
+recorded rather than quietly corrected because the reasoning is the reusable part.
 
-That distinction was measured on this repository rather than inherited. A sibling
-froze four artifacts including its own vendored copy of this schema; inheriting
-that list would have described a live dependency as dead machinery, and deleting
-on the strength of it would have broken every generation.
+`src/oracle.rs` bound the file with `include_bytes!` as `PGM_SCHEMA` and used it
+in exactly one place: `generator_implementation_digest()`, where it was one of ten
+byte blobs fed to a hasher. Nothing in the crate validated against it. The only
+schema validation lived in three integration tests, which compiled the file
+themselves. Deleting the file did break the build — and that is what the earlier
+review observed and read as liveness — but an `include_bytes!` of a missing path
+is a compile error, not a contract under load. "It doesn't compile without this"
+and "something depends on this" are different claims, and only the second one
+justifies a keep.
 
-The generated-oracle shape and the source-region map shape are live for the same
-kind of reason — both are included by `src/oracle.rs` and validated against in
-`tests/oracle_generation.rs`. All three stay in use, and a test asserts that each
-is still named by the generator so a later tidy-up cannot fold them into the
-deleted set on the strength of the directory they share.
+It was the deprecated PGM-01 derivation-evidence envelope, the same format the
+campaign removed everywhere else, and it is now deleted under
+`agent-ix/quire-contract-codegen#18`. Removing a hash input moved the generator's
+own identity digest. That was accepted deliberately, not overlooked: this is
+pre-release software with no consumers, and both statements of the hash-input
+list — the one in `src/oracle.rs` and the independent one in
+`tests/oracle_generation.rs` — moved together.
+
+The two that stay are live on the stronger test. `schemas/generated-rust-oracle-v1.schema.json`
+and `schemas/oracle-source-map-v1.schema.json` are each included by
+`src/oracle.rs`, which emits their SHA-256 as the schema identity of the output
+artifact they describe, and `tests/oracle_generation.rs` compiles both and
+validates the generated Rust and the generated source map against them with a
+positive and a negative case each. Removing either breaks an assertion, not just a
+path. A test asserts both are still named by the generator, so a later tidy-up
+cannot fold them into the deleted set on the strength of the directory they share.

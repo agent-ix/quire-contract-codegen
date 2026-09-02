@@ -27,13 +27,8 @@
   ],
   "consumed_artifacts_note": "Four artifacts were pinned here by digest until the pre-stable preservation release (engineering-assurance#7): the verification-semantics module, the PGM-01 compatibility-view schema, and the two packaged PGM-01 positive-control fixtures. Every one of them was consumed only by the retained-evidence reader under scripts/, which is deleted along with the records it read. Leaving them would have made this file's own purpose statement — the digests of the artifacts it actually reads — false, and would have left artifact_digest_mismatches re-hashing files nothing in this repository opens. They are replaced by a live pin on compatibility.py rather than removed outright, so the digest check keeps a subject and does not become vacuous.",
   "schemas": {
-    "why": "Three schemas remain under schemas/ and all three are live domain contracts, not evidence machinery. src/oracle.rs includes each at compile time and the crate validates what it generates against them.",
+    "why": "Two schemas remain under schemas/ and both are live domain contracts, not evidence machinery. src/oracle.rs includes each at compile time, emits its SHA-256 as the schema identity of the output artifact it describes, and tests/oracle_generation.rs validates the generated Rust and the generated source map against them with a positive and a negative case each.",
     "live": [
-      {
-        "path": "schemas/pgm01-derivation-evidence-envelope-v1.schema.json",
-        "sha256": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256",
-        "why": "src/oracle.rs includes it as PGM_SCHEMA and the generator validates every derivation manifest it emits against it. It is also part of the generator's own executable_digest. The `pgm01` in its filename names the programme that governed the shape, not the retained records that were deleted: a filename is not a dependency, and this file was measured live rather than inherited from a sibling's freeze list."
-      },
       {
         "path": "schemas/generated-rust-oracle-v1.schema.json",
         "why": "the shape of generated Rust, included by src/oracle.rs and validated against in tests/oracle_generation.rs"
@@ -43,6 +38,6 @@
         "why": "the shape of the generated source-region map, for the same reason"
       }
     ],
-    "deleted": "The foundation evidence input and manifest schemas were frozen, not live: they were kept only because retained collection inputs and evidence manifests named them by SHA-256. The records that named them are deleted, so there is no longer a reference for the freeze to protect and the two schemas went with them. Nothing executable referenced either at any point. Their names are not repeated here: tests/shared_assurance.rs runs a census asserting that no code or configuration file in this repository mentions them, and this register is configuration."
+    "deleted": "Three schemas are gone. The foundation evidence input and manifest schemas were frozen, not live: they were kept only because retained collection inputs and evidence manifests named them by SHA-256. The records that named them are deleted, so there is no longer a reference for the freeze to protect. Nothing executable referenced either at any point. The third is the deprecated derivation-evidence envelope, removed under agent-ix/quire-contract-codegen#18. It was pinned here as live on the grounds that the generator validated every manifest it emits against it; that was wrong. src/oracle.rs bound it with include_bytes! and used it in exactly one place, as one of ten byte blobs feeding the generator's own identity digest, and nothing validated against it. Removing it moved that identity digest, which was accepted deliberately for pre-release software with no consumers. None of the three names is repeated here: tests/shared_assurance.rs runs a census asserting that no code or configuration file in this repository mentions them, and this register is configuration."
   }
 }

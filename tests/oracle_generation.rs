@@ -98,7 +98,6 @@ fn expected_implementation_digest() -> String {
         include_bytes!("../src/strategy.rs").as_slice(),
         include_bytes!("../build.rs").as_slice(),
         include_bytes!("../Cargo.lock").as_slice(),
-        include_bytes!("../schemas/pgm01-derivation-evidence-envelope-v1.schema.json").as_slice(),
         include_bytes!("../schemas/oracle-source-map-v1.schema.json").as_slice(),
         include_bytes!("../schemas/generated-rust-oracle-v1.schema.json").as_slice(),
         include_bytes!("../spec/functional/FR-001-deterministic-oracles.md").as_slice(),
@@ -325,35 +324,13 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
 
     let manifest: DerivationManifest = serde_json::from_str(&first.manifest.contents).unwrap();
     let manifest_value: serde_json::Value = serde_json::from_str(&first.manifest.contents).unwrap();
-    let schema: serde_json::Value = serde_json::from_str(include_str!(
-        "../schemas/pgm01-derivation-evidence-envelope-v1.schema.json"
-    ))
-    .unwrap();
-    let validator = JSONSchema::options()
-        .with_draft(Draft::Draft7)
-        .compile(&schema)
-        .unwrap();
-    let validation_errors = validator
-        .validate(&manifest_value)
-        .err()
-        .map(|errors| errors.map(|error| error.to_string()).collect::<Vec<_>>())
-        .unwrap_or_default();
-    assert!(validation_errors.is_empty(), "{validation_errors:?}");
-    let mut malformed_manifest = manifest_value.clone();
-    malformed_manifest
-        .as_object_mut()
-        .unwrap()
-        .remove("producer");
-    assert!(validator.validate(&malformed_manifest).is_err());
+    // The manifest shape is asserted field by field below rather than against a
+    // packaged JSON Schema. The schema that used to sit here was the deprecated
+    // PGM-01 derivation-evidence envelope, deleted with the rest of that format;
+    // nothing in `src/` ever validated against it.
     let mut extended_manifest = manifest_value.clone();
     extended_manifest["unexpected"] = serde_json::Value::Bool(true);
     assert!(serde_json::from_value::<DerivationManifest>(extended_manifest).is_err());
-    assert_eq!(
-        sha256(include_bytes!(
-            "../schemas/pgm01-derivation-evidence-envelope-v1.schema.json"
-        )),
-        "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256"
-    );
     assert_eq!(manifest.schema_version, "quire.derivation-evidence/v1");
     assert_eq!(manifest.backend.kind, "none");
     let git_head = Command::new("git")

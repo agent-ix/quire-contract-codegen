@@ -1,6 +1,6 @@
 {
   "schema_version": "quire-contract-codegen.change-assurance-declaration/v1",
-  "purpose": "What this repository states about the change under issue #16: the deletion of the retained evidence tree and everything that existed only to serve it, under the preservation constraint the repository owner released for the pre-stable phase on 2026-09-02 (the \"Preservation constraint released for the pre-stable phase\" section of agent-ix/engineering-assurance#7). This is a new record rather than a revision of the issue-13 shared-assurance migration record: it is a different change under a different authority, and reusing issue-13's identity would present this content as revision 1 of that declaration. revision is 1 and parent_digest is null because this record has no predecessor under its own id; the issue-13 record was sealed only into an ignored store under target/ and was never persisted, so there is no durable digest to name as a parent and none is invented.",
+  "purpose": "What this repository states about the change under issue #18: the deletion of the deprecated PGM-01 derivation-evidence envelope schema, which the issue-16 change kept as a live output contract on a justification that did not hold -- src/oracle.rs bound it with include_bytes! and used it only as one of ten byte blobs feeding the generator identity digest, and nothing validated against it. Removing it moved that identity digest, deliberately and with no consumers to break. It follows the same authority as the issue-16 deletion of the retained evidence tree and everything that existed only to serve it, under the preservation constraint the repository owner released for the pre-stable phase on 2026-09-02 (the \"Preservation constraint released for the pre-stable phase\" section of agent-ix/engineering-assurance#7). This is a new record rather than a revision of the issue-13 shared-assurance migration record: it is a different change under a different authority, and reusing issue-13's identity would present this content as revision 1 of that declaration. revision is 1 and parent_digest is null because this record has no predecessor under its own id; the issue-13 record was sealed only into an ignored store under target/ and was never persisted, so there is no durable digest to name as a parent and none is invented.",
   "not_an_envelope": "Quoin's packaged change-assurance-record-v1, proof-attestation-v1, and verification-receipt-v1 schemas are the shapes. This file projects into the record body Quoin requires and derives nothing beyond the digests its own derived_fields names. It is not a local evidence envelope, it retains nothing, and it computes no verdict.",
   "derived_fields": [
     "subject.base_revision and impact_snapshot.revision come from the candidate revision the caller names.",
@@ -25,24 +25,15 @@
   "record": {
     "schema_version": 1,
     "record_type": "change_assurance",
-    "record_id": "quire-contract-codegen/issue-16",
+    "record_id": "quire-contract-codegen/issue-18",
     "revision": 1,
     "parent_digest": null,
     "subject": {
       "repository": "agent-ix/quire-contract-codegen",
       "scope": [
-        ".gitignore",
         "CLAUDE.md",
-        "Makefile",
-        "README.md",
         "assurance",
-        "evidence",
-        "examples",
-        "plan",
-        "planning",
-        "reviews",
         "schemas",
-        "scripts",
         "spec",
         "src",
         "tests"
@@ -316,7 +307,7 @@
       ]
     },
     "review_workflow": {
-      "run_id": "quire-contract-codegen-issue-16",
+      "run_id": "quire-contract-codegen-issue-18",
       "decision_event_kind": "change_assurance.review_decided"
     }
   }

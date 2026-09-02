@@ -31,8 +31,6 @@ pub fn generator_source_is_dirty() -> bool {
 /// Maximum generated Rust bytes for one clause.
 pub const MAX_GENERATED_SOURCE_BYTES: usize = 1_048_576;
 
-const PGM_SCHEMA: &[u8] =
-    include_bytes!("../schemas/pgm01-derivation-evidence-envelope-v1.schema.json");
 const SOURCE_MAP_SCHEMA: &[u8] = include_bytes!("../schemas/oracle-source-map-v1.schema.json");
 const RUST_ORACLE_SCHEMA: &[u8] = include_bytes!("../schemas/generated-rust-oracle-v1.schema.json");
 const ORACLE_SPEC: &[u8] = include_bytes!("../spec/functional/FR-001-deterministic-oracles.md");
@@ -1173,7 +1171,6 @@ fn generator_implementation_digest() -> &'static str {
             STRATEGY_SOURCE,
             BUILD_SOURCE,
             LOCKFILE,
-            PGM_SCHEMA,
             SOURCE_MAP_SCHEMA,
             RUST_ORACLE_SCHEMA,
             ORACLE_SPEC,

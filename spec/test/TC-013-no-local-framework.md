@@ -12,15 +12,16 @@ relationships:
 
 Verify that the repository-local collector, envelope builder, schema validators for shared record
 types, verifier, anchor writer, failure-propagation policer, coverage reimplementation, and
-retained-evidence reader are gone; that the two schemas retained records once named by digest are
-deleted with those records and referenced by nothing; that the three live domain schemas are still
-named by the generator; and that the gates which replaced them are reachable from `ci` rather than
-merely defined.
+retained-evidence reader are gone; that the three schemas deleted with the formats they described —
+the two retained records once named by digest, and the deprecated derivation-evidence envelope that
+nothing validated against — are absent and referenced by nothing; that the two live domain schemas
+are still named by the generator; and that the gates which replaced them are reachable from `ci`
+rather than merely defined.
 
 ## Test Procedure
 
-Assert each removed file is absent by name, including the retained tree itself and the two schemas
-frozen only for the records that named them. Assert each live domain schema is present and named by
+Assert each removed file is absent by name, including the retained tree itself and the three deleted
+schemas. Assert each live domain schema is present and named by
 `src/oracle.rs`, so a later tidy-up cannot delete one on the strength of the directory it shares.
 Walk the repository's executable and configuration surfaces and require none of them to name a
 deleted artifact, over a population held above a floor derived from the tree as it stands rather than

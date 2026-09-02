@@ -1041,25 +1041,35 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         );
     }
 
-    // The retained tree itself, and the two schemas that were frozen only because
-    // retained records named them by SHA-256. With the records deleted there is
-    // nothing left for those digests to keep intact, so the schemas went too.
+    // The retained tree itself, and the three schemas that went with the formats
+    // it carried.
     //
-    // The set was two and not four, and that was measured rather than inherited:
-    // schemas/pgm01-derivation-evidence-envelope-v1.schema.json is a live domain
-    // contract here, included by src/oracle.rs as PGM_SCHEMA and validated
-    // against on every generation. Sharing a directory and a `pgm01` in the
-    // filename with the retained material did not make it retained material. It
-    // is asserted live below for exactly that reason.
+    // Two of them were frozen rather than live: they were kept only because
+    // retained collection inputs and evidence manifests named them by SHA-256,
+    // and with those records deleted there is nothing left for the digests to
+    // keep intact.
+    //
+    // The third is the deprecated derivation-evidence envelope, removed under
+    // agent-ix/quire-contract-codegen#18. The change before this one kept it, on
+    // the stated grounds that it was a live output contract validated on every
+    // generation. It was not. `src/oracle.rs` bound it with `include_bytes!` and
+    // used it in exactly one place: as one of ten byte blobs feeding the
+    // generator's own identity digest. Nothing validated against it — the only
+    // schema validation was in three integration tests that compiled the file
+    // themselves. Deleting it broke the build, which is what the earlier census
+    // read as liveness, but a missing `include_bytes!` path is a compile error
+    // and not a contract under load. The generator identity moved as a result,
+    // deliberately: this is pre-release software with no consumers.
     let deleted_schemas = [
         "schemas/foundation-evidence-input-v1.schema.json",
         "schemas/foundation-evidence-manifest-v1.schema.json",
+        "schemas/pgm01-derivation-evidence-envelope-v1.schema.json",
     ];
     for path in deleted_schemas {
         assert!(
             !root.join(path).exists(),
-            "{path} is still present; it was frozen only for the retained records \
-             that named it, and those are deleted"
+            "{path} is still present; it was deleted with the format it described \
+             and nothing here reads it"
         );
     }
     assert!(
@@ -1067,12 +1077,20 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         "evidence/ is still present; the retained records were not deleted"
     );
 
-    // And the three live ones stay live. Asserting this is what stops a later
+    // And the two live ones stay live. Asserting this is what stops a later
     // tidy-up from deleting them on the strength of the directory they happen to
-    // share with the two above.
+    // share with the three above.
+    //
+    // Both are load-bearing beyond the identity digest, which is exactly what the
+    // deleted third was not: `src/oracle.rs` emits the SHA-256 of each as the
+    // schema identity of the output artifact it describes, and
+    // `tests/oracle_generation.rs` compiles both and validates the generated Rust
+    // and the generated source map against them with a positive and a negative
+    // case each. Inclusion by the generator is the weaker half of this check; the
+    // stronger half is that removing either breaks a real assertion, not just a
+    // path.
     let generator = fs::read_to_string(root.join("src/oracle.rs")).unwrap();
     for live in [
-        "schemas/pgm01-derivation-evidence-envelope-v1.schema.json",
         "schemas/generated-rust-oracle-v1.schema.json",
         "schemas/oracle-source-map-v1.schema.json",
     ] {
@@ -1154,9 +1172,10 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // It does not defend against someone editing both, and nothing in one file
     // can. It defends against the realistic failure, which is an entry quietly
     // dropped while the control keeps reporting success.
-    const EXPECTED_GONE: [&str; 14] = [
+    const EXPECTED_GONE: [&str; 16] = [
         "COMPAT_RESULT",
         "FR-006-AC-4",
+        "PGM_SCHEMA",
         "PROOF-legacy-compatibility",
         "SUITE-005",
         "TC-011",
@@ -1168,6 +1187,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         "legacy-compatibility",
         "legacy_compat",
         "legacy_evidence_view",
+        "pgm01-derivation-evidence-envelope-v1",
         "tc_011",
     ];
     let gone: Vec<&str> = deleted_schemas
@@ -1193,6 +1213,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
             "TC-011",
             "tc_011",
             "FR-006-AC-4",
+            "PGM_SCHEMA",
         ])
         .collect();
     assert_eq!(
@@ -1210,7 +1231,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // nothing more. `gone` could then be reduced to that single entry and the
     // control still agreed, which is precisely the defect the directory guard's
     // `assert_eq!` was added to fix, left standing here: a declaration whose
-    // shrinking removes the check. Nine of these names are hand-written and
+    // shrinking removes the check. Ten of these names are hand-written and
     // corroborated by nothing else, so the probe corroborates them.
     let probe_body = format!(
         "# Census probe, written and removed by tc_013. Never commit this file.\n\
@@ -1425,10 +1446,14 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // Measured with the deny-list above, so both sides are the same filter:
     //
     //     origin/main, `evidence/` excluded as it was then   45
-    //     this head                                          31
-    //     removed  14 = 1 reader + 11 fixtures + 2 schemas
+    //     this head                                          30
+    //     removed  15 = 1 reader + 11 fixtures + 3 schemas
     //     added     0
-    //     45 - 14 + 0 = 31, and the census counts 31
+    //     45 - 15 + 0 = 30, and the census counts 30
+    //
+    // The third schema is the one this change removed. It was counted as live by
+    // the change before this one and is counted as deleted here, so the figure
+    // moved by one and the arithmetic was re-closed rather than left standing.
     //
     // `inspected` counts a tracked file once it has been read, before the
     // change-declaration exemption below, so it is the walked tracked count and
@@ -1440,16 +1465,18 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // The old floor was `> 20`, which would have kept passing while a third of
     // the inspectable surface disappeared.
     //
-    // The margin is 4 and it is chosen, not derived — no rule fixes it, and
+    // The margin is 3 and it is chosen, not derived — no rule fixes it, and
     // printing arithmetic that does not close would be worse than printing none.
-    // What makes 4 safe is that this floor is not the instrument that catches a
+    // The floor was not lowered when the count fell from 31 to 30; the margin
+    // absorbed it, which is what a margin is for.
+    // What makes 3 safe is that this floor is not the instrument that catches a
     // directory disappearing: the set comparison and the per-directory floors
     // below do that, and they trip on losses far smaller than 4. This number only
     // has to catch diffuse attrition across the tree.
     assert!(
         inspected >= 27,
         "the executable and configuration census is unexpectedly small ({inspected}, \
-         floor 27, measured 31 at the time it was derived) to make this claim"
+         floor 27, measured 30 at the time it was derived) to make this claim"
     );
 
     // A total-only floor is the wrong instrument on a tree this small. `scripts`
@@ -1498,7 +1525,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         (".github", (1, 2)),
         ("assurance", (2, 2)),
         ("examples", (1, 1)),
-        ("schemas", (3, 3)),
+        ("schemas", (2, 2)),
         ("scripts", (4, 5)),
         ("src", (4, 4)),
         ("tests", (4, 5)),
