@@ -523,6 +523,8 @@ fn harness_generated() -> Case {
         precondition: &precondition,
         postcondition: &postcondition,
         execution_point: "generate",
+        minimum_accepted_cases: 1,
+        maximum_discarded_cases: 1,
         attestation: attestation(),
     };
     match generate_tristate_harness(&request) {
@@ -786,6 +788,8 @@ fn harness_rejects_duplicate_clause_identity() -> Case {
         precondition: &precondition,
         postcondition: &postcondition,
         execution_point: "generate",
+        minimum_accepted_cases: 1,
+        maximum_discarded_cases: 1,
         attestation: attestation(),
     };
     match generate_tristate_harness(&request) {

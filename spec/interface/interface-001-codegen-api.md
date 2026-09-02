@@ -19,9 +19,9 @@ operations:
     output: ArtifactBundle | DiagnosticSet
     semantics: deterministic, all-or-nothing lowering; unsupported semantics prevent false completeness
   - name: generate_tristate_harness
-    inputs: [typed precondition, typed postcondition, explicit bindings, attestation context]
+    inputs: [typed precondition, typed postcondition, explicit bindings, minimum accepted cases, maximum discarded cases, attestation context]
     output: GeneratedArtifactBundle | HarnessDiagnosticSet
-    semantics: source plus one proof attestation, accepted-case floor, retained campaign accounting
+    semantics: source plus one proof attestation, request-bound campaign policy, owned execution loop, retained campaign accounting
   - name: generate_i64_strategy
     inputs: [requirement identity, constraint, campaign, attestation context]
     output: GeneratedArtifactBundle | StrategyDiagnostic
@@ -88,9 +88,13 @@ oracle_slice:
 harness_strategy_slice:
   output: generated Rust artifact plus one ProofAttestationV1 body, under proof obligations PROOF-codegen-generated-rust-harness and PROOF-codegen-generated-rust-strategy
   attestation_context: required for harness, integer-strategy, and enum-strategy generation
-  campaign_conclusion: reads accepted, rejected, failed, and discarded counters and requires at least one accepted case
-  expected_domain: generated integer cases expose a rejection expectation and verdict check; the generated harness proptest adapter requires and checks that expectation against quire_contract_runtime::VerdictKind
+  campaign_policy: minimum accepted and maximum explicit discarded case counts are caller-supplied, rendered into the generated runner, and bound into deterministic request identity
+  campaign_execution: the public generated runner is the campaign-level entry point; it owns the proptest loop, creates observations, records every explicit discard, invokes the private verdict adapter, reads all four counters, and enforces the campaign policy before returning a summary
+  discard_boundary: supported generated strategies use direct construction rather than hidden filtering; a generated Boolean campaign's discarded constructor is therefore its only framework-discard path and the owned runner accounts for it
+  campaign_conclusion: rejects zero-case or below-floor runner configuration before execution, rejects an all-rejected/all-discarded campaign, and rejects discard counts above the requested ceiling
+  expected_domain: generated integer and enum cases expose executable accepted/rejected verdict checks; generated Boolean campaign constructors bind accepted, rejected, or discarded disposition to the exact values consumed by the owned runner
   generated_crate_lints: generated crate roots deny missing documentation and compile under denied warnings
+  source_limit: this slice makes no maximum-source-size claim; ProofAttestationV1 carries the retained output digest after sealing but no local generated-artifact size field
   artifact_names: bounded readable prefix plus full SHA-256 over length-delimited request identity
 compatibility:
   draft_pins: must be reconciled before leaving draft

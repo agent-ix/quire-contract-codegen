@@ -581,6 +581,40 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
         StrategyErrorCode::UnsupportedCampaignConstraint
     );
 
+    let correlated_full_width = generate_i64_strategy(&StrategyRequest {
+        requirement: &requirement,
+        attestation: attestation_context(),
+        strategy_id: "correlated-full-width-boundary",
+        constraint: StrategyConstraint::CorrelatedOffset {
+            primary_minimum: i64::MIN,
+            primary_maximum: i64::MAX,
+            offset_minimum: 0,
+            offset_maximum: 0,
+        },
+        campaign: StrategyCampaign::Boundary,
+    })
+    .unwrap_err();
+    assert_eq!(
+        correlated_full_width.code,
+        StrategyErrorCode::UnsupportedCampaignConstraint
+    );
+    assert_eq!(correlated_full_width.path, "campaign.boundary");
+
+    let empty_residual = generate_i64_strategy(&StrategyRequest {
+        requirement: &requirement,
+        attestation: attestation_context(),
+        strategy_id: "empty-residual",
+        constraint: StrategyConstraint::ResidualExclusion {
+            minimum: 0,
+            maximum: 10,
+            excluded: &[],
+        },
+        campaign: StrategyCampaign::Broad,
+    })
+    .unwrap_err();
+    assert_eq!(empty_residual.code, StrategyErrorCode::InvalidMembership);
+    assert_eq!(empty_residual.path, "constraint.excluded");
+
     // Both halves of the attestation binding, probed separately. The strategy
     // slice reaches the same validation the oracle slice does, and each field has
     // to be seen rejecting on its own or one of the two rules could be gone.
@@ -645,6 +679,8 @@ fn tc_004_customer_enum_memberships_are_directly_shaped_and_validated() {
     assert!(!broad.rust.contents.contains("prop_filter"));
     assert!(broad.rust.contents.contains("Mode::Idle"));
     assert!(broad.rust.contents.contains("Mode::Active"));
+    assert!(broad.rust.contents.contains("EnumExpectedDomain"));
+    assert!(broad.rust.contents.contains("pub expected:"));
 
     let no_event = generate_enum_strategy(&EnumStrategyRequest {
         requirement: &requirement,
@@ -698,10 +734,21 @@ mod generated_tests {{
             let case = {broad_function}().new_tree(&mut runner).unwrap().current();
             assert!(matches!(case.current, Mode::Idle | Mode::Active));
             assert!(case.related.is_none());
+            assert!(!case.expected.expects_rejection());
+            case.expected
+                .verify(quire_contract_runtime::VerdictKind::Passed)
+                .unwrap();
+            assert!(case
+                .expected
+                .verify(quire_contract_runtime::VerdictKind::RejectedPrecondition)
+                .is_err());
         }}
         let case = {no_event_function}().new_tree(&mut runner).unwrap().current();
         assert!(matches!(case.current, Mode::Idle));
         assert!(matches!(case.related, Some(Mode::Idle)));
+        case.expected
+            .verify(quire_contract_runtime::VerdictKind::Passed)
+            .unwrap();
     }}
 }}
 "#,

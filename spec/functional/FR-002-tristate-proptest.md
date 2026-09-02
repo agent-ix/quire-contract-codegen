@@ -34,9 +34,13 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   precondition evaluation, subject invocation, and post-state evaluation.
 - Unsupported constraint forms shall produce a structured diagnostic.
 - Strategy generation shall not silently fall back to filtering.
-- Every generated harness campaign shall expose framework-discard recording and a terminal
-  conclusion that reads all counters and rejects an all-rejected/all-discarded run.
-- Generated expected-domain tags shall be executable checks against runtime tri-state verdicts.
+- The generated campaign runner shall own the proptest execution loop, explicit framework-discard
+  accounting, and terminal conclusion. It shall enforce caller-supplied minimum accepted and
+  maximum discarded case counts and reject an all-rejected/all-discarded run.
+- Every generated integer and enum strategy case shall bind its exact values to an executable
+  expected-domain check against runtime tri-state verdicts.
+- Generated harness campaign constructors shall bind exact Boolean inputs to accepted, rejected, or
+  discarded disposition.
 - Harness and strategy generation shall return deterministic source plus a shared proof
   attestation, or a structured non-generated terminal state with no partial bundle.
 
@@ -48,6 +52,8 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-2 | Boundary strategies exercise immediately inside and outside supported constraints. | Test (TC-004) |
 | FR-002-AC-3 | Supported correlated constraints do not rely on improbable filtering. | Analysis |
 | FR-002-AC-4 | Shrinking preserves generated constraints or records a residual rejection. | Test (TC-004) |
+| FR-002-AC-5 | The generated campaign runner owns execution, discard accounting, and conclusion, and rejects campaigns below the configured acceptance floor or above the discard ceiling. | Test (TC-004) |
+| FR-002-AC-6 | Integer, enum, and generated harness campaign cases bind exact values to an executable expected-domain classification. | Test (TC-004) |
 
 ## Dependencies
 
