@@ -823,11 +823,28 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
             collect_sources(&path, into);
             continue;
         }
+        // Extension is not a good enough filter on its own, and this was measured
+        // rather than reasoned about. `Makefile` has no extension, so an
+        // extension-only census never saw it — and the Makefile is precisely
+        // where a reintroduced compatibility-view target would live, since a
+        // Make target name can exist nowhere else. Appending the deleted target
+        // verbatim was observed to leave the census green.
+        //
+        // `yaml` is here for the same class of reason: GitHub accepts both
+        // `.github/workflows/*.yml` and `*.yaml`, and a census that knows only
+        // one of the two spellings is a census a workflow can be renamed past.
+        let name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
         let extension = path.extension().and_then(|value| value.to_str());
-        if matches!(
-            extension,
-            Some("py" | "sh" | "rs" | "txt" | "toml" | "yml" | "md" | "json")
-        ) {
+        let extensionless_source = matches!(name, "Makefile" | "Dockerfile" | ".gitignore");
+        if extensionless_source
+            || matches!(
+                extension,
+                Some("py" | "sh" | "rs" | "txt" | "toml" | "yml" | "yaml" | "md" | "json")
+            )
+        {
             into.push(path);
         }
     }
@@ -1049,15 +1066,16 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         .collect();
 
     // The one exemption, and it is a range rather than a file: this test
-    // necessarily spells out every name it forbids, first to assert those files
-    // are absent and then to forbid references to them. The range runs from the
-    // first declaration to the end of the second and no further, so a stale
-    // reference anywhere else in this file — which is exactly what a wholesale
-    // exemption hid last time — is still caught.
+    // necessarily spells out every name it forbids — in the `removed` list, in
+    // `deleted_schemas`, and again in `gone`. The range covers those three
+    // declarations and stops at the end of the last one, which is well above the
+    // `make -n ci` plan check below. That matters: the stale
+    // `scripts/legacy_evidence_view.py` this census exists to catch was in that
+    // plan check, and a wholesale exemption of this file is exactly what hid it.
     let this_file = fs::read_to_string(root.join("tests/shared_assurance.rs")).unwrap();
     let declaration_start = this_file
-        .find("let deleted_schemas = [")
-        .expect("the deleted_schemas declaration");
+        .find("    for removed in [")
+        .expect("the removed declaration");
     let gone_start = this_file
         .find("let gone: Vec<&str> = deleted_schemas")
         .expect("the gone declaration");
@@ -1067,7 +1085,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         .expect("the end of the gone declaration");
     assert!(
         declaration_start < gone_start,
-        "the exempt range assumes deleted_schemas is declared before gone"
+        "the exempt range assumes the removed list precedes the gone declaration"
     );
 
     let mut inspected = 0;
@@ -1082,6 +1100,18 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         let Ok(source) = fs::read_to_string(path) else {
             continue;
         };
+        // The change declaration is the one document whose job is to say what was
+        // deleted, so it necessarily names the obligation, the target and the
+        // criteria that went. Exempting it does not weaken the claim, because
+        // nothing in it is checked by substring search anyway: every resolvable
+        // element it carries has a stricter gate. `record_body` raises if a
+        // declared source or proof configuration path is missing, and `tc_009`
+        // requires every declared argv to appear verbatim in
+        // `make -n assurance-inputs`. A dangling path or a stale command in this
+        // file fails those, not this census.
+        if path.file_name().and_then(|value| value.to_str()) == Some("change-assurance.json") {
+            continue;
+        }
         let is_this_file = path.file_name().and_then(|value| value.to_str())
             == Some("shared_assurance.rs")
             && source == this_file;
@@ -1104,16 +1134,55 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     }
     // Re-derived rather than inherited. The floor was `> 20` against a walked
     // population of 42 non-markdown readable files, leaving 22 of headroom. This
-    // change deletes 14 files from that population — the reader, its 11 fixtures
-    // and the two frozen schemas — taking it to 28, so the old floor would have
-    // kept passing while more than a quarter of the inspectable surface
-    // disappeared. Set at 24 against a measured 28: four files of ordinary churn,
-    // and a directory going missing is caught rather than absorbed.
+    // change deletes 14 of them — the reader, its 11 fixtures and the two frozen
+    // schemas — and the extensionless and `.yaml` fix above adds 2, so the
+    // population is 30. The old floor would have kept passing while a third of
+    // the inspectable surface disappeared.
     assert!(
-        inspected >= 24,
+        inspected >= 26,
         "the executable and configuration census is unexpectedly small ({inspected}, \
-         floor 24, measured 28 at the time it was derived) to make this claim"
+         floor 26, measured 30 at the time it was derived) to make this claim"
     );
+
+    // A total-only floor is the wrong instrument on a tree this small. `scripts`
+    // and `tests` are five files each and `src` is four, so an entire directory
+    // could vanish and move the total by less than ordinary churn would — 30 to
+    // 25 is still above any floor loose enough to be usable. The per-directory
+    // guard is what actually catches a directory disappearing.
+    let mut per_directory: BTreeMap<String, usize> = BTreeMap::new();
+    for path in &sources {
+        let Ok(relative) = path.strip_prefix(&root) else {
+            continue;
+        };
+        if relative.extension().and_then(|value| value.to_str()) == Some("md") {
+            continue;
+        }
+        let top = match relative.components().count() {
+            0 | 1 => "<root>".to_owned(),
+            _ => relative
+                .components()
+                .next()
+                .map(|component| component.as_os_str().to_string_lossy().into_owned())
+                .unwrap_or_else(|| "<root>".to_owned()),
+        };
+        *per_directory.entry(top).or_default() += 1;
+    }
+    for (directory, floor, measured) in [
+        ("src", 4, 4),
+        ("scripts", 4, 5),
+        ("tests", 4, 5),
+        ("schemas", 3, 3),
+        ("assurance", 2, 2),
+        ("<root>", 7, 9),
+    ] {
+        let seen = per_directory.get(directory).copied().unwrap_or(0);
+        assert!(
+            seen >= floor,
+            "the census saw {seen} inspectable files under {directory}, below its floor of \
+             {floor} (measured {measured} when derived). A directory that empties out is how \
+             a reference census stops proving anything while its total still looks healthy"
+        );
+    }
 
     // The Makefile is orchestration, not a trust root, and carries no gate that
     // polices its own execution. Target definitions are matched, not bare words.

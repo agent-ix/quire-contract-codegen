@@ -174,14 +174,14 @@
         },
         {
           "id": "PRESERVE-no-quire-quoin-runtime-dependency",
-          "statement": "The published crate gains no runtime dependency on Quire or Quoin. The generation producer is an example target, not a library dependency, and the crate's dependency graph is unchanged by this migration.",
+          "statement": "The published crate gains no runtime dependency on Quire or Quoin. The generation producer is an example target, not a library dependency, and the crate's dependency graph is unchanged by this change.",
           "source_ids": [
             "NFR-001"
           ]
         },
         {
           "id": "PRESERVE-planned-matrix",
-          "statement": "Every TM-001 row for FR-001 through FR-005, NFR-001, NFR-002 and StR-001 stays 🚧 Planned. Promoting a row is a human-reviewed matrix change and this migration does not make one. The rows this change adds for FR-006 are the only rows it claims.",
+          "statement": "Every TM-001 row for FR-001 through FR-005, NFR-001, NFR-002 and StR-001 stays 🚧 Planned. Promoting a row is a human-reviewed matrix change and this change does not make one. This change adds no row. It removes two -- the FR-006-AC-4 row and the TC-011 row -- because the acceptance criterion and the test case they name are deleted with the evidence they asserted over, and an orphan row would report as unbacked. No other row's status is touched.",
           "source_ids": [
             "TM-001",
             "AA-001"
@@ -189,7 +189,7 @@
         },
         {
           "id": "PRESERVE-manual-ci",
-          "statement": "Hosted CI remains workflow_dispatch only and is not dispatched by this change.",
+          "statement": "Hosted CI remains workflow_dispatch only, is not dispatched by this change, and no workflow file is modified by it.",
           "source_ids": [
             "NFR-002"
           ]
@@ -293,7 +293,7 @@
         },
         {
           "id": "UNKNOWN-kani-and-vacuity-are-specified-not-implemented",
-          "statement": "FR-003 (Kani obligation lowering) and FR-004 (vacuity and rejection evidence) are specified and have no implementation at this candidate revision: there is no Kani or vacuity code under src/, and every TM-001 row is 🚧 Planned. The generation producer reports on the oracle, harness and strategy slices that exist. This migration preserves the specification and the planned status and manufactures no producer for behaviour that does not exist, because a proof obligation over absent code would be the most complete false green available.",
+          "statement": "FR-003 (Kani obligation lowering) and FR-004 (vacuity and rejection evidence) are specified and have no implementation at this candidate revision: there is no Kani or vacuity code under src/, and every TM-001 row is 🚧 Planned. The generation producer reports on the oracle, harness and strategy slices that exist. This change preserves the specification and the planned status and manufactures no producer for behaviour that does not exist, because a proof obligation over absent code would be the most complete false green available.",
           "disposition": "open",
           "owner": "agent-ix/quire-contract-codegen"
         },
@@ -305,14 +305,8 @@
         },
         {
           "id": "UNKNOWN-make-is-not-a-trust-root",
-          "statement": "A green `make ci` attests to the tree as committed, not to a tree whose Makefile has been edited. Measured on this repository at this candidate revision with three injected defects (a rustfmt violation, a failing test assertion, and an upstream constant the crate does not declare): the control exits 2 at fmt-check, the first of eleven ci prerequisites, having run only that one; with `.IGNORE:` prepended the same tree exits 0, runs all eleven, and fails seven of them -- fmt-check, spec, lint, msrv, upstream-identity, test and assurance-chain -- each printing its diagnostic and none failing the build. assurance-chain is in that list because the chain did notice: the upstream producer's rows became not-computed, the attestation said so because the bytes said so, and the scenario requiring every producer to have reported success went red for exit 1. Make discarded it. Anything that feeds the chain is protected by digest binding and by results derived from producer bytes; the gates that feed nothing into the chain are neutered, and the structural replacement does not reach them. tests/shared_assurance.rs asserts the committed Makefile declares no such directive, which protects a diff review and not an exit code -- under .IGNORE: that test also runs, also fails, and is also swallowed. Recorded, not closed; no policer target was re-added. Filed as agent-ix/quire-contract-codegen#14.",
+          "statement": "A green `make ci` attests to the tree as committed, not to a tree whose Makefile has been edited. Measured on this repository at the shared-assurance migration's candidate revision (issue #13, merged as bbd5e67) with three injected defects (a rustfmt violation, a failing test assertion, and an upstream constant the crate does not declare): the control exits 2 at fmt-check, the first of eleven ci prerequisites, having run only that one; with `.IGNORE:` prepended the same tree exits 0, runs all eleven, and fails seven of them -- fmt-check, spec, lint, msrv, upstream-identity, test and assurance-chain -- each printing its diagnostic and none failing the build. assurance-chain is in that list because the chain did notice: the upstream producer's rows became not-computed, the attestation said so because the bytes said so, and the scenario requiring every producer to have reported success went red for exit 1. Make discarded it. Anything that feeds the chain is protected by digest binding and by results derived from producer bytes; the gates that feed nothing into the chain are neutered, and the structural replacement does not reach them. tests/shared_assurance.rs asserts the committed Makefile declares no such directive, which protects a diff review and not an exit code -- under .IGNORE: that test also runs, also fails, and is also swallowed. Recorded, not closed; no policer target was re-added. Filed as agent-ix/quire-contract-codegen#14. The measurement is not re-taken here and is not restated: this change leaves the ci prerequisite list at the same eleven targets and none of the seven that failed, so the counts still describe the tree. Recorded rather than closed, and no execution-control guard was re-added, by owner decision. Tracked as agent-ix/quire-contract-codegen#14.",
           "disposition": "open",
-          "owner": "agent-ix/quire-contract-codegen"
-        },
-        {
-          "id": "UNKNOWN-stacked-branch-divergence",
-          "statement": "This change supersedes PRs #9, #10 and #12. PR #12's head was never restacked onto PR #10's head, so the two differ. The divergence was read across every domain path: outside evidence/ it is confined to eight files, of which all but two are machinery this change deletes. The unsafe-audit false green was carried forward and the tautological assertion was rejected; both decisions are recorded in the reconciliation commit with the measurement behind them. The four evidence collections retained only on the unmerged variant remain fetchable on their branches, which are not deleted.",
-          "disposition": "accepted",
           "owner": "agent-ix/quire-contract-codegen"
         }
       ]

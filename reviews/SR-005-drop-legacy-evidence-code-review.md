@@ -122,6 +122,9 @@ material and both made `make ci` fail.
 | FND-516 | medium | the census floor `inspected > 20` was inherited unchanged while its walked population fell 42 → 28, cutting headroom from 22 to 8 | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-517 | low | `purpose` was moved into `record`, where it is an extra field; quoin refused to seal and four tests exited 2. Found by `make ci` | `assurance/change-assurance.json` | correct-requirement-no-evidence |
 | FND-518 | low | the FND-509 fix exempted only the `gone` declaration, but this test names the deleted schemas twice. Found by `make ci` | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-519 | high | `collect_sources` filtered on extension, and `Makefile` has no extension — so the reference census never saw the one file a Make target can live in. Appending the deleted `compat-view` target verbatim left the census green. `.yaml` was also absent, and GitHub accepts `.github/workflows/*.yaml` | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-520 | medium | three claims corrected everywhere a reader looks were left stale in `assurance/change-assurance.json`, which is the file that gets sealed and travels into the receipt | `assurance/change-assurance.json` | correct-requirement-no-evidence |
+| FND-521 | medium | the re-derived floor was total-only. `scripts` and `tests` are five files each and `src` is four, so a whole directory could vanish and move the total by less than ordinary churn | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 
 ## Dispositions
 
@@ -215,9 +218,36 @@ Applying the coordinator's test — name the defect, introduce it, watch it go r
 | it raises but without naming the line | **not matched** | **not matched** |
 | restored | matched | matched |
 
+The same rule was applied to every other check this change added or repointed. Each was given the
+specific defect it exists to catch, and each was observed to go red:
+
+| Check | Defect introduced | Result |
+|---|---|---|
+| `tc_013` reference census | the FND-501 stale `legacy_evidence_view.py` put back in the `make -n ci` list | **red** |
+| `tc_013` reference census | the deleted `compat-view` target appended to the `Makefile` | **red** — and **green** before FND-519 was fixed, which is how FND-519 was found |
+| `tc_013` reference census | a `.github/workflows/probe.yaml` naming the deleted reader | **red** |
+| `tc_013` per-directory floor | two files moved out of `scripts/` | **red** |
+| `make pins` digest check | one byte appended to `engineering_assurance/compatibility.py` | **exit 1**, naming the digest |
+
 It counts no verification state, so it does not put `malformed` back in the census by way of an error
 message. It closes a real gap instead: the `JSONDecodeError` arm of `adapt_conformance` was reached by
 no case before it.
+
+## The sealed record, re-read last
+
+`assurance/change-assurance.json` is the one file in this change that is **sealed and travels into
+the verification receipt**, and the census that would otherwise catch a stale reference in it exempts
+it by design — because it is also the file whose job is to name what was deleted. So it was re-read
+last, line by line, against every claim corrected elsewhere. Three were stale:
+
+| Claim | Was | Now |
+|---|---|---|
+| `PRESERVE-planned-matrix` | "The rows this change adds for FR-006 are the only rows it claims" | This change adds no row. It **removes two** — the FR-006-AC-4 row and the TC-011 row — and says so |
+| `UNKNOWN-stacked-branch-divergence` | "This change supersedes PRs #9, #10 and #12 … machinery this change deletes" | **Removed.** It was an accepted disposition of the issue-13 migration record. Once the record id moved to issue-16 its "this change" named the wrong change, and carrying it forward would have sealed a false claim |
+| `UNKNOWN-make-is-not-a-trust-root` | "Measured on this repository **at this candidate revision**" | attributed to the revision it was actually measured at (`bbd5e67`, issue #13), with the reason the counts still describe this tree: `ci` keeps the same eleven prerequisites and none of the seven that failed |
+
+The `#14` measurement itself is untouched and no execution-control guard was re-added, per the owner
+decision recorded there. Correcting who a measurement belongs to is not restating it.
 
 ## Empty populations
 

@@ -171,7 +171,9 @@ acceptance criterion:
 | FND-603 | high | `NFR-002`'s Verification section gated on TC-011, which this change deletes — an unsatisfiable verification method, the same pattern a sibling repository left behind | `spec/nonfunctional/NFR-002-provenance-boundary.md` | correct-requirement-no-evidence |
 | FND-604 | medium | five further documents argued from retained evidence beyond the one acceptance criterion the brief named | `spec/assurance/AA-001-codegen-argument.md`, `spec/assurance/MP-001-codegen-measurements.md`, `spec/assurance/CAC-001-codegen-contract.md`, `spec/evidence/suites.md`, `planning/release-decision.md` | wrong-requirement |
 | FND-605 | medium | TC-013's clause changed from asserting frozen schemas present to asserting deleted schemas absent, which over a just-deleted population is satisfied by a repository that deleted everything | `spec/test/TC-013-no-local-framework.md` | wrong-requirement |
-| FND-606 | medium | the census floor was inherited unchanged while its walked population fell 42 → 28 | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-606 | medium | the census floor was inherited unchanged while its walked population fell 42 → 28, and once re-derived was still total-only over a tree whose directories hold four or five files each | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-609 | high | the reference census could not see `Makefile`, which is the only file a reintroduced Make target can live in | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-610 | medium | three claims corrected in the spec, the README and `CLAUDE.md` were left stale in the sealed change-assurance record | `assurance/change-assurance.json` | correct-requirement-no-evidence |
 | FND-607 | low | `unsupported` and `malformed` have no demonstration in this repository, which is a real reduction in what the intake path is shown to distinguish | `spec/functional/FR-006-shared-assurance-intake.md` | correct-requirement-no-evidence |
 | FND-608 | low | FR-003 and FR-004 remain specified and unimplemented, with no suite and no proof obligation | `spec/functional/FR-003-kani-lowering.md`, `spec/functional/FR-004-vacuity-evidence.md` | correct-requirement-no-evidence |
 
@@ -184,7 +186,9 @@ acceptance criterion:
 | FND-603 | **FIXED**. The TC-011 sentence is struck and no weaker substitute is put in its place |
 | FND-604 | **FIXED** in all five. `planning/foundation-gap-analysis.md` is **ACCEPTED** unchanged as a dated historical record |
 | FND-605 | **FIXED**. The load-bearing clause is the live-schema assertion over three present files, plus a reference census over 28 files; the absence clause corroborates rather than carries |
-| FND-606 | **FIXED**. Floor re-derived at `>= 24` against a measured 28, with the derivation recorded |
+| FND-606 | **FIXED**. Floor re-derived at `>= 26` against a measured 30, plus a per-directory guard, because `scripts` and `tests` are five files each and a whole directory vanishing moves the total by less than ordinary churn |
+| FND-609 | **FIXED**. `collect_sources` admits extensionless sources by name and `.yaml` alongside `.yml`. Reproduced before fixing: the deleted target appended to the `Makefile` left the census green |
+| FND-610 | **FIXED**. The sealed record was re-read last against every claim corrected elsewhere; SR-005 tabulates the three |
 | FND-607 | **ACCEPTED**. Recorded in FR-006-AC-5, MP-001, `assurance/README.md`, `CLAUDE.md` and a TC-012 absence assertion. It is a reduction, and it is stated as one |
 | FND-608 | **ACCEPTED**. Issues #2 and #5 own it. No proof obligation was created for either: a proof obligation whose subject does not exist is the most complete false green available |
 
