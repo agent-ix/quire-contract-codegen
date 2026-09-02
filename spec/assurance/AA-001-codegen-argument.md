@@ -35,6 +35,11 @@ challenges:
     statement: PGM-01 is merged and reconciled, while runtime remains provisional and the IR corpus is unavailable
     status: open
     owner: human-release-owner
+  - id: challenge-make-is-not-a-trust-root
+    target: claim-codegen-v01
+    statement: a green local gate run is evidence about the tree as committed and not about a tree whose Makefile has been edited
+    status: open
+    owner: human-release-owner
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AP-001
     type: references
@@ -63,3 +68,22 @@ dependencies, protected CI, retained measurements, gap analysis, open assumption
 Merged PGM-01 is pinned and reconciled. Runtime helpers remain provisionally pinned, and the IR
 corpus remains unavailable. The runtime and IR identities and contracts must be reconciled before
 semantic implementation leaves draft or this claim can be considered.
+
+A second challenge is recorded against the reasoning above rather than against the claim's subject.
+The reasoning says "every native issue and protected CI gate is complete", and a reader may take a
+green `make ci` as evidence for that. It is evidence about the tree as committed and about nothing
+else.
+
+Measured here with three injected defects: the control tree exits 2 at `fmt-check`, the first of
+eleven `ci` prerequisites; the same tree with `.IGNORE:` prepended exits 0, runs all eleven, fails
+seven of them — `fmt-check`, `spec`, `lint`, `msrv`, `upstream-identity`, `test` and
+`assurance-chain` — prints every diagnostic, and fails the build for none of them. The chain itself
+detected the defect and returned 1; Make discarded that.
+
+Anything that feeds the change-assurance chain is protected differently and better: Quoin binds
+retained inputs by digest and every attested result is read out of the producer's own bytes, so a
+suppressed producer yields an absent or unreadable input and the chain errors. The gates that feed
+nothing into the chain are simply neutered, and the sufficiency criterion "every protected CI gate is
+complete" cannot be discharged by an exit code alone. The decision owner reviews the diff, not only
+the result. Tracked as agent-ix/quire-contract-codegen#14; the policer that used to make this claim
+locally was itself a self-attestation and was not re-added.

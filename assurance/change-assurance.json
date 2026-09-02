@@ -44,16 +44,46 @@
       ]
     },
     "source_connections": [
-      { "source_id": "FR-006", "kind": "requirement" },
-      { "source_id": "FR-001", "kind": "requirement" },
-      { "source_id": "FR-002", "kind": "requirement" },
-      { "source_id": "NFR-001", "kind": "requirement" },
-      { "source_id": "NFR-002", "kind": "requirement" },
-      { "source_id": "TM-001", "kind": "test" },
-      { "source_id": "SUR-001", "kind": "test" },
-      { "source_id": "MP-001", "kind": "architecture" },
-      { "source_id": "AA-001", "kind": "architecture" },
-      { "source_id": "assurance-pins", "kind": "other" }
+      {
+        "source_id": "FR-006",
+        "kind": "requirement"
+      },
+      {
+        "source_id": "FR-001",
+        "kind": "requirement"
+      },
+      {
+        "source_id": "FR-002",
+        "kind": "requirement"
+      },
+      {
+        "source_id": "NFR-001",
+        "kind": "requirement"
+      },
+      {
+        "source_id": "NFR-002",
+        "kind": "requirement"
+      },
+      {
+        "source_id": "TM-001",
+        "kind": "test"
+      },
+      {
+        "source_id": "SUR-001",
+        "kind": "test"
+      },
+      {
+        "source_id": "MP-001",
+        "kind": "architecture"
+      },
+      {
+        "source_id": "AA-001",
+        "kind": "architecture"
+      },
+      {
+        "source_id": "assurance-pins",
+        "kind": "other"
+      }
     ],
     "impact_snapshot": {
       "identity": "quire-static-export",
@@ -66,81 +96,126 @@
         {
           "id": "FR-006-AC-1",
           "statement": "The adopted component versions are classified by the packaged Engineering Assurance compatibility matrix, not by a local restatement of it, and no install line in this repository names a version the matrix calls incompatible.",
-          "source_ids": ["FR-006", "assurance-pins"]
+          "source_ids": [
+            "FR-006",
+            "assurance-pins"
+          ]
         },
         {
           "id": "FR-006-AC-2",
           "statement": "Generation-conformance and upstream-identity results are produced by this repository's own tools in declared structured formats and transcribed by Quoin without Quoin executing the producer.",
-          "source_ids": ["FR-006", "FR-001", "FR-002", "NFR-002"]
+          "source_ids": [
+            "FR-006",
+            "FR-001",
+            "FR-002",
+            "NFR-002"
+          ]
         },
         {
           "id": "FR-006-AC-3",
           "statement": "Static specification, obligation, and coverage facts come from a Quire export, and Quire does not execute a producer.",
-          "source_ids": ["FR-006", "TM-001"]
+          "source_ids": [
+            "FR-006",
+            "TM-001"
+          ]
         },
         {
           "id": "FR-006-AC-4",
           "statement": "Retained evidence bytes are read through the Engineering Assurance compatibility mapping and are not modified, and the mapping's answer is reported without collapsing it into pass or fail.",
-          "source_ids": ["FR-006", "NFR-002"]
+          "source_ids": [
+            "FR-006",
+            "NFR-002"
+          ]
         },
         {
           "id": "FR-006-AC-5",
           "statement": "Pass, fail, unavailable, unsupported, inconclusive, not-computed, malformed, partial, stale, suspect, vacuous, and tampered remain twelve distinguishable states across the intake path, and the generator's own Interface-001 terminal states survive alongside them rather than being collapsed into the attestation's four.",
-          "source_ids": ["FR-006", "NFR-002"]
+          "source_ids": [
+            "FR-006",
+            "NFR-002"
+          ]
         },
         {
           "id": "FR-006-AC-6",
           "statement": "No repository-local generic runner, evidence envelope, manifest, identity framework, retention store, audit store, anchor file, failure-propagation policer, or aggregate verdict remains in the execution path.",
-          "source_ids": ["FR-006", "NFR-002"]
+          "source_ids": [
+            "FR-006",
+            "NFR-002"
+          ]
         }
       ],
       "preservation_constraints": [
         {
           "id": "PRESERVE-legacy-bytes",
           "statement": "Every byte under evidence/ is unchanged by this migration: ANCHORS, README.md, foundation-remote, the authoritative record directory, and the whole historical/ tree — 2,205 files carrying 44 retained envelopes. The verifier is what was removed; the record is not.",
-          "source_ids": ["NFR-002", "FR-006"]
+          "source_ids": [
+            "NFR-002",
+            "FR-006"
+          ]
         },
         {
           "id": "PRESERVE-frozen-schemas",
-          "statement": "Three artifacts under schemas/ are frozen, not deleted, because retained records name each of them by SHA-256. assurance/pins.json records the digests and where each reference sits. Nothing validates against them any more and no code, configuration, or workflow file may reference them. The two remaining schemas under schemas/ are live domain artifacts describing generated output, not evidence machinery, and stay in use.",
-          "source_ids": ["NFR-002"]
+          "statement": "Two artifacts under schemas/ are frozen, not deleted, because retained records name each of them by SHA-256: the foundation evidence input and manifest schemas. assurance/pins.json records the digests and where each reference sits, and nothing executable references them. The set was measured on this repository rather than inherited from a sibling. The remaining three schemas are live domain contracts: src/oracle.rs includes all three at compile time, and the generator validates every derivation manifest it emits against the PGM-01 envelope schema, so that file is a live output contract which the retained records also happen to name, not dead evidence machinery.",
+          "source_ids": [
+            "NFR-002"
+          ]
         },
         {
           "id": "PRESERVE-deterministic-generation",
           "statement": "The deterministic Boolean oracle, tri-state harness, and shaped proptest strategy slices keep their byte-identical regeneration, their dual-licence SPDX identity, their requirement/clause traceability, their bounded source rendering and 1,048,576-byte per-clause limit, their source-region maps, and their derivation manifests. Every generated artifact still records the digest of its own bytes.",
-          "source_ids": ["FR-001", "FR-002", "NFR-001", "NFR-002"]
+          "source_ids": [
+            "FR-001",
+            "FR-002",
+            "NFR-001",
+            "NFR-002"
+          ]
         },
         {
           "id": "PRESERVE-generation-diagnostics",
           "statement": "Every declared GenerationErrorCode, HarnessErrorCode and StrategyErrorCode keeps the Interface-001 terminal state it declares, and a rejection still arrives with no partial artifact bundle. Generated, unsupported, invalid-input, backend-unavailable, io-failed and inconclusive stay six distinct terminal states; unsupported and invalid-input in particular are not permitted to collapse into one another.",
-          "source_ids": ["FR-001", "NFR-002"]
+          "source_ids": [
+            "FR-001",
+            "NFR-002"
+          ]
         },
         {
           "id": "PRESERVE-upstream-identity",
           "statement": "The exact IR and runtime revisions this crate lowers against agree across the crate's own constants, the dependency declarations, and the lockfile, and every generated manifest continues to record them.",
-          "source_ids": ["NFR-002", "FR-001"]
+          "source_ids": [
+            "NFR-002",
+            "FR-001"
+          ]
         },
         {
           "id": "PRESERVE-no-quire-quoin-runtime-dependency",
           "statement": "The published crate gains no runtime dependency on Quire or Quoin. The generation producer is an example target, not a library dependency, and the crate's dependency graph is unchanged by this migration.",
-          "source_ids": ["NFR-001"]
+          "source_ids": [
+            "NFR-001"
+          ]
         },
         {
           "id": "PRESERVE-planned-matrix",
           "statement": "Every TM-001 row for FR-001 through FR-005, NFR-001, NFR-002 and StR-001 stays 🚧 Planned. Promoting a row is a human-reviewed matrix change and this migration does not make one. The rows this change adds for FR-006 are the only rows it claims.",
-          "source_ids": ["TM-001", "AA-001"]
+          "source_ids": [
+            "TM-001",
+            "AA-001"
+          ]
         },
         {
           "id": "PRESERVE-manual-ci",
           "statement": "Hosted CI remains workflow_dispatch only and is not dispatched by this change.",
-          "source_ids": ["NFR-002"]
+          "source_ids": [
+            "NFR-002"
+          ]
         }
       ],
       "proof_obligations": [
         {
           "proof_id": "PROOF-generation-conformance",
           "statement": "Every case in the bounded generation corpus reached its declared Interface-001 terminal state at this candidate revision, each discharging at least its declared check floor: the oracle, harness and strategy slices regenerate byte-identically with their SPDX identity and self-consistent artifact digests, and each rejection case produces the diagnostic code and terminal state it declares with no partial bundle.",
-          "obligation_ids": ["FR-006-AC-2"],
+          "obligation_ids": [
+            "FR-006-AC-2"
+          ],
           "evidence_kind": "Integration",
           "command": {
             "argv": [
@@ -158,10 +233,16 @@
         {
           "proof_id": "PROOF-upstream-identity",
           "statement": "The IR and runtime revisions this crate lowers against are the same revision in the crate's own constants, the dependency declarations, and the resolved lockfile.",
-          "obligation_ids": ["FR-006-AC-2"],
+          "obligation_ids": [
+            "FR-006-AC-2"
+          ],
           "evidence_kind": "Static",
           "command": {
-            "argv": ["python3", "scripts/check_upstream_pins.py", "--json"],
+            "argv": [
+              "python3",
+              "scripts/check_upstream_pins.py",
+              "--json"
+            ],
             "working_directory": "."
           },
           "tool_identity": "quire-contract-codegen-upstream-identity",
@@ -170,10 +251,18 @@
         {
           "proof_id": "PROOF-quire-static-export",
           "statement": "The authoritative static specification, obligation, and coverage facts for this revision are the Quire export, which executes no producer.",
-          "obligation_ids": ["FR-006-AC-3"],
+          "obligation_ids": [
+            "FR-006-AC-3"
+          ],
           "evidence_kind": "Static",
           "command": {
-            "argv": ["quire", "coverage", "--scope", ".", "--json"],
+            "argv": [
+              "quire",
+              "coverage",
+              "--scope",
+              ".",
+              "--json"
+            ],
             "working_directory": "."
           },
           "tool_identity": "quire",
@@ -182,7 +271,9 @@
         {
           "proof_id": "PROOF-legacy-compatibility",
           "statement": "All 44 retained evidence envelopes are read through the pinned Engineering Assurance mapping, their bytes are unchanged, and the mapping's answer for each is reported as it stands.",
-          "obligation_ids": ["FR-006-AC-4"],
+          "obligation_ids": [
+            "FR-006-AC-4"
+          ],
           "evidence_kind": "Static",
           "command": {
             "argv": [
@@ -198,7 +289,9 @@
         {
           "proof_id": "PROOF-msrv",
           "statement": "The declared MSRV compiles every target of this crate at this candidate revision, against the locked dependency graph, and reports it in cargo's own JSON message stream.",
-          "obligation_ids": ["FR-006-AC-2"],
+          "obligation_ids": [
+            "FR-006-AC-2"
+          ],
           "evidence_kind": "Static",
           "command": {
             "argv": [
@@ -250,7 +343,7 @@
         },
         {
           "id": "UNKNOWN-make-is-not-a-trust-root",
-          "statement": "A green `make ci` attests to the tree as committed, not to a tree whose Makefile has been edited. Measured on this repository rather than assumed; the numbers are in NFR-002, AA-001 and the Makefile header. The chain is unaffected for anything that feeds it, because attested results are derived from producer bytes and a suppressed producer yields an absent or unreadable input; the gates that feed nothing into the chain are simply neutered. The test suite asserts the committed Makefile declares no such directive, which protects a diff review and not an exit code. Filed as agent-ix/quire-contract-codegen#14.",
+          "statement": "A green `make ci` attests to the tree as committed, not to a tree whose Makefile has been edited. Measured on this repository at this candidate revision with three injected defects (a rustfmt violation, a failing test assertion, and an upstream constant the crate does not declare): the control exits 2 at fmt-check, the first of eleven ci prerequisites, having run only that one; with `.IGNORE:` prepended the same tree exits 0, runs all eleven, and fails seven of them -- fmt-check, spec, lint, msrv, upstream-identity, test and assurance-chain -- each printing its diagnostic and none failing the build. assurance-chain is in that list because the chain did notice: the upstream producer's rows became not-computed, the attestation said so because the bytes said so, and the scenario requiring every producer to have reported success went red for exit 1. Make discarded it. Anything that feeds the chain is protected by digest binding and by results derived from producer bytes; the gates that feed nothing into the chain are neutered, and the structural replacement does not reach them. tests/shared_assurance.rs asserts the committed Makefile declares no such directive, which protects a diff review and not an exit code -- under .IGNORE: that test also runs, also fails, and is also swallowed. Recorded, not closed; no policer target was re-added. Filed as agent-ix/quire-contract-codegen#14.",
           "disposition": "open",
           "owner": "agent-ix/quire-contract-codegen"
         },

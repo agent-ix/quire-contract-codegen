@@ -43,28 +43,29 @@
     "filed_upstream": "agent-ix/engineering-assurance#21"
   },
   "frozen_artifacts": {
-    "why": "Three files under schemas/ are frozen rather than deleted. Retained envelopes and per-record digest files name each of them by SHA-256, so removing one would not remove a generic evidence family from this repository; it would break a reference inside bytes this migration is required to leave untouched. Two further schemas under schemas/ are live domain artifacts, not evidence machinery, and stay in use.",
+    "why": "Two files under schemas/ are frozen rather than deleted. Retained envelopes and evidence manifests name each of them by SHA-256, so removing one would not remove a generic evidence family from this repository; it would break a reference inside bytes this migration is required to leave untouched. Nothing executable references them any more.",
+    "measured_not_inherited": "This set was measured on this repository and is not the sibling answer. quire-contract-runtime froze four artifacts including its vendored PGM-01 envelope schema. Here schemas/pgm01-derivation-evidence-envelope-v1.schema.json is NOT frozen: src/oracle.rs includes it at compile time as PGM_SCHEMA and the crate validates every derivation manifest it generates against it. It is a live domain output contract that the retained records also happen to name, and freezing it would have described a live dependency as dead machinery.",
     "frozen": [
       {
         "path": "schemas/foundation-evidence-input-v1.schema.json",
         "sha256": "1f533ba87a9c883ad5b26ea24509e52c71721a7f68b2891050ab7f9630f12ab5",
-        "named_by": "the `inputs[].schema.digest` of every retained collection-input record"
+        "named_by": "the inputs[].schema.digest of every retained collection-input record; 37 retained files mention it"
       },
       {
         "path": "schemas/foundation-evidence-manifest-v1.schema.json",
         "sha256": "05e92a537a4def39d50e0050667200fae648284afef603bcbf2c0e014e9b5be5",
-        "named_by": "the `outputs[].schema.digest` of every retained evidence manifest"
-      },
-      {
-        "path": "schemas/pgm01-derivation-evidence-envelope-v1.schema.json",
-        "sha256": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256",
-        "named_by": "each envelope's `extensions.dev.agent-ix.codegen.envelopeSchemaDigest` and its own `inputs[]` entry"
+        "named_by": "the outputs[].schema.digest of every retained evidence manifest; 37 retained files mention it"
       }
     ],
     "still_live": [
       {
+        "path": "schemas/pgm01-derivation-evidence-envelope-v1.schema.json",
+        "sha256": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256",
+        "why": "src/oracle.rs:33 includes it as PGM_SCHEMA and the generator validates every derivation manifest it emits against it. It is also part of the generator's own executable_digest. Live domain contract, not evidence machinery."
+      },
+      {
         "path": "schemas/generated-rust-oracle-v1.schema.json",
-        "why": "a domain schema the generator's own output is validated against by tests/oracle_generation.rs; it is not evidence machinery and no retained record names it"
+        "why": "the shape of generated Rust, included by src/oracle.rs and validated against in tests/oracle_generation.rs"
       },
       {
         "path": "schemas/oracle-source-map-v1.schema.json",

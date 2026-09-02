@@ -106,7 +106,24 @@ prefix on a recipe line, or an assignment to `SHELL` each make a recipe report s
 exit status being consulted. The 334-line recipe-failure policer that used to catch this went with
 the collector it was protecting.
 
-MEASURED_IGNORE_PARAGRAPH
+Measured on this repository at this candidate revision, not assumed and not
+inherited from a sibling. Three defects were injected — a rustfmt violation in
+`src/lib.rs`, a failing assertion in `tests/integration.rs`, and an upstream
+constant name the crate does not declare — and `make ci` was run twice.
+
+| | control | `.IGNORE:` prepended |
+| --- | --- | --- |
+| `make ci` exit status | **2** | **0** |
+| where it stopped | `fmt-check`, the first of eleven prerequisites | nowhere; all eleven ran |
+| recipes that failed | 1 observed (the other ten never ran) | **7**: `fmt-check`, `spec`, `lint`, `msrv`, `upstream-identity`, `test`, `assurance-chain` |
+| recipes that failed the build | 1 | **0** |
+
+Every one of those seven printed its own diagnostic. None of them changed the
+exit code. `assurance-chain` is in that list and it is the interesting entry: the
+chain did detect the injected defect — the upstream producer's rows became
+`not-computed`, the attestation said so because the bytes said so, and the
+`attested-results-are-read-from-producer-output` scenario and its paired control
+both went red for exit 1. Make swallowed it anyway.
 
 What that reaches and what it does not. Quoin binds retained inputs by digest and the chain derives
 every attested result from the producer's own bytes, so a Makefile that lies about running a producer

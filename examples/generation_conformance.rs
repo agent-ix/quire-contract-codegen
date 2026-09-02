@@ -31,17 +31,18 @@
 use std::fmt::Write as _;
 
 use quire_contract_codegen::{
-    generate_boolean_oracle, generate_i64_strategy, generate_tristate_harness, GenerationDiagnostic,
-    GenerationErrorCode, GenerationTerminalState, HarnessErrorCode, HarnessRequest, ManifestContext,
-    OracleArtifactBundle, OracleRequest, SourceRegion, StrategyCampaign, StrategyConstraint,
-    StrategyErrorCode, StrategyRequest, IR_CANDIDATE_REVISION,
+    generate_boolean_oracle, generate_i64_strategy, generate_tristate_harness,
+    GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState, HarnessErrorCode,
+    HarnessRequest, ManifestContext, OracleArtifactBundle, OracleRequest, SourceRegion,
+    StrategyCampaign, StrategyConstraint, StrategyErrorCode, StrategyRequest,
+    IR_CANDIDATE_REVISION,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
     ExecutionPoint, Expression, ExpressionKind, IntegerDomain, IntegerType, OverflowPolicy,
-    PackageId, RequirementId, RequirementRef, RequirementRevision, SourceDocumentId, SourceIdentity,
-    SourceLocation, SourceRevision, SourceSpan, StateObservation, SymbolName, TypedExpression,
-    ValueDeclaration, ValueDeclarationKind, ValueType,
+    PackageId, RequirementId, RequirementRef, RequirementRevision, SourceDocumentId,
+    SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation, SymbolName,
+    TypedExpression, ValueDeclaration, ValueDeclarationKind, ValueType,
 };
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
@@ -392,7 +393,10 @@ fn oracle_generated() -> Case {
             let second = generate_boolean_oracle(&request);
             case.check(
                 "regeneration is byte-identical",
-                second.as_ref().map(|value| value == &first).unwrap_or(false),
+                second
+                    .as_ref()
+                    .map(|value| value == &first)
+                    .unwrap_or(false),
             );
             case.check(
                 "generated Rust carries the dual-licence SPDX identity",
@@ -474,10 +478,7 @@ fn harness_generated() -> Case {
     let (precondition, postcondition) = match (precondition, postcondition) {
         (Ok(first), Ok(second)) => (first, second),
         (first, second) => {
-            case.check(
-                &format!("the clauses type: {first:?} / {second:?}"),
-                false,
-            );
+            case.check(&format!("the clauses type: {first:?} / {second:?}"), false);
             return case;
         }
     };
@@ -498,7 +499,10 @@ fn harness_generated() -> Case {
             let second = generate_tristate_harness(&request);
             case.check(
                 "regeneration is byte-identical",
-                second.as_ref().map(|value| value == &first).unwrap_or(false),
+                second
+                    .as_ref()
+                    .map(|value| value == &first)
+                    .unwrap_or(false),
             );
             case.check(
                 "generated Rust carries the dual-licence SPDX identity",
@@ -554,7 +558,10 @@ fn strategy_generated() -> Case {
             let second = generate_i64_strategy(&request);
             case.check(
                 "regeneration is byte-identical",
-                second.as_ref().map(|value| value == &first).unwrap_or(false),
+                second
+                    .as_ref()
+                    .map(|value| value == &first)
+                    .unwrap_or(false),
             );
             case.check(
                 "generated Rust carries the dual-licence SPDX identity",

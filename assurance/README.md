@@ -99,14 +99,32 @@ The mapping is shown to accept as well as refuse: the pinned release's own
 positive controls in the same run. A refusal that has never been seen to accept
 is indistinguishable from a step that never worked.
 
-## What was frozen rather than deleted
+## What was frozen rather than deleted, and what only looked frozen
 
-Three files under `schemas/` are frozen. Retained envelopes name each of them by
-SHA-256, so deleting one would not remove a generic evidence family from this
-repository; it would break a reference inside bytes this migration is required to
-leave untouched. `pins.json` records the digests and where each reference sits,
-and a test asserts nothing executable references them.
+Two files under `schemas/` are frozen: the foundation evidence input and manifest
+schemas. Retained envelopes name each of them by SHA-256 — 37 retained files
+mention each — so deleting one would not remove a generic evidence family from
+this repository; it would break a reference inside bytes this migration is
+required to leave untouched. `pins.json` records the digests and where each
+reference sits, and a test asserts nothing executable references them.
 
-Two other files under `schemas/` are live domain artifacts describing generated
-output — the generated-oracle shape and the source-region map shape — and stay in
-use. They are not evidence machinery and no retained record names them.
+The set is two, not the sibling's four, and the difference was measured rather
+than inherited. `schemas/pgm01-derivation-evidence-envelope-v1.schema.json` looks
+like evidence machinery and is not: `src/oracle.rs` includes it at compile time as
+`PGM_SCHEMA`, the generator validates every derivation manifest it emits against
+it, and it is part of the generator's own `executable_digest`. It is a live output
+contract that the retained records also happen to name. Freezing it would have
+described a live dependency as dead machinery, and a repository that inherits a
+sibling's freeze list gets exactly that wrong.
+
+The generated-oracle shape and the source-region map shape are live for the same
+kind of reason. All three stay in use.
+
+## `evidence/ANCHORS`
+
+The anchor writer and the verifier that read it are gone. The file itself is not
+touched, and neither is anything else under `evidence/`: the constraint is that
+retained bytes stay unchanged, and an unread census inside an immutable tree is a
+smaller problem than editing that tree to tidy it. Integrity of retained bytes is
+Git history and pull-request review, which is what the compatibility view asks
+rather than implying a stronger claim than it can make.

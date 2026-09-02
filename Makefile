@@ -1,6 +1,41 @@
 # =============================================================================
 # Quire Contract Codegen Makefile
 # =============================================================================
+#
+# Native orchestration. Every target calls the toolchain that owns the job: cargo
+# for the crate, the generation corpus for conformance, quire for static export,
+# quoin for evidence. Nothing here computes a verdict, attests to its own
+# correctness, or retains evidence of its own.
+#
+# This file is not a trust root and no longer tries to be one. The parse-time
+# guards that used to police Make's own execution controls, and the 334-line
+# recipe-failure prover behind them, went with the collector they were protecting.
+#
+# READ THIS BEFORE TRUSTING A GREEN `make ci`.
+#
+# `.IGNORE:` added to this file, a `-` prefix on a recipe line, or an assignment
+# to SHELL makes every recipe report success without its exit status being
+# consulted. Measured on this repository, not assumed: with a rustfmt violation, a
+# failing test assertion and an unknown upstream constant all present, the control
+# tree exits 2 at fmt-check -- the first of eleven `ci` prerequisites, so the other
+# ten never run -- and the same tree with `.IGNORE:` prepended exits 0, runs all
+# eleven, and fails seven of them (fmt-check, spec, lint, msrv, upstream-identity,
+# test, assurance-chain). Every one printed its diagnostic. None failed the build.
+#
+# What that does and does not reach. Quoin binds retained inputs by digest and
+# scripts/assurance_chain.py derives every attested result from the producer's own
+# bytes, so a Makefile that lies about running a producer yields an absent or
+# unreadable input and the chain errors rather than passing -- in the measurement
+# above the chain did exactly that and returned 1, and Make discarded it. The
+# gates that feed nothing into the chain (fmt-check, lint, deny, audit-unsafe,
+# rustdoc) are simply neutered.
+#
+# tests/shared_assurance.rs asserts this file declares no such directive, which
+# protects a reviewer reading a diff. It does not make this file's exit code
+# trustworthy on a tree where it has been edited, because under `.IGNORE:` that
+# test also runs, also fails, and is also swallowed. Recorded rather than closed,
+# and tracked as agent-ix/quire-contract-codegen#14.
+# =============================================================================
 
 TRUSTED_HOME := $(shell /usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
 override BASH := /usr/bin/bash
@@ -10,12 +45,6 @@ override PYTHON := /usr/bin/python3
 override QUIRE := $(TRUSTED_HOME)/.npm-global/bin/quire
 override QUOIN := $(TRUSTED_HOME)/.npm-global/bin/quoin
 
-ifneq ($(filter ci,$(MAKECMDGOALS)),)
-codegen_ci_parse_status := $(shell /usr/bin/env MAKEFLAGS='$(MAKEFLAGS)' /usr/bin/python3 scripts/check_failure_propagation.py --makefile '$(firstword $(MAKEFILE_LIST))' --parse-time >/dev/null 2>&1; echo $$?)
-ifneq ($(codegen_ci_parse_status),0)
-$(error local CI parse-time integrity guard rejected this invocation)
-endif
-endif
 
 .PHONY: help
 help:
@@ -30,9 +59,6 @@ help:
 	@echo "  make clean            - cargo clean"
 	@echo "  make deny             - Run all configured cargo-deny checks"
 	@echo "  make audit-unsafe     - Enforce // SAFETY: comments on unsafe blocks"
-	@echo "  make evidence-tool    - Test the foundation evidence toolchain and pins"
-	@echo "  make verify-evidence  - Re-verify every authoritative retained evidence record"
-	@echo "  make coverage         - Report specification-to-test coverage"
 	@echo "  make conformance      - Run the bounded generation conformance corpus"
 	@echo "  make upstream-identity- Check the IR and runtime revisions agree everywhere"
 	@echo "  make assurance-env    - Create the pinned shared-assurance interpreter"
@@ -60,21 +86,32 @@ fmt-check:
 lint:
 	$(CARGO) clippy --locked --all-targets -- -D warnings
 
+# The traced tests invoke the assurance gates, so the producers must already have
+# run. They are a prerequisite rather than something a test creates for itself: a
+# test that can produce its own inputs can produce a green run out of nothing.
 .PHONY: test
-test:
+test: assurance-inputs
 	$(CARGO) test --locked
 
 .PHONY: build
 build:
 	$(CARGO) build --locked --release
 
+# Same prerequisite as `test`, and for the same reason plus one. The MSRV lane
+# runs the same traced tests, so it needs the same producer output; and because
+# `msrv` precedes `test` in the `ci` list, a run without this prerequisite reads
+# whatever `target/assurance/` happens to hold from an earlier run. That is not a
+# hypothetical: it was observed reading a producer document left behind by a
+# deliberately broken measurement run, and reporting `not_computed` about a tree
+# that was fine.
 .PHONY: msrv
-msrv:
+msrv: assurance-inputs
 	$(CARGO) +$(MSRV) test --locked
 
 .PHONY: spec
 spec:
-	$(QUIRE) validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md'
+	$(QUIRE) validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' \
+		'reviews/**/*.md'
 
 .PHONY: clean
 clean:
@@ -97,32 +134,12 @@ cargo-audit:
 audit-unsafe:
 	$(BASH) scripts/check_unsafe_comments.sh
 
-.PHONY: evidence-tool
-evidence-tool:
-	$(PYTHON) -m py_compile scripts/build_foundation_envelope.py scripts/check_coverage_status.py scripts/check_failure_propagation.py scripts/evidence_policy.py scripts/run_python_tests.py scripts/update_evidence_anchors.py scripts/validate_json_schema.py scripts/verify_foundation_evidence.py
-	$(PYTHON) scripts/run_python_tests.py
-
-.PHONY: verify-evidence
-verify-evidence:
-	$(PYTHON) scripts/verify_foundation_evidence.py
-
-.PHONY: coverage
-coverage:
-	$(PYTHON) scripts/check_coverage_status.py
-
 .PHONY: rustdoc
 rustdoc:
 	RUSTDOCFLAGS=-Dwarnings $(CARGO) doc --locked --no-deps
 
 # =============================================================================
 # Shared assurance (FR-006)
-#
-# This block is the new path. It runs alongside the retained collector until the
-# dual run at one candidate revision has been recorded, at which point the old
-# path and its Makefile guards go. Until then `ci:` below is deliberately
-# unchanged: the retained failure-propagation guard hardcodes the exact `ci:`
-# prerequisite list, so adding a target to it would make the two paths
-# unrunnable at the same revision, which is the one thing the dual run needs.
 #
 # The shared-assurance lane runs in its own interpreter. engineering-assurance
 # declares jsonschema>=4.23 and this repository's Draft 7 lane pins 3.2.0; both
@@ -207,18 +224,8 @@ assurance-record: assurance-inputs
 # Composite
 # =============================================================================
 
-.PHONY: ci-guard
-ci-guard:
-	/usr/bin/python3 scripts/check_failure_propagation.py
-
 .NOTPARALLEL: ci
 .PHONY: ci
-ci: ci-guard fmt-check spec lint test msrv deny audit-unsafe rustdoc coverage evidence-tool verify-evidence
+ci: fmt-check spec lint msrv deny audit-unsafe rustdoc upstream-identity conformance test assurance
 
 # This final guard deliberately follows every assignment and include opportunity.
-ifneq ($(filter ci,$(MAKECMDGOALS)),)
-codegen_ci_final_parse_status := $(shell /usr/bin/env MAKEFLAGS='$(MAKEFLAGS)' /usr/bin/python3 scripts/check_failure_propagation.py --makefile '$(firstword $(MAKEFILE_LIST))' --parse-time >/dev/null 2>&1; echo $$?)
-ifneq ($(codegen_ci_final_parse_status),0)
-$(error local CI final parse-time integrity guard rejected this invocation)
-endif
-endif
