@@ -33,8 +33,8 @@ make assurance-inputs
 ```
 
 It runs the generation conformance corpus, the upstream-identity check, the
-Quire static export, the retained-evidence compatibility view, and the MSRV
-build, and writes their structured output to `target/assurance/`.
+Quire static export, and the MSRV build, and writes their structured output to
+`target/assurance/`.
 
 Everything downstream consumes those files. `scripts/assurance_chain.py` refuses
 to run a producer; if an input is missing it says so and names the target that
@@ -78,53 +78,64 @@ decision is an attributed human act; only the repository owner can create one,
 and an agent that synthesized one would be forging the single field in the whole
 chain that exists to say a person looked.
 
-## The compatibility answer, stated plainly
+## What was deleted with the retained evidence
 
-This repository never retained a `quire.pgm01-evidence` record. Its 44 retained
-envelopes are `quire.derivation-evidence/v1` — a different schema family, which
-the PGM-01 programme governed but did not define. The pinned mapping
-`engineering_assurance.verification_semantics.map_pgm01_bytes` therefore answers
-`incompatible` for every one of them, with the reason "unknown PGM-01 schema
-version".
+This repository used to carry 2,205 files under `evidence/` — 44 envelopes of
+`quire.derivation-evidence/v1`, a schema family the PGM-01 programme governed but
+did not define, which the pinned mapping refused as an unknown schema version for
+every one of them. It also carried the reader that asked the mapping, the fixtures
+that exercised it, a proof obligation over its answer, a `compat-view` Make
+target, and two schemas frozen only because retained records named them by digest.
 
-That is the mapping declining to interpret a shape it has never seen, which is
-exactly what it should do and is one of the twelve states this migration is
-required to keep distinguishable. It is not a pass, it is not a failure of these
-records, and it is not a licence to write a local mapper that would return a
-friendlier answer. The gap is filed upstream as
-`agent-ix/engineering-assurance#21`.
+All of it is deleted. The repository owner released the preservation constraint
+for the pre-stable phase on 2026-09-02; the authority is the
+"Preservation constraint released for the pre-stable phase" section of
+`agent-ix/engineering-assurance#7`. Evidence becomes something to protect when
+these repositories move toward stable releases, and the constraint re-applies
+unchanged at that point.
 
-The mapping is shown to accept as well as refuse: the pinned release's own
-`fixtures/verification-semantics/pgm01-v1.json` and `pgm01-v2.json` are read as
-positive controls in the same run. A refusal that has never been seen to accept
-is indistinguishable from a step that never worked.
+Nothing was rewritten, backdated, or re-sealed to look as though it still
+verifies. The claims that rested on those records were removed with them:
 
-## What was frozen rather than deleted, and what only looked frozen
+- **FR-006-AC-4** asserted retained bytes were read through the shared mapping
+  and reported without collapsing. There are no retained bytes, so the criterion,
+  its TM-001 rows, its test and its proof obligation are gone rather than
+  restated over a smaller tree.
+- **`agent-ix/engineering-assurance#21`** — the missing `quire.derivation-evidence/v1`
+  mapping — closes as moot rather than as fixed. The records it was about no
+  longer exist here.
+- **`unsupported`** was one of the twelve shared verification states, and on this
+  repository the compatibility census was its only demonstration. It is not in the
+  assurance chain's producer vocabulary and never was, so FR-006-AC-5 withdraws it
+  rather than restating it over a refusal or borrowing the Interface-001 terminal
+  state of the same name. `tests/shared_assurance.rs` asserts it stays absent, so
+  a later change cannot quietly re-acquire it.
 
-Two files under `schemas/` are frozen: the foundation evidence input and manifest
-schemas. Retained envelopes name each of them by SHA-256 — 37 retained files
-mention each — so deleting one would not remove a generic evidence family from
-this repository; it would break a reference inside bytes this migration is
-required to leave untouched. `pins.json` records the digests and where each
-reference sits, and a test asserts nothing executable references them.
+  **`malformed` did not go with it**, and that is the measurement worth recording.
+  Taken before anything was deleted, per state and per source: the chain alone
+  demonstrated ten of the twelve, and the census supplied `unsupported` *and*
+  `malformed`. `malformed` is a declared member of the adapter's producer outcome
+  vocabulary, so the `attested-malformed` scenario now demonstrates it from a
+  producer stream that really reports it, derived from the real corpus run. Had it
+  simply been dropped, TC-012 would have gone on passing at ten and reported the
+  same green — a gate weakening silently rather than a claim being withdrawn.
 
-The set is two, not the sibling's four, and the difference was measured rather
-than inherited. `schemas/pgm01-derivation-evidence-envelope-v1.schema.json` looks
-like evidence machinery and is not: `src/oracle.rs` includes it at compile time as
-`PGM_SCHEMA`, the generator validates every derivation manifest it emits against
-it, and it is part of the generator's own `executable_digest`. It is a live output
-contract that the retained records also happen to name. Freezing it would have
-described a live dependency as dead machinery, and a repository that inherits a
-sibling's freeze list gets exactly that wrong.
+## Three schemas remain, and all three are live
+
+`schemas/pgm01-derivation-evidence-envelope-v1.schema.json` looks like evidence
+machinery and is not: `src/oracle.rs` includes it at compile time as `PGM_SCHEMA`,
+the generator validates every derivation manifest it emits against it, and it is
+part of the generator's own `executable_digest`. The `pgm01` in its filename names
+the programme that governed the shape, not the records that were deleted. A
+filename is not a dependency.
+
+That distinction was measured on this repository rather than inherited. A sibling
+froze four artifacts including its own vendored copy of this schema; inheriting
+that list would have described a live dependency as dead machinery, and deleting
+on the strength of it would have broken every generation.
 
 The generated-oracle shape and the source-region map shape are live for the same
-kind of reason. All three stay in use.
-
-## `evidence/ANCHORS`
-
-The anchor writer and the verifier that read it are gone. The file itself is not
-touched, and neither is anything else under `evidence/`: the constraint is that
-retained bytes stay unchanged, and an unread census inside an immutable tree is a
-smaller problem than editing that tree to tidy it. Integrity of retained bytes is
-Git history and pull-request review, which is what the compatibility view asks
-rather than implying a stronger claim than it can make.
+kind of reason — both are included by `src/oracle.rs` and validated against in
+`tests/oracle_generation.rs`. All three stay in use, and a test asserts that each
+is still named by the generator so a later tidy-up cannot fold them into the
+deleted set on the strength of the directory they share.

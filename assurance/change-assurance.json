@@ -120,16 +120,8 @@
           ]
         },
         {
-          "id": "FR-006-AC-4",
-          "statement": "Retained evidence bytes are read through the Engineering Assurance compatibility mapping and are not modified, and the mapping's answer is reported without collapsing it into pass or fail.",
-          "source_ids": [
-            "FR-006",
-            "NFR-002"
-          ]
-        },
-        {
           "id": "FR-006-AC-5",
-          "statement": "Pass, fail, unavailable, unsupported, inconclusive, not-computed, malformed, partial, stale, suspect, vacuous, and tampered remain twelve distinguishable states across the intake path, and the generator's own Interface-001 terminal states survive alongside them rather than being collapsed into the attestation's four.",
+          "statement": "Pass, fail, unavailable, inconclusive, not-computed, malformed, partial, stale, suspect, vacuous and tampered remain eleven distinguishable states across the intake path, each demonstrated by a case that produced it, and the generator's own Interface-001 terminal states survive alongside them rather than being collapsed into the attestation's four. The shared vocabulary is twelve. Measured before deletion, per state and per source: the chain alone demonstrated ten and the compatibility census over retained evidence supplied unsupported and malformed. malformed is a declared member of the adapter's producer vocabulary and is now demonstrated by the attested-malformed scenario, derived from the real corpus run, so deleting the census does not weaken this gate to ten. unsupported is not in that vocabulary and was a property of the compatibility mapping alone; its claim is withdrawn with the evidence rather than restated over a refusal or borrowed from the Interface-001 terminal state of the same name, and TC-012 asserts it stays absent.",
           "source_ids": [
             "FR-006",
             "NFR-002"
@@ -145,21 +137,6 @@
         }
       ],
       "preservation_constraints": [
-        {
-          "id": "PRESERVE-legacy-bytes",
-          "statement": "Every byte under evidence/ is unchanged by this migration: ANCHORS, README.md, foundation-remote, the authoritative record directory, and the whole historical/ tree — 2,205 files carrying 44 retained envelopes. The verifier is what was removed; the record is not.",
-          "source_ids": [
-            "NFR-002",
-            "FR-006"
-          ]
-        },
-        {
-          "id": "PRESERVE-frozen-schemas",
-          "statement": "Two artifacts under schemas/ are frozen, not deleted, because retained records name each of them by SHA-256: the foundation evidence input and manifest schemas. assurance/pins.json records the digests and where each reference sits, and nothing executable references them. The set was measured on this repository rather than inherited from a sibling. The remaining three schemas are live domain contracts: src/oracle.rs includes all three at compile time, and the generator validates every derivation manifest it emits against the PGM-01 envelope schema, so that file is a live output contract which the retained records also happen to name, not dead evidence machinery.",
-          "source_ids": [
-            "NFR-002"
-          ]
-        },
         {
           "id": "PRESERVE-deterministic-generation",
           "statement": "The deterministic Boolean oracle, tri-state harness, and shaped proptest strategy slices keep their byte-identical regeneration, their dual-licence SPDX identity, their requirement/clause traceability, their bounded source rendering and 1,048,576-byte per-clause limit, their source-region maps, and their derivation manifests. Every generated artifact still records the digest of its own bytes.",
@@ -269,24 +246,6 @@
           "configuration": "spec/test-matrix.md"
         },
         {
-          "proof_id": "PROOF-legacy-compatibility",
-          "statement": "All 44 retained evidence envelopes are read through the pinned Engineering Assurance mapping, their bytes are unchanged, and the mapping's answer for each is reported as it stands.",
-          "obligation_ids": [
-            "FR-006-AC-4"
-          ],
-          "evidence_kind": "Static",
-          "command": {
-            "argv": [
-              ".venv-assurance/bin/python",
-              "scripts/legacy_evidence_view.py",
-              "--json"
-            ],
-            "working_directory": "."
-          },
-          "tool_identity": "quire-contract-codegen/legacy_evidence_view",
-          "configuration": "tests/fixtures/legacy-compat/expectations.json"
-        },
-        {
           "proof_id": "PROOF-msrv",
           "statement": "The declared MSRV compiles every target of this crate at this candidate revision, against the locked dependency graph, and reports it in cargo's own JSON message stream.",
           "obligation_ids": [
@@ -314,12 +273,6 @@
         {
           "id": "UNKNOWN-ea-acceptance-not-in-a-release",
           "statement": "engineering-assurance v0.2.0 records accepted.state = pending_human_acceptance and ships no human_acceptance_recorded predicate; the acceptance exists only on main. This repository reports the state the release records and does not gate on it. Filed as agent-ix/engineering-assurance#20.",
-          "disposition": "open",
-          "owner": "agent-ix/engineering-assurance"
-        },
-        {
-          "id": "UNKNOWN-derivation-evidence-not-mapped",
-          "statement": "map_pgm01_bytes at the pinned release covers quire.pgm01-evidence v1 and v2. This repository's 44 retained envelopes are quire.derivation-evidence/v1, so the mapping refuses them as an unknown schema version. That refusal is reported as the compatibility result; no local mapper was written to make it read as a pass. Filed as agent-ix/engineering-assurance#21.",
           "disposition": "open",
           "owner": "agent-ix/engineering-assurance"
         },

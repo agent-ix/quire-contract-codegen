@@ -1,4 +1,0 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
-     Running unittests src/lib.rs (/tmp/quire-contract-codegen-evidence-target/debug/deps/quire_contract_codegen-af49302f11c0ed4d)
-     Running tests/integration.rs (/tmp/quire-contract-codegen-evidence-target/debug/deps/integration-5f05090d231b4298)
-   Doc-tests quire_contract_codegen

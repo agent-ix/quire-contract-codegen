@@ -235,7 +235,6 @@ fn tc_009_the_chain_reaches_quoin_without_quoin_or_quire_executing_a_producer() 
         "PROOF-generation-conformance",
         "PROOF-upstream-identity",
         "PROOF-quire-static-export",
-        "PROOF-legacy-compatibility",
         "PROOF-msrv",
     ] {
         assert_eq!(
@@ -796,81 +795,14 @@ fn tc_010_the_sealed_records_impact_snapshot_is_the_quire_export() {
     );
 }
 
-/// Trace: TC-011, FR-006-AC-4, NFR-002-AC-1
-#[test]
-fn tc_011_retained_evidence_is_read_through_the_shared_mapping_without_moving_a_byte() {
-    let python = assurance_python();
-    let census = json_gate(&python, &["scripts/legacy_evidence_view.py", "--json"]);
-
-    // Two different claims, kept apart. The first is that this run wrote nothing;
-    // the second is that the retained bytes are the bytes that were committed.
-    // Only Git can answer the second, and it is asked rather than assumed.
-    assert!(census["evidence_bytes_moved_during_this_run"]
-        .as_array()
-        .unwrap()
-        .is_empty());
-    assert!(
-        census["uncommitted_evidence_changes"]
-            .as_array()
-            .unwrap()
-            .is_empty(),
-        "retained evidence differs from what was committed: {}",
-        census["uncommitted_evidence_changes"]
-    );
-    assert!(census["misattributed_records"]
-        .as_array()
-        .unwrap()
-        .is_empty());
-    assert_eq!(census["matched"], true);
-
-    let files = census["evidence_files_read"].as_u64().unwrap();
-    let on_disk = walk(&root().join("evidence"));
-    assert_eq!(
-        files, on_disk,
-        "the compatibility view read {files} evidence files but {on_disk} are present"
-    );
-
-    let retained = &census["retained"];
-    assert!(retained["count"].as_u64().unwrap() > 0);
-    // The honest answer for this repository. Its retained family is
-    // quire.derivation-evidence/v1, which the pinned mapping does not cover, so
-    // every envelope is refused. That refusal is reported as it stands and is not
-    // converted into a pass. Filed as agent-ix/engineering-assurance#21.
-    assert_eq!(
-        retained["outcomes"],
-        serde_json::json!(["incompatible"]),
-        "the retained-evidence outcome changed; if the shared mapping gained a \
-         derivation-evidence reader this assertion should be updated deliberately"
-    );
-
-    // The mapping must be seen to accept, or a refusal proves nothing.
-    let cases = census["cases"].as_array().unwrap();
-    assert!(
-        cases
-            .iter()
-            .any(|case| case["kind"] == "positive_control" && case["outcome"] == "lossy"),
-        "no positive control was accepted; a mapping only ever seen refusing is \
-         indistinguishable from a step that never worked"
-    );
-
-    let (code, stdout, stderr) = run(
-        &python,
-        &["scripts/legacy_evidence_view.py", "--mutation-probes"],
-    );
-    assert_eq!(
-        code, 0,
-        "a load-bearing compatibility check was removed and the census did not \
-         notice\n{stdout}\n{stderr}"
-    );
-}
-
 /// Collect every readable source file under `directory`, recursively.
 fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
     // Excluded, and each for its own reason: `.git` is not source, `target` is
-    // build output, `evidence` is immutable retained history that legitimately
-    // names the schemas its records were sealed against, and `.venv-assurance` is
-    // the pinned upstream release rather than anything this repository wrote.
-    const EXCLUDED: [&str; 4] = [".git", "target", "evidence", ".venv-assurance"];
+    // build output, and `.venv-assurance` is the pinned upstream release rather
+    // than anything this repository wrote. `evidence/` used to be excluded here
+    // as retained history that legitimately named the schemas its records were
+    // sealed against; it is deleted, so the exemption it needed is gone with it.
+    const EXCLUDED: [&str; 3] = [".git", "target", ".venv-assurance"];
     let Ok(entries) = fs::read_dir(directory) else {
         return;
     };
@@ -897,29 +829,16 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
     }
 }
 
-fn walk(directory: &Path) -> u64 {
-    let mut count = 0;
-    for entry in fs::read_dir(directory).expect("evidence directory") {
-        let path = entry.expect("directory entry").path();
-        if path.is_dir() {
-            count += walk(&path);
-        } else {
-            count += 1;
-        }
-    }
-    count
-}
-
 /// Trace: TC-012, TC-003, FR-006-AC-5, NFR-002-AC-3
 #[test]
-fn tc_012_all_twelve_verification_outcomes_are_demonstrated_and_paired_with_controls() {
-    // The twelve states this migration must keep distinguishable. A state nobody
+fn tc_012_every_demonstrable_verification_outcome_is_demonstrated_and_paired_with_controls() {
+    // The shared vocabulary is twelve states. Eleven are demonstrated on this
+    // repository's intake path and are required here. A state nobody
     // demonstrates is a state nobody would notice the loss of.
-    const REQUIRED: [&str; 12] = [
+    const REQUIRED: [&str; 11] = [
         "pass",
         "fail",
         "unavailable",
-        "unsupported",
         "inconclusive",
         "not-computed",
         "malformed",
@@ -930,23 +849,36 @@ fn tc_012_all_twelve_verification_outcomes_are_demonstrated_and_paired_with_cont
         "tampered",
     ];
 
-    let python = assurance_python();
-    let report = chain_report();
-    let census = json_gate(&python, &["scripts/legacy_evidence_view.py", "--json"]);
+    // `unsupported` is the twelfth and is deliberately absent. Measured on the
+    // pre-deletion tree, per state and per source: the assurance chain alone
+    // reached ten, and the compatibility census over retained evidence supplied
+    // `unsupported` and `malformed`. That census is deleted.
+    //
+    // `malformed` did not go with it. It is a declared member of the adapter's
+    // producer vocabulary — `ROW_RESULTS` and `CONFORMANCE_OUTCOMES` both name
+    // it — so a producer really reporting it is a state that travels this chain,
+    // and `attested-malformed` demonstrates it the same way `attested-failed`
+    // demonstrates `fail`: by deriving it from the real corpus run. Accepting its
+    // loss would have left this test passing at ten, which is a gate weakening
+    // silently rather than a claim being withdrawn.
+    //
+    // `unsupported` is not in that vocabulary and never was. It was a property of
+    // the compatibility mapping — a retained record carrying an unknown PGM-01
+    // schema version — and nothing on the intake path produces it. The corpus
+    // does reach an `unsupported` *Interface-001 terminal state*, and borrowing
+    // that would be exactly the collapse of two vocabularies this test exists to
+    // prevent. So the claim went with the evidence rather than being restated
+    // over a weaker substitute.
+    const NOT_DEMONSTRABLE_HERE: [&str; 1] = ["unsupported"];
 
-    let mut demonstrated: BTreeSet<String> = report["states_demonstrated"]
+    let report = chain_report();
+
+    let demonstrated: BTreeSet<String> = report["states_demonstrated"]
         .as_array()
         .unwrap()
         .iter()
         .map(|value| value.as_str().unwrap().to_owned())
         .collect();
-    for case in census["cases"].as_array().unwrap() {
-        assert_eq!(
-            case["matched"], true,
-            "a compatibility case is being counted as a demonstration without matching: {case:#}"
-        );
-        demonstrated.insert(case["kind"].as_str().unwrap().replace('_', "-"));
-    }
 
     let missing: Vec<&str> = REQUIRED
         .iter()
@@ -958,6 +890,18 @@ fn tc_012_all_twelve_verification_outcomes_are_demonstrated_and_paired_with_cont
         "these verification outcomes were never demonstrated: {missing:?}; \
          demonstrated: {demonstrated:?}"
     );
+
+    // The two absent states must stay absent by measurement rather than by
+    // comment. If a later change gives one of them a real demonstration, this
+    // fails and the requirement is widened deliberately instead of drifting.
+    for state in NOT_DEMONSTRABLE_HERE {
+        assert!(
+            !demonstrated.contains(state),
+            "{state} is demonstrated again; FR-006-AC-5 and MP-001 record it as \
+             having lost its only demonstration with the retained evidence, so \
+             widen the requirement deliberately rather than leaving it understated"
+        );
+    }
 
     // Every negative names the positive control that proves the step it refuses
     // is a step that works.
@@ -972,6 +916,7 @@ fn tc_012_all_twelve_verification_outcomes_are_demonstrated_and_paired_with_cont
         "refuse-an-edited-receipt",
         "stale-candidate-binding",
         "attested-failed",
+        "attested-malformed",
     ] {
         assert!(
             negatives.contains(required),
@@ -982,7 +927,7 @@ fn tc_012_all_twelve_verification_outcomes_are_demonstrated_and_paired_with_cont
 
 /// Trace: TC-013, FR-006-AC-6
 #[test]
-fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothing() {
+fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unreferenced() {
     let root = root();
 
     // The generic machinery is gone, by name.
@@ -998,6 +943,11 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         "scripts/run_python_tests.py",
         "tests/test_foundation_evidence_tooling.py",
         "requirements-evidence.txt",
+        // The retained-evidence reader and its fixtures. They were kept only to
+        // read the records under evidence/; those records are deleted, so the
+        // reader that mapped them is too.
+        "scripts/legacy_evidence_view.py",
+        "tests/fixtures/legacy-compat/expectations.json",
     ] {
         assert!(
             !root.join(removed).exists(),
@@ -1005,43 +955,35 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         );
     }
 
-    // Two evidence schemas are frozen, not deleted: every retained collection
-    // input names the first by SHA-256 and every retained manifest names the
-    // second. Removing one would not remove a generic evidence family from this
-    // repository; it would break a reference inside bytes this migration is
-    // required to leave untouched.
+    // The retained tree itself, and the two schemas that were frozen only because
+    // retained records named them by SHA-256. With the records deleted there is
+    // nothing left for those digests to keep intact, so the schemas went too.
     //
-    // The set is two and not four, and that was measured rather than inherited:
+    // The set was two and not four, and that was measured rather than inherited:
     // schemas/pgm01-derivation-evidence-envelope-v1.schema.json is a live domain
     // contract here, included by src/oracle.rs as PGM_SCHEMA and validated
-    // against on every generation. It is asserted live below for exactly that
-    // reason.
-    let frozen = [
-        (
-            "schemas/foundation-evidence-input-v1.schema.json",
-            "1f533ba87a9c883ad5b26ea24509e52c71721a7f68b2891050ab7f9630f12ab5",
-        ),
-        (
-            "schemas/foundation-evidence-manifest-v1.schema.json",
-            "05e92a537a4def39d50e0050667200fae648284afef603bcbf2c0e014e9b5be5",
-        ),
+    // against on every generation. Sharing a directory and a `pgm01` in the
+    // filename with the retained material did not make it retained material. It
+    // is asserted live below for exactly that reason.
+    let deleted_schemas = [
+        "schemas/foundation-evidence-input-v1.schema.json",
+        "schemas/foundation-evidence-manifest-v1.schema.json",
     ];
-    for (path, expected) in frozen {
-        let file = root.join(path);
+    for path in deleted_schemas {
         assert!(
-            file.is_file(),
-            "{path} was deleted; it is frozen, not removed"
-        );
-        assert_eq!(
-            sha256_of(&file),
-            expected,
-            "{path} changed; a frozen artifact is immutable"
+            !root.join(path).exists(),
+            "{path} is still present; it was frozen only for the retained records \
+             that named it, and those are deleted"
         );
     }
+    assert!(
+        !root.join("evidence").exists(),
+        "evidence/ is still present; the retained records were not deleted"
+    );
 
     // And the three live ones stay live. Asserting this is what stops a later
-    // tidy-up from folding them into the frozen set on the strength of the
-    // directory they happen to share.
+    // tidy-up from deleting them on the strength of the directory they happen to
+    // share with the two above.
     let generator = fs::read_to_string(root.join("src/oracle.rs")).unwrap();
     for live in [
         "schemas/pgm01-derivation-evidence-envelope-v1.schema.json",
@@ -1059,19 +1001,25 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         );
     }
 
-    // Nothing validates against the frozen pair any more. The census walks the
-    // repository root and excludes, rather than naming the directories it will
-    // look in: an inclusion list is a list of the places a reintroduced validator
-    // would have to avoid, and it only has to be incomplete once.
+    // Nothing references the deleted pair, or the deleted reader, any more. The
+    // census walks the repository root and excludes, rather than naming the
+    // directories it will look in: an inclusion list is a list of the places a
+    // reintroduced validator would have to avoid, and it only has to be
+    // incomplete once.
     let mut sources = Vec::new();
     collect_sources(&root, &mut sources);
 
-    // The claim is that nothing *validates* against them, so the assertion runs
-    // over the surfaces that can: code, configuration, and workflow files.
-    // Markdown is excluded and deliberately so — prose cannot validate anything,
-    // and this repository's planning documents are a record of the schemas they
-    // name. Two files are exempt and each says why.
+    // The claim is that nothing *reads* them, so the assertion runs over the
+    // surfaces that can: code, configuration, and workflow files. Markdown is
+    // excluded and deliberately so — prose cannot read anything, and this
+    // repository's planning documents and reviews are a record of what was
+    // deleted and why. One file is exempt and says why.
     let mut inspected = 0;
+    let gone: Vec<&str> = deleted_schemas
+        .iter()
+        .map(|path| Path::new(path).file_name().unwrap().to_str().unwrap())
+        .chain(["legacy_evidence_view.py"])
+        .collect();
     for path in &sources {
         let extension = path
             .extension()
@@ -1080,28 +1028,19 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         if extension == "md" {
             continue;
         }
-        let file_name = path.file_name().and_then(|value| value.to_str());
-        // This file, because pinning the frozen pair by digest is the whole of
-        // this test; and assurance/pins.json, because it is the register that
-        // records the freeze and where each retained reference sits. Neither
-        // validates anything.
-        if file_name == Some("shared_assurance.rs") || file_name == Some("pins.json") {
-            continue;
-        }
-        // A frozen artifact naming itself is its own `$id`, not a validator.
-        if frozen.iter().any(|(schema, _)| root.join(schema) == *path) {
+        // This file, because naming the deleted artifacts is the whole of this
+        // test. It reads none of them.
+        if path.file_name().and_then(|value| value.to_str()) == Some("shared_assurance.rs") {
             continue;
         }
         let Ok(source) = fs::read_to_string(path) else {
             continue;
         };
         inspected += 1;
-        for (schema, _) in frozen {
-            let frozen_name = Path::new(schema).file_name().unwrap().to_str().unwrap();
+        for name in &gone {
             assert!(
-                !source.contains(frozen_name),
-                "{} references the frozen artifact {frozen_name}; nothing may validate \
-                 against it",
+                !source.contains(name),
+                "{} references the deleted artifact {name}",
                 path.display()
             );
         }

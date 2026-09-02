@@ -58,7 +58,6 @@ INPUTS = {
     "PROOF-generation-conformance": ("generation-conformance.jsonl", "application/x-ndjson"),
     "PROOF-upstream-identity": ("upstream-identity.json", "application/json"),
     "PROOF-quire-static-export": ("quire-static-export.json", "application/json"),
-    "PROOF-legacy-compatibility": ("legacy-compatibility.json", "application/json"),
     "PROOF-msrv": ("msrv.jsonl", "application/x-ndjson"),
 }
 
@@ -612,9 +611,6 @@ def _derive(proof_id: str, raw: str, path: Path) -> str:
         rows = document["entries"]
         require_measurements(document.get("protocol"), rows, path.name)
         return _rows_result(rows, path.name)
-    if proof_id == "PROOF-legacy-compatibility":
-        census = json.loads(raw)
-        return "passed" if census["matched"] else "failed"
     if proof_id == "PROOF-quire-static-export":
         export = json.loads(raw)
         # Quire's export is a static fact set, not a run, so it has no outcome
@@ -675,6 +671,35 @@ def derive_failed_stream(raw: str) -> str:
             lines[index] = json.dumps(row)
             return "\n".join(lines) + "\n"
     raise ChainError("the conformance stream contains no passing row to derive a failure from")
+
+
+def derive_malformed_stream(raw: str) -> str:
+    """The same one named edit, but the first passing case reports `malformed`.
+
+    `malformed` is a declared member of this adapter's producer vocabulary --
+    ROW_RESULTS and CONFORMANCE_OUTCOMES both name it -- so a producer really
+    reporting it is a state that travels the chain, not a refusal wearing a
+    label. It is derived from the real run for the same reason the failing case
+    is: a state demonstrated by a document nobody produced is a state nobody has
+    actually seen travel the chain.
+
+    This is the only demonstration of `malformed` in this repository. Until the
+    pre-stable preservation release it was demonstrated by the compatibility
+    census, against a retained record whose field really had the wrong type.
+    Those records are deleted. Measured on the pre-deletion tree, the chain alone
+    reached ten of the twelve states and the census supplied `unsupported` and
+    `malformed`; without this scenario, deleting the census would have left
+    TC-012 passing at ten rather than going red, which is a gate weakening
+    silently rather than a claim being withdrawn deliberately.
+    """
+    lines = [line for line in raw.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        row = json.loads(line)
+        if row.get("outcome") == "pass":
+            row["outcome"] = "malformed"
+            lines[index] = json.dumps(row)
+            return "\n".join(lines) + "\n"
+    raise ChainError("the conformance stream contains no passing row to derive a malformed one from")
 
 
 # ---------------------------------------------------------------------------
@@ -947,6 +972,56 @@ def run_chain(candidate_revision: str, workspace: Path) -> dict[str, Any]:
         {state: sorted(value) for state, value in observed_reasons.items()},
     )
 
+    # -- 6b. a producer reporting `malformed` is carried, not refused ----------
+    #
+    # `malformed` is in this adapter's declared producer vocabulary, so a stream
+    # reporting it is transcribed rather than refused or defaulted. The coarse
+    # attestation result is `failed` -- the schema has four values and the domain
+    # state is not meant to survive into it -- and the domain's own `malformed`
+    # survives in the retained bytes Quoin binds by digest. Both halves are
+    # asserted, because "it became a failure" without "the word is still in the
+    # bytes" is the collapse this whole migration is about.
+    malformed_stream = scratch / "malformed.jsonl"
+    malformed_raw = derive_malformed_stream(inputs[PRIMARY_PROOF].read_text(encoding="utf-8"))
+    malformed_stream.write_text(malformed_raw, encoding="utf-8")
+    malformed_entries = adapt_conformance(malformed_raw)
+    transcribed = {entry["outcome"] for entry in malformed_entries["entries"]}
+    malformed_body = chain.attestation_body(record_digest, PRIMARY_PROOF, "failed")
+    malformed_body["attestation_id"] = f"{PRIMARY_PROOF}:malformed"
+    sealed_malformed = chain.seal_attestation(malformed_body, malformed_stream, "application/x-ndjson")
+    taken_malformed = chain.intake(sealed_malformed, malformed_stream)
+    if taken_malformed.returncode != 0:
+        raise ChainError(f"intake refused a malformed attestation: {taken_malformed.stderr.strip()}")
+    malformed_selections = dict(selections)
+    malformed_selections[PRIMARY_PROOF] = sealed_malformed["digest"]
+    _, malformed_receipt = chain.receipt(
+        record_digest, malformed_selections, decisions, audits=audits
+    )
+    malformed_reasons = set(proof_rows(malformed_receipt)[PRIMARY_PROOF]["reasons"])
+    scenario(
+        "attested-malformed",
+        "malformed",
+        "result_failed" in malformed_reasons
+        and "fail" in transcribed
+        and '"outcome": "malformed"' in json.dumps(json.loads(malformed_raw.splitlines()[0])),
+        {
+            "transcribed_outcomes": sorted(transcribed),
+            "reasons": sorted(malformed_reasons),
+            "receipt_outcome": malformed_receipt["outcome"],
+            "why": (
+                "the producer reported malformed, the adapter named it rather than "
+                "refusing it, the coarse attestation result is failed, and the "
+                "retained bytes still carry the domain state"
+            ),
+        },
+    )
+    control(
+        "a-clean-producer-is-not-reported-as-malformed",
+        "attested-malformed",
+        "result_failed" not in set(passing_row["reasons"]),
+        {"reasons": passing_row["reasons"]},
+    )
+
     # -- 7. an unaudited proof is not-computed, not clean ---------------------
     unaudited_row = proof_rows(receipt)[PRIMARY_PROOF]
     scenario(
@@ -1190,11 +1265,16 @@ def adapter_probes(workspace: Path) -> list[dict[str, Any]]:
     results.append(
         {
             "probe": "refuses-a-foreign-protocol",
-            # A refusal by the adapter is not one of the twelve states travelling
-            # the chain; it is the adapter declining to produce one. Labelling it
+            # A refusal by the adapter is not one of the states travelling the
+            # chain; it is the adapter declining to produce one. Labelling it
             # `unsupported` would let the census count a refusal as a
-            # demonstration. `unsupported` is demonstrated by the compatibility
-            # view, against a record that really carries an unknown schema.
+            # demonstration. `unsupported` used to be demonstrated by the
+            # compatibility view, against a retained record that really carried
+            # an unknown PGM-01 schema version. That view and those records are
+            # deleted, and `unsupported` is not in this adapter's producer
+            # vocabulary, so the state has no demonstration here and this probe
+            # does not invent one for it. Recorded as a limitation in MP-001 and
+            # asserted absent by TC-012, not papered over.
             "state": None,
             "matched": refused,
             "detail": {"protocol": "some.other.protocol/v1"},
@@ -1233,8 +1313,10 @@ def adapter_probes(workspace: Path) -> list[dict[str, Any]]:
     results.append(
         {
             "probe": "refuses-an-unnamed-outcome",
-            # Same reason. `malformed` is demonstrated by the compatibility view,
-            # against a record whose legacy field really has the wrong type.
+            # Same reason. `malformed` is demonstrated by `attested-malformed`,
+            # against a producer stream that really declares that outcome, which
+            # is a state travelling the chain rather than the adapter declining
+            # to produce one.
             "state": None,
             "matched": unknown_refused,
             "detail": {"outcome": "probably-fine"},

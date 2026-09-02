@@ -11,57 +11,28 @@
   },
   "consumed_artifacts": [
     {
-      "path": "verification_semantics.py",
-      "sha256": "af9f92fcec60463fe3e9398a5ce0c1acde76b738816b10baf1b94e123c9b50bc",
-      "why": "map_pgm01_bytes is the only sanctioned reader of this repository's retained evidence. scripts/legacy_evidence_view.py calls it and implements no mapping of its own."
-    },
-    {
-      "path": "schemas/pgm01-compatibility-view-v1.schema.json",
-      "sha256": "317294d04e430f26612a6c7cbde937e06d9e655585a59de1f1e4a0dd66855ca6",
-      "why": "The shape map_pgm01_bytes validates every view against before returning it. Pinned because the compatibility result this repository reports is only as meaningful as the shape it is reported in."
-    },
-    {
-      "path": "fixtures/verification-semantics/pgm01-v1.json",
-      "sha256": "ab20a39d307a0d3e7d2eda9d50e295ba43de34b527c8f514484cd48af6b7b7f5",
-      "why": "The release's own known-good PGM-01 v1 record. This repository retains no PGM-01 record of its own (see legacy_compatibility below), so this fixture is the positive control that proves the mapping accepts as well as refuses."
-    },
-    {
-      "path": "fixtures/verification-semantics/pgm01-v2.json",
-      "sha256": "947baf2f16a11809ca488935cb8b89fb75015eae2204293eac049b5789bd17bc",
-      "why": "The v2 positive control, for the same reason."
+      "path": "compatibility.py",
+      "sha256": "62829251d7697d279364eeb2395a1e86a81ef116703c4b89ec754f701475f654",
+      "why": "scripts/check_shared_pins.py imports load_matrix, classify_all and accepted from this module and delegates every component verdict to it. It is the one artifact this repository still reads out of the release on every `make pins`, so it is the one that carries a digest."
     },
     {
       "path": "compatibility-matrix.json",
       "why": "The authority on which component versions are pinned, and on which versions are named incompatible. Deliberately carries no digest here: it is expected to advance as the matrix is re-accepted, and pinning its bytes locally would make this repository a second acceptance authority."
     }
   ],
-  "legacy_compatibility": {
-    "retained_family": "quire.derivation-evidence/v1",
-    "retained_records": 44,
-    "pgm01_records": 0,
-    "statement": "This repository never retained a quire.pgm01-evidence record. Its 44 retained envelopes are quire.derivation-evidence/v1, a different schema family that the PGM-01 programme governed but did not define. map_pgm01_bytes therefore classifies every one of them 'incompatible' with 'unknown PGM-01 schema version'. That is the mapping refusing to interpret a shape it does not know, which is the correct behaviour and an explicit reported state; it is not a pass, not a failure of this repository, and not a licence to write a local mapper.",
-    "filed_upstream": "agent-ix/engineering-assurance#21"
-  },
-  "frozen_artifacts": {
-    "why": "Two files under schemas/ are frozen rather than deleted. Retained envelopes and evidence manifests name each of them by SHA-256, so removing one would not remove a generic evidence family from this repository; it would break a reference inside bytes this migration is required to leave untouched. Nothing executable references them any more.",
-    "measured_not_inherited": "This set was measured on this repository and is not the sibling answer. quire-contract-runtime froze four artifacts including its vendored PGM-01 envelope schema. Here schemas/pgm01-derivation-evidence-envelope-v1.schema.json is NOT frozen: src/oracle.rs includes it at compile time as PGM_SCHEMA and the crate validates every derivation manifest it generates against it. It is a live domain output contract that the retained records also happen to name, and freezing it would have described a live dependency as dead machinery.",
-    "frozen": [
-      {
-        "path": "schemas/foundation-evidence-input-v1.schema.json",
-        "sha256": "1f533ba87a9c883ad5b26ea24509e52c71721a7f68b2891050ab7f9630f12ab5",
-        "named_by": "the inputs[].schema.digest of every retained collection-input record; 37 retained files mention it"
-      },
-      {
-        "path": "schemas/foundation-evidence-manifest-v1.schema.json",
-        "sha256": "05e92a537a4def39d50e0050667200fae648284afef603bcbf2c0e014e9b5be5",
-        "named_by": "the outputs[].schema.digest of every retained evidence manifest; 37 retained files mention it"
-      }
-    ],
-    "still_live": [
+  "known_drift": [
+    "engineering-assurance v0.2.0 packages compatibility-matrix.json with accepted.state = pending_human_acceptance and ships no human_acceptance_recorded predicate. Both landed on main after the tag and no v0.2.1 was cut. Filed as agent-ix/engineering-assurance#20. scripts/check_shared_pins.py reports the acceptance state the installed package records and gates only on the local toolchain, so an absent field is never read as an approval in either direction.",
+    "Pinning a branch head to obtain the acceptance record is exactly what the release discipline forbids, so this repository does not.",
+    "FR-003 (Kani obligation lowering) and FR-004 (vacuity and rejection evidence) are specified and not implemented at this candidate revision: there is no Kani or vacuity code under src/, and every TM-001 row is 🚧 Planned. This migration preserves the specification and the planned status and does not manufacture a producer for behaviour that does not exist. The generation producer reports on the oracle, harness and strategy slices that do."
+  ],
+  "consumed_artifacts_note": "Four artifacts were pinned here by digest until the pre-stable preservation release (engineering-assurance#7): the verification-semantics module, the PGM-01 compatibility-view schema, and the two packaged PGM-01 positive-control fixtures. Every one of them was consumed only by the retained-evidence reader under scripts/, which is deleted along with the records it read. Leaving them would have made this file's own purpose statement — the digests of the artifacts it actually reads — false, and would have left artifact_digest_mismatches re-hashing files nothing in this repository opens. They are replaced by a live pin on compatibility.py rather than removed outright, so the digest check keeps a subject and does not become vacuous.",
+  "schemas": {
+    "why": "Three schemas remain under schemas/ and all three are live domain contracts, not evidence machinery. src/oracle.rs includes each at compile time and the crate validates what it generates against them.",
+    "live": [
       {
         "path": "schemas/pgm01-derivation-evidence-envelope-v1.schema.json",
         "sha256": "0946e235e9e4b0fa79e9b9ec27ae157b303c17de0a9408d3cc04968fb7152256",
-        "why": "src/oracle.rs:33 includes it as PGM_SCHEMA and the generator validates every derivation manifest it emits against it. It is also part of the generator's own executable_digest. Live domain contract, not evidence machinery."
+        "why": "src/oracle.rs includes it as PGM_SCHEMA and the generator validates every derivation manifest it emits against it. It is also part of the generator's own executable_digest. The `pgm01` in its filename names the programme that governed the shape, not the retained records that were deleted: a filename is not a dependency, and this file was measured live rather than inherited from a sibling's freeze list."
       },
       {
         "path": "schemas/generated-rust-oracle-v1.schema.json",
@@ -71,12 +42,7 @@
         "path": "schemas/oracle-source-map-v1.schema.json",
         "why": "the shape of the generated source-region map, for the same reason"
       }
-    ]
-  },
-  "known_drift": [
-    "engineering-assurance v0.2.0 packages compatibility-matrix.json with accepted.state = pending_human_acceptance and ships no human_acceptance_recorded predicate. Both landed on main after the tag and no v0.2.1 was cut. Filed as agent-ix/engineering-assurance#20. scripts/check_shared_pins.py reports the acceptance state the installed package records and gates only on the local toolchain, so an absent field is never read as an approval in either direction.",
-    "Pinning a branch head to obtain the acceptance record is exactly what the release discipline forbids, so this repository does not.",
-    "map_pgm01_bytes at v0.2.0 covers quire.pgm01-evidence v1 and v2 only. It has no mapping for quire.derivation-evidence/v1, which is the family this repository retained. Filed as agent-ix/engineering-assurance#21. Reported, not worked around.",
-    "FR-003 (Kani obligation lowering) and FR-004 (vacuity and rejection evidence) are specified and not implemented at this candidate revision: there is no Kani or vacuity code under src/, and every TM-001 row is 🚧 Planned. This migration preserves the specification and the planned status and does not manufacture a producer for behaviour that does not exist. The generation producer reports on the oracle, harness and strategy slices that do."
-  ]
+    ],
+    "deleted": "The foundation evidence input and manifest schemas were frozen, not live: they were kept only because retained collection inputs and evidence manifests named them by SHA-256. The records that named them are deleted, so there is no longer a reference for the freeze to protect and the two schemas went with them. Nothing executable referenced either at any point. Their names are not repeated here: tests/shared_assurance.rs runs a census asserting that no code or configuration file in this repository mentions them, and this register is configuration."
+  }
 }

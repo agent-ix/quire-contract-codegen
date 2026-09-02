@@ -234,7 +234,16 @@ fn source_symbol(source: &str) -> &str {
         .unwrap()
 }
 
-/// TC-001.
+/// Trace: TC-001, NFR-002-AC-1
+///
+/// NFR-002-AC-1 declares its verification method as Test (TC-001), and this is
+/// that test: it asserts the emitted manifest records the producer, its inputs,
+/// the schema digests of both outputs, the backend, the parameter digest, the
+/// output content digests, and the generator's own executable digest. The tag
+/// used to sit on the retained-evidence compatibility test instead, which read
+/// identity out of historical records rather than out of an artifact this crate
+/// emits. Those records are deleted; the tag moves to the test the requirement
+/// always named.
 #[test]
 fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     let environment = boolean_environment(&["enabled"]);

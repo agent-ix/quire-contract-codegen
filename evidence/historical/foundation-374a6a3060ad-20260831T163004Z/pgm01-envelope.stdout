@@ -1,1 +1,0 @@
-{"errors": [{"code": "SCHEMA_VIOLATION", "message": "'3' does not match '^v[1-9][0-9]*$'", "path": "$.inputs[2].schema.version"}], "valid": false}

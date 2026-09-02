@@ -1,5 +1,0 @@
-   Compiling quire-contract-codegen v0.1.0 (/home/peter/dev/quire-contract-codegen)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
-     Running unittests src/lib.rs (target/evidence-pgm-d8d-b3bb861/debug/deps/quire_contract_codegen-af49302f11c0ed4d)
-     Running tests/integration.rs (target/evidence-pgm-d8d-b3bb861/debug/deps/integration-5f05090d231b4298)
-   Doc-tests quire_contract_codegen

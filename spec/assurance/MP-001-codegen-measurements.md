@@ -58,9 +58,6 @@ confirm it.
 `quire coverage --scope . --json` is the authoritative static specification, obligation and coverage
 export. Quire exports; it never executes a producer.
 
-`scripts/legacy_evidence_view.py --json` reads every retained envelope through the pinned
-Engineering Assurance mapping and reports what came back.
-
 `rustup run 1.75.0 cargo check --locked --all-targets --message-format=json` is the MSRV build, whose
 verdict is read from cargo's own `build-finished` message rather than from its transcript.
 
@@ -73,10 +70,10 @@ FR-065 verification receipt. It runs `quoin` and nothing else.
 ## Evidence Verification Control
 
 Retention, integrity checking, audit, attestation and receipts are Quoin's. Static specification,
-obligation and coverage facts are Quire's. The read-only mapping of retained bytes is Engineering
-Assurance's. This repository retains no evidence of its own and computes no aggregate verdict.
+obligation and coverage facts are Quire's. This repository retains no evidence of its own and
+computes no aggregate verdict.
 
-Three things are measured rather than asserted.
+Two things are measured rather than asserted.
 
 The execution boundary. `tests/shared_assurance.rs` runs the chain three times: once with every
 producer replaced by a logging stub, requiring the log to be empty; once with `quoin` stubbed,
@@ -88,13 +85,6 @@ The declared command. Every proof obligation's declared argv must appear verbati
 `make -n assurance-inputs`. A declared command that is not the executed command is a lie inside a
 sealed attestation, and it is the kind of lie nothing downstream can catch, because Quoin records
 what the caller says the command was.
-
-The read-only claim over retained bytes. The compatibility view digests the whole `evidence/` tree
-before and after its run and fails if one byte moved, and separately asks Git whether any retained
-byte differs from what was committed. Those are two different claims and they are reported
-separately: "this process wrote nothing" is not "these are the bytes that were committed". Six
-mutation probes each remove one load-bearing check and require the census to notice; a probe that
-crashes is a broken probe, not a detection, and is not counted as one.
 
 ## Qualification Integrity
 
@@ -147,11 +137,20 @@ implementation at this revision. There is no suite for them and no proof obligat
 because a proof obligation whose subject does not exist is the most complete false green available.
 Their TM-001 rows stay 🚧 Planned.
 
-The retained `evidence/` tree is 44 envelopes of `quire.derivation-evidence/v1`, a family the pinned
-mapping does not cover. Every one of them reads as `incompatible` with the reason "unknown PGM-01
-schema version". That is the mapping declining to interpret a shape it has never seen; it is
-reported, not converted into a pass, and not converted into a defect of those records. Filed upstream
-as agent-ix/engineering-assurance#21.
+The shared verification vocabulary is twelve states and this repository demonstrates eleven. The
+missing one is `unsupported`. Measured on the tree before anything was deleted, per state and per
+source: the assurance chain alone demonstrated ten, and the compatibility census over the retained
+`evidence/` tree supplied `unsupported` and `malformed`. The repository owner released the
+preservation constraint for the pre-stable phase on 2026-09-02
+(`agent-ix/engineering-assurance#7`) and those records are deleted.
+
+`malformed` is a declared member of the assurance chain's producer outcome vocabulary, so it is
+demonstrated by the `attested-malformed` scenario against a producer stream that really reports it,
+derived from the real corpus run. `unsupported` is not in that vocabulary: it was raised only by the
+compatibility mapping, against a retained record carrying an unknown PGM-01 schema version. Its claim
+is withdrawn rather than restated over an adapter refusal or borrowed from the Interface-001 terminal
+state of the same name, which is a different vocabulary on a different axis. TC-012 asserts the state
+stays absent, so a later change cannot re-acquire it quietly.
 
 This measurement plan supports neither a semantic implementation decision nor a release decision, and
 confers no validation, accreditation, or certification.
