@@ -7,6 +7,11 @@ set -euo pipefail
 
 baseline_file="scripts/unsafe_comment_baseline.txt"
 update_baseline=false
+trusted_grep=/usr/bin/grep
+trusted_mktemp=/usr/bin/mktemp
+trusted_rm=/usr/bin/rm
+trusted_sed=/usr/bin/sed
+trusted_sort=/usr/bin/sort
 
 if [[ "${1:-}" == "--update-baseline" ]]; then
   update_baseline=true
@@ -19,14 +24,21 @@ for candidate in src tests benches examples; do
   fi
 done
 if [[ ${#search_roots[@]} -eq 0 ]]; then
-  echo "unsafe audit passed"
-  exit 0
+  echo "unsafe audit inconclusive: no Rust source roots are available" >&2
+  exit 2
 fi
 
-unsafe_lines=()
-while IFS= read -r line; do
-  unsafe_lines+=("$line")
-done < <(grep -rEn --include='*.rs' 'unsafe[[:space:]]*\{' "${search_roots[@]}" 2>/dev/null || true)
+grep_output="$("$trusted_mktemp")"
+trap '"$trusted_rm" -f -- "$grep_output"' EXIT
+set +e
+"$trusted_grep" -rEn --include='*.rs' 'unsafe[[:space:]]*\{' "${search_roots[@]}" >"$grep_output"
+grep_status=$?
+set -e
+if (( grep_status > 1 )); then
+  echo "unsafe audit inconclusive: source scan failed with status ${grep_status}" >&2
+  exit 2
+fi
+mapfile -t unsafe_lines <"$grep_output"
 
 if [[ ${#unsafe_lines[@]} -eq 0 ]]; then
   echo "unsafe audit passed"
@@ -41,7 +53,7 @@ for entry in "${unsafe_lines[@]}"; do
   line=${rest%%:*}
 
   start=$(( line > 3 ? line - 3 : 1 ))
-  if ! sed -n "${start},${line}p" "$file" | grep -q '// SAFETY:'; then
+  if ! "$trusted_sed" -n "${start},${line}p" "$file" | "$trusted_grep" -q '// SAFETY:'; then
     missing_lines+=("${file}:${line}")
   fi
 done
@@ -51,7 +63,7 @@ if [[ "$update_baseline" == true ]]; then
     : > "$baseline_file"
     echo "wrote empty ${baseline_file}"
   else
-    printf '%s\n' "${missing_lines[@]}" | sort -u > "$baseline_file"
+    printf '%s\n' "${missing_lines[@]}" | "$trusted_sort" -u > "$baseline_file"
     echo "wrote ${baseline_file} with ${#missing_lines[@]} entries"
   fi
   exit 0
@@ -69,7 +81,7 @@ if [[ ! -f "$baseline_file" ]]; then
 fi
 
 for entry in "${missing_lines[@]}"; do
-  if ! grep -Fxq "$entry" "$baseline_file"; then
+  if ! "$trusted_grep" -Fxq "$entry" "$baseline_file"; then
     echo "missing SAFETY comment near ${entry}" >&2
     missing=1
   fi
