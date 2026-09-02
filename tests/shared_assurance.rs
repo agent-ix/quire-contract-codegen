@@ -1088,6 +1088,39 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         "the exempt range assumes the removed list precedes the gone declaration"
     );
 
+    // Scanned broadly, counted narrowly, and the two are different populations
+    // on purpose.
+    //
+    // The reference scan runs over everything the walk finds — tracked and
+    // untracked alike — because untracked is exactly the state a reintroduced
+    // reader is in while someone is still writing it, and a census that only
+    // reads committed files would not see it until after it was `git add`ed.
+    //
+    // The counts below use the tracked set only. A walk-based count can be
+    // inflated by anything lying around: `proptest-regressions/*.txt` and a
+    // scratch `.json` in the repository root are both admitted by the extension
+    // filter, and two stray files are enough to restore headroom that real
+    // deletions had consumed. Scratch cannot vote on whether the census is big
+    // enough to prove anything.
+    let tracked_output = Command::new("git")
+        .args(["ls-files", "-z"])
+        .current_dir(&root)
+        .output()
+        .expect("git ls-files failed");
+    assert!(
+        tracked_output.status.success(),
+        "git ls-files failed; the census cannot tell tracked files from scratch"
+    );
+    let tracked: BTreeSet<PathBuf> = String::from_utf8_lossy(&tracked_output.stdout)
+        .split('\0')
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| root.join(entry))
+        .collect();
+    assert!(
+        !tracked.is_empty(),
+        "git ls-files reported no tracked files; the counts below would be vacuous"
+    );
+
     let mut inspected = 0;
     for path in &sources {
         let extension = path
@@ -1115,7 +1148,9 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         let is_this_file = path.file_name().and_then(|value| value.to_str())
             == Some("shared_assurance.rs")
             && source == this_file;
-        inspected += 1;
+        if tracked.contains(path) {
+            inspected += 1;
+        }
         for name in &gone {
             let Some(at) = source.find(name) else {
                 continue;
@@ -1133,14 +1168,23 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         }
     }
     // Re-derived rather than inherited, and every figure below was taken from
-    // the walk above rather than from a document describing the layout.
+    // the walk and from `git ls-files` rather than from any document describing
+    // the layout. This repository has no `schemas/README.md` or equivalent, and
+    // no number here is sourced from prose.
     //
-    // The floor was `> 20` against a walked population of 42 non-markdown
+    // The floor was `> 20` against a population of 42 tracked non-markdown
     // readable files, leaving 22 of headroom. This change removes 14 of them —
     // the reader, its 11 fixtures and the two frozen schemas — and the
     // extensionless admission adds 2, `Makefile` and `.gitignore`. 42 − 14 + 2 =
-    // 30, and 30 is what the walk reports. The old floor would have kept passing
+    // 30, and 30 is what the census counts. The old floor would have kept passing
     // while a third of the inspectable surface disappeared.
+    //
+    // The margin is 4 and it is chosen, not derived — there is no rule that fixes
+    // it, and saying otherwise would be printing arithmetic that does not close.
+    // What makes 4 safe is that this floor is not the instrument that catches a
+    // directory disappearing: the set comparison and the per-directory floors
+    // below do that, and they trip on losses far smaller than 4. This number only
+    // has to catch diffuse attrition across the tree.
     //
     // `.yaml` adds nothing to that count today: this repository's only workflow
     // is `.yml`. It is admitted so that renaming a workflow to the other spelling
@@ -1170,6 +1214,9 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // set fails it too; and a directory that merely shrinks fails its floor.
     let mut per_directory: BTreeMap<String, usize> = BTreeMap::new();
     for path in &sources {
+        if !tracked.contains(path) {
+            continue;
+        }
         let Ok(relative) = path.strip_prefix(&root) else {
             continue;
         };

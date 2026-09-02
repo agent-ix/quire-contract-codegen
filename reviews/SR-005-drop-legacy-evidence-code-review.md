@@ -145,6 +145,8 @@ material and both made `make ci` fail.
 | FND-521 | medium | the re-derived floor was total-only. `scripts` and `tests` are five files each and `src` is four, so a whole directory could vanish and move the total by less than ordinary churn | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-522 | high | the first per-directory guard read its floors from a hardcoded list, so deleting an entry removed the directory from the check and left the test green. A guard built from the same list the walk uses cannot catch that list shrinking | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-523 | low | the floor derivation credited `.yaml` with part of the population increase; both added files are extensionless | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-524 | medium | the census counted from the directory walk, so untracked scratch could inflate the population and restore headroom that real deletions had consumed. `proptest-regressions/*.txt` and a stray root `.json` are both admitted by the extension filter | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-525 | low | the floor comment stated a margin as though it were derived, when no rule fixes it | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 
 ## Dispositions
 
@@ -166,6 +168,8 @@ material and both made `make ci` fail.
 | FND-520 | **FIXED**. See "The sealed record, re-read last" above |
 | FND-521 | **FIXED**. A per-directory guard was added alongside the total, then rebuilt on discovery after probing found the defect below |
 | FND-522 | **FIXED**. The first per-directory guard read its floors from a hardcoded list and looked each directory up with `unwrap_or(0)`. Deleting the `scripts` entry from that list left `tc_013` green. The guard now compares the **discovered** directory set against a declared one with `assert_eq!` before any floor is applied, so a directory that stops being walked and an entry removed from the declaration both land on the same assertion |
+| FND-524 | **FIXED**. Scanned broadly, counted narrowly. The reference scan still runs over tracked *and* untracked files, because untracked is exactly the state a reintroduced reader is in before anyone `git add`s it; the floors count `git ls-files` only, so scratch cannot vote on whether the census is large enough to prove anything. Probed in both directions |
+| FND-525 | **FIXED**. The margin of 4 is now stated as chosen rather than derived, with the reason it is safe: whole-directory loss is caught by the set comparison and the per-directory floors, not by this number. Printing arithmetic that does not close is the failure this avoids |
 | FND-523 | **FIXED**. The floor derivation credited `.yaml` with part of the population increase. Measured: both added files are `Makefile` and `.gitignore`, and `.yaml` adds nothing here because this repository's only workflow is `.yml`. It is admitted so a rename cannot carry a workflow out of the census, and it is no longer credited with any of the 2 |
 
 ## Assurance Context
@@ -254,6 +258,8 @@ specific defect it exists to catch, and each was observed to go red:
 | `tc_013` per-directory floor | two files moved out of `scripts/` (5 → 3) | **red**, via the directory floor |
 | `tc_013` directory-set guard | the `scripts` entry deleted from the declared set | **red** — and **green** against the first version of the guard, which is how FND-522 was found |
 | `tc_013` total floor | the whole of `scripts/` moved out (30 → 24) | **red** |
+| `tc_013` removed-name check | an **untracked** `scripts/legacy_evidence_view.py` written back, never `git add`ed | **red** |
+| `tc_013` tracked-only counting | two real files removed from `scripts/`, then four untracked scratch `.json` added to restore the count | **red** — the scratch does not count, which is the point |
 | `make pins` digest check | one byte appended to `engineering_assurance/compatibility.py` | **exit 1**, naming the digest |
 
 It counts no verification state, so it does not put `malformed` back in the census by way of an error
