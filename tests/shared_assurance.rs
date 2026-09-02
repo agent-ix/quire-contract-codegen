@@ -806,10 +806,23 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
     // than anything this repository wrote. `evidence/` used to be excluded here
     // as retained history that legitimately named the schemas its records were
     // sealed against; it is deleted, so the exemption it needed is gone with it.
-    const EXCLUDED: [&str; 3] = [".git", "target", ".venv-assurance"];
-    let Ok(entries) = fs::read_dir(directory) else {
-        return;
-    };
+    // `__pycache__` joins the three: it is generated, it is not authored here,
+    // and its `.pyc` files are binary. They were being read and silently dropped
+    // by the old unreadable-file `continue`, which is how the wide-encoding
+    // assertion below found them.
+    const EXCLUDED: [&str; 4] = [".git", "target", ".venv-assurance", "__pycache__"];
+    // Fail closed, exactly as the file arm does. A silent `return` here was the
+    // directory half of the same class as the unreadable-file skip: an exclusion
+    // no deny-list entry names, which also quietly lowers `inspected` and the
+    // per-directory counts. Measured: a live import inside a chmod-000 directory
+    // was invisible.
+    let entries = fs::read_dir(directory).unwrap_or_else(|error| {
+        panic!(
+            "{} could not be read ({error}); the census cannot claim to have \
+             examined what is inside it",
+            directory.display()
+        )
+    });
     for entry in entries {
         let path = entry.expect("directory entry").path();
         if path.is_dir() {
@@ -849,8 +862,8 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
             "SHA256SUMS",
             ".gitkeep",
         ];
-        const NOT_SCANNED_EXTENSIONS: [&str; 10] = [
-            "lock", "png", "jpg", "jpeg", "gif", "ico", "pdf", "zip", "gz", "golden",
+        const NOT_SCANNED_EXTENSIONS: [&str; 12] = [
+            "lock", "png", "jpg", "jpeg", "gif", "ico", "pdf", "zip", "gz", "golden", "pyc", "pyo",
         ];
         let name = path
             .file_name()
@@ -868,6 +881,13 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
             continue;
         }
         if NOT_SCANNED.contains(&name) || NOT_SCANNED_EXTENSIONS.contains(&extension) {
+            continue;
+        }
+        // Regular files only. A FIFO is not a directory, so it fell through to
+        // `fs::read` and blocked the whole census with no timeout -- denial
+        // rather than escape, but a walk over a working tree should not have an
+        // unbounded step in it.
+        if !path.is_file() {
             continue;
         }
         into.push(path);
@@ -1106,12 +1126,22 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         "git ls-files reported no tracked files; the counts below would be vacuous"
     );
 
-    // Stems, not filenames, wherever the artifact can be named without its
-    // suffix. The reader was listed here by its full filename, and a Python
-    // import of the same module -- the single most likely form of
-    // reintroduction -- spells it without the extension and went straight past.
-    // The suffixed spelling is a substring of the stem, so the stem subsumes it;
-    // listing the filename subsumed nothing.
+    // Stems, not filenames, and the rule is applied to every entry rather than
+    // to the one that prompted it.
+    //
+    // The reader was listed by its full filename, and a Python import of the
+    // same module -- the likeliest form of reintroduction -- spells it without
+    // the extension and went straight past. Fixing that one name and leaving the
+    // other ten was the same mistake at a smaller scale, and it was measured: a
+    // workflow running the deleted test by its Rust function-name spelling was
+    // green, because the list carried only the hyphenated document id while this
+    // repository's own convention for test functions is the underscored form;
+    // and the two schemas kept their full `.schema.json` filenames while the
+    // census that justified deleting them searched by the bare stem.
+    //
+    // So: suffixes stripped, and every name that has a hyphen/underscore pair in
+    // circulation carries both. A suffixed or decorated spelling is a superstring
+    // of the stem, so the stem subsumes it; the filename subsumed nothing.
     //
     // Only the arrays below are exempt from the census, not the prose around
     // them, so this comment must not spell any of the names it is about.
@@ -1124,31 +1154,44 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // It does not defend against someone editing both, and nothing in one file
     // can. It defends against the realistic failure, which is an entry quietly
     // dropped while the control keeps reporting success.
-    const EXPECTED_GONE: [&str; 11] = [
+    const EXPECTED_GONE: [&str; 14] = [
         "COMPAT_RESULT",
         "FR-006-AC-4",
         "PROOF-legacy-compatibility",
         "SUITE-005",
         "TC-011",
         "compat-view",
-        "foundation-evidence-input-v1.schema.json",
-        "foundation-evidence-manifest-v1.schema.json",
+        "compat_view",
+        "foundation-evidence-input-v1",
+        "foundation-evidence-manifest-v1",
         "legacy-compat",
-        "legacy-compatibility.json",
+        "legacy-compatibility",
+        "legacy_compat",
         "legacy_evidence_view",
+        "tc_011",
     ];
     let gone: Vec<&str> = deleted_schemas
         .iter()
-        .map(|path| Path::new(path).file_name().unwrap().to_str().unwrap())
+        .map(|path| {
+            Path::new(path)
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .trim_end_matches(".schema.json")
+        })
         .chain([
             "legacy_evidence_view",
             "legacy-compat",
+            "legacy_compat",
             "PROOF-legacy-compatibility",
             "compat-view",
+            "compat_view",
             "COMPAT_RESULT",
-            "legacy-compatibility.json",
+            "legacy-compatibility",
             "SUITE-005",
             "TC-011",
+            "tc_011",
             "FR-006-AC-4",
         ])
         .collect();
@@ -1217,7 +1260,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     let literal_ranges: Vec<(usize, usize)> = [
         ("    for removed in [", "    ] {"),
         ("    let deleted_schemas = [", "    ];"),
-        ("    const EXPECTED_GONE: [&str; 11] = [", "    ];"),
+        ("    const EXPECTED_GONE:", "    ];"),
         (
             "    let gone: Vec<&str> = deleted_schemas",
             "        .collect();",
@@ -1268,6 +1311,19 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
                 path.display()
             )
         };
+        // Interleaved NULs mean a wide encoding, and `from_utf8_lossy` turns a
+        // UTF-16 spelling of any forbidden name into `l\0e\0g\0...` that no
+        // substring ever matches. Measured: a UTF-16 live import was invisible while the
+        // stray-byte case was caught. Rust would reject such a source file, but
+        // Python's `json` decoder autodetects UTF-16 and this repository reads
+        // JSON configuration from Python, so it is refused rather than scanned
+        // badly.
+        assert!(
+            !bytes.windows(2).any(|pair| pair[1] == 0 && pair[0] != 0),
+            "{} looks like a wide encoding (interleaved NUL bytes). The census \
+             matches byte substrings and would silently see nothing in it",
+            path.display()
+        );
         let source = String::from_utf8_lossy(&bytes).into_owned();
         if tracked.contains(path) {
             inspected += 1;
@@ -1496,9 +1552,14 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
             continue;
         }
         let statement = line.split('#').next().unwrap_or("").trim();
-        for form in ["include ", "-include ", "sinclude "] {
+        // Matched on the directive word, not on `"include "` with a trailing
+        // space: make honours `include<TAB>file.mk` just as happily, and a
+        // one-character change put `.IGNORE:` back through an include with this
+        // test green.
+        let directive = statement.split_whitespace().next().unwrap_or("");
+        for form in ["include", "-include", "sinclude"] {
             assert!(
-                !statement.starts_with(form),
+                directive != form,
                 "the Makefile includes another file, which the directive scan below \
                  does not follow: {line}"
             );
@@ -1537,7 +1598,18 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
                  failing the build: {line}"
             );
         }
-        let assigns_shell = statement
+        // `override` and `export` are stripped first. Without that,
+        // `override SHELL := /usr/bin/true` split to the target
+        // `"override SHELL"` and passed -- and `override` is this Makefile's own
+        // house spelling, used for six variables already, so it is the likely
+        // form rather than an exotic one. Measured: with it prepended, a failing
+        // recipe exited 0 and this test stayed green.
+        let bare = statement
+            .strip_prefix("override ")
+            .or_else(|| statement.strip_prefix("export "))
+            .unwrap_or(statement)
+            .trim_start();
+        let assigns_shell = bare
             .split_once([':', '=', '?'])
             .map(|(target, _)| target.trim() == "SHELL")
             .unwrap_or(false);

@@ -188,7 +188,7 @@ acceptance criterion:
 | FND-604 | **FIXED** in all five. `planning/foundation-gap-analysis.md` is **ACCEPTED** unchanged as a dated historical record |
 | FND-605 | **FIXED**. The load-bearing clause is the live-schema assertion over three present files, plus a reference census over 31 tracked files; the absence clause corroborates rather than carries |
 | FND-606 | **FIXED**. Floor re-derived at `>= 27` against a measured 31, plus a directory-set guard and per-directory floors. The first per-directory guard read its floors from a hardcoded list and could not catch that list shrinking; it was probed, found green on a deleted entry, and rebuilt on discovery — SR-005 FND-522. Every figure was taken from the walk, with both sides on the same deny-list filter: 45 − 14 + 0 = 31, and the census counts 31 |
-| FND-609 | **FIXED**. `collect_sources` admits extensionless sources by name and `.yaml` alongside `.yml`. Reproduced before fixing: the deleted target appended to the `Makefile` left the census green |
+| FND-609 | **FIXED**. `collect_sources` was changed to see the Makefile, and has since become a deny-list that subsumes the extensionless and `.yaml` cases. Reproduced before fixing: the deleted target appended to the `Makefile` left the census green |
 | FND-610 | **FIXED**. The sealed record was re-read last against every claim corrected elsewhere; SR-005 tabulates the three |
 | FND-607 | **ACCEPTED**. Recorded in FR-006-AC-5, MP-001, `assurance/README.md`, `CLAUDE.md` and a TC-012 absence assertion. It is a reduction, and it is stated as one |
 | FND-608 | **ACCEPTED**. Issues #2 and #5 own it. No proof obligation was created for either: a proof obligation whose subject does not exist is the most complete false green available |

@@ -220,6 +220,23 @@ def adapt_conformance(raw: str) -> dict[str, Any]:
                 "traceIds": list(row.get("traceIds", [])),
             }
         )
+    # Every validated row reaches the transcript. This is the other half of the
+    # undecodable-row probe and it was missing: that probe truncates each row and
+    # requires a refusal naming it, which proves the adapter *enforces* on every
+    # row. It says nothing about the happy path, so an adapter that validated all
+    # nine rows and then dropped one before this list passed all eight probes
+    # while sealing eight entries out of nine -- measured, chain green.
+    #
+    # `accepts-the-real-run` recorded the entry count in its detail and compared
+    # it to nothing; the number that would have caught this was printed and
+    # discarded.
+    if len(entries) != len(lines):
+        raise ChainError(
+            f"the adapter transcribed {len(entries)} entries from {len(lines)} rows. "
+            "A row that is validated and then dropped is a row missing from the "
+            "sealed transcript, which is the failure the truncation probe is "
+            "written against and cannot see."
+        )
     return {"entries": entries}
 
 
@@ -1093,8 +1110,17 @@ def adapter_probes(workspace: Path) -> list[dict[str, Any]]:
         {
             "probe": "accepts-the-real-run",
             "state": "pass",
-            "matched": bool(bound),
-            "detail": {"bound": len(bound), "entries": len(transcribed["entries"])},
+            # The entry count is compared, not merely printed. It was in this
+            # detail already and nothing read it, so the one number that would
+            # have caught an adapter dropping a validated row was reported and
+            # discarded.
+            "matched": bool(bound)
+            and len(transcribed["entries"]) == len([line for line in stream.splitlines() if line.strip()]),
+            "detail": {
+                "bound": len(bound),
+                "entries": len(transcribed["entries"]),
+                "rows": len([line for line in stream.splitlines() if line.strip()]),
+            },
         }
     )
 
