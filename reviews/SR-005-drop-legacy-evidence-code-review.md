@@ -3,7 +3,7 @@ id: SR-005
 title: Drop legacy evidence code review
 type: SpecReview
 analysis: code-review
-scope: "agent-ix/quire-contract-codegen#16 at 4f50940; the deletion of the retained evidence tree and everything that served it, and the disposition of every finding from the independent adversarial review"
+scope: "agent-ix/quire-contract-codegen#16, branch chore/drop-legacy-evidence; the deletion of the retained evidence tree and everything that served it, and the disposition of every finding from the independent adversarial review"
 review_set: all
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-006
@@ -164,6 +164,17 @@ the first round's fixes had themselves introduced defects. It found two blockers
 | FND-709 | low | the census probe was not removed when the loop panicked, and was not gitignored — a failing gate littering the tree with a file `git add -A` would commit | `tests/shared_assurance.rs`, `.gitignore` | correct-requirement-no-evidence |
 | FND-710 | medium | SR-005 and SR-006 carried a stale claim boundary and superseded measurements | `reviews/SR-005-…`, `reviews/SR-006-…` | wrong-requirement |
 | FND-711 | low | AA-001's Sufficiency Decision **redefined** "retained measurements" onto a weaker referent while `planning/release-decision.md` struck the identical item, and neither disclosed the inconsistency | `spec/assurance/AA-001-codegen-argument.md` | wrong-requirement |
+| FND-801 | high | one non-UTF-8 byte made a file invisible to the census *and* to the count. `read_to_string` returned `Err` and the loop `continue`d — an unnamed silent exclusion that no deny-list entry covers, already dropping three `__pycache__` files, and eroding the floors at the same time | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-802 | high | `gone` named the reader by filename, so a Python import of the same module — the most likely form of reintroduction — spelled it without the suffix and passed | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-803 | high | the undecodable-row probe pinned rows 1 and 2 of a nine-row stream, so an adapter enforcing only `number <= 2` and dropping the rest passed all eight probes while silently transcribing 8 entries from 9 | `scripts/assurance_chain.py` | correct-requirement-no-evidence |
+| FND-804 | medium | nothing asserted the census probe was untracked. Committing it restored the FND-528 defect exactly | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-805 | medium | the probe carried one of nine forbidden names, so `gone` could be reduced to that one entry and the control still agreed — FND-522's shape, fixed for directories and left standing for names | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-806 | medium | the change-declaration exemption compared a bare basename, so any `change-assurance.json` anywhere in the tree bought a whole-file exemption | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-807 | medium | SR-005 and SR-006 still carried superseded census figures and a claim boundary naming a parent commit — which is what FND-710 records as fixed | `reviews/SR-005-…`, `reviews/SR-006-…` | wrong-requirement |
+| FND-808 | low | the FND-708 correction was appended rather than substituted, leaving a sentence asserting both readings | `reviews/SR-006-…` | wrong-requirement |
+| FND-809 | low | the exempt span ran ~131 lines and covered executable statements, so a live invocation of the deleted reader inserted among them was exempt | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-810 | low | the Makefile directive scan reads one file, so `.IGNORE:` reached through an `include` left the test green while `make` swallowed a failing recipe | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-811 | low | `subject.scope` is a strict superset of the diff — `examples`, `plan` and `src` are declared and untouched | `assurance/change-assurance.json` | wrong-requirement |
 | FND-528 | high | the control written to close FND-527 was itself a tautology, in two successive forms. It asserted a *fresh* `collect_sources` call could see an untracked file, which is a fact about the walker; narrowing the census left it green. Rewritten to assert on `sources`, it was still green, because anything narrowing the set between collection and use slips underneath | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 
 ## Dispositions
@@ -200,13 +211,23 @@ the first round's fixes had themselves introduced defects. It found two blockers
 | FND-708 | **FIXED** in both places |
 | FND-709 | **FIXED**. An RAII drop guard removes the probe even when the loop panics, and `.gitignore` names it. Verified: after a deliberately failing run the file is absent |
 | FND-711 | **FIXED**. AA-001 now strikes the item exactly as `planning/release-decision.md` does, and says so |
+| FND-801 | **FIXED**. Files are read as bytes and decoded with `from_utf8_lossy`; a file the filter admitted but that cannot be *read* now panics rather than being skipped. Probed: the same reader invocation with one `\xe9` in a comment is red |
+| FND-802 | **FIXED**. `gone` carries the module **stem**, which subsumes the suffixed spelling. Probed: a Python import of the stem is red |
+| FND-803 | **FIXED**. The probe truncates **every** row in turn — nine runs — and requires each refusal to name that row and no other. Probed: an adapter enforcing only rows 1–2 now reports 2/9 and the chain goes red; so does a fixed wrong row |
+| FND-804 | **FIXED**. One assertion that the probe is untracked, immediately after the `git ls-files` block. Probed with the reviewer's exact mutation: red |
+| FND-805 | **FIXED**. The probe carries every name in `gone`, the control requires each to have been matched, and `EXPECTED_GONE` is an independent second statement of the list that a single-line deletion lands on. It does not defend against a coordinated edit of both, and the comment says so — nothing in one file can |
+| FND-806 | **FIXED**. Compared by full path |
+| FND-807, FND-808 | **FIXED**. Figures corrected to 31 / floor 27; the schema-digest sentence is substituted rather than appended. The claim boundary now names the branch and states the one-commit lag explicitly, because a document cannot name the commit that contains it and naming a superseded parent is worse than naming none |
+| FND-809 | **FIXED**. Three disjoint ranges over the literal declarations, with an ordering assertion. Probed: a live invocation inserted where the old span reached is red. Prose in this file is no longer exempt either, which caught four of my own comments |
+| FND-810 | **FIXED**. The Makefile is asserted to declare no `include`. Probed: `.IGNORE:` reached through one is red |
+| FND-811 | **ACCEPTED**. `subject.scope` declares the *subject area* of the record, not a changelog. `examples`, `plan` and `src` are in scope for a change to this repository's assurance surface whether or not this particular diff touched them, and under-declaring was the finding — over-declaring costs nothing and survives a rebase |
 | FND-523 | **FIXED**. The floor derivation credited `.yaml` with part of the population increase. Measured: both added files are `Makefile` and `.gitignore`, and `.yaml` adds nothing here because this repository's only workflow is `.yml`. It is admitted so a rename cannot carry a workflow out of the census, and it is no longer credited with any of the 2 |
 
 ## Assurance Context
 
 **Claim boundary.** That this repository no longer retains evidence, that nothing surviving needs
 what was removed, and that no claim resting on the deleted records was restated more weakly. It is a
-claim about the tree at `4f50940` and about nothing else.
+claim about the final head of `chore/drop-legacy-evidence` and about nothing else. That head is recorded in the merge comment on PR #17 rather than here: a document cannot name the commit that contains it, and three earlier drafts of this line named a parent that had already been superseded, which is worse than naming none.
 
 **Authoritative policy.** `agent-ix/engineering-assurance#7`, the "Preservation constraint released
 for the pre-stable phase" section. The decision is the repository owner's, taken on 2026-09-02; an
@@ -229,7 +250,7 @@ producer, and the three-run PATH probe with its control still asserts it.
 **Retained-output identity.** There is none, and that is the point of the change. The Quoin store
 lives under `target/` and is ignored.
 
-## Gate results at `4f50940`
+## Gate results at the final head
 
 | Gate | Result |
 |---|---|
@@ -335,8 +356,8 @@ review ended up working to:
   narrowing between collection and use. Only asserting on `scanned`, recorded inside the loop at the
   moment each file is read, actually holds.
 
-Every check in the table above was run against the specific defect it exists to catch, and **six** of
-them were green until they were not — three found by the first fix cycle and three more by the
+Every check in the table above was run against the specific defect it exists to catch, and **twelve**
+of them were green until they were not — three found by the first fix cycle and three more by the
 independent re-review of the fixes themselves (FND-701, FND-702, FND-704). The re-review's summary of
 its own finding is the sharpest statement of it:
 
@@ -354,6 +375,6 @@ population that was just deleted is satisfied by a repository that deleted every
 carry the criterion alone.
 
 It does not. Three live schemas are asserted **present and still named by `src/oracle.rs`** — a
-non-empty positive population — and the reference census runs over 28 non-markdown readable files
-against a re-derived floor of 24. The deleted-schema clause is a corroborating check, not the
+non-empty positive population — and the reference census runs over 31 tracked non-markdown readable
+files against a re-derived floor of 27. The deleted-schema clause is a corroborating check, not the
 load-bearing one.

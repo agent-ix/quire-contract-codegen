@@ -1303,32 +1303,50 @@ def adapter_probes(workspace: Path) -> list[dict[str, Any]]:
             return str(error)
         return ""
 
-    second_row_error = truncate_at(1)
-    first_row_error = truncate_at(0)
+    # Every row, not the first two.
+    #
+    # The previous form truncated rows 1 and 2 and required each refusal to name
+    # its own row. That killed the line-number tautology it was written for and
+    # generalised to nothing: an adapter enforcing only `number <= 2` and
+    # `continue`-ing afterwards passed all eight probes with the chain green,
+    # while silently dropping a row from the sealed transcript -- 8 entries
+    # transcribed from 9. That is verbatim the failure this probe's own comment
+    # claims to guard against.
+    #
+    # The adapter is pure and the corpus is nine rows, so the honest form is to
+    # truncate each row in turn and require every refusal to name that row and no
+    # other. An early exit, an off-by-one and a hard-coded row all fail it.
+    row_errors = {index: truncate_at(index) for index in range(len(truncation_rows))}
+    own_row_named = []
+    for index, message in row_errors.items():
+        line = index + 1
+        names_own = f"conformance stream line {line} is malformed" in message
+        # Matched on the adapter's own sentence, not on a bare "line N": the
+        # decoder's message is appended verbatim and always says "line 1 column
+        # ...", because it reports a position inside the single line it was
+        # handed. A bare substring test for "line 1" is true in every run and
+        # discriminates nothing -- the same trap one layer down, found by running
+        # it.
+        names_another = any(
+            f"conformance stream line {other + 1} is malformed" in message
+            for other in row_errors
+            if other != index
+        )
+        own_row_named.append(bool(message) and names_own and not names_another)
     results.append(
         {
             "probe": "refuses-an-undecodable-row-by-name",
             "state": None,
-            # Matched on the adapter's own sentence, not on a bare "line N".
-            # The decoder's message is appended verbatim and always says
-            # "line 1 column ..." -- it reports a position within the single line
-            # it was handed -- so a bare substring test for "line 1" is true in
-            # both runs and discriminates nothing. That is the same trap in a
-            # second layer, and it was found by running it.
-            "matched": bool(second_row_error)
-            and bool(first_row_error)
-            and "conformance stream line 2 is malformed" in second_row_error
-            and "conformance stream line 1 is malformed" not in second_row_error
-            and "conformance stream line 1 is malformed" in first_row_error
-            and "conformance stream line 2 is malformed" not in first_row_error,
+            "matched": all(own_row_named) and len(own_row_named) == len(truncation_rows),
             "detail": {
-                "second_row_error": second_row_error,
-                "first_row_error": first_row_error,
+                "rows_probed": len(truncation_rows),
+                "rows_naming_their_own_row_and_no_other": sum(own_row_named),
+                "errors": {str(index + 1): message for index, message in row_errors.items()},
                 "why": (
-                    "the real producer stream, truncated mid-object, through the real "
-                    "adapter, twice at different rows; each refusal must name the row "
-                    "it refused and not the other, so an adapter that names no row or "
-                    "a fixed one fails"
+                    "the real producer stream, truncated mid-object at every row in turn, "
+                    "through the real adapter; each refusal must name the row it refused "
+                    "and no other, so an adapter that names no row, names a fixed one, or "
+                    "stops enforcing after the first few fails"
                 ),
             },
         }

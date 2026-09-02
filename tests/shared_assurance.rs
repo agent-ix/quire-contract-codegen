@@ -860,6 +860,13 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
             .extension()
             .and_then(|value| value.to_str())
             .unwrap_or("");
+        // `EXCLUDED` is consulted on directories only, and in a linked worktree
+        // `.git` is a *file* pointing at the real git directory. Harmless here --
+        // it carries no forbidden name -- but an exclusion should mean what it
+        // says wherever the repository happens to be checked out.
+        if EXCLUDED.contains(&name) {
+            continue;
+        }
         if NOT_SCANNED.contains(&name) || NOT_SCANNED_EXTENSIONS.contains(&extension) {
             continue;
         }
@@ -988,13 +995,6 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
 
     let probe_path = root.join("scripts/.census-probe.py");
     let _probe_guard = ProbeGuard(probe_path.clone());
-    fs::write(
-        &probe_path,
-        "# census probe, written and removed by tc_013; never commit this file.\n\
-         # It names a deleted artifact on purpose: the census must detect it.\n\
-         # legacy_evidence_view.py\n",
-    )
-    .expect("write the census probe");
 
     // The generic machinery is gone, by name.
     for removed in [
@@ -1072,73 +1072,6 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // directories it will look in: an inclusion list is a list of the places a
     // reintroduced validator would have to avoid, and it only has to be
     // incomplete once.
-    // The untracked half of the scan has to be shown to happen, or it is a
-    // property that can be lost silently. Written before the census collects, so
-    // the control can assert against the very set the census uses.
-
-    let mut sources = Vec::new();
-    collect_sources(&root, &mut sources);
-
-    // The claim is that nothing *reads* them, so the assertion runs over the
-    // surfaces that can: code, configuration, and workflow files. Markdown is
-    // excluded and deliberately so — prose cannot read anything, and this
-    // repository's planning documents and reviews are a record of what was
-    // deleted and why.
-    //
-    // Every name a live surface could still reach for, not just the files. An
-    // earlier form of this census listed three basenames and exempted this file
-    // wholesale, and a stale `scripts/legacy_evidence_view.py` in the `make -n ci`
-    // list two hundred lines below survived it: the exemption covered the very
-    // file the dangling reference was in. So the list is wide, and the exemption
-    // is the literal declaration below rather than the file that holds it.
-    let gone: Vec<&str> = deleted_schemas
-        .iter()
-        .map(|path| Path::new(path).file_name().unwrap().to_str().unwrap())
-        .chain([
-            "legacy_evidence_view.py",
-            "legacy-compat",
-            "PROOF-legacy-compatibility",
-            "compat-view",
-            "COMPAT_RESULT",
-            "legacy-compatibility.json",
-            "SUITE-005",
-            "TC-011",
-            "FR-006-AC-4",
-        ])
-        .collect();
-
-    // The one exemption, and it is a range rather than a file: this test
-    // necessarily spells out every name it forbids — in the probe it writes, in
-    // the `removed` list, in `deleted_schemas`, and again in `gone`. The range
-    // covers exactly those declarations and stops at the end of the last one.
-    //
-    // Two things about that boundary were learned the hard way. It stops well
-    // above the `make -n ci` plan assertion further down, which is where a stale
-    // reference to the deleted reader once survived a wholesale exemption of this
-    // whole file. And the matching below is `match_indices`, not `find`: with
-    // `find`, every forbidden name's *first* occurrence is inside this range, so
-    // the loop skipped it and never looked at the rest of the file. That made the
-    // byte range behave identically to the file exemption it replaced, and six
-    // stale references appended below were measured passing.
-    //
-    // Anything naming a deleted artifact outside this range fails, including
-    // prose in this file. That is deliberate: a comment is where a name outlives
-    // the thing it names.
-    let this_file = fs::read_to_string(root.join("tests/shared_assurance.rs")).unwrap();
-    let declaration_start = this_file
-        .find("    // Removed by a drop guard rather than by the line below alone")
-        .expect("the census probe block");
-    let gone_start = this_file
-        .find("let gone: Vec<&str> = deleted_schemas")
-        .expect("the gone declaration");
-    let declaration_end = this_file[gone_start..]
-        .find("        .collect();")
-        .map(|offset| gone_start + offset + "        .collect();".len())
-        .expect("the end of the gone declaration");
-    assert!(
-        declaration_start < gone_start,
-        "the exempt range assumes the probe block precedes the gone declaration"
-    );
 
     // Scanned broadly, counted narrowly, and the two are different populations
     // on purpose.
@@ -1173,8 +1106,145 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         "git ls-files reported no tracked files; the counts below would be vacuous"
     );
 
+    // Stems, not filenames, wherever the artifact can be named without its
+    // suffix. The reader was listed here by its full filename, and a Python
+    // import of the same module -- the single most likely form of
+    // reintroduction -- spells it without the extension and went straight past.
+    // The suffixed spelling is a substring of the stem, so the stem subsumes it;
+    // listing the filename subsumed nothing.
+    //
+    // Only the arrays below are exempt from the census, not the prose around
+    // them, so this comment must not spell any of the names it is about.
+    // Two statements of the same list, compared. The probe below is built from
+    // `gone`, so a `gone` that loses an entry loses it from the probe too and the
+    // control agrees with itself -- measured green, which is the third time this
+    // shape has appeared in this test. `EXPECTED_GONE` is the independent second
+    // statement, and the `assert_eq!` is what a single-line deletion lands on.
+    //
+    // It does not defend against someone editing both, and nothing in one file
+    // can. It defends against the realistic failure, which is an entry quietly
+    // dropped while the control keeps reporting success.
+    const EXPECTED_GONE: [&str; 11] = [
+        "COMPAT_RESULT",
+        "FR-006-AC-4",
+        "PROOF-legacy-compatibility",
+        "SUITE-005",
+        "TC-011",
+        "compat-view",
+        "foundation-evidence-input-v1.schema.json",
+        "foundation-evidence-manifest-v1.schema.json",
+        "legacy-compat",
+        "legacy-compatibility.json",
+        "legacy_evidence_view",
+    ];
+    let gone: Vec<&str> = deleted_schemas
+        .iter()
+        .map(|path| Path::new(path).file_name().unwrap().to_str().unwrap())
+        .chain([
+            "legacy_evidence_view",
+            "legacy-compat",
+            "PROOF-legacy-compatibility",
+            "compat-view",
+            "COMPAT_RESULT",
+            "legacy-compatibility.json",
+            "SUITE-005",
+            "TC-011",
+            "FR-006-AC-4",
+        ])
+        .collect();
+    assert_eq!(
+        gone.iter().copied().collect::<BTreeSet<&str>>(),
+        EXPECTED_GONE.into_iter().collect::<BTreeSet<&str>>(),
+        "the forbidden-name list changed. Every name here is a thing this change \
+         deleted, so removing one silently stops checking for it -- and the probe \
+         is built from this list, so the control below would agree"
+    );
+
+    // The probe carries **every** name in `gone`, and the control below requires
+    // each one to have been matched inside it.
+    //
+    // Carrying one name was enough to show the census sees untracked files and
+    // nothing more. `gone` could then be reduced to that single entry and the
+    // control still agreed, which is precisely the defect the directory guard's
+    // `assert_eq!` was added to fix, left standing here: a declaration whose
+    // shrinking removes the check. Nine of these names are hand-written and
+    // corroborated by nothing else, so the probe corroborates them.
+    let probe_body = format!(
+        "# Census probe, written and removed by tc_013. Never commit this file.\n\
+         # It names every deleted artifact on purpose: the census must detect each.\n\
+         {}\n",
+        gone.iter()
+            .map(|name| format!("# {name}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    fs::write(&probe_path, &probe_body).expect("write the census probe");
+    assert!(
+        !tracked.contains(&probe_path),
+        "the census probe at {} is tracked. The control below is about untracked \
+         files, and a committed probe satisfies it while the census is blind to \
+         the state a reintroduced reader is actually in",
+        probe_path.display()
+    );
+
+    // Collected after the probe is written, so the probe is in the census's own
+    // set rather than in a second walk taken on its behalf.
+    let mut sources = Vec::new();
+    collect_sources(&root, &mut sources);
+
+    // The claim is that nothing *reads* them, so the assertion runs over the
+    // surfaces that can: code, configuration, and workflow files. Markdown is
+    // excluded and deliberately so — prose cannot read anything, and this
+    // repository's planning documents and reviews are a record of what was
+    // deleted and why.
+    //
+    // Every name a live surface could still reach for, not just the files. An
+    // earlier form of this census listed three basenames and exempted this file
+    // wholesale, and a stale reference to the deleted reader in the `make -n ci`
+    // list two hundred lines below survived it: the exemption covered the very
+    // file the dangling reference was in. So the list is wide, and the exemption
+    // is the literal declaration below rather than the file that holds it.
+
+    // The exemptions, and they are three disjoint ranges over literal
+    // declarations rather than one span between the first and the last.
+    //
+    // The span form covered ~131 lines: the `ProbeGuard` impl, three assertion
+    // blocks, the live-schema loop and the `collect_sources` call all sat inside
+    // it, so a live `Command::new` invoking the deleted reader, inserted among
+    // them, was exempt. Measured green. Only the arrays that spell
+    // the forbidden names need an exemption, and only those get one.
+    let this_file = fs::read_to_string(root.join("tests/shared_assurance.rs")).unwrap();
+    let literal_ranges: Vec<(usize, usize)> = [
+        ("    for removed in [", "    ] {"),
+        ("    let deleted_schemas = [", "    ];"),
+        ("    const EXPECTED_GONE: [&str; 11] = [", "    ];"),
+        (
+            "    let gone: Vec<&str> = deleted_schemas",
+            "        .collect();",
+        ),
+    ]
+    .iter()
+    .map(|(open, close)| {
+        let start = this_file
+            .find(open)
+            .unwrap_or_else(|| panic!("the declaration beginning {open:?} moved or was renamed"));
+        let end = this_file[start..]
+            .find(close)
+            .map(|offset| start + offset + close.len())
+            .unwrap_or_else(|| panic!("the declaration beginning {open:?} has no {close:?}"));
+        (start, end)
+    })
+    .collect();
+    for window in literal_ranges.windows(2) {
+        assert!(
+            window[0].1 <= window[1].0,
+            "the exempt ranges overlap or are out of order, so one of them is not the \
+             declaration it is meant to be: {literal_ranges:?}"
+        );
+    }
+
     let mut inspected = 0;
-    let mut probe_detected = false;
+    let mut probe_matched: BTreeSet<&str> = BTreeSet::new();
     for path in &sources {
         let extension = path
             .extension()
@@ -1183,9 +1253,22 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         if extension == "md" {
             continue;
         }
-        let Ok(source) = fs::read_to_string(path) else {
-            continue;
+        // Decoded lossily rather than skipped. `read_to_string` returns `Err` on
+        // the first non-UTF-8 byte, and a `continue` there is a silent exclusion
+        // that no deny-list entry names: one `\xe9` in a comment made a live
+        // invocation of the deleted reader invisible, and three
+        // `__pycache__/*.pyc` files were already being dropped this way. It also
+        // quietly lowered `inspected` and the per-directory counts, eroding the
+        // floors at the same time. An unreadable file is a read failure and is
+        // reported; an undecodable one is decoded as far as it goes.
+        let Ok(bytes) = fs::read(path) else {
+            panic!(
+                "{} was admitted by the filter but could not be read; the census \
+                 cannot claim to have examined it",
+                path.display()
+            )
         };
+        let source = String::from_utf8_lossy(&bytes).into_owned();
         if tracked.contains(path) {
             inspected += 1;
         }
@@ -1198,7 +1281,10 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         // requires every declared argv to appear verbatim in
         // `make -n assurance-inputs`. A dangling path or a stale command in this
         // file fails those, not this census.
-        if path.file_name().and_then(|value| value.to_str()) == Some("change-assurance.json") {
+        // Compared by full path. A bare basename check exempted any
+        // `change-assurance.json` anywhere in the tree, so dropping one into
+        // `scripts/` bought a whole-file exemption for free.
+        if path == &root.join("assurance/change-assurance.json") {
             continue;
         }
         let is_this_file = path.file_name().and_then(|value| value.to_str())
@@ -1216,7 +1302,11 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
                 // Inside this test's own declarations, naming the artifact is the
                 // point. Anywhere else — including elsewhere in this same file —
                 // it is a live reference to something that does not exist.
-                if is_this_file && at >= declaration_start && at < declaration_end {
+                if is_this_file
+                    && literal_ranges
+                        .iter()
+                        .any(|(start, end)| at >= *start && at < *end)
+                {
                     continue;
                 }
                 // The census probe is the positive control, and it is detected
@@ -1227,7 +1317,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
                 // failure. A census that cannot see untracked files, or whose
                 // matching is broken, does not set this flag.
                 if path == &probe_path {
-                    probe_detected = true;
+                    probe_matched.insert(name);
                     continue;
                 }
                 panic!(
@@ -1258,12 +1348,17 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         "the census probe was not cleaned up at {}",
         probe_path.display()
     );
+    let unmatched: Vec<&str> = gone
+        .iter()
+        .copied()
+        .filter(|name| !probe_matched.contains(name))
+        .collect();
     assert!(
-        probe_detected,
-        "the reference census did not detect a deleted name in an untracked file. \
-         Untracked is the state a reintroduced reader is in before anyone commits it, \
-         so a census that cannot see one would not notice until it was too late to \
-         matter — and a census whose matching is broken would not notice at all"
+        unmatched.is_empty(),
+        "the reference census did not detect {unmatched:?} in an untracked file that \
+         contains every forbidden name. Untracked is the state a reintroduced reader is \
+         in before anyone commits it; and a name missing here is a name the census would \
+         not have caught anywhere, so shrinking the list below lands on this assertion"
     );
 
     // Re-derived rather than inherited, and every figure below was taken from the
@@ -1388,6 +1483,27 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         !makefile.contains("MAKEFLAGS"),
         "the Makefile still polices its own execution controls"
     );
+
+    // The directive scan below reads this one file, so an `include` would carry
+    // it past. Measured: a scratch `.mk` declaring `.IGNORE:` plus an `include`
+    // line left this test green while `make` on a failing recipe exited 0. Issue
+    // #14 already records that a green `make ci` says nothing about an *edited*
+    // Makefile; this assertion is about the narrower claim the scan itself
+    // makes, which was false. There is no include in this file, and adding one
+    // has to be a deliberate change that comes here first.
+    for line in makefile.lines() {
+        if line.starts_with('\t') {
+            continue;
+        }
+        let statement = line.split('#').next().unwrap_or("").trim();
+        for form in ["include ", "-include ", "sinclude "] {
+            assert!(
+                !statement.starts_with(form),
+                "the Makefile includes another file, which the directive scan below \
+                 does not follow: {line}"
+            );
+        }
+    }
 
     // Make can be told to ignore failure, and a single line does it. `.IGNORE:`
     // at the top, a `-` prefix on a recipe line, or an assignment to `SHELL` each
