@@ -1263,6 +1263,18 @@ def main(argv: list[str]) -> int:
     )
     arguments = parser.parse_args(argv[1:])
 
+    # Taken here, before this file does anything else, because the census can only
+    # speak for the interval it brackets. Placed lower, an input regenerated
+    # earlier in `main` would appear in both halves and read as untouched — which
+    # is exactly what an adversarial re-probe demonstrated when it sat just above
+    # the try block.
+    #
+    # The two isolation checks are complementary and neither subsumes the other.
+    # This one covers any tool, including one nobody thought to shim, but only
+    # from this point onward. `tests/shared_assurance.rs` covers any point,
+    # including before this line, but only for the tools it names.
+    inputs_before = input_census()
+
     if arguments.adapt is not None:
         try:
             entries = adapt_conformance(Path(arguments.adapt).read_text(encoding="utf-8"))
@@ -1282,7 +1294,6 @@ def main(argv: list[str]) -> int:
     STORE.mkdir(parents=True, exist_ok=True)
     workspace = Path(tempfile.mkdtemp(prefix="run-", dir=STORE))
 
-    inputs_before = input_census()
     try:
         chain = run_chain(arguments.candidate_revision, workspace)
         probes = adapter_probes(workspace)
