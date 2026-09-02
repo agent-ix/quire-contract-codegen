@@ -18,7 +18,7 @@ type: TestMatrix
 | FR-003 | FR-003-AC-2 | TC-007 | 🚧 Planned |
 | FR-003 | FR-003-AC-3 | TC-003 | 🚧 Planned |
 | FR-003 | FR-003-AC-4 | Inspection | 🚧 Planned |
-| FR-004 | FR-004-AC-1 through FR-004-AC-3 | TC-006 | 🚧 Planned |
+| FR-004 | FR-004-AC-1 through FR-004-AC-3, FR-004-AC-5, FR-004-AC-6 | TC-006 | 🚧 Planned |
 | FR-004 | FR-004-AC-4 | Inspection | 🚧 Planned |
 | FR-005 | FR-005-AC-1 | TC-002 | 🚧 Planned |
 | FR-005 | FR-005-AC-2 | TC-001 | 🚧 Planned |
@@ -74,7 +74,7 @@ nothing has been built.
 | TC-003 | Reject unsupported inputs explicitly | Integration | P0 | FR-001-AC-4, FR-003-AC-3, NFR-002-AC-3 | 🚧 Planned |
 | TC-004 | Preserve shaped proptest strategies | Property | P0 | FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4 | 🚧 Planned |
 | TC-005 | Enforce Kani proof dependencies | Analysis | P0 | FR-003-AC-1 | 🚧 Planned |
-| TC-006 | Distinguish vacuity and unexecuted flow | Integration | P0 | FR-004-AC-1, FR-004-AC-2, FR-004-AC-3 | 🚧 Planned |
+| TC-006 | Distinguish vacuity and unexecuted flow | Integration | P0 | FR-004-AC-1, FR-004-AC-2, FR-004-AC-3, FR-004-AC-5, FR-004-AC-6 | 🚧 Planned |
 | TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-003-AC-2, FR-005-AC-4 | 🚧 Planned |
 | TC-008 | Verify the shared component pins through the packaged matrix | Integration | P0 | FR-006-AC-1 | ✅ Covered |
 | TC-009 | Verify Quoin intake without Quoin or Quire executing a producer | Integration | P0 | FR-006-AC-2 | ✅ Covered |

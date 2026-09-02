@@ -15,10 +15,23 @@ ordinary unexecuted flow, and test outcome distinctly per requirement.
 
 ## Test Procedure
 
-Run always-false, always-true, mixed, rejected, discarded, and unexecuted fixtures; export LLVM
-coverage and combine it with source maps and runtime reports.
+Generate always-false, always-true, mixed, implication-free, rejected, discarded, and unexecuted
+fixtures. Produce LLVM JSON with the pinned cargo-llvm-cov command outside the analyzer, then pass the
+retained bytes, tool identity, source root, generated source-map artifact, matching runtime campaign
+report, test outcome, and attestation context to `analyze_coverage`.
+
+Exercise exact positive and zero segment counts for oracle-evaluation and consequent regions,
+multiple consequents with mixed observation, and complete campaign counters. Mutate each input class
+independently: export type/version, absent segments from summary-only output, segment tuple shape,
+missing/duplicate filenames, parent-traversing or ambiguous paths, source-map digest, requirement or
+revision identity, and invalid attestation context. Use the pinned quire-contract-runtime
+`CampaignReport` type rather than constructing a caller-owned counter lookalike.
 
 ## Expected Results
 
-An unobserved consequent cannot claim exercised coverage, vacuity is explicit, and unrelated
-unexecuted control flow receives a distinct classification with complete tool/source-map identity.
+An evaluated always-false implication is vacuous; a never-evaluated clause is unexecuted; a mixed
+multi-implication clause is partially exercised; and only complete consequent observation is
+exercised. An implication-free clause is never labeled vacuous. Accepted, rejected, failed, and
+discarded counts plus test outcome remain unchanged in every report. Each valid report contains exact
+tool, export-format, export-digest, source-map-digest, schema, requirement, and revision identity.
+Every malformed or mismatched input returns a stable diagnostic and no report or attestation.
