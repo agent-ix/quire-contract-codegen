@@ -147,6 +147,8 @@ material and both made `make ci` fail.
 | FND-523 | low | the floor derivation credited `.yaml` with part of the population increase; both added files are extensionless | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-524 | medium | the census counted from the directory walk, so untracked scratch could inflate the population and restore headroom that real deletions had consumed. `proptest-regressions/*.txt` and a stray root `.json` are both admitted by the extension filter | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-525 | low | the floor comment stated a margin as though it were derived, when no rule fixes it | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-526 | high | the census filter was an allow-list, so it was blind to an extensionless `scripts/reintroduced_reader` and to a `.yaml` one. Naming `Makefile` back by hand fixed one file and left the class | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-527 | medium | the untracked half of the scan had no probe. Narrowing `sources` to tracked files left every assertion passing — a property that had already been lost once could be lost again silently | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 
 ## Dispositions
 
@@ -168,6 +170,8 @@ material and both made `make ci` fail.
 | FND-520 | **FIXED**. See "The sealed record, re-read last" above |
 | FND-521 | **FIXED**. A per-directory guard was added alongside the total, then rebuilt on discovery after probing found the defect below |
 | FND-522 | **FIXED**. The first per-directory guard read its floors from a hardcoded list and looked each directory up with `unwrap_or(0)`. Deleting the `scripts` entry from that list left `tc_013` green. The guard now compares the **discovered** directory set against a declared one with `assert_eq!` before any floor is applied, so a directory that stops being walked and an entry removed from the declaration both land on the same assertion |
+| FND-526 | **FIXED**. The filter is now a deny-list: everything is scanned unless it is non-text or a generated lock/licence, each exclusion named individually and the count in the comment taken from the array length so it cannot drift. Probed: an extensionless reader, a `.yaml` reader and a `Makefile` target all go red |
+| FND-527 | **FIXED**. A self-cleaning positive control writes an untracked `scripts/.census-probe.py` with a marker, requires the scan to have seen it, and deletes it. Probed by narrowing the scan to tracked files: red |
 | FND-524 | **FIXED**. Scanned broadly, counted narrowly. The reference scan still runs over tracked *and* untracked files, because untracked is exactly the state a reintroduced reader is in before anyone `git add`s it; the floors count `git ls-files` only, so scratch cannot vote on whether the census is large enough to prove anything. Probed in both directions |
 | FND-525 | **FIXED**. The margin of 4 is now stated as chosen rather than derived, with the reason it is safe: whole-directory loss is caught by the set comparison and the per-directory floors, not by this number. Printing arithmetic that does not close is the failure this avoids |
 | FND-523 | **FIXED**. The floor derivation credited `.yaml` with part of the population increase. Measured: both added files are `Makefile` and `.gitignore`, and `.yaml` adds nothing here because this repository's only workflow is `.yml`. It is admitted so a rename cannot carry a workflow out of the census, and it is no longer credited with any of the 2 |
@@ -260,6 +264,9 @@ specific defect it exists to catch, and each was observed to go red:
 | `tc_013` total floor | the whole of `scripts/` moved out (30 → 24) | **red** |
 | `tc_013` removed-name check | an **untracked** `scripts/legacy_evidence_view.py` written back, never `git add`ed | **red** |
 | `tc_013` tracked-only counting | two real files removed from `scripts/`, then four untracked scratch `.json` added to restore the count | **red** — the scratch does not count, which is the point |
+| `tc_013` reference census | an **extensionless** `scripts/reintroduced_reader` naming the deleted reader | **red** — **green** under the allow-list, which is how FND-526 was found |
+| `tc_013` reference census | `scripts/reintroduced_reader.yaml` naming the deleted reader | **red** |
+| `tc_013` untracked-scan control | the scan narrowed to tracked files only | **red** |
 | `make pins` digest check | one byte appended to `engineering_assurance/compatibility.py` | **exit 1**, naming the digest |
 
 It counts no verification state, so it does not put `malformed` back in the census by way of an error

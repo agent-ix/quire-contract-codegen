@@ -823,30 +823,47 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
             collect_sources(&path, into);
             continue;
         }
-        // Extension is not a good enough filter on its own, and this was measured
-        // rather than reasoned about. `Makefile` has no extension, so an
-        // extension-only census never saw it — and the Makefile is precisely
-        // where a reintroduced compatibility-view target would live, since a
-        // Make target name can exist nowhere else. Appending the deleted target
-        // verbatim was observed to leave the census green.
+        // Deny-list, not allow-list, and that direction was chosen after an
+        // allow-list was measured failing twice.
         //
-        // `yaml` is here for the same class of reason: GitHub accepts both
-        // `.github/workflows/*.yml` and `*.yaml`, and a census that knows only
-        // one of the two spellings is a census a workflow can be renamed past.
+        // An allow-list is a list of the places a reintroduced reference has to
+        // avoid, and it only has to be incomplete once. `Makefile` has no
+        // extension, so an extension-only filter never saw the one file a Make
+        // target name can live in — appending the deleted compatibility-view
+        // target verbatim was observed to leave the census green. Naming
+        // `Makefile` back explicitly fixed that one file and left the next one:
+        // an extensionless `scripts/reintroduced_reader` is just as invisible to
+        // a filter that admits three names by hand, and a reader is exactly the
+        // kind of thing that gets committed without a suffix.
+        //
+        // So everything is scanned unless there is a reason not to. The reasons
+        // are: it is not text and would never carry a readable reference, or it
+        // is a generated lock or licence whose contents this repository does not
+        // author. Each exclusion is named individually below; the count in this
+        // comment is the length of the array, so it cannot drift from it.
+        const NOT_SCANNED: [&str; 6] = [
+            "Cargo.lock",
+            "LICENSE",
+            "LICENSE-APACHE",
+            "LICENSE-MIT",
+            "SHA256SUMS",
+            ".gitkeep",
+        ];
+        const NOT_SCANNED_EXTENSIONS: [&str; 10] = [
+            "lock", "png", "jpg", "jpeg", "gif", "ico", "pdf", "zip", "gz", "golden",
+        ];
         let name = path
             .file_name()
             .and_then(|value| value.to_str())
             .unwrap_or("");
-        let extension = path.extension().and_then(|value| value.to_str());
-        let extensionless_source = matches!(name, "Makefile" | "Dockerfile" | ".gitignore");
-        if extensionless_source
-            || matches!(
-                extension,
-                Some("py" | "sh" | "rs" | "txt" | "toml" | "yml" | "yaml" | "md" | "json")
-            )
-        {
-            into.push(path);
+        let extension = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
+        if NOT_SCANNED.contains(&name) || NOT_SCANNED_EXTENSIONS.contains(&extension) {
+            continue;
         }
+        into.push(path);
     }
 }
 
@@ -1121,6 +1138,39 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         "git ls-files reported no tracked files; the counts below would be vacuous"
     );
 
+    // The untracked half of the scan has to be shown to happen, or it is a
+    // property that can be lost silently — and it has already been lost once in
+    // this file's history and recovered. Deleting the walk in favour of
+    // `git ls-files` would leave every assertion below still passing while the
+    // census stopped seeing exactly the file a reintroduction lives in first.
+    //
+    // So: write an untracked file carrying a marker, require the scan to have
+    // found it, and delete it. Self-cleaning, and it fails if the scan is
+    // narrowed to tracked files only.
+    let probe_path = root.join("scripts/.census-probe.py");
+    const PROBE_MARKER: &str = "census-probe-marker-do-not-commit";
+    fs::write(&probe_path, format!("# {PROBE_MARKER}\n")).expect("write the census probe");
+    let mut probe_sources = Vec::new();
+    collect_sources(&root, &mut probe_sources);
+    let probe_seen = probe_sources.iter().any(|candidate| {
+        candidate == &probe_path
+            && fs::read_to_string(candidate)
+                .map(|body| body.contains(PROBE_MARKER))
+                .unwrap_or(false)
+    });
+    fs::remove_file(&probe_path).expect("remove the census probe");
+    assert!(
+        !probe_path.exists(),
+        "the census probe was not cleaned up at {}",
+        probe_path.display()
+    );
+    assert!(
+        probe_seen,
+        "the reference scan did not see an untracked file. Untracked is the state a \
+         reintroduced reader is in before anyone commits it, so a scan that only reads \
+         tracked files would not notice one until it was too late to matter"
+    );
+
     let mut inspected = 0;
     for path in &sources {
         let extension = path
@@ -1167,33 +1217,32 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
             );
         }
     }
-    // Re-derived rather than inherited, and every figure below was taken from
-    // the walk and from `git ls-files` rather than from any document describing
-    // the layout. This repository has no `schemas/README.md` or equivalent, and
-    // no number here is sourced from prose.
+    // Re-derived rather than inherited, and every figure below was taken from the
+    // walk and from `git ls-files` rather than from any document describing the
+    // layout. This repository has no `schemas/README.md` or equivalent, and no
+    // number here is sourced from prose.
     //
-    // The floor was `> 20` against a population of 42 tracked non-markdown
-    // readable files, leaving 22 of headroom. This change removes 14 of them —
-    // the reader, its 11 fixtures and the two frozen schemas — and the
-    // extensionless admission adds 2, `Makefile` and `.gitignore`. 42 − 14 + 2 =
-    // 30, and 30 is what the census counts. The old floor would have kept passing
-    // while a third of the inspectable surface disappeared.
+    // Measured with the deny-list above, so both sides are the same filter:
     //
-    // The margin is 4 and it is chosen, not derived — there is no rule that fixes
-    // it, and saying otherwise would be printing arithmetic that does not close.
+    //     origin/main, `evidence/` excluded as it was then   45
+    //     this head                                          31
+    //     removed  14 = 1 reader + 11 fixtures + 2 schemas
+    //     added     0
+    //     45 - 14 + 0 = 31, and the census counts 31
+    //
+    // The old floor was `> 20`, which would have kept passing while a third of
+    // the inspectable surface disappeared.
+    //
+    // The margin is 4 and it is chosen, not derived — no rule fixes it, and
+    // printing arithmetic that does not close would be worse than printing none.
     // What makes 4 safe is that this floor is not the instrument that catches a
     // directory disappearing: the set comparison and the per-directory floors
     // below do that, and they trip on losses far smaller than 4. This number only
     // has to catch diffuse attrition across the tree.
-    //
-    // `.yaml` adds nothing to that count today: this repository's only workflow
-    // is `.yml`. It is admitted so that renaming a workflow to the other spelling
-    // cannot carry it out of the census, which is a different job from making the
-    // number bigger, and it is not credited with any of the 2.
     assert!(
-        inspected >= 26,
+        inspected >= 27,
         "the executable and configuration census is unexpectedly small ({inspected}, \
-         floor 26, measured 30 at the time it was derived) to make this claim"
+         floor 27, measured 31 at the time it was derived) to make this claim"
     );
 
     // A total-only floor is the wrong instrument on a tree this small. `scripts`
@@ -1239,7 +1288,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // read off a document describing the layout.
     let declared: BTreeMap<&str, (usize, usize)> = BTreeMap::from([
         ("<root>", (7usize, 9usize)),
-        (".github", (1, 1)),
+        (".github", (1, 2)),
         ("assurance", (2, 2)),
         ("examples", (1, 1)),
         ("schemas", (3, 3)),
