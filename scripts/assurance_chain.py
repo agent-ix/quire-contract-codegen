@@ -1273,28 +1273,62 @@ def adapter_probes(workspace: Path) -> list[dict[str, Any]]:
     # from the transcript would satisfy "did not appear in the output" while
     # being exactly the failure this guards against, so a refusal that does not
     # name the line is not counted.
-    truncation_lines = [line for line in stream.splitlines() if line.strip()]
-    intact = truncation_lines[0]
-    truncation_lines[0] = intact[: len(intact) // 2]
-    truncation_error = ""
-    try:
-        adapt_conformance("\n".join(truncation_lines))
-    except ChainError as error:
-        truncation_error = str(error)
+    # Two rows are truncated in two separate runs, the second and the first, and
+    # each refusal must name *its own* row. One run cannot show that.
+    #
+    # The earlier form truncated row 1 and asserted `"line 1" in error`. That
+    # condition could not fail: `adapt_conformance` decodes one line at a time, so
+    # a `json.JSONDecodeError` always reports "line 1" of the fragment it was
+    # given, and the adapter interpolates the exception. An adapter naming no row
+    # at all, and one naming a fixed wrong row, both satisfied it -- measured
+    # green in both cases. It was a word-match on the message wearing the costume
+    # of a position check.
+    #
+    # Truncating row 2 and requiring "line 2" is the discriminating form: it fails
+    # for an adapter that reports nothing, one that hard-codes a row, and one that
+    # reports the decoder's line rather than the stream's.
+    truncation_rows = [line for line in stream.splitlines() if line.strip()]
+    if len(truncation_rows) < 2:
+        raise ChainError(
+            "the conformance stream has fewer than two rows, so a probe cannot show "
+            "that a refusal names the row it refused rather than a fixed one"
+        )
+
+    def truncate_at(index: int) -> str:
+        rows = list(truncation_rows)
+        rows[index] = rows[index][: len(rows[index]) // 2]
+        try:
+            adapt_conformance("\n".join(rows))
+        except ChainError as error:
+            return str(error)
+        return ""
+
+    second_row_error = truncate_at(1)
+    first_row_error = truncate_at(0)
     results.append(
         {
             "probe": "refuses-an-undecodable-row-by-name",
             "state": None,
-            "matched": bool(truncation_error)
-            and "line 1" in truncation_error
-            and "malformed" in truncation_error,
+            # Matched on the adapter's own sentence, not on a bare "line N".
+            # The decoder's message is appended verbatim and always says
+            # "line 1 column ..." -- it reports a position within the single line
+            # it was handed -- so a bare substring test for "line 1" is true in
+            # both runs and discriminates nothing. That is the same trap in a
+            # second layer, and it was found by running it.
+            "matched": bool(second_row_error)
+            and bool(first_row_error)
+            and "conformance stream line 2 is malformed" in second_row_error
+            and "conformance stream line 1 is malformed" not in second_row_error
+            and "conformance stream line 1 is malformed" in first_row_error
+            and "conformance stream line 2 is malformed" not in first_row_error,
             "detail": {
-                "truncated_to_bytes": len(truncation_lines[0]),
-                "error": truncation_error,
+                "second_row_error": second_row_error,
+                "first_row_error": first_row_error,
                 "why": (
                     "the real producer stream, truncated mid-object, through the real "
-                    "adapter; the refusal must name the line so a dropped row cannot "
-                    "pass as a refused one"
+                    "adapter, twice at different rows; each refusal must name the row "
+                    "it refused and not the other, so an adapter that names no row or "
+                    "a fixed one fails"
                 ),
             },
         }

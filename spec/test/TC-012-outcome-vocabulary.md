@@ -26,8 +26,7 @@ evidence was their only demonstration here and it is deleted. Neither may be rep
 refusal, because a refusal to produce a state is not a demonstration of one; and `malformed` may not
 be replaced by a producer stream declaring that outcome, because the adapter maps it onto the same
 `fail` and the resulting receipt is indistinguishable from the `fail` case. Require each declared
-negative scenario to name a control that ran, and that the control could fail independently of the
-scenario. Separately, require the generation corpus to have reached more than one non-success
+negative scenario to name a control that ran. Separately, require the generation corpus to have reached more than one non-success
 terminal state, so `unsupported` and `invalid-input` are shown not to have collapsed into one another
 as Interface-001 terminal states.
 

@@ -3,7 +3,7 @@ id: SR-005
 title: Drop legacy evidence code review
 type: SpecReview
 analysis: code-review
-scope: "agent-ix/quire-contract-codegen#16 at 2320c7f; the deletion of the retained evidence tree and everything that served it, and the disposition of every finding from the independent adversarial review"
+scope: "agent-ix/quire-contract-codegen#16 at 4f50940; the deletion of the retained evidence tree and everything that served it, and the disposition of every finding from the independent adversarial review"
 review_set: all
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-006
@@ -115,10 +115,14 @@ Fourteen from the independent adversarial review of `00aa054`, plus three raised
 coordinator against the *fix* rather than the deletion, plus two this repository found in its own
 correction.
 
-Severities are the reviewer's except for FND-501 and FND-502, which the reviewer graded **critical**.
-The SpecReview vocabulary is low/medium/high, so they are recorded as `high` here and the reviewer's
-grade is stated in this sentence rather than quietly lost. Both were live references to deleted
-material and both made `make ci` fail.
+Severities are the reviewers'. Three were graded **critical** by a reviewer and are recorded as
+`high` here because the SpecReview vocabulary is low/medium/high — FND-501 and FND-502 from the first
+round, both live references to deleted material that also made `make ci` fail, and FND-701 from the
+re-review, which found the reference census still defeatable after it was reported fixed. The grade
+is stated here rather than quietly lost.
+
+The FND-7xx block came from an independent re-review commissioned on the exact final head *because*
+the first round's fixes had themselves introduced defects. It found two blockers.
 
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
@@ -149,6 +153,17 @@ material and both made `make ci` fail.
 | FND-525 | low | the floor comment stated a margin as though it were derived, when no rule fixes it | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-526 | high | the census filter was an allow-list, so it was blind to an extensionless `scripts/reintroduced_reader` and to a `.yaml` one. Naming `Makefile` back by hand fixed one file and left the class | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-527 | medium | the untracked half of the scan had no probe. Narrowing `sources` to tracked files left every assertion passing — a property that had already been lost once could be lost again silently | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-701 | high | the byte-range exemption was still a whole-file exemption. The census matched with `find`, which returns the *first* occurrence only, and every forbidden name occurs first inside the exempt declarations — so this file was never examined past them. Six stale references appended to the end were measured green | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-702 | high | the untracked-scan control was a tautology for the third time. `scanned` was recorded at the top of the loop, so a narrowing placed between there and the check that matters left the census blind and the control green | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-703 | medium | `inspected` counted 30, not the 31 the comment and the assert message both claimed, because the change-declaration exemption ran before the increment. The real margin was 3, not 4 — the same class of defect the commit before it set out to remove | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
+| FND-704 | high | the new probe's line condition was inert. `adapt_conformance` decodes one line at a time, so the decoder always reports "line 1" and a bare substring test for it is free. An adapter naming no row, and one naming a fixed wrong row, both passed | `scripts/assurance_chain.py` | correct-requirement-no-evidence |
+| FND-705 | medium | SR-005's mutation table credited the reference census with a red that was actually produced by the `make -n ci` plan assertion. The census did not see that defect | `reviews/SR-005-…` | wrong-requirement |
+| FND-706 | medium | `subject.scope` gained `evidence` but still omitted `reviews`, `README.md` and `CLAUDE.md`, all touched by this change. One instance of FND-506 was fixed out of four | `assurance/change-assurance.json` | correct-requirement-no-evidence |
+| FND-707 | medium | TC-012 gained a procedure step — that each control could fail independently of its scenario — which nothing implements | `spec/test/TC-012-outcome-vocabulary.md` | correct-requirement-no-evidence |
+| FND-708 | low | the TC-001 trace comment and SR-006 claimed "both output schema digests"; only the first output's is asserted | `tests/oracle_generation.rs`, `reviews/SR-006-…` | correct-requirement-no-evidence |
+| FND-709 | low | the census probe was not removed when the loop panicked, and was not gitignored — a failing gate littering the tree with a file `git add -A` would commit | `tests/shared_assurance.rs`, `.gitignore` | correct-requirement-no-evidence |
+| FND-710 | medium | SR-005 and SR-006 carried a stale claim boundary and superseded measurements | `reviews/SR-005-…`, `reviews/SR-006-…` | wrong-requirement |
+| FND-711 | low | AA-001's Sufficiency Decision **redefined** "retained measurements" onto a weaker referent while `planning/release-decision.md` struck the identical item, and neither disclosed the inconsistency | `spec/assurance/AA-001-codegen-argument.md` | wrong-requirement |
 | FND-528 | high | the control written to close FND-527 was itself a tautology, in two successive forms. It asserted a *fresh* `collect_sources` call could see an untracked file, which is a fact about the walker; narrowing the census left it green. Rewritten to assert on `sources`, it was still green, because anything narrowing the set between collection and use slips underneath | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 
 ## Dispositions
@@ -165,7 +180,7 @@ material and both made `make ci` fail.
 | FND-513 | **ACCEPTED**. An artifact of the uncommitted tree at review time, not of the change. The gate is revision-bound and is green on the committed tree |
 | FND-514 | **FIXED**. Not claimed closed. The epic records that it closes as moot once the campaign repositories have dropped their records, and it names four |
 | FND-515 | **FIXED**. A new probe truncates a real row of the real producer stream mid-object and calls the real adapter, requiring an error that names the line. Mutation-tested in both directions — see below |
-| FND-516 | **FIXED**. Floor re-derived from the tree as it stands: `>= 26` against a measured 30, with the arithmetic in the comment and every input taken from the walk |
+| FND-516 | **FIXED**. Floor re-derived from the tree as it stands: `>= 27` against a measured 31, with the arithmetic in the comment and every input taken from the walk |
 | FND-517, FND-518 | **FIXED**. Both were defects in the FND-503..FND-509 fixes and both were caught by `make ci` before merge |
 | FND-519 | **FIXED**. `collect_sources` now admits extensionless sources by name (`Makefile`, `Dockerfile`, `.gitignore`) and `.yaml` alongside `.yml`. Relayed by the campaign coordinator from a sibling's reviewer; reproduced here before fixing, and mutation-tested after |
 | FND-520 | **FIXED**. See "The sealed record, re-read last" above |
@@ -175,13 +190,23 @@ material and both made `make ci` fail.
 | FND-527, FND-528 | **FIXED**. The control writes an untracked `scripts/.census-probe.py`, and asserts against `scanned` — the set the census loop actually read, recorded at the point it reads each file — then deletes the probe. Not against a fresh walk, and not against `sources`: both of those were written, measured green while the census was blind, and discarded. Probed red two ways: narrowing the set between collection and use, and narrowing `collect_sources` itself to tracked files |
 | FND-524 | **FIXED**. Scanned broadly, counted narrowly. The reference scan still runs over tracked *and* untracked files, because untracked is exactly the state a reintroduced reader is in before anyone `git add`s it; the floors count `git ls-files` only, so scratch cannot vote on whether the census is large enough to prove anything. Probed in both directions |
 | FND-525 | **FIXED**. The margin of 4 is now stated as chosen rather than derived, with the reason it is safe: whole-directory loss is caught by the set comparison and the per-directory floors, not by this number. Printing arithmetic that does not close is the failure this avoids |
+| FND-701 | **FIXED**. The census matches with `match_indices` and judges every occurrence on its own. Probed with the reviewer's own mutation — six stale references appended to the end of the file: **red** |
+| FND-702 | **FIXED**, and the form changed rather than the placement. The probe is now an untracked file **carrying a real deleted name**, and it is detected by the same `match_indices` branch that panics on every other file — there is no separate accounting to keep in step, so nothing can narrow the census while the control still agrees. Probed with the reviewer's mutation: **red** |
+| FND-703 | **FIXED**. `inspected` increments where the file is read, before the change-declaration exemption, so it is the walked tracked count. Measured 31, matching the printed derivation |
+| FND-704 | **FIXED**. The probe truncates two different rows in two runs and requires each refusal to carry the adapter's own sentence for *its* row and not the other's. Matching the adapter's sentence rather than a bare `line N` was itself necessary — the decoder's appended message always says "line 1", which is the same trap one layer down. Both reviewer mutations, no-row and fixed-wrong-row, are now **red**, as is dropping the row silently |
+| FND-705, FND-710 | **FIXED**. The mutation row is re-attributed to the assertion that actually produced the red, and the stale figures and claim boundary are corrected |
+| FND-706 | **FIXED**. `reviews`, `README.md` and `CLAUDE.md` added to `subject.scope` |
+| FND-707 | **FIXED**. The unimplemented clause is removed rather than left declared. Adding an independence requirement immediately after a finding about a control that could not fail independently was the wrong direction, and implementing it was not in scope for this change |
+| FND-708 | **FIXED** in both places |
+| FND-709 | **FIXED**. An RAII drop guard removes the probe even when the loop panics, and `.gitignore` names it. Verified: after a deliberately failing run the file is absent |
+| FND-711 | **FIXED**. AA-001 now strikes the item exactly as `planning/release-decision.md` does, and says so |
 | FND-523 | **FIXED**. The floor derivation credited `.yaml` with part of the population increase. Measured: both added files are `Makefile` and `.gitignore`, and `.yaml` adds nothing here because this repository's only workflow is `.yml`. It is admitted so a rename cannot carry a workflow out of the census, and it is no longer credited with any of the 2 |
 
 ## Assurance Context
 
 **Claim boundary.** That this repository no longer retains evidence, that nothing surviving needs
 what was removed, and that no claim resting on the deleted records was restated more weakly. It is a
-claim about the tree at `2320c7f` and about nothing else.
+claim about the tree at `4f50940` and about nothing else.
 
 **Authoritative policy.** `agent-ix/engineering-assurance#7`, the "Preservation constraint released
 for the pre-stable phase" section. The decision is the repository owner's, taken on 2026-09-02; an
@@ -204,7 +229,7 @@ producer, and the three-run PATH probe with its control still asserts it.
 **Retained-output identity.** There is none, and that is the point of the change. The Quoin store
 lives under `target/` and is ignored.
 
-## Gate results at `2320c7f`
+## Gate results at `4f50940`
 
 | Gate | Result |
 |---|---|
@@ -260,7 +285,7 @@ specific defect it exists to catch, and each was observed to go red:
 | `tc_013` reference census | the FND-501 stale `legacy_evidence_view.py` put back in the `make -n ci` list | **red** |
 | `tc_013` reference census | the deleted `compat-view` target appended to the `Makefile` | **red** — and **green** before FND-519 was fixed, which is how FND-519 was found |
 | `tc_013` reference census | a `.github/workflows/probe.yaml` naming the deleted reader | **red** |
-| `tc_013` per-directory floor | two files moved out of `scripts/` (5 → 3) | **red**, via the directory floor |
+| `tc_013` per-directory floor | two files moved out of `scripts/`, 5 → 3 | **red**, via the directory floor |
 | `tc_013` directory-set guard | the `scripts` entry deleted from the declared set | **red** — and **green** against the first version of the guard, which is how FND-522 was found |
 | `tc_013` total floor | the whole of `scripts/` moved out (30 → 24) | **red** |
 | `tc_013` removed-name check | an **untracked** `scripts/legacy_evidence_view.py` written back, never `git add`ed | **red** |
@@ -310,8 +335,16 @@ review ended up working to:
   narrowing between collection and use. Only asserting on `scanned`, recorded inside the loop at the
   moment each file is read, actually holds.
 
-Every check in the table above was run against the specific defect it exists to catch, and three of
-them were green until they were not.
+Every check in the table above was run against the specific defect it exists to catch, and **six** of
+them were green until they were not — three found by the first fix cycle and three more by the
+independent re-review of the fixes themselves (FND-701, FND-702, FND-704). The re-review's summary of
+its own finding is the sharpest statement of it:
+
+> The two checks that carry TC-013 — the reference census and its untracked-scan control — are both
+> still defeatable, and both were reported as fixed.
+
+That is the reason this document lists the mutation for every check rather than asserting that the
+checks work.
 
 ## Empty populations
 

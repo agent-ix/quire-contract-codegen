@@ -63,10 +63,13 @@ deleted under the pre-stable preservation release (`agent-ix/engineering-assuran
 ## Sufficiency Decision
 
 No automated sufficiency decision is recorded. The human release owner must review reconciled
-dependencies, protected CI, the upstream revisions the Measurement Plan records, gap analysis, open
-assumptions, and challenges. "Retained measurements" here means MP-001's recorded revisions and the
-producer results the chain seals, not a retained evidence tree — there is none to review, and a
-sufficiency criterion naming one would be unsatisfiable rather than merely unmet.
+dependencies, protected CI, gap analysis, open assumptions, and challenges.
+
+"Retained measurements" was struck from that list rather than redefined. The retained evidence tree
+it named is deleted, so the item could not be satisfied, and narrowing it onto a different referent
+would be restating a claim over a weaker one. Nothing is substituted for it: this is a human release
+owner's obligation, and `planning/release-decision.md` records the same striking for the same
+reason.
 
 ## Challenges
 

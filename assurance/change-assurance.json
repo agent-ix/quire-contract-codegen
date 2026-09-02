@@ -31,17 +31,20 @@
     "subject": {
       "repository": "agent-ix/quire-contract-codegen",
       "scope": [
-        "src",
+        "CLAUDE.md",
+        "Makefile",
+        "README.md",
+        "assurance",
+        "evidence",
         "examples",
+        "plan",
+        "planning",
+        "reviews",
         "schemas",
         "scripts",
         "spec",
-        "plan",
-        "planning",
-        "tests",
-        "assurance",
-        "Makefile",
-        "evidence"
+        "src",
+        "tests"
       ]
     },
     "source_connections": [

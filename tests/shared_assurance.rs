@@ -975,6 +975,27 @@ fn tc_012_every_demonstrable_verification_outcome_is_demonstrated_and_paired_wit
 fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unreferenced() {
     let root = root();
 
+    // Removed by a drop guard rather than by the line below alone: the census
+    // loop panics on a real finding, and a gate that litters the source tree on
+    // the way out leaves a file a later `git add -A` would commit. `.gitignore`
+    // names it too, belt and braces.
+    struct ProbeGuard(PathBuf);
+    impl Drop for ProbeGuard {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+
+    let probe_path = root.join("scripts/.census-probe.py");
+    let _probe_guard = ProbeGuard(probe_path.clone());
+    fs::write(
+        &probe_path,
+        "# census probe, written and removed by tc_013; never commit this file.\n\
+         # It names a deleted artifact on purpose: the census must detect it.\n\
+         # legacy_evidence_view.py\n",
+    )
+    .expect("write the census probe");
+
     // The generic machinery is gone, by name.
     for removed in [
         "scripts/build_foundation_envelope.py",
@@ -1054,9 +1075,6 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // The untracked half of the scan has to be shown to happen, or it is a
     // property that can be lost silently. Written before the census collects, so
     // the control can assert against the very set the census uses.
-    let probe_path = root.join("scripts/.census-probe.py");
-    const PROBE_MARKER: &str = "census-probe-marker-do-not-commit";
-    fs::write(&probe_path, format!("# {PROBE_MARKER}\n")).expect("write the census probe");
 
     let mut sources = Vec::new();
     collect_sources(&root, &mut sources);
@@ -1090,16 +1108,26 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         .collect();
 
     // The one exemption, and it is a range rather than a file: this test
-    // necessarily spells out every name it forbids — in the `removed` list, in
-    // `deleted_schemas`, and again in `gone`. The range covers those three
-    // declarations and stops at the end of the last one, which is well above the
-    // `make -n ci` plan check below. That matters: the stale
-    // `scripts/legacy_evidence_view.py` this census exists to catch was in that
-    // plan check, and a wholesale exemption of this file is exactly what hid it.
+    // necessarily spells out every name it forbids — in the probe it writes, in
+    // the `removed` list, in `deleted_schemas`, and again in `gone`. The range
+    // covers exactly those declarations and stops at the end of the last one.
+    //
+    // Two things about that boundary were learned the hard way. It stops well
+    // above the `make -n ci` plan assertion further down, which is where a stale
+    // reference to the deleted reader once survived a wholesale exemption of this
+    // whole file. And the matching below is `match_indices`, not `find`: with
+    // `find`, every forbidden name's *first* occurrence is inside this range, so
+    // the loop skipped it and never looked at the rest of the file. That made the
+    // byte range behave identically to the file exemption it replaced, and six
+    // stale references appended below were measured passing.
+    //
+    // Anything naming a deleted artifact outside this range fails, including
+    // prose in this file. That is deliberate: a comment is where a name outlives
+    // the thing it names.
     let this_file = fs::read_to_string(root.join("tests/shared_assurance.rs")).unwrap();
     let declaration_start = this_file
-        .find("    for removed in [")
-        .expect("the removed declaration");
+        .find("    // Removed by a drop guard rather than by the line below alone")
+        .expect("the census probe block");
     let gone_start = this_file
         .find("let gone: Vec<&str> = deleted_schemas")
         .expect("the gone declaration");
@@ -1109,7 +1137,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         .expect("the end of the gone declaration");
     assert!(
         declaration_start < gone_start,
-        "the exempt range assumes the removed list precedes the gone declaration"
+        "the exempt range assumes the probe block precedes the gone declaration"
     );
 
     // Scanned broadly, counted narrowly, and the two are different populations
@@ -1146,7 +1174,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     );
 
     let mut inspected = 0;
-    let mut scanned: BTreeSet<PathBuf> = BTreeSet::new();
+    let mut probe_detected = false;
     for path in &sources {
         let extension = path
             .extension()
@@ -1158,10 +1186,9 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         let Ok(source) = fs::read_to_string(path) else {
             continue;
         };
-        // Recorded here, at the point the census actually reads a file, so the
-        // control below speaks for what was scanned rather than for what was
-        // collected or for what a second walk would have found.
-        scanned.insert(path.clone());
+        if tracked.contains(path) {
+            inspected += 1;
+        }
         // The change declaration is the one document whose job is to say what was
         // deleted, so it necessarily names the obligation, the target and the
         // criteria that went. Exempting it does not weaken the claim, because
@@ -1177,36 +1204,54 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         let is_this_file = path.file_name().and_then(|value| value.to_str())
             == Some("shared_assurance.rs")
             && source == this_file;
-        if tracked.contains(path) {
-            inspected += 1;
-        }
         for name in &gone {
-            let Some(at) = source.find(name) else {
-                continue;
-            };
-            // Inside this test's own `gone` list, naming the artifact is the
-            // point. Anywhere else — including elsewhere in this same file — it
-            // is a live reference to something that does not exist.
-            if is_this_file && at >= declaration_start && at < declaration_end {
-                continue;
+            // `match_indices`, not `find`. `find` returns the first occurrence
+            // only, and in this file every one of these names occurs first inside
+            // the exempt declarations below — so a `find`-based loop `continue`d
+            // on the exemption and never looked at anything after it. That made
+            // the byte range behave exactly like the whole-file exemption it
+            // replaced: six stale references appended to the end of this file
+            // were measured passing. Every occurrence is now judged on its own.
+            for (at, _) in source.match_indices(name) {
+                // Inside this test's own declarations, naming the artifact is the
+                // point. Anywhere else — including elsewhere in this same file —
+                // it is a live reference to something that does not exist.
+                if is_this_file && at >= declaration_start && at < declaration_end {
+                    continue;
+                }
+                // The census probe is the positive control, and it is detected
+                // here rather than asserted about somewhere else. It is a real
+                // untracked file carrying a real deleted name, judged by the real
+                // predicate on the real code path; the only thing special about
+                // it is that finding it is the expected outcome instead of a
+                // failure. A census that cannot see untracked files, or whose
+                // matching is broken, does not set this flag.
+                if path == &probe_path {
+                    probe_detected = true;
+                    continue;
+                }
+                panic!(
+                    "{} references the deleted artifact {name} at byte {at}",
+                    path.display()
+                );
             }
-            panic!(
-                "{} references the deleted artifact {name} at byte {at}",
-                path.display()
-            );
         }
     }
-    // The control for the untracked half of the scan, and it asserts against
-    // `scanned` — the set the loop above actually read — rather than against
-    // `sources`, and certainly not against a fresh call of its own.
+    // The control for the untracked half of the scan.
     //
-    // Both weaker forms were written and both were measured passing while the
-    // census was blind. A second `collect_sources` call verifies the walker can
-    // see an untracked file, which is a fact about the walker and says nothing
-    // about what the census does with it. Asserting on `sources` at collection
-    // time is better and still not enough, because anything that narrows the set
-    // between collection and use slips underneath it — that was observed, green.
-    // Only `scanned` is the census's own answer.
+    // Three weaker forms were written before this one and each was measured
+    // passing while the census was blind. A second `collect_sources` call tests
+    // the walker, not the census. Asserting on the collected `sources` misses
+    // anything that narrows the set afterwards. Asserting on a `scanned` set
+    // recorded at the top of the loop misses anything that narrows it between
+    // there and the check that matters — which is where the narrowing would be.
+    //
+    // The only form that cannot be satisfied by bookkeeping is this one: the
+    // probe is an untracked file carrying a real deleted name, and the flag is
+    // set by the same `match_indices` branch that panics on every other file. To
+    // pass, the census has to have walked to an untracked file, read it, and
+    // matched a deleted name in it. There is no separate accounting to keep in
+    // step.
     fs::remove_file(&probe_path).expect("remove the census probe");
     assert!(
         !probe_path.exists(),
@@ -1214,10 +1259,11 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         probe_path.display()
     );
     assert!(
-        scanned.contains(&probe_path),
-        "the reference census did not scan an untracked file. Untracked is the state a \
-         reintroduced reader is in before anyone commits it, so a census that only reads \
-         tracked files would not notice one until it was too late to matter"
+        probe_detected,
+        "the reference census did not detect a deleted name in an untracked file. \
+         Untracked is the state a reintroduced reader is in before anyone commits it, \
+         so a census that cannot see one would not notice until it was too late to \
+         matter — and a census whose matching is broken would not notice at all"
     );
 
     // Re-derived rather than inherited, and every figure below was taken from the
@@ -1232,6 +1278,13 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     //     removed  14 = 1 reader + 11 fixtures + 2 schemas
     //     added     0
     //     45 - 14 + 0 = 31, and the census counts 31
+    //
+    // `inspected` counts a tracked file once it has been read, before the
+    // change-declaration exemption below, so it is the walked tracked count and
+    // not that count minus the exemptions. An earlier form incremented after the
+    // exemption and reported 30 while the comment claimed 31 — a derivation
+    // beside a threshold that its own arithmetic did not support, which is the
+    // exact defect this comment was rewritten to remove.
     //
     // The old floor was `> 20`, which would have kept passing while a third of
     // the inspectable surface disappeared.
