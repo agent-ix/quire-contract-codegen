@@ -9,7 +9,7 @@
 //! A missing prerequisite is a failure here, never a skip. A gate that stands
 //! down when its dependency is absent reports the same green as one that ran.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -491,14 +491,37 @@ fn producer_shims(directory: &Path, names: &[&str]) -> PathBuf {
         fs::write(
             &path,
             format!(
+                // Every invocation is logged, and each one says which of the two
+                // kinds it is. Asking a tool its version is an observation — it is
+                // what the compatibility matrix's own `observe` column does — and
+                // it is not the thing this test forbids. Asking a tool to build,
+                // compile, test, generate or export is work, and the log must
+                // carry none of it.
+                //
+                // The caller is recorded too, not just the call. `quoin evidence
+                // audit` legitimately shells out to `quire coverage` against its
+                // own scratch repository, so "was quire asked for a coverage
+                // export" is not on its own an answer to "did the driver run a
+                // producer". The parent's command line tells those two apart, and
+                // asserting on it is what closes the hole an adversarial review
+                // found: injecting `subprocess.run(["quire","coverage",...])`
+                // straight into the driver was not detected, because the only
+                // assertion was on the subcommand.
                 "#!/bin/sh\n\
+                 parent=$(tr '\\0' ' ' < /proc/$PPID/cmdline 2>/dev/null)\n\
                  case \"$1\" in\n\
-                 --version|-V) echo \"{name} 9.9.9 (shim)\"; exit 0 ;;\n\
-                 provenance) echo '{{\"cli\":{{\"version\":\"9.9.9\"}},\"engine\":{{\"version\":\"9.9.9\"}}}}'; exit 0 ;;\n\
+                 --version|-V)\n\
+                   echo \"observe $0 $@ <<caller=$parent\" >> {log}\n\
+                   echo \"{name} 9.9.9 (shim)\"; exit 0 ;;\n\
+                 provenance)\n\
+                   echo \"observe $0 $@ <<caller=$parent\" >> {log}\n\
+                   echo '{{\"cli\":{{\"version\":\"9.9.9\"}},\"engine\":{{\"version\":\"9.9.9\"}}}}'\n\
+                   exit 0 ;;\n\
                  esac\n\
-                 echo \"$0 $@\" >> {}\n\
+                 echo \"work $0 $@ <<caller=$parent\" >> {log}\n\
                  exit 97\n",
-                log.display()
+                log = log.display(),
+                name = name,
             ),
         )
         .unwrap();
@@ -514,7 +537,11 @@ fn producer_shims(directory: &Path, names: &[&str]) -> PathBuf {
 fn run_chain_with_path(shims: &Path) -> std::process::Output {
     let inherited = std::env::var("PATH").unwrap_or_default();
     let revision = head_revision();
-    Command::new("python3")
+    // Launched by absolute path on purpose. `python3` is one of the names the
+    // shims replace — the input target runs two of its five producers through it
+    // — and resolving the driver itself through the shimmed PATH would stub the
+    // thing under test instead of the things it must not call.
+    Command::new("/usr/bin/python3")
         .args([
             "scripts/assurance_chain.py",
             "--candidate-revision",
@@ -529,22 +556,33 @@ fn run_chain_with_path(shims: &Path) -> std::process::Output {
 /// Trace: TC-009, FR-006-AC-2
 #[test]
 fn tc_009_the_chain_never_executes_a_producer_and_the_probe_can_prove_it() {
-    // Three runs, because one proves nothing.
+    // Four runs, because one proves nothing and three proved too little.
     //
-    // Run A replaces every producer — cargo, rustup, rustc — with a stub that
-    // logs and fails. The chain must finish, and the log must be empty: not one
-    // producer was invoked.
+    // Run A replaces every producer `make assurance-inputs` actually runs —
+    // `cargo`, `rustup`, `rustc`, and `python3`/`python`, which is how two of the
+    // five producers are invoked — with a stub that logs and fails. The chain must
+    // finish and the log must carry no work.
+    //
+    // The interpreter names are in that list because leaving them out was a real
+    // hole: an adversarial review made the driver regenerate a deleted
+    // `upstream-identity.json` by running `python3 scripts/check_upstream_pins.py`
+    // itself, and every gate here stayed green.
     //
     // Run B is the control. It stubs `quoin`, which the chain is supposed to run,
     // and requires the chain to fail and the log to be non-empty. Without it, an
     // empty log in run A would be equally consistent with PATH never being
-    // consulted at all, which is exactly how this test read in a sibling
-    // repository before an adversarial review caught it.
+    // consulted at all.
     //
-    // Run C reads what Quire is asked to do. Quire is excluded from run A on
-    // purpose, and the exclusion is checked rather than assumed.
+    // Run C reads what Quire is asked to do, and by whom.
+    //
+    // Run D is the total form of the claim, and it does not depend on anyone
+    // having thought to shim the right tool: the driver must not have written into
+    // the directory it reads its inputs from, by any means at all.
     let producers = root().join("target/producer-shims");
-    let producer_log = producer_shims(&producers, &["cargo", "rustup", "rustc"]);
+    let producer_log = producer_shims(
+        &producers,
+        &["cargo", "rustup", "rustc", "python3", "python"],
+    );
     let output = run_chain_with_path(&producers);
     let logged = fs::read_to_string(&producer_log).unwrap_or_default();
     assert!(
@@ -553,9 +591,14 @@ fn tc_009_the_chain_never_executes_a_producer_and_the_probe_can_prove_it() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    let work: Vec<&str> = logged
+        .lines()
+        .filter(|line| line.starts_with("work "))
+        .collect();
     assert!(
-        logged.trim().is_empty(),
-        "the assurance driver asked a producer to do work, not just to name its version:\n{logged}"
+        work.is_empty(),
+        "the assurance driver asked a producer to do work, not just to name its \
+         version:\n{work:#?}"
     );
 
     let tools = root().join("target/tool-shims");
@@ -572,16 +615,21 @@ fn tc_009_the_chain_never_executes_a_producer_and_the_probe_can_prove_it() {
         "the chain succeeded with quoin stubbed out, so it is not actually using it"
     );
 
-    // Run C: what is Quire asked to do?
+    // Run C: what is Quire asked to do, and who asks it?
     //
-    // Shimming `quire` alongside the producers makes run A fail, and the reason is
-    // legitimate: `quoin evidence audit` shells out to `quire coverage --scope
-    // <its own scratch repo> --json`. That is Quoin reading static facts, which is
-    // what the architecture says Quoin does with Quire's export; it is not Quoin
-    // executing a producer. So the claim here is narrower and checkable: every
-    // request made of Quire is a static read. This run's chain is expected to
-    // fail — a shim cannot serve a real export — and that is fine, because what is
-    // being read is the log, not the exit code.
+    // Quire is excluded from run A because `quoin evidence audit` shells out to
+    // `quire coverage --scope <its own scratch repo> --json`. That is Quoin
+    // reading static facts, which is what the architecture says Quoin does with
+    // Quire's export; it is not the driver running a producer. Asserting only that
+    // the subcommand is `coverage` or `provenance` therefore permits the driver to
+    // run `quire coverage` itself, which is exactly the producer command — and an
+    // adversarial review did precisely that and was not caught.
+    //
+    // So the caller is what is asserted. Every invocation whose parent is the
+    // driver must be an observation. A coverage export requested by the driver is
+    // a producer run and is refused; the same request from Quoin is fine.
+    // This run's chain is expected to fail — a shim cannot serve a real export —
+    // and that is fine, because what is being read is the log, not the exit code.
     let quire_shims = root().join("target/quire-shims");
     let quire_log = producer_shims(&quire_shims, &["quire"]);
     let _ = run_chain_with_path(&quire_shims);
@@ -590,13 +638,108 @@ fn tc_009_the_chain_never_executes_a_producer_and_the_probe_can_prove_it() {
         !quire_logged.trim().is_empty(),
         "stubbing quire produced no invocation, so this run observed nothing"
     );
+    let mut driver_calls = 0;
+    let mut other_calls = 0;
     for line in quire_logged.lines().filter(|line| !line.trim().is_empty()) {
-        let subcommand = line.split_whitespace().nth(1).unwrap_or("");
+        let (invocation, caller) = line.split_once("<<caller=").unwrap_or((line, ""));
         assert!(
-            matches!(subcommand, "provenance" | "coverage"),
-            "Quire was asked to do something other than a static read: {line}"
+            !caller.is_empty(),
+            "the shim recorded no caller, so this run cannot tell the driver from \
+             Quoin and proves nothing: {line}"
+        );
+        if caller.contains("assurance_chain.py") {
+            driver_calls += 1;
+            assert!(
+                line.starts_with("observe "),
+                "the driver asked Quire to do work rather than to name its own \
+                 version: {invocation}"
+            );
+        } else {
+            other_calls += 1;
+        }
+    }
+    // Both halves must have happened, or the discrimination is untested. The
+    // driver must have been seen asking Quire something, or the caller check
+    // matched nothing; and something other than the driver must have been seen
+    // asking too, or the exemption that makes this run necessary was never
+    // exercised.
+    assert!(
+        driver_calls > 0,
+        "no Quire invocation was attributed to the driver, so the caller check \
+         matched nothing:\n{quire_logged}"
+    );
+    assert!(
+        other_calls > 0,
+        "every Quire invocation was attributed to the driver, so this run never \
+         exercised the case it exists to permit:\n{quire_logged}"
+    );
+
+    // Run D: the driver wrote nothing into its own input directory.
+    //
+    // Every run above depends on someone having shimmed the tool a driver would
+    // use. This one does not: it digests `target/assurance/` before and after and
+    // requires it unchanged, so a driver that regenerated an input using a tool
+    // nobody named is caught anyway. The driver performs the same census itself
+    // and exits 2 if it fails; this asserts it from outside, against the file
+    // system, so a driver that stopped performing it would still be caught.
+    let inputs = root().join("target/assurance");
+    let before = directory_digests(&inputs);
+    assert!(
+        !before.is_empty(),
+        "target/assurance is empty; run `make assurance-inputs`"
+    );
+    let revision = head_revision();
+    let honest = Command::new("/usr/bin/python3")
+        .args([
+            "scripts/assurance_chain.py",
+            "--candidate-revision",
+            &revision,
+        ])
+        .current_dir(root())
+        .output()
+        .expect("failed to run the assurance chain");
+    assert!(
+        honest.status.success(),
+        "the chain failed on the honest path:\n{}\n{}",
+        String::from_utf8_lossy(&honest.stdout),
+        String::from_utf8_lossy(&honest.stderr)
+    );
+    let after = directory_digests(&inputs);
+    assert_eq!(
+        before, after,
+        "the driver wrote into the directory it reads its inputs from; a driver \
+         that can produce its own inputs can produce a green run out of nothing"
+    );
+}
+
+/// Digest every file under `directory`, keyed by path relative to it.
+fn directory_digests(directory: &Path) -> BTreeMap<String, String> {
+    let mut found = BTreeMap::new();
+    let Ok(entries) = fs::read_dir(directory) else {
+        return found;
+    };
+    for entry in entries {
+        let path = entry.expect("directory entry").path();
+        if path.is_dir() {
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("")
+                .to_owned();
+            for (child, digest) in directory_digests(&path) {
+                found.insert(format!("{name}/{child}"), digest);
+            }
+            continue;
+        }
+        found.insert(
+            path.file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("")
+                .to_owned(),
+            sha256_of(&path),
         );
     }
+    found
 }
 
 /// Trace: TC-010, FR-006-AC-3
@@ -1067,15 +1210,46 @@ fn tc_013_no_local_evidence_framework_remains_and_the_frozen_schemas_bind_nothin
         "scripts/legacy_evidence_view.py",
         "scripts/assurance_chain.py",
         "scripts/check_unsafe_comments.sh",
-        // The test runner itself. Without this line, deleting `test` from the
-        // `ci:` prerequisite list is invisible: `assurance-inputs` still supplies
-        // every script named above, so `make ci` stays green while TC-008 through
-        // TC-013 — the whole enforcement layer for FR-006 — never runs.
-        "test --locked",
     ] {
         assert!(
             planned.contains(required),
             "`make ci` would not run {required}; it is defined but unreachable"
         );
     }
+
+    // The two test runners, told apart.
+    //
+    // Without this, deleting `test` from the `ci:` prerequisite list is invisible:
+    // `assurance-inputs` still supplies every script named above, so `make ci`
+    // stays green while TC-008 through TC-013 — the whole enforcement layer for
+    // FR-006 — never runs.
+    //
+    // Matching the bare string `test --locked` was not enough, and an adversarial
+    // review proved it: `msrv:` is `cargo +1.75.0 test --locked`, so it supplies
+    // that string on its own and `test` could be deleted from `ci:` undetected.
+    // The two are distinguished by the toolchain selector, which is the only thing
+    // that differs between them.
+    let mut stable_runner = false;
+    let mut msrv_runner = false;
+    for line in planned.lines() {
+        if !line.contains("test --locked") {
+            continue;
+        }
+        if line.contains("+1.75.0") {
+            msrv_runner = true;
+        } else {
+            stable_runner = true;
+        }
+    }
+    assert!(
+        stable_runner,
+        "`make ci` would not run `cargo test --locked` on the default toolchain; \
+         the `test` prerequisite is unreachable and the FR-006 gates never run.\n\
+         Plan: {planned}"
+    );
+    assert!(
+        msrv_runner,
+        "`make ci` would not run the MSRV test lane; the `msrv` prerequisite is \
+         unreachable.\nPlan: {planned}"
+    );
 }

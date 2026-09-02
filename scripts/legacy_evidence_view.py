@@ -52,6 +52,40 @@ REQUIRED_STATES = ("passed", "failed", "error", "skipped", "inconclusive", "unav
 # The outcomes map_pgm01_bytes can return. Same argument.
 REQUIRED_OUTCOMES = ("lossy", "incompatible", "unreadable")
 
+# What a declared `kind` obliges the case to have actually observed.
+#
+# `kind` is the label the twelve-state census counts, and it used to be free text
+# that nothing cross-checked: `run_case` asserted the outcome, the record id, the
+# schema version and the reasons, then echoed `kind` back untouched. An
+# adversarial review relabelled two healthy PGM-01 v1 records — one whose check
+# says `fail`, one whose check says `error` — as `malformed` and `unsupported`,
+# and the whole suite stayed green while two of the twelve states were
+# "demonstrated" by records exhibiting neither.
+#
+# A case whose label is not supported by its own observation does not match, so
+# the label cannot be borrowed. A kind this table does not name is refused, because
+# a kind nothing constrains is a kind anything can claim.
+KIND_OBLIGATIONS: dict[str, dict[str, Any]] = {
+    # A positive control is a case where the mechanism read the record as itself
+    # rather than refusing it. That is the claim, and it is what is checked: the
+    # mapping must not have answered with a substitute identity. Two different
+    # positive controls live here — a released record the mapping accepts
+    # outright, and this repository's own retained bytes presented under their own
+    # true digest, which the integrity binding accepts and the schema check then
+    # refuses for an unrelated reason — and both are controls in the same sense.
+    "positive_control": {"record_id_not": ("tampered-source", "unreadable-source")},
+    "failed": {"outcome": "lossy", "state": "failed"},
+    "unavailable": {"outcome": "lossy", "state": "unavailable"},
+    "inconclusive": {"outcome": "lossy", "state": "inconclusive"},
+    "error": {"outcome": "lossy", "state": "error"},
+    "stale": {"outcome": "lossy", "state": "stale"},
+    "not_computed": {"outcome": "unreadable"},
+    "malformed": {"outcome": "unreadable"},
+    "unreadable": {"outcome": "unreadable", "record_id": "unreadable-source"},
+    "unsupported": {"outcome": "incompatible", "reason_contains": "unknown PGM-01 schema version"},
+    "tampered": {"outcome": "incompatible", "record_id": "tampered-source"},
+}
+
 
 class ViewError(RuntimeError):
     """The pinned mapping or its inputs could not be used."""
@@ -243,6 +277,27 @@ def run_case(mapper: Callable[..., dict[str, Any]], case: dict[str, Any]) -> dic
         matched = any(case["expected_reason_contains"] in reason for reason in reasons)
     if matched:
         matched = set(case.get("requires_states", [])) <= set(observed_states)
+    obligation = KIND_OBLIGATIONS.get(case["kind"])
+    if obligation is None:
+        label_supported = False
+    else:
+        label_supported = (
+            ("outcome" not in obligation or view["outcome"] == obligation["outcome"])
+            and ("state" not in obligation or obligation["state"] in observed_states)
+            and (
+                "record_id" not in obligation
+                or view["source_record_id"] == obligation["record_id"]
+            )
+            and (
+                "record_id_not" not in obligation
+                or view["source_record_id"] not in obligation["record_id_not"]
+            )
+            and (
+                "reason_contains" not in obligation
+                or any(obligation["reason_contains"] in reason for reason in reasons)
+            )
+        )
+    matched = matched and label_supported
     return {
         "id": case["id"],
         "kind": case["kind"],
@@ -254,6 +309,7 @@ def run_case(mapper: Callable[..., dict[str, Any]], case: dict[str, Any]) -> dic
         "mapped_states": sorted(set(observed_states)),
         "unmapped_reasons": reasons,
         "matched": matched,
+        "label_supported_by_observation": label_supported,
         "why": case["why"],
     }
 
@@ -310,6 +366,7 @@ def census(mapper: Callable[..., dict[str, Any]]) -> dict[str, Any]:
     uncommitted = uncommitted_evidence_changes()
     before = evidence_census()
     declaration = json.loads(EXPECTATIONS.read_text(encoding="utf-8"))
+    floor = declaration["retained_floor"]
     cases = [run_case(mapper, case) for case in declaration["cases"]]
     retained = retained_report(mapper)
     after = evidence_census()
@@ -322,6 +379,21 @@ def census(mapper: Callable[..., dict[str, Any]]) -> dict[str, Any]:
     misattributed = [
         entry["path"] for entry in retained["entries"] if not entry["source_identity_verified"]
     ]
+    # Retained evidence is immutable and may only grow, so a floor is the right
+    # shape of check and an equality would be wrong. Without it this census
+    # compared the tree to itself: `evidence_files_read` and the test's own walk
+    # both counted whatever was on disk, so they agreed at any size, and the only
+    # structural floor was `retained_envelopes()` raising on an empty glob. An
+    # adversarial review showed 2,203 of 2,205 files and 42 of 44 envelopes could
+    # be dropped in a commit with every gate still green. `git status` catches an
+    # uncommitted deletion; it does not catch a committed one.
+    below_floor = []
+    if len(before) < floor["files"]:
+        below_floor.append(f"{len(before)} evidence files, floor {floor['files']}")
+    if len(retained["entries"]) < floor["envelopes"]:
+        below_floor.append(
+            f"{len(retained['entries'])} retained envelopes, floor {floor['envelopes']}"
+        )
     return {
         "schemaVersion": "quire-contract-codegen.legacy-compatibility-census/v1",
         "mapping_authority": (
@@ -346,6 +418,8 @@ def census(mapper: Callable[..., dict[str, Any]]) -> dict[str, Any]:
         "undemonstrated_outcomes": missing_outcomes,
         "unmatched_cases": unmatched,
         "misattributed_records": misattributed,
+        "retained_floor": floor,
+        "below_retained_floor": below_floor,
         "matched": (
             not unmatched
             and not moved
@@ -353,6 +427,7 @@ def census(mapper: Callable[..., dict[str, Any]]) -> dict[str, Any]:
             and not missing_states
             and not missing_outcomes
             and not misattributed
+            and not below_floor
         ),
     }
 
@@ -405,6 +480,14 @@ def run_mutation_probes(mapper: Callable[..., dict[str, Any]]) -> dict[str, Any]
             view["source_record_id"] = "some-real-record"
         return view
 
+    def losing_states(raw: bytes, **kwargs: Any) -> dict[str, Any]:
+        """Report no mapped states at all, so a kind that needs one cannot earn it."""
+        view = mapper(raw, **kwargs)
+        view["mappings"] = [
+            mapping for mapping in view["mappings"] if mapping["target_field"] != "state"
+        ]
+        return view
+
     probes = {
         "collapse-non-success-states": collapsing,
         "repair-unreadable-outcome": repairing,
@@ -412,6 +495,7 @@ def run_mutation_probes(mapper: Callable[..., dict[str, Any]]) -> dict[str, Any]
         "unbind-tamper-digest": unbinding,
         "drop-source-identity": forgetting_identity,
         "blur-structural-record-id": blurring_record_id,
+        "erase-mapped-states": losing_states,
     }
     results = []
     for name, degraded in probes.items():
@@ -459,6 +543,11 @@ def main(argv: list[str]) -> int:
         print(
             f"retained envelopes: {retained['count']} "
             f"{retained['declared_schema_versions']} -> {retained['outcomes']}"
+        )
+        print(
+            f"retained floor: {report['retained_floor']['files']} files / "
+            f"{report['retained_floor']['envelopes']} envelopes; below floor: "
+            f"{report['below_retained_floor'] or 'no'}"
         )
         print(
             f"evidence files read: {report['evidence_files_read']}, "

@@ -90,6 +90,11 @@ ROW_RESULTS = {
 # because the strongest thing observed is what the run has to be reported as.
 RESULT_PRECEDENCE = ("failed", "unavailable", "not_computed", "passed")
 
+# The fields `quire coverage --json` declares. A document missing any of them is
+# not a coverage export, whatever else it is. Named rather than counted, because
+# "a populated object" was the earlier rule and `{"junk":[1]}` satisfied it.
+QUIRE_EXPORT_FIELDS = ("totals", "metrics", "engine", "status_lies", "unbacked_rows")
+
 
 class ChainError(RuntimeError):
     """The chain could not be driven. Distinct from a scenario that did not match."""
@@ -445,6 +450,30 @@ class Chain:
 # ---------------------------------------------------------------------------
 
 
+def input_census() -> dict[str, str]:
+    """Digest everything in the producer-output directory.
+
+    The claim "this driver never creates its own inputs" is asserted twice and
+    the two assertions have different reach. `tests/shared_assurance.rs` shims the
+    tools a driver would have to run, which catches a driver that runs a tool
+    someone thought to shim. This catches a driver that produced an input by any
+    means at all, including a tool nobody named.
+
+    An adversarial review found the first assertion alone insufficient: it shimmed
+    cargo, rustup and rustc, and the driver was then made to regenerate a deleted
+    `quire-static-export.json` by running `quire coverage` itself, and a deleted
+    `upstream-identity.json` by running `python3 scripts/check_upstream_pins.py`.
+    Neither tool was shimmed, both runs finished, and every gate stayed green.
+    """
+    if not ASSURANCE_DIR.is_dir():
+        return {}
+    return {
+        path.relative_to(ASSURANCE_DIR).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(ASSURANCE_DIR.rglob("*"))
+        if path.is_file()
+    }
+
+
 def require_inputs() -> dict[str, Path]:
     paths = {}
     for proof_id, (name, _) in INPUTS.items():
@@ -589,10 +618,24 @@ def _derive(proof_id: str, raw: str, path: Path) -> str:
     if proof_id == "PROOF-quire-static-export":
         export = json.loads(raw)
         # Quire's export is a static fact set, not a run, so it has no outcome
-        # field. What it can be held to is that it actually contains the facts
-        # the impact snapshot claims: an empty document is `not_computed`, which
-        # is a different answer from a clean export and must not read as one.
+        # field. What it can be held to is that it is the document it claims to
+        # be. "A populated object" was the earlier rule and an adversarial review
+        # showed `{"junk":[1]}` satisfying it: the chain attested `passed` over a
+        # two-token file while the impact snapshot said `complete`. So the fields
+        # a coverage export actually declares are named, and a document that does
+        # not carry them is `not_computed` — which is a different answer from a
+        # clean export and must not read as one.
+        #
+        # This is a shape check and it is deliberately not a content check. That
+        # the export names every requirement in this repository is TC-010's
+        # assertion, because it is a claim about this repository rather than about
+        # the document, and the chain is not the place that knows the difference.
         if not isinstance(export, dict) or not export:
+            return "not_computed"
+        for required in QUIRE_EXPORT_FIELDS:
+            if required not in export:
+                return "not_computed"
+        if not isinstance(export.get("totals"), dict) or not export["totals"]:
             return "not_computed"
         populated = any(
             isinstance(export.get(key), (list, dict)) and export.get(key) for key in export
@@ -731,11 +774,15 @@ def run_chain(candidate_revision: str, workspace: Path) -> dict[str, Any]:
                 identical,
                 {"retained": str(retained), "bytes": retained.stat().st_size},
             )
+            # The control observes what intake *did*, not what the scenario
+            # measured. Both used to read the same `identical` boolean, which made
+            # the positive control a second printing of the scenario's own result
+            # rather than an independent one.
             control(
                 "intake-accepts-unchanged-bytes",
                 "retained-bytes-changed-after-sealing",
-                identical,
-                {"proof": proof_id},
+                taken.returncode == 0,
+                {"proof": proof_id, "intake_exit": taken.returncode},
             )
 
     # Every producer at this candidate revision reported success, and the
@@ -1235,6 +1282,7 @@ def main(argv: list[str]) -> int:
     STORE.mkdir(parents=True, exist_ok=True)
     workspace = Path(tempfile.mkdtemp(prefix="run-", dir=STORE))
 
+    inputs_before = input_census()
     try:
         chain = run_chain(arguments.candidate_revision, workspace)
         probes = adapter_probes(workspace)
@@ -1244,6 +1292,25 @@ def main(argv: list[str]) -> int:
     finally:
         if not arguments.keep_store:
             shutil.rmtree(workspace, ignore_errors=True)
+
+    # Whatever tool it might have used, the driver did not touch the directory it
+    # reads its inputs from. This is the total form of the claim `require_inputs`
+    # makes in prose, and it is checked rather than asserted.
+    inputs_after = input_census()
+    touched = sorted(
+        name
+        for name in set(inputs_before) | set(inputs_after)
+        if inputs_before.get(name) != inputs_after.get(name)
+    )
+    if touched:
+        print(
+            f"the driver wrote into its own input directory: {touched}. Every file "
+            "under target/assurance/ is producer output and this driver consumes it. "
+            "A driver that can produce its own inputs can produce a green run out of "
+            "nothing.",
+            file=sys.stderr,
+        )
+        return 2
 
     report = {
         "schemaVersion": "quire-contract-codegen.assurance-chain-report/v1",

@@ -21,7 +21,10 @@
       "root": "release",
       "file": "fixtures/verification-semantics/pgm01-v1.json",
       "expected_outcome": "lossy",
-      "requires_states": ["passed", "skipped"],
+      "requires_states": [
+        "passed",
+        "skipped"
+      ],
       "why": "The pinned release's own known-good PGM-01 v1 record. This repository retains none of its own, so without this the mapping would only ever be seen refusing, and a refusal that has never been seen to accept is indistinguishable from a step that never worked."
     },
     {
@@ -30,7 +33,9 @@
       "root": "release",
       "file": "fixtures/verification-semantics/pgm01-v2.json",
       "expected_outcome": "lossy",
-      "requires_states": ["failed"],
+      "requires_states": [
+        "failed"
+      ],
       "why": "The v2 positive control. It also carries the only genuine failed command in the whole census, so failed is demonstrated by a record that really says so rather than by an edit."
     },
     {
@@ -45,7 +50,9 @@
         "occurrences": 1
       },
       "expected_outcome": "lossy",
-      "requires_states": ["failed"],
+      "requires_states": [
+        "failed"
+      ],
       "why": "PGM-01 v1 defines fail and no record in this repository or in the release carries it in v1 shape. One named edit to the passing check produces it, so the state is demonstrated by real bytes rather than asserted."
     },
     {
@@ -60,7 +67,9 @@
         "occurrences": 1
       },
       "expected_outcome": "lossy",
-      "requires_states": ["unavailable"],
+      "requires_states": [
+        "unavailable"
+      ],
       "why": "PGM-01 v1 defines unavailable and no record here or in the release carries it. One named edit produces it. This is the same state a generation producer would emit for a backend it could not reach, in a different vocabulary."
     },
     {
@@ -75,7 +84,9 @@
         "occurrences": 1
       },
       "expected_outcome": "lossy",
-      "requires_states": ["inconclusive"],
+      "requires_states": [
+        "inconclusive"
+      ],
       "why": "PGM-01 v1 defines inconclusive and no record here or in the release carries it. Inconclusive is also one of this crate's own Interface-001 terminal states, which is why it has to stay separable from failed rather than folding into it."
     },
     {
@@ -90,7 +101,9 @@
         "occurrences": 1
       },
       "expected_outcome": "lossy",
-      "requires_states": ["error"],
+      "requires_states": [
+        "error"
+      ],
       "why": "PGM-01 v1 defines error and no record here or in the release carries it. One named edit to the passing check produces it."
     },
     {
@@ -150,7 +163,10 @@
       "kind": "unreadable",
       "source": "fixtures/verification-semantics/pgm01-v1.json",
       "file": "derived-unreadable-truncated.json",
-      "derivation": { "operation": "truncate", "bytes": 512 },
+      "derivation": {
+        "operation": "truncate",
+        "bytes": 512
+      },
       "expected_outcome": "unreadable",
       "requires_states": [],
       "expected_reason_contains": "invalid JSON",
@@ -189,7 +205,9 @@
         "occurrences": 1
       },
       "expected_outcome": "lossy",
-      "requires_states": ["stale"],
+      "requires_states": [
+        "stale"
+      ],
       "why": "A retracted v2 record maps to the stale evidence state. Stale is not failed and not unavailable; a record can be perfectly well formed and still be superseded. This repository retired nine collections under evidence/historical/ for exactly that reason."
     },
     {
@@ -232,16 +250,22 @@
     },
     {
       "id": "retained-historical-envelope-refused",
-      "kind": "stale",
+      "kind": "unsupported",
       "root": "repository",
       "file": "evidence/historical/foundation-2753a4f93301-20260831T203535Z/evidence-envelope.json",
       "expected_outcome": "incompatible",
       "requires_states": [],
       "expected_reason_contains": "unknown PGM-01 schema version",
-      "why": "A retired collection under evidence/historical/, read exactly as it sits on disk. The compatibility view walks the historical tree as well as the authoritative record, because a migration that left three quarters of the retained bytes unread would be claiming more than it checked.",
+      "why": "A retired collection under evidence/historical/, read exactly as it sits on disk. It is refused for its schema family like every other retained envelope, so its kind is `unsupported` and not `stale`: the record is superseded in this repository's own history, but the mapping never gets far enough to say so, and labelling it `stale` was borrowing a state this case does not demonstrate. `stale` is demonstrated by derived-stale-disposition, against a record that really carries a retracted disposition. The compatibility view walks the historical tree as well as the authoritative record, because a migration that left three quarters of the retained bytes unread would be claiming more than it checked.",
       "expected_record_id": "foundation-2753a4f93301-20260831T203535Z",
       "expected_schema_version": "quire.derivation-evidence/v1"
     }
   ],
-  "discrimination": "Where the mapping distinguishes a case by a structured field it sets, that field is what the gate asserts: `source_record_id` is `tampered-source` for a digest mismatch and `unreadable-source` for undecodable bytes, and `source_schema_version` carries the declared version. Two cases remain separable only by the wording of an upstream reason -- a malformed field type and an unknown status both return `unreadable` under the real record id -- and that is the mapping's only discriminator for them, stated here rather than papered over."
+  "discrimination": "Where the mapping distinguishes a case by a structured field it sets, that field is what the gate asserts: `source_record_id` is `tampered-source` for a digest mismatch and `unreadable-source` for undecodable bytes, and `source_schema_version` carries the declared version. Two cases remain separable only by the wording of an upstream reason -- a malformed field type and an unknown status both return `unreadable` under the real record id -- and that is the mapping's only discriminator for them, stated here rather than papered over.",
+  "retained_floor": {
+    "files": 2205,
+    "envelopes": 44,
+    "why": "Retained evidence is immutable and may only grow, so this is a floor and not an equality. Without it the census compared the tree to itself and was satisfied by the tree shrinking: an adversarial review showed 2,203 of 2,205 files and 42 of 44 envelopes could be removed in a commit with every gate still green. `git status --porcelain -- evidence` catches an uncommitted deletion and not a committed one."
+  },
+  "label_discipline": "Every case's `kind` is the label the twelve-state census counts, and `scripts/legacy_evidence_view.py` requires the observation to support it: a `malformed` case must actually read `unreadable`, a `tampered` case must actually carry `source_record_id: tampered-source`, and a `positive_control` must not have been answered with a substitute identity. A kind the table does not name is refused. Before that check, `kind` was free text nothing cross-checked, and relabelling two healthy records was enough to 'demonstrate' two of the twelve states."
 }
