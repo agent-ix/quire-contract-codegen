@@ -1044,16 +1044,27 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         ])
         .collect();
 
-    // The one exemption, and it is a range rather than a file: the `gone`
-    // declaration above necessarily spells out every name it forbids.
+    // The one exemption, and it is a range rather than a file: this test
+    // necessarily spells out every name it forbids, first to assert those files
+    // are absent and then to forbid references to them. The range runs from the
+    // first declaration to the end of the second and no further, so a stale
+    // reference anywhere else in this file — which is exactly what a wholesale
+    // exemption hid last time — is still caught.
     let this_file = fs::read_to_string(root.join("tests/shared_assurance.rs")).unwrap();
     let declaration_start = this_file
+        .find("let deleted_schemas = [")
+        .expect("the deleted_schemas declaration");
+    let gone_start = this_file
         .find("let gone: Vec<&str> = deleted_schemas")
         .expect("the gone declaration");
-    let declaration_end = this_file[declaration_start..]
+    let declaration_end = this_file[gone_start..]
         .find("        .collect();")
-        .map(|offset| declaration_start + offset)
+        .map(|offset| gone_start + offset + "        .collect();".len())
         .expect("the end of the gone declaration");
+    assert!(
+        declaration_start < gone_start,
+        "the exempt range assumes deleted_schemas is declared before gone"
+    );
 
     let mut inspected = 0;
     for path in &sources {
