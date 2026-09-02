@@ -102,23 +102,34 @@ verifies. The claims that rested on those records were removed with them:
   its TM-001 rows, its test and its proof obligation are gone rather than
   restated over a smaller tree.
 - **`agent-ix/engineering-assurance#21`** — the missing `quire.derivation-evidence/v1`
-  mapping — closes as moot rather than as fixed. The records it was about no
-  longer exist here.
-- **`unsupported`** was one of the twelve shared verification states, and on this
-  repository the compatibility census was its only demonstration. It is not in the
-  assurance chain's producer vocabulary and never was, so FR-006-AC-5 withdraws it
-  rather than restating it over a refusal or borrowing the Interface-001 terminal
-  state of the same name. `tests/shared_assurance.rs` asserts it stays absent, so
-  a later change cannot quietly re-acquire it.
+  mapping — no longer has a subject in this repository. The epic records that it
+  closes as moot rather than as fixed once the campaign repositories have dropped
+  their retained records; it names four, so this repository does not close it
+  unilaterally and it remains open upstream at the time of writing.
+- **`unsupported` and `malformed`** were two of the twelve shared verification
+  states. Measured before anything was deleted, per state and per source: the
+  assurance chain alone demonstrated ten, and the compatibility census supplied
+  exactly these two. FR-006-AC-5 now requires ten and both claims are withdrawn.
 
-  **`malformed` did not go with it**, and that is the measurement worth recording.
-  Taken before anything was deleted, per state and per source: the chain alone
-  demonstrated ten of the twelve, and the census supplied `unsupported` *and*
-  `malformed`. `malformed` is a declared member of the adapter's producer outcome
-  vocabulary, so the `attested-malformed` scenario now demonstrates it from a
-  producer stream that really reports it, derived from the real corpus run. Had it
-  simply been dropped, TC-012 would have gone on passing at ten and reported the
-  same green — a gate weakening silently rather than a claim being withdrawn.
+  `unsupported` is not in the assurance chain's producer vocabulary and never was,
+  so there is nothing to restate it over. The generation corpus reaches an
+  `unsupported` *Interface-001 terminal state*, which is a different vocabulary on
+  a different axis and is not borrowed to fill the gap.
+
+  `malformed` is in that vocabulary, and it was still withdrawn — this is the part
+  worth recording, because the first attempt got it wrong. A scenario was added
+  that fed the adapter a producer stream declaring `outcome: malformed`, on the
+  reasoning that a declared key is a state that travels the chain. Measured against
+  the existing `fail` scenario, its receipt reasons were byte-identical:
+  `ROW_RESULTS` and `CONFORMANCE_OUTCOMES` both map `malformed` onto `fail`, which
+  is exactly why the chain's own `non-success-states-stay-distinguishable`
+  scenario could not have included it. It was `attested-failed` under a second
+  name, and it was removed. Ten states that are real beats eleven with one painted
+  on.
+
+  What stops the gate weakening quietly is not a manufactured demonstration. It is
+  `tests/shared_assurance.rs` asserting that both states stay **absent**, so a
+  later change that re-acquires one goes red and has to argue for it.
 
 ## Three schemas remain, and all three are live
 

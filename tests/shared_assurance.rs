@@ -297,8 +297,8 @@ fn tc_009_every_declared_proof_command_is_the_command_make_actually_runs() {
         .expect("proof_obligations");
     assert_eq!(
         obligations.len(),
-        5,
-        "the declaration names {} proof obligations; the chain and this test expect 5",
+        4,
+        "the declaration names {} proof obligations; the chain and this test expect 4",
         obligations.len()
     );
     for proof in obligations {
@@ -832,16 +832,15 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
 /// Trace: TC-012, TC-003, FR-006-AC-5, NFR-002-AC-3
 #[test]
 fn tc_012_every_demonstrable_verification_outcome_is_demonstrated_and_paired_with_controls() {
-    // The shared vocabulary is twelve states. Eleven are demonstrated on this
+    // The shared vocabulary is twelve states. Ten are demonstrated on this
     // repository's intake path and are required here. A state nobody
     // demonstrates is a state nobody would notice the loss of.
-    const REQUIRED: [&str; 11] = [
+    const REQUIRED: [&str; 10] = [
         "pass",
         "fail",
         "unavailable",
         "inconclusive",
         "not-computed",
-        "malformed",
         "partial",
         "stale",
         "suspect",
@@ -849,27 +848,34 @@ fn tc_012_every_demonstrable_verification_outcome_is_demonstrated_and_paired_wit
         "tampered",
     ];
 
-    // `unsupported` is the twelfth and is deliberately absent. Measured on the
-    // pre-deletion tree, per state and per source: the assurance chain alone
-    // reached ten, and the compatibility census over retained evidence supplied
-    // `unsupported` and `malformed`. That census is deleted.
+    // `unsupported` and `malformed` are the other two and are deliberately
+    // absent. Measured on the pre-deletion tree, per state and per source: the
+    // assurance chain alone reached ten, and the compatibility census over the
+    // retained evidence supplied exactly these two. That census is deleted, and
+    // neither state is re-demonstrated here.
     //
-    // `malformed` did not go with it. It is a declared member of the adapter's
-    // producer vocabulary — `ROW_RESULTS` and `CONFORMANCE_OUTCOMES` both name
-    // it — so a producer really reporting it is a state that travels this chain,
-    // and `attested-malformed` demonstrates it the same way `attested-failed`
-    // demonstrates `fail`: by deriving it from the real corpus run. Accepting its
-    // loss would have left this test passing at ten, which is a gate weakening
-    // silently rather than a claim being withdrawn.
+    // `unsupported` is not in the adapter's producer vocabulary and never was. It
+    // was a property of the compatibility mapping — a retained record carrying an
+    // unknown PGM-01 schema version — and nothing on the intake path produces it.
+    // The corpus does reach an `unsupported` *Interface-001 terminal state*, and
+    // borrowing that would be exactly the collapse of two vocabularies this test
+    // exists to prevent.
     //
-    // `unsupported` is not in that vocabulary and never was. It was a property of
-    // the compatibility mapping — a retained record carrying an unknown PGM-01
-    // schema version — and nothing on the intake path produces it. The corpus
-    // does reach an `unsupported` *Interface-001 terminal state*, and borrowing
-    // that would be exactly the collapse of two vocabularies this test exists to
-    // prevent. So the claim went with the evidence rather than being restated
-    // over a weaker substitute.
-    const NOT_DEMONSTRABLE_HERE: [&str; 1] = ["unsupported"];
+    // `malformed` is in that vocabulary, and it was still withdrawn, because
+    // being a declared key is not the same as being distinguishable. Both
+    // `ROW_RESULTS` and `CONFORMANCE_OUTCOMES` map it onto the same `fail`, so a
+    // scenario feeding the adapter a stream declaring `outcome: malformed`
+    // produces receipt reasons byte-identical to the `fail` case — which is why
+    // `non-success-states-stay-distinguishable` could not have included it. Such
+    // a scenario was written, measured, found to be `attested-failed` under
+    // another name, and removed. Keeping it would have held this list at eleven
+    // by painting one on, which is worse than ten that are real.
+    //
+    // Both claims went with the evidence rather than being restated over a weaker
+    // substitute. The protection against a silent weakening is not a manufactured
+    // demonstration; it is the assertion below that both states stay absent, so
+    // re-acquiring either goes red instead of drifting.
+    const NOT_DEMONSTRABLE_HERE: [&str; 2] = ["unsupported", "malformed"];
 
     let report = chain_report();
 
@@ -898,8 +904,10 @@ fn tc_012_every_demonstrable_verification_outcome_is_demonstrated_and_paired_wit
         assert!(
             !demonstrated.contains(state),
             "{state} is demonstrated again; FR-006-AC-5 and MP-001 record it as \
-             having lost its only demonstration with the retained evidence, so \
-             widen the requirement deliberately rather than leaving it understated"
+             having lost its only demonstration with the retained evidence. If a \
+             real demonstration now exists, widen the requirement deliberately — \
+             but check first that the new case is distinguishable in the receipt \
+             and not another state under a second name"
         );
     }
 
@@ -916,7 +924,6 @@ fn tc_012_every_demonstrable_verification_outcome_is_demonstrated_and_paired_wit
         "refuse-an-edited-receipt",
         "stale-candidate-binding",
         "attested-failed",
-        "attested-malformed",
     ] {
         assert!(
             negatives.contains(required),
@@ -1013,13 +1020,42 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // surfaces that can: code, configuration, and workflow files. Markdown is
     // excluded and deliberately so — prose cannot read anything, and this
     // repository's planning documents and reviews are a record of what was
-    // deleted and why. One file is exempt and says why.
-    let mut inspected = 0;
+    // deleted and why.
+    //
+    // Every name a live surface could still reach for, not just the files. An
+    // earlier form of this census listed three basenames and exempted this file
+    // wholesale, and a stale `scripts/legacy_evidence_view.py` in the `make -n ci`
+    // list two hundred lines below survived it: the exemption covered the very
+    // file the dangling reference was in. So the list is wide, and the exemption
+    // is the literal declaration below rather than the file that holds it.
     let gone: Vec<&str> = deleted_schemas
         .iter()
         .map(|path| Path::new(path).file_name().unwrap().to_str().unwrap())
-        .chain(["legacy_evidence_view.py"])
+        .chain([
+            "legacy_evidence_view.py",
+            "legacy-compat",
+            "PROOF-legacy-compatibility",
+            "compat-view",
+            "COMPAT_RESULT",
+            "legacy-compatibility.json",
+            "SUITE-005",
+            "TC-011",
+            "FR-006-AC-4",
+        ])
         .collect();
+
+    // The one exemption, and it is a range rather than a file: the `gone`
+    // declaration above necessarily spells out every name it forbids.
+    let this_file = fs::read_to_string(root.join("tests/shared_assurance.rs")).unwrap();
+    let declaration_start = this_file
+        .find("let gone: Vec<&str> = deleted_schemas")
+        .expect("the gone declaration");
+    let declaration_end = this_file[declaration_start..]
+        .find("        .collect();")
+        .map(|offset| declaration_start + offset)
+        .expect("the end of the gone declaration");
+
+    let mut inspected = 0;
     for path in &sources {
         let extension = path
             .extension()
@@ -1028,19 +1064,25 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         if extension == "md" {
             continue;
         }
-        // This file, because naming the deleted artifacts is the whole of this
-        // test. It reads none of them.
-        if path.file_name().and_then(|value| value.to_str()) == Some("shared_assurance.rs") {
-            continue;
-        }
         let Ok(source) = fs::read_to_string(path) else {
             continue;
         };
+        let is_this_file = path.file_name().and_then(|value| value.to_str())
+            == Some("shared_assurance.rs")
+            && source == this_file;
         inspected += 1;
         for name in &gone {
-            assert!(
-                !source.contains(name),
-                "{} references the deleted artifact {name}",
+            let Some(at) = source.find(name) else {
+                continue;
+            };
+            // Inside this test's own `gone` list, naming the artifact is the
+            // point. Anywhere else — including elsewhere in this same file — it
+            // is a live reference to something that does not exist.
+            if is_this_file && at >= declaration_start && at < declaration_end {
+                continue;
+            }
+            panic!(
+                "{} references the deleted artifact {name} at byte {at}",
                 path.display()
             );
         }
@@ -1146,7 +1188,6 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         "--example generation_conformance",
         "scripts/check_upstream_pins.py",
         "scripts/check_shared_pins.py",
-        "scripts/legacy_evidence_view.py",
         "scripts/assurance_chain.py",
         "scripts/check_unsafe_comments.sh",
     ] {

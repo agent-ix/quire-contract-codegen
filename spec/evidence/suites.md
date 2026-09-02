@@ -38,8 +38,8 @@ that keep the Interface-001 terminal states apart — and its rows carry trace
 bindings the corpus declares per case.
 
 SUITE-003, SUITE-004 and SUITE-006 were previously performed by the deleted
-collector: schema validation, envelope conformance, the local traceability
-reimplementation, and the local verifier. Every one of those concerns moved
+collector, which conflated schema validation and envelope conformance in one
+lane and added the local traceability reimplementation and the local verifier. Every one of those concerns moved
 upstream. Quire is the authority on static specification, obligation and coverage
 facts; Quoin owns intake, retention, audit and receipts.
 

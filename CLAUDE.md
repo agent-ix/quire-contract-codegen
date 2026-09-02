@@ -47,12 +47,14 @@ released the preservation constraint for the pre-stable phase on 2026-09-02; the
 move toward stable releases.
 
 Nothing was rewritten to look as though it still verifies. FR-006-AC-4 and TC-011 are gone rather
-than restated over a smaller tree, and `unsupported` — one of the twelve shared verification states,
-demonstrated here only by the deleted compatibility census — is withdrawn from FR-006-AC-5 rather
-than re-acquired from an adapter refusal. `malformed`, which the same census also supplied, is a
-declared producer outcome and is now demonstrated by the chain instead, because dropping it would
-have left TC-012 passing at ten and reporting the same green — a gate weakening silently rather than
-a claim being withdrawn.
+than restated over a smaller tree. `unsupported` and `malformed` — two of the twelve shared
+verification states, demonstrated here only by the deleted compatibility census — are withdrawn from
+FR-006-AC-5, so this repository demonstrates ten. `unsupported` is not in the adapter's producer
+vocabulary at all. `malformed` is, and was still withdrawn: the adapter maps it onto the same `fail`
+in both tables, so a scenario declaring that outcome yields a receipt byte-identical to the `fail`
+case. One was written, measured, found to be `attested-failed` under another name, and removed. What
+stops the gate weakening quietly is not a manufactured demonstration but TC-012's assertion that both
+states stay absent, so re-acquiring either goes red.
 
 ## Before trusting a green `make ci`
 

@@ -137,20 +137,27 @@ implementation at this revision. There is no suite for them and no proof obligat
 because a proof obligation whose subject does not exist is the most complete false green available.
 Their TM-001 rows stay 🚧 Planned.
 
-The shared verification vocabulary is twelve states and this repository demonstrates eleven. The
-missing one is `unsupported`. Measured on the tree before anything was deleted, per state and per
-source: the assurance chain alone demonstrated ten, and the compatibility census over the retained
-`evidence/` tree supplied `unsupported` and `malformed`. The repository owner released the
+The shared verification vocabulary is twelve states and this repository demonstrates ten. The two it
+does not are `unsupported` and `malformed`. Measured on the tree before anything was deleted, per
+state and per source: the assurance chain alone demonstrated ten, and the compatibility census over
+the retained `evidence/` tree supplied exactly those two. The repository owner released the
 preservation constraint for the pre-stable phase on 2026-09-02
-(`agent-ix/engineering-assurance#7`) and those records are deleted.
+(`agent-ix/engineering-assurance#7`), those records are deleted, and both claims are withdrawn with
+them.
 
-`malformed` is a declared member of the assurance chain's producer outcome vocabulary, so it is
-demonstrated by the `attested-malformed` scenario against a producer stream that really reports it,
-derived from the real corpus run. `unsupported` is not in that vocabulary: it was raised only by the
-compatibility mapping, against a retained record carrying an unknown PGM-01 schema version. Its claim
-is withdrawn rather than restated over an adapter refusal or borrowed from the Interface-001 terminal
-state of the same name, which is a different vocabulary on a different axis. TC-012 asserts the state
-stays absent, so a later change cannot re-acquire it quietly.
+`unsupported` is not in the assurance chain's producer outcome vocabulary and never was; it was
+raised only by the compatibility mapping, against a retained record carrying an unknown PGM-01 schema
+version. The generation corpus reaches an `unsupported` Interface-001 terminal state, which is a
+different vocabulary on a different axis and is not borrowed to fill the gap.
+
+`malformed` is in that vocabulary and was still withdrawn, because a declared key is not a
+distinguishable state. The adapter maps `malformed` onto the same `fail` in both of its tables, so a
+scenario feeding it a stream declaring that outcome produces receipt reasons byte-identical to the
+`fail` case, and the chain's own anti-collapse scenario could not have included it. Such a scenario
+was written, measured against the `fail` case, found to be that case under another name, and removed.
+
+TC-012 asserts both states stay absent. That assertion, not a manufactured demonstration, is what
+stops the gate weakening quietly: re-acquiring either state goes red and has to be argued for.
 
 This measurement plan supports neither a semantic implementation decision nor a release decision, and
 confers no validation, accreditation, or certification.

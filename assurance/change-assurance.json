@@ -25,7 +25,7 @@
   "record": {
     "schema_version": 1,
     "record_type": "change_assurance",
-    "record_id": "quire-contract-codegen/issue-13",
+    "record_id": "quire-contract-codegen/issue-16",
     "revision": 1,
     "parent_digest": null,
     "subject": {
@@ -40,7 +40,8 @@
         "planning",
         "tests",
         "assurance",
-        "Makefile"
+        "Makefile",
+        "evidence"
       ]
     },
     "source_connections": [
@@ -121,7 +122,7 @@
         },
         {
           "id": "FR-006-AC-5",
-          "statement": "Pass, fail, unavailable, inconclusive, not-computed, malformed, partial, stale, suspect, vacuous and tampered remain eleven distinguishable states across the intake path, each demonstrated by a case that produced it, and the generator's own Interface-001 terminal states survive alongside them rather than being collapsed into the attestation's four. The shared vocabulary is twelve. Measured before deletion, per state and per source: the chain alone demonstrated ten and the compatibility census over retained evidence supplied unsupported and malformed. malformed is a declared member of the adapter's producer vocabulary and is now demonstrated by the attested-malformed scenario, derived from the real corpus run, so deleting the census does not weaken this gate to ten. unsupported is not in that vocabulary and was a property of the compatibility mapping alone; its claim is withdrawn with the evidence rather than restated over a refusal or borrowed from the Interface-001 terminal state of the same name, and TC-012 asserts it stays absent.",
+          "statement": "Pass, fail, unavailable, inconclusive, not-computed, partial, stale, suspect, vacuous and tampered remain ten distinguishable states across the intake path, each demonstrated by a case that produced it, and the generator's own Interface-001 terminal states survive alongside them rather than being collapsed into the attestation's four. The shared vocabulary is twelve. Measured before deletion, per state and per source: the chain alone demonstrated ten and the compatibility census over retained evidence supplied exactly unsupported and malformed. Both are withdrawn with that evidence. unsupported is not in the adapter's producer vocabulary and was raised only by the compatibility mapping; the Interface-001 terminal state of the same name is a different vocabulary and is not borrowed. malformed is a declared key but not a distinguishable state: the adapter maps it onto the same fail in both tables, so a scenario declaring that outcome yields a receipt byte-identical to the fail case. Such a scenario was written, measured and removed rather than kept to hold the count at eleven. TC-012 asserts both states stay absent.",
           "source_ids": [
             "FR-006",
             "NFR-002"
@@ -137,6 +138,14 @@
         }
       ],
       "preservation_constraints": [
+        {
+          "id": "PRESERVE-no-retained-evidence",
+          "statement": "This repository retains no evidence of its own and reintroduces none. The evidence/ tree it previously held -- 2,205 files carrying 44 envelopes of quire.derivation-evidence/v1, which the pinned compatibility mapping refused as an unknown PGM-01 schema version -- is deleted by this change, together with the reader that mapped it, its fixtures, the PROOF-legacy-compatibility obligation, the compat-view target, and the two schemas frozen only because retained records named them by SHA-256. The authority is the repository owner's 2026-09-02 release of the preservation constraint for the pre-stable phase, recorded in the \"Preservation constraint released for the pre-stable phase\" section of agent-ix/engineering-assurance#7; the epic's completion criterion and mandatory control were amended before this change. Nothing was rewritten, backdated or re-sealed: FR-006-AC-4, TC-011, SUITE-005 and the obligation were removed rather than restated over a smaller tree. The constraint re-applies unchanged when this repository moves toward stable releases, and evidence retained under it from that point is immutable.",
+          "source_ids": [
+            "NFR-002",
+            "FR-006"
+          ]
+        },
         {
           "id": "PRESERVE-deterministic-generation",
           "statement": "The deterministic Boolean oracle, tri-state harness, and shaped proptest strategy slices keep their byte-identical regeneration, their dual-licence SPDX identity, their requirement/clause traceability, their bounded source rendering and 1,048,576-byte per-clause limit, their source-region maps, and their derivation manifests. Every generated artifact still records the digest of its own bytes.",
@@ -309,8 +318,9 @@
       ]
     },
     "review_workflow": {
-      "run_id": "quire-contract-codegen-issue-13",
+      "run_id": "quire-contract-codegen-issue-16",
       "decision_event_kind": "change_assurance.review_decided"
-    }
+    },
+    "purpose": "What this repository states about the change under issue #16: the deletion of the retained evidence tree and everything that existed only to serve it, under the preservation constraint the repository owner released for the pre-stable phase on 2026-09-02 (the \"Preservation constraint released for the pre-stable phase\" section of agent-ix/engineering-assurance#7). This is a new record rather than a revision of the issue-13 shared-assurance migration record: it is a different change under a different authority, and reusing issue-13's identity would present this content as revision 1 of that declaration. revision is 1 and parent_digest is null because this record has no predecessor under its own id; the issue-13 record was sealed only into an ignored store under target/ and was never persisted, so there is no durable digest to name as a parent and none is invented."
   }
 }

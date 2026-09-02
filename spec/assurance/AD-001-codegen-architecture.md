@@ -33,10 +33,13 @@ Rust syntax. Stable ordering and path-independent names support byte reproducibi
 isolated by version adapter. LLVM export is consumed as data. Atomic directory replacement is limited
 to generator-owned boundaries. Provisional upstream pins remain explicit until reconciled.
 
-The structured evidence verifier and its integrity probes are a reusable program surface. A future
-shared suite should own checksum, artifact-census, schema, source-identity, and mutation-probe logic
-for all participating repositories; this foundation records that boundary but does not build or
-publish the shared component.
+The structured evidence verifier and its integrity probes were a reusable program surface, and the
+boundary they identified is the one this repository now sits on: checksum, artifact-census, schema,
+source-identity and retention logic belong to Engineering Assurance and Quoin, not to a participating
+repository. The verifier went with the shared-assurance migration and its last local mutation probes
+went with the retained evidence they guarded, so no instance of that surface remains here. The
+observation is kept because it is why the boundary is drawn where it is; the component is not built
+or published here.
 
 The program's eight Rust crates currently expose divergent architecture and evidence structures.
 Their ownership markers, gate names, evidence layouts, and architecture records must converge through

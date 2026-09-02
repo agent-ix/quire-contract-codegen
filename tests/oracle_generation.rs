@@ -237,9 +237,11 @@ fn source_symbol(source: &str) -> &str {
 /// Trace: TC-001, NFR-002-AC-1
 ///
 /// NFR-002-AC-1 declares its verification method as Test (TC-001), and this is
-/// that test: it asserts the emitted manifest records the producer, its inputs,
-/// the schema digests of both outputs, the backend, the parameter digest, the
-/// output content digests, and the generator's own executable digest. The tag
+/// that test: it asserts the emitted manifest records the producer's source
+/// revision, the schema digests of both outputs, the backend, the parameter and
+/// dependency digests, the output content digests, and the generator's own
+/// executable digest. Manifest `inputs` are required by the envelope schema the
+/// same assertion validates against, rather than asserted field by field. The tag
 /// used to sit on the retained-evidence compatibility test instead, which read
 /// identity out of historical records rather than out of an artifact this crate
 /// emits. Those records are deleted; the tag moves to the test the requirement

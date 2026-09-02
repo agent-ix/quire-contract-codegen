@@ -61,7 +61,7 @@ retention store, audit store, anchor file, or aggregate verdict of its own.
 | FR-006-AC-1 | Adopted component versions are classified by the packaged compatibility matrix rather than a local restatement, and no install line names a version that matrix calls incompatible. | Test (TC-008) |
 | FR-006-AC-2 | Generation-conformance and upstream-identity results are produced by this repository's own tools in declared structured formats and transcribed by Quoin without Quoin or Quire executing a producer. | Test (TC-009) |
 | FR-006-AC-3 | Static specification, obligation, and coverage facts come from a Quire export that names every requirement in this repository, and the sealed record's impact snapshot is that export's digest. | Test (TC-010) |
-| FR-006-AC-5 | Pass, fail, unavailable, inconclusive, not-computed, malformed, partial, stale, suspect, vacuous, and tampered are each demonstrated by a case that produced it, `unsupported` is demonstrated by nothing, and every negative is paired with a positive control. | Test (TC-012) |
+| FR-006-AC-5 | Pass, fail, unavailable, inconclusive, not-computed, partial, stale, suspect, vacuous, and tampered are each demonstrated by a case that produced it, `unsupported` and `malformed` are demonstrated by nothing, and every negative is paired with a positive control. | Test (TC-012) |
 | FR-006-AC-6 | No repository-local generic runner, envelope builder, manifest, verifier, anchor writer, failure-propagation policer, or aggregate verdict remains, and the gates that replaced them are reachable from `ci`. | Test (TC-013) |
 
 ## Dependencies
@@ -72,28 +72,32 @@ retention store, audit store, anchor file, or aggregate verdict of its own.
 
 ## Notes
 
-The shared verification vocabulary is twelve states. FR-006-AC-5 requires eleven
+The shared verification vocabulary is twelve states. FR-006-AC-5 requires ten
 of them. Measured on the tree before anything was deleted, per state and per
 source: the assurance chain alone demonstrated ten, and the compatibility census
-over the retained `evidence/` tree supplied `unsupported` and `malformed`. The
-repository owner released the preservation constraint for the pre-stable phase on
-2026-09-02 (`agent-ix/engineering-assurance#7`) and those records are deleted.
+over the retained `evidence/` tree supplied exactly `unsupported` and
+`malformed`. The repository owner released the preservation constraint for the
+pre-stable phase on 2026-09-02 (`agent-ix/engineering-assurance#7`), those
+records are deleted, and both claims are withdrawn with them rather than restated
+over a weaker substitute.
 
-`malformed` did not go with them. It is a declared member of the assurance
-chain's producer outcome vocabulary, so a producer reporting it is a state that
-travels the intake path; the `attested-malformed` scenario demonstrates it by
-deriving it from the real corpus run, exactly as the `fail` state is demonstrated.
-Leaving it undemonstrated would have left TC-012 passing at ten and reported the
-same green, which is a gate weakening rather than a claim being withdrawn.
+`unsupported` is not in the assurance chain's producer outcome vocabulary and
+never was: it was raised only by the compatibility mapping, against a retained
+record carrying an unknown PGM-01 schema version. The generation corpus does
+reach an `unsupported` *Interface-001 terminal state*, and borrowing that would
+collapse two vocabularies this requirement exists to keep apart.
 
-`unsupported` is withdrawn. It is not in that producer vocabulary and never was:
-it was a property of the compatibility mapping, raised by a retained record
-carrying an unknown PGM-01 schema version, and nothing on the intake path
-produces it. The generation corpus does reach an `unsupported` *Interface-001
-terminal state*, and borrowing that would collapse two vocabularies this
-requirement exists to keep apart. So the claim was removed with the evidence
-rather than restated over a weaker substitute, and TC-012 asserts the state stays
-absent so a later change cannot quietly re-acquire it from a refusal.
+`malformed` is in that vocabulary, and it was still withdrawn, because being a
+declared key is not the same as being distinguishable. The adapter maps
+`malformed` onto the same `fail` in both of its tables, so a scenario feeding it
+a stream declaring that outcome yields receipt reasons byte-identical to the
+`fail` case — which is why the chain's own anti-collapse scenario could not have
+included it. Such a scenario was written, measured, found to be the `fail` case
+under another name, and removed. Eleven states with one painted on is worse than
+ten that are real.
+
+TC-012 asserts both states stay absent, so a later change re-acquires one
+deliberately rather than drifting into it.
 
 FR-003 and FR-004 are specified and not implemented at this revision. This requirement covers the
 generation behaviour that exists; it does not create a proof obligation over absent code, because a
