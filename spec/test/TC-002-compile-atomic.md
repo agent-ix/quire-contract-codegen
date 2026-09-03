@@ -17,12 +17,15 @@ Verify generated source compiles against only the runtime/customer types and pub
 ## Test Procedure
 
 Compile the supported Boolean grammar in an isolated `rustc` fixture against only the pinned runtime
-and compare every truth assignment with an independent evaluator. When atomic publication is added,
-inject failures at each staged write and compare destination and developer-owned tree digests before
-and after each run.
+and compare every truth assignment with an independent evaluator. Construct a validated artifact
+bundle, inject a failure before every staged artifact and marker write and at both swap boundaries,
+and compare the destination plus an adjacent developer-owned file before and after each run. Attempt
+replacement after modifying, adding to, or symlinking the owned boundary and require refusal.
 
 ## Expected Results
 
 Valid Boolean oracles compile without generator/IR dependencies and match the independent evaluator.
-The row remains planned until publication failures also leave no partial bundle and modify no
-developer-owned file.
+Every injected failure restores the prior generated boundary, leaves no staging residue, and does not
+modify the adjacent developer-owned file. Unmarked, modified, extra-entry, and symlinked destinations
+are never replaced. Portable replacement remains rollback-atomic for reported failures rather than
+process-crash atomic between its two directory renames.

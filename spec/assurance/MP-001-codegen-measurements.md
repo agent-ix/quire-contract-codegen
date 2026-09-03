@@ -218,6 +218,13 @@ implementation at this revision. There is no suite for them and no proof obligat
 because a proof obligation whose subject does not exist is the most complete false green available.
 Their TM-001 rows stay 🚧 Planned.
 
+The atomic publisher's fault model injects refusal before every artifact and ownership-marker write,
+before destination swap, and during replacement swap. The old generated boundary, an adjacent
+developer-owned file, and sibling staging census are checked after every reported failure. On
+portable filesystems, replacing a non-empty directory still requires two renames: rollback covers
+reported errors, but a process crash between those renames can temporarily leave only the sibling
+backup. This boundary is retained as FND-905 rather than represented as crash atomicity.
+
 The shared verification vocabulary is twelve states and this repository demonstrates ten. The two it
 does not are `unsupported` and `malformed`. Measured on the tree before anything was deleted, per
 state and per source: the assurance chain alone demonstrated ten, and the compatibility census over

@@ -33,7 +33,7 @@ operations:
   - name: write_bundle_atomic
     inputs: [ArtifactBundle, destination directory]
     output: PublishedBundleIdentity | IO diagnostic
-    semantics: replace only generator-owned bundle boundaries after complete staged validation
+    semantics: replace only generator-owned bundle boundaries after complete staged validation; caller serializes destination writers; portable rollback protects reported failures but not a process crash between directory renames
   - name: analyze_coverage
     inputs: [source map, LLVM coverage export, runtime campaign report]
     output: per-requirement vacuity and rejection report
@@ -97,4 +97,6 @@ compatibility:
   generated_runtime_dependency: quire-contract-runtime, proptest, plus declared customer types only
   licensing: MIT OR Apache-2.0
   publication: disabled through the human v0.1 source-release decision
+open_design_gates:
+  serialized_package_cli: the accepted ContractPackage wire format binds ReferenceBody metadata but no executable TypedExpression, and the IR wire decoder is private; cli_generate cannot truthfully lower serialized packages until IR owns that binding and decoding contract
 ```

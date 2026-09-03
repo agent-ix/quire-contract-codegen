@@ -5,12 +5,18 @@
 
 // Implements: FR-001
 mod oracle;
+// Implements: FR-005, NFR-001
+mod publication;
 // Implements: FR-002
 mod harness;
 // Implements: FR-002
 mod strategy;
 
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
+pub use publication::{
+    write_bundle_atomic, ArtifactBundle, PublicationDiagnostic, PublicationErrorCode,
+    PublishedBundleIdentity,
+};
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,

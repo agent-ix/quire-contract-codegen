@@ -83,14 +83,16 @@ nothing has been built.
 | TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6, FR-006-AC-7 | ✅ Covered |
 
 TC-001 through TC-007 remain deliberately planned until their complete ticket scope is independently
-reviewed. The oracle draft carries bound implementation symbols for TC-001 through TC-003; TC-002
-remains partial because atomic publication is not implemented, and no row is promoted by that draft.
+reviewed. The oracle draft carries bound implementation symbols for TC-001 through TC-003. TC-002
+now has local compilation, independent-evaluator, and atomic-publication coverage, but remains
+planned pending independent exact-head review; no row is promoted by these drafts.
 
 TC-008 through TC-013 are the shared-assurance migration's own rows and are covered by named tests.
 
 ## Evidence Locations
 
 Each row is specified in the same-ID document under `spec/test/`. `spec/evidence/suites.md` is the
-suite registry: it names the command, tool and evidence kind for each suite whose results are
-transcribed. Implementation evidence for TC-001 through TC-007 is pending. TC-008 through TC-013 are
-backed by `tests/shared_assurance.rs`, whose `/// Trace:` comments are what Quire's census reads.
+suite registry: it names the command, tool and evidence kind for each suite. SUITE-010 is local
+pre-review evidence for the publication portion of TC-002; transcribed current-head evidence and
+matrix promotion remain pending. TC-008 through TC-013 are backed by `tests/shared_assurance.rs`,
+whose `/// Trace:` comments are what Quire's census reads.
