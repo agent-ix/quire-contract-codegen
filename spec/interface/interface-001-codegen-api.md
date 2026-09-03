@@ -33,7 +33,7 @@ operations:
   - name: write_bundle_atomic
     inputs: [ArtifactBundle, destination directory]
     output: PublishedBundleIdentity | IO diagnostic
-    semantics: replace only generator-owned bundle boundaries after complete staged validation; caller serializes destination writers; portable rollback protects reported failures but not a process crash between directory renames
+    semantics: replace only generator-owned bundle boundaries after complete staged validation; caller serializes destination writers; pre-commit failures report unchanged or unknown destination state; post-commit cleanup failures report published; process crashes between directory renames remain outside the portable rollback guarantee
   - name: analyze_coverage
     inputs: [source map, LLVM coverage export, runtime campaign report]
     output: per-requirement vacuity and rejection report

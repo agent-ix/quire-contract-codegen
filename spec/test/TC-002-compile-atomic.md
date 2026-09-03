@@ -25,7 +25,8 @@ replacement after modifying, adding to, or symlinking the owned boundary and req
 ## Expected Results
 
 Valid Boolean oracles compile without generator/IR dependencies and match the independent evaluator.
-Every injected failure restores the prior generated boundary, leaves no staging residue, and does not
-modify the adjacent developer-owned file. Unmarked, modified, extra-entry, and symlinked destinations
-are never replaced. Portable replacement remains rollback-atomic for reported failures rather than
-process-crash atomic between its two directory renames.
+Every injected pre-commit failure restores the prior generated boundary, leaves no staging residue,
+and does not modify the adjacent developer-owned file. A post-commit cleanup failure reports the
+destination as published, leaves a complete new bundle, and exposes backup residue rather than
+claiming rollback. Unmarked, modified, extra-entry, and symlinked destinations are never replaced.
+Portable replacement is not process-crash atomic between its two directory renames.

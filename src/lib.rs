@@ -14,8 +14,8 @@ mod strategy;
 
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
 pub use publication::{
-    write_bundle_atomic, ArtifactBundle, PublicationDiagnostic, PublicationErrorCode,
-    PublishedBundleIdentity,
+    write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
+    PublicationErrorCode, PublishedBundleIdentity,
 };
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,

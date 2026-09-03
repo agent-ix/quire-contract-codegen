@@ -25,8 +25,9 @@ destinations are refused without editing adjacent developer-owned files.
 
 ## Open Gates
 
-- Portable directory replacement is rollback-atomic for reported failures, not process-crash atomic
-  between the old-directory and staged-directory renames.
+- Portable directory replacement is rollback-atomic for pre-commit failures, not process-crash atomic
+  between the old-directory and staged-directory renames. A cleanup failure after commit reports that
+  the new destination is published rather than claiming it stayed unchanged.
 - The accepted serialized `ContractPackage<ReferenceBody>` carries clause metadata but does not bind
   executable `TypedExpression` values, and the IR wire decoder is private. A truthful
   serialized-package CLI requires an upstream IR design/API decision rather than a codegen-local wire

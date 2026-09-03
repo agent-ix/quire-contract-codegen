@@ -39,6 +39,18 @@ pub enum PublicationErrorCode {
     IoFailed,
 }
 
+/// Observable destination state when publication returns a diagnostic.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublicationDestinationState {
+    /// The destination was not changed by this call, or the prior bundle was restored.
+    Unchanged,
+    /// The new bundle was committed, but a post-commit operation failed.
+    Published,
+    /// Rollback itself failed, so callers must inspect the destination before retrying.
+    Unknown,
+}
+
 impl PublicationErrorCode {
     /// Maps the publication failure onto the codegen terminal-state vocabulary.
     #[must_use]
@@ -62,6 +74,8 @@ pub struct PublicationDiagnostic {
     pub code: PublicationErrorCode,
     /// Terminal state implied by `code`.
     pub terminal_state: GenerationTerminalState,
+    /// Whether this call left the destination unchanged, published, or uncertain.
+    pub destination_state: PublicationDestinationState,
     /// Stable bundle or filesystem path associated with the failure.
     pub path: String,
     /// Human-readable detail not used as machine identity.
@@ -167,6 +181,7 @@ enum PublicationFault {
     BeforeMarker,
     BeforeSwap,
     DuringSwap,
+    AfterCommitBeforeBackupCleanup,
 }
 
 /// Publishes a complete bundle without editing any file outside its destination boundary.
@@ -249,16 +264,27 @@ fn publish(
         if let Err(error) = replacement {
             let rollback = fs::rename(&backup, destination);
             if let Err(rollback_error) = rollback {
-                return Err(io_diagnostic(
+                return Err(io_diagnostic_with_state(
                     destination,
                     "restore old bundle after failed swap",
                     &rollback_error,
+                    PublicationDestinationState::Unknown,
                 ));
             }
             cleanup(&staging, "clean staging after failed swap")?;
             return Err(error);
         }
-        cleanup(&backup, "clean replaced bundle backup")?;
+        if fault == PublicationFault::AfterCommitBeforeBackupCleanup {
+            return Err(injected_with_state(
+                &backup,
+                "after commit before backup cleanup",
+                PublicationDestinationState::Published,
+            ));
+        }
+        if let Err(mut error) = cleanup(&backup, "clean replaced bundle backup") {
+            error.destination_state = PublicationDestinationState::Published;
+            return Err(error);
+        }
     } else {
         if fault == PublicationFault::DuringSwap {
             cleanup(&staging, "clean staging after injected swap failure")?;
@@ -599,6 +625,7 @@ fn diagnostic(code: PublicationErrorCode, path: &str, message: &str) -> Publicat
     PublicationDiagnostic {
         code,
         terminal_state: code.terminal_state(),
+        destination_state: PublicationDestinationState::Unchanged,
         path: path.to_owned(),
         message: message.to_owned(),
     }
@@ -610,6 +637,17 @@ fn io_diagnostic(path: &Path, action: &str, error: &std::io::Error) -> Publicati
         &path.to_string_lossy(),
         &format!("could not {action}: {error}"),
     )
+}
+
+fn io_diagnostic_with_state(
+    path: &Path,
+    action: &str,
+    error: &std::io::Error,
+    destination_state: PublicationDestinationState,
+) -> PublicationDiagnostic {
+    let mut diagnostic = io_diagnostic(path, action, error);
+    diagnostic.destination_state = destination_state;
+    diagnostic
 }
 
 fn not_owned(path: &Path, message: &str) -> PublicationDiagnostic {
@@ -626,6 +664,16 @@ fn injected(path: &Path, point: &str) -> PublicationDiagnostic {
         &path.to_string_lossy(),
         &format!("injected publication failure {point}"),
     )
+}
+
+fn injected_with_state(
+    path: &Path,
+    point: &str,
+    destination_state: PublicationDestinationState,
+) -> PublicationDiagnostic {
+    let mut diagnostic = injected(path, point);
+    diagnostic.destination_state = destination_state;
+    diagnostic
 }
 
 #[cfg(test)]
@@ -722,6 +770,38 @@ mod tests {
             assert!(residue(&parent).is_empty());
             fs::remove_dir_all(parent).unwrap();
         }
+    }
+
+    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3
+    #[test]
+    fn post_commit_cleanup_failure_reports_that_the_new_bundle_is_published() {
+        let parent = temporary("post-commit-cleanup");
+        let destination = parent.join("generated");
+        let developer = parent.join("developer.rs");
+        fs::write(&developer, "developer-owned\n").unwrap();
+        write_bundle_atomic(&bundle("old\n"), &destination).unwrap();
+
+        let error = publish(
+            &bundle("new\n"),
+            &destination,
+            PublicationFault::AfterCommitBeforeBackupCleanup,
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code, PublicationErrorCode::IoFailed);
+        assert_eq!(
+            error.destination_state,
+            PublicationDestinationState::Published
+        );
+        assert_eq!(
+            fs::read_to_string(destination.join("src/generated.rs")).unwrap(),
+            "new\n"
+        );
+        assert_eq!(fs::read_to_string(&developer).unwrap(), "developer-owned\n");
+        let residue = residue(&parent);
+        assert_eq!(residue.len(), 1);
+        cleanup(&parent.join(&residue[0]), "test cleanup").unwrap();
+        fs::remove_dir_all(parent).unwrap();
     }
 
     /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-3

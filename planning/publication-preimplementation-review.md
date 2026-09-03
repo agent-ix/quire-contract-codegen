@@ -29,7 +29,7 @@ generator-owned. Any unmarked, malformed, symlinked, extra-file, or modified bou
 | FND-902 | high | Existing output may be replaced only when a marker plus full recursive census proves every entry was generated and remains digest-identical. | FR-005-AC-1, NFR-001-AC-3 |
 | FND-903 | high | A failed staged write or failed swap must restore the old directory and remove staging residue. | TC-002, NFR-001-AC-2 |
 | FND-904 | medium | Bundle identity must be independent of input order and staging names. | FR-005-AC-2, TC-001 |
-| FND-905 | medium | The portable replacement is rollback-atomic for reported I/O failures, but not process-crash atomic across the two directory renames; retain that boundary explicitly. | NFR-001, MP-001 |
+| FND-905 | medium | The portable replacement is rollback-atomic for pre-commit I/O failures, but not process-crash atomic across the two directory renames; post-commit cleanup errors must report that the new destination is published. | NFR-001, MP-001 |
 | FND-908 | medium | Publication requires caller-serialized writers; a concurrent process mutating the destination or generated sibling names is outside this bounded API contract. | interface-001, NFR-001 |
 
 ## Decision
