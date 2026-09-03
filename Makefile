@@ -219,5 +219,3 @@ assurance-record: assurance-inputs
 .NOTPARALLEL: ci
 .PHONY: ci
 ci: fmt-check spec lint msrv deny audit-unsafe rustdoc upstream-identity conformance test assurance
-
-# This final guard deliberately follows every assignment and include opportunity.

@@ -15,10 +15,17 @@ supported constraints and boundaries.
 
 ## Test Procedure
 
-Generate campaigns for range, membership, correlated, state-pinned, boundary, and residual-filter
-fixtures; execute seeded cases and shrinking while retaining accepted/rejected/failed/discarded counts.
+Generate campaigns for range, membership, enum, correlated, state-pinned, boundary, and residual
+fixtures. Execute seeded cases and shrinking through the generated campaign runner. Exercise an
+accepted-case floor, an explicit-discard ceiling, zero configured cases, all-rejected cases,
+expectation mismatches, empty residual exclusions, and correlated populations whose representable
+boundary census would otherwise be vacuous.
 
 ## Expected Results
 
-Supported constraints are shaped directly, inside/outside boundaries execute, residual rejection is
-explicit, and no rejected case becomes a pass.
+Supported constraints are shaped directly, every emitted boundary census contains accepted and
+rejected cases, residual rejection is explicit, and no rejected case becomes a pass. Integer and
+enum values carry executable expected-domain checks. Boolean campaign constructors bind disposition
+to their exact values; the generated runner owns invocation, explicit discard accounting, and final
+accepted/rejected/failed/discarded validation. It rejects zero/below-floor campaigns and campaigns
+above the requested discard ceiling.

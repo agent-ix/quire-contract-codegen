@@ -13,7 +13,7 @@ type: TestMatrix
 | FR-001 | FR-001-AC-1, FR-001-AC-3 | TC-001 | 🚧 Planned |
 | FR-001 | FR-001-AC-2 | TC-002 | 🚧 Planned |
 | FR-001 | FR-001-AC-4 | TC-003 | 🚧 Planned |
-| FR-002 | FR-002-AC-1 through FR-002-AC-4 | TC-004 | 🚧 Planned |
+| FR-002 | FR-002-AC-1 through FR-002-AC-6 | TC-004 | 🚧 Planned |
 | FR-003 | FR-003-AC-1 | TC-005 | 🚧 Planned |
 | FR-003 | FR-003-AC-2 | TC-007 | 🚧 Planned |
 | FR-003 | FR-003-AC-3 | TC-003 | 🚧 Planned |
@@ -72,7 +72,7 @@ nothing has been built.
 | TC-001 | Reproduce artifacts and attestations | Integration | P0 | FR-001-AC-1, FR-001-AC-3, FR-005-AC-2, NFR-001-AC-1, NFR-002-AC-1, NFR-002-AC-2 | 🚧 Planned |
 | TC-002 | Compile and publish atomically | Integration | P0 | FR-001-AC-2, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3 | 🚧 Planned |
 | TC-003 | Reject unsupported inputs explicitly | Integration | P0 | FR-001-AC-4, FR-003-AC-3, NFR-002-AC-3 | 🚧 Planned |
-| TC-004 | Preserve shaped proptest strategies | Property | P0 | FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4 | 🚧 Planned |
+| TC-004 | Preserve shaped proptest strategies | Property | P0 | FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4, FR-002-AC-5, FR-002-AC-6 | 🚧 Planned |
 | TC-005 | Enforce Kani proof dependencies | Analysis | P0 | FR-003-AC-1 | 🚧 Planned |
 | TC-006 | Distinguish vacuity and unexecuted flow | Integration | P0 | FR-004-AC-1, FR-004-AC-2, FR-004-AC-3 | 🚧 Planned |
 | TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-003-AC-2, FR-005-AC-4 | 🚧 Planned |

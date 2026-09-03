@@ -8,8 +8,9 @@ use std::{
 mod common;
 
 use quire_contract_codegen::{
-    generate_tristate_harness, AttestationContext, AttestationResult, GenerationTerminalState,
-    HarnessErrorCode, HarnessRequest, ProofAttestationBody, IR_CANDIDATE_REVISION,
+    generate_tristate_harness, AttestationContext, AttestationResult, GenerationErrorCode,
+    GenerationTerminalState, HarnessErrorCode, HarnessRequest, ProofAttestationBody,
+    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, DeclarationEnvironment, ExecutionPoint, Expression,
@@ -79,6 +80,28 @@ fn harness_function_name(source: &str) -> &str {
         .find(|line| line.starts_with("pub fn harness_") && !line.contains("_shell"))
         .and_then(|line| line.strip_prefix("pub fn "))
         .and_then(|signature| signature.split('<').next())
+        .unwrap()
+}
+
+fn harness_campaign_error_name(source: &str) -> &str {
+    source
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("pub enum ")
+                .and_then(|name| name.strip_suffix(" {"))
+                .filter(|name| name.ends_with("CampaignError"))
+        })
+        .unwrap()
+}
+
+fn harness_campaign_case_name(source: &str) -> &str {
+    source
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("pub struct ")
+                .and_then(|name| name.strip_suffix(" {"))
+                .filter(|name| name.ends_with("CampaignCase"))
+        })
         .unwrap()
 }
 
@@ -157,11 +180,44 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
         precondition: &precondition_expression,
         postcondition: &postcondition_expression,
         execution_point: "handler:update",
+        minimum_accepted_cases: 2,
+        minimum_rejected_cases: 1,
+        maximum_discarded_cases: 0,
         attestation: attestation_context(),
     };
     let first = generate_tristate_harness(&request).unwrap();
     let second = generate_tristate_harness(&request).unwrap();
     assert_eq!(first, second);
+    let stricter = generate_tristate_harness(&HarnessRequest {
+        requirement: environment.owner(),
+        precondition_clause: &precondition,
+        postcondition_clause: &postcondition,
+        precondition: &precondition_expression,
+        postcondition: &postcondition_expression,
+        execution_point: "handler:update",
+        minimum_accepted_cases: 3,
+        minimum_rejected_cases: 2,
+        maximum_discarded_cases: 1,
+        attestation: attestation_context(),
+    })
+    .unwrap();
+    assert_ne!(first.rust, stricter.rust);
+    assert_ne!(first.attestation, stricter.attestation);
+    let higher_rejected_floor = generate_tristate_harness(&HarnessRequest {
+        requirement: environment.owner(),
+        precondition_clause: &precondition,
+        postcondition_clause: &postcondition,
+        precondition: &precondition_expression,
+        postcondition: &postcondition_expression,
+        execution_point: "handler:update",
+        minimum_accepted_cases: 2,
+        minimum_rejected_cases: 2,
+        maximum_discarded_cases: 0,
+        attestation: attestation_context(),
+    })
+    .unwrap();
+    assert_ne!(first.rust, higher_rejected_floor.rust);
+    assert_ne!(first.attestation, higher_rejected_floor.attestation);
     let attestation: ProofAttestationBody =
         serde_json::from_str(&first.attestation.contents).unwrap();
     assert_eq!(attestation.schema_version, 1);
@@ -223,6 +279,8 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
 #[cfg(test)]
 mod generated_tests {
     use super::*;
+    use proptest::strategy::{Just, Strategy as _};
+    use proptest::test_runner::{Config, TestRunner};
     use quire_contract_runtime::{
         CampaignReport, ClauseId, ClauseKind, ClauseOutcome, ContractIdentity, ExecutionPoint,
         Observation, RequirementId, RevisionId, VerdictKind,
@@ -256,24 +314,28 @@ mod generated_tests {
             RequirementId::new("FR-002"),
             RevisionId::new("1"),
         ));
-        let mut observations = [blank(); 2];
-        let result = HARNESS_FN_proptest(
+        let strategy = Just(HARNESS_FN_rejected_case(false, true));
+        let mut runner = TestRunner::new(Config {
+            cases: 1,
+            max_global_rejects: 2,
+            failure_persistence: None,
+            ..Config::default()
+        });
+        let result = HARNESS_FN_run_campaign(
+            &mut runner,
+            &strategy,
             &mut report,
-            true,
-            false,
-            &mut state,
             |_, _| panic!("rejected subject must not run"),
-            &mut observations,
         );
-        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(&error, HARNESS_ERROR::BelowAcceptedFloor { .. }));
+        assert_eq!(error.summary().accepted, 0);
+        assert_eq!(error.summary().attempted, 3);
+        assert_eq!(error.summary().rejected, 3);
         assert_eq!(report.counts().accepted(), 0);
-        assert_eq!(report.counts().rejected(), 1);
+        assert_eq!(report.counts().rejected(), 3);
         assert_eq!(report.counts().failed(), 0);
         assert_eq!(report.counts().discarded(), 0);
-        assert!(HARNESS_FN_conclude_campaign(&report).is_err());
-        HARNESS_FN_record_discard(&mut report);
-        assert_eq!(report.counts().discarded(), 1);
-        assert!(HARNESS_FN_conclude_campaign(&report).is_err());
     }
 
     #[test]
@@ -297,47 +359,169 @@ mod generated_tests {
     }
 
     #[test]
-    fn accepted_campaign_concludes_with_retained_counts() {
-        let mut state = true;
-        let mut observations = [blank(); 2];
+    fn generated_runner_owns_expectations_discards_and_conclusion() {
         let mut mismatch_report = CampaignReport::new(ContractIdentity::new(
             RequirementId::new("FR-002"),
             RevisionId::new("1"),
         ));
-        assert!(HARNESS_FN_proptest(
+        let mismatch = Just(HARNESS_FN_rejected_case(true, true));
+        let mut mismatch_runner = TestRunner::new(Config {
+            cases: 1,
+            failure_persistence: None,
+            ..Config::default()
+        });
+        let mismatch_error = HARNESS_FN_run_campaign(
+            &mut mismatch_runner,
+            &mismatch,
             &mut mismatch_report,
-            true,
-            true,
-            &mut state,
             |_, _| {},
-            &mut observations,
         )
-        .is_err());
-        assert_eq!(mismatch_report.counts().accepted(), 1);
+        .unwrap_err();
+        assert!(matches!(mismatch_error, HARNESS_ERROR::Failed { .. }));
+        assert!(mismatch_report.counts().accepted() > 0);
 
-        let mut observations = [blank(); 2];
+        let mut accepted_only_report = CampaignReport::new(ContractIdentity::new(
+            RequirementId::new("FR-002"),
+            RevisionId::new("1"),
+        ));
+        let accepted = Just(HARNESS_FN_accepted_case(true, true));
+        let mut accepted_only_runner = TestRunner::new(Config {
+            cases: 2,
+            failure_persistence: None,
+            ..Config::default()
+        });
+        let rejected_floor_error = HARNESS_FN_run_campaign(
+            &mut accepted_only_runner,
+            &accepted,
+            &mut accepted_only_report,
+            |_, _| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            rejected_floor_error,
+            HARNESS_ERROR::BelowRejectedFloor { .. }
+        ));
+
         let mut report = CampaignReport::new(ContractIdentity::new(
             RequirementId::new("FR-002"),
             RevisionId::new("1"),
         ));
-        HARNESS_FN_proptest(
+        let mixed = proptest::sample::select(vec![
+            HARNESS_FN_accepted_case(true, true),
+            HARNESS_FN_rejected_case(false, true),
+        ]).boxed();
+        let mut runner = TestRunner::new(Config {
+            cases: 8,
+            max_global_rejects: 32,
+            failure_persistence: None,
+            ..Config::default()
+        });
+        let summary = HARNESS_FN_run_campaign(
+            &mut runner,
+            &mixed,
             &mut report,
-            false,
-            true,
-            &mut state,
             |_, _| {},
-            &mut observations,
         )
         .unwrap();
-        HARNESS_FN_record_discard(&mut report);
-        let summary = HARNESS_FN_conclude_campaign(&report).unwrap();
-        assert_eq!(summary.accepted, 1);
-        assert_eq!(summary.rejected, 0);
+        assert_eq!(summary.attempted, summary.accepted + summary.rejected);
+        assert_eq!(summary.accepted, 8);
+        assert!(summary.rejected >= 1);
         assert_eq!(summary.failed, 0);
-        assert_eq!(summary.discarded, 1);
+        assert_eq!(summary.discarded, 0);
+
+        let mut discarded_report = CampaignReport::new(ContractIdentity::new(
+            RequirementId::new("FR-002"),
+            RevisionId::new("1"),
+        ));
+        let discarded = Just(HARNESS_FN_discarded_case(true, true));
+        let mut discarded_runner = TestRunner::new(Config {
+            cases: 1,
+            max_global_rejects: 4,
+            failure_persistence: None,
+            ..Config::default()
+        });
+        let discard_error = HARNESS_FN_run_campaign(
+            &mut discarded_runner,
+            &discarded,
+            &mut discarded_report,
+            |_, _| panic!("discarded subject must not run"),
+        )
+        .unwrap_err();
+        assert!(matches!(discard_error, HARNESS_ERROR::AboveDiscardCeiling { .. }));
+        assert_eq!(discarded_report.counts().discarded(), 1);
+
+        let mut zero_case_report = CampaignReport::new(ContractIdentity::new(
+            RequirementId::new("FR-002"),
+            RevisionId::new("1"),
+        ));
+        let mut zero_case_runner = TestRunner::new(Config {
+            cases: 0,
+            failure_persistence: None,
+            ..Config::default()
+        });
+        let zero_case_error = HARNESS_FN_run_campaign(
+            &mut zero_case_runner,
+            &accepted,
+            &mut zero_case_report,
+            |_, _| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            zero_case_error,
+            HARNESS_ERROR::BelowAcceptedFloor { .. }
+        ));
+        assert_eq!(zero_case_report.counts().total(), 0);
+
+        #[derive(Debug)]
+        struct UnavailableStrategy {
+            value: HARNESS_CASE,
+        }
+
+        impl proptest::strategy::Strategy for UnavailableStrategy {
+            type Tree = Just<HARNESS_CASE>;
+            type Value = HARNESS_CASE;
+
+            fn new_tree(
+                &self,
+                _runner: &mut TestRunner,
+            ) -> proptest::strategy::NewTree<Self> {
+                let _ = &self.value;
+                Err("generated input unavailable".into())
+            }
+        }
+
+        let mut exhausted_report = CampaignReport::new(ContractIdentity::new(
+            RequirementId::new("FR-002"),
+            RevisionId::new("1"),
+        ));
+        let unavailable = UnavailableStrategy {
+            value: HARNESS_FN_accepted_case(true, true),
+        };
+        let mut exhausted_runner = TestRunner::new(Config {
+            cases: 1,
+            failure_persistence: None,
+            ..Config::default()
+        });
+        let exhausted_error = HARNESS_FN_run_campaign(
+            &mut exhausted_runner,
+            &unavailable,
+            &mut exhausted_report,
+            |_, _| {},
+        )
+        .unwrap_err();
+        assert!(matches!(exhausted_error, HARNESS_ERROR::Exhausted { .. }));
+        assert_eq!(exhausted_report.counts().total(), 0);
     }
 }
 "#
+    .replace(
+        "HARNESS_ERROR",
+        harness_campaign_error_name(&first.rust.contents),
+    )
+    .replace(
+        "HARNESS_CASE",
+        harness_campaign_case_name(&first.rust.contents),
+    )
     .replace("HARNESS_FN", harness_function_name(&first.rust.contents));
     fs::write(
         temporary.0.join("src/lib.rs"),
@@ -435,6 +619,9 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
         precondition: &dependency_free_pre,
         postcondition: &dependency_free_post,
         execution_point: "handler:dependency-free",
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 1,
         attestation: attestation_context(),
     })
     .unwrap();
@@ -445,6 +632,9 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
         precondition: &state_pre,
         postcondition: &state_post,
         execution_point: "handler:state-only",
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 1,
         attestation: attestation_context(),
     })
     .unwrap();
@@ -506,6 +696,9 @@ fn tc_004_invalid_execution_point_is_a_structured_failure_without_artifact() {
         precondition: &precondition_expression,
         postcondition: &postcondition_expression,
         execution_point: "bad\npoint",
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 1,
         attestation: attestation_context(),
     })
     .unwrap_err();
@@ -515,6 +708,111 @@ fn tc_004_invalid_execution_point_is_a_structured_failure_without_artifact() {
         GenerationTerminalState::InvalidInput
     );
     assert_eq!(diagnostic[0].path, "execution_point");
+
+    let oversized_execution_point = "x".repeat(MAX_GENERATED_SOURCE_BYTES);
+    let resource_limit = generate_tristate_harness(&HarnessRequest {
+        requirement: environment.owner(),
+        precondition_clause: &precondition,
+        postcondition_clause: &postcondition,
+        precondition: &precondition_expression,
+        postcondition: &postcondition_expression,
+        execution_point: &oversized_execution_point,
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 1,
+        attestation: attestation_context(),
+    })
+    .unwrap_err();
+    assert_eq!(
+        resource_limit[0].code,
+        HarnessErrorCode::ResourceLimitExceeded
+    );
+    assert_eq!(
+        resource_limit[0].generation_code,
+        Some(GenerationErrorCode::ResourceLimitExceeded)
+    );
+    assert_eq!(
+        resource_limit[0].terminal_state,
+        GenerationTerminalState::Unsupported
+    );
+    assert_eq!(resource_limit[0].path, "generated.rust");
+}
+
+/// TC-003, TC-004.
+#[test]
+fn tc_004_invalid_campaign_and_attestation_inputs_fail_before_clause_generation() {
+    let (environment, precondition_expression, postcondition_expression) = typed_clauses();
+    let precondition = ClauseId::new("precondition-main").unwrap();
+    let postcondition = ClauseId::new("postcondition-main").unwrap();
+    let invalid_policy = generate_tristate_harness(&HarnessRequest {
+        requirement: environment.owner(),
+        precondition_clause: &precondition,
+        postcondition_clause: &postcondition,
+        precondition: &precondition_expression,
+        postcondition: &postcondition_expression,
+        execution_point: "handler:update",
+        minimum_accepted_cases: 0,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 0,
+        attestation: attestation_context(),
+    })
+    .unwrap_err();
+    assert_eq!(
+        invalid_policy[0].code,
+        HarnessErrorCode::InvalidCampaignPolicy
+    );
+    assert_eq!(
+        invalid_policy[0].terminal_state,
+        GenerationTerminalState::InvalidInput
+    );
+    assert_eq!(invalid_policy[0].path, "minimum_accepted_cases");
+
+    for (name, attestation) in [
+        (
+            "record digest",
+            AttestationContext {
+                record_digest: "not-a-digest",
+                ..attestation_context()
+            },
+        ),
+        (
+            "candidate revision",
+            AttestationContext {
+                candidate_revision: "not-a-revision",
+                ..attestation_context()
+            },
+        ),
+    ] {
+        let invalid_attestation = generate_tristate_harness(&HarnessRequest {
+            requirement: environment.owner(),
+            precondition_clause: &precondition,
+            postcondition_clause: &postcondition,
+            precondition: &precondition_expression,
+            postcondition: &postcondition_expression,
+            execution_point: "handler:update",
+            minimum_accepted_cases: 1,
+            minimum_rejected_cases: 0,
+            maximum_discarded_cases: 0,
+            attestation,
+        })
+        .unwrap_err();
+        assert_eq!(
+            invalid_attestation[0].code,
+            HarnessErrorCode::AttestationGenerationFailed,
+            "{name}"
+        );
+        assert_eq!(
+            invalid_attestation[0].generation_code,
+            Some(GenerationErrorCode::InvalidAttestationContext),
+            "{name}"
+        );
+        assert_eq!(
+            invalid_attestation[0].terminal_state,
+            GenerationTerminalState::InvalidInput,
+            "{name}"
+        );
+        assert_eq!(invalid_attestation[0].path, "attestation.context", "{name}");
+    }
 }
 
 /// TC-003, TC-004.
@@ -584,6 +882,9 @@ fn tc_004_multiple_state_bindings_fail_closed() {
         precondition: &precondition,
         postcondition: &postcondition,
         execution_point: "handler:update",
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 1,
         attestation: attestation_context(),
     })
     .unwrap_err();
