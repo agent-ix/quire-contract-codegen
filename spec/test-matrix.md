@@ -37,16 +37,15 @@ for that conflict was a second traceability implementation carrying a hand-copie
 with the rest of the generic evidence machinery; the conflict itself is unresolved and is carried as
 an open unknown in `assurance/change-assurance.json`.
 
-Every FR-001 through FR-005, NFR, and StR row stays `🚧 Planned`. Those requirements describe
-semantic generation behaviour whose complete ticket scope has not been independently reviewed, and
-the shared-assurance migration does not review it. Promoting one of those rows is a human-reviewed
-matrix change.
+Every FR-001 through FR-005, NFR, and StR row stays `🚧 Planned`. FR-001 through FR-003 have draft
+implementations and local tests, but their complete ticket scopes have not been independently
+reviewed at the current head. The shared-assurance migration did not perform that semantic review,
+and promoting one of these rows remains a human-reviewed matrix change.
 
 The FR-006 rows are the only ones this migration claims, and they are `✅ Covered` because TC-008
 through TC-013 are backed by tests in `tests/shared_assurance.rs` that invoke the gates rather than
-reimplementing them. FR-003 and FR-004 have no implementation at this revision at all, which is why
-they have no evidence suite and no proof obligation; their rows are planned in the strict sense that
-nothing has been built.
+reimplementing them. FR-003 now has an implemented draft and SUITE-008, but remains planned pending
+independent current-head review. FR-004 has no implementation or suite.
 
 ## Nonfunctional Requirement Coverage
 
@@ -83,14 +82,16 @@ nothing has been built.
 | TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6, FR-006-AC-7 | ✅ Covered |
 
 TC-001 through TC-007 remain deliberately planned until their complete ticket scope is independently
-reviewed. The oracle draft carries bound implementation symbols for TC-001 through TC-003; TC-002
-remains partial because atomic publication is not implemented, and no row is promoted by that draft.
+reviewed. The oracle and harness drafts carry bound implementation symbols for TC-001 through TC-004;
+the Kani draft directly exercises TC-003, TC-005, and the FR-003 portion of TC-007. TC-002 remains
+partial because atomic publication is not implemented, and no row is promoted by these drafts.
 
 TC-008 through TC-013 are the shared-assurance migration's own rows and are covered by named tests.
 
 ## Evidence Locations
 
 Each row is specified in the same-ID document under `spec/test/`. `spec/evidence/suites.md` is the
-suite registry: it names the command, tool and evidence kind for each suite whose results are
-transcribed. Implementation evidence for TC-001 through TC-007 is pending. TC-008 through TC-013 are
-backed by `tests/shared_assurance.rs`, whose `/// Trace:` comments are what Quire's census reads.
+suite registry: it names the command, tool and evidence kind for each suite. SUITE-008 is local
+pre-review evidence for TC-003, TC-005, and the FR-003 portion of TC-007; transcribed current-head
+evidence and matrix promotion remain pending. TC-008 through TC-013 are backed by
+`tests/shared_assurance.rs`, whose `/// Trace:` comments are what Quire's census reads.

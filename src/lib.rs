@@ -7,10 +7,18 @@
 mod oracle;
 // Implements: FR-002
 mod harness;
+// Implements: FR-003
+mod kani;
 // Implements: FR-002
 mod strategy;
 
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
+pub use kani::{
+    generate_kani_bundle, KaniArtifactBundle, KaniDiagnostic, KaniErrorCode, KaniRequest,
+    KaniSolver, ProofDependencyEdge, ProofDependencyGraph, ProofDependencyKind,
+    ProofDependencyRequest, ProofDependencyState, ProofReadiness, KANI_ADAPTER_PROFILE,
+    KANI_BACKEND_VERSION,
+};
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,

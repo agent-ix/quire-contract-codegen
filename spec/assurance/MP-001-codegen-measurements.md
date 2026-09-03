@@ -213,10 +213,12 @@ a pass.
 
 Two limitations are load-bearing and are stated here rather than left to be inferred.
 
-FR-003 and FR-004 — Kani obligation lowering and vacuity evidence — are specified and have no
-implementation at this revision. There is no suite for them and no proof obligation over them,
-because a proof obligation whose subject does not exist is the most complete false green available.
-Their TM-001 rows stay 🚧 Planned.
+FR-003 Kani obligation lowering now has a bounded draft and a local suite, but its generated graph
+states `proofExecutionState: not_run`: dependency readiness is not proof completion, and the two
+ProofAttestationV1 bodies attest only successful artifact generation. The TM-001 rows remain planned
+until independent current-head review and retained execution evidence. FR-004 vacuity evidence still
+has no implementation, suite, or proof obligation; a proof obligation whose subject does not exist
+would be a false green.
 
 The shared verification vocabulary is twelve states and this repository demonstrates ten. The two it
 does not are `unsupported` and `malformed`. Measured on the tree before anything was deleted, per
