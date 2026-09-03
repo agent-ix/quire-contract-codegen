@@ -16,6 +16,7 @@ type: SuiteRegistry
 | SUITE-004 | Static specification and coverage export | `quire coverage --scope . --json` | quire 0.31.0 / quire-rs 0.46.0 | Static |
 | SUITE-006 | Shared assurance intake chain | `python3 scripts/assurance_chain.py --candidate-revision <sha>` | quoin 0.23.1 change-assurance and evidence surfaces | Integration |
 | SUITE-007 | Minimum supported Rust version build | `rustup run 1.75.0 cargo check --locked --all-targets --message-format=json` | rustc 1.75.0 | Static |
+| SUITE-010 | Atomic generated-boundary publication | `cargo test --lib publication` | quire-contract-codegen 0.1.0 / rustc | Integration |
 
 ## Notes
 
@@ -48,6 +49,11 @@ evidence are specified and not implemented at this revision, and a suite whose
 command exercises nothing would report `pass` for a capability that does not
 exist. Their absence from this table is the honest statement; TM-001 keeps their
 rows 🚧 Planned.
+
+SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
+complete ownership-census verification, and refusal of modified, extra-entry, unmarked, and symlinked
+destinations. It is local pre-review evidence for the publication portion of TC-002; the
+serialized-package CLI remains blocked on an IR expression-binding design.
 
 `make ci` is deliberately not a suite. A suite whose command is "everything"
 cannot say which obligation a result discharged, and `make ci` is a gate rather
