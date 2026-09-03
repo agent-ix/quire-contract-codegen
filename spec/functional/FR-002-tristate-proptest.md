@@ -28,17 +28,21 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - A harness shall snapshot pre-state before invoking the subject.
 - A harness shall check post-state after invoking the subject.
 - Ranges, memberships, and supported correlated relations shall shape admissible strategies.
-- Residual constraints shall use explicit rejection and retain discard rates.
+- Residual constraints shall use explicit rejection and retain the rejected-invocation numerator and
+  total-invocation denominator needed to report their rejection rate.
 - Shrinking shall preserve shaped constraints or report residual rejection.
 - Generated harnesses, rather than caller glue, shall own the ordering of pre-state snapshot,
   precondition evaluation, subject invocation, and post-state evaluation.
 - Unsupported constraint forms shall produce a structured diagnostic.
 - Strategy generation shall not silently fall back to filtering.
 - The generated campaign runner shall own the proptest execution loop, explicit framework-discard
-  accounting, and terminal conclusion. It shall enforce caller-supplied minimum accepted and
-  maximum discarded case counts and reject an all-rejected/all-discarded run.
-- Every generated integer and enum strategy case shall bind its exact values to an executable
-  expected-domain check against runtime tri-state verdicts.
+  accounting, and terminal conclusion. It shall enforce caller-supplied minimum accepted, minimum
+  rejected, and maximum explicit-discard invocation counts. A zero rejected floor declares a total
+  precondition; a positive rejected floor requires observed rejection coverage.
+- Every generated integer strategy case shall bind its exact values to an executable accepted or
+  rejected domain check against runtime tri-state verdicts. Enum strategy populations contain only
+  declared admissible members and shall execute their admission expectation without synthesizing an
+  out-of-membership customer enum value.
 - Generated harness campaign constructors shall bind exact Boolean inputs to accepted, rejected, or
   discarded disposition.
 - Harness and strategy generation shall return deterministic source plus a shared proof
@@ -52,8 +56,8 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-2 | Boundary strategies exercise immediately inside and outside supported constraints. | Test (TC-004) |
 | FR-002-AC-3 | Supported correlated constraints do not rely on improbable filtering. | Analysis |
 | FR-002-AC-4 | Shrinking preserves generated constraints or records a residual rejection. | Test (TC-004) |
-| FR-002-AC-5 | The generated campaign runner owns execution, discard accounting, and conclusion, and rejects campaigns below the configured acceptance floor or above the discard ceiling. | Test (TC-004) |
-| FR-002-AC-6 | Integer, enum, and generated harness campaign cases bind exact values to an executable expected-domain classification. | Test (TC-004) |
+| FR-002-AC-5 | The generated campaign runner owns execution, explicit-discard accounting, and conclusion, returns a typed terminal result, and rejects campaigns below either configured coverage floor or above the explicit-discard ceiling. | Test (TC-004) |
+| FR-002-AC-6 | Integer and generated Boolean harness campaign cases bind exact values to executable accepted/rejected expectations; enum cases execute an all-admitted membership expectation. | Test (TC-004) |
 
 ## Dependencies
 

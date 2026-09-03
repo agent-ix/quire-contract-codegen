@@ -524,6 +524,7 @@ fn harness_generated() -> Case {
         postcondition: &postcondition,
         execution_point: "generate",
         minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
         maximum_discarded_cases: 1,
         attestation: attestation(),
     };
@@ -789,6 +790,7 @@ fn harness_rejects_duplicate_clause_identity() -> Case {
         postcondition: &postcondition,
         execution_point: "generate",
         minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
         maximum_discarded_cases: 1,
         attestation: attestation(),
     };

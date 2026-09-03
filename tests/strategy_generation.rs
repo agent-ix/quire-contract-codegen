@@ -11,7 +11,7 @@ use quire_contract_codegen::{
     generate_enum_strategy, generate_i64_strategy, AttestationContext, AttestationResult,
     EnumStrategyCampaign, EnumStrategyRequest, GenerationErrorCode, GenerationTerminalState,
     ProofAttestationBody, StrategyCampaign, StrategyConstraint, StrategyErrorCode, StrategyRequest,
-    IR_CANDIDATE_REVISION,
+    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES,
 };
 use quire_contract_ir::{PackageId, RequirementId, RequirementRef, RequirementRevision};
 
@@ -661,6 +661,32 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
             "{name}"
         );
     }
+
+    let oversized_strategy_id = "x".repeat(MAX_GENERATED_SOURCE_BYTES);
+    let resource_limit = generate_i64_strategy(&StrategyRequest {
+        requirement: &requirement,
+        attestation: attestation_context(),
+        strategy_id: &oversized_strategy_id,
+        constraint: StrategyConstraint::InclusiveRange {
+            minimum: 0,
+            maximum: 1,
+        },
+        campaign: StrategyCampaign::Broad,
+    })
+    .unwrap_err();
+    assert_eq!(
+        resource_limit.code,
+        StrategyErrorCode::ResourceLimitExceeded
+    );
+    assert_eq!(
+        resource_limit.generation_code,
+        Some(GenerationErrorCode::ResourceLimitExceeded)
+    );
+    assert_eq!(
+        resource_limit.terminal_state,
+        GenerationTerminalState::Unsupported
+    );
+    assert_eq!(resource_limit.path, "generated.rust");
 }
 
 /// TC-004.
