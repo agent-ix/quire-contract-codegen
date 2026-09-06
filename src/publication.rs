@@ -33,7 +33,7 @@ pub enum PublicationErrorCode {
     DuplicateArtifactPath,
     /// An artifact digest does not match its exact bytes.
     ArtifactDigestMismatch,
-    /// The existing destination is not a completely verified generator-owned boundary.
+    /// The existing destination does not completely match its local ownership marker.
     DestinationNotOwned,
     /// Staging, swapping, rollback, or cleanup encountered an I/O error.
     IoFailed,
@@ -181,13 +181,25 @@ enum PublicationFault {
     BeforeMarker,
     BeforeSwap,
     DuringSwap,
+    DuringRollback,
+    OwnershipIo(OwnershipIoPoint),
     AfterCommitBeforeBackupCleanup,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OwnershipIoPoint {
+    DestinationMetadata,
+    MarkerRead,
+    ArtifactMetadata,
+    ArtifactRead,
 }
 
 /// Publishes a complete bundle without editing any file outside its destination boundary.
 ///
 /// Callers must serialize publishers and other writers to the destination and its generated sibling
 /// names for the duration of this call.
+/// A destination's marker establishes content consistency, not authenticated provenance.
+/// The rollback guarantee does not cover process crashes or power-loss durability.
 // Implements: FR-005, NFR-001
 pub fn write_bundle_atomic(
     bundle: &ArtifactBundle,
@@ -234,7 +246,7 @@ fn publish(
         }
     };
     if replacing {
-        verify_owned_destination(destination)?;
+        verify_owned_destination(destination, fault)?;
     }
 
     let staging = unique_sibling(parent, name, "stage")?;
@@ -255,14 +267,24 @@ fn publish(
             cleanup(&staging, "clean staging after old-bundle move failure")?;
             return Err(io_diagnostic(destination, "move old bundle", &error));
         }
-        let replacement = if fault == PublicationFault::DuringSwap {
+        let replacement = if matches!(
+            fault,
+            PublicationFault::DuringSwap | PublicationFault::DuringRollback
+        ) {
             Err(injected(destination, "during destination swap"))
         } else {
             fs::rename(&staging, destination)
                 .map_err(|error| io_diagnostic(destination, "publish staged bundle", &error))
         };
         if let Err(error) = replacement {
-            let rollback = fs::rename(&backup, destination);
+            let rollback = if fault == PublicationFault::DuringRollback {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "injected rollback failure",
+                ))
+            } else {
+                fs::rename(&backup, destination)
+            };
             if let Err(rollback_error) = rollback {
                 return Err(io_diagnostic_with_state(
                     destination,
@@ -353,7 +375,9 @@ fn validate_path(path: &str, index: usize) -> Result<(), PublicationDiagnostic> 
     let valid = !path.is_empty()
         && !path.contains('\\')
         && !path.ends_with('/')
-        && path.split('/').all(|segment| !segment.is_empty())
+        && path
+            .split('/')
+            .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
         && path != MARKER_NAME
         && !path.chars().any(char::is_control)
         && parsed
@@ -443,20 +467,34 @@ fn stage_bundle(
     Ok(())
 }
 
-fn verify_owned_destination(destination: &Path) -> Result<(), PublicationDiagnostic> {
-    if !destination.is_dir()
-        || destination
-            .symlink_metadata()
-            .map_or(true, |value| value.file_type().is_symlink())
-    {
+fn verify_owned_destination(
+    destination: &Path,
+    fault: PublicationFault,
+) -> Result<(), PublicationDiagnostic> {
+    let metadata = ownership_io(fault, OwnershipIoPoint::DestinationMetadata, || {
+        destination.symlink_metadata()
+    })
+    .map_err(|error| {
+        ownership_io_diagnostic(
+            destination,
+            destination,
+            "inspect ownership boundary",
+            &error,
+        )
+    })?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
         return Err(not_owned(
             destination,
             "destination is not a regular directory boundary",
         ));
     }
     let marker_path = destination.join(MARKER_NAME);
-    let bytes = fs::read(&marker_path)
-        .map_err(|_| not_owned(destination, "ownership marker is absent or unreadable"))?;
+    let bytes = ownership_io(fault, OwnershipIoPoint::MarkerRead, || {
+        fs::read(&marker_path)
+    })
+    .map_err(|error| {
+        ownership_io_diagnostic(destination, &marker_path, "read ownership marker", &error)
+    })?;
     if bytes.len() > MAX_ARTIFACT_BYTES {
         return Err(not_owned(
             destination,
@@ -496,17 +534,22 @@ fn verify_owned_destination(destination: &Path) -> Result<(), PublicationDiagnos
             }
         }
         let path = destination.join(&artifact.path);
-        let metadata = path
-            .symlink_metadata()
-            .map_err(|_| not_owned(destination, "a marked artifact is absent"))?;
+        let metadata = ownership_io(fault, OwnershipIoPoint::ArtifactMetadata, || {
+            path.symlink_metadata()
+        })
+        .map_err(|error| {
+            ownership_io_diagnostic(destination, &path, "inspect marked artifact", &error)
+        })?;
         if !metadata.is_file() || metadata.file_type().is_symlink() {
             return Err(not_owned(
                 destination,
                 "a marked artifact is not a regular file",
             ));
         }
-        let contents = fs::read(&path)
-            .map_err(|_| not_owned(destination, "a marked artifact is unreadable"))?;
+        let contents = ownership_io(fault, OwnershipIoPoint::ArtifactRead, || fs::read(&path))
+            .map_err(|error| {
+                ownership_io_diagnostic(destination, &path, "read marked artifact", &error)
+            })?;
         if sha256(&contents) != artifact.sha256 {
             return Err(not_owned(destination, "a marked artifact digest changed"));
         }
@@ -531,6 +574,37 @@ fn verify_owned_destination(destination: &Path) -> Result<(), PublicationDiagnos
         ));
     }
     Ok(())
+}
+
+fn ownership_io<T>(
+    fault: PublicationFault,
+    point: OwnershipIoPoint,
+    operation: impl FnOnce() -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    if fault == PublicationFault::OwnershipIo(point) {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "injected ownership I/O failure",
+        ))
+    } else {
+        operation()
+    }
+}
+
+fn ownership_io_diagnostic(
+    destination: &Path,
+    path: &Path,
+    action: &str,
+    error: &std::io::Error,
+) -> PublicationDiagnostic {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        not_owned(
+            destination,
+            &format!("ownership input is absent: {}", path.display()),
+        )
+    } else {
+        io_diagnostic(path, action, error)
+    }
 }
 
 fn collect_entries(
@@ -755,21 +829,143 @@ mod tests {
                 PublicationFault::DuringSwap,
             ]);
         for fault in faults {
-            let parent = temporary("rollback");
-            let destination = parent.join("generated");
-            let developer = parent.join("developer.rs");
-            fs::write(&developer, "developer-owned\n").unwrap();
-            write_bundle_atomic(&bundle("old\n"), &destination).unwrap();
-            let error = publish(&bundle("new\n"), &destination, fault).unwrap_err();
-            assert_eq!(error.code, PublicationErrorCode::IoFailed);
+            for replacing in [false, true] {
+                let parent = temporary("rollback");
+                let destination = parent.join("generated");
+                let developer = parent.join("developer.rs");
+                fs::write(&developer, "developer-owned\n").unwrap();
+                if replacing {
+                    write_bundle_atomic(&bundle("old\n"), &destination).unwrap();
+                }
+                let error = publish(&bundle("new\n"), &destination, fault).unwrap_err();
+                assert_eq!(error.code, PublicationErrorCode::IoFailed);
+                assert_eq!(
+                    error.destination_state,
+                    PublicationDestinationState::Unchanged
+                );
+                if replacing {
+                    assert_eq!(
+                        fs::read_to_string(destination.join("src/generated.rs")).unwrap(),
+                        "old\n"
+                    );
+                } else {
+                    assert!(!destination.exists());
+                }
+                assert_eq!(fs::read_to_string(&developer).unwrap(), "developer-owned\n");
+                assert!(residue(&parent).is_empty());
+                fs::remove_dir_all(parent).unwrap();
+            }
+        }
+    }
+
+    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3
+    #[test]
+    fn failed_rollback_reports_unknown_and_preserves_complete_recovery_bundles() {
+        let parent = temporary("failed-rollback");
+        let destination = parent.join("generated");
+        let developer = parent.join("developer.rs");
+        fs::write(&developer, "developer-owned\n").unwrap();
+        let old = bundle("old\n");
+        let new = bundle("new\n");
+        write_bundle_atomic(&old, &destination).unwrap();
+
+        let error = publish(&new, &destination, PublicationFault::DuringRollback).unwrap_err();
+        assert_eq!(error.code, PublicationErrorCode::IoFailed);
+        assert_eq!(error.terminal_state, GenerationTerminalState::IoFailed);
+        assert_eq!(
+            error.destination_state,
+            PublicationDestinationState::Unknown
+        );
+        assert!(error
+            .message
+            .contains("restore old bundle after failed swap"));
+        assert!(!destination.exists());
+        assert_eq!(fs::read_to_string(&developer).unwrap(), "developer-owned\n");
+        let recovery = residue(&parent);
+        assert_eq!(recovery.len(), 2);
+        for (role, expected) in [(".quire-backup-", old), (".quire-stage-", new)] {
+            let path = parent.join(recovery.iter().find(|name| name.contains(role)).unwrap());
+            verify_owned_destination(&path, PublicationFault::None).unwrap();
+            let observed: OwnershipMarker =
+                serde_json::from_slice(&fs::read(path.join(MARKER_NAME)).unwrap()).unwrap();
+            assert_eq!(observed, marker(&expected));
+            for artifact in expected.artifacts() {
+                assert_eq!(
+                    fs::read_to_string(path.join(&artifact.path)).unwrap(),
+                    artifact.contents
+                );
+            }
+        }
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-3
+    #[test]
+    fn ownership_io_failures_remain_distinct_from_observed_missing_inputs() {
+        let parent = temporary("ownership-io");
+        let destination = parent.join("generated");
+        let old = bundle("old\n");
+        write_bundle_atomic(&old, &destination).unwrap();
+        for (point, path, action) in [
+            (
+                OwnershipIoPoint::DestinationMetadata,
+                destination.clone(),
+                "inspect ownership boundary",
+            ),
+            (
+                OwnershipIoPoint::MarkerRead,
+                destination.join(MARKER_NAME),
+                "read ownership marker",
+            ),
+            (
+                OwnershipIoPoint::ArtifactMetadata,
+                destination.join("attestations/generated.json"),
+                "inspect marked artifact",
+            ),
+            (
+                OwnershipIoPoint::ArtifactRead,
+                destination.join("attestations/generated.json"),
+                "read marked artifact",
+            ),
+        ] {
+            let error = publish(
+                &bundle("new\n"),
+                &destination,
+                PublicationFault::OwnershipIo(point),
+            )
+            .unwrap_err();
+            assert_eq!(error.code, PublicationErrorCode::IoFailed, "{point:?}");
+            assert_eq!(error.terminal_state, GenerationTerminalState::IoFailed);
+            assert_eq!(
+                error.destination_state,
+                PublicationDestinationState::Unchanged
+            );
+            assert_eq!(error.path, path.to_string_lossy());
+            assert!(error.message.contains(action));
+            assert!(error.message.contains("injected ownership I/O failure"));
+            verify_owned_destination(&destination, PublicationFault::None).unwrap();
             assert_eq!(
                 fs::read_to_string(destination.join("src/generated.rs")).unwrap(),
                 "old\n"
             );
-            assert_eq!(fs::read_to_string(&developer).unwrap(), "developer-owned\n");
             assert!(residue(&parent).is_empty());
-            fs::remove_dir_all(parent).unwrap();
         }
+        let missing = destination.join("src/generated.rs");
+        fs::remove_file(&missing).unwrap();
+        let error = write_bundle_atomic(&bundle("new\n"), &destination).unwrap_err();
+        assert_eq!(error.code, PublicationErrorCode::DestinationNotOwned);
+        assert_eq!(error.terminal_state, GenerationTerminalState::InvalidInput);
+        assert_eq!(
+            error.destination_state,
+            PublicationDestinationState::Unchanged
+        );
+        assert_eq!(
+            error.message,
+            format!("ownership input is absent: {}", missing.display())
+        );
+        assert!(!missing.exists());
+        assert!(residue(&parent).is_empty());
+        fs::remove_dir_all(parent).unwrap();
     }
 
     /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3
@@ -811,6 +1007,8 @@ mod tests {
             "../escape",
             "/absolute",
             "./alias",
+            "a/./b",
+            "a/b/.",
             "nested//alias",
             "trailing/",
             "nested\\windows",
@@ -823,6 +1021,10 @@ mod tests {
                 "{path}"
             );
         }
+        let alias_pair =
+            ArtifactBundle::new(vec![generated("a/b", "x"), generated("a/./b", "y")]).unwrap_err();
+        assert_eq!(alias_pair.code, PublicationErrorCode::UnsafeArtifactPath);
+        assert_eq!(alias_pair.path, "bundle.artifacts[1].path");
         let mut wrong_digest = generated("safe", "x");
         wrong_digest.sha256 = "0".repeat(64);
         assert_eq!(

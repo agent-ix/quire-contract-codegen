@@ -51,9 +51,12 @@ exist. Their absence from this table is the honest statement; TM-001 keeps their
 rows 🚧 Planned.
 
 SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
+failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,
 complete ownership-census verification, and refusal of modified, extra-entry, unmarked, and symlinked
 destinations. It is local pre-review evidence for the publication portion of TC-002; the
-serialized-package CLI remains blocked on an IR expression-binding design.
+serialized-package CLI remains blocked on an IR expression-binding design. The suite command is a
+focused local check; the full repository test target also includes these tests, but SUITE-010 has no
+separate structured execution-result producer yet.
 
 `make ci` is deliberately not a suite. A suite whose command is "everything"
 cannot say which obligation a result discharged, and `make ci` is a gate rather

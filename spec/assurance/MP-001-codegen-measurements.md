@@ -219,13 +219,17 @@ because a proof obligation whose subject does not exist is the most complete fal
 Their TM-001 rows stay 🚧 Planned.
 
 The atomic publisher's fault model injects refusal before every artifact and ownership-marker write,
-before destination swap, during replacement swap, and after commit before backup cleanup. For every
-pre-commit failure, the old generated boundary, an adjacent developer-owned file, and sibling staging
-census are checked. The post-commit control instead requires the diagnostic to report `published`,
+before destination swap, during replacement swap and failed rollback, and after commit before backup
+cleanup. Initial-publication and successful-rollback failures must report `unchanged`; their destination,
+an adjacent developer-owned file, and sibling staging census are checked. Failed rollback must report
+`unknown` and preserve complete prior/staged bundles for recovery. Ownership metadata/read I/O failures
+must report `io_failed`, distinct from observed missing inputs. The post-commit control requires `published`,
 requires the new bundle to be complete, and observes the backup residue. On portable filesystems,
 replacing a non-empty directory still requires two renames: rollback covers pre-commit errors, but a
 process crash between those renames can temporarily leave only the sibling backup. This boundary is
-retained as FND-905 rather than represented as crash atomicity.
+retained as FND-905 rather than represented as crash atomicity. Directory entries are not synchronized;
+the current publisher does not promise power-loss durability after a successful return. Its writable
+ownership marker establishes content consistency rather than authenticated provenance.
 
 The shared verification vocabulary is twelve states and this repository demonstrates ten. The two it
 does not are `unsupported` and `malformed`. Measured on the tree before anything was deleted, per
