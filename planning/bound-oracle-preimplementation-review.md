@@ -77,3 +77,15 @@ The implementation digest includes both the new bound consumer and the publisher
 The original oracle golden failed against actual generated output only at the three package-aware
 symbol names (`57741ce7…` to `15522505…`); the fixture and compiled symbol references were updated to
 that output, leaving the independent true/false expectations and expression source range unchanged.
+
+Exact implementation head `e59fb26ae25d0c29c52b0068052263253f8fe9bc` passes all 40 focused tests on
+stable and exact Rust 1.75.0: eight unit, seven bound consumer, five harness, ten oracle, five strategy
+and five coverage primitives. Native generated crate controls and the six pinned stable LLVM cases
+execute in these runs; the LLVM producer is still the separately qualified stable toolchain, not
+Rust 1.75 LLVM. All-target Clippy with denied warnings, warning-free rustdoc, format, spec validation
+and constant/manifest/lockfile upstream identity checks pass. Rust 1.75 Cargo required populating its
+separate Git cache from the same exact published IR head. No path patch qualified these results.
+The structured producer set and shared retention/receipt gates were not run by this slice; the
+coordinator owns integrated assurance and independent acceptance. A documentation-only followup
+removes stale interface claims that the IR-owned binding is absent and the old package-less naming
+description; it does not implement CLI or aggregate analysis.

@@ -23,7 +23,7 @@ operations:
     output: ArtifactBundle | DiagnosticSet
     semantics: planned multi-backend operation; the implemented first consumer is library-only generate_bound_oracles
   - name: generate_tristate_harness
-    inputs: [typed precondition, typed postcondition, explicit bindings, minimum accepted cases, maximum discarded cases, attestation context]
+    inputs: [typed precondition, typed postcondition, explicit bindings, minimum accepted cases, minimum rejected cases, maximum discarded cases, attestation context]
     output: GeneratedArtifactBundle | HarnessDiagnosticSet
     semantics: source plus one proof attestation, request-bound campaign policy, owned execution loop, retained campaign accounting
   - name: generate_i64_strategy
@@ -39,15 +39,17 @@ operations:
     output: PublishedBundleIdentity | IO diagnostic
     semantics: replace only a destination whose complete contents match its local ownership marker after staged validation; the marker is a writable consistency declaration, not authenticated provenance; caller serializes destination writers; missing inputs refuse ownership while inspection/read failures return io_failed with unchanged state; failed rollback reports unknown and preserves backup/staging for recovery; post-commit cleanup failures report published; process crashes between directory renames and power-loss durability remain outside the portable rollback guarantee
   - name: analyze_coverage
-    status: planned; awaits public IR-owned bound executable population and native run-result contract
+    status: planned; public IR-owned bound population is available, native run-result contract and aggregate analysis integration remain pending
     inputs: [bound executable population, generated source and maps, LLVM coverage JSON bytes, native producer and run identities, source root, runtime campaign report, execution outcome, attestation context]
     output: versioned structured AnalysisOutcome including non-success diagnostics and available input identities
     semantics: coverage obligation succeeds only for nonempty complete exercised population with successful bound execution; successful serialization is not successful coverage; never executes LLVM
   - name: cli_generate
+    status: planned; no executable CLI is provided by this library candidate
     inputs: [serialized package path, destination, backend flags]
     output: stable exit status, diagnostics, and published bundle identity
     semantics: equivalent to the library API and never edits developer-owned regions
 artifact_bundle:
+  scope: planned multi-backend generate_bundle; implemented bound-oracle batches contain only oracle source, source maps and their generation attestation bodies
   required:
     - executable Rust oracles
     - tri-state harnesses
@@ -56,6 +58,8 @@ artifact_bundle:
     - coverage source map and vacuity map
     - diagnostics and one proof attestation per generated artifact
 diagnostics:
+  bound_batch_errors: typed ResourceLimitExceeded, NameCollision(full ClauseRef), Clause(full ClauseRef plus existing lower-level diagnostics), or Bundle(existing publication diagnostic); no partial artifacts
+  no_executable: separate successful non-artifact result for valid empty or informational-only populations, not a terminal-state or proof-attestation claim
   terminal_states: [generated, unsupported, invalid-input, backend-unavailable, io-failed, inconclusive]
   implemented_mapping:
     generated: successful supported Boolean lowering only
@@ -89,7 +93,7 @@ oracle_slice:
   archive_build: exact archive revision/time may be supplied explicitly; absent Git/archive identity is marked unavailable and dirty rather than aborting compilation
   schemas: generated Rust and source-map outputs each identify and validate against their own versioned schema
   source_limit: 1048576 bytes per clause, enforced during rendering
-  artifact_names: bounded readable prefix plus full SHA-256 requirement/revision/clause identity with per-clause source-map and per-artifact attestation paths
+  artifact_names: bounded readable prefix plus full SHA-256 package/requirement/revision/clause identity with per-clause source-map and per-artifact attestation paths
 harness_strategy_slice:
   output: generated Rust artifact plus one ProofAttestationV1 body, under proof obligations PROOF-codegen-generated-rust-harness and PROOF-codegen-generated-rust-strategy
   attestation_context: required for harness, integer-strategy, and enum-strategy generation
@@ -133,5 +137,5 @@ compatibility:
   licensing: MIT OR Apache-2.0
   publication: disabled through the human v0.1 source-release decision
 open_design_gates:
-  serialized_package_cli: the accepted ContractPackage wire format binds ReferenceBody metadata but no executable TypedExpression, and the IR wire decoder is private; cli_generate cannot truthfully lower serialized packages until IR owns that binding and decoding contract
+  serialized_package_cli: the pinned public IR derived-projection decoder now supplies BoundPackage; cli_generate remains unimplemented, and normal projection production remains the authoritative frontend/model lane rather than a codegen-owned authored sidecar
 ```
