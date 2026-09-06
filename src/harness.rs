@@ -545,7 +545,7 @@ pub enum {outcome_error_type} {{\n\
         summary: {summary_type},\n\
         /// Human-readable framework detail, not used as machine identity.\n\
         reason: String,\n\
-        /// Coverage-floor failure observed before exhaustion, if any; search remains inconclusive.\n\
+        /// Observed campaign policy failure, if any; search remains inconclusive.\n\
         policy: Option<Box<Self>>,\n\
     }},\n\
     /// A case failed its expected-domain or postcondition check.\n\
@@ -575,6 +575,9 @@ impl {outcome_error_type} {{\n\
 fn {conclude_symbol}_policy(\n\
     summary: {summary_type},\n\
 ) -> Result<{summary_type}, {outcome_error_type}> {{\n\
+    if summary.discarded > {maximum_discarded_symbol} {{\n\
+        return Err({outcome_error_type}::AboveDiscardCeiling {{ summary }});\n\
+    }}\n\
     if summary.accepted < {minimum_accepted_symbol} {{\n\
         return Err({outcome_error_type}::BelowAcceptedFloor {{ summary }});\n\
     }}\n\

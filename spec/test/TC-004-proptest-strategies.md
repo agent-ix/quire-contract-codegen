@@ -23,6 +23,9 @@ boundary census would otherwise be vacuous.
 Pin the successful mixed campaign's RNG and exact accepted/rejected counts. Exercise framework
 exhaustion both before any invocation and after invocations, and require the framework reason and
 any missed coverage floor to survive together.
+Pass an existing report containing a discard into an otherwise successful deterministic campaign;
+require the completed-run policy to reject the cumulative discard excess. An aborted search with
+the same prior excess must retain both exhaustion and the exceeded-ceiling policy result.
 
 ## Expected Results
 

@@ -40,9 +40,11 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   rejected, and maximum explicit-discard invocation counts. A zero rejected floor declares a total
   precondition; a positive rejected floor requires observed rejection coverage.
 - An aborted search shall return an exhausted result with its framework reason and observed
-  accounting, including any missed coverage floor as a nested policy result. A floor missed during
+  accounting, including any violated policy threshold as a nested policy result. A floor missed during
   an incomplete search shall not replace the exhaustion result. Completed searches shall enforce
   the same coverage floors.
+- Campaign policy shall apply to the complete supplied report, including preexisting invocations
+  and explicit discards; a completed search shall not pass when that report exceeds its discard ceiling.
 - Every generated integer strategy case shall bind its exact values to an executable accepted or
   rejected domain check against runtime tri-state verdicts. Enum strategy populations contain only
   declared admissible members and shall execute their admission expectation without synthesizing an

@@ -438,6 +438,32 @@ mod generated_tests {
         assert_eq!(summary.failed, 0);
         assert_eq!(summary.discarded, 0);
 
+        let mut prior_discard_report = CampaignReport::new(ContractIdentity::new(
+            RequirementId::new("FR-002"),
+            RevisionId::new("1"),
+        ));
+        prior_discard_report.record_discard();
+        let mut prior_discard_runner = TestRunner::new_with_rng(Config {
+            cases: 8,
+            max_global_rejects: 32,
+            failure_persistence: None,
+            ..Config::default()
+        }, proptest::test_runner::TestRng::deterministic_rng(
+            proptest::test_runner::RngAlgorithm::ChaCha,
+        ));
+        let prior_discard_error = HARNESS_FN_run_campaign(
+            &mut prior_discard_runner,
+            &mixed,
+            &mut prior_discard_report,
+            |_, _| {},
+        )
+        .unwrap_err();
+        assert!(matches!(&prior_discard_error, HARNESS_ERROR::AboveDiscardCeiling { .. }));
+        assert_eq!(prior_discard_error.summary().attempted, 13);
+        assert_eq!(prior_discard_error.summary().accepted, 8);
+        assert_eq!(prior_discard_error.summary().rejected, 4);
+        assert_eq!(prior_discard_error.summary().discarded, 1);
+
         let mut discarded_report = CampaignReport::new(ContractIdentity::new(
             RequirementId::new("FR-002"),
             RevisionId::new("1"),
@@ -502,19 +528,23 @@ mod generated_tests {
             }
         }
 
-        for (values, accepted_count, rejected_count) in [
-            (vec![], 0, 0),
-            (vec![HARNESS_FN_accepted_case(true, true); 2], 2, 0),
+        for (values, accepted_count, rejected_count, discarded_count) in [
+            (vec![], 0, 0, 0),
+            (vec![HARNESS_FN_accepted_case(true, true); 2], 2, 0, 0),
             (vec![
                 HARNESS_FN_accepted_case(true, true),
                 HARNESS_FN_rejected_case(false, true),
                 HARNESS_FN_accepted_case(true, true),
-            ], 2, 1),
+            ], 2, 1, 0),
+            (vec![], 0, 0, 1),
         ] {
             let mut exhausted_report = CampaignReport::new(ContractIdentity::new(
                 RequirementId::new("FR-002"),
                 RevisionId::new("1"),
             ));
+            for _ in 0..discarded_count {
+                exhausted_report.record_discard();
+            }
             let unavailable = ExhaustingStrategy {
                 values,
                 next: core::cell::Cell::new(0),
@@ -534,10 +564,11 @@ mod generated_tests {
             match &exhausted_error {
                 HARNESS_ERROR::Exhausted { reason, policy, .. } => {
                     assert_eq!(reason, "generated input unavailable");
-                    match (accepted_count, rejected_count) {
-                        (0, 0) => assert!(matches!(policy.as_deref(), Some(HARNESS_ERROR::BelowAcceptedFloor { .. }))),
-                        (2, 0) => assert!(matches!(policy.as_deref(), Some(HARNESS_ERROR::BelowRejectedFloor { .. }))),
-                        (2, 1) => assert!(policy.is_none()),
+                    match (accepted_count, rejected_count, discarded_count) {
+                        (0, 0, 0) => assert!(matches!(policy.as_deref(), Some(HARNESS_ERROR::BelowAcceptedFloor { .. }))),
+                        (2, 0, 0) => assert!(matches!(policy.as_deref(), Some(HARNESS_ERROR::BelowRejectedFloor { .. }))),
+                        (2, 1, 0) => assert!(policy.is_none()),
+                        (0, 0, 1) => assert!(matches!(policy.as_deref(), Some(HARNESS_ERROR::AboveDiscardCeiling { .. }))),
                         _ => unreachable!(),
                     }
                     if let Some(policy) = policy {
@@ -548,7 +579,8 @@ mod generated_tests {
             }
             assert_eq!(exhausted_report.counts().accepted(), accepted_count);
             assert_eq!(exhausted_report.counts().rejected(), rejected_count);
-            assert_eq!(exhausted_report.counts().total(), accepted_count + rejected_count);
+            assert_eq!(exhausted_report.counts().discarded(), discarded_count);
+            assert_eq!(exhausted_report.counts().total(), accepted_count + rejected_count + discarded_count);
         }
     }
 }

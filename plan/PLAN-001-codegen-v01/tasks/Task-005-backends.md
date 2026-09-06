@@ -32,9 +32,10 @@ correlated relations; only explicitly residual constraints may use rejection.
 ## PR #22 round 8 repair delta
 
 Seed the mixed positive fixture and pin its exact counters. Preserve every framework abort as
-`Exhausted`, retaining the reason, accounting, and optional missed-floor result. Remove the
-unreachable policy-level discard check while preserving the live loop/failure checks and every
-generated-source size guard. Correct the accounting unit and add a source-limit conformance case.
+`Exhausted`, retaining the reason, accounting, and optional policy failure. Preserve the
+policy-level discard check because supplied reports may contain prior discards, and prove that
+path with a prepopulated-report fixture. Preserve the loop/failure checks and every generated-source
+size guard. Correct the accounting unit and add a source-limit conformance case.
 The campaign-outcome producer integration remains a separate completion item; generated-crate
 execution supplies the focused campaign controls in this revision.
 
