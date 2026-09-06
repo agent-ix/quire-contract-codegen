@@ -328,7 +328,14 @@ mod generated_tests {
             |_, _| panic!("rejected subject must not run"),
         );
         let error = result.unwrap_err();
-        assert!(matches!(&error, HARNESS_ERROR::BelowAcceptedFloor { .. }));
+        match &error {
+            HARNESS_ERROR::Exhausted { reason, policy, .. } => {
+                assert_eq!(reason, "Too many global rejects");
+                assert!(matches!(policy.as_deref(), Some(HARNESS_ERROR::BelowAcceptedFloor { .. })));
+                assert_eq!(policy.as_deref().unwrap().summary(), error.summary());
+            }
+            other => panic!("expected exhausted search with retained floor failure, got {other:?}"),
+        }
         assert_eq!(error.summary().accepted, 0);
         assert_eq!(error.summary().attempted, 3);
         assert_eq!(error.summary().rejected, 3);
@@ -410,12 +417,14 @@ mod generated_tests {
             HARNESS_FN_accepted_case(true, true),
             HARNESS_FN_rejected_case(false, true),
         ]).boxed();
-        let mut runner = TestRunner::new(Config {
+        let mut runner = TestRunner::new_with_rng(Config {
             cases: 8,
             max_global_rejects: 32,
             failure_persistence: None,
             ..Config::default()
-        });
+        }, proptest::test_runner::TestRng::deterministic_rng(
+            proptest::test_runner::RngAlgorithm::ChaCha,
+        ));
         let summary = HARNESS_FN_run_campaign(
             &mut runner,
             &mixed,
@@ -423,9 +432,9 @@ mod generated_tests {
             |_, _| {},
         )
         .unwrap();
-        assert_eq!(summary.attempted, summary.accepted + summary.rejected);
+        assert_eq!(summary.attempted, 12);
         assert_eq!(summary.accepted, 8);
-        assert!(summary.rejected >= 1);
+        assert_eq!(summary.rejected, 4);
         assert_eq!(summary.failed, 0);
         assert_eq!(summary.discarded, 0);
 
@@ -473,11 +482,12 @@ mod generated_tests {
         assert_eq!(zero_case_report.counts().total(), 0);
 
         #[derive(Debug)]
-        struct UnavailableStrategy {
-            value: HARNESS_CASE,
+        struct ExhaustingStrategy {
+            values: Vec<HARNESS_CASE>,
+            next: core::cell::Cell<usize>,
         }
 
-        impl proptest::strategy::Strategy for UnavailableStrategy {
+        impl proptest::strategy::Strategy for ExhaustingStrategy {
             type Tree = Just<HARNESS_CASE>;
             type Value = HARNESS_CASE;
 
@@ -485,32 +495,61 @@ mod generated_tests {
                 &self,
                 _runner: &mut TestRunner,
             ) -> proptest::strategy::NewTree<Self> {
-                let _ = &self.value;
-                Err("generated input unavailable".into())
+                let next = self.next.get();
+                self.next.set(next + 1);
+                self.values.get(next).cloned().map(Just)
+                    .ok_or_else(|| "generated input unavailable".into())
             }
         }
 
-        let mut exhausted_report = CampaignReport::new(ContractIdentity::new(
-            RequirementId::new("FR-002"),
-            RevisionId::new("1"),
-        ));
-        let unavailable = UnavailableStrategy {
-            value: HARNESS_FN_accepted_case(true, true),
-        };
-        let mut exhausted_runner = TestRunner::new(Config {
-            cases: 1,
-            failure_persistence: None,
-            ..Config::default()
-        });
-        let exhausted_error = HARNESS_FN_run_campaign(
-            &mut exhausted_runner,
-            &unavailable,
-            &mut exhausted_report,
-            |_, _| {},
-        )
-        .unwrap_err();
-        assert!(matches!(exhausted_error, HARNESS_ERROR::Exhausted { .. }));
-        assert_eq!(exhausted_report.counts().total(), 0);
+        for (values, accepted_count, rejected_count) in [
+            (vec![], 0, 0),
+            (vec![HARNESS_FN_accepted_case(true, true); 2], 2, 0),
+            (vec![
+                HARNESS_FN_accepted_case(true, true),
+                HARNESS_FN_rejected_case(false, true),
+                HARNESS_FN_accepted_case(true, true),
+            ], 2, 1),
+        ] {
+            let mut exhausted_report = CampaignReport::new(ContractIdentity::new(
+                RequirementId::new("FR-002"),
+                RevisionId::new("1"),
+            ));
+            let unavailable = ExhaustingStrategy {
+                values,
+                next: core::cell::Cell::new(0),
+            };
+            let mut exhausted_runner = TestRunner::new(Config {
+                cases: 3,
+                failure_persistence: None,
+                ..Config::default()
+            });
+            let exhausted_error = HARNESS_FN_run_campaign(
+                &mut exhausted_runner,
+                &unavailable,
+                &mut exhausted_report,
+                |_, _| {},
+            )
+            .unwrap_err();
+            match &exhausted_error {
+                HARNESS_ERROR::Exhausted { reason, policy, .. } => {
+                    assert_eq!(reason, "generated input unavailable");
+                    match (accepted_count, rejected_count) {
+                        (0, 0) => assert!(matches!(policy.as_deref(), Some(HARNESS_ERROR::BelowAcceptedFloor { .. }))),
+                        (2, 0) => assert!(matches!(policy.as_deref(), Some(HARNESS_ERROR::BelowRejectedFloor { .. }))),
+                        (2, 1) => assert!(policy.is_none()),
+                        _ => unreachable!(),
+                    }
+                    if let Some(policy) = policy {
+                        assert_eq!(policy.summary(), exhausted_error.summary());
+                    }
+                }
+                other => panic!("expected exhausted input generation, got {other:?}"),
+            }
+            assert_eq!(exhausted_report.counts().accepted(), accepted_count);
+            assert_eq!(exhausted_report.counts().rejected(), rejected_count);
+            assert_eq!(exhausted_report.counts().total(), accepted_count + rejected_count);
+        }
     }
 }
 "#

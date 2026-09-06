@@ -88,6 +88,10 @@ remains partial because atomic publication is not implemented, and no row is pro
 
 TC-008 through TC-013 are the shared-assurance migration's own rows and are covered by named tests.
 
+TC-004's generated-crate fixtures include deterministic mixed-campaign counts and distinguish
+framework exhaustion with a retained floor result from a completed below-floor campaign. Its row
+remains planned pending independent review of the complete issue #3 scope.
+
 ## Evidence Locations
 
 Each row is specified in the same-ID document under `spec/test/`. `spec/evidence/suites.md` is the

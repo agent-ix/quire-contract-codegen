@@ -509,7 +509,7 @@ const {maximum_discarded_symbol}: u64 = {maximum_discarded_cases};\n\
 /// Complete invocation accounting retained by the generated campaign.\n\
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]\n\
 pub struct {summary_type} {{\n\
-    /// Total adapter invocations, including retries and shrink replays.\n\
+    /// Adapter invocations plus explicit discards, including global-reject retries and shrink replays.\n\
     pub attempted: u64,\n\
     /// Accepted adapter invocations, including postcondition failures.\n\
     pub accepted: u64,\n\
@@ -545,6 +545,8 @@ pub enum {outcome_error_type} {{\n\
         summary: {summary_type},\n\
         /// Human-readable framework detail, not used as machine identity.\n\
         reason: String,\n\
+        /// Coverage-floor failure observed before exhaustion, if any; search remains inconclusive.\n\
+        policy: Option<Box<Self>>,\n\
     }},\n\
     /// A case failed its expected-domain or postcondition check.\n\
     Failed {{\n\
@@ -573,9 +575,6 @@ impl {outcome_error_type} {{\n\
 fn {conclude_symbol}_policy(\n\
     summary: {summary_type},\n\
 ) -> Result<{summary_type}, {outcome_error_type}> {{\n\
-    if summary.discarded > {maximum_discarded_symbol} {{\n\
-        return Err({outcome_error_type}::AboveDiscardCeiling {{ summary }});\n\
-    }}\n\
     if summary.accepted < {minimum_accepted_symbol} {{\n\
         return Err({outcome_error_type}::BelowAcceptedFloor {{ summary }});\n\
     }}\n\
@@ -600,20 +599,12 @@ fn {conclude_symbol}(\n\
     }};\n\
     match run_result {{\n\
         Ok(()) => {conclude_symbol}_policy(summary),\n\
-        Err(proptest::test_runner::TestError::Abort(reason)) if summary.attempted == 0 => {{\n\
+        Err(proptest::test_runner::TestError::Abort(reason)) => {{\n\
             Err({outcome_error_type}::Exhausted {{\n\
                 summary,\n\
                 reason: reason.to_string(),\n\
+                policy: {conclude_symbol}_policy(summary).err().map(Box::new),\n\
             }})\n\
-        }}\n\
-        Err(proptest::test_runner::TestError::Abort(reason)) => {{\n\
-            match {conclude_symbol}_policy(summary) {{\n\
-                Ok(summary) => Err({outcome_error_type}::Exhausted {{\n\
-                    summary,\n\
-                    reason: reason.to_string(),\n\
-                }}),\n\
-                Err(error) => Err(error),\n\
-            }}\n\
         }}\n\
         Err(proptest::test_runner::TestError::Fail(reason, _case)) => {{\n\
             if summary.discarded > {maximum_discarded_symbol} {{\n\

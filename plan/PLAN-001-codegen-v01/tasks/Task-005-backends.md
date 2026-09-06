@@ -29,6 +29,15 @@ Its accepted-case floor and discard ceiling are request inputs bound into genera
 Strategy generation directly shapes bounded ranges, finite memberships, enums, and supported
 correlated relations; only explicitly residual constraints may use rejection.
 
+## PR #22 round 8 repair delta
+
+Seed the mixed positive fixture and pin its exact counters. Preserve every framework abort as
+`Exhausted`, retaining the reason, accounting, and optional missed-floor result. Remove the
+unreachable policy-level discard check while preserving the live loop/failure checks and every
+generated-source size guard. Correct the accounting unit and add a source-limit conformance case.
+The campaign-outcome producer integration remains a separate completion item; generated-crate
+execution supplies the focused campaign controls in this revision.
+
 ## Guards
 
 - Current `main` is the branch base; superseded bespoke-assurance PRs are not revived or restacked.
