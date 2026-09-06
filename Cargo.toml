@@ -14,7 +14,7 @@ name = "quire_contract_codegen"
 path = "src/lib.rs"
 
 [dependencies]
-quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "5c49ebfd1c87415f74420ad047392bd03b1bd202" }
+quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "93674480c572c237fe87c5d509b17206664bdd62" }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"
 sha2 = "=0.10.9"

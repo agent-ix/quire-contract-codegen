@@ -101,6 +101,8 @@ fn expected_implementation_digest() -> String {
     let mut hasher = Sha256::new();
     for value in [
         include_bytes!("../src/oracle.rs").as_slice(),
+        include_bytes!("../src/bound.rs").as_slice(),
+        include_bytes!("../src/publication.rs").as_slice(),
         include_bytes!("../src/harness.rs").as_slice(),
         include_bytes!("../src/strategy.rs").as_slice(),
         include_bytes!("../build.rs").as_slice(),
@@ -471,16 +473,16 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
         first.rust.contents,
         include_str!("fixtures/generated_boolean_oracle.golden")
     );
-    assert!(!generated_boolean_oracle::oracle_fr_001_7_clause_main_id_57741ce71ac28bb13911940353c3f67827c9429e1c21cc1becae9119641ab101(true));
-    assert!(generated_boolean_oracle::oracle_fr_001_7_clause_main_id_57741ce71ac28bb13911940353c3f67827c9429e1c21cc1becae9119641ab101(false));
+    assert!(!generated_boolean_oracle::oracle_fr_001_7_clause_main_id_15522505943cb96b7492688e45253baa21b4b68c040d8a55eb483976327050b1(true));
+    assert!(generated_boolean_oracle::oracle_fr_001_7_clause_main_id_15522505943cb96b7492688e45253baa21b4b68c040d8a55eb483976327050b1(false));
     assert_eq!(
-        generated_boolean_oracle::ORACLE_FR_001_7_CLAUSE_MAIN_ID_57741CE71AC28BB13911940353C3F67827C9429E1C21CC1BECAE9119641AB101_IDENTITY
+        generated_boolean_oracle::ORACLE_FR_001_7_CLAUSE_MAIN_ID_15522505943CB96B7492688E45253BAA21B4B68C040D8A55EB483976327050B1_IDENTITY
             .requirement
             .as_str(),
         "FR-001"
     );
     assert_eq!(
-        generated_boolean_oracle::ORACLE_FR_001_7_CLAUSE_MAIN_ID_57741CE71AC28BB13911940353C3F67827C9429E1C21CC1BECAE9119641AB101_CLAUSE.as_str(),
+        generated_boolean_oracle::ORACLE_FR_001_7_CLAUSE_MAIN_ID_15522505943CB96B7492688E45253BAA21B4B68C040D8A55EB483976327050B1_CLAUSE.as_str(),
         "clause-main"
     );
 

@@ -51,6 +51,10 @@ and terminal states the corpus actually reached.
 The harness source-limit case must observe `ResourceLimitExceeded` and `unsupported`; the corpus
 has at least ten rows including its census. Campaign outcome controls execute in TC-004's generated
 crate tests; this generation producer does not yet publish native campaign-execution results.
+The library-only public bound-package consumer additionally has seven synthetic-projection tests
+and a byte-accounting unit control, including actual publication and native execution of generated
+sources. These are not yet rows in this structured generation producer, do not establish the normal
+source frontend, and do not close a native campaign or aggregate coverage obligation.
 
 `scripts/check_upstream_pins.py --json` publishes `codegen.upstream-identity/v1`: for each declared
 upstream, the revision the crate's own constant states, the revision the dependency declaration pins,

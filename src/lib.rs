@@ -5,6 +5,8 @@
 
 // Implements: FR-001
 mod oracle;
+// Implements: FR-001
+mod bound;
 // Implements: FR-005, NFR-001
 mod publication;
 // Implements: FR-002
@@ -17,6 +19,11 @@ mod vacuity;
 pub use vacuity::{
     classify_clause, parse_llvm_coverage, ClauseCoverage, CoverageDiagnostic, CoverageErrorCode,
     LlvmCoverage, ProbeObservation, MAX_COVERAGE_BYTES,
+};
+
+pub use bound::{
+    generate_bound_oracles, BoundGenerationError, BoundOracleClause, BoundOracleGeneration,
+    GeneratedBoundOracles, NoExecutableOracles,
 };
 
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};

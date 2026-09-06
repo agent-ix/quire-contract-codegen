@@ -214,10 +214,18 @@ pub fn generate_tristate_harness(
         "{}_MAXIMUM_DISCARDED_CASES",
         base_symbol.to_ascii_uppercase()
     );
-    let precondition_symbol =
-        oracle_symbol(requirement, revision, request.precondition_clause.as_str());
-    let postcondition_symbol =
-        oracle_symbol(requirement, revision, request.postcondition_clause.as_str());
+    let precondition_symbol = oracle_symbol(
+        request.requirement.package().as_str(),
+        requirement,
+        revision,
+        request.precondition_clause.as_str(),
+    );
+    let postcondition_symbol = oracle_symbol(
+        request.requirement.package().as_str(),
+        requirement,
+        revision,
+        request.postcondition_clause.as_str(),
+    );
     let shell_precondition_identity_symbol =
         format!("{}_PRECONDITION", shell_symbol.to_ascii_uppercase());
     let shell_postcondition_identity_symbol =

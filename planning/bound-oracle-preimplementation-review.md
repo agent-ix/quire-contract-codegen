@@ -54,3 +54,26 @@ attestation assertions, since build identity intentionally records source dirtin
 generation/publication and failure-before-publication, source-map schema identity, empty/information
 cases, cross-package collisions, exact input provenance, stable/MSRV and integrated native producers.
 No CLI, pre/post pairing, Kani, aggregate vacuity report or campaign-provenance closure is included.
+
+## Implementation checkpoint (not independent acceptance)
+
+The public consumer now lowers the complete immutable IR population. Seven synthetic projection
+tests exercise complete population/order, exact bound/expression/declaration identities, explicit
+NoExecutable, cross-package symbol/map identity, whole-batch refusal of a later unsupported clause,
+count preflight, declaration-only provenance changes, and actual publication followed by native
+compilation/execution against the unchanged exact runtime. A separate byte-accounting unit control
+tests both exact publisher limits, one-past refusal and overflow without allocating maximum-sized
+fixtures. These controls pass locally; integrated committed-head qualification follows separately.
+
+FND-16001 through FND-16005 have implementations and local controls, not campaign closure. Output
+collection retains both immutable clause bundles and the publication bundle; its 128 MiB limit is
+an emitted-byte budget, not an assertion of 128 MiB peak process memory. No input/output coverage
+verdict is generated. Native coverage remains the earlier six measured standalone-oracle controls.
+
+The fetched canonical HTTPS IR pin is exactly `93674480c572c237fe87c5d509b17206664bdd62`, without a
+path override. Cargo lock reconciliation downgrades stacker 0.1.25 to the IR-required exact 0.1.15,
+adding its Windows platform dependencies and removing the replaced windows-sys dependency.
+The implementation digest includes both the new bound consumer and the publisher it calls.
+The original oracle golden failed against actual generated output only at the three package-aware
+symbol names (`57741ce7…` to `15522505…`); the fixture and compiled symbol references were updated to
+that output, leaving the independent true/false expectations and expression source range unchanged.
