@@ -15,6 +15,13 @@ mod harness;
 mod strategy;
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
 mod vacuity;
+// Implements: FR-004 (complete domain observations, always unqualified).
+mod bound_coverage;
+
+pub use bound_coverage::{
+    analyze_bound_coverage, ArtifactBytes, BoundAnalysisState, BoundCoverageAnalysis,
+    BoundCoverageInputs, BOUND_COVERAGE_FORMAT, BOUND_COVERAGE_SCHEMA, MAX_ANALYSIS_BYTES,
+};
 
 pub use vacuity::{
     classify_clause, parse_llvm_coverage, ClauseCoverage, CoverageDiagnostic, CoverageErrorCode,

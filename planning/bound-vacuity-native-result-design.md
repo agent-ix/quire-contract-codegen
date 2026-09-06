@@ -17,6 +17,12 @@ review_set: subset
 `e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3` pins in this first slice.
 No producer, schema, proof obligation, or passing coverage row is claimed by this packet.
 
+Campaign checkpoint: the coordinator subsequently approved phase A exactly as complete
+unqualified observations. The implementation follows this proposal without promoting a
+runtime dependency or implementing native transport/qualification. Phase B remains a design
+gate. REV-018 records the resulting local candidate and qualifications separately from this
+preimplementation history.
+
 Issue #5 requires per-requirement LLVM coverage/rejection facts. PR #23's original
 specification-only body is historical: its published recovery `a953a203` implements
 probes/LLVM primitives and explicitly leaves native binding and aggregate analysis open.

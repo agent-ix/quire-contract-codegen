@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-ix.github.io/quire-contract-codegen/schemas/bound-coverage-observations-v1.schema.json",
+  "title": "Complete bound coverage observations, not native qualification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schema_sha256", "state", "provenance", "population", "analyzer_revision", "analyzer_source_state", "analyzer_implementation_sha256", "bound_sha256", "export_sha256", "informational", "artifacts", "clauses", "diagnostics"],
+  "properties": {
+    "format": {"const": "codegen.bound-coverage-observations/v1"},
+    "schema_sha256": {"$ref": "#/$defs/digest"},
+    "analyzer_implementation_sha256": {"$ref": "#/$defs/digest"},
+    "analyzer_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "analyzer_source_state": {"enum": ["clean", "dirty"]},
+    "state": {"enum": ["complete", "incomplete", "invalid_input", "unsupported", "no_executable"]},
+    "provenance": {"const": "unqualified"},
+    "population": {"enum": ["complete", "not_emitted"]},
+    "bound_sha256": {"$ref": "#/$defs/digest"},
+    "export_sha256": {"anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+    "informational": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/clause_ref"}},
+    "artifacts": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/artifact"}},
+    "clauses": {"type": "array", "maxItems": 1024, "items": {"$ref": "#/$defs/clause"}},
+    "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}}
+  },
+  "allOf": [
+    {"if": {"properties": {"state": {"enum": ["invalid_input", "unsupported"]}}}, "then": {"properties": {"population": {"const": "not_emitted"}, "clauses": {"maxItems": 0}, "diagnostics": {"minItems": 1}}}},
+    {"if": {"properties": {"state": {"const": "no_executable"}}}, "then": {"properties": {"population": {"const": "complete"}, "clauses": {"maxItems": 0}, "artifacts": {"maxItems": 0}, "export_sha256": {"type": "null"}, "diagnostics": {"maxItems": 0}}}},
+    {"if": {"properties": {"state": {"enum": ["complete", "incomplete"]}}}, "then": {"properties": {"population": {"const": "complete"}, "clauses": {"minItems": 1}, "diagnostics": {"maxItems": 0}}}},
+    {"if": {"properties": {"state": {"const": "complete"}}}, "then": {"properties": {"export_sha256": {"$ref": "#/$defs/digest"}, "clauses": {"items": {"properties": {"classification": {"type": "string"}, "evaluation_count": {"$ref": "#/$defs/count"}, "diagnostics": {"maxItems": 0}, "consequents": {"items": {"properties": {"count": {"$ref": "#/$defs/count"}}}}}}}}}},
+    {"if": {"properties": {"state": {"const": "incomplete"}}}, "then": {"properties": {"clauses": {"contains": {"properties": {"classification": {"type": "null"}, "diagnostics": {"minItems": 1}}}}}}}
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "count": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "optional_count": {"anyOf": [{"$ref": "#/$defs/count"}, {"type": "null"}]},
+    "requirement_ref": {
+      "type": "object", "additionalProperties": false, "required": ["package", "requirement", "revision"],
+      "properties": {"package": {"type": "string", "minLength": 1}, "requirement": {"type": "string", "minLength": 1}, "revision": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615}}
+    },
+    "clause_ref": {
+      "type": "object", "additionalProperties": false, "required": ["requirement", "clause"],
+      "properties": {"requirement": {"$ref": "#/$defs/requirement_ref"}, "clause": {"type": "string", "minLength": 1}}
+    },
+    "artifact": {
+      "type": "object", "additionalProperties": false, "required": ["path", "bytes", "sha256"],
+      "properties": {"path": {"type": "string", "minLength": 1}, "bytes": {"type": "integer", "minimum": 0, "maximum": 16777216}, "sha256": {"$ref": "#/$defs/digest"}}
+    },
+    "diagnostic": {
+      "type": "object", "additionalProperties": false, "required": ["code", "message"],
+      "properties": {"code": {"enum": ["binding_mismatch", "artifact_mismatch", "map_mismatch", "foreign_generated_file", "resource_limit_exceeded", "malformed_export", "unsupported_profile", "invalid_path", "duplicate_file", "unavailable_observation", "population_mismatch", "inconsistent_observation"]}, "message": {"type": "string", "minLength": 1}}
+    },
+    "consequent": {
+      "type": "object", "additionalProperties": false, "required": ["ordinal", "count"],
+      "properties": {"ordinal": {"type": "integer", "minimum": 0}, "count": {"$ref": "#/$defs/optional_count"}}
+    },
+    "clause": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity", "expression_sha256", "declaration_sha256", "expected_consequents", "evaluation_count", "consequents", "classification", "diagnostics"],
+      "properties": {
+        "identity": {"$ref": "#/$defs/clause_ref"}, "expression_sha256": {"$ref": "#/$defs/digest"}, "declaration_sha256": {"$ref": "#/$defs/digest"},
+        "expected_consequents": {"type": "integer", "minimum": 0}, "evaluation_count": {"$ref": "#/$defs/optional_count"},
+        "consequents": {"type": "array", "items": {"$ref": "#/$defs/consequent"}},
+        "classification": {"enum": ["exercised", "partially_exercised", "vacuous", "unexecuted", null]},
+        "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}}
+      },
+      "allOf": [{"if": {"properties": {"classification": {"type": "null"}}}, "then": {"properties": {"diagnostics": {"minItems": 1}}}, "else": {"properties": {"diagnostics": {"maxItems": 0}, "evaluation_count": {"$ref": "#/$defs/count"}, "consequents": {"items": {"properties": {"count": {"$ref": "#/$defs/count"}}}}}}}]
+    }
+  }
+}

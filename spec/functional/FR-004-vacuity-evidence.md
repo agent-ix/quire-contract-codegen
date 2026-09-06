@@ -95,17 +95,24 @@ per-requirement vacuity report without executing a coverage producer itself.
 
 ## Implementation boundary
 
-The first implementation slice provides source probes and bounded LLVM reading/classification
-primitives. It does not yet implement the aggregate analysis outcome, native campaign-run binding,
-or shared coverage attestation. Those require the IR-owned executable population from IR #50 and a
-native producer/result contract. A primitive returning `exercised` is not a discharged coverage
-obligation. FR-004/TC-006 remain planned until the complete bound operation and producer gate exist.
+The implementation provides source probes, bounded LLVM primitives, and complete bound
+observations through `analyze_bound_coverage`. Its strict domain schema is
+`codegen.bound-coverage-observations/v1`; all outcomes retain `provenance: unqualified`.
+The complete immutable generated artifact population is checked against public typed IR
+before any measured classification. Missing measurements retain null counts and diagnostics;
+global binding failure emits no clause observations, with `population: not_emitted`.
+Serialization is bounded to 16 MiB. Resource refusal may omit a population, explicitly
+diagnosed, rather than allocate fabricated zero observations. Full ClauseRefs on every
+ordered clause retain per-requirement membership without duplicating or summing campaign counts.
+Neither native campaign-run binding nor a shared coverage attestation is implemented.
+FR-004/TC-006 remain planned until those producer and consuming obligation gates exist.
 
 The proposed next slice is [REV-017](../../planning/bound-vacuity-native-result-design.md):
 complete immutable BoundPackage/source/map observations first, explicitly unqualified.
 Native campaign transport is not yet provided by the pinned runtime, and declared producer
 digests are not authenticated execution. REV-017 requests coordinator approval before its
-new public API or domain schema is implemented; AC-9 records that boundary, not completion.
+new public API or domain schema is implemented; that phase-A approval is now recorded in
+REV-017. AC-9 records the boundary, not completion of issue #5 or native qualification.
 
 ## Dependencies
 

@@ -44,7 +44,7 @@ operations:
     output: versioned structured AnalysisOutcome including non-success diagnostics and available input identities
     semantics: coverage obligation succeeds only for nonempty complete exercised population with successful bound execution; successful serialization is not successful coverage; never executes LLVM
   - name: analyze_bound_coverage
-    status: proposal in REV-017; coordinator approval required before implementation
+    status: implemented phase A after coordinator approval of REV-017; full native-run analysis remains pending
     inputs: [public BoundPackage, immutable BoundOracleGeneration, complete artifact bytes, optional LLVM export bytes, source root]
     output: immutable versioned BoundCoverageAnalysis domain observations
     semantics: exact independent clause and implication census; whole-batch artifact/map binding; measured clauses or explicit unavailable states; valid informational-only population is no_executable; provenance remains unqualified even when all clauses are exercised; no runtime transport, producer execution, attestation, or assurance verdict
@@ -113,7 +113,9 @@ harness_strategy_slice:
   artifact_names: bounded readable prefix plus full SHA-256 over length-delimited request identity
 coverage_analysis_slice:
   qualified_profile: cargo-llvm-cov 0.9.0 with rustc 1.94.1 on x86_64-unknown-linux-gnu in test profile producing llvm.coverage.json.export version 3.0.1; primitives validate export metadata, not native executable provenance
-  implementation_boundary: parse_llvm_coverage, LlvmCoverage.observe, and classify_clause are unbound observation primitives; no aggregate report, campaign binding, coverage attestation, or obligation discharge is implemented
+  implementation_boundary: parse_llvm_coverage, LlvmCoverage.observe, and classify_clause remain unbound observation primitives; the separate bound observation API does not implement native-qualified aggregate analysis, campaign binding, coverage attestation, or obligation discharge
+  bound_observation_boundary: analyze_bound_coverage emits the strict codegen.bound-coverage-observations/v1 domain schema from a complete immutable generated bundle plus independently validated BoundPackage; its provenance is always unqualified; no campaign binding, native execution, attestation, or obligation discharge
+  bound_observation_output: complete ordered full-ClauseRef observations with independent typed implication census and available digests; computation state complete/incomplete/invalid_input/unsupported/no_executable; global refusal emits no clause observations and population not_emitted; null means unavailable, never measured zero; at most 16 MiB serialized bytes
   expected_population: immutable IR-owned executable clauses with typed expression, clause kind, execution anchor, declarations, dependencies, spans and canonical digest; exact artifact and map population equality; empty executable population is not_computed
   source_map: exactly one clause envelope carrying expectedConsequents counted independently from typed IR, one oracle_evaluation entry probe, and every implication_consequent entry probe; recompute artifact digests before aggregate use
   probes: one-based single-line UTF-8 byte columns with exclusive end; function-declaration entry token for evaluation and first expression token for each consequent; probes are required for semantic roles and forbidden on clause envelopes
