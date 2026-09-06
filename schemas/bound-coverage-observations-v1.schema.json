@@ -4,7 +4,7 @@
   "title": "Complete bound coverage observations, not native qualification",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format", "schema_sha256", "state", "provenance", "population", "analyzer_revision", "analyzer_source_state", "analyzer_implementation_sha256", "bound_sha256", "export_sha256", "informational", "artifacts", "clauses", "diagnostics"],
+  "required": ["format", "schema_sha256", "state", "provenance", "population", "analyzer_revision", "analyzer_source_state", "analyzer_implementation_sha256", "bound_sha256", "export_sha256", "source_root", "informational", "artifacts", "clauses", "diagnostics"],
   "properties": {
     "format": {"const": "codegen.bound-coverage-observations/v1"},
     "schema_sha256": {"$ref": "#/$defs/digest"},
@@ -16,12 +16,14 @@
     "population": {"enum": ["complete", "not_emitted"]},
     "bound_sha256": {"$ref": "#/$defs/digest"},
     "export_sha256": {"anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+    "source_root": {"anyOf": [{"$ref": "#/$defs/source_root"}, {"type": "null"}]},
     "informational": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/clause_ref"}},
     "artifacts": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/artifact"}},
     "clauses": {"type": "array", "maxItems": 1024, "items": {"$ref": "#/$defs/clause"}},
     "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}}
   },
   "allOf": [
+    {"if": {"properties": {"state": {"enum": ["complete", "incomplete", "no_executable"]}}}, "then": {"properties": {"source_root": {"$ref": "#/$defs/source_root"}}}},
     {"if": {"properties": {"state": {"enum": ["invalid_input", "unsupported"]}}}, "then": {"properties": {"population": {"const": "not_emitted"}, "clauses": {"maxItems": 0}, "diagnostics": {"minItems": 1}}}},
     {"if": {"properties": {"state": {"const": "no_executable"}}}, "then": {"properties": {"population": {"const": "complete"}, "clauses": {"maxItems": 0}, "artifacts": {"maxItems": 0}, "export_sha256": {"type": "null"}, "diagnostics": {"maxItems": 0}}}},
     {"if": {"properties": {"state": {"enum": ["complete", "incomplete"]}}}, "then": {"properties": {"population": {"const": "complete"}, "clauses": {"minItems": 1}, "diagnostics": {"maxItems": 0}}}},
@@ -29,6 +31,7 @@
     {"if": {"properties": {"state": {"const": "incomplete"}}}, "then": {"properties": {"clauses": {"contains": {"properties": {"classification": {"type": "null"}, "diagnostics": {"minItems": 1}}}}}}}
   ],
   "$defs": {
+    "source_root": {"type": "string", "pattern": "^/", "minLength": 2, "maxLength": 4096},
     "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "count": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
     "optional_count": {"anyOf": [{"$ref": "#/$defs/count"}, {"type": "null"}]},

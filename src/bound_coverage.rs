@@ -19,6 +19,7 @@ pub const BOUND_COVERAGE_SCHEMA: &str =
     include_str!("../schemas/bound-coverage-observations-v1.schema.json");
 /// Maximum serialized analysis bytes, including explicit refusal outcomes.
 pub const MAX_ANALYSIS_BYTES: usize = 16 * 1024 * 1024;
+const MAX_SOURCE_ROOT_BYTES: usize = 4096;
 
 /// Borrowed untrusted artifact bytes. The analyzer recomputes their identity.
 pub struct ArtifactBytes<'a> {
@@ -30,7 +31,7 @@ pub struct ArtifactBytes<'a> {
 
 /// Complete caller inputs, consumed without filesystem reads or subprocess execution.
 pub struct BoundCoverageInputs<'a> {
-    /// Absolute lexical package root, following the qualified LLVM parser's rules.
+    /// Absolute lexical package root, at most 4096 bytes, using LLVM parser normalization.
     pub source_root: &'a str,
     /// Every generated artifact, including source-generation bodies, exactly once.
     pub artifacts: &'a [ArtifactBytes<'a>],
@@ -91,6 +92,7 @@ struct ObservationBody {
     analyzer_implementation_sha256: String,
     bound_sha256: String,
     export_sha256: Option<String>,
+    source_root: Option<String>,
     informational: Vec<ClauseRef>,
     artifacts: Vec<ArtifactIdentity>,
     clauses: Vec<ClauseObservation>,
@@ -160,6 +162,7 @@ pub fn analyze_bound_coverage(
         analyzer_implementation_sha256: implementation_digest(),
         bound_sha256: package.digest().to_string(),
         export_sha256: None,
+        source_root: None,
         informational: package.informational().to_vec(),
         artifacts: Vec::new(),
         clauses: Vec::new(),
@@ -199,6 +202,12 @@ fn analyze_inner(
     inputs: &BoundCoverageInputs<'_>,
     body: &mut ObservationBody,
 ) -> Result<(), CoverageDiagnostic> {
+    if inputs.source_root.len() > MAX_SOURCE_ROOT_BYTES {
+        return Err(diag(
+            CoverageErrorCode::ResourceLimitExceeded,
+            "source root exceeds 4096 bytes",
+        ));
+    }
     let root = normalize_path(inputs.source_root)?;
     if !root.starts_with('/') || root == "/" {
         return Err(diag(
@@ -206,6 +215,7 @@ fn analyze_inner(
             "source root must be an absolute package directory",
         ));
     }
+    body.source_root = Some(root.clone());
     if let Some(bytes) = inputs.llvm_export {
         if bytes.len() > MAX_COVERAGE_BYTES {
             return Err(diag(
@@ -519,6 +529,17 @@ fn observe_clause(
             }
         };
         row.consequents.push(Consequent { ordinal, count });
+    }
+    if let Ok(evaluation) = &evaluation {
+        if observations
+            .iter()
+            .any(|count| count.count() > evaluation.count())
+        {
+            row.diagnostics.push(diag(
+                CoverageErrorCode::InconsistentObservation,
+                "consequent count exceeds its loop-free generated oracle evaluation count",
+            ));
+        }
     }
     if row.diagnostics.is_empty() {
         match classify_clause(

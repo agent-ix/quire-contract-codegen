@@ -395,6 +395,54 @@ fn complete_bound_package_is_observed_against_actual_native_llvm() {
         report["clauses"][6]["consequents"],
         json!([{"ordinal":0,"count":1},{"ordinal":1,"count":0}])
     );
+    // Mutate the real export's healthy 1/1 observation, not a hand-authored native claim.
+    assert_eq!(report["clauses"][5]["evaluation_count"], 1);
+    assert_eq!(report["clauses"][5]["consequents"][0]["count"], 1);
+    let mut changed: Value = serde_json::from_slice(&coverage).unwrap();
+    let clause = &g.clauses()[5];
+    let map: Vec<quire_contract_codegen::SourceRegion> =
+        serde_json::from_str(&clause.bundle().source_map.contents).unwrap();
+    let probe = map[2].probe.unwrap();
+    let expected_path = source_root.join(&clause.bundle().rust.path);
+    let file = changed["data"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .flat_map(|d| d["files"].as_array_mut().unwrap().iter_mut())
+        .find(|f| f["filename"] == expected_path.to_str().unwrap())
+        .unwrap();
+    let segments = file["segments"].as_array_mut().unwrap();
+    let position = |s: &Value| (s[0].as_u64().unwrap(), s[1].as_u64().unwrap());
+    let index = segments
+        .windows(2)
+        .position(|p| {
+            position(&p[0]) <= (probe.line as u64, probe.start_column as u64)
+                && (probe.line as u64, probe.end_column as u64) <= position(&p[1])
+                && p[0][3] == true
+                && p[0][5] == false
+        })
+        .unwrap();
+    assert_eq!(segments[index][2], 1);
+    segments[index][2] = json!(2);
+    let changed_bytes = serde_json::to_vec(&changed).unwrap();
+    let changed = analyze_bound_coverage(
+        &package,
+        &generated,
+        BoundCoverageInputs {
+            source_root: source_root.to_str().unwrap(),
+            artifacts: &borrowed,
+            llvm_export: Some(&changed_bytes),
+        },
+    );
+    let changed: Value = serde_json::from_slice(&changed.to_json_bytes().unwrap()).unwrap();
+    validate_schema(&changed);
+    assert_eq!(changed["state"], "incomplete");
+    assert!(changed["clauses"][5]["classification"].is_null());
+    assert_eq!(changed["clauses"][5]["consequents"][0]["count"], 2);
+    assert_eq!(
+        changed["clauses"][5]["diagnostics"][0]["code"],
+        "inconsistent_observation"
+    );
     fs::remove_dir_all(root).unwrap();
 }
 

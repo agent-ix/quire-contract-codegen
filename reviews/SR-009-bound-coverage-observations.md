@@ -37,6 +37,7 @@ source-size guards, publisher, campaign policy, and shared assurance inputs rema
 | FND-25003 | high | Closed in phase A: unavailable counts remain null with diagnostics, distinct from measured zero; global refusals retain an explicit not-emitted population. | FR-004-AC-5 |
 | FND-25004 | high | Deliberately withheld: native authentication, runtime campaign transport, shared obligation mapping, retained coverage attestations and human sufficiency remain separate owner gates. An all-exercised result is still unqualified. | FR-004-AC-4, FR-004-AC-6, FR-004-AC-8, FR-004-AC-9 |
 | FND-25005 | medium | The output is bounded before allocating serialized bytes; oversize analysis clears unpublishable populations with a resource diagnostic instead of manufacturing zeros. Input artifact and LLVM limits remain enforced. | FR-004-AC-5 |
+| FND-25006 | medium | Coordinator review found that the unbound primitive permits evaluation 1 / consequent 2. The exact loop-free generated Boolean aggregate now refuses this impossible observation without changing the primitive contract; both counts remain visible with no clause classification. | FR-004-AC-3, FR-004-AC-5 |
 
 ## Native and adversarial controls
 
@@ -68,6 +69,21 @@ The seven new controls, including native LLVM, passed on stable and Rust 1.75.0 
 bring-up. Initial broader runs correctly refused the dirty source tree in the existing
 oracle attestation control (`source_dirty`); that gate is unchanged. Full clean-head
 regression and independent review are required before publication.
+
+Implementation `333c49e` subsequently passed all 48 selected tests on both stable and
+Rust 1.75.0: 9 unit, 7 aggregate, 7 bound generation, 5 harness, 10 oracle, 5 strategy,
+and 5 primitive tests. Both actual LLVM fixtures ran on the explicitly qualified stable
+toolchain, including when the outer library suite used MSRV. The clean-source guard passed.
+Final self-review added the normalized source-root mapping parameter to the domain report
+and a 4096-byte root preflight, with alias, relative, traversal, and over-limit controls;
+this closes an observation-reproducibility omission without authenticating the root or run.
+Empty, slash-only, relative, traversing and oversized roots have bounded refusal controls.
+The coordinator's 1/2 count witness was banked in `5f8d4d4` against a healthy 1/1 control;
+before the aggregate fix it failed as expected because the output was `complete`, not
+`incomplete`. The stronger rule belongs only to the exact generated Boolean aggregate.
+The native fixture additionally mutates the actual LLVM span for its measured 1/1 exercised
+clause to 1/2. The real healthy export remains complete; the modified export retains count 2
+and an inconsistency diagnostic with no classification for that clause.
 
 No full make-ci/shared receipt or FR-004 ticket closure is claimed here. Existing shared
 measurement producers still do not publish campaign/vacuity outcomes. Their historical
