@@ -41,7 +41,8 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 Task-003's historical dependency gate is complete for IR PR #19 merge
 `5c49ebfd1c87415f74420ad047392bd03b1bd202`. The local integration candidate combines reviewed
 PR #22 head `fae8e4216216397ef6f5ec40a2ea3cb60ededcc2` and PR #26 head
-`490fde7d11ae92637bc631c8f9206946dc376406`, preserving their separate source branches and shared
+`490fde7d11ae92637bc631c8f9206946dc376406`, followed by PR #23 head
+`a953a203abe08e0e1bff573e0a45d7a11b83ca5f`, preserving their separate source branches and shared
 ProofAttestationV1 boundary. This is not a claim that either candidate is merged upstream.
 Task-004 and Task-005 remain in progress until semantic criteria and current-head review findings
 close. Task-006 includes the locally verified atomic publication slice; serialized-package
