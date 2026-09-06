@@ -10,15 +10,16 @@ relationships:
 
 ## Description
 
-Verify coverage export and runtime counts classify consequent execution, vacuity, rejection, discard,
-ordinary unexecuted flow, and test outcome distinctly per requirement.
+Verify actual generated-oracle probes against native LLVM export, and ultimately keep measured
+coverage, runtime accounting, native execution outcome, and obligation discharge distinct.
 
 ## Test Procedure
 
-Generate always-false, always-true, mixed, implication-free, rejected, discarded, and unexecuted
-fixtures. Produce LLVM JSON with the pinned cargo-llvm-cov command outside the analyzer, then pass the
-retained bytes, tool identity, source root, generated source-map artifact, matching runtime campaign
-report, test outcome, and attestation context to `analyze_coverage`.
+The implemented primitive fixture generates Rust and maps through `generate_boolean_oracle`, then
+executes the pinned cargo-llvm-cov producer outside the analyzer for vacuous, mixed,
+implication-free, and never-called generated functions. Parse its actual full JSON and observe the
+generated entry probes. Synthetic export controls independently remove or corrupt exact fields;
+they test refusal behavior but do not masquerade as native coverage evidence.
 
 Exercise exact positive and zero segment counts for oracle-evaluation and consequent regions,
 multiple consequents with mixed observation, and complete campaign counters. Mutate each input class
@@ -34,4 +35,20 @@ multi-implication clause is partially exercised; and only complete consequent ob
 exercised. An implication-free clause is never labeled vacuous. Accepted, rejected, failed, and
 discarded counts plus test outcome remain unchanged in every report. Each valid report contains exact
 tool, export-format, export-digest, source-map-digest, schema, requirement, and revision identity.
-Every malformed or mismatched input returns a stable diagnostic and no report or attestation.
+Every malformed or mismatched input retains a stable non-success diagnostic without inventing a
+measured-zero observation or passed coverage attestation. The primitive fixture emits no report or
+attestation and makes no native campaign binding claim.
+
+## Remaining aggregate controls
+
+Once IR #50 supplies the immutable executable population, remove one clause, consequent, evaluation
+probe, and the entire population independently. Rebind source/maps, requirement revisions, binary,
+profiles, toolchain, target, campaign and candidate independently; every mismatch must prevent
+coverage discharge. Exercise unavailable producer/evaluator and implication-free positive evaluation
+as different cases. Feed vacuous, unexecuted, partial, failed, aborted and unavailable outcomes
+through the consuming obligation gate: each must deny success even if its diagnostic report can be
+serialized. Check accepted/rejected/discarded accounting independently and reject passed execution
+with failed postconditions. Use the native runtime CampaignReport, never a private counter type.
+
+TC-006 and FR-004 matrix rows remain planned: primitive controls are partial implementation, not
+completion of bound analysis, native-run provenance, versioned report output or shared consumption.

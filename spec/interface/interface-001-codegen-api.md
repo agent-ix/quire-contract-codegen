@@ -35,9 +35,10 @@ operations:
     output: PublishedBundleIdentity | IO diagnostic
     semantics: replace only generator-owned bundle boundaries after complete staged validation
   - name: analyze_coverage
-    inputs: [source-map artifact, LLVM coverage JSON bytes, producer identity, source root, runtime campaign report, test outcome, attestation context]
-    output: CoverageArtifactBundle | CoverageDiagnosticSet
-    semantics: deterministic per-requirement report plus one proof attestation; analysis consumes producer bytes and never runs or substitutes for LLVM coverage
+    status: planned; awaits public IR-owned bound executable population and native run-result contract
+    inputs: [bound executable population, generated source and maps, LLVM coverage JSON bytes, native producer and run identities, source root, runtime campaign report, execution outcome, attestation context]
+    output: versioned structured AnalysisOutcome including non-success diagnostics and available input identities
+    semantics: coverage obligation succeeds only for nonempty complete exercised population with successful bound execution; successful serialization is not successful coverage; never executes LLVM
   - name: cli_generate
     inputs: [serialized package path, destination, backend flags]
     output: stable exit status, diagnostics, and published bundle identity
@@ -93,20 +94,30 @@ harness_strategy_slice:
   generated_crate_lints: generated crate roots deny missing documentation and compile under denied warnings
   artifact_names: bounded readable prefix plus full SHA-256 over length-delimited request identity
 coverage_analysis_slice:
-  qualified_profile: cargo-llvm-cov 0.9.0 producing llvm.coverage.json.export version 2.0.1
-  source_map: exactly one clause envelope and one oracle_evaluation region per analyzed clause, plus every implication_consequent region; artifact digest is recomputed before use
-  llvm_export: full JSON export with type llvm.coverage.json.export, exact version 2.0.1, file segments present, and exactly one lexically normalized filename matching the generated artifact path under the caller-declared source root
-  segment_semantics: ordered LLVM segment transitions are reconstructed into active source spans; a mapped region is observed only when a positive-count, count-bearing, non-gap active span intersects it; summary percentages are never used as execution evidence
+  qualified_profile: cargo-llvm-cov 0.9.0 with rustc 1.94.1 on x86_64-unknown-linux-gnu in test profile producing llvm.coverage.json.export version 3.0.1; primitives validate export metadata, not native executable provenance
+  implementation_boundary: parse_llvm_coverage, LlvmCoverage.observe, and classify_clause are unbound observation primitives; no aggregate report, campaign binding, coverage attestation, or obligation discharge is implemented
+  expected_population: immutable IR-owned executable clauses with typed expression, clause kind, execution anchor, declarations, dependencies, spans and canonical digest; exact artifact and map population equality; empty executable population is not_computed
+  source_map: exactly one clause envelope carrying expectedConsequents counted independently from typed IR, one oracle_evaluation entry probe, and every implication_consequent entry probe; recompute artifact digests before aggregate use
+  probes: one-based single-line UTF-8 byte columns with exclusive end; function-declaration entry token for evaluation and first expression token for each consequent; probes are required for semantic roles and forbidden on clause envelopes
+  llvm_export: full JSON export with type llvm.coverage.json.export, exact version 3.0.1, file segments present, and exactly one lexically normalized filename matching the generated artifact path under the caller-declared source root
+  input_bounds: at most 16 MiB raw export before deserialization, 4096 files and 250000 segments across the export; strictly ordered nonzero coordinates and exactly six typed tuple fields; final transition has no inferred infinite extent
+  path_semantics: normalize dot and repeated-separator aliases, reject parent traversal and backslashes, strip exact absolute package-root boundary; external absolute dependency paths cannot match generated paths; reject duplicate eligible normalized filenames
+  segment_semantics: a single count-bearing non-gap active span must contain the entire entry-token probe; measured zero is distinct from unavailable data; no partial intersection or summary fallback
   classification:
-    unexecuted: oracle_evaluation is not observed
-    vacuous: oracle_evaluation is observed and no mapped implication consequent is observed
-    partially_exercised: oracle_evaluation is observed and some but not all mapped implication consequents are observed
-    exercised: oracle_evaluation is observed and every mapped implication consequent is observed, or the evaluated clause contains no implication
+    unexecuted: measured zero evaluation and no positive consequent observations
+    vacuous: positive evaluation with a nonempty expected implication population and zero positive consequents
+    partially_exercised: positive evaluation with a proper nonempty subset of expected consequents observed
+    exercised: positive evaluation with every expected consequent observed, including the independently known empty implication set
+    unavailable: no measured classification when input or a complete probe observation is absent
+    inconsistent: positive consequent observation with zero oracle evaluation is rejected
   campaign_report: the analyzer consumes the pinned quire-contract-runtime CampaignReport type so its complete counter set and failed-is-a-subset-of-accepted invariant are not restated by a caller-owned lookalike
   test_outcomes: [passed, failed, aborted, not_computed]
   independent_facts: accepted, rejected, failed, and discarded runtime counts plus test outcome are retained verbatim and never used to upgrade coverage classification
-  identity: source-map and runtime report requirement/revision must agree; report retains producer name/version, LLVM export format version, export digest, source-map digest, report schema identity, and exact requirement revision
-  invalid_input: malformed or summary-only export, unsupported format version, missing or duplicate semantic regions, ambiguous or traversing paths, digest mismatch, identity mismatch, and invalid attestation context produce stable diagnostics with no partial bundle
+  accounting: failed postconditions prohibit passed execution; positive oracle coverage with zero invocations is inconsistent when the generated campaign is declared the only execution source
+  identity: native result binds command, executable, source, binary, profiles, toolchain, target, optimization profile, campaign, candidate and bound-population digest; JSON producer version and manifest are cross-checks, not executable provenance
+  revision: compare IR and source-map u64 revision to runtime RevisionId using the canonical decimal string without leading zeroes
+  invalid_input: stable non-success analysis outcome retains available identities and diagnostics without fabricated measured classifications or a passed coverage attestation
+  default_gate: every executable clause exercised and native execution passed; adverse or unavailable coverage cannot discharge obligation; no automated human sufficiency or exception decision
 compatibility:
   draft_pins: must be reconciled before leaving draft
   generated_runtime_dependency: quire-contract-runtime, proptest, plus declared customer types only

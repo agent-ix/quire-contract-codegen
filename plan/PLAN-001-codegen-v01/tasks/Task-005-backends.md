@@ -27,15 +27,15 @@ snapshot, subject invocation ordering, post-state evaluation, runtime `Verdict`,
 accounting boundary. Strategy generation directly shapes bounded ranges, finite memberships, and
 supported correlated relations; only explicitly residual constraints may use rejection.
 
-Issue #5 is in specification review from the shared-assurance `main` revision. Its proposed analyzer
-consumes full LLVM JSON, requires a dedicated oracle-evaluation source region, and keeps unexecuted,
-vacuous, partially exercised, and exercised classifications distinct from campaign counts and test
-outcome. No vacuity implementation begins until the exact specification head receives independent
-review.
+Issue #5's reviewed spec is being repaired in a bounded coordinator-authorized slice: generated
+entry probes, a typed-IR implication census, strict LLVM reading, and measured classification
+primitives. Native fixtures use actual generator outputs. Aggregate analysis and coverage
+attestations await IR #50's bound population and a native producer/run-result contract; no private
+binding or counter model is introduced. REV-014 and REV-015 record the repair and residual work.
 
 ## Guards
 
 - PR #10 remains the provisional Task-004 base; this branch must rebase to its accepted revision.
 - Unsupported state, constraint, or shrinking semantics fail with a structured diagnostic rather
   than falling back to an unreported filter.
-- Kani and vacuity backends remain not started within this task.
+- Kani is outside this recovery slice. Vacuity is partial and closes no full FR-004 row.

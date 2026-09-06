@@ -23,7 +23,20 @@
       "endLine": {"type": "integer", "minimum": 1},
       "requirementId": {"type": "string", "minLength": 1},
       "requirementRevision": {"type": "integer", "minimum": 1},
-      "clauseId": {"type": "string", "minLength": 1}
-    }
+      "clauseId": {"type": "string", "minLength": 1},
+      "expectedConsequents": {"type": "integer", "minimum": 0},
+      "probe": {
+        "type": "object", "additionalProperties": false,
+        "required": ["line", "startColumn", "endColumn"],
+        "properties": {
+          "line": {"type": "integer", "minimum": 1},
+          "startColumn": {"type": "integer", "minimum": 1},
+          "endColumn": {"type": "integer", "minimum": 2}
+        }
+      }
+    },
+    "if": {"properties": {"role": {"const": "clause"}}},
+    "then": {"required": ["expectedConsequents"], "not": {"required": ["probe"]}},
+    "else": {"required": ["probe"], "not": {"required": ["expectedConsequents"]}}
   }
 }
