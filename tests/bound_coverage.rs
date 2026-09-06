@@ -406,6 +406,7 @@ fn complete_population_is_measured_but_never_run_qualified() {
     let bytes = serde_json::to_vec(&export(&generated)).unwrap();
     let report = analyze(&package, &generated, &artifacts, Some(&bytes));
     assert_eq!(report["state"], "complete");
+    assert_eq!(report["source_root"], "/fixture");
     assert_eq!(report["provenance"], "unqualified");
     assert_eq!(report["informational"].as_array().unwrap().len(), 1);
     assert_eq!(report["clauses"].as_array().unwrap().len(), 7);
@@ -560,4 +561,91 @@ fn informational_only_is_no_executable_not_invalid_or_exercised() {
         assert_eq!(report["state"], "invalid_input");
         assert!(report["clauses"].as_array().unwrap().is_empty());
     }
+}
+
+/// Trace: TC-006, FR-004-AC-4, FR-004-AC-5
+#[test]
+fn normalized_mapping_root_is_retained_and_bounded() {
+    let (package, generated) = generate(&projection("coverage/root", &expressions(), false));
+    let artifacts = inventory(&generated);
+    let borrowed: Vec<_> = artifacts
+        .iter()
+        .map(|(path, bytes)| ArtifactBytes { path, bytes })
+        .collect();
+    let coverage = serde_json::to_vec(&export(&generated)).unwrap();
+    for (root, state, normalized) in [
+        ("/fixture//./".to_owned(), "complete", json!("/fixture")),
+        ("relative".to_owned(), "invalid_input", Value::Null),
+        ("".to_owned(), "invalid_input", Value::Null),
+        ("/".to_owned(), "invalid_input", Value::Null),
+        (
+            "/fixture/../foreign".to_owned(),
+            "invalid_input",
+            Value::Null,
+        ),
+        (format!("/{}", "x".repeat(4096)), "unsupported", Value::Null),
+    ] {
+        let result = analyze_bound_coverage(
+            &package,
+            &generated,
+            BoundCoverageInputs {
+                source_root: &root,
+                artifacts: &borrowed,
+                llvm_export: Some(&coverage),
+            },
+        );
+        let result: Value = serde_json::from_slice(&result.to_json_bytes().unwrap()).unwrap();
+        validate_schema(&result);
+        assert_eq!(result["state"], state);
+        assert_eq!(result["source_root"], normalized);
+        if state != "complete" {
+            assert!(result["clauses"].as_array().unwrap().is_empty());
+        }
+    }
+}
+
+/// Trace: TC-006, FR-004-AC-3, FR-004-AC-5
+#[test]
+fn aggregate_consequent_cannot_outcount_its_loop_free_oracle() {
+    let (package, generated) = generate(&projection("coverage/counts", &expressions(), false));
+    let artifacts = inventory(&generated);
+    let mut coverage = export(&generated);
+    assert_eq!(
+        analyze(
+            &package,
+            &generated,
+            &artifacts,
+            Some(&serde_json::to_vec(&coverage).unwrap())
+        )["state"],
+        "complete"
+    );
+    let BoundOracleGeneration::Generated(g) = &generated else {
+        unreachable!()
+    };
+    let map: Vec<quire_contract_codegen::SourceRegion> =
+        serde_json::from_str(&g.clauses()[0].bundle().source_map.contents).unwrap();
+    let probe = map[2].probe.unwrap();
+    let segment = coverage["data"][0]["files"][0]["segments"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|s| s[0] == probe.line && s[1] == probe.start_column)
+        .unwrap();
+    assert_eq!(segment[2], 1);
+    segment[2] = json!(2);
+    let report = analyze(
+        &package,
+        &generated,
+        &artifacts,
+        Some(&serde_json::to_vec(&coverage).unwrap()),
+    );
+    assert_eq!(report["state"], "incomplete");
+    assert!(report["clauses"][0]["classification"].is_null());
+    assert_eq!(report["clauses"][0]["evaluation_count"], 1);
+    assert_eq!(report["clauses"][0]["consequents"][0]["count"], 2);
+    assert_eq!(
+        report["clauses"][0]["diagnostics"][0]["code"],
+        "inconsistent_observation"
+    );
+    assert_eq!(report["clauses"][1]["classification"], "exercised");
 }

@@ -55,6 +55,11 @@ per-requirement vacuity report without executing a coverage producer itself.
 - Positive observation requires one count-bearing, non-gap LLVM active span to contain the entire
   mapped entry-token probe. Partial intersection, summary counts, and an unterminated final span
   cannot establish observation. Consequent observation with zero oracle-entry count is inconsistent.
+- In the bound generated Boolean-only profile, each consequent shall have a count no greater
+  than its owning oracle evaluation count: generated expressions contain no loop or user call
+  that can enter the consequent repeatedly per invocation. A contradiction retains both observed
+  counts and an inconsistency diagnostic but no clause classification. This stronger aggregate
+  rule does not change the unbound `classify_clause` primitive's compatibility contract.
 - The analyzer shall preserve native accepted, rejected, failed, and discarded counts and execution
   outcome independently. It shall verify run/requirement/revision bindings; a successful test outcome
   cannot coexist with failed postconditions, and positive oracle observation cannot coexist with
