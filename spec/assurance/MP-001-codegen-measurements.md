@@ -226,10 +226,10 @@ a pass.
 
 Two limitations are load-bearing and are stated here rather than left to be inferred.
 
-FR-003 and FR-004 — Kani obligation lowering and vacuity evidence — are specified and have no
-implementation at this revision. There is no suite for them and no proof obligation over them,
-because a proof obligation whose subject does not exist is the most complete false green available.
-Their TM-001 rows stay 🚧 Planned.
+FR-003 Kani obligation lowering is outside this integration candidate. FR-004 has bounded LLVM
+observation primitives and six actual generated-oracle native controls, but no aggregate bound
+coverage report, campaign-run provenance or consuming obligation gate. Neither has a shared proof
+obligation claiming completed backend assurance here. Their TM-001 rows stay 🚧 Planned.
 
 The atomic publisher's fault model injects refusal before every artifact and ownership-marker write,
 before destination swap, during replacement swap and failed rollback, and after commit before backup

@@ -11,13 +11,17 @@ type: interface
 name: ContractCodegen
 version: draft-codegen-v1
 input:
-  contract_package: pinned serialized quire-contract-ir package
+  contract_package: public IR BoundPackage from the pinned derived executable projection decoder; no private wire or codegen input schema
   configuration: backend versions, customer bindings, output profile
 operations:
+  - name: generate_bound_oracles
+    inputs: [public BoundPackage reference, attestation context]
+    output: BoundOracleGeneration | BoundGenerationError
+    semantics: complete ordered executable-clause batch or explicit NoExecutable with bound digest and informational references but no publishable artifact; unsupported executable content fails the entire batch
   - name: generate_bundle
     inputs: [contract package bytes, generation configuration]
     output: ArtifactBundle | DiagnosticSet
-    semantics: deterministic, all-or-nothing lowering; unsupported semantics prevent false completeness
+    semantics: planned multi-backend operation; the implemented first consumer is library-only generate_bound_oracles
   - name: generate_tristate_harness
     inputs: [typed precondition, typed postcondition, explicit bindings, minimum accepted cases, maximum discarded cases, attestation context]
     output: GeneratedArtifactBundle | HarnessDiagnosticSet

@@ -14,6 +14,8 @@ type: TestMatrix
 | FR-001 | FR-001-AC-2 | TC-002 | 🚧 Planned |
 | FR-001 | FR-001-AC-4 | TC-003 | 🚧 Planned |
 | FR-001 | FR-001-AC-5 | TC-001, TC-006 | 🚧 Planned |
+| FR-001 | FR-001-AC-6 | TC-001, TC-002 | 🚧 Planned |
+| FR-001 | FR-001-AC-7 | TC-001 | 🚧 Planned |
 | FR-002 | FR-002-AC-1 through FR-002-AC-6 | TC-004 | 🚧 Planned |
 | FR-003 | FR-003-AC-1 | TC-005 | 🚧 Planned |
 | FR-003 | FR-003-AC-2 | TC-007 | 🚧 Planned |
