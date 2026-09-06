@@ -33,14 +33,18 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 | [Task-003](./tasks/Task-003-dependency-reconciliation.md) | Upstream dependency reconciliation | done |
 | [Task-004](./tasks/Task-004-oracles.md) | Deterministic oracles and manifests | in_progress |
 | [Task-005](./tasks/Task-005-backends.md) | Harness, proptest, Kani, and vacuity backends | in_progress |
-| [Task-006](./tasks/Task-006-parity.md) | CLI, golden, differential, and parity closure | not_started |
+| [Task-006](./tasks/Task-006-parity.md) | CLI, golden, differential, and parity closure | in_progress |
 | [Task-007](./tasks/Task-007-human-release.md) | Human source-release decision | not_started |
 
 ## Coordination Rule
 
-Task-003's dependency gate is complete. The shared-assurance migration and deterministic Oracle
-slice are present on current `main`; that migration did not independently accept Task-004's semantic
-scope, so Task-004 remains in progress. Issue #3 harness/proptest remediation proceeds as a separate
-branch directly from current `main` and reuses the packaged ProofAttestationV1 path. It does not
-promote Task-004 or any planned matrix row before independent review. Automation must not complete
-Task-007.
+Task-003's historical dependency gate is complete for IR PR #19 merge
+`5c49ebfd1c87415f74420ad047392bd03b1bd202`. The local integration candidate combines reviewed
+PR #22 head `fae8e4216216397ef6f5ec40a2ea3cb60ededcc2` and PR #26 head
+`490fde7d11ae92637bc631c8f9206946dc376406`, preserving their separate source branches and shared
+ProofAttestationV1 boundary. This is not a claim that either candidate is merged upstream.
+Task-004 and Task-005 remain in progress until semantic criteria and current-head review findings
+close. Task-006 includes the locally verified atomic publication slice; serialized-package
+generation awaits the accepted IR-owned executable binding and explicit pin reconciliation.
+Neither integration nor source generation promotes planned coverage/parity rows. Automation must
+not complete Task-007.
