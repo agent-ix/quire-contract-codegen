@@ -38,8 +38,9 @@ per-requirement vacuity report without executing a coverage producer itself.
 - The analyzer shall consume an LLVM coverage JSON export without implementing instrumentation,
   profile merging, or a coverage engine.
 - The analyzer shall derive its expected clause population and implication counts from typed IR,
-  require exact source-map/artifact population equality, and reject an empty executable population
-  as not computed. Missing map rows shall never turn an implication into an implication-free clause.
+  require exact source-map/artifact population equality, and represent a valid empty executable
+  population explicitly as no executable work, retaining informational references and no positive
+  coverage result. Missing map rows shall never turn an implication into an implication-free clause.
 - The analyzer shall classify a clause as `vacuous` only when its oracle-evaluation probe was observed,
   its typed expression contains at least one implication, and no expected consequent probe was observed.
 - The analyzer shall classify a mapped clause as `unexecuted` when its oracle-evaluation region has
@@ -90,6 +91,7 @@ per-requirement vacuity report without executing a coverage producer itself.
 | FR-004-AC-6 | Campaign counts and test outcome remain complete facts independent of coverage classification. | Test (TC-006) |
 | FR-004-AC-7 | Removing an expected clause, consequent, evaluation probe, or all clauses prevents successful analysis; the expected census comes from bound typed IR. | Test (TC-006) |
 | FR-004-AC-8 | Adverse coverage and non-success native execution cannot discharge the coverage obligation merely because a report serialized successfully. | Test (TC-006) |
+| FR-004-AC-9 | Complete bound observations without independently verified native-run provenance remain explicitly unqualified; internally consistent declared digests cannot manufacture a run-qualified result or passed coverage attestation. Valid informational-only populations retain their references as no executable work. | Test (TC-006; proposed next slice) |
 
 ## Implementation boundary
 
@@ -98,6 +100,12 @@ primitives. It does not yet implement the aggregate analysis outcome, native cam
 or shared coverage attestation. Those require the IR-owned executable population from IR #50 and a
 native producer/result contract. A primitive returning `exercised` is not a discharged coverage
 obligation. FR-004/TC-006 remain planned until the complete bound operation and producer gate exist.
+
+The proposed next slice is [REV-017](../../planning/bound-vacuity-native-result-design.md):
+complete immutable BoundPackage/source/map observations first, explicitly unqualified.
+Native campaign transport is not yet provided by the pinned runtime, and declared producer
+digests are not authenticated execution. REV-017 requests coordinator approval before its
+new public API or domain schema is implemented; AC-9 records that boundary, not completion.
 
 ## Dependencies
 

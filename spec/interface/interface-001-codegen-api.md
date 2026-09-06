@@ -43,6 +43,11 @@ operations:
     inputs: [bound executable population, generated source and maps, LLVM coverage JSON bytes, native producer and run identities, source root, runtime campaign report, execution outcome, attestation context]
     output: versioned structured AnalysisOutcome including non-success diagnostics and available input identities
     semantics: coverage obligation succeeds only for nonempty complete exercised population with successful bound execution; successful serialization is not successful coverage; never executes LLVM
+  - name: analyze_bound_coverage
+    status: proposal in REV-017; coordinator approval required before implementation
+    inputs: [public BoundPackage, immutable BoundOracleGeneration, complete artifact bytes, optional LLVM export bytes, source root]
+    output: immutable versioned BoundCoverageAnalysis domain observations
+    semantics: exact independent clause and implication census; whole-batch artifact/map binding; measured clauses or explicit unavailable states; valid informational-only population is no_executable; provenance remains unqualified even when all clauses are exercised; no runtime transport, producer execution, attestation, or assurance verdict
   - name: cli_generate
     status: planned; no executable CLI is provided by this library candidate
     inputs: [serialized package path, destination, backend flags]
@@ -137,5 +142,7 @@ compatibility:
   licensing: MIT OR Apache-2.0
   publication: disabled through the human v0.1 source-release decision
 open_design_gates:
+  native_campaign_transport: pinned runtime CampaignReport has no validated native-process snapshot decoder; no Display parsing, fake verdict replay, or private counter lookalike may substitute
+  native_run_authentication: producer result digests establish consistency only; Quoin-owned authorized producer and expected record/candidate/run verification must precede qualification; no caller verified flag
   serialized_package_cli: the pinned public IR derived-projection decoder now supplies BoundPackage; cli_generate remains unimplemented, and normal projection production remains the authoritative frontend/model lane rather than a codegen-owned authored sidecar
 ```

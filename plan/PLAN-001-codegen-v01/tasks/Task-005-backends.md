@@ -47,6 +47,12 @@ binding or counter model is introduced. REV-014 and REV-015 record the repair an
 
 ## Guards
 
+Next bounded dispatch is proposed in REV-017 atop published PR #27 `cd345e1`: implement
+complete bound observation only after API approval, retaining unqualified provenance. A
+runtime-owned campaign transport and an authorized native producer/shared verification join
+are separate ownership gates; no private counters or attestation/receipt framework fills them.
+The current IR/runtime pins and every generated-source guard remain unchanged.
+
 - The source candidates share `0f4df413b21dba39ef62aca89ededc707aab7056`; the local derivative
   integrates reviewed PR #22, #26 and #23 heads without changing those branches or reviving
   superseded bespoke-assurance PRs.
