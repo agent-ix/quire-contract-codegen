@@ -519,12 +519,14 @@ fn generate_boolean_oracle_inner(
         source_line_count,
     )];
     regions[0].expected_consequents = Some(implication_count(request.expression.expression()));
+    // Index once: rescanning lines for every consequent would make probe extraction quadratic.
+    let source_lines = source.source.lines().collect::<Vec<_>>();
     let mut evaluation = source_region(request, &source_path, "oracle_evaluation", offset, offset);
-    evaluation.probe = Some(entry_probe(&source.source, offset));
+    evaluation.probe = Some(entry_probe(source_lines[offset as usize - 1], offset));
     regions.push(evaluation);
     regions.extend(source.implication_regions.into_iter().map(|(start, end)| {
         let mut region = source_region(request, &source_path, "implication_consequent", start, end);
-        region.probe = Some(entry_probe(&source.source, start));
+        region.probe = Some(entry_probe(source_lines[start as usize - 1], start));
         region
     }));
 
@@ -1217,11 +1219,7 @@ fn source_region(
     }
 }
 
-fn entry_probe(source: &str, line: u32) -> SourceProbe {
-    let text = source
-        .lines()
-        .nth(line as usize - 1)
-        .expect("generated source line");
+fn entry_probe(text: &str, line: u32) -> SourceProbe {
     // Generated expressions and declarations begin with an ASCII identifier or punctuation.
     let start = text.len() - text.trim_start().len();
     let token_length = text[start..]
