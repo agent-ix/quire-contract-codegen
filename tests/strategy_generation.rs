@@ -166,7 +166,7 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
     let temporary = TemporaryDirectory::new("quire-generated-strategies");
     fs::write(
         temporary.0.join("Cargo.toml"),
-        "[package]\nname = \"generated-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3\" }\n",
+        "[package]\nname = \"generated-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354\" }\n",
     )
     .unwrap();
     let executed_tests = format!(
@@ -441,7 +441,7 @@ fn tc_004_boundary_pinned_and_no_event_bodies_compile_and_execute_with_denied_wa
     let temporary = TemporaryDirectory::new("quire-generated-campaign-shapes");
     fs::write(
         temporary.0.join("Cargo.toml"),
-        "[package]\nname = \"generated-campaign-shapes\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3\" }\n",
+        "[package]\nname = \"generated-campaign-shapes\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354\" }\n",
     )
     .unwrap();
     let generated_tests = format!(
@@ -725,7 +725,7 @@ fn tc_004_customer_enum_memberships_are_directly_shaped_and_validated() {
     let temporary = TemporaryDirectory::new("quire-generated-enum-strategy");
     fs::write(
         temporary.0.join("Cargo.toml"),
-        "[package]\nname = \"generated-enum-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3\" }\n",
+        "[package]\nname = \"generated-enum-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354\" }\n",
     )
     .unwrap();
     let broad_function = function_name(&broad.rust.contents);
