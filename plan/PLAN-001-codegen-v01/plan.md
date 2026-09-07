@@ -14,7 +14,7 @@ relationships:
 ## Scope
 
 Specify, reconcile, implement, and verify deterministic code generation from the authoritative
-contract IR into runtime-backed oracles, harnesses, proofs, vacuity maps, and derivation evidence.
+contract IR into runtime-backed oracles, harnesses, proofs, vacuity maps, and Quoin proof attestations.
 
 ## Dependency Graph
 
@@ -31,7 +31,7 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 | [Task-001](./tasks/Task-001-foundation-spec.md) | Foundation specification and assurance | done |
 | [Task-002](./tasks/Task-002-foundation-evidence.md) | Foundation evidence and gap review | done |
 | [Task-003](./tasks/Task-003-dependency-reconciliation.md) | Upstream dependency reconciliation | done |
-| [Task-004](./tasks/Task-004-oracles.md) | Deterministic oracles and manifests | in_progress |
+| [Task-004](./tasks/Task-004-oracles.md) | Deterministic oracles and attestations | in_progress |
 | [Task-005](./tasks/Task-005-backends.md) | Harness, proptest, Kani, and vacuity backends | in_progress |
 | [Task-006](./tasks/Task-006-parity.md) | CLI, golden, differential, and parity closure | in_progress |
 | [Task-007](./tasks/Task-007-human-release.md) | Human source-release decision | not_started |
@@ -40,6 +40,11 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 
 Task-003's dependency gate is complete and `main` includes the migrated oracle, harness, and strategy
 drafts from PR #15 against accepted IR PR #19 merge
+<<<<<<< HEAD
+`5c49ebfd1c87415f74420ad047392bd03b1bd202`. Task-004 and Task-005 remain in progress until their
+semantic acceptance criteria and current-head review findings close. The bounded Kani slice is under
+local verification; vacuity remains next. Automation must not complete Task-007.
+=======
 `5c49ebfd1c87415f74420ad047392bd03b1bd202`, together with the shared-assurance migration, the
 deterministic Oracle slice, and the issue #3 harness/proptest remediation merged as PR #22. That
 migration did not independently accept Task-004's semantic scope, so Task-004 and Task-005 remain in
@@ -47,3 +52,4 @@ progress until their semantic acceptance criteria and current-head review findin
 has a locally verified atomic publication slice; its serialized-package CLI stays blocked while this
 repository still pins the IR revision named above, which does not bind executable expressions.
 Automation must not complete Task-007.
+>>>>>>> origin/main

@@ -29,6 +29,10 @@ Its accepted-case floor and discard ceiling are request inputs bound into genera
 Strategy generation directly shapes bounded ranges, finite memberships, enums, and supported
 correlated relations; only explicitly residual constraints may use rejection.
 
+The bounded Kani adapter reuses the exact oracle predicates, emits distinct
+framing/binding/contract/harness regions, derives a complete dependency graph, and records proof
+execution as `not_run`.
+
 ## PR #22 round 8 repair delta
 
 Seed the mixed positive fixture and pin its exact counters. Preserve every framework abort as
@@ -50,5 +54,5 @@ binding or counter model is introduced. REV-014 and REV-015 record the repair an
 - Current `main` is the branch base; superseded bespoke-assurance PRs are not revived or restacked.
 - Unsupported state, constraint, or shrinking semantics fail with a structured diagnostic rather
   than falling back to an unreported filter.
-- Kani remains a separate slice and is outside this recovery slice. Vacuity is partial and closes no
-  full FR-004 row.
+- Vacuity is partial and closes no full FR-004 row. Kani arrives here as its own bounded slice and
+  stays a draft until independent current-head review.
