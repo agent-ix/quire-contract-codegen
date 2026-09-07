@@ -187,6 +187,24 @@ pub struct SourceRegion {
     pub requirement_revision: u64,
     /// Clause identity.
     pub clause_id: String,
+    /// Entry-token probe for executable semantic roles; never the whole clause envelope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub probe: Option<SourceProbe>,
+    /// Implication census independently traversed from typed IR, on the clause envelope only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_consequents: Option<u32>,
+}
+
+/// Single-line source token to be contained by one measured LLVM active span.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct SourceProbe {
+    /// One-based source line.
+    pub line: u32,
+    /// One-based UTF-8 byte column, inclusive.
+    pub start_column: u32,
+    /// One-based UTF-8 byte column, exclusive.
+    pub end_column: u32,
 }
 
 /// The command a proof attestation declares (`ProofAttestationV1.command`).
@@ -500,8 +518,16 @@ fn generate_boolean_oracle_inner(
         1,
         source_line_count,
     )];
+    regions[0].expected_consequents = Some(implication_count(request.expression.expression()));
+    // Index once: rescanning lines for every consequent would make probe extraction quadratic.
+    let source_lines = source.source.lines().collect::<Vec<_>>();
+    let mut evaluation = source_region(request, &source_path, "oracle_evaluation", offset, offset);
+    evaluation.probe = Some(entry_probe(source_lines[offset as usize - 1], offset));
+    regions.push(evaluation);
     regions.extend(source.implication_regions.into_iter().map(|(start, end)| {
-        source_region(request, &source_path, "implication_consequent", start, end)
+        let mut region = source_region(request, &source_path, "implication_consequent", start, end);
+        region.probe = Some(entry_probe(source_lines[start as usize - 1], start));
+        region
     }));
 
     let rust = artifact(source_path, source.source);
@@ -1253,7 +1279,44 @@ fn source_region(
         requirement_id: request.requirement.requirement().as_str().to_owned(),
         requirement_revision: request.requirement.revision().get(),
         clause_id: request.clause.as_str().to_owned(),
+        probe: None,
+        expected_consequents: None,
     }
+}
+
+fn entry_probe(text: &str, line: u32) -> SourceProbe {
+    // Generated expressions and declarations begin with an ASCII identifier or punctuation.
+    let start = text.len() - text.trim_start().len();
+    let token_length = text[start..]
+        .bytes()
+        .take_while(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+        .count()
+        .max(1);
+    SourceProbe {
+        line,
+        start_column: start as u32 + 1,
+        end_column: (start + token_length) as u32 + 1,
+    }
+}
+
+fn implication_count(expression: &Expression) -> u32 {
+    let mut pending = vec![expression];
+    let mut count = 0;
+    while let Some(expression) = pending.pop() {
+        match expression.kind() {
+            ExpressionKind::Boolean {
+                operator,
+                left,
+                right,
+            } => {
+                count += u32::from(*operator == BooleanOperator::Implication);
+                pending.extend([left.as_ref(), right.as_ref()]);
+            }
+            ExpressionKind::BooleanNot { operand } => pending.push(operand),
+            _ => {}
+        }
+    }
+    count
 }
 
 fn resource_error(request: &OracleRequest<'_>) -> Vec<GenerationDiagnostic> {

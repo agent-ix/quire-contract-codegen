@@ -31,6 +31,11 @@ attestation with complete identity.
 - Generated signatures shall contain exactly the clause dependency set in deterministic order,
   preserving current, pre-state, and post-state observations in caller-facing parameter names.
 - An implication consequent shall occupy its own coverable source region.
+- Each oracle shall carry exactly one evaluation-entry probe on its function-entry line, disjoint
+  from every consequent region. Every consequent shall carry a single-line entry-token probe inside
+  its exact expression region. Probe columns are one-based byte offsets with an exclusive end.
+- The clause envelope shall declare its expected consequent count derived from the typed expression,
+  independent of the emitted region list. Dropped or duplicate regions cannot redefine that count.
 - The generator shall retain every input, schema, tool, backend, configuration, output, and digest identity;
   consuming packages shall supply only the sealed record digest and the candidate revision their
   attestations bind to.
@@ -48,6 +53,7 @@ attestation with complete identity.
 | FR-001-AC-2 | A differential corpus covering every supported operator compiles with only the runtime and matches an independent evaluator. | Test (TC-002) |
 | FR-001-AC-3 | Requirement IDs and revisions appear in symbols, failures, source maps, and attestations. | Test (TC-001) |
 | FR-001-AC-4 | No construct, obligation, name collision, or bounded-resource failure is silently dropped, approximated, or marked complete after a diagnostic. | Test (TC-003) |
+| FR-001-AC-5 | Every oracle map declares the typed-expression consequent census, one disjoint evaluation-entry probe, and an exact entry-token probe for every consequent; generated-oracle LLVM controls distinguish observed entry from zero consequent execution. | Test (TC-001, TC-006) |
 
 ## Dependencies
 
