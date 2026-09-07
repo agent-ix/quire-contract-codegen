@@ -9,11 +9,11 @@ use quire_contract_ir::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
-/// Exact reviewed public executable-binding IR candidate consumed by this implementation.
-pub const IR_CANDIDATE_REVISION: &str = "93674480c572c237fe87c5d509b17206664bdd62";
+/// Exact reviewed public executable-binding IR revision consumed by this implementation.
+pub const IR_CANDIDATE_REVISION: &str = "04eb6f849c03be23177d373549c6c272551f957d";
 
 /// Exact merged runtime revision required by generated source.
-pub const RUNTIME_REVISION: &str = "e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3";
+pub const RUNTIME_REVISION: &str = "8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354";
 
 /// Exact codegen Git revision captured by the build.
 pub const GENERATOR_SOURCE_REVISION: &str = env!("QUIRE_CODEGEN_SOURCE_REVISION");
@@ -858,6 +858,21 @@ struct AttestationOutput<'a> {
     schema_digest: Option<&'a str>,
 }
 
+/// Operation-specific facts used to emit one shared proof-attestation body.
+pub(crate) struct GeneratedAttestationSpec<'a> {
+    pub(crate) operation: &'a str,
+    pub(crate) stable_identity: &'a str,
+    pub(crate) input_bytes: &'a [u8],
+    pub(crate) output_role: &'a str,
+    pub(crate) media_type: &'a str,
+    pub(crate) output_schema: &'a str,
+    pub(crate) schema_digest: Option<&'a str>,
+    pub(crate) canonical_profile: &'a str,
+    pub(crate) backend: &'a str,
+    pub(crate) configuration_digest: &'a str,
+    pub(crate) extra_argv: &'a [String],
+}
+
 /// The proof obligation an output role discharges.
 fn proof_id_for(role: &str) -> String {
     format!("PROOF-codegen-{role}")
@@ -875,6 +890,7 @@ fn generation_command(
     canonical_profile: &str,
     input_digest: &str,
     output: &AttestationOutput<'_>,
+    backend: &str,
 ) -> AttestationCommand {
     let mut argv = vec![TOOL_ARGV0.to_owned(), operation.to_owned()];
     argv.extend(subject.iter().cloned());
@@ -888,7 +904,7 @@ fn generation_command(
         "--runtime-revision".to_owned(),
         RUNTIME_REVISION.to_owned(),
         "--backend".to_owned(),
-        "none".to_owned(),
+        backend.to_owned(),
         "--maximum-source-bytes".to_owned(),
         MAX_GENERATED_SOURCE_BYTES.to_string(),
         "--output-schema".to_owned(),
@@ -920,6 +936,7 @@ fn attestation_body(
     identity: &str,
     output: &AttestationOutput<'_>,
     command: AttestationCommand,
+    configuration_digest: &str,
 ) -> ProofAttestationBody {
     let proof_id = proof_id_for(output.role);
     ProofAttestationBody {
@@ -933,7 +950,7 @@ fn attestation_body(
         tool: AttestationTool {
             identity: TOOL_IDENTITY.to_owned(),
             version: GENERATOR_SOURCE_REVISION.to_owned(),
-            configuration_digest: generator_implementation_digest().to_owned(),
+            configuration_digest: configuration_digest.to_owned(),
         },
         environment: AttestationEnvironment {
             target_triple: env!("QUIRE_CODEGEN_TARGET").to_owned(),
@@ -972,6 +989,7 @@ fn oracle_attestation(
         },
         input_digest,
         output,
+        "none",
     );
     // The canonical semantic digest of the expression, which is a different fact
     // from the digest of its canonical bytes and was a separate extension field.
@@ -979,7 +997,13 @@ fn oracle_attestation(
         "--expression-canonical-digest".to_owned(),
         canonical_digest.to_owned(),
     ]);
-    attestation_body(&request.attestation, identity, output, command)
+    attestation_body(
+        &request.attestation,
+        identity,
+        output,
+        command,
+        generator_implementation_digest(),
+    )
 }
 
 /// Serializes one attestation body into the artifact emitted beside its output.
@@ -1006,29 +1030,53 @@ pub(crate) fn generated_artifact_bundle(
     output_schema: &str,
     rust: Artifact,
 ) -> Result<GeneratedArtifactBundle, GenerationErrorCode> {
+    let specification = GeneratedAttestationSpec {
+        operation,
+        stable_identity,
+        input_bytes,
+        output_role,
+        media_type: "text/x-rust",
+        output_schema,
+        schema_digest: None,
+        canonical_profile: "quire.codegen.request/v1",
+        backend: "none",
+        configuration_digest: generator_implementation_digest(),
+        extra_argv: &[],
+    };
+    let attestation = generated_output_attestation(context, requirement, &specification, &rust)?;
+    Ok(GeneratedArtifactBundle { rust, attestation })
+}
+
+/// Emits one Quoin proof-attestation body beside an arbitrary generated output.
+pub(crate) fn generated_output_attestation(
+    context: &AttestationContext<'_>,
+    requirement: &RequirementRef,
+    specification: &GeneratedAttestationSpec<'_>,
+    generated: &Artifact,
+) -> Result<Artifact, GenerationErrorCode> {
     if !attestation_context_is_valid(context) {
         return Err(GenerationErrorCode::InvalidAttestationContext);
     }
-    if rust.contents.len() > MAX_GENERATED_SOURCE_BYTES {
+    if generated.contents.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(GenerationErrorCode::ResourceLimitExceeded);
     }
-    let input_digest = sha256(input_bytes);
+    let input_digest = sha256(specification.input_bytes);
     let identity = sha256(
         length_delimited_identity(&[
-            operation,
+            specification.operation,
             requirement.requirement().as_str(),
             &requirement.revision().get().to_string(),
-            stable_identity,
+            specification.stable_identity,
             &input_digest,
         ])
         .as_bytes(),
     );
     let output = AttestationOutput {
-        role: output_role,
-        path: &rust.path,
-        media_type: "text/x-rust",
-        schema: output_schema,
-        schema_digest: None,
+        role: specification.output_role,
+        path: &generated.path,
+        media_type: specification.media_type,
+        schema: specification.output_schema,
+        schema_digest: specification.schema_digest,
     };
     let subject = vec![
         "--requirement".to_owned(),
@@ -1038,23 +1086,37 @@ pub(crate) fn generated_artifact_bundle(
             requirement.revision().get()
         ),
         "--identity".to_owned(),
-        stable_identity.to_owned(),
+        specification.stable_identity.to_owned(),
     ];
-    let command = generation_command(
-        operation,
+    let mut command = generation_command(
+        specification.operation,
         &subject,
-        "quire.codegen.request/v1",
+        specification.canonical_profile,
         &input_digest,
         &output,
+        specification.backend,
     );
-    let body = attestation_body(context, &identity, &output, command);
+    command
+        .argv
+        .extend(specification.extra_argv.iter().cloned());
+    let body = attestation_body(
+        context,
+        &identity,
+        &output,
+        command,
+        specification.configuration_digest,
+    );
     let attestation = attestation_artifact(
-        &format!("{}_{}", bounded_readable_component(operation), identity),
-        output_role,
+        &format!(
+            "{}_{}",
+            bounded_readable_component(specification.operation),
+            identity
+        ),
+        specification.output_role,
         &body,
     )
     .map_err(|_| GenerationErrorCode::SerializationFailed)?;
-    Ok(GeneratedArtifactBundle { rust, attestation })
+    Ok(attestation)
 }
 
 fn node_name(kind: &ExpressionKind) -> &'static str {

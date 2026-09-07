@@ -552,7 +552,7 @@ dependencies = [
 [[package]]
 name = "quire-contract-ir"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-ir?rev=93674480c572c237fe87c5d509b17206664bdd62#93674480c572c237fe87c5d509b17206664bdd62"
+source = "git+https://github.com/agent-ix/quire-contract-ir?rev=04eb6f849c03be23177d373549c6c272551f957d#04eb6f849c03be23177d373549c6c272551f957d"
 dependencies = [
  "jsonschema",
  "serde",
@@ -565,7 +565,7 @@ dependencies = [
 [[package]]
 name = "quire-contract-runtime"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-runtime?rev=e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3#e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3"
+source = "git+https://github.com/agent-ix/quire-contract-runtime?rev=8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354#8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354"
 dependencies = [
  "proptest",
 ]

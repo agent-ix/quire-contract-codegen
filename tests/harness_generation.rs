@@ -272,7 +272,7 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
     );
 
     let temporary = TemporaryDirectory::new("quire-generated-harness");
-    let manifest = "[package]\nname = \"generated-harness-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3\", features = [\"proptest\"] }\n";
+    let manifest = "[package]\nname = \"generated-harness-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354\", features = [\"proptest\"] }\n";
     fs::write(temporary.0.join("Cargo.toml"), manifest).unwrap();
     let tests = r#"
 
@@ -726,7 +726,7 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
         let temporary = TemporaryDirectory::new(&format!("quire-generated-harness-{name}"));
         fs::write(
             temporary.0.join("Cargo.toml"),
-            "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3\", features = [\"proptest\"] }\n",
+            "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354\", features = [\"proptest\"] }\n",
         )
         .unwrap();
         let generated_test = format!(

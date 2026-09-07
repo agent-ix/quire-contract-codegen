@@ -230,10 +230,14 @@ a pass.
 
 Two limitations are load-bearing and are stated here rather than left to be inferred.
 
-FR-003 Kani obligation lowering is outside this integration candidate. FR-004 has bounded LLVM
-observation primitives and six actual generated-oracle native controls, but no aggregate bound
-coverage report, campaign-run provenance or consuming obligation gate. Neither has a shared proof
-obligation claiming completed backend assurance here. Their TM-001 rows stay 🚧 Planned.
+FR-003 Kani obligation lowering now has a bounded draft and a local suite, but its generated graph
+states `proofExecutionState: not_run`: dependency readiness is not proof completion, and the two
+ProofAttestationV1 bodies attest only successful artifact generation. FR-004 has bounded LLVM
+observation primitives, six actual generated-oracle native controls, and complete bound observations
+through `analyze_bound_coverage`, every outcome of which retains `provenance: unqualified`; it has
+no campaign-run provenance and no consuming obligation gate. Neither backend has a shared proof
+obligation claiming completed assurance here. Their TM-001 rows stay 🚧 Planned until independent
+current-head review and retained execution evidence.
 
 The atomic publisher's fault model injects refusal before every artifact and ownership-marker write,
 before destination swap, during replacement swap and failed rollback, and after commit before backup

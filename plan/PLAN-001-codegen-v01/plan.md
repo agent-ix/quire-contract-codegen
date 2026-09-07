@@ -14,7 +14,7 @@ relationships:
 ## Scope
 
 Specify, reconcile, implement, and verify deterministic code generation from the authoritative
-contract IR into runtime-backed oracles, harnesses, proofs, vacuity maps, and derivation evidence.
+contract IR into runtime-backed oracles, harnesses, proofs, vacuity maps, and Quoin proof attestations.
 
 ## Dependency Graph
 
@@ -31,21 +31,21 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 | [Task-001](./tasks/Task-001-foundation-spec.md) | Foundation specification and assurance | done |
 | [Task-002](./tasks/Task-002-foundation-evidence.md) | Foundation evidence and gap review | done |
 | [Task-003](./tasks/Task-003-dependency-reconciliation.md) | Upstream dependency reconciliation | done |
-| [Task-004](./tasks/Task-004-oracles.md) | Deterministic oracles and manifests | in_progress |
+| [Task-004](./tasks/Task-004-oracles.md) | Deterministic oracles and attestations | in_progress |
 | [Task-005](./tasks/Task-005-backends.md) | Harness, proptest, Kani, and vacuity backends | in_progress |
 | [Task-006](./tasks/Task-006-parity.md) | CLI, golden, differential, and parity closure | in_progress |
 | [Task-007](./tasks/Task-007-human-release.md) | Human source-release decision | not_started |
 
 ## Coordination Rule
 
-Task-003's historical dependency gate is complete for IR PR #19 merge
-`5c49ebfd1c87415f74420ad047392bd03b1bd202`. The local integration candidate combines reviewed
-PR #22 head `fae8e4216216397ef6f5ec40a2ea3cb60ededcc2` and PR #26 head
-`490fde7d11ae92637bc631c8f9206946dc376406`, followed by PR #23 head
-`a953a203abe08e0e1bff573e0a45d7a11b83ca5f`, preserving their separate source branches and shared
-ProofAttestationV1 boundary. This is not a claim that either candidate is merged upstream.
-Task-004 and Task-005 remain in progress until semantic criteria and current-head review findings
-close. Task-006 includes the locally verified atomic publication slice; serialized-package
-generation awaits the accepted IR-owned executable binding and explicit pin reconciliation.
-Neither integration nor source generation promotes planned coverage/parity rows. Automation must
-not complete Task-007.
+Task-003's dependency gate is complete. `main` now carries the shared-assurance migration, the
+deterministic oracle slice, the issue #3 harness/proptest remediation (PR #22), atomic publication
+(PR #26), the bounded vacuity observation primitives (PR #23) and the bounded Kani slice (PR #25),
+pinned against IR `04eb6f849c03be23177d373549c6c272551f957d` and runtime
+`8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354`.
+
+That IR revision binds executable expressions through the public API, so Task-006's
+serialized-package generation is no longer blocked on the binding itself; what remains is the
+serialized CLI surface and cross-backend parity. Task-004 and Task-005 remain in progress until
+their semantic acceptance criteria and current-head review findings close. This integration
+promotes no planned coverage or parity row. Automation must not complete Task-007.

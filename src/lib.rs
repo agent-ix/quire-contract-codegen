@@ -11,6 +11,8 @@ mod bound;
 mod publication;
 // Implements: FR-002
 mod harness;
+// Implements: FR-003
+mod kani;
 // Implements: FR-002
 mod strategy;
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
@@ -34,6 +36,12 @@ pub use bound::{
 };
 
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
+pub use kani::{
+    generate_kani_bundle, KaniArtifactBundle, KaniDiagnostic, KaniErrorCode, KaniRequest,
+    KaniSolver, ProofDependencyEdge, ProofDependencyGraph, ProofDependencyKind,
+    ProofDependencyRequest, ProofDependencyState, ProofReadiness, KANI_ADAPTER_PROFILE,
+    KANI_BACKEND_VERSION,
+};
 pub use publication::{
     write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
     PublicationErrorCode, PublishedBundleIdentity,

@@ -29,6 +29,10 @@ Its accepted-case floor and discard ceiling are request inputs bound into genera
 Strategy generation directly shapes bounded ranges, finite memberships, enums, and supported
 correlated relations; only explicitly residual constraints may use rejection.
 
+The bounded Kani adapter reuses the exact oracle predicates, emits distinct
+framing/binding/contract/harness regions, derives a complete dependency graph, and records proof
+execution as `not_run`.
+
 ## PR #22 round 8 repair delta
 
 Seed the mixed positive fixture and pin its exact counters. Preserve every framework abort as
@@ -51,11 +55,12 @@ Next bounded dispatch is proposed in REV-017 atop published PR #27 `cd345e1`: im
 complete bound observation only after API approval, retaining unqualified provenance. A
 runtime-owned campaign transport and an authorized native producer/shared verification join
 are separate ownership gates; no private counters or attestation/receipt framework fills them.
-The current IR/runtime pins and every generated-source guard remain unchanged.
+Every generated-source guard remains unchanged.
 
-- The source candidates share `0f4df413b21dba39ef62aca89ededc707aab7056`; the local derivative
-  integrates reviewed PR #22, #26 and #23 heads without changing those branches or reviving
-  superseded bespoke-assurance PRs.
+- Current `main` is the branch base; superseded bespoke-assurance PRs are not revived or restacked.
+  It carries the reviewed PR #22, #26, #23 and #25 heads, so this integration adds bound-package
+  oracle generation and bound coverage analysis on top of them rather than restacking them.
 - Unsupported state, constraint, or shrinking semantics fail with a structured diagnostic rather
   than falling back to an unreported filter.
-- Kani is outside this recovery slice. Vacuity is partial and closes no full FR-004 row.
+- Vacuity is partial and closes no full FR-004 row. Kani landed as its own bounded slice and stays
+  a draft until independent current-head review.

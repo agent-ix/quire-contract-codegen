@@ -16,6 +16,7 @@ type: SuiteRegistry
 | SUITE-004 | Static specification and coverage export | `quire coverage --scope . --json` | quire 0.31.0 / quire-rs 0.46.0 | Static |
 | SUITE-006 | Shared assurance intake chain | `python3 scripts/assurance_chain.py --candidate-revision <sha>` | quoin 0.23.1 change-assurance and evidence surfaces | Integration |
 | SUITE-007 | Minimum supported Rust version build | `rustup run 1.75.0 cargo check --locked --all-targets --message-format=json` | rustc 1.75.0 | Static |
+| SUITE-008 | Bounded Kani generation and execution | `cargo test --test kani_generation` | cargo-kani 0.67.0 / rustc | Analysis |
 | SUITE-010 | Atomic generated-boundary publication | `cargo test --lib publication` | quire-contract-codegen 0.1.0 / rustc | Integration |
 
 ## Notes
@@ -44,11 +45,21 @@ lane and added the local traceability reimplementation and the local verifier. E
 upstream. Quire is the authority on static specification, obligation and coverage
 facts; Quoin owns intake, retention, audit and receipts.
 
-There is no suite for FR-003 or FR-004. Kani obligation lowering and vacuity
-evidence are specified and not implemented at this revision, and a suite whose
-command exercises nothing would report `pass` for a capability that does not
-exist. Their absence from this table is the honest statement; TM-001 keeps their
-rows 🚧 Planned.
+SUITE-008 exists for the implemented FR-003 draft. It validates both output
+schemas, seals both generated attestation bodies through Quoin, checks every
+dependency classification and source-site edge, compares the embedded predicates
+with the executable-oracle output, and runs representative bundles under the
+pinned Kani backend. It is local pre-review evidence and does not promote TM-001
+or classify a proof complete. FR-004 still has no suite because its implementation
+does not yet exist.
+
+SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
+failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,
+complete ownership-census verification, and refusal of modified, extra-entry, unmarked, and symlinked
+destinations. It is local pre-review evidence for the publication portion of TC-002; the
+serialized-package CLI remains blocked on an IR expression-binding design. The suite command is a
+focused local check; the full repository test target also includes these tests, but SUITE-010 has no
+separate structured execution-result producer yet.
 
 SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
 failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,

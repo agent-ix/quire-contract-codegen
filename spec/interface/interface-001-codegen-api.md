@@ -34,6 +34,10 @@ operations:
     inputs: [requirement identity, customer enum path and variants, campaign, attestation context]
     output: GeneratedArtifactBundle | StrategyDiagnostic
     semantics: finite shaped cases with an explicit quire-contract-runtime consumer dependency
+  - name: generate_kani_bundle
+    inputs: [typed precondition, typed postcondition, subject path, pinned backend identity, dependency census, attestation context]
+    output: KaniArtifactBundle | KaniDiagnosticSet
+    semantics: deterministic Kani source and dependency graph; generation records proof execution as not_run and never claims proof completion
   - name: write_bundle_atomic
     inputs: [ArtifactBundle, destination directory]
     output: PublishedBundleIdentity | IO diagnostic
@@ -81,7 +85,7 @@ identity_envelope:
   required: [schema_version, record_type, attestation_id, record_digest, candidate_revision, proof_id, command, tool, environment, observed_at, result]
   results: [passed, failed, unavailable, not_computed]
   binding: one attestation per generated artifact, because an attestation binds exactly one retained output
-  backend_rule: in-process lowering declares `--backend none` in the attested command. This is enforced by TC-001 asserting the flag is present, not by the shape -- argv is a free-form string array, so an omitted flag would still validate, which the deprecated envelope's required `backend` field did not permit
+  backend_rule: oracle, harness, and strategy lowering declare `--backend none`; Kani generation declares `--backend cargo-kani` together with exact version, executable digest, adapter profile, options, readiness, and `--proof-execution-state not_run`. These are enforced by tests because argv is a free-form string array
   observed_at: the generator's own source-commit time, frozen at build so that regeneration is byte-identical. It is not an observation of when generation ran, and a consumer generating months later emits an attestation whose observed_at predates the generation. Verification receipts derive staleness from candidate_revision, not from this field
   argv: a faithful rendering of an in-process call, not a runnable command line. The crate declares a library and no binary and cli_generate is unimplemented, so argv[0] names no program that exists. Recorded as UNKNOWN-attested-command-is-not-runnable rather than dressed up
   not_carried:
@@ -111,6 +115,13 @@ harness_strategy_slice:
   generated_crate_lints: generated crate roots deny missing documentation and compile under denied warnings
   source_limit: harness and strategy Rust are rejected above 1048576 bytes before bundling, matching the maximum-source-bytes value retained in ProofAttestationV1 command argv
   artifact_names: bounded readable prefix plus full SHA-256 over length-delimited request identity
+kani_slice:
+  adapter: exactly `cargo-kani 0.67.0` under profile `kani-0.67.0-function-contracts-v1`; another requested version is backend-unavailable
+  binding: one Boolean input, one Boolean pre/post state, and an explicit customer `fn(bool, bool) -> bool` path
+  outputs: generated Rust plus a schema-validated proof-dependency graph, each with its own Quoin ProofAttestationV1 body
+  completion_boundary: graph readiness is derived from the full dependency census, but `proofExecutionState` is always `not_run`; artifact-generation attestations use output-specific proof obligations and do not attest that Kani proved the contract
+  dependency_rule: missing or failed required edges yield incomplete; any assumption or stub yields conditional; only passed required edges yield ready
+  source_sites: every assumption and stub has one digest-bound source marker and one graph edge
 coverage_analysis_slice:
   qualified_profile: cargo-llvm-cov 0.9.0 with rustc 1.94.1 on x86_64-unknown-linux-gnu in test profile producing llvm.coverage.json.export version 3.0.1; primitives validate export metadata, not native executable provenance
   implementation_boundary: parse_llvm_coverage, LlvmCoverage.observe, and classify_clause remain unbound observation primitives; the separate bound observation API does not implement native-qualified aggregate analysis, campaign binding, coverage attestation, or obligation discharge
