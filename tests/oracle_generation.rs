@@ -240,6 +240,189 @@ fn source_symbol(source: &str) -> &str {
         .unwrap()
 }
 
+/// Trace: TC-001, TC-006
+#[test]
+fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
+    use quire_contract_codegen::{
+        classify_clause, parse_llvm_coverage, ClauseCoverage, SourceRegion,
+    };
+    let directory = TemporaryDirectory::new("quire-native-vacuity");
+    let environment = boolean_environment(&["a", "b"]);
+    let implication = || {
+        boolean_op(
+            BooleanOperator::Implication,
+            value("a", 2),
+            value("b", 3),
+            1,
+        )
+    };
+    let expressions = [
+        implication(),
+        value("a", 1),
+        boolean_op(
+            BooleanOperator::TotalAnd,
+            implication(),
+            boolean_op(
+                BooleanOperator::Implication,
+                value("b", 5),
+                value("a", 6),
+                4,
+            ),
+            0,
+        ),
+        implication(),
+        boolean_op(
+            BooleanOperator::Implication,
+            value("a", 0),
+            boolean_op(
+                BooleanOperator::Implication,
+                value("b", 1),
+                value("a", 2),
+                3,
+            ),
+            4,
+        ),
+        implication(),
+    ];
+    let mut generated = Vec::new();
+    let mut modules = String::new();
+    let mut calls = String::new();
+    for (index, expression) in expressions.iter().enumerate() {
+        let typed = environment
+            .check_expression(expression, &ValueType::Boolean, &pre(), true)
+            .unwrap();
+        let clause = ClauseId::new(format!("coverage-{index}")).unwrap();
+        let bundle = generate_boolean_oracle(&OracleRequest {
+            requirement: &requirement(),
+            clause: &clause,
+            expression: &typed,
+            attestation: attestation_context(),
+        })
+        .unwrap();
+        let path = directory.0.join(&bundle.rust.path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, &bundle.rust.contents).unwrap();
+        writeln!(
+            modules,
+            "#[path = {:?}] mod case_{index};",
+            bundle.rust.path.strip_prefix("src/").unwrap()
+        )
+        .unwrap();
+        let symbol = source_symbol(&bundle.rust.contents);
+        match index {
+            0 => writeln!(calls, "assert!(case_0::{symbol}(std::hint::black_box(false), std::hint::black_box(true)));"),
+            1 => writeln!(calls, "assert!(case_1::{symbol}(std::hint::black_box(true)));"),
+            2 => writeln!(calls, "assert!(!case_2::{symbol}(std::hint::black_box(true), std::hint::black_box(false)));"),
+            4 => writeln!(calls, "assert!(case_4::{symbol}(std::hint::black_box(true), std::hint::black_box(false)));"),
+            5 => writeln!(calls, "assert!(case_5::{symbol}(std::hint::black_box(true), std::hint::black_box(true)));"),
+            _ => Ok(()),
+        }.unwrap();
+        generated.push(bundle);
+    }
+    fs::write(
+        directory.0.join("src/lib.rs"),
+        format!("#![allow(dead_code)]\n{modules}\n#[test] fn native_run() {{ {calls} }}"),
+    )
+    .unwrap();
+    fs::write(directory.0.join("Cargo.toml"), format!("[package]\nname = \"native-vacuity\"\nversion = \"0.0.0\"\nedition = \"2021\"\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n")).unwrap();
+    let output_path = directory.0.join("coverage.json");
+    // The stable installation owns llvm-tools here; qualify its exact compiler first.
+    let compiler = Command::new("rustc")
+        .args(["+stable", "--version"])
+        .output()
+        .unwrap();
+    assert!(compiler.status.success());
+    assert_eq!(
+        String::from_utf8(compiler.stdout).unwrap().trim(),
+        "rustc 1.94.1 (e408947bf 2026-03-25)"
+    );
+    let sysroot = Command::new("rustc")
+        .args(["+stable", "--print", "sysroot"])
+        .output()
+        .unwrap();
+    assert!(sysroot.status.success());
+    let tools = PathBuf::from(String::from_utf8(sysroot.stdout).unwrap().trim())
+        .join("lib/rustlib/x86_64-unknown-linux-gnu/bin");
+    for tool in ["llvm-cov", "llvm-profdata"] {
+        assert!(
+            tools.join(tool).is_file(),
+            "qualified llvm-tools must already be installed"
+        );
+    }
+    let output = Command::new("cargo")
+        .args([
+            "+stable",
+            "llvm-cov",
+            "--offline",
+            "--json",
+            "--output-path",
+        ])
+        .arg(&output_path)
+        .current_dir(&directory.0)
+        .env("CARGO_TARGET_DIR", directory.0.join("target"))
+        .env("LLVM_COV", tools.join("llvm-cov"))
+        .env("LLVM_PROFDATA", tools.join("llvm-profdata"))
+        .env("CARGO_PROFILE_TEST_OPT_LEVEL", "0")
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "native producer failed: {}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).unwrap();
+    let coverage = parse_llvm_coverage(&bytes, directory.0.to_str().unwrap()).unwrap();
+    for (index, (bundle, expected)) in generated
+        .iter()
+        .zip([
+            ClauseCoverage::Vacuous,
+            ClauseCoverage::Exercised,
+            ClauseCoverage::PartiallyExercised,
+            ClauseCoverage::Unexecuted,
+            ClauseCoverage::PartiallyExercised,
+            ClauseCoverage::Exercised,
+        ])
+        .enumerate()
+    {
+        let map: Vec<SourceRegion> = serde_json::from_str(&bundle.source_map.contents).unwrap();
+        let envelope = map.iter().find(|region| region.role == "clause").unwrap();
+        assert_eq!(
+            envelope.expected_consequents,
+            Some([1, 0, 2, 1, 2, 1][index])
+        );
+        assert_eq!(
+            map.len(),
+            envelope.expected_consequents.unwrap() as usize + 2
+        );
+        let evaluation = map
+            .iter()
+            .find(|region| region.role == "oracle_evaluation")
+            .unwrap();
+        let observe = |region: &SourceRegion| {
+            coverage
+                .observe(&region.artifact_path, region.probe.unwrap())
+                .unwrap()
+        };
+        let consequents = map
+            .iter()
+            .filter(|region| region.role == "implication_consequent")
+            .map(observe)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            classify_clause(
+                observe(evaluation),
+                envelope.expected_consequents.unwrap(),
+                &consequents
+            )
+            .unwrap(),
+            expected
+        );
+    }
+}
+
 /// Trace: TC-001, NFR-002-AC-1
 ///
 /// NFR-002-AC-1 declares its verification method as Test (TC-001), and this is
@@ -312,6 +495,22 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
         .compile(&source_map_schema)
         .unwrap();
     assert!(source_map_validator.validate(&source_map_value).is_ok());
+    let mut missing_probe = source_map_value.clone();
+    let evaluation_row = missing_probe
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|row| row["role"] == "oracle_evaluation")
+        .unwrap();
+    evaluation_row.as_object_mut().unwrap().remove("probe");
+    assert!(source_map_validator.validate(&missing_probe).is_err());
+    let mut missing_census = source_map_value.clone();
+    missing_census[0]
+        .as_object_mut()
+        .unwrap()
+        .remove("expectedConsequents");
+    assert!(source_map_validator.validate(&missing_census).is_err());
+    assert_eq!(source_map[0].expected_consequents, Some(1));
     assert!(source_map_validator
         .validate(&serde_json::json!({"not": "a source map"}))
         .is_err());

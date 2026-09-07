@@ -39,9 +39,16 @@ size guard. Correct the accounting unit and add a source-limit conformance case.
 The campaign-outcome producer integration remains a separate completion item; generated-crate
 execution supplies the focused campaign controls in this revision.
 
+Issue #5's reviewed spec is being repaired in a bounded coordinator-authorized slice: generated
+entry probes, a typed-IR implication census, strict LLVM reading, and measured classification
+primitives. Native fixtures use actual generator outputs. Aggregate analysis and coverage
+attestations await IR #50's bound population and a native producer/run-result contract; no private
+binding or counter model is introduced. REV-014 and REV-015 record the repair and residual work.
+
 ## Guards
 
 - Current `main` is the branch base; superseded bespoke-assurance PRs are not revived or restacked.
 - Unsupported state, constraint, or shrinking semantics fail with a structured diagnostic rather
   than falling back to an unreported filter.
-- Kani and vacuity work remain separate slices and do not broaden this issue #3 branch.
+- Kani remains a separate slice and is outside this recovery slice. Vacuity is partial and closes no
+  full FR-004 row.
