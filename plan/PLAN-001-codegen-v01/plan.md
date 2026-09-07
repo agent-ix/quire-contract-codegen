@@ -38,18 +38,14 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 
 ## Coordination Rule
 
-Task-003's dependency gate is complete and `main` includes the migrated oracle, harness, and strategy
-drafts from PR #15 against accepted IR PR #19 merge
-<<<<<<< HEAD
-`5c49ebfd1c87415f74420ad047392bd03b1bd202`. Task-004 and Task-005 remain in progress until their
-semantic acceptance criteria and current-head review findings close. The bounded Kani slice is under
-local verification; vacuity remains next. Automation must not complete Task-007.
-=======
-`5c49ebfd1c87415f74420ad047392bd03b1bd202`, together with the shared-assurance migration, the
-deterministic Oracle slice, and the issue #3 harness/proptest remediation merged as PR #22. That
-migration did not independently accept Task-004's semantic scope, so Task-004 and Task-005 remain in
-progress until their semantic acceptance criteria and current-head review findings close. Task-006
-has a locally verified atomic publication slice; its serialized-package CLI stays blocked while this
-repository still pins the IR revision named above, which does not bind executable expressions.
-Automation must not complete Task-007.
->>>>>>> origin/main
+Task-003's dependency gate is complete. `main` now carries the shared-assurance migration, the
+deterministic oracle slice, the issue #3 harness/proptest remediation (PR #22), atomic publication
+(PR #26), the bounded vacuity observation primitives (PR #23) and the bounded Kani slice (PR #25),
+pinned against IR `04eb6f849c03be23177d373549c6c272551f957d` and runtime
+`8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354`.
+
+That IR revision binds executable expressions through the public API, so Task-006's
+serialized-package generation is no longer blocked on the binding itself; what remains is the
+serialized CLI surface and cross-backend parity. Task-004 and Task-005 remain in progress until
+their semantic acceptance criteria and current-head review findings close. This integration
+promotes no planned coverage or parity row. Automation must not complete Task-007.

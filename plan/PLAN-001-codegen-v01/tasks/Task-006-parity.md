@@ -18,10 +18,6 @@ golden-corpus, differential, and cross-backend parity evidence after Tasks 004 a
 
 ## Current State
 
-<<<<<<< HEAD
-The bounded generation-conformance example exists, but atomic publication, the CLI surface, golden
-bundle publication, and full cross-backend parity closure have not started.
-=======
 The bounded publisher validates and path-sorts complete artifact sets, stages them beside the target,
 and replaces only a directory whose contents match its writable marker. Fault injection covers every artifact
 and marker staging point plus both swap boundaries. Modified, unmarked, extra-entry, and symlinked
@@ -44,4 +40,3 @@ destinations are refused without editing adjacent developer-owned files.
   serialized-package CLI requires an upstream IR design/API decision rather than a codegen-local wire
   format.
 - Golden publication and complete executable/proptest/Kani/coverage parity remain to be reconciled.
->>>>>>> origin/main

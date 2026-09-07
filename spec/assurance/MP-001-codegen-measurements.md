@@ -51,6 +51,10 @@ and terminal states the corpus actually reached.
 The harness source-limit case must observe `ResourceLimitExceeded` and `unsupported`; the corpus
 has at least ten rows including its census. Campaign outcome controls execute in TC-004's generated
 crate tests; this generation producer does not yet publish native campaign-execution results.
+The library-only public bound-package consumer additionally has seven synthetic-projection tests
+and a byte-accounting unit control, including actual publication and native execution of generated
+sources. These are not yet rows in this structured generation producer, do not establish the normal
+source frontend, and do not close a native campaign or aggregate coverage obligation.
 
 `scripts/check_upstream_pins.py --json` publishes `codegen.upstream-identity/v1`: for each declared
 upstream, the revision the crate's own constant states, the revision the dependency declaration pins,
@@ -228,10 +232,12 @@ Two limitations are load-bearing and are stated here rather than left to be infe
 
 FR-003 Kani obligation lowering now has a bounded draft and a local suite, but its generated graph
 states `proofExecutionState: not_run`: dependency readiness is not proof completion, and the two
-ProofAttestationV1 bodies attest only successful artifact generation. The TM-001 rows remain planned
-until independent current-head review and retained execution evidence. FR-004 vacuity evidence still
-has no implementation, suite, or proof obligation; a proof obligation whose subject does not exist
-would be a false green.
+ProofAttestationV1 bodies attest only successful artifact generation. FR-004 has bounded LLVM
+observation primitives, six actual generated-oracle native controls, and complete bound observations
+through `analyze_bound_coverage`, every outcome of which retains `provenance: unqualified`; it has
+no campaign-run provenance and no consuming obligation gate. Neither backend has a shared proof
+obligation claiming completed assurance here. Their TM-001 rows stay 🚧 Planned until independent
+current-head review and retained execution evidence.
 
 The atomic publisher's fault model injects refusal before every artifact and ownership-marker write,
 before destination swap, during replacement swap and failed rollback, and after commit before backup

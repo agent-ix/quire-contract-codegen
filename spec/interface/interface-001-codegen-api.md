@@ -11,15 +11,19 @@ type: interface
 name: ContractCodegen
 version: draft-codegen-v1
 input:
-  contract_package: pinned serialized quire-contract-ir package
+  contract_package: public IR BoundPackage from the pinned derived executable projection decoder; no private wire or codegen input schema
   configuration: backend versions, customer bindings, output profile
 operations:
+  - name: generate_bound_oracles
+    inputs: [public BoundPackage reference, attestation context]
+    output: BoundOracleGeneration | BoundGenerationError
+    semantics: complete ordered executable-clause batch or explicit NoExecutable with bound digest and informational references but no publishable artifact; unsupported executable content fails the entire batch
   - name: generate_bundle
     inputs: [contract package bytes, generation configuration]
     output: ArtifactBundle | DiagnosticSet
-    semantics: deterministic, all-or-nothing lowering; unsupported semantics prevent false completeness
+    semantics: planned multi-backend operation; the implemented first consumer is library-only generate_bound_oracles
   - name: generate_tristate_harness
-    inputs: [typed precondition, typed postcondition, explicit bindings, minimum accepted cases, maximum discarded cases, attestation context]
+    inputs: [typed precondition, typed postcondition, explicit bindings, minimum accepted cases, minimum rejected cases, maximum discarded cases, attestation context]
     output: GeneratedArtifactBundle | HarnessDiagnosticSet
     semantics: source plus one proof attestation, request-bound campaign policy, owned execution loop, retained campaign accounting
   - name: generate_i64_strategy
@@ -39,15 +43,22 @@ operations:
     output: PublishedBundleIdentity | IO diagnostic
     semantics: replace only a destination whose complete contents match its local ownership marker after staged validation; the marker is a writable consistency declaration, not authenticated provenance; caller serializes destination writers; missing inputs refuse ownership while inspection/read failures return io_failed with unchanged state; failed rollback reports unknown and preserves backup/staging for recovery; post-commit cleanup failures report published; process crashes between directory renames and power-loss durability remain outside the portable rollback guarantee
   - name: analyze_coverage
-    status: planned; awaits public IR-owned bound executable population and native run-result contract
+    status: planned; public IR-owned bound population is available, native run-result contract and aggregate analysis integration remain pending
     inputs: [bound executable population, generated source and maps, LLVM coverage JSON bytes, native producer and run identities, source root, runtime campaign report, execution outcome, attestation context]
     output: versioned structured AnalysisOutcome including non-success diagnostics and available input identities
     semantics: coverage obligation succeeds only for nonempty complete exercised population with successful bound execution; successful serialization is not successful coverage; never executes LLVM
+  - name: analyze_bound_coverage
+    status: implemented phase A after coordinator approval of REV-017; full native-run analysis remains pending
+    inputs: [public BoundPackage, immutable BoundOracleGeneration, complete artifact bytes, optional LLVM export bytes, source root]
+    output: immutable versioned BoundCoverageAnalysis domain observations
+    semantics: exact independent clause and implication census; whole-batch artifact/map binding; measured clauses or explicit unavailable states; valid informational-only population is no_executable; provenance remains unqualified even when all clauses are exercised; no runtime transport, producer execution, attestation, or assurance verdict
   - name: cli_generate
+    status: planned; no executable CLI is provided by this library candidate
     inputs: [serialized package path, destination, backend flags]
     output: stable exit status, diagnostics, and published bundle identity
     semantics: equivalent to the library API and never edits developer-owned regions
 artifact_bundle:
+  scope: planned multi-backend generate_bundle; implemented bound-oracle batches contain only oracle source, source maps and their generation attestation bodies
   required:
     - executable Rust oracles
     - tri-state harnesses
@@ -56,6 +67,8 @@ artifact_bundle:
     - coverage source map and vacuity map
     - diagnostics and one proof attestation per generated artifact
 diagnostics:
+  bound_batch_errors: typed ResourceLimitExceeded, NameCollision(full ClauseRef), Clause(full ClauseRef plus existing lower-level diagnostics), or Bundle(existing publication diagnostic); no partial artifacts
+  no_executable: separate successful non-artifact result for valid empty or informational-only populations, not a terminal-state or proof-attestation claim
   terminal_states: [generated, unsupported, invalid-input, backend-unavailable, io-failed, inconclusive]
   implemented_mapping:
     generated: successful supported Boolean lowering only
@@ -89,7 +102,7 @@ oracle_slice:
   archive_build: exact archive revision/time may be supplied explicitly; absent Git/archive identity is marked unavailable and dirty rather than aborting compilation
   schemas: generated Rust and source-map outputs each identify and validate against their own versioned schema
   source_limit: 1048576 bytes per clause, enforced during rendering
-  artifact_names: bounded readable prefix plus full SHA-256 requirement/revision/clause identity with per-clause source-map and per-artifact attestation paths
+  artifact_names: bounded readable prefix plus full SHA-256 package/requirement/revision/clause identity with per-clause source-map and per-artifact attestation paths
 harness_strategy_slice:
   output: generated Rust artifact plus one ProofAttestationV1 body, under proof obligations PROOF-codegen-generated-rust-harness and PROOF-codegen-generated-rust-strategy
   attestation_context: required for harness, integer-strategy, and enum-strategy generation
@@ -111,7 +124,11 @@ kani_slice:
   source_sites: every assumption and stub has one digest-bound source marker and one graph edge
 coverage_analysis_slice:
   qualified_profile: cargo-llvm-cov 0.9.0 with rustc 1.94.1 on x86_64-unknown-linux-gnu in test profile producing llvm.coverage.json.export version 3.0.1; primitives validate export metadata, not native executable provenance
-  implementation_boundary: parse_llvm_coverage, LlvmCoverage.observe, and classify_clause are unbound observation primitives; no aggregate report, campaign binding, coverage attestation, or obligation discharge is implemented
+  implementation_boundary: parse_llvm_coverage, LlvmCoverage.observe, and classify_clause remain unbound observation primitives; the separate bound observation API does not implement native-qualified aggregate analysis, campaign binding, coverage attestation, or obligation discharge
+  bound_observation_boundary: analyze_bound_coverage emits the strict codegen.bound-coverage-observations/v1 domain schema from a complete immutable generated bundle plus independently validated BoundPackage; its provenance is always unqualified; no campaign binding, native execution, attestation, or obligation discharge
+  bound_observation_output: complete ordered full-ClauseRef observations with independent typed implication census and available digests; computation state complete/incomplete/invalid_input/unsupported/no_executable; global refusal emits no clause observations and population not_emitted; null means unavailable, never measured zero; at most 16 MiB serialized bytes
+  bound_source_root: at most 4096 UTF-8 bytes before normalization; the accepted canonical absolute root is retained in the report as the mapping configuration; root aliases use existing LLVM parser normalization, not filesystem resolution
+  bound_count_consistency: within exact loop-free generated Boolean source, every measured consequent count is at most its owning oracle evaluation count; greater counts are retained with inconsistent_observation and no classification, never upgraded to exercised; the unbound primitive remains unchanged
   expected_population: immutable IR-owned executable clauses with typed expression, clause kind, execution anchor, declarations, dependencies, spans and canonical digest; exact artifact and map population equality; empty executable population is not_computed
   source_map: exactly one clause envelope carrying expectedConsequents counted independently from typed IR, one oracle_evaluation entry probe, and every implication_consequent entry probe; recompute artifact digests before aggregate use
   probes: one-based single-line UTF-8 byte columns with exclusive end; function-declaration entry token for evaluation and first expression token for each consequent; probes are required for semantic roles and forbidden on clause envelopes
@@ -134,12 +151,13 @@ coverage_analysis_slice:
   revision: compare IR and source-map u64 revision to runtime RevisionId using the canonical decimal string without leading zeroes
   invalid_input: stable non-success analysis outcome retains available identities and diagnostics without fabricated measured classifications or a passed coverage attestation
   default_gate: every executable clause exercised and native execution passed; adverse or unavailable coverage cannot discharge obligation; no automated human sufficiency or exception decision
-
 compatibility:
   draft_pins: must be reconciled before leaving draft
   generated_runtime_dependency: quire-contract-runtime, proptest, plus declared customer types only
   licensing: MIT OR Apache-2.0
   publication: disabled through the human v0.1 source-release decision
 open_design_gates:
-  serialized_package_cli: the accepted ContractPackage wire format binds ReferenceBody metadata but no executable TypedExpression, and the IR wire decoder is private; cli_generate cannot truthfully lower serialized packages until IR owns that binding and decoding contract
+  native_campaign_transport: pinned runtime CampaignReport has no validated native-process snapshot decoder; no Display parsing, fake verdict replay, or private counter lookalike may substitute
+  native_run_authentication: producer result digests establish consistency only; Quoin-owned authorized producer and expected record/candidate/run verification must precede qualification; no caller verified flag
+  serialized_package_cli: the pinned public IR derived-projection decoder now supplies BoundPackage; cli_generate remains unimplemented, and normal projection production remains the authoritative frontend/model lane rather than a codegen-owned authored sidecar
 ```

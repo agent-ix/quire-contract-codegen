@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::SourceProbe;
@@ -13,8 +13,17 @@ const MAX_FILES: usize = 4096;
 const MAX_SEGMENTS: usize = 250_000;
 
 /// Stable refusal classes for low-level coverage observation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CoverageErrorCode {
+    /// Bound package and immutable generated population differ.
+    BindingMismatch,
+    /// Supplied artifact inventory or bytes differ from the generated bundle.
+    ArtifactMismatch,
+    /// Generated map does not match independently derived typed clause semantics.
+    MapMismatch,
+    /// An eligible generated source file is outside the expected population.
+    ForeignGeneratedFile,
     /// The raw export or decoded collection exceeds the bounded profile.
     ResourceLimitExceeded,
     /// JSON shape, tuple, or source coordinate ordering is invalid.
@@ -34,7 +43,7 @@ pub enum CoverageErrorCode {
 }
 
 /// A refusal preserves its diagnostic instead of inventing measured-zero coverage.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CoverageDiagnostic {
     /// Stable machine-readable category.
     pub code: CoverageErrorCode,
@@ -67,7 +76,8 @@ impl ProbeObservation {
 /// Four mutually exclusive classifications for fully measured clause probes.
 ///
 /// This is not an attestation, a native-run binding, or discharge of an obligation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ClauseCoverage {
     /// The oracle entry was measured zero.
     Unexecuted,
@@ -160,6 +170,9 @@ pub struct LlvmCoverage {
 }
 
 impl LlvmCoverage {
+    pub(crate) fn paths(&self) -> impl Iterator<Item = &str> {
+        self.files.keys().map(String::as_str)
+    }
     /// Digest of the exact supplied bytes, not canonicalized JSON.
     #[must_use]
     pub fn export_sha256(&self) -> &str {
@@ -309,7 +322,7 @@ fn validate_segments(segments: &[Segment]) -> Result<(), CoverageDiagnostic> {
     Ok(())
 }
 
-fn normalize_path(path: &str) -> Result<String, CoverageDiagnostic> {
+pub(crate) fn normalize_path(path: &str) -> Result<String, CoverageDiagnostic> {
     if path.is_empty() || path.contains(['\\', '\0']) {
         return Err(diagnostic(
             CoverageErrorCode::InvalidPath,

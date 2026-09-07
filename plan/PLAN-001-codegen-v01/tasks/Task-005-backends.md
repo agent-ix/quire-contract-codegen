@@ -51,8 +51,16 @@ binding or counter model is introduced. REV-014 and REV-015 record the repair an
 
 ## Guards
 
+Next bounded dispatch is proposed in REV-017 atop published PR #27 `cd345e1`: implement
+complete bound observation only after API approval, retaining unqualified provenance. A
+runtime-owned campaign transport and an authorized native producer/shared verification join
+are separate ownership gates; no private counters or attestation/receipt framework fills them.
+Every generated-source guard remains unchanged.
+
 - Current `main` is the branch base; superseded bespoke-assurance PRs are not revived or restacked.
+  It carries the reviewed PR #22, #26, #23 and #25 heads, so this integration adds bound-package
+  oracle generation and bound coverage analysis on top of them rather than restacking them.
 - Unsupported state, constraint, or shrinking semantics fail with a structured diagnostic rather
   than falling back to an unreported filter.
-- Vacuity is partial and closes no full FR-004 row. Kani arrives here as its own bounded slice and
-  stays a draft until independent current-head review.
+- Vacuity is partial and closes no full FR-004 row. Kani landed as its own bounded slice and stays
+  a draft until independent current-head review.

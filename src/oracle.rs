@@ -9,7 +9,7 @@ use quire_contract_ir::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
-/// Exact accepted IR PR #19 merge consumed by this implementation.
+/// Exact reviewed public executable-binding IR revision consumed by this implementation.
 pub const IR_CANDIDATE_REVISION: &str = "04eb6f849c03be23177d373549c6c272551f957d";
 
 /// Exact merged runtime revision required by generated source.
@@ -31,6 +31,8 @@ const SOURCE_MAP_SCHEMA: &[u8] = include_bytes!("../schemas/oracle-source-map-v1
 const RUST_ORACLE_SCHEMA: &[u8] = include_bytes!("../schemas/generated-rust-oracle-v1.schema.json");
 const ORACLE_SPEC: &[u8] = include_bytes!("../spec/functional/FR-001-deterministic-oracles.md");
 const GENERATOR_SOURCE: &[u8] = include_bytes!("oracle.rs");
+const BOUND_SOURCE: &[u8] = include_bytes!("bound.rs");
+const PUBLICATION_SOURCE: &[u8] = include_bytes!("publication.rs");
 const HARNESS_SOURCE: &[u8] = include_bytes!("harness.rs");
 const STRATEGY_SOURCE: &[u8] = include_bytes!("strategy.rs");
 const HARNESS_SPEC: &[u8] = include_bytes!("../spec/functional/FR-002-tristate-proptest.md");
@@ -39,8 +41,8 @@ const LOCKFILE: &[u8] = include_bytes!("../Cargo.lock");
 
 /// One validated clause supplied to the Boolean lowering core.
 ///
-/// This explicit boundary is required because accepted IR PR #19 does not bind typed expressions
-/// directly into `ContractPackage` clauses.
+/// This low-level boundary does not establish complete package binding. Normal package consumers
+/// use [`crate::generate_bound_oracles`] with the IR-owned validated projection.
 pub struct OracleRequest<'a> {
     /// Requirement identity and revision.
     pub requirement: &'a RequirementRef,
@@ -181,6 +183,8 @@ pub struct SourceRegion {
     pub start_line: u32,
     /// One-based inclusive ending line.
     pub end_line: u32,
+    /// Package identity completing the clause reference.
+    pub package_id: String,
     /// Requirement identity.
     pub requirement_id: String,
     /// Exact requirement revision.
@@ -394,14 +398,23 @@ impl SourceBuilder {
 pub fn generate_boolean_oracle(
     request: &OracleRequest<'_>,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
+    generate_oracle_with_derivation(request, None)
+}
+
+pub(crate) fn generate_oracle_with_derivation(
+    request: &OracleRequest<'_>,
+    bound_digest: Option<&str>,
+) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     if request.expression.nodes().len() < 128 {
-        return generate_boolean_oracle_inner(request);
+        return generate_boolean_oracle_inner(request, bound_digest);
     }
     std::thread::scope(|scope| {
         let handle = std::thread::Builder::new()
             .name("contract-oracle-generation".to_owned())
             .stack_size(16 * 1024 * 1024)
-            .spawn_scoped(scope, || generate_boolean_oracle_inner(request))
+            .spawn_scoped(scope, || {
+                generate_boolean_oracle_inner(request, bound_digest)
+            })
             .map_err(|error| {
                 single_diagnostic(
                     request,
@@ -423,6 +436,7 @@ pub fn generate_boolean_oracle(
 
 fn generate_boolean_oracle_inner(
     request: &OracleRequest<'_>,
+    bound_digest: Option<&str>,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     validate_attestation_context(request)?;
     if request.expression.value_type() != &ValueType::Boolean {
@@ -452,7 +466,12 @@ fn generate_boolean_oracle_inner(
     let requirement = request.requirement.requirement().as_str();
     let revision = request.requirement.revision().get();
     let clause = request.clause.as_str();
-    let symbol_text = oracle_symbol(requirement, revision, clause);
+    let symbol_text = oracle_symbol(
+        request.requirement.package().as_str(),
+        requirement,
+        revision,
+        clause,
+    );
     let identity_symbol = format!("{}_IDENTITY", symbol_text.to_ascii_uppercase());
     let clause_symbol = format!("{}_CLAUSE", symbol_text.to_ascii_uppercase());
     let requirement_literal = format!("{requirement:?}");
@@ -554,7 +573,9 @@ fn generate_boolean_oracle_inner(
                 error.to_string(),
             )
         })?;
-    let input_digest = sha256(canonical_expression.bytes().as_slice());
+    let input_digest = bound_digest
+        .map(str::to_owned)
+        .unwrap_or_else(|| sha256(canonical_expression.bytes().as_slice()));
     let subject = vec![
         "--requirement".to_owned(),
         format!("{requirement}@{revision}"),
@@ -575,6 +596,7 @@ fn generate_boolean_oracle_inner(
         &subject,
         &input_digest,
         &canonical_expression.digest().to_string(),
+        bound_digest.is_some(),
     );
     let source_map_attestation = oracle_attestation(
         request,
@@ -589,6 +611,7 @@ fn generate_boolean_oracle_inner(
         &subject,
         &input_digest,
         &canonical_expression.digest().to_string(),
+        bound_digest.is_some(),
     );
     let rust_attestation = attestation_artifact(&symbol_text, ORACLE_RUST_ROLE, &rust_attestation)
         .map_err(|error| {
@@ -950,11 +973,20 @@ fn oracle_attestation(
     subject: &[String],
     input_digest: &str,
     canonical_digest: &str,
+    bound: bool,
 ) -> ProofAttestationBody {
     let mut command = generation_command(
-        "generate_boolean_oracle",
+        if bound {
+            "generate_bound_oracles"
+        } else {
+            "generate_boolean_oracle"
+        },
         subject,
-        CanonicalProfile::V1.as_str(),
+        if bound {
+            quire_contract_ir::BOUND_IDENTITY_PROFILE
+        } else {
+            CanonicalProfile::V1.as_str()
+        },
         input_digest,
         output,
         "none",
@@ -1173,11 +1205,16 @@ pub(crate) fn length_delimited_identity(values: &[&str]) -> String {
         .join(":")
 }
 
-pub(crate) fn oracle_symbol(requirement: &str, revision: u64, clause: &str) -> String {
+pub(crate) fn oracle_symbol(
+    package: &str,
+    requirement: &str,
+    revision: u64,
+    clause: &str,
+) -> String {
     let readable_requirement = bounded_readable_component(requirement);
     let readable_clause = bounded_readable_component(clause);
     let revision_text = revision.to_string();
-    let identity = length_delimited_identity(&[requirement, &revision_text, clause]);
+    let identity = length_delimited_identity(&[package, requirement, &revision_text, clause]);
     format!(
         "oracle_{readable_requirement}_{revision}_{readable_clause}_id_{}",
         sha256(identity.as_bytes())
@@ -1213,6 +1250,8 @@ fn generator_implementation_digest() -> &'static str {
         let mut hasher = Sha256::new();
         for value in [
             GENERATOR_SOURCE,
+            BOUND_SOURCE,
+            PUBLICATION_SOURCE,
             HARNESS_SOURCE,
             STRATEGY_SOURCE,
             BUILD_SOURCE,
@@ -1276,6 +1315,7 @@ fn source_region(
         role: role.to_owned(),
         start_line,
         end_line,
+        package_id: request.requirement.package().as_str().to_owned(),
         requirement_id: request.requirement.requirement().as_str().to_owned(),
         requirement_revision: request.requirement.revision().get(),
         clause_id: request.clause.as_str().to_owned(),

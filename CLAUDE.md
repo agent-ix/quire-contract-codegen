@@ -107,7 +107,7 @@ src/lib.rs                 # crate root
 examples/                  # the generation conformance producer
 tests/integration.rs       # end-to-end tests
 tests/shared_assurance.rs  # FR-006 gates; /// Trace: comments are Quire's census
-schemas/                   # two live domain output contracts, both included by src/oracle.rs
+schemas/                   # domain output contracts included by their owning library producers
 spec/                      # requirements artifacts, the test matrix, the suite registry
 reviews/                   # quire-validated SpecReview artifacts
 assurance/                 # the change declaration and the adopted pins

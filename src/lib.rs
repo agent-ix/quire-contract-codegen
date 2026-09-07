@@ -5,6 +5,8 @@
 
 // Implements: FR-001
 mod oracle;
+// Implements: FR-001
+mod bound;
 // Implements: FR-005, NFR-001
 mod publication;
 // Implements: FR-002
@@ -15,10 +17,22 @@ mod kani;
 mod strategy;
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
 mod vacuity;
+// Implements: FR-004 (complete domain observations, always unqualified).
+mod bound_coverage;
+
+pub use bound_coverage::{
+    analyze_bound_coverage, ArtifactBytes, BoundAnalysisState, BoundCoverageAnalysis,
+    BoundCoverageInputs, BOUND_COVERAGE_FORMAT, BOUND_COVERAGE_SCHEMA, MAX_ANALYSIS_BYTES,
+};
 
 pub use vacuity::{
     classify_clause, parse_llvm_coverage, ClauseCoverage, CoverageDiagnostic, CoverageErrorCode,
     LlvmCoverage, ProbeObservation, MAX_COVERAGE_BYTES,
+};
+
+pub use bound::{
+    generate_bound_oracles, BoundGenerationError, BoundOracleClause, BoundOracleGeneration,
+    GeneratedBoundOracles, NoExecutableOracles,
 };
 
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};

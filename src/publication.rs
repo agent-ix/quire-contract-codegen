@@ -16,9 +16,9 @@ use crate::{Artifact, GenerationTerminalState};
 
 const MARKER_NAME: &str = ".quire-codegen-owned.json";
 const MARKER_SCHEMA: &str = "quire.codegen-owned-bundle/v1";
-const MAX_ARTIFACTS: usize = 4096;
-const MAX_ARTIFACT_BYTES: usize = 16 * 1024 * 1024;
-const MAX_BUNDLE_BYTES: usize = 128 * 1024 * 1024;
+pub(crate) const MAX_ARTIFACTS: usize = 4096;
+pub(crate) const MAX_ARTIFACT_BYTES: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_BUNDLE_BYTES: usize = 128 * 1024 * 1024;
 static PUBLICATION_NONCE: AtomicU64 = AtomicU64::new(0);
 
 /// Stable reason a bundle could not be validated or published.

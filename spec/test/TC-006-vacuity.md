@@ -41,6 +41,14 @@ attestation and makes no native campaign binding claim.
 
 ## Remaining aggregate controls
 
+REV-017 proposes a first complete bound-observation slice with no run qualification. Bank
+complete-package native controls through `generate_bound_oracles` and independently corrupt
+whole-population, source/map, full package identity and typed implication census bindings.
+Assert explicit unqualified provenance even for entirely exercised observations, and retain
+informational references for valid no-executable input. Missing campaign transport or native
+authentication must never become a passing coverage result. These controls are proposed,
+not implemented or retained native-run evidence in the current candidate.
+
 Once IR #50 supplies the immutable executable population, remove one clause, consequent, evaluation
 probe, and the entire population independently. Rebind source/maps, requirement revisions, binary,
 profiles, toolchain, target, campaign and candidate independently; every mismatch must prevent

@@ -12,6 +12,7 @@
       "role",
       "startLine",
       "endLine",
+      "packageId",
       "requirementId",
       "requirementRevision",
       "clauseId"
@@ -21,6 +22,7 @@
       "role": {"enum": ["clause", "oracle_evaluation", "implication_consequent"]},
       "startLine": {"type": "integer", "minimum": 1},
       "endLine": {"type": "integer", "minimum": 1},
+      "packageId": {"type": "string", "minLength": 1},
       "requirementId": {"type": "string", "minLength": 1},
       "requirementRevision": {"type": "integer", "minimum": 1},
       "clauseId": {"type": "string", "minLength": 1},

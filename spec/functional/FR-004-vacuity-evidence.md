@@ -38,8 +38,9 @@ per-requirement vacuity report without executing a coverage producer itself.
 - The analyzer shall consume an LLVM coverage JSON export without implementing instrumentation,
   profile merging, or a coverage engine.
 - The analyzer shall derive its expected clause population and implication counts from typed IR,
-  require exact source-map/artifact population equality, and reject an empty executable population
-  as not computed. Missing map rows shall never turn an implication into an implication-free clause.
+  require exact source-map/artifact population equality, and represent a valid empty executable
+  population explicitly as no executable work, retaining informational references and no positive
+  coverage result. Missing map rows shall never turn an implication into an implication-free clause.
 - The analyzer shall classify a clause as `vacuous` only when its oracle-evaluation probe was observed,
   its typed expression contains at least one implication, and no expected consequent probe was observed.
 - The analyzer shall classify a mapped clause as `unexecuted` when its oracle-evaluation region has
@@ -54,6 +55,11 @@ per-requirement vacuity report without executing a coverage producer itself.
 - Positive observation requires one count-bearing, non-gap LLVM active span to contain the entire
   mapped entry-token probe. Partial intersection, summary counts, and an unterminated final span
   cannot establish observation. Consequent observation with zero oracle-entry count is inconsistent.
+- In the bound generated Boolean-only profile, each consequent shall have a count no greater
+  than its owning oracle evaluation count: generated expressions contain no loop or user call
+  that can enter the consequent repeatedly per invocation. A contradiction retains both observed
+  counts and an inconsistency diagnostic but no clause classification. This stronger aggregate
+  rule does not change the unbound `classify_clause` primitive's compatibility contract.
 - The analyzer shall preserve native accepted, rejected, failed, and discarded counts and execution
   outcome independently. It shall verify run/requirement/revision bindings; a successful test outcome
   cannot coexist with failed postconditions, and positive oracle observation cannot coexist with
@@ -90,14 +96,28 @@ per-requirement vacuity report without executing a coverage producer itself.
 | FR-004-AC-6 | Campaign counts and test outcome remain complete facts independent of coverage classification. | Test (TC-006) |
 | FR-004-AC-7 | Removing an expected clause, consequent, evaluation probe, or all clauses prevents successful analysis; the expected census comes from bound typed IR. | Test (TC-006) |
 | FR-004-AC-8 | Adverse coverage and non-success native execution cannot discharge the coverage obligation merely because a report serialized successfully. | Test (TC-006) |
+| FR-004-AC-9 | Complete bound observations without independently verified native-run provenance remain explicitly unqualified; internally consistent declared digests cannot manufacture a run-qualified result or passed coverage attestation. Valid informational-only populations retain their references as no executable work. | Test (TC-006; proposed next slice) |
 
 ## Implementation boundary
 
-The first implementation slice provides source probes and bounded LLVM reading/classification
-primitives. It does not yet implement the aggregate analysis outcome, native campaign-run binding,
-or shared coverage attestation. Those require the IR-owned executable population from IR #50 and a
-native producer/result contract. A primitive returning `exercised` is not a discharged coverage
-obligation. FR-004/TC-006 remain planned until the complete bound operation and producer gate exist.
+The implementation provides source probes, bounded LLVM primitives, and complete bound
+observations through `analyze_bound_coverage`. Its strict domain schema is
+`codegen.bound-coverage-observations/v1`; all outcomes retain `provenance: unqualified`.
+The complete immutable generated artifact population is checked against public typed IR
+before any measured classification. Missing measurements retain null counts and diagnostics;
+global binding failure emits no clause observations, with `population: not_emitted`.
+Serialization is bounded to 16 MiB. Resource refusal may omit a population, explicitly
+diagnosed, rather than allocate fabricated zero observations. Full ClauseRefs on every
+ordered clause retain per-requirement membership without duplicating or summing campaign counts.
+Neither native campaign-run binding nor a shared coverage attestation is implemented.
+FR-004/TC-006 remain planned until those producer and consuming obligation gates exist.
+
+The proposed next slice is [REV-017](../../planning/bound-vacuity-native-result-design.md):
+complete immutable BoundPackage/source/map observations first, explicitly unqualified.
+Native campaign transport is not yet provided by the pinned runtime, and declared producer
+digests are not authenticated execution. REV-017 requests coordinator approval before its
+new public API or domain schema is implemented; that phase-A approval is now recorded in
+REV-017. AC-9 records the boundary, not completion of issue #5 or native qualification.
 
 ## Dependencies
 
