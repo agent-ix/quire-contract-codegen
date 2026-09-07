@@ -21,7 +21,7 @@ contract IR into runtime-backed oracles, harnesses, proofs, vacuity maps, and de
 ```text
 Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
                          ^
-              PGM-01 + IR #10 + runtime #5
+              shared ProofAttestationV1 + accepted IR/runtime revisions
 ```
 
 ## Task File Mapping
@@ -38,9 +38,9 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 
 ## Coordination Rule
 
-Task-004 implementation exists in stacked draft PR #10. Task-003's dependency gate is complete:
-the branch is reconciled to accepted IR PR #19 merge `5c49ebfd1c87415f74420ad047392bd03b1bd202`.
-PR #10 remains draft until Task-004's own acceptance criteria and review findings are closed.
-Issue #3 harness/proptest work proceeds only as a separate stacked draft on PR #10. It does not
-promote Task-004, and it must be rebased onto the accepted Task-004 revision before review closure.
-Automation must not complete Task-007.
+Task-003's dependency gate is complete. The shared-assurance migration and deterministic Oracle
+slice are present on current `main`; that migration did not independently accept Task-004's semantic
+scope, so Task-004 remains in progress. Issue #3 harness/proptest remediation proceeds as a separate
+branch directly from current `main` and reuses the packaged ProofAttestationV1 path. It does not
+promote Task-004 or any planned matrix row before independent review. Automation must not complete
+Task-007.
