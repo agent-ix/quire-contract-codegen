@@ -292,10 +292,18 @@ pub fn generate_kani_bundle(
     let contract_symbol = format!("{symbol}_contract");
     let harness_symbol = format!("{symbol}_proof");
     let module_symbol = format!("{symbol}_module");
-    let precondition_symbol =
-        oracle_symbol(requirement, revision, request.precondition_clause.as_str());
-    let postcondition_symbol =
-        oracle_symbol(requirement, revision, request.postcondition_clause.as_str());
+    let precondition_symbol = oracle_symbol(
+        request.requirement.package().as_str(),
+        requirement,
+        revision,
+        request.precondition_clause.as_str(),
+    );
+    let postcondition_symbol = oracle_symbol(
+        request.requirement.package().as_str(),
+        requirement,
+        revision,
+        request.postcondition_clause.as_str(),
+    );
     let precondition_arguments = predicate_arguments(&precondition_parameters, false)?;
     let postcondition_arguments = predicate_arguments(&postcondition_parameters, true)?;
     let exact_harness = format!("{module_symbol}::{harness_symbol}");
