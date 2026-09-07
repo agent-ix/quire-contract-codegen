@@ -30,6 +30,9 @@ atomically and shall retain golden, differential, and cross-backend semantic-par
 ## Behavior
 
 - The CLI shall never edit developer-owned source regions.
+- The library publisher shall reject noncanonical artifact paths before mutation, distinguish
+  missing ownership inputs from I/O inspection failures, and report `unchanged`, `published`, or
+  `unknown` destination state according to the observed staging, commit, and rollback result.
 - Supported platforms shall produce reproducible generated files and attestations.
 - Every differential discrepancy shall become a fixture or documented semantic difference.
 - The Assurance Argument shall cite completed conformance evidence without closing the human claim.
