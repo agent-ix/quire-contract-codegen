@@ -17,12 +17,25 @@ Verify generated source compiles against only the runtime/customer types and pub
 ## Test Procedure
 
 Compile the supported Boolean grammar in an isolated `rustc` fixture against only the pinned runtime
-and compare every truth assignment with an independent evaluator. When atomic publication is added,
-inject failures at each staged write and compare destination and developer-owned tree digests before
-and after each run.
+and compare every truth assignment with an independent evaluator. Construct a validated artifact
+bundle, inject a failure before every staged artifact and marker write and at both swap boundaries,
+and compare the destination plus an adjacent developer-owned file before and after each run. Attempt
+replacement after modifying, adding to, or symlinking the owned boundary and require refusal.
+Inject a replacement failure followed by failed rollback; inspect the complete backup and staged
+bundles and require `unknown`. Inject ownership-inspection/read failures and require `io_failed`
+with `unchanged`, distinct from a missing marker/artifact. Reject interior-dot artifact aliases
+before publication, including a bundle containing both `a/b` and `a/./b`.
 
 ## Expected Results
 
 Valid Boolean oracles compile without generator/IR dependencies and match the independent evaluator.
-The row remains planned until publication failures also leave no partial bundle and modify no
-developer-owned file.
+Every injected pre-commit failure whose rollback succeeds restores the prior generated boundary,
+reports `unchanged`, leaves no staging residue, and does not modify the adjacent developer-owned
+file. Failed rollback reports `unknown`, leaves the destination absent, and preserves the complete
+prior bundle in its backup sibling and the complete staged replacement for recovery.
+A post-commit cleanup failure reports the
+destination as published, leaves a complete new bundle, and exposes backup residue rather than
+claiming rollback. Unmarked, modified, extra-entry, and symlinked destinations are never replaced.
+Portable replacement is not process-crash atomic between its two directory renames and does not
+guarantee persistence after power loss. A matching local marker establishes consistency, not
+authenticated authorship or a destination-specific ownership grant.

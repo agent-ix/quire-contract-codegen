@@ -999,6 +999,9 @@ pub(crate) fn generated_output_attestation(
     if !attestation_context_is_valid(context) {
         return Err(GenerationErrorCode::InvalidAttestationContext);
     }
+    if generated.contents.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(GenerationErrorCode::ResourceLimitExceeded);
+    }
     let input_digest = sha256(specification.input_bytes);
     let identity = sha256(
         length_delimited_identity(&[

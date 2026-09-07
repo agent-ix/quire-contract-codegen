@@ -15,10 +15,25 @@ supported constraints and boundaries.
 
 ## Test Procedure
 
-Generate campaigns for range, membership, correlated, state-pinned, boundary, and residual-filter
-fixtures; execute seeded cases and shrinking while retaining accepted/rejected/failed/discarded counts.
+Generate campaigns for range, membership, enum, correlated, state-pinned, boundary, and residual
+fixtures. Execute seeded cases and shrinking through the generated campaign runner. Exercise an
+accepted-case floor, an explicit-discard ceiling, zero configured cases, all-rejected cases,
+expectation mismatches, empty residual exclusions, and correlated populations whose representable
+boundary census would otherwise be vacuous.
+Pin the successful mixed campaign's RNG and exact accepted/rejected counts. Exercise framework
+exhaustion both before any invocation and after invocations, and require the framework reason and
+any missed coverage floor to survive together.
+Pass an existing report containing a discard into an otherwise successful deterministic campaign;
+require the completed-run policy to reject the cumulative discard excess. An aborted search with
+the same prior excess must retain both exhaustion and the exceeded-ceiling policy result.
 
 ## Expected Results
 
-Supported constraints are shaped directly, inside/outside boundaries execute, residual rejection is
-explicit, and no rejected case becomes a pass.
+Supported constraints are shaped directly, every emitted boundary census contains accepted and
+rejected cases, residual rejection is explicit, and no rejected case becomes a pass. Integer and
+enum values carry executable expected-domain checks. Boolean campaign constructors bind disposition
+to their exact values; the generated runner owns invocation, explicit discard accounting, and final
+accepted/rejected/failed/discarded validation. It rejects zero/below-floor campaigns and campaigns
+above the requested discard ceiling.
+An exhausted search remains a typed `Exhausted` result even when its retained policy result says
+that a floor was missed; completed searches still return the corresponding floor failure directly.

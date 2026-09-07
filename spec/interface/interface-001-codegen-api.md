@@ -19,9 +19,9 @@ operations:
     output: ArtifactBundle | DiagnosticSet
     semantics: deterministic, all-or-nothing lowering; unsupported semantics prevent false completeness
   - name: generate_tristate_harness
-    inputs: [typed precondition, typed postcondition, explicit bindings, attestation context]
+    inputs: [typed precondition, typed postcondition, explicit bindings, minimum accepted cases, maximum discarded cases, attestation context]
     output: GeneratedArtifactBundle | HarnessDiagnosticSet
-    semantics: source plus one proof attestation, accepted-case floor, retained campaign accounting
+    semantics: source plus one proof attestation, request-bound campaign policy, owned execution loop, retained campaign accounting
   - name: generate_i64_strategy
     inputs: [requirement identity, constraint, campaign, attestation context]
     output: GeneratedArtifactBundle | StrategyDiagnostic
@@ -37,7 +37,7 @@ operations:
   - name: write_bundle_atomic
     inputs: [ArtifactBundle, destination directory]
     output: PublishedBundleIdentity | IO diagnostic
-    semantics: replace only generator-owned bundle boundaries after complete staged validation
+    semantics: replace only a destination whose complete contents match its local ownership marker after staged validation; the marker is a writable consistency declaration, not authenticated provenance; caller serializes destination writers; missing inputs refuse ownership while inspection/read failures return io_failed with unchanged state; failed rollback reports unknown and preserves backup/staging for recovery; post-commit cleanup failures report published; process crashes between directory renames and power-loss durability remain outside the portable rollback guarantee
   - name: analyze_coverage
     inputs: [source map, LLVM coverage export, runtime campaign report]
     output: per-requirement vacuity and rejection report
@@ -92,9 +92,14 @@ oracle_slice:
 harness_strategy_slice:
   output: generated Rust artifact plus one ProofAttestationV1 body, under proof obligations PROOF-codegen-generated-rust-harness and PROOF-codegen-generated-rust-strategy
   attestation_context: required for harness, integer-strategy, and enum-strategy generation
-  campaign_conclusion: reads accepted, rejected, failed, and discarded counters and requires at least one accepted case
-  expected_domain: generated integer cases expose a rejection expectation and verdict check; the generated harness proptest adapter requires and checks that expectation against quire_contract_runtime::VerdictKind
+  campaign_policy: minimum accepted, minimum rejected, and maximum explicit-discard invocation counts are caller-supplied, rendered once as generated constants, and bound into deterministic request identity; zero is the valid rejected floor for a declared total precondition
+  campaign_execution: the public generated runner is the campaign-level entry point; it owns the proptest loop, creates observations, records every explicit discard, invokes the private verdict adapter, and always classifies retained accounting as passed, below an accepted/rejected floor, above the explicit-discard ceiling, exhausted, or failed
+  accounting_unit: accepted, rejected, and failed count adapter invocations; discarded counts explicit discards that do not invoke the adapter; attempted equals accepted plus rejected plus discarded, including global-reject retries and shrink replays rather than distinct generated values, and supplies the exact denominator for rejected/attempted and discarded/attempted rates
+  discard_boundary: a precondition rejection returned by the test closure is a proptest global reject recorded in rejected, while the generated discarded constructor is a separate explicit-discard channel recorded in discarded; the caller-owned max_global_rejects setting governs framework search exhaustion and the generated policy governs the retained invocation counters
+  campaign_conclusion: policy applies to the complete supplied report including prior invocations/discards; completed searches enforce the discard ceiling then accepted/rejected floors; every framework Abort returns Exhausted with its reason, summary, and optional boxed policy failure, including all-rejected and zero-attempt aborted searches; a completed fresh zero-case campaign returns BelowAcceptedFloor, and explicit discards above the requested ceiling produce a distinct typed result
+  expected_domain: generated integer cases expose executable accepted/rejected verdict checks; generated enum populations contain declared admissible members only and execute their admission expectation; generated Boolean campaign constructors bind accepted, rejected, or explicit-discarded disposition to the exact values consumed by the owned runner
   generated_crate_lints: generated crate roots deny missing documentation and compile under denied warnings
+  source_limit: harness and strategy Rust are rejected above 1048576 bytes before bundling, matching the maximum-source-bytes value retained in ProofAttestationV1 command argv
   artifact_names: bounded readable prefix plus full SHA-256 over length-delimited request identity
 kani_slice:
   adapter: exactly `cargo-kani 0.67.0` under profile `kani-0.67.0-function-contracts-v1`; another requested version is backend-unavailable
@@ -108,4 +113,6 @@ compatibility:
   generated_runtime_dependency: quire-contract-runtime, proptest, plus declared customer types only
   licensing: MIT OR Apache-2.0
   publication: disabled through the human v0.1 source-release decision
+open_design_gates:
+  serialized_package_cli: the accepted ContractPackage wire format binds ReferenceBody metadata but no executable TypedExpression, and the IR wire decoder is private; cli_generate cannot truthfully lower serialized packages until IR owns that binding and decoding contract
 ```

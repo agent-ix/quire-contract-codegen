@@ -5,6 +5,8 @@
 
 // Implements: FR-001
 mod oracle;
+// Implements: FR-005, NFR-001
+mod publication;
 // Implements: FR-002
 mod harness;
 // Implements: FR-003
@@ -18,6 +20,10 @@ pub use kani::{
     KaniSolver, ProofDependencyEdge, ProofDependencyGraph, ProofDependencyKind,
     ProofDependencyRequest, ProofDependencyState, ProofReadiness, KANI_ADAPTER_PROFILE,
     KANI_BACKEND_VERSION,
+};
+pub use publication::{
+    write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
+    PublicationErrorCode, PublishedBundleIdentity,
 };
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,

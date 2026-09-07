@@ -427,7 +427,15 @@ fn tc_009_the_generation_producer_reports_what_the_generator_did() {
         .filter(|line| !line.trim().is_empty())
         .map(|line| serde_json::from_str(line).expect("a conformance row is JSON"))
         .collect();
-    assert!(rows.len() >= 9, "the corpus shrank to {} rows", rows.len());
+    assert!(rows.len() >= 10, "the corpus shrank to {} rows", rows.len());
+    assert!(
+        rows.iter().any(|row| {
+            row["symbol"] == "rejection::harness-source-limit"
+                && row["diagnosticCode"] == "ResourceLimitExceeded"
+                && row["terminalState"] == "unsupported"
+        }),
+        "the harness source-limit control disappeared from the corpus"
+    );
 
     for row in &rows {
         assert_eq!(

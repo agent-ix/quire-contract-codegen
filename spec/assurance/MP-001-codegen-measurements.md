@@ -48,6 +48,9 @@ floor is `vacuous`, not `pass` — a corpus can go green by getting smaller, and
 stops that. The corpus covers the oracle, harness and strategy slices and the rejection cases that
 keep `unsupported` and `invalid-input` apart, and a census row reports how many distinct diagnostics
 and terminal states the corpus actually reached.
+The harness source-limit case must observe `ResourceLimitExceeded` and `unsupported`; the corpus
+has at least ten rows including its census. Campaign outcome controls execute in TC-004's generated
+crate tests; this generation producer does not yet publish native campaign-execution results.
 
 `scripts/check_upstream_pins.py --json` publishes `codegen.upstream-identity/v1`: for each declared
 upstream, the revision the crate's own constant states, the revision the dependency declaration pins,
@@ -219,6 +222,19 @@ ProofAttestationV1 bodies attest only successful artifact generation. The TM-001
 until independent current-head review and retained execution evidence. FR-004 vacuity evidence still
 has no implementation, suite, or proof obligation; a proof obligation whose subject does not exist
 would be a false green.
+
+The atomic publisher's fault model injects refusal before every artifact and ownership-marker write,
+before destination swap, during replacement swap and failed rollback, and after commit before backup
+cleanup. Initial-publication and successful-rollback failures must report `unchanged`; their destination,
+an adjacent developer-owned file, and sibling staging census are checked. Failed rollback must report
+`unknown` and preserve complete prior/staged bundles for recovery. Ownership metadata/read I/O failures
+must report `io_failed`, distinct from observed missing inputs. The post-commit control requires `published`,
+requires the new bundle to be complete, and observes the backup residue. On portable filesystems,
+replacing a non-empty directory still requires two renames: rollback covers pre-commit errors, but a
+process crash between those renames can temporarily leave only the sibling backup. This boundary is
+retained as FND-905 rather than represented as crash atomicity. Directory entries are not synchronized;
+the current publisher does not promise power-loss durability after a successful return. Its writable
+ownership marker establishes content consistency rather than authenticated provenance.
 
 The shared verification vocabulary is twelve states and this repository demonstrates ten. The two it
 does not are `unsupported` and `malformed`. Measured on the tree before anything was deleted, per
