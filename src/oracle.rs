@@ -951,6 +951,9 @@ pub(crate) fn generated_artifact_bundle(
     if !attestation_context_is_valid(context) {
         return Err(GenerationErrorCode::InvalidAttestationContext);
     }
+    if rust.contents.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(GenerationErrorCode::ResourceLimitExceeded);
+    }
     let input_digest = sha256(input_bytes);
     let identity = sha256(
         length_delimited_identity(&[
