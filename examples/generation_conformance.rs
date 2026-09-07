@@ -35,7 +35,7 @@ use quire_contract_codegen::{
     AttestationResult, GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
     HarnessErrorCode, HarnessRequest, OracleArtifactBundle, OracleRequest, ProofAttestationBody,
     SourceRegion, StrategyCampaign, StrategyConstraint, StrategyErrorCode, StrategyRequest,
-    IR_CANDIDATE_REVISION,
+    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
@@ -523,6 +523,9 @@ fn harness_generated() -> Case {
         precondition: &precondition,
         postcondition: &postcondition,
         execution_point: "generate",
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 1,
         attestation: attestation(),
     };
     match generate_tristate_harness(&request) {
@@ -740,16 +743,33 @@ fn oracle_rejects_invalid_attestation_context() -> Case {
     case
 }
 
-/// TC-004: a harness whose two clause identities collide is rejected, because a
-/// harness that cannot attribute a failure to a clause is worse than none.
-fn harness_rejects_duplicate_clause_identity() -> Case {
+/// TC-004: distinguish colliding clause identities from an oversized generated
+/// harness; the size fixture uses distinct identities so it reaches its own guard.
+fn harness_rejects_invalid_input(duplicate_clause: bool) -> Case {
+    let (symbol, expected_code, expected_state) = if duplicate_clause {
+        (
+            "rejection::duplicate-clause-identity",
+            HarnessErrorCode::DuplicateClauseIdentity,
+            GenerationTerminalState::InvalidInput,
+        )
+    } else {
+        (
+            "rejection::harness-source-limit",
+            HarnessErrorCode::ResourceLimitExceeded,
+            GenerationTerminalState::Unsupported,
+        )
+    };
     let mut case = Case::new(
-        "rejection::duplicate-clause-identity",
+        symbol,
         2,
         vec!["FR-002", "FR-002-AC-4", "NFR-002-AC-3", "TC-004"],
     );
-    case.expected_terminal_state = Some(GenerationTerminalState::InvalidInput);
-    case.expected_diagnostic_code = Some("DuplicateClauseIdentity");
+    case.expected_terminal_state = Some(expected_state);
+    case.expected_diagnostic_code = Some(if duplicate_clause {
+        "DuplicateClauseIdentity"
+    } else {
+        "ResourceLimitExceeded"
+    });
     let owner = requirement("FR-002", 1);
     let environment = boolean_environment(
         owner,
@@ -779,19 +799,32 @@ fn harness_rejects_duplicate_clause_identity() -> Case {
         }
     };
     let clause = ClauseId::new("clause-same").unwrap();
+    let other_clause = ClauseId::new("clause-other").unwrap();
+    let execution_point = if duplicate_clause {
+        "generate".to_owned()
+    } else {
+        "x".repeat(MAX_GENERATED_SOURCE_BYTES)
+    };
     let request = HarnessRequest {
         requirement: environment.owner(),
         precondition_clause: &clause,
-        postcondition_clause: &clause,
+        postcondition_clause: if duplicate_clause {
+            &clause
+        } else {
+            &other_clause
+        },
         precondition: &precondition,
         postcondition: &postcondition,
-        execution_point: "generate",
+        execution_point: &execution_point,
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 1,
         attestation: attestation(),
     };
     match generate_tristate_harness(&request) {
         Ok(_) => {
             case.terminal_state = Some(GenerationTerminalState::Generated);
-            case.check("the colliding clause identities were rejected", false);
+            case.check("the invalid harness input was rejected", false);
         }
         Err(diagnostics) => {
             let first = diagnostics.first();
@@ -799,7 +832,7 @@ fn harness_rejects_duplicate_clause_identity() -> Case {
             case.diagnostic_code = first.map(|item| format!("{:?}", item.code));
             case.check(
                 "the rejection carries the declared diagnostic code",
-                first.map(|item| item.code) == Some(HarnessErrorCode::DuplicateClauseIdentity),
+                first.map(|item| item.code) == Some(expected_code),
             );
             case.check(
                 "the rejection carries the declared terminal state",
@@ -861,7 +894,7 @@ fn strategy_rejects_invalid_range() -> Case {
 fn diagnostic_census(rows: &[Row]) -> Case {
     let mut case = Case::new(
         "census::diagnostic-vocabulary",
-        9,
+        10,
         vec!["FR-001-AC-4", "NFR-002-AC-3", "TC-003", "TC-006"],
     );
     // Only a case that passed demonstrates anything. A case that failed and
@@ -947,7 +980,8 @@ fn main() {
         oracle_rejects_non_boolean_root().into_row(),
         oracle_rejects_unsupported_expression().into_row(),
         oracle_rejects_invalid_attestation_context().into_row(),
-        harness_rejects_duplicate_clause_identity().into_row(),
+        harness_rejects_invalid_input(true).into_row(),
+        harness_rejects_invalid_input(false).into_row(),
         strategy_rejects_invalid_range().into_row(),
     ];
     rows.push(diagnostic_census(&rows).into_row());

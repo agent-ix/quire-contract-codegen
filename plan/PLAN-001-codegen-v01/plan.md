@@ -21,7 +21,7 @@ contract IR into runtime-backed oracles, harnesses, proofs, vacuity maps, and de
 ```text
 Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
                          ^
-              PGM-01 + IR #10 + runtime #5
+              shared ProofAttestationV1 + accepted IR/runtime revisions
 ```
 
 ## Task File Mapping
@@ -40,7 +40,10 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 
 Task-003's dependency gate is complete and `main` includes the migrated oracle, harness, and strategy
 drafts from PR #15 against accepted IR PR #19 merge
-`5c49ebfd1c87415f74420ad047392bd03b1bd202`. Task-004 and Task-005 remain in progress until their
-semantic acceptance criteria and current-head review findings close. Task-006 has a locally verified
-atomic publication slice; its serialized-package CLI is blocked because the accepted IR package does
-not bind executable expressions. Automation must not complete Task-007.
+`5c49ebfd1c87415f74420ad047392bd03b1bd202`, together with the shared-assurance migration, the
+deterministic Oracle slice, and the issue #3 harness/proptest remediation merged as PR #22. That
+migration did not independently accept Task-004's semantic scope, so Task-004 and Task-005 remain in
+progress until their semantic acceptance criteria and current-head review findings close. Task-006
+has a locally verified atomic publication slice; its serialized-package CLI stays blocked while this
+repository still pins the IR revision named above, which does not bind executable expressions.
+Automation must not complete Task-007.
