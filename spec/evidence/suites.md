@@ -50,22 +50,16 @@ schemas, seals both generated attestation bodies through Quoin, checks every
 dependency classification and source-site edge, compares the embedded predicates
 with the executable-oracle output, and runs representative bundles under the
 pinned Kani backend. It is local pre-review evidence and does not promote TM-001
-or classify a proof complete. FR-004 still has no suite because its implementation
-does not yet exist.
+or classify a proof complete. FR-004 has primitive and bound-observation implementations in
+`src/vacuity.rs` and `src/bound_coverage.rs`, with focused tests, but no registered qualified
+native-campaign result producer. Their observations remain explicitly unqualified.
 
 SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
 failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,
 complete ownership-census verification, and refusal of modified, extra-entry, unmarked, and symlinked
 destinations. It is local pre-review evidence for the publication portion of TC-002; the
-serialized-package CLI remains blocked on an IR expression-binding design. The suite command is a
-focused local check; the full repository test target also includes these tests, but SUITE-010 has no
-separate structured execution-result producer yet.
-
-SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
-failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,
-complete ownership-census verification, and refusal of modified, extra-entry, unmarked, and symlinked
-destinations. It is local pre-review evidence for the publication portion of TC-002; the
-serialized-package CLI remains blocked on an IR expression-binding design. The suite command is a
+serialized-package CLI remains unimplemented, but the pinned public IR supplies its decoder and
+bound expression API. The suite command is a
 focused local check; the full repository test target also includes these tests, but SUITE-010 has no
 separate structured execution-result producer yet.
 

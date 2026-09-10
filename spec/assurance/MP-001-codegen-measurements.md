@@ -68,15 +68,17 @@ export. Quire exports; it never executes a producer.
 `rustup run 1.75.0 cargo check --locked --all-targets --message-format=json` is the MSRV build, whose
 verdict is read from cargo's own `build-finished` message rather than from its transcript.
 
-TC-006 will add a coverage producer only after FR-004's independent specification review. The
-qualified v0.1 producer is cargo-llvm-cov 0.9.0 invoked with `cargo llvm-cov --json`, whose output is
-LLVM's full JSON export format 2.0.1 with
-per-file segments; the analyzer consumes those retained bytes and never invokes LLVM, Cargo, Quire,
-or Quoin. The producer version and LLVM export-format version are separate facts. A positive
+TC-006 has primitive and bound-observation tests, including a nested native LLVM fixture. That
+historical test profile uses cargo-llvm-cov 0.9.0 with Rust 1.94.1 and LLVM full JSON export format
+3.0.1 with per-file segments; it does not qualify the required Rust 1.98.1 profile. The analyzer
+consumes export bytes and never invokes LLVM, Cargo, Quire, or Quoin. The producer version and LLVM
+export-format version are separate facts. A positive
 measurement pairs a tool-produced export with exact source-map and runtime identities; mutation
 controls independently remove the evaluation hit, remove one of several consequent hits, replace the
 export with summary-only output, alter a source path, alter each digest, and mismatch the campaign
-revision. No FR-004 proof obligation or suite is declared until that producer and analyzer exist.
+revision. The implemented bound analyzer retains unqualified provenance. Native producer/run
+binding, shared retained-result integration and current-profile qualification remain incomplete;
+existing analysis cannot discharge those obligations.
 
 Every generated artifact carries a proof-attestation body, and that body's conformance to the shared
 shape is measured rather than declared. `tests/oracle_generation.rs` fetches
