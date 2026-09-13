@@ -16,4 +16,6 @@ description: "Contents of the PLAN-001 codegen plan bundle."
 - [Task-005: Harness, proof, and vacuity backends](./tasks/Task-005-backends.md)
 - [Task-006: CLI and parity closure](./tasks/Task-006-parity.md)
 - [Task-007: Human source-release decision](./tasks/Task-007-human-release.md)
-- [Task-008: Numeric/state Kani increment](./tasks/Task-008-numeric-state-kani.md)
+- [Task-008: Constructive numeric strategy core](./tasks/Task-008-numeric-strategy-core.md)
+- [Task-009: Bound strategy integration](./tasks/Task-009-bound-strategy-integration.md)
+- [Task-010: Numeric/state Kani increment](./tasks/Task-010-numeric-state-kani.md)

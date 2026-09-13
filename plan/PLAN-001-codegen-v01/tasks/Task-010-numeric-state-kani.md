@@ -1,5 +1,5 @@
 ---
-id: Task-008
+id: Task-010
 title: "Numeric and state Kani ticket increment"
 type: Task
 status: done
@@ -19,7 +19,7 @@ relationships:
   - target: ix://agent-ix/quire-contract-codegen/TC-014
     type: verifies
 ---
-# Task-008: Numeric and state Kani ticket increment
+# Task-010: Numeric and state Kani ticket increment
 
 ## Scope
 

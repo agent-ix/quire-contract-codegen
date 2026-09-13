@@ -38,19 +38,35 @@ type: TestMatrix
 | FR-006 | FR-006-AC-5 | TC-012 | ✅ Covered |
 | FR-006 | FR-006-AC-6 | TC-013 | ✅ Covered |
 | FR-006 | FR-006-AC-7 | TC-013 | ✅ Covered |
+| FR-008 | FR-008-AC-1 through FR-008-AC-5, FR-008-CON-2 | TC-017 | ✅ Covered |
+| FR-008 | FR-008-CON-1 | Inspection | ✅ Covered |
+| FR-009 | FR-009-AC-1 through FR-009-AC-6 | TC-018 | ✅ Covered |
+| FR-010 | FR-010-AC-1 through FR-010-AC-5 | TC-019 | ✅ Covered |
+| FR-011 | FR-011-AC-1 through FR-011-AC-5 | TC-020 | ✅ Covered |
+| FR-012 | FR-012-AC-1 through FR-012-AC-3 | TC-021 | ✅ Covered |
+| FR-012 | FR-012-AC-4 | TC-021 | ✅ Covered |
+| FR-013 | FR-013-AC-1 through FR-013-AC-4 | TC-022 | ✅ Covered |
+| FR-013 | FR-013-AC-5 | Inspection | ✅ Covered |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
 retains no local checker or copied traceability implementation.
 
-FR-001 and FR-003 are `✅ Covered` after their ticket-scoped current-head reviews. FR-002, FR-004,
-FR-005, the remaining NFR rows, and StR rows stay `🚧 Planned` until their complete ticket scopes are
-implemented and reviewed. The shared-assurance migration did not promote these semantic rows.
+FR-001, FR-003, FR-006, and the numeric-strategy FR-008 through FR-013 slice are `✅ Covered` after
+their ticket-scoped current-head reviews. FR-002, FR-004, FR-005, the remaining NFR rows, and StR
+rows stay `🚧 Planned` until their complete ticket scopes are implemented and reviewed. The
+shared-assurance migration did not promote those semantic rows.
 
 The FR-006 rows are the only ones this migration claims, and they are `✅ Covered` because TC-008
 through TC-013 are backed by tests in `tests/shared_assurance.rs` that invoke the gates rather than
 reimplementing them. FR-003 is backed by the reviewed Boolean and numeric/state Kani implementation
 and local SUITE-008. FR-004 has no complete implementation or suite.
+
+FR-008 through FR-013 and NFR-004 are covered by TC-017 through TC-022 after the bounded-integer
+oracle grammar landed in PR #29. The evidence includes exhaustive small-domain population and
+shrink walks, exact boundary censuses, all supported clause-kind/population campaigns at 256 and
+10,000 cases with zero global rejects, generated-consumer compilation, identity mutation, packaged
+attestation validation/sealing, closing Rust review SR-016, and gap analysis SR-017.
 
 ## Non-Functional Requirement Coverage
 
@@ -61,6 +77,8 @@ and local SUITE-008. FR-004 has no complete implementation or suite.
 | NFR-002 | Test | TC-001 (NFR-002-AC-1, NFR-002-AC-2) | 🚧 Planned |
 | NFR-002 | Test | TC-003 (NFR-002-AC-3) | 🚧 Planned |
 | NFR-002 | Inspection | NFR-002-AC-4 | 🚧 Planned |
+| NFR-004 | Test | TC-020 (NFR-004-AC-1) | ✅ Covered |
+| NFR-004 | Test | TC-019 (NFR-004-AC-2) | ✅ Covered |
 
 ## Stakeholder Requirement Coverage
 
@@ -86,6 +104,12 @@ and local SUITE-008. FR-004 has no complete implementation or suite.
 | TC-012 | Verify the demonstrable verification outcomes stay distinguishable | Integration | P0 | FR-006-AC-5, NFR-002-AC-3 | ✅ Covered |
 | TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6, FR-006-AC-7 | ✅ Covered |
 | TC-014 | Verify bounded numeric and state Kani contracts | Analysis | P0 | FR-003-AC-2, FR-003-AC-3, FR-003-AC-4, FR-003-AC-5, FR-003-AC-6, FR-003-AC-7, FR-003-AC-8 | ✅ Covered |
+| TC-017 | Verify bound-clause domain derivation and refusal | Integration | P0 | FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-2 | ✅ Covered |
+| TC-018 | Verify constructive satisfying and violating populations | Property | P0 | FR-009-AC-1, FR-009-AC-2, FR-009-AC-3, FR-009-AC-4, FR-009-AC-5, FR-009-AC-6 | ✅ Covered |
+| TC-019 | Verify domain and relation boundary censuses | Integration | P0 | FR-010-AC-1, FR-010-AC-2, FR-010-AC-3, FR-010-AC-4, FR-010-AC-5, NFR-004-AC-2 | ✅ Covered |
+| TC-020 | Verify numeric conformance campaigns and rate reporting | Integration | P0 | FR-011-AC-1, FR-011-AC-2, FR-011-AC-3, FR-011-AC-4, FR-011-AC-5, NFR-004-AC-1 | ✅ Covered |
+| TC-021 | Verify shrinking preserves numeric constraints | Property | P0 | FR-012-AC-1, FR-012-AC-2, FR-012-AC-3, FR-012-AC-4 | ✅ Covered |
+| TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4 | ✅ Covered |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and
@@ -95,6 +119,11 @@ TC-006, and TC-007 remain planned until their complete backend/parity ticket sco
 reviewed; the FR-003 portion of TC-007 is already covered by TC-014 without promoting TC-007 overall.
 
 TC-008 through TC-013 are the shared-assurance migration's own rows and are covered by named tests.
+
+TC-017 through TC-022 are backed by passing named tests in `tests/bound_strategy_generation.rs`,
+`tests/bound_populations.rs`, and `tests/bound_census.rs`. Together they cover admission and ordered
+refusals, constructive populations, boundary censuses, runtime accounting and replay, generated
+consumer compilation, and Quoin attestation integration.
 
 TC-004's generated-crate fixtures include deterministic mixed-campaign counts and distinguish
 framework exhaustion with a retained floor result from a completed below-floor campaign. Its row
@@ -106,4 +135,5 @@ Each row is specified in the same-ID document under `spec/test/`. `spec/evidence
 suite registry: it names the command, tool and evidence kind for each suite. SUITE-008 is the reviewed
 local evidence producer for TC-003, TC-005, TC-014, and the FR-003 portion of TC-007; SUITE-010 is
 local pre-review evidence for the publication portion of TC-002. TC-008 through TC-013 are backed by
-`tests/shared_assurance.rs`, whose `/// Trace:` comments are what Quire's census reads.
+`tests/shared_assurance.rs`, whose `/// Trace:` comments are what Quire's census reads. SR-016 and
+SR-017 record the closing code and gap reviews for TC-017 through TC-022.

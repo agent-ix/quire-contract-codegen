@@ -1,5 +1,5 @@
 ---
-id: SR-012
+id: SR-020
 title: "Numeric and state Kani Rust review"
 type: SpecReview
 analysis: code-review
@@ -8,11 +8,11 @@ review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-003
     type: reviews
-  - target: ix://agent-ix/quire-contract-codegen/Task-008
+  - target: ix://agent-ix/quire-contract-codegen/Task-010
     type: references
 ---
 
-# SR-012: Numeric and state Kani Rust review
+# SR-020: Numeric and state Kani Rust review
 
 ## Summary
 
