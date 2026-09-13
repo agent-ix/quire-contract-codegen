@@ -34,6 +34,11 @@ operations:
     inputs: [requirement identity, customer enum path and variants, campaign, attestation context]
     output: GeneratedArtifactBundle | StrategyDiagnostic
     semantics: finite shaped cases with an explicit quire-contract-runtime consumer dependency
+  - name: generate_bound_strategy
+    status: specified for codegen#3 numeric/state slice; implementation waits on the codegen#4 numeric oracle slice
+    inputs: [public BoundPackage, full ClauseRef, population Satisfying|Violating|Broad|Boundary, campaign policy, attestation context]
+    output: GeneratedArtifactBundle | StrategyDiagnostic
+    semantics: domains taken from the clause's IR IntegerType declarations; constructive populations with Holds/Violated/OutOfDomain tags; runner summary reports discard and rejection rates; see bound_strategy_slice
   - name: generate_kani_bundle
     inputs: [typed precondition, typed postcondition, subject path, pinned backend identity, dependency census, attestation context]
     output: KaniArtifactBundle | KaniDiagnosticSet
@@ -115,6 +120,19 @@ harness_strategy_slice:
   generated_crate_lints: generated crate roots deny missing documentation and compile under denied warnings
   source_limit: harness and strategy Rust are rejected above 1048576 bytes before bundling, matching the maximum-source-bytes value retained in ProofAttestationV1 command argv
   artifact_names: bounded readable prefix plus full SHA-256 over length-delimited request identity
+bound_strategy_slice:
+  requirements: [FR-008, FR-009, FR-010, FR-011, FR-012, FR-013, NFR-004]
+  admission: root is exactly one Compare over integer ValueReference (Current/Pre/Post) and IntegerLiteral operands, at least one reference, no definedness obligations, OverflowPolicy::Reject; never looser than generate_bound_oracles admission
+  refusals: [UnknownClause, UnsupportedRelation, UnsupportedObligations, UnsupportedOverflowPolicy, UnsupportedDeclarationType, UnsupportedAnchor, EmptyPopulation, UnsupportedCampaignConstraint]; each carries full ClauseRef and offending span; no partial bundle
+  domains: inclusive IntegerType minimum/maximum of each read declaration; Pre and Post reads of one State declaration are two correlated values sharing its domain; no caller-supplied range
+  populations: Satisfying and Violating are constructed directly (interval draws and dependent partner draws), Broad is their tagged union, Boundary is a finite census of domain edges ±1 and relation edges ±1; no filter, assume, reject, or discard
+  expectation_tags: Holds, Violated, OutOfDomain
+  verdict_mapping: Pre anchor Holds→Passed|FailedPostcondition, Violated→RejectedPrecondition; Post anchor Holds→Passed, Violated→FailedPostcondition; OutOfDomain never reaches the oracle adapter and requires a consumer domain refusal
+  unrepresentable_edges: checked i64 edge computation; omitted edges are listed in a generated census record, never clamped or wrapped
+  rates: generated summary discard_rate() and rejection_rate() return Some((numerator, attempted)) or None at zero attempted; out_of_domain is a separate counter outside accepted/rejected/discarded
+  shrinking: partner values re-derived from the current first value at every step; tags never change during shrinking; residual candidates are counted in rejected
+  consumer: generated case types expose i64 fields keyed by IR SymbolName and StateObservation; generated code depends only on proptest, quire-contract-runtime, and std; no serialized case/census/summary format and no new schemas/ file; ProofAttestationV1 body under PROOF-codegen-generated-rust-strategy with BoundPackage digest and full ClauseRef in header and argv
+  out_of_scope: Numeric/NumericNegate arithmetic and its checked-overflow edges, Boolean connectives over numeric compares, deref/reaches, definedness obligations, Initialization/Handler anchors, undefined-result oracle API (qcir/runtime decision under quire-spec-language#83)
 kani_slice:
   adapter: exactly `cargo-kani 0.67.0` under profile `kani-0.67.0-function-contracts-v1`; another requested version is backend-unavailable
   binding: one Boolean input, one Boolean pre/post state, and an explicit customer `fn(bool, bool) -> bool` path

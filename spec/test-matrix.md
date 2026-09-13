@@ -8,7 +8,7 @@ type: TestMatrix
 
 ## Functional Requirement Coverage
 
-| Functional Req | Acceptance Criteria | Test Cases | Coverage Status |
+| Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
 | FR-001 | FR-001-AC-1, FR-001-AC-3 | TC-001 | 🚧 Planned |
 | FR-001 | FR-001-AC-2 | TC-002 | 🚧 Planned |
@@ -33,12 +33,18 @@ type: TestMatrix
 | FR-006 | FR-006-AC-5 | TC-012 | ✅ Covered |
 | FR-006 | FR-006-AC-6 | TC-013 | ✅ Covered |
 | FR-006 | FR-006-AC-7 | TC-013 | ✅ Covered |
+| FR-008 | FR-008-AC-1 through FR-008-AC-5 | TC-017 | 🚧 Planned |
+| FR-009 | FR-009-AC-1 through FR-009-AC-6 | TC-018 | 🚧 Planned |
+| FR-010 | FR-010-AC-1 through FR-010-AC-5 | TC-019 | 🚧 Planned |
+| FR-011 | FR-011-AC-1 through FR-011-AC-5 | TC-020 | 🚧 Planned |
+| FR-012 | FR-012-AC-1 through FR-012-AC-4 | TC-021 | 🚧 Planned |
+| FR-013 | FR-013-AC-1 through FR-013-AC-4 | TC-022 | 🚧 Planned |
+| FR-013 | FR-013-AC-5 | Inspection | 🚧 Planned |
 
-The current coverage selector expects a `Status` column while the TestMatrix structure requires
-`Coverage Status` (upstream spec-artifacts-process #77). The local checker that used to compensate
-for that conflict was a second traceability implementation carrying a hand-copied matrix, and it went
-with the rest of the generic evidence machinery; the conflict itself is unresolved and is carried as
-an open unknown in `assurance/change-assurance.json`.
+Every coverage table uses one `Status` column. Upstream spec-artifacts-process#87 (`375fc2a`)
+collapsed the former `Coverage Status`/`Status` pair into that one name, and the installed TestMatrix
+contract now asserts it. The open unknown for the old conflict in `assurance/change-assurance.json` is
+not updated by this spec change.
 
 Every FR-001 through FR-005, NFR, and StR row stays `🚧 Planned`. FR-001 through FR-003 have draft
 implementations and local tests, but their complete ticket scopes have not been independently
@@ -52,17 +58,18 @@ independent current-head review. FR-004 has no implementation or suite.
 
 ## Nonfunctional Requirement Coverage
 
-| Nonfunctional Req | Acceptance Criteria | Test/Inspection | Coverage Status |
+| Nonfunctional Req | Acceptance Criteria | Test/Inspection | Status |
 |---|---|---|---|
 | NFR-001 | NFR-001-AC-1 | TC-001 | 🚧 Planned |
 | NFR-001 | NFR-001-AC-2, NFR-001-AC-3 | TC-002 | 🚧 Planned |
 | NFR-002 | NFR-002-AC-1, NFR-002-AC-2 | TC-001 | 🚧 Planned |
 | NFR-002 | NFR-002-AC-3 | TC-003 | 🚧 Planned |
 | NFR-002 | NFR-002-AC-4 | Inspection | 🚧 Planned |
+| NFR-004 | Measurement table (discard, reject, exhaustion, census size) | TC-018, TC-019, TC-020 | 🚧 Planned |
 
 ## Stakeholder Requirement Coverage
 
-| Stakeholder Req | Trace to US/FR | Test/Validation | Coverage Status |
+| Stakeholder Req | Trace to US/FR | Test/Validation | Status |
 |---|---|---|---|
 | StR-001 | StR-001-VC-1, FR-001 | TC-001 | 🚧 Planned |
 | StR-001 | StR-001-VC-2, FR-003, FR-004 | TC-007 | 🚧 Planned |
@@ -83,6 +90,12 @@ independent current-head review. FR-004 has no implementation or suite.
 | TC-010 | Verify the sealed impact snapshot is the Quire export | Integration | P0 | FR-006-AC-3 | ✅ Covered |
 | TC-012 | Verify the demonstrable verification outcomes stay distinguishable | Integration | P0 | FR-006-AC-5, NFR-002-AC-3 | ✅ Covered |
 | TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6, FR-006-AC-7 | ✅ Covered |
+| TC-017 | Verify bound-clause domain derivation and refusal | Integration | P0 | FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5 | 🚧 Planned |
+| TC-018 | Verify constructive satisfying and violating populations | Property | P0 | FR-009-AC-1, FR-009-AC-2, FR-009-AC-3, FR-009-AC-4, FR-009-AC-5, FR-009-AC-6, NFR-004 | 🚧 Planned |
+| TC-019 | Verify domain and relation boundary censuses | Integration | P0 | FR-010-AC-1, FR-010-AC-2, FR-010-AC-3, FR-010-AC-4, FR-010-AC-5, NFR-004 | 🚧 Planned |
+| TC-020 | Verify numeric campaign verdict mapping and rate reporting | Integration | P0 | FR-011-AC-1, FR-011-AC-2, FR-011-AC-3, FR-011-AC-4, FR-011-AC-5, NFR-004 | 🚧 Planned |
+| TC-021 | Verify shrinking preserves numeric constraints | Property | P0 | FR-012-AC-1, FR-012-AC-2, FR-012-AC-3, FR-012-AC-4 | 🚧 Planned |
+| TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4 | 🚧 Planned |
 
 TC-001 through TC-007 remain deliberately planned until their complete ticket scope is independently
 reviewed. The oracle and harness drafts carry bound implementation symbols for TC-001 through TC-004;

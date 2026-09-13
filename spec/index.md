@@ -69,6 +69,31 @@ results and is constrained by NFR-002.
 evidence contract. TC-001 through TC-007 form the initial verification matrix. Assurance artifacts
 bind the intended use, trusted boundary, risks, measurement policy, and open human decision.
 
+FR-008 through FR-013 refine FR-002 for bound numeric and state-scalar clauses
+(agent-ix/quire-contract-codegen#3 under agent-ix/quire-spec-language#83) and are constrained by
+NFR-004. TC-017 through TC-022 verify them. Numbers skip FR-007, NFR-003, and TC-014 through TC-016
+because a parked expansion branch allocated them.
+
+### Subsystem layout
+
+Specification files are grouped by crate subsystem. Identifiers stay flat and globally sequential;
+the directory carries the subsystem.
+
+| Subsystem | Source | Directory | Artifacts |
+|---|---|---|---|
+| Strategies and harness campaigns | `src/strategy.rs`, `src/harness.rs` | `functional/strategies/`, `nonfunctional/strategies/`, `test/strategies/` | FR-008–FR-013, NFR-004, TC-017–TC-022 |
+
+The earlier flat artifacts move into subsystem directories after the in-flight codegen#4 and codegen#2
+branches land, so their edits do not conflict with the move:
+
+- oracles: FR-001, TC-001, TC-003
+- strategies: FR-002, TC-004
+- kani: FR-003, TC-005, TC-007
+- vacuity and coverage: FR-004, TC-006
+- publication and CLI: FR-005, TC-002
+- assurance intake: FR-006, TC-008–TC-010, TC-012, TC-013
+- cross-cutting: NFR-001, NFR-002, StR-001
+
 ## References
 
 - [Program umbrella](https://github.com/agent-ix/quire-contract-ir/issues/1).
