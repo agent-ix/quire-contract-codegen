@@ -69,14 +69,56 @@ pub enum Partner {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Relation {
     /// Comparison operator as written.
-    pub operator: ComparisonOperator,
+    operator: ComparisonOperator,
     /// Position of the primary read in the comparison as written.
-    pub primary: OperandPosition,
+    primary: OperandPosition,
     /// Literal or partner read compared with the primary read.
-    pub partner: Partner,
+    partner: Partner,
 }
 
 impl Relation {
+    /// Constructs a comparison between a primary read and an integer literal.
+    #[must_use]
+    pub const fn with_literal(
+        operator: ComparisonOperator,
+        primary: OperandPosition,
+        literal: i64,
+    ) -> Self {
+        Self {
+            operator,
+            primary,
+            partner: Partner::Literal(literal),
+        }
+    }
+
+    /// Constructs a comparison between two reads, whose primary is the authored left operand.
+    #[must_use]
+    pub const fn between_reads(operator: ComparisonOperator) -> Self {
+        Self {
+            operator,
+            primary: OperandPosition::Left,
+            partner: Partner::Read,
+        }
+    }
+
+    /// Comparison operator as written.
+    #[must_use]
+    pub const fn operator(self) -> ComparisonOperator {
+        self.operator
+    }
+
+    /// Operand position of the primary read.
+    #[must_use]
+    pub const fn primary(self) -> OperandPosition {
+        self.primary
+    }
+
+    /// Literal or second read compared with the primary read.
+    #[must_use]
+    pub const fn partner(self) -> Partner {
+        self.partner
+    }
+
     /// Evaluates the relation for one primary value and, for a partner read, the partner value.
     ///
     /// Returns `None` when the valuation does not match the relation's shape: a partner value for a

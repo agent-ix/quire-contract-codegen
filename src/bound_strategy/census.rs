@@ -156,7 +156,7 @@ pub fn compute_census(
     let minimum = i128::from(domain.minimum);
     let maximum = i128::from(domain.maximum);
     let mut edge_candidates = vec![minimum, minimum + 1, maximum - 1, maximum];
-    if let Partner::Literal(literal) = relation.partner {
+    if let Partner::Literal(literal) = relation.partner() {
         let literal = i128::from(literal);
         edge_candidates.extend([literal - 1, literal, literal + 1]);
     }
@@ -172,7 +172,7 @@ pub fn compute_census(
     let below_minimum = (minimum - 1, CensusEdge::Minimum, EdgeDirection::Below);
     let above_maximum = (maximum + 1, CensusEdge::Maximum, EdgeDirection::Above);
 
-    match relation.partner {
+    match relation.partner() {
         Partner::Literal(literal) => {
             for primary in &edges {
                 in_domain.insert(tagged(relation, *primary, None));

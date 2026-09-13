@@ -49,33 +49,25 @@ const FULL_DOMAIN: Domain = Domain {
 };
 
 fn literal(operator: ComparisonOperator, value: i64) -> Relation {
-    Relation {
-        operator,
-        primary: OperandPosition::Left,
-        partner: Partner::Literal(value),
-    }
+    Relation::with_literal(operator, OperandPosition::Left, value)
 }
 
 fn two_reads(operator: ComparisonOperator) -> Relation {
-    Relation {
-        operator,
-        primary: OperandPosition::Left,
-        partner: Partner::Read,
-    }
+    Relation::between_reads(operator)
 }
 
 /// Evaluates the relation from its textual reading, independently of `Relation::evaluate`.
 fn independent_holds(relation: Relation, primary: i64, partner: Option<i64>) -> bool {
-    let other = match (relation.partner, partner) {
+    let other = match (relation.partner(), partner) {
         (Partner::Literal(value), None) => value,
         (Partner::Read, Some(value)) => value,
         shape => panic!("valuation shape does not match the relation: {shape:?}"),
     };
-    let (left, right) = match relation.primary {
+    let (left, right) = match relation.primary() {
         OperandPosition::Left => (i128::from(primary), i128::from(other)),
         OperandPosition::Right => (i128::from(other), i128::from(primary)),
     };
-    match relation.operator {
+    match relation.operator() {
         ComparisonOperator::Equal => left == right,
         ComparisonOperator::NotEqual => left != right,
         ComparisonOperator::Less => left < right,
@@ -557,11 +549,7 @@ fn sweep_relations(domain: Domain) -> Vec<Relation> {
         relations.push(two_reads(operator));
         for value in &literals {
             for primary in [OperandPosition::Left, OperandPosition::Right] {
-                relations.push(Relation {
-                    operator,
-                    primary,
-                    partner: Partner::Literal(*value),
-                });
+                relations.push(Relation::with_literal(operator, primary, *value));
             }
         }
     }
@@ -641,7 +629,7 @@ fn tc_019_exhaustive_sweep_tags_domains_order_size_and_determinism() {
     }
     // The sweep reaches the largest census the FR-010 rules produce: 10 in-domain pairs (the
     // `min` and `max` primary edges each lose one out-of-domain partner) plus 10 out-of-domain
-    // pairs. NFR-004's stated "12 in-domain" worst case is unreachable; its 22 bound still holds.
+    // pairs, exactly reaching NFR-004's bound of 20.
     assert_eq!(largest, 20, "the sweep must reach the worst-case census");
     assert!(admitted > 0 && admitted < checked);
 }

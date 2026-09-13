@@ -57,23 +57,15 @@ const READ_IDENTIFIERS: &[&str] = &["left_current", "right_current"];
 const VERSION_IDENTIFIERS: &[&str] = &["version_number_post", "version_number_pre"];
 
 fn literal(operator: ComparisonOperator, primary: OperandPosition, value: i64) -> Relation {
-    Relation {
-        operator,
-        primary,
-        partner: Partner::Literal(value),
-    }
+    Relation::with_literal(operator, primary, value)
 }
 
 fn two_reads(operator: ComparisonOperator) -> Relation {
-    Relation {
-        operator,
-        primary: OperandPosition::Left,
-        partner: Partner::Read,
-    }
+    Relation::between_reads(operator)
 }
 
 fn identifiers(relation: Relation) -> &'static [&'static str] {
-    match relation.partner {
+    match relation.partner() {
         Partner::Literal(_) => LITERAL_IDENTIFIERS,
         Partner::Read => READ_IDENTIFIERS,
     }
@@ -124,11 +116,11 @@ fn enumerated_side(
     let holds = side == PopulationSide::Satisfying;
     let mut set = BTreeSet::new();
     for primary in domain.minimum..=domain.maximum {
-        match relation.partner {
+        match relation.partner() {
             Partner::Literal(value) => {
-                let result = match relation.primary {
-                    OperandPosition::Left => compare(relation.operator, primary, value),
-                    OperandPosition::Right => compare(relation.operator, value, primary),
+                let result = match relation.primary() {
+                    OperandPosition::Left => compare(relation.operator(), primary, value),
+                    OperandPosition::Right => compare(relation.operator(), value, primary),
                 };
                 if result == holds {
                     set.insert((primary, None));
@@ -136,7 +128,7 @@ fn enumerated_side(
             }
             Partner::Read => {
                 for partner in domain.minimum..=domain.maximum {
-                    if compare(relation.operator, primary, partner) == holds {
+                    if compare(relation.operator(), primary, partner) == holds {
                         set.insert((primary, Some(partner)));
                     }
                 }
@@ -257,7 +249,7 @@ fn tc_018_value_sets_equal_independent_enumeration_and_empty_sides_refuse() {
                             "{relation:?} {domain:?} {side:?}"
                         );
                         for primary in domain.minimum..=domain.maximum {
-                            let partners: Vec<Option<i64>> = match relation.partner {
+                            let partners: Vec<Option<i64>> = match relation.partner() {
                                 Partner::Literal(_) => vec![None],
                                 Partner::Read => {
                                     (domain.minimum..=domain.maximum).map(Some).collect()
@@ -604,8 +596,8 @@ fn rust_literal(value: i64) -> String {
 
 /// An independent `fn(i64, Option<i64>) -> bool` evaluating `relation` as written.
 fn relation_closure(relation: Relation) -> String {
-    let symbol = source_symbol(relation.operator);
-    match (relation.partner, relation.primary) {
+    let symbol = source_symbol(relation.operator());
+    match (relation.partner(), relation.primary()) {
         (Partner::Read, _) => {
             format!("|primary: i64, partner: Option<i64>| primary {symbol} partner.unwrap()")
         }
@@ -655,7 +647,8 @@ fn strict_config(cases: u32) -> Config {
     }
 }
 
-/// Visits the root and every candidate on every simplify/complicate path of one seeded tree.
+/// Visits the root and every candidate on every protocol-valid simplify/complicate path of one
+/// seeded tree.
 fn walk_every_path<T: Debug>(strategy: &BoxedStrategy<T>, seed: u32, mut visit: impl FnMut(&T)) {
     let replay = |path: &[bool]| {
         let mut runner = seeded_runner(seed, strict_config(WALK_REGENERATIONS));

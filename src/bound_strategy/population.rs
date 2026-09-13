@@ -64,9 +64,9 @@ const fn symbol(operator: ComparisonOperator) -> &'static str {
 
 /// The operator oriented as `primary op' other`, consistent with [`Relation::evaluate`].
 const fn primary_operator(relation: &Relation) -> ComparisonOperator {
-    match relation.primary {
-        OperandPosition::Left => relation.operator,
-        OperandPosition::Right => mirrored(relation.operator),
+    match relation.primary() {
+        OperandPosition::Left => relation.operator(),
+        OperandPosition::Right => mirrored(relation.operator()),
     }
 }
 
@@ -369,7 +369,7 @@ pub fn side_values(
         PopulationSide::Satisfying => primary_operator(relation),
         PopulationSide::Violating => negated(primary_operator(relation)),
     };
-    let values = match relation.partner {
+    let values = match relation.partner() {
         Partner::Literal(literal) => literal_values(operator, literal, domain)?
             .map(|primary| SideValues::Literal { primary }),
         Partner::Read => correlated_values(operator, domain)?,
@@ -867,12 +867,12 @@ fn indent(text: &str, width: usize) -> String {
 }
 
 fn relation_text(relation: &Relation, primary: &str, partner: &str) -> String {
-    let symbol = symbol(relation.operator);
-    let other = match relation.partner {
+    let symbol = symbol(relation.operator());
+    let other = match relation.partner() {
         Partner::Literal(literal) => literal.to_string(),
         Partner::Read => partner.to_owned(),
     };
-    match relation.primary {
+    match relation.primary() {
         OperandPosition::Left => format!("{primary} {symbol} {other}"),
         OperandPosition::Right => format!("{other} {symbol} {primary}"),
     }
