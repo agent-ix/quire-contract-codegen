@@ -16,7 +16,7 @@ type: SuiteRegistry
 | SUITE-004 | Static specification and coverage export | `quire coverage --scope . --json` | quire 0.31.0 / quire-rs 0.46.0 | Static |
 | SUITE-006 | Shared assurance intake chain | `python3 scripts/assurance_chain.py --candidate-revision <sha>` | quoin 0.23.1 change-assurance and evidence surfaces | Integration |
 | SUITE-007 | Minimum supported Rust version build | `rustup run 1.75.0 cargo check --locked --all-targets --message-format=json` | rustc 1.75.0 | Static |
-| SUITE-008 | Bounded Kani generation and execution | `cargo test --test kani_generation` | cargo-kani 0.67.0 / rustc | Analysis |
+| SUITE-008 | Bounded Kani generation and execution | `cargo test --locked --target-dir target-codex-backends --test kani_generation -- --test-threads=1` | cargo-kani 0.67.0 / rustc | Analysis |
 | SUITE-010 | Atomic generated-boundary publication | `cargo test --lib publication` | quire-contract-codegen 0.1.0 / rustc | Integration |
 
 ## Notes
@@ -49,9 +49,12 @@ SUITE-008 exists for the implemented FR-003 draft. It validates both output
 schemas, seals both generated attestation bodies through Quoin, checks every
 dependency classification and source-site edge, compares the embedded predicates
 with the executable-oracle output, and runs representative bundles under the
-pinned Kani backend. It is local pre-review evidence and does not promote TM-001
-or classify a proof complete. FR-004 still has no suite because its implementation
-does not yet exist.
+pinned Kani backend. The numeric/state increment adds v2 typed subject bindings,
+IR-owned integer assumptions, exact boundary/outside controls, and successful plus
+falsifying concrete-playback runs without changing the generation-time `not_run`
+classification. It remains local pre-review evidence until the current-head review
+and does not classify graph readiness as a completed proof. FR-004 still has no
+suite because its implementation does not yet exist.
 
 SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
 failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,

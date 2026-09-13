@@ -6,6 +6,8 @@ quality_attribute: compliance
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-001
     type: constrains
+  - target: ix://agent-ix/quire-contract-codegen/FR-003
+    type: constrains
 ---
 # NFR-002: Provenance, licensing, and qualification boundary
 

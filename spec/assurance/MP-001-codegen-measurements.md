@@ -30,7 +30,9 @@ approve release or confer validation, accreditation, or certification.
 
 The population is every public IR construct and positive/negative canonical fixture, all supported
 executable/proptest/Kani/coverage backends, supported platforms, output types, diagnostics, dependency
-states, and injected publication failure points.
+states, and injected publication failure points. The Kani population includes direct Boolean and
+bounded-`i64` input/current/pre/post bindings, all six integer comparisons, exact inclusive model
+endpoints, immediately outside values, dependency-readiness states, and healthy/falsifying subjects.
 
 ## Collection Procedure
 
@@ -55,6 +57,16 @@ The library-only public bound-package consumer additionally has seven synthetic-
 and a byte-accounting unit control, including actual publication and native execution of generated
 sources. These are not yet rows in this structured generation producer, do not establish the normal
 source frontend, and do not close a native campaign or aggregate coverage obligation.
+
+`cargo test --locked --target-dir target-codex-backends --test kani_generation -- --test-threads=1`
+is SUITE-008. It requires `cargo-kani 0.67.0`, records the executable digest and
+complete generated option vector, validates the v2 Rust/graph schemas and Quoin attestation bodies,
+compiles the generated `publish = false` crates, and runs exact harnesses. The bounded scalar cases
+exercise signed 0 through 1000 domains plus -1 and 1001 controls. An identity state subject must
+prove; a changed-value subject and falsifiable integer comparison must fail and print concrete
+playback data under `-Z concrete-playback --concrete-playback print`. The executable-oracle corpus is
+evaluated independently so a shared renderer alone cannot establish parity. Kani results remain test
+observations rather than generation attestations, whose `proofExecutionState` stays `not_run`.
 
 `scripts/check_upstream_pins.py --json` publishes `codegen.upstream-identity/v1`: for each declared
 upstream, the revision the crate's own constant states, the revision the dependency declaration pins,
@@ -230,9 +242,12 @@ a pass.
 
 Two limitations are load-bearing and are stated here rather than left to be inferred.
 
-FR-003 Kani obligation lowering now has a bounded draft and a local suite, but its generated graph
-states `proofExecutionState: not_run`: dependency readiness is not proof completion, and the two
-ProofAttestationV1 bodies attest only successful artifact generation. FR-004 has bounded LLVM
+FR-003 Kani obligation lowering has a Boolean draft and the numeric/state increment is specified for
+the same local suite. Its generated graph states `proofExecutionState: not_run`: dependency readiness
+is not proof completion, and the two ProofAttestationV1 bodies attest only successful artifact
+generation. Successful and failing cargo-kani observations qualify only the exact recorded 0.67.0
+profile and options. Native counterexample replay remains quire-spec-language IT-010 and cannot be
+claimed from codegen's generated source or Kani text alone. FR-004 has bounded LLVM
 observation primitives, six actual generated-oracle native controls, and complete bound observations
 through `analyze_bound_coverage`, every outcome of which retains `provenance: unqualified`; it has
 no campaign-run provenance and no consuming obligation gate. Neither backend has a shared proof

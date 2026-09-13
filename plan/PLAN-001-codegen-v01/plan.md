@@ -54,4 +54,8 @@ Task-004 is complete through the numeric/state oracle slice from
 `agent-ix/quire-spec-language#83`: obligation-free bounded-integer comparisons over direct input and
 current/pre/post state observations. Definedness obligations, arithmetic/negation requiring an
 invalid-result representation, indirect dependencies, and object/graph reads remain explicit
-refusals. Task-005's numeric/state Kani increment follows only after this oracle slice merges.
+refusals. Task-005's numeric/state Kani increment is now specified against that merged oracle core:
+checked IR domains exclusively determine symbolic bounds, the generalized subject ABI covers direct
+Boolean and bounded-`i64` current/pre/post observations, and Kani 0.67.0 concrete playback is retained
+for downstream IT-010 replay. Implementation follows only after the selected specification review is
+accepted and remains independent of agent E's issue #3 strategy work.

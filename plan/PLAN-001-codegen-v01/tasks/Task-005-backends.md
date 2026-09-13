@@ -31,7 +31,11 @@ correlated relations; only explicitly residual constraints may use rejection.
 
 The bounded Kani adapter reuses the exact oracle predicates, emits distinct
 framing/binding/contract/harness regions, derives a complete dependency graph, and records proof
-execution as `not_run`.
+execution as `not_run`. Its next reviewed increment generalizes direct Boolean bindings to bounded
+`i64` current-input/current-state/pre-state arguments and post-state results. Inclusive assumptions
+come only from checked IR `IntegerType` domains; post-state results carry the same domain in the
+ensures contract. The v2 adapter and graph retain the complete typed ABI, bounds, cargo-kani 0.67.0
+identity/options and concrete-playback configuration while preserving v1 artifacts historically.
 
 ## PR #22 round 8 repair delta
 
@@ -57,10 +61,17 @@ runtime-owned campaign transport and an authorized native producer/shared verifi
 are separate ownership gates; no private counters or attestation/receipt framework fills them.
 Every generated-source guard remains unchanged.
 
+The numeric/state Kani increment is specified by FR-003 and TC-014 and must complete the selected
+specification review before implementation. It consumes issue #4's executable-oracle analyzer and
+rendered predicates directly. It does not consume, change, or duplicate issue #3's model-domain
+strategy interface; agent E retains ownership of that branch and file set. Native replay of printed
+counterexamples remains the downstream quire-spec-language IT-010 boundary.
+
 - Current `main` is the branch base; superseded bespoke-assurance PRs are not revived or restacked.
   It carries the reviewed PR #22, #26, #23 and #25 heads, so this integration adds bound-package
   oracle generation and bound coverage analysis on top of them rather than restacking them.
 - Unsupported state, constraint, or shrinking semantics fail with a structured diagnostic rather
   than falling back to an unreported filter.
-- Vacuity is partial and closes no full FR-004 row. Kani landed as its own bounded slice and stays
-  a draft until independent current-head review.
+- Vacuity is partial and closes no full FR-004 row. Boolean Kani landed as its own bounded slice;
+  numeric/state Kani stays planned until its specification review is accepted, implemented, and
+  independently reviewed at PR time.

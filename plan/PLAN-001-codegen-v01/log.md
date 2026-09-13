@@ -12,3 +12,7 @@ description: "Chronological changes to the codegen v0.1 plan bundle."
 - **2026-09-12** - Scoped Task-004's next increment to obligation-free bounded-integer and state
   scalar comparisons, preserving explicit refusal for undefined, indirect and object/graph
   constructs before the numeric/state Kani work begins.
+- **2026-09-13** - Specified Task-005's numeric/state Kani increment: shared executable-oracle
+  predicates, deterministic Boolean/`i64` subject ABI, checked IR inclusive bounds, v2 adapter/graph,
+  exact cargo-kani 0.67.0 options, healthy and falsifying concrete-playback cases, explicit refusal,
+  and the downstream native replay boundary. Implementation remains gated on the selected review.
