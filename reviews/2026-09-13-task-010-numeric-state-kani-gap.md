@@ -40,13 +40,16 @@ reverse gap, or stub remains.
   `src/lib.rs`; evidence tests `tests/kani_generation.rs`.
 - Reconciliation: `quire coverage --scope . --json` with quire-cli 0.31.0 / engine
   `ca7362d4dacecb96f01d74d1d971327118c25917`.
-- Targeted tasks done: 1 / 1. PLAN-001 overall is 5 / 8 tasks done; Task-005, Task-006, and the
-  human-owned Task-007 remain explicitly outside this ticket and are not claimed complete.
+- Targeted tasks done: 1 / 1. PLAN-001 overall is 7 / 10 tasks done after integrating the merged
+  strategy Task-008/009 work; Task-005, Task-006, and the human-owned Task-007 remain explicitly
+  outside this ticket and are not claimed complete.
 - FR-003 acceptance criteria backed by bound Rust tests: 8 / 8.
-- Test Matrix test-case rows backed by bound Rust tests: 13 / 13. Overall reconciliation is 49 / 72
-  because later strategy, vacuity, CLI/parity, stakeholder, and suite-registry scopes remain planned.
-- Status lies: 0. Untracked test symbols: 0. Unmatched tags: 0. The five reported unbacked reference
-  rows are Inspection/Analysis `no_symbol_rows`, and none belongs to FR-003 or Task-010.
+- Test Matrix test-case rows backed by bound Rust tests: 19 / 19. Overall reconciliation is 87 / 110
+  after the merged strategy requirements and tests expanded the governed population.
+- Status lies: 0. Unmatched tags: 0. The one overall untracked symbol is E's merged
+  `FR-008-CON-1` strategy trace and is outside Task-010/FR-003; Task-010 has zero untracked symbols.
+  The seven reported unbacked reference rows are Inspection/Analysis `no_symbol_rows`, and none
+  belongs to FR-003 or Task-010.
 - Inventoried Task-010 behaviors: 6 (typed ABI normalization, exact integer bounds, result-domain
   guarantees, v2 graph/attestation identity, explicit refusal mapping, and pinned Kani
   proof/playback options). Untraced behaviors: 0. Source stubs: 0. Test stubs: 0.

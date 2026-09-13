@@ -3,7 +3,7 @@ id: SR-020
 title: "Numeric and state Kani Rust review"
 type: SpecReview
 analysis: code-review
-scope: "agent-ix/quire-contract-codegen#2 numeric/state slice at b614cc9; origin/main..b614cc9"
+scope: "agent-ix/quire-contract-codegen#2 numeric/state slice integrated with origin/main@b3af1c6 through a8e5c13"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-003
@@ -23,7 +23,7 @@ and local gates. Three findings were repaired during the PR-time pass; no open R
 ## Verdict
 
 **PASS** — every Rust-review finding is closed and the stable plus exact Rust 1.75 local suites pass
-on the committed candidate.
+on the clean integrated candidate.
 
 ## Findings
 
@@ -47,22 +47,27 @@ on the committed candidate.
 - Public wire structures deny unknown fields; the additive diagnostic field is backward compatible;
   v1 schemas remain historical and v2 outputs are separately identified and schema validated.
 - No production panic, unsafe block, unchecked integer conversion, unbounded recursion, new
-  dependency, hosted workflow change, or `publish` change was introduced. Codegen #3 files were not
-  edited.
+  dependency, hosted workflow change, or `publish` change was introduced. Codegen #3 merged as PR
+  #30; its public strategy output was consumed through `main`, and this ticket did not rewrite its
+  implementation.
 
 ## Gate Results
 
 - `cargo fmt --all -- --check`: pass.
 - `cargo clippy --locked --all-targets -- -D warnings` with
   `CARGO_TARGET_DIR=target-codex-backends`: pass.
-- Stable `cargo test --locked` with prescribed assurance inputs: 73 passed, 0 failed.
-- Exact Rust 1.75.0 `cargo +1.75.0 test --locked`: 73 passed, 0 failed.
+- Stable `cargo test --locked` with the prescribed pinned assurance inputs: 94 passed, 0 failed.
+- Exact Rust 1.75.0 `cargo +1.75.0 test --locked`: 94 passed, 0 failed.
 - SUITE-008 actual backend: cargo-kani 0.67.0; executable SHA-256
   `7f143a251d11c7e6e232bbf2cbccf56f9ce66a5f0107eeb3008698e6715f55d9`; healthy mixed and
   ConfigVersion-style identity proofs pass; changed-state and strict-comparison subjects print
   concrete counterexamples.
 - Generated option identity: `-Z function-contracts`, optional `-Z stubbing`,
   `-Z concrete-playback`, exact harness, unwind, `cadical`, regular output, and printed playback.
+- Pinned local assurance tools: quire-cli 0.31.0 / engine
+  `ca7362d4dacecb96f01d74d1d971327118c25917`, Quoin 0.23.1, ix-flow 0.0.4, and Engineering
+  Assurance 0.2.0; the full shared-assurance suite passes outside the sandboxed process-spawn
+  restriction.
 - `cargo deny check`: advisories, bans, licenses, and sources pass; only the existing unmatched
   allow-list warnings remain.
 - Unsafe audit, warning-denied rustdoc, upstream pin check, ten-row generation conformance, release
