@@ -2,7 +2,7 @@
 id: Task-009
 title: "Bound strategy admission, runner, and consumer bundle"
 type: Task
-status: blocked
+status: in_progress
 track: B
 priority: P0
 relationships:
@@ -33,17 +33,17 @@ relationships:
 
 ## Scope
 
-After codegen #4's bounded-integer oracle grammar lands, lower admitted `BoundPackage` clauses into
+With codegen #4's bounded-integer oracle grammar landed in PR #29, lower admitted `BoundPackage` clauses into
 the strategy core, execute generated cases against the embedded oracle through runtime verdict
 accounting, and emit the complete consumer bundle with its Quoin proof attestation.
 
 ## Subtasks
 
-- [ ] Rebase on the merged codegen #4 implementation and reconcile matrix additions as unions.
-- [ ] Implement FR-008 admission and ordered structured refusals.
-- [ ] Implement the FR-011 proptest and census runners, exact counters, rates, and conclusions.
-- [ ] Count all FR-012 shrink replays in `attempted`.
-- [ ] Implement the FR-013 case identity surface, bundle assembly, and proof attestation.
+- [x] Rebase on the merged codegen #4 implementation and reconcile matrix additions as unions.
+- [x] Implement FR-008 admission and ordered structured refusals.
+- [x] Implement the FR-011 proptest and census runners, exact counters, rates, and conclusions.
+- [x] Count all FR-012 shrink replays in `attempted`.
+- [x] Implement the FR-013 case identity surface, bundle assembly, and proof attestation.
 - [ ] Run TC-017 through TC-022, Rust 1.75, Rust review, gap analysis, and the full local gate.
 
 ## Deliverables
@@ -54,5 +54,5 @@ accounting, and emit the complete consumer bundle with its Quoin proof attestati
 
 ## Notes
 
-- Blocked on Task-004's codegen #4 implementation, currently uncommitted in its owner worktree.
-- Do not copy that work or edit its worktree; resume from its merged `main` revision.
+- Task-004's codegen #4 implementation landed as PR #29 at `e0be330`; this branch consumes that
+  merged revision and retains the matrix changes from both work streams.

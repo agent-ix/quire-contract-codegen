@@ -84,8 +84,8 @@ the directory carries the subsystem.
 |---|---|---|---|
 | Strategies and harness campaigns | `src/strategy.rs`, `src/harness.rs` | `functional/strategies/`, `nonfunctional/strategies/`, `test/strategies/` | FR-008–FR-013, NFR-004, TC-017–TC-022 |
 
-The earlier flat artifacts move into subsystem directories after the in-flight codegen#4 and codegen#2
-branches land, so their edits do not conflict with the move:
+The earlier flat artifacts move into subsystem directories after the remaining in-flight codegen#2
+branch lands, so its edits do not conflict with the move:
 
 - oracles: FR-001, TC-001, TC-003
 - strategies: FR-002, TC-004

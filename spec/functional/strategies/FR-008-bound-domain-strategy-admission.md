@@ -132,7 +132,7 @@ integer declaration ([quire-contract-ir FR-013](ix://agent-ix/quire-contract-ir/
 
 - **Upstream**: [StR-001](../../stakeholder/StR-001-traceable-generation.md);
   [FR-001](../FR-001-deterministic-oracles.md) FR-001-AC-8 bounded-integer oracle grammar
-  (agent-ix/quire-contract-codegen#4, specified at `task/4-numeric-state-oracles` revision `1db74b5`);
+  (agent-ix/quire-contract-codegen#4, merged by PR #29 at `e0be330`);
   [quire-contract-ir FR-012, FR-013, FR-014, FR-015](ix://agent-ix/quire-contract-ir/FR-014) at
   `04eb6f8`; [quire-spec-language FR-034](ix://agent-ix/quire-spec-language/FR-034) field aliases;
   [FR-002](../FR-002-tristate-proptest.md).

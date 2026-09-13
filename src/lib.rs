@@ -21,6 +21,8 @@ mod vacuity;
 mod bound_coverage;
 pub mod bound_strategy;
 
+pub use bound_strategy::{generate_bound_strategy, BoundStrategyPopulation, BoundStrategyRequest};
+
 pub use bound_coverage::{
     analyze_bound_coverage, ArtifactBytes, BoundAnalysisState, BoundCoverageAnalysis,
     BoundCoverageInputs, BOUND_COVERAGE_FORMAT, BOUND_COVERAGE_SCHEMA, MAX_ANALYSIS_BYTES,

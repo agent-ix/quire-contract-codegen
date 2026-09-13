@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeSet, fmt::Write as _};
 
-use quire_contract_ir::RequirementRef;
+use quire_contract_ir::{ClauseRef, RequirementRef, SourceSpan};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
@@ -139,6 +139,14 @@ pub enum StrategyErrorCode {
     ResourceLimitExceeded,
     /// A requested bound population side has no value over the shared domain.
     EmptyPopulation,
+    /// The requested clause does not exist in the bound package.
+    UnknownClause,
+    /// Bound oracle generation refused the selected package or clause.
+    UnsupportedClause,
+    /// The selected clause kind cannot drive a numeric campaign.
+    UnsupportedClauseKind,
+    /// The selected expression is not one admitted numeric relation.
+    UnsupportedRelation,
 }
 
 impl StrategyErrorCode {
@@ -148,10 +156,14 @@ impl StrategyErrorCode {
             | Self::InvalidMembership
             | Self::CorrelationOverflow
             | Self::InvalidStrategyIdentity
-            | Self::InvalidEnumIdentity => GenerationTerminalState::InvalidInput,
+            | Self::InvalidEnumIdentity
+            | Self::UnknownClause => GenerationTerminalState::InvalidInput,
             Self::UnsupportedCampaignConstraint
             | Self::ResourceLimitExceeded
-            | Self::EmptyPopulation => GenerationTerminalState::Unsupported,
+            | Self::EmptyPopulation
+            | Self::UnsupportedClause
+            | Self::UnsupportedClauseKind
+            | Self::UnsupportedRelation => GenerationTerminalState::Unsupported,
             Self::InvalidGeneratedSyntax | Self::AttestationGenerationFailed => {
                 GenerationTerminalState::Inconclusive
             }
@@ -169,6 +181,12 @@ pub struct StrategyDiagnostic {
     pub terminal_state: GenerationTerminalState,
     /// Preserved attestation or syntax failure code, when one exists.
     pub generation_code: Option<GenerationErrorCode>,
+    /// Complete bound clause identity for clause-scoped generation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clause: Option<Box<ClauseRef>>,
+    /// Exact rejected IR locus for expression-scoped failures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_span: Option<Box<SourceSpan>>,
     /// Stable input path associated with the failure.
     pub path: String,
     /// Human-readable detail not used as machine identity.
@@ -846,6 +864,8 @@ fn diagnostic_with_generation(
             .map(GenerationErrorCode::terminal_state)
             .unwrap_or_else(|| code.terminal_state()),
         generation_code,
+        clause: None,
+        source_span: None,
         path: path.to_owned(),
         message: message.to_owned(),
     }

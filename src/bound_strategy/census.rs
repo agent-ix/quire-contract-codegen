@@ -559,6 +559,8 @@ fn diagnostic_with_generation(
         code,
         terminal_state,
         generation_code,
+        clause: None,
+        source_span: None,
         path: path.to_owned(),
         message: message.to_owned(),
     }
