@@ -8,7 +8,7 @@ type: TestMatrix
 
 ## Functional Requirement Coverage
 
-| Functional Req | Acceptance Criteria | Test Cases | Coverage Status |
+| Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
 | FR-001 | FR-001-AC-1, FR-001-AC-3 | TC-001 | 🚧 Planned |
 | FR-001 | FR-001-AC-2 | TC-002 | 🚧 Planned |
@@ -16,6 +16,7 @@ type: TestMatrix
 | FR-001 | FR-001-AC-5 | TC-001, TC-006 | 🚧 Planned |
 | FR-001 | FR-001-AC-6 | TC-001, TC-002 | Local bound-consumer controls pass; integrated assurance pending |
 | FR-001 | FR-001-AC-7 | TC-001 | Local bound-consumer controls pass; integrated assurance pending |
+| FR-001 | FR-001-AC-8 | TC-002 | 🚧 Numeric/state oracle implementation pending |
 | FR-002 | FR-002-AC-1 through FR-002-AC-6 | TC-004 | 🚧 Planned |
 | FR-003 | FR-003-AC-1 | TC-005 | 🚧 Planned |
 | FR-003 | FR-003-AC-2 | TC-007 | 🚧 Planned |
@@ -34,11 +35,9 @@ type: TestMatrix
 | FR-006 | FR-006-AC-6 | TC-013 | ✅ Covered |
 | FR-006 | FR-006-AC-7 | TC-013 | ✅ Covered |
 
-The current coverage selector expects a `Status` column while the TestMatrix structure requires
-`Coverage Status` (upstream spec-artifacts-process #77). The local checker that used to compensate
-for that conflict was a second traceability implementation carrying a hand-copied matrix, and it went
-with the rest of the generic evidence machinery; the conflict itself is unresolved and is carried as
-an open unknown in `assurance/change-assurance.json`.
+The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
+former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
+retains no local checker or copied traceability implementation.
 
 Every FR-001 through FR-005, NFR, and StR row stays `🚧 Planned`. FR-001 through FR-003 have draft
 implementations and local tests, but their complete ticket scopes have not been independently
@@ -50,19 +49,19 @@ through TC-013 are backed by tests in `tests/shared_assurance.rs` that invoke th
 reimplementing them. FR-003 now has an implemented draft and SUITE-008, but remains planned pending
 independent current-head review. FR-004 has no implementation or suite.
 
-## Nonfunctional Requirement Coverage
+## Non-Functional Requirement Coverage
 
-| Nonfunctional Req | Acceptance Criteria | Test/Inspection | Coverage Status |
+| Non-Functional Req | Verification Method | Evidence/Test Cases | Status |
 |---|---|---|---|
-| NFR-001 | NFR-001-AC-1 | TC-001 | 🚧 Planned |
-| NFR-001 | NFR-001-AC-2, NFR-001-AC-3 | TC-002 | 🚧 Planned |
-| NFR-002 | NFR-002-AC-1, NFR-002-AC-2 | TC-001 | 🚧 Planned |
-| NFR-002 | NFR-002-AC-3 | TC-003 | 🚧 Planned |
-| NFR-002 | NFR-002-AC-4 | Inspection | 🚧 Planned |
+| NFR-001 | Test | TC-001 (NFR-001-AC-1) | 🚧 Planned |
+| NFR-001 | Test | TC-002 (NFR-001-AC-2, NFR-001-AC-3) | 🚧 Planned |
+| NFR-002 | Test | TC-001 (NFR-002-AC-1, NFR-002-AC-2) | 🚧 Planned |
+| NFR-002 | Test | TC-003 (NFR-002-AC-3) | 🚧 Planned |
+| NFR-002 | Inspection | NFR-002-AC-4 | 🚧 Planned |
 
 ## Stakeholder Requirement Coverage
 
-| Stakeholder Req | Trace to US/FR | Test/Validation | Coverage Status |
+| Stakeholder Req | Trace to US/FR | Test/Validation | Status |
 |---|---|---|---|
 | StR-001 | StR-001-VC-1, FR-001 | TC-001 | 🚧 Planned |
 | StR-001 | StR-001-VC-2, FR-003, FR-004 | TC-007 | 🚧 Planned |
@@ -72,7 +71,7 @@ independent current-head review. FR-004 has no implementation or suite.
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
 | TC-001 | Reproduce artifacts and attestations | Integration | P0 | FR-001-AC-1, FR-001-AC-3, FR-005-AC-2, NFR-001-AC-1, NFR-002-AC-1, NFR-002-AC-2 | 🚧 Planned |
-| TC-002 | Compile and publish atomically | Integration | P0 | FR-001-AC-2, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3 | 🚧 Planned |
+| TC-002 | Compile and publish atomically | Integration | P0 | FR-001-AC-2, FR-001-AC-8, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3 | 🚧 Numeric/state oracle implementation pending |
 | TC-003 | Reject unsupported inputs explicitly | Integration | P0 | FR-001-AC-4, FR-003-AC-3, NFR-002-AC-3 | 🚧 Planned |
 | TC-004 | Preserve shaped proptest strategies | Property | P0 | FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4, FR-002-AC-5, FR-002-AC-6 | 🚧 Planned |
 | TC-005 | Enforce Kani proof dependencies | Analysis | P0 | FR-003-AC-1 | 🚧 Planned |

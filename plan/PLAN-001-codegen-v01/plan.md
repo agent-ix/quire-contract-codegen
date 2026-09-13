@@ -49,3 +49,9 @@ serialized-package generation is no longer blocked on the binding itself; what r
 serialized CLI surface and cross-backend parity. Task-004 and Task-005 remain in progress until
 their semantic acceptance criteria and current-head review findings close. This integration
 promotes no planned coverage or parity row. Automation must not complete Task-007.
+
+Task-004's next ordered increment is the numeric/state oracle slice from
+`agent-ix/quire-spec-language#83`: obligation-free bounded-integer comparisons over direct input and
+current/pre/post state observations. Definedness obligations, arithmetic/negation requiring an
+invalid-result representation, indirect dependencies, and object/graph reads remain explicit
+refusals. Task-005's numeric/state Kani increment follows only after this oracle slice merges.

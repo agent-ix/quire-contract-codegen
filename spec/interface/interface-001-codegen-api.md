@@ -17,7 +17,7 @@ operations:
   - name: generate_bound_oracles
     inputs: [public BoundPackage reference, attestation context]
     output: BoundOracleGeneration | BoundGenerationError
-    semantics: complete ordered executable-clause batch or explicit NoExecutable with bound digest and informational references but no publishable artifact; unsupported executable content fails the entire batch
+    semantics: complete ordered executable-clause batch over the supported Boolean and obligation-free bounded-integer comparison grammar, or explicit NoExecutable with bound digest and informational references but no publishable artifact; unsupported executable content fails the entire batch
   - name: generate_bundle
     inputs: [contract package bytes, generation configuration]
     output: ArtifactBundle | DiagnosticSet
@@ -67,18 +67,18 @@ artifact_bundle:
     - coverage source map and vacuity map
     - diagnostics and one proof attestation per generated artifact
 diagnostics:
-  bound_batch_errors: typed ResourceLimitExceeded, NameCollision(full ClauseRef), Clause(full ClauseRef plus existing lower-level diagnostics), or Bundle(existing publication diagnostic); no partial artifacts
+  bound_batch_errors: typed ResourceLimitExceeded, NameCollision(full ClauseRef), Clause(full ClauseRef plus existing lower-level diagnostics and exact rejected IR source spans where applicable), or Bundle(existing publication diagnostic); no partial artifacts
   no_executable: separate successful non-artifact result for valid empty or informational-only populations, not a terminal-state or proof-attestation claim
   terminal_states: [generated, unsupported, invalid-input, backend-unavailable, io-failed, inconclusive]
   implemented_mapping:
-    generated: successful supported Boolean lowering only
+    generated: successful supported Boolean-root lowering, including obligation-free bounded-integer comparisons over direct input and state scalar observations
     unsupported: unsupported expression, dependency, obligation, or bounded resource
     invalid-input: non-Boolean root or generated-name collision
     inconclusive: internal syntax or serialization control failure
     backend-unavailable: reserved for external backends
     io-failed: reserved for atomic publication
   rule: no non-generated state may be converted into a complete artifact claim
-  fields: [stable code, terminal state, stable input path, optional preserved lower-level generation code, human detail]
+  fields: [stable code, terminal state, stable input path, optional exact IR source span, optional preserved lower-level generation code, human detail]
 identity_envelope:
   schema: Quoin's packaged ProofAttestationV1 (proof-attestation-v1.schema.json), read from `quoin change-assurance schema` and never copied here
   emitted_form: that schema without digest and without retained_output, which `quoin change-assurance seal-attestation` derives from the retained bytes and refuses from a caller
@@ -103,6 +103,10 @@ oracle_slice:
   schemas: generated Rust and source-map outputs each identify and validate against their own versioned schema
   source_limit: 1048576 bytes per clause, enforced during rendering
   artifact_names: bounded readable prefix plus full SHA-256 package/requirement/revision/clause identity with per-clause source-map and per-artifact attestation paths
+  supported_expression_grammar: Boolean literals, Boolean direct value references, Boolean not/operators, bounded i64 literals, bounded i64 direct input/state value references, and all six comparisons with a Boolean clause root
+  dependency_types: Boolean dependencies render as bool; bounded-integer dependencies render as i64; current/pre/post observations remain distinct parameters
+  undefined_result_boundary: a typed expression carrying any definedness obligation refuses before rendering; numeric arithmetic and negation remain unsupported until a versioned IR/runtime result can distinguish invalid from false
+  refusal_locus: an unsupported expression node carries that node's exact IR source span; an unsupported obligation carries its exact obligation source span; neither produces a partial artifact
 harness_strategy_slice:
   output: generated Rust artifact plus one ProofAttestationV1 body, under proof obligations PROOF-codegen-generated-rust-harness and PROOF-codegen-generated-rust-strategy
   attestation_context: required for harness, integer-strategy, and enum-strategy generation
