@@ -292,7 +292,7 @@ fn source_symbol(source: &str) -> &str {
         .unwrap()
 }
 
-/// Trace: TC-001, TC-006
+/// Trace: TC-001, TC-006, FR-001-AC-5
 #[test]
 fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     use quire_contract_codegen::{
@@ -475,7 +475,7 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     }
 }
 
-/// Trace: TC-001, NFR-002-AC-1
+/// Trace: TC-001, FR-001-AC-1, FR-001-AC-3, NFR-002-AC-1
 ///
 /// NFR-002-AC-1 declares its verification method as Test (TC-001), and this is
 /// that test: it asserts that each emitted proof attestation records the tool
@@ -1296,7 +1296,9 @@ fn tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluato
     );
 }
 
-/// TC-002; FR-001-AC-2; FR-001-AC-8.
+/// TC-002
+/// FR-001-AC-2
+/// FR-001-AC-8
 #[test]
 fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_model() {
     let value_type =
@@ -1434,7 +1436,8 @@ fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_
     );
 }
 
-/// TC-001.
+/// TC-001
+/// FR-001-AC-5
 #[test]
 fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
     let environment = boolean_environment(&["a", "b", "implies_short_circuit"]);
@@ -1517,7 +1520,8 @@ fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
     );
 }
 
-/// TC-003.
+/// TC-003
+/// FR-001-AC-4
 #[test]
 fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
     let integer =
@@ -1581,6 +1585,15 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
     assert_eq!(
         &decoded, diagnostic,
         "the exact IR span must survive the API wire form"
+    );
+    let mut legacy_value = serde_json::to_value(diagnostic).unwrap();
+    legacy_value.as_object_mut().unwrap().remove("sourceSpan");
+    let legacy_decoded: GenerationDiagnostic = serde_json::from_value(legacy_value).unwrap();
+    let mut expected_legacy = diagnostic.clone();
+    expected_legacy.source_span = None;
+    assert_eq!(
+        legacy_decoded, expected_legacy,
+        "diagnostics serialized before sourceSpan existed must remain readable"
     );
 
     let root_span = span(33, 34);
@@ -1741,7 +1754,8 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
     }
 }
 
-/// TC-003; FR-001-AC-4.
+/// TC-003
+/// FR-001-AC-4
 #[test]
 fn tc_003_unsupported_dependency_reports_the_first_reference_span() {
     let rational = RationalType::new(-10, 10, 10).unwrap();
@@ -1863,7 +1877,8 @@ fn tc_003_normalization_is_injective_for_dependencies_and_clause_artifacts() {
     }
 }
 
-/// TC-003.
+/// TC-003
+/// FR-001-AC-4
 #[test]
 fn tc_003_discharged_obligations_are_explicitly_rejected() {
     let integer = IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Reject).unwrap();

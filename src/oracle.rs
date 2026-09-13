@@ -741,7 +741,7 @@ pub(crate) fn dependency_parameters(
             request,
             GenerationErrorCode::UnsupportedDependency,
             "expression.dependencies",
-            "this Boolean harness slice does not support integer dependencies",
+            "the current harness and Kani slices do not support integer dependencies",
             &parameter.source,
         ));
     }

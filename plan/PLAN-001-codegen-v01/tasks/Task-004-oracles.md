@@ -2,7 +2,7 @@
 id: Task-004
 title: "Deterministic oracles and proof attestations"
 type: Task
-status: in_progress
+status: done
 track: B
 priority: P0
 relationships:
@@ -35,5 +35,15 @@ dependency signatures, source maps, and one Quoin ProofAttestationV1 body per ou
 Task-003 is complete. `main` pins IR revision
 `04eb6f849c03be23177d373549c6c272551f957d` and runtime revision
 `8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354`. The undefined-result ruling permits only Boolean-root
-comparison clauses with no definedness obligations in this slice. Task-004 remains in progress until
-the numeric/state acceptance criteria, exact-head Rust review and gap analysis are closed.
+comparison clauses with no definedness obligations in this slice. The numeric/state acceptance
+criteria pass on stable and Rust 1.75.0, and exact-head Rust review plus gap analysis closed the
+slice without a retained implementation gap.
+
+## Completion Evidence
+
+The reviewed implementation lowers all six obligation-free integer comparisons, preserves typed
+input/current/pre/post state parameters, byte-compares regenerated bundles, compiles generated Rust
+against the pinned runtime, and matches an independent bounded evaluator at domain endpoints and
+immediately outside them. Adverse controls retain the first unsupported node or obligation span and
+produce no artifact. All repository gates pass locally with `target-codex-backends`; no hosted CI
+was dispatched.
