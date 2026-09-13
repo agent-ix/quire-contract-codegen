@@ -1211,6 +1211,8 @@ pub(crate) struct GeneratedAttestationSpec<'a> {
     pub(crate) operation: &'a str,
     pub(crate) stable_identity: &'a str,
     pub(crate) input_bytes: &'a [u8],
+    /// Precomputed canonical input digest when the input's owning API already exposes one.
+    pub(crate) input_digest: Option<&'a str>,
     pub(crate) output_role: &'a str,
     pub(crate) media_type: &'a str,
     pub(crate) output_schema: &'a str,
@@ -1382,6 +1384,7 @@ pub(crate) fn generated_artifact_bundle(
         operation,
         stable_identity,
         input_bytes,
+        input_digest: None,
         output_role,
         media_type: "text/x-rust",
         output_schema,
@@ -1408,7 +1411,10 @@ pub(crate) fn generated_output_attestation(
     if generated.contents.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(GenerationErrorCode::ResourceLimitExceeded);
     }
-    let input_digest = sha256(specification.input_bytes);
+    let input_digest = specification
+        .input_digest
+        .map(str::to_owned)
+        .unwrap_or_else(|| sha256(specification.input_bytes));
     let identity = sha256(
         length_delimited_identity(&[
             specification.operation,
@@ -1592,7 +1598,7 @@ fn sha256(bytes: &[u8]) -> String {
     value
 }
 
-fn generator_implementation_digest() -> &'static str {
+pub(crate) fn generator_implementation_digest() -> &'static str {
     static VALUE: OnceLock<String> = OnceLock::new();
     VALUE.get_or_init(|| {
         let mut hasher = Sha256::new();

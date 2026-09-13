@@ -338,7 +338,7 @@
         },
         {
           "id": "UNKNOWN-coverage-status-column-unchecked",
-          "statement": "quire coverage does not fail a Coverage Status column that contradicts its own row. The repository-local checker that used to compensate was a second traceability implementation with a hand-copied matrix, and it went with the rest of the generic machinery. The matrix's own note records the upstream conflict. Tracked as agent-ix/quire-contract-ir#21.",
+          "statement": "quire coverage does not fail a matrix Status column that contradicts its own row. The repository-local checker that used to compensate was a second traceability implementation with a hand-copied matrix, and it went with the rest of the generic machinery. The former Coverage Status/Status header conflict was resolved upstream in spec-artifacts-process#87, and the matrix now uses the one Status column; the unchecked-contradiction gap remains. Tracked as agent-ix/quire-contract-ir#21.",
           "disposition": "deferred",
           "owner": "agent-ix/quire-contract-ir"
         },
