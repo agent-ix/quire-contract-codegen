@@ -10,7 +10,7 @@ mod common;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     generate_boolean_oracle, generate_kani_bundle, AttestationContext, AttestationResult,
-    GenerationErrorCode, GenerationTerminalState, KaniBindingRole, KaniErrorCode,
+    GenerationErrorCode, GenerationTerminalState, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
     KaniPrimitiveType, KaniRequest, KaniSolver, OracleRequest, ProofAttestationBody,
     ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
     ProofReadiness, IR_CANDIDATE_REVISION, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
@@ -1404,6 +1404,16 @@ fn invalid_kani_requests_return_structured_non_generated_states() {
         Some(GenerationErrorCode::UnsupportedExpression)
     );
     assert_eq!(diagnostic.source_span.as_ref(), Some(&unsupported_span));
+    let mut legacy_value = serde_json::to_value(diagnostic).expect("diagnostic should serialize");
+    legacy_value
+        .as_object_mut()
+        .expect("diagnostic wire value should be an object")
+        .remove("sourceSpan");
+    let legacy_diagnostic: KaniDiagnostic =
+        serde_json::from_value(legacy_value).expect("legacy diagnostic should deserialize");
+    let mut expected_legacy = diagnostic.clone();
+    expected_legacy.source_span = None;
+    assert_eq!(legacy_diagnostic, expected_legacy);
 }
 
 /// TC-007.
