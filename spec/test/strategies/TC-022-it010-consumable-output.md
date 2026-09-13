@@ -21,7 +21,7 @@ shape bound to the source package, and that no local serialized format exists.
    warnings.
 2. In the fixture, draw cases and read each value through the generated declaration-name and
    observation-name constants; read the out-of-domain array the same way.
-3. Generate a fixture with two reads whose oracle parameter identifiers collide.
+3. Generate a fixture for which bound oracle generation reports `NameCollision`.
 4. List the bundle's files, and diff `schemas/` against the base revision.
 5. Validate the strategy attestation body against the bytes `quoin change-assurance schema` publishes,
    with format assertion on, and seal it through the real CLI.
@@ -31,8 +31,10 @@ shape bound to the source package, and that no local serialized format exists.
 
 ## Expected Results
 
-- The fixture builds and reads `versionNumber` at `"pre"` and at `"post"` by name and observation.
-- The colliding fixture is refused with `UnsupportedClause` preserving `NameCollision`.
+- The fixture builds and reads the `versionNumber` field's declaration, by its SL field-alias
+  `SymbolName`, at `"pre"` and at `"post"` by name and observation.
+- The colliding fixture is refused with `UnsupportedClause` carrying the `NameCollision` error's full
+  `ClauseRef` and `invalid-input` terminal state.
 - The bundle holds only generated Rust and its attestation body; no serialized case, census, or
   summary file exists; `schemas/` is unchanged.
 - The attestation validates and seals.

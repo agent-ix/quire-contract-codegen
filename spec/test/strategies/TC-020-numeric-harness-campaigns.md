@@ -26,7 +26,8 @@ exact rates.
 3. Run the census runner for `VersionUnchanged` with an instrumented oracle that records every
    valuation it receives.
 4. Run a campaign over a report seeded with pinned prior accepted, rejected, and discarded counts,
-   then read both rates; read both rates on a fresh zero-attempt summary.
+   then read both rates; read both rates on a fresh zero-attempt summary and on a report driven to
+   `at_limit`.
 5. Read the runner's proptest global reject count and each campaign conclusion from steps 1 and 4.
 
 ## Expected Results
@@ -39,7 +40,7 @@ exact rates.
 - The instrumented oracle receives exactly the 10 in-domain census cases, once each, in census order,
   and no out-of-domain case.
 - The rates equal the pinned `(discarded, attempted)` and `(rejected, attempted)`, and both are `None`
-  at zero attempts.
+  at zero attempts and at `at_limit`.
 - Every fresh campaign in step 1 reports `discard_rate() == Some((0, attempted))` with
   `attempted > 0`, passes a zero discard ceiling, records zero global rejects, and does not end
   `Exhausted`.

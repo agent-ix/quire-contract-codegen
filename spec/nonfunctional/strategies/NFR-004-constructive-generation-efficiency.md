@@ -43,20 +43,22 @@ returning them as global rejects, remove that failure mode and make the discard 
 | Discarded / attempted on a fresh 10,000-case campaign per population and fixture | 0 | 0 | Generated summary `discard_rate()` |
 | Proptest global rejects on the same campaigns | 0 | 0 | `TestRunner` reject count |
 | Campaigns ending `Exhausted` on the same campaigns, and on 256-case default-config campaigns | 0 | 0 | Generated campaign conclusion |
-| In-domain plus out-of-domain census cases per admitted clause | ≤ 22 | ≤ 22 | Census array lengths |
+| In-domain plus out-of-domain census cases per admitted clause | ≤ 20 | ≤ 20 | Census array lengths |
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | NFR-004-AC-1 | Fresh 10,000-case and 256-case campaigns of every population over `VersionUnchanged`, `amount < 7`, and a `Precondition` fixture record zero discards, zero proptest global rejects, and no `Exhausted` conclusion. | Test (TC-020) |
-| NFR-004-AC-2 | For every admitted fixture in TC-019, the in-domain census plus out-of-domain array holds at most 22 cases. | Test (TC-019) |
+| NFR-004-AC-2 | For every admitted fixture in TC-019, the in-domain census plus out-of-domain array holds at most 20 cases. | Test (TC-019) |
 
 ## Verification
 
 TC-020 runs the campaigns and reads the summary, the runner's reject count, and the conclusion. TC-019
-counts the census arrays for every admitted fixture; 22 is the largest census the FR-010 rules can
-produce (12 in-domain plus 10 out-of-domain cases for two reads).
+counts the census arrays for every admitted fixture; 20 is the largest census the FR-010 rules can
+produce: for two reads, 10 in-domain cases (the `min` and `max` primary edges each have 2 in-domain
+partners, `min + 1` and `max - 1` have 3) plus 10 out-of-domain cases; a read against a literal
+yields at most 7 plus 4.
 
 ## Dependencies
 

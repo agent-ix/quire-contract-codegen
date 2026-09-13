@@ -39,5 +39,5 @@ exactly the cases FR-010 defines, in order, with correct tags and bounded size.
   carries the out-of-domain array [-1, 1001].
 - Every tag equals the independent evaluation, and every out-of-domain case has at least one
   out-of-domain value.
-- No fixture exceeds 22 census cases.
+- No fixture exceeds 20 census cases, and an exhaustive sweep reaches exactly 20.
 - Repeated generation is byte-identical.

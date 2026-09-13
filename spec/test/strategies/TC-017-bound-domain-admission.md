@@ -17,8 +17,9 @@ order with a located diagnostic and no bundle.
 ## Test Procedure
 
 1. Build `BoundPackage` fixtures through the public IR API at the pinned revision:
-   - ConfigVersion `VersionUnchanged` (`Postcondition`, state `versionNumber` 0..=1000, `Post` left,
-     `Pre` right);
+   - ConfigVersion `VersionUnchanged` shaped as quire-spec-language FR-034 projects it
+     (`Postcondition`, one state declaration for the `versionNumber` field named by an SL-style field
+     alias `SymbolName`, 0..=1000, `Post` left, `Pre` right);
    - SL's `integer-healthy` invariant `amount < 7` (0..=1000);
    - oracle-refused clauses: a `Numeric` addition, a `NumericNegate`, and a clause carrying a
      definedness obligation;

@@ -53,6 +53,13 @@ generated oracle returns for it.
 - The generator shall compute every edge value with checked 128-bit integer arithmetic.
 - If an edge value such as `i64::MIN - 1` is outside the `i64` range, then the generator shall list it
   in the unrepresentable-edge array instead of clamping, wrapping, or silently dropping it.
+- The generator shall test representability only for values that would be out-of-domain cases:
+  `min - 1`, `max + 1`, and each of `k - 1` and `k + 1` outside the domain, for the primary and the
+  partner read separately.
+- The generator shall omit an out-of-domain case whose value is unrepresentable, and list that edge in
+  the unrepresentable-edge array instead.
+- The generator shall list a literal edge and a domain edge as separate unrepresentable entries, even
+  when their values coincide.
 - If the in-domain census has no `Holds` case or no `Violated` case, then the generator shall refuse
   the `Boundary` population with `UnsupportedCampaignConstraint`, matching the existing integer
   boundary rule.

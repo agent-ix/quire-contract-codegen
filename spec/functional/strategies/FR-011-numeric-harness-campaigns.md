@@ -13,6 +13,14 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
+  - target: ix://agent-ix/quire-contract-runtime/FR-001
+    type: depends_on
+  - target: ix://agent-ix/quire-contract-runtime/FR-003
+    type: references
+  - target: ix://agent-ix/quire-contract-runtime/FR-004
+    type: depends_on
+  - target: ix://agent-ix/quire-contract-runtime/interface-001
+    type: depends_on
 ---
 # FR-011: Run numeric oracle-conformance campaigns and report rates
 
@@ -21,7 +29,8 @@ relationships:
 When a bound strategy bundle is generated, the generator shall also emit an oracle-conformance
 campaign runner. The runner evaluates the clause's generated oracle on each generated valuation,
 records the runtime verdict for the clause kind, and requires that verdict to equal the case's
-expectation. Its summary reports the discard rate and the rejection rate exactly.
+expectation. Its summary reports the discard rate and the rejection rate as exact counts, or as
+unavailable when a counter may be saturated.
 
 The runner invokes no subject. A numeric subject harness, where an operation produces the post-state,
 is outside this slice and stays under [FR-002](../FR-002-tristate-proptest.md)'s Boolean harness
@@ -45,24 +54,37 @@ until specified.
 
 ## Behavior
 
-- The runner shall map an oracle result to a runtime verdict by clause kind:
+- The runner shall map an oracle result to a runtime verdict by `quire_contract_ir::ClauseKind`:
   - for a `Precondition` clause, `true` to `Passed` and `false` to `RejectedPrecondition`;
   - for a `Postcondition` clause, `true` to `Passed` and `false` to `FailedPostcondition`;
-  - for an `Invariant` clause, `true` to `Passed` and `false` to `FailedPostcondition` whose observation
-    has `ClauseKind::Invariant`.
-- The runner shall construct each verdict through the runtime `VerdictContext` with the clause
-  identity, execution point, and observed read values; a false invariant carries
-  `FailureKind::Contract`.
-- The runner shall record each verdict with `CampaignReport::record_verdict`, so a rejected
-  precondition counts in `rejected` and a false postcondition or invariant counts in `failed`.
-- If `record_verdict` returns `IdentityMismatch`, then the runner shall fail the campaign with that
-  error and record nothing further.
+  - for an `Invariant` clause, `true` to `Passed` and `false` to `FailedPostcondition` whose clause
+    observation carries the pinned runtime's invariant clause kind, which quire-contract-runtime
+    implements but does not yet specify.
+- The runner shall construct each verdict through the runtime `construct_verdict` operation
+  (quire-contract-runtime interface-001) with the requirement and revision identity, the runtime
+  execution point rendered from the clause's `quire_contract_ir::ExecutionPoint` serialized name
+  (`initialization`, `handler`, `pre`, or `post`), and the clause observations.
+- For a false invariant, the runner shall use the failure detail the pinned runtime revision
+  provides for a contract clause, because quire-contract-runtime's specification does not yet state
+  the failure detail of an invariant; a runtime specification of that mapping supersedes this rule.
+- The runner shall record each verdict through the runtime `record_campaign_verdict` operation, so
+  the counters follow quire-contract-runtime FR-004: a passed or failed case counts in `accepted`, a
+  failed case also counts in `failed`, and a rejected precondition counts in `rejected`.
+- If recording refuses the verdict with an identity mismatch, then the runner shall fail the campaign
+  with that error and record nothing further.
+- The runner shall not use the runtime `adapt_to_proptest` or `adapt_to_proptest_and_record`
+  operations, which map a rejection only to a proptest rejection (quire-contract-runtime FR-003);
+  this runner tests oracle conformance, where an expected rejection is the correct oracle result
+  rather than a case to skip.
 - When the observed verdict equals the verdict the case's tag predicts, the runner shall return a
   passing proptest result, including for an expected `RejectedPrecondition`.
 - If the observed verdict differs from the verdict the case's tag predicts, then the runner shall fail
   the campaign with `ConformanceMismatch`.
 - The runner shall never return a proptest global reject or an explicit discard, so framework
   exhaustion cannot come from rejected preconditions.
+- The runner's passing result shall not count a rejected precondition as contract success: the
+  rejection stays counted only in `rejected`, preserving the quire-contract-runtime interface-001
+  invariant that rejected preconditions are never successful evidence.
 - The census runner shall evaluate every in-domain census case exactly once, in census order, without
   proptest sampling or shrinking.
 - The runner shall not evaluate out-of-domain cases.
@@ -70,15 +92,14 @@ until specified.
   pair `(discarded, attempted)` or `(rejected, attempted)` over the existing `attempted` denominator
   from interface-001 `accounting_unit`.
 - When `attempted` is zero, `discard_rate()` and `rejection_rate()` shall return `None`.
+- When the report snapshot is `at_limit` (quire-contract-runtime FR-004), `discard_rate()` and
+  `rejection_rate()` shall return `None`, because a saturated counter is not an exact count.
 - The generator shall emit the rate accessors on the bound-strategy summary type only, leaving the
   PR #22 harness summary unchanged.
 - The runner shall apply the existing floor, ceiling, and `Exhausted` conclusions of
   [FR-002](../FR-002-tristate-proptest.md) to the complete supplied report unchanged.
 - When proptest reports a failing case, the runner shall conclude `ConformanceMismatch` after the
   discard-ceiling check, so the runner never concludes the harness `Failed`.
-- The rule that a subject harness never converts a rejected precondition to success stays unchanged:
-  this runner's passing result asserts that the oracle agreed with the expectation, while the
-  rejection stays counted in `rejected`.
 
 ## Acceptance Criteria
 
@@ -87,12 +108,13 @@ until specified.
 | FR-011-AC-1 | A `VersionUnchanged` (`Postcondition`) `Broad` campaign records `Holds` cases as `Passed` and `Violated` cases as `FailedPostcondition` and passes; a `Precondition` fixture records `Violated` cases as `RejectedPrecondition` in `rejected` and passes with zero proptest global rejects; the `amount < 7` `Invariant` records `Violated` cases as `FailedPostcondition`. | Test (TC-020) |
 | FR-011-AC-2 | An oracle deliberately swapped for its negation fails each campaign with `ConformanceMismatch` carrying the case values, expected tag, and observed verdict kind. | Test (TC-020) |
 | FR-011-AC-3 | The census runner evaluates each of the 10 `VersionUnchanged` in-domain census cases exactly once, in census order, and evaluates none of the out-of-domain cases. | Test (TC-020) |
-| FR-011-AC-4 | A campaign over a report seeded with pinned prior counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with those exact values, and a fresh zero-attempt summary returns `None` for both. | Test (TC-020) |
+| FR-011-AC-4 | A campaign over a report seeded with pinned prior counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with those exact values, a fresh zero-attempt summary returns `None` for both, and a report whose snapshot is `at_limit` returns `None` for both. | Test (TC-020) |
 | FR-011-AC-5 | A fresh 10,000-case `Broad` campaign for each fixture returns `discard_rate() == Some((0, attempted))` with `attempted > 0`, passes a zero discard ceiling, and does not end `Exhausted`. | Test (TC-020) |
 
 ## Dependencies
 
-- **Upstream**: [FR-002](../FR-002-tristate-proptest.md) campaign policy and conclusions,
+- **Upstream**: [FR-002](../FR-002-tristate-proptest.md) campaign policy and conclusions;
+  quire-contract-runtime FR-001, FR-003, FR-004, and interface-001 at `8a4d02b`;
   [FR-009](./FR-009-constructive-correlated-populations.md),
   [FR-010](./FR-010-domain-boundary-campaigns.md).
 - **Constrained by**:
