@@ -39,10 +39,10 @@ use quire_contract_codegen::{
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
-    ExecutionPoint, Expression, ExpressionKind, IntegerDomain, IntegerType, OverflowPolicy,
-    PackageId, RequirementId, RequirementRef, RequirementRevision, SourceDocumentId,
-    SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation, SymbolName,
-    TypedExpression, ValueDeclaration, ValueDeclarationKind, ValueType,
+    ExecutionPoint, Expression, ExpressionKind, IntegerDomain, IntegerType, NumericOperator,
+    OverflowPolicy, PackageId, RequirementId, RequirementRef, RequirementRevision,
+    SourceDocumentId, SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation,
+    SymbolName, TypedExpression, ValueDeclaration, ValueDeclarationKind, ValueType,
 };
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
@@ -664,9 +664,9 @@ fn oracle_rejects_non_boolean_root() -> Case {
     case
 }
 
-/// TC-003: a comparison is outside the bounded first slice, so it is
-/// `unsupported` — a construct the generator declines to lower rather than one
-/// it rejects as wrong.
+/// TC-003: arithmetic remains outside the obligation-free comparison slice, so
+/// it is `unsupported` — a construct the generator declines to lower rather
+/// than one it rejects as wrong.
 fn oracle_rejects_unsupported_expression() -> Case {
     let mut case = Case::new(
         "rejection::unsupported-expression",
@@ -683,13 +683,32 @@ fn oracle_rejects_unsupported_expression() -> Case {
     case.expected_diagnostic_code = Some("unsupported_expression");
     let owner = requirement("FR-001", 7);
     let environment = DeclarationEnvironment::new(owner, vec![], vec![], vec![]).unwrap();
+    let integer =
+        IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Saturate).unwrap();
+    let literal = |value, start| {
+        Expression::new(
+            ExpressionKind::IntegerLiteral {
+                value,
+                value_type: integer.clone(),
+            },
+            span(start, start + 1),
+        )
+    };
+    let addition = Expression::new(
+        ExpressionKind::Numeric {
+            operator: NumericOperator::Add,
+            left: Box::new(literal(1, 30)),
+            right: Box::new(literal(1, 31)),
+        },
+        span(30, 32),
+    );
     let comparison = Expression::new(
         ExpressionKind::Compare {
             operator: ComparisonOperator::Equal,
-            left: Box::new(integer_literal(1, 30)),
-            right: Box::new(integer_literal(1, 31)),
+            left: Box::new(addition),
+            right: Box::new(literal(2, 32)),
         },
-        span(30, 32),
+        span(30, 33),
     );
     let typed_expression = match typed(&environment, &comparison, &ValueType::Boolean, true) {
         Ok(value) => value,

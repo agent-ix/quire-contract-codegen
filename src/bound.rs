@@ -1,4 +1,4 @@
-//! Complete-package Boolean lowering through the public IR binding boundary.
+//! Complete-package oracle lowering through the public IR binding boundary.
 
 use std::collections::BTreeSet;
 
@@ -115,7 +115,7 @@ pub enum BoundGenerationError {
     Clause {
         /// Complete identity of the failing clause.
         identity: ClauseRef,
-        /// Existing Boolean-lowering diagnostics, with their terminal states.
+        /// Oracle-lowering diagnostics, with their terminal states and exact refusal loci.
         diagnostics: Vec<GenerationDiagnostic>,
     },
     /// Complete in-memory bundle validation failed; no publication was attempted.

@@ -809,16 +809,23 @@ fn tc_010_the_sealed_records_impact_snapshot_is_the_quire_export() {
 
 /// Collect every readable source file under `directory`, recursively.
 fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
-    // Excluded, and each for its own reason: `.git` is not source, `target` is
-    // build output, and `.venv-assurance` is the pinned upstream release rather
-    // than anything this repository wrote. `evidence/` used to be excluded here
+    // Excluded, and each for its own reason: `.git` is not source, `target` and the
+    // lane-isolated `target-codex-backends` are build output, and `.venv-assurance`
+    // is the pinned upstream release rather than anything this repository wrote.
+    // `evidence/` used to be excluded here
     // as retained history that legitimately named the schemas its records were
     // sealed against; it is deleted, so the exemption it needed is gone with it.
     // `__pycache__` joins the three: it is generated, it is not authored here,
     // and its `.pyc` files are binary. They were being read and silently dropped
     // by the old unreadable-file `continue`, which is how the wide-encoding
     // assertion below found them.
-    const EXCLUDED: [&str; 4] = [".git", "target", ".venv-assurance", "__pycache__"];
+    const EXCLUDED: [&str; 5] = [
+        ".git",
+        "target",
+        "target-codex-backends",
+        ".venv-assurance",
+        "__pycache__",
+    ];
     // Fail closed, exactly as the file arm does. A silent `return` here was the
     // directory half of the same class as the unreadable-file skip: an exclusion
     // no deny-list entry names, which also quietly lowers `inspected` and the

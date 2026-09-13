@@ -31,7 +31,7 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 | [Task-001](./tasks/Task-001-foundation-spec.md) | Foundation specification and assurance | done |
 | [Task-002](./tasks/Task-002-foundation-evidence.md) | Foundation evidence and gap review | done |
 | [Task-003](./tasks/Task-003-dependency-reconciliation.md) | Upstream dependency reconciliation | done |
-| [Task-004](./tasks/Task-004-oracles.md) | Deterministic oracles and attestations | in_progress |
+| [Task-004](./tasks/Task-004-oracles.md) | Deterministic oracles and attestations | done |
 | [Task-005](./tasks/Task-005-backends.md) | Harness, proptest, Kani, and vacuity backends | in_progress |
 | [Task-006](./tasks/Task-006-parity.md) | CLI, golden, differential, and parity closure | in_progress |
 | [Task-007](./tasks/Task-007-human-release.md) | Human source-release decision | not_started |
@@ -49,3 +49,9 @@ serialized-package generation is no longer blocked on the binding itself; what r
 serialized CLI surface and cross-backend parity. Task-004 and Task-005 remain in progress until
 their semantic acceptance criteria and current-head review findings close. This integration
 promotes no planned coverage or parity row. Automation must not complete Task-007.
+
+Task-004 is complete through the numeric/state oracle slice from
+`agent-ix/quire-spec-language#83`: obligation-free bounded-integer comparisons over direct input and
+current/pre/post state observations. Definedness obligations, arithmetic/negation requiring an
+invalid-result representation, indirect dependencies, and object/graph reads remain explicit
+refusals. Task-005's numeric/state Kani increment follows only after this oracle slice merges.
