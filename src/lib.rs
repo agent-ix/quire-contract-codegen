@@ -37,10 +37,10 @@ pub use bound::{
 
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
 pub use kani::{
-    generate_kani_bundle, KaniArtifactBundle, KaniDiagnostic, KaniErrorCode, KaniRequest,
-    KaniSolver, ProofDependencyEdge, ProofDependencyGraph, ProofDependencyKind,
-    ProofDependencyRequest, ProofDependencyState, ProofReadiness, KANI_ADAPTER_PROFILE,
-    KANI_BACKEND_VERSION,
+    generate_kani_bundle, KaniArtifactBundle, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
+    KaniIntegerBounds, KaniPrimitiveType, KaniRequest, KaniSolver, KaniSubjectBinding,
+    ProofDependencyEdge, ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest,
+    ProofDependencyState, ProofReadiness, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
 };
 pub use publication::{
     write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,

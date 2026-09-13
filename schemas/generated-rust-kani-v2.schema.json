@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-ix.github.io/quire-contract-codegen/schemas/generated-rust-kani-v2.schema.json",
+  "title": "Generated Rust Kani proof source profile v2",
+  "description": "A UTF-8 Rust source artifact with a normalized Boolean/i64 subject ABI, exact model-domain assumptions, and separately inspectable adapter regions.",
+  "type": "string",
+  "allOf": [
+    {"pattern": "^// SPDX-License-Identifier: MIT OR Apache-2\\.0\\n"},
+    {"pattern": "Kani adapter: kani-0\\.67\\.0-function-contracts-v2"},
+    {"pattern": "// BEGIN framing"},
+    {"pattern": "// BEGIN binding"},
+    {"pattern": "// BEGIN contract"},
+    {"pattern": "#\\[kani::requires\\("},
+    {"pattern": "#\\[kani::ensures\\("},
+    {"pattern": "// BEGIN proof harness"},
+    {"pattern": "#\\[kani::proof_for_contract\\("}
+  ]
+}
