@@ -17,7 +17,9 @@ keeps its original tag, that `Broad` never shrinks across sides, and that shrink
 
 1. For every operator and domain of 1 to 4 members from TC-018 step 3, create `Satisfying`,
    `Violating`, and `Broad` value trees from every reachable seed state and walk every path of
-   `simplify` and `complicate` calls to exhaustion, recording each visited value.
+   `simplify` and `complicate` calls permitted by the proptest `ValueTree` protocol to exhaustion,
+   recording each visited value. Do not call `complicate` before the path has completed a successful
+   `simplify`, because the protocol does not require that call order to be handled.
 2. For 1,000 seeded `VersionUnchanged` value trees of each population over 0..=1000, follow the greedy
    shrink path: call `simplify` until it returns false, calling `complicate` after each failing
    candidate.

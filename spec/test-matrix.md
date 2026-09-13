@@ -35,10 +35,11 @@ type: TestMatrix
 | FR-006 | FR-006-AC-7 | TC-013 | ✅ Covered |
 | FR-008 | FR-008-AC-1 through FR-008-AC-5, FR-008-CON-2 | TC-017 | 🚧 Planned |
 | FR-008 | FR-008-CON-1 | Inspection | 🚧 Planned |
-| FR-009 | FR-009-AC-1 through FR-009-AC-6 | TC-018 | 🚧 Planned |
-| FR-010 | FR-010-AC-1 through FR-010-AC-5 | TC-019 | 🚧 Planned |
+| FR-009 | FR-009-AC-1 through FR-009-AC-6 | TC-018 | 🚧 Local population controls pass; bound bundle integration pending |
+| FR-010 | FR-010-AC-1 through FR-010-AC-5 | TC-019 | 🚧 Local census controls pass; bound bundle integration pending |
 | FR-011 | FR-011-AC-1 through FR-011-AC-5 | TC-020 | 🚧 Planned |
-| FR-012 | FR-012-AC-1 through FR-012-AC-4 | TC-021 | 🚧 Planned |
+| FR-012 | FR-012-AC-1 through FR-012-AC-3 | TC-021 | 🚧 Local value-tree controls pass; bound runner integration pending |
+| FR-012 | FR-012-AC-4 | TC-021 | 🚧 Planned |
 | FR-013 | FR-013-AC-1 through FR-013-AC-4 | TC-022 | 🚧 Planned |
 | FR-013 | FR-013-AC-5 | Inspection | 🚧 Planned |
 
@@ -56,8 +57,10 @@ through TC-013 are backed by tests in `tests/shared_assurance.rs` that invoke th
 reimplementing them. FR-003 now has an implemented draft and SUITE-008, but remains planned pending
 independent current-head review. FR-004 has no implementation or suite.
 
-The FR-008 through FR-013 rows are specified for agent-ix/quire-contract-codegen#3 and have no
-implementation; they wait on the bounded-integer oracle grammar of agent-ix/quire-contract-codegen#4.
+FR-009, FR-010, and the value-tree portion of FR-012 have requirement-tagged local controls. Their
+IR-independent core is implemented while the public bound bundle, admission, runner, replay
+accounting, and consumer attestation remain blocked on the bounded-integer oracle grammar of
+agent-ix/quire-contract-codegen#4. FR-008, FR-011, FR-012-AC-4, and FR-013 remain planned.
 
 ## Non-Functional Requirement Coverage
 
@@ -69,7 +72,7 @@ implementation; they wait on the bounded-integer oracle grammar of agent-ix/quir
 | NFR-002 | Test | TC-003 (NFR-002-AC-3) | 🚧 Planned |
 | NFR-002 | Inspection | NFR-002-AC-4 | 🚧 Planned |
 | NFR-004 | Test | TC-020 (NFR-004-AC-1) | 🚧 Planned |
-| NFR-004 | Test | TC-019 (NFR-004-AC-2) | 🚧 Planned |
+| NFR-004 | Test | TC-019 (NFR-004-AC-2) | 🚧 Local census-size controls pass; bound bundle integration pending |
 
 ## Stakeholder Requirement Coverage
 
@@ -95,10 +98,10 @@ implementation; they wait on the bounded-integer oracle grammar of agent-ix/quir
 | TC-012 | Verify the demonstrable verification outcomes stay distinguishable | Integration | P0 | FR-006-AC-5, NFR-002-AC-3 | ✅ Covered |
 | TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6, FR-006-AC-7 | ✅ Covered |
 | TC-017 | Verify bound-clause domain derivation and refusal | Integration | P0 | FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-2 | 🚧 Planned |
-| TC-018 | Verify constructive satisfying and violating populations | Property | P0 | FR-009-AC-1, FR-009-AC-2, FR-009-AC-3, FR-009-AC-4, FR-009-AC-5, FR-009-AC-6 | 🚧 Planned |
-| TC-019 | Verify domain and relation boundary censuses | Integration | P0 | FR-010-AC-1, FR-010-AC-2, FR-010-AC-3, FR-010-AC-4, FR-010-AC-5, NFR-004-AC-2 | 🚧 Planned |
+| TC-018 | Verify constructive satisfying and violating populations | Property | P0 | FR-009-AC-1, FR-009-AC-2, FR-009-AC-3, FR-009-AC-4, FR-009-AC-5, FR-009-AC-6 | 🚧 Local population controls pass; bound bundle integration pending |
+| TC-019 | Verify domain and relation boundary censuses | Integration | P0 | FR-010-AC-1, FR-010-AC-2, FR-010-AC-3, FR-010-AC-4, FR-010-AC-5, NFR-004-AC-2 | 🚧 Local census controls pass; bound bundle integration pending |
 | TC-020 | Verify numeric conformance campaigns and rate reporting | Integration | P0 | FR-011-AC-1, FR-011-AC-2, FR-011-AC-3, FR-011-AC-4, FR-011-AC-5, NFR-004-AC-1 | 🚧 Planned |
-| TC-021 | Verify shrinking preserves numeric constraints | Property | P0 | FR-012-AC-1, FR-012-AC-2, FR-012-AC-3, FR-012-AC-4 | 🚧 Planned |
+| TC-021 | Verify shrinking preserves numeric constraints | Property | P0 | FR-012-AC-1, FR-012-AC-2, FR-012-AC-3, FR-012-AC-4 | 🚧 Local value-tree controls pass; runner accounting pending |
 | TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4 | 🚧 Planned |
 
 TC-001 through TC-007 remain deliberately planned until their complete ticket scope is independently
@@ -108,6 +111,10 @@ local compilation, independent-evaluator, and atomic-publication coverage, but r
 pending independent exact-head review; no row is promoted by these drafts.
 
 TC-008 through TC-013 are the shared-assurance migration's own rows and are covered by named tests.
+
+TC-018 and TC-019 are backed by passing named tests in `tests/bound_populations.rs` and
+`tests/bound_census.rs`. TC-021 has passing value-tree controls for FR-012-AC-1 through
+FR-012-AC-3; its FR-012-AC-4 runner-accounting step remains planned with the runner.
 
 TC-004's generated-crate fixtures include deterministic mixed-campaign counts and distinguish
 framework exhaustion with a retained floor result from a completed below-floor campaign. Its row
