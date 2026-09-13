@@ -67,7 +67,7 @@ artifact_bundle:
     - coverage source map and vacuity map
     - diagnostics and one proof attestation per generated artifact
 diagnostics:
-  bound_batch_errors: typed ResourceLimitExceeded, NameCollision(full ClauseRef), Clause(full ClauseRef plus existing lower-level diagnostics and exact rejected IR source spans where applicable), or Bundle(existing publication diagnostic); no partial artifacts
+  bound_batch_errors: typed ResourceLimitExceeded, NameCollision(full ClauseRef), Clause(full ClauseRef plus existing lower-level diagnostics and exact rejected IR source spans for expression failures), or Bundle(existing publication diagnostic); no partial artifacts
   no_executable: separate successful non-artifact result for valid empty or informational-only populations, not a terminal-state or proof-attestation claim
   terminal_states: [generated, unsupported, invalid-input, backend-unavailable, io-failed, inconclusive]
   implemented_mapping:
@@ -78,7 +78,7 @@ diagnostics:
     backend-unavailable: reserved for external backends
     io-failed: reserved for atomic publication
   rule: no non-generated state may be converted into a complete artifact claim
-  fields: [stable code, terminal state, stable input path, optional exact IR source span, optional preserved lower-level generation code, human detail]
+  fields: [stable code, terminal state, stable input path, exact IR source span required for NonBooleanRoot/UnsupportedExpression/UnsupportedDependency/UnsupportedObligations and absent for non-expression failures, optional preserved lower-level generation code, human detail]
 identity_envelope:
   schema: Quoin's packaged ProofAttestationV1 (proof-attestation-v1.schema.json), read from `quoin change-assurance schema` and never copied here
   emitted_form: that schema without digest and without retained_output, which `quoin change-assurance seal-attestation` derives from the retained bytes and refuses from a caller
@@ -105,8 +105,8 @@ oracle_slice:
   artifact_names: bounded readable prefix plus full SHA-256 package/requirement/revision/clause identity with per-clause source-map and per-artifact attestation paths
   supported_expression_grammar: Boolean literals, Boolean direct value references, Boolean not/operators, bounded i64 literals, bounded i64 direct input/state value references, and all six comparisons with a Boolean clause root
   dependency_types: Boolean dependencies render as bool; bounded-integer dependencies render as i64; current/pre/post observations remain distinct parameters
-  undefined_result_boundary: a typed expression carrying any definedness obligation refuses before rendering; numeric arithmetic and negation remain unsupported until a versioned IR/runtime result can distinguish invalid from false
-  refusal_locus: an unsupported expression node carries that node's exact IR source span; an unsupported obligation carries its exact obligation source span; neither produces a partial artifact
+  undefined_result_boundary: a typed expression carrying any definedness obligation refuses before rendering; every numeric arithmetic and numeric-negation node remains unsupported even without an obligation until a versioned IR/runtime result can distinguish invalid from false; no checked result is unwrapped or defaulted into bool
+  refusal_locus: NonBooleanRoot carries the clause-root SourceSpan; UnsupportedExpression and UnsupportedDependency carry the first rejected expression node's SourceSpan in authored preorder; UnsupportedObligations carries the first retained obligation's SourceSpan in IR order; none produces a partial artifact
 harness_strategy_slice:
   output: generated Rust artifact plus one ProofAttestationV1 body, under proof obligations PROOF-codegen-generated-rust-harness and PROOF-codegen-generated-rust-strategy
   attestation_context: required for harness, integer-strategy, and enum-strategy generation

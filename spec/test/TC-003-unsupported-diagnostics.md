@@ -21,7 +21,8 @@ Run every negative conformance fixture through every applicable backend and insp
 exact rejected IR source spans, attestation completeness state, exit status, and staged output
 directory. Include definedness obligations, scalar roots, numeric arithmetic/negation, indirect
 dependencies, object/graph reads such as dereference and reachability, and every expression node
-outside the supported grammar.
+outside the supported grammar. Where more than one expression node or obligation is unsupported,
+require the deterministic first locus declared by FR-001 rather than accepting any failing span.
 
 ## Expected Results
 

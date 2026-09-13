@@ -45,8 +45,10 @@ attestation with complete identity.
 - The generator shall not emit a scalar-valued oracle.
 - The generator shall reject every typed expression carrying a definedness obligation until a
   versioned non-Boolean invalid-result API exists in the IR and runtime.
-- The generator shall reject numeric arithmetic and negation when their definedness cannot be
-  represented without collapsing invalid into a Boolean result.
+- The generator shall reject every numeric arithmetic and numeric-negation node in this slice,
+  whether or not the typed expression carries a definedness obligation. Until a versioned result
+  API distinguishes invalid from false, no checked runtime result may be unwrapped, defaulted, or
+  otherwise converted into a Boolean oracle result.
 - An implication consequent shall occupy its own coverable source region.
 - Each oracle shall carry exactly one evaluation-entry probe on its function-entry line, disjoint
   from every consequent region. Every consequent shall carry a single-line entry-token probe inside
@@ -60,8 +62,10 @@ attestation with complete identity.
 - The generator shall render source in linear space and reject it before exceeding 1,048,576 bytes per clause.
 - Distinct requirement and clause identities shall produce bounded, fixed-digest-disambiguated Rust,
   source-map, and attestation paths whose individual filename components do not exceed 255 bytes.
-- Unsupported constructs shall produce diagnostics naming the rejected node or obligation and its
-  exact IR source span, with no falsely complete artifact.
+- Expression refusals shall retain an exact IR `SourceSpan`: the clause root for a non-Boolean root,
+  the first unsupported node in authored preorder for an unsupported expression or dependency, and
+  the first retained obligation in IR order for definedness obligations. No refusal shall produce a
+  falsely complete artifact.
 - `generate_bound_oracles` shall consume every executable clause through public `BoundPackage` and
   `BoundClause` accessors, without private wire structures, a codegen-owned input schema, clause
   selection, or inferred pre/post pairing. An unsupported executable clause shall fail the entire

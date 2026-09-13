@@ -20,7 +20,9 @@ Compile the supported Boolean and obligation-free bounded-integer comparison gra
 `rustc` fixture against only the pinned runtime and compare every Boolean assignment, integer
 boundary value, comparison operator, and current/pre/post state assignment with an independent
 evaluator. Require the generated signature to use `bool` and `i64` according to the typed
-dependency and to preserve distinct observation-qualified names. Construct a validated artifact
+dependency and to preserve distinct observation-qualified names. Generate every numeric/state case
+twice from identical inputs and require byte-identical Rust, source-map and attestation artifacts.
+Construct a validated artifact
 bundle, inject a failure before every staged artifact and marker write and at both swap boundaries,
 and compare the destination plus an adjacent developer-owned file before and after each run. Attempt
 replacement after modifying, adding to, or symlinking the owned boundary and require refusal.
