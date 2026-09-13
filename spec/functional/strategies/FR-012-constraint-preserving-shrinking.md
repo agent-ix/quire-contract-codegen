@@ -1,60 +1,60 @@
 ---
 id: FR-012
-title: "Preserve generated constraints while shrinking"
+title: "Preserve numeric constraints while shrinking"
 type: FR
 relationships:
+  - target: ix://agent-ix/quire-contract-codegen/StR-001
+    type: satisfies
   - target: ix://agent-ix/quire-contract-codegen/FR-009
     type: depends_on
-  - target: ix://agent-ix/quire-contract-codegen/FR-002
+  - target: ix://agent-ix/quire-contract-codegen/FR-011
     type: depends_on
+  - target: ix://agent-ix/quire-contract-codegen/interface-001
+    type: implements
 ---
-# FR-012: Preserve generated constraints while shrinking
+# FR-012: Preserve numeric constraints while shrinking
 
 ## Description
 
-When proptest shrinks a failing numeric or state-scalar case, every candidate it tries shall stay
-inside the declared domains and on the same side of the relation as the original case. The one
-exception is a residual population, where the runner records a candidate that leaves the shaped
-constraint as a rejection and never reports it as a pass.
-
-This closes [FR-002](../FR-002-tristate-proptest.md)-AC-4 for the numeric/state slice.
+When proptest shrinks a failing case drawn from a bound `Satisfying`, `Violating`, or `Broad`
+population, every candidate it visits shall stay inside the shared domain and keep the expectation tag
+of the case it came from. This refines [FR-002](../FR-002-tristate-proptest.md) FR-002-AC-4 for bound
+populations; FR-002-AC-4 itself stays verified by TC-004.
 
 ## Inputs
 
-- A failing case drawn from a `Satisfying`, `Violating`, `Broad`, or `Boundary` population.
+- A failing case drawn from a `Satisfying`, `Violating`, or `Broad` population of
+  [FR-009](./FR-009-constructive-correlated-populations.md).
 
 ## Outputs
 
-- A minimal counterexample that keeps the original case's expectation tag, or a residual rejection
-  recorded in campaign accounting.
+- A minimal counterexample that lies in the domain and keeps the original case's expectation tag.
 
 ## Behavior
 
-- For correlated reads, the generated shrink tree shall derive the partner value from the current
-  first value at every step, so a shrink of the first value can never leave the partner outside its
-  partner set.
-- A shrunk case shall keep the expectation tag of the case it was shrunk from. The generator shall
-  not let a `Violated` case shrink into a `Holds` case, or the reverse.
-- Each branch of the `Broad` union shall shrink only within its own branch.
-- `Boundary` census populations shall shrink only to other census members that have the same tag.
-- If a population is residual (a clause form that is shaped only in part), then the runner shall
-  count every shrink candidate outside the shaped constraint in `rejected` through the explicit
-  rejection path.
-- The runner shall not count a residual shrink candidate outside the shaped constraint as accepted
-  or passed.
-- The runner shall count shrink replays in `attempted`, as interface-001 `accounting_unit` states.
+- For a primary read with a partner read, the generated value tree shall derive the partner value from
+  the current primary value at every shrink step, so no candidate leaves the partner set.
+- The generated value tree shall keep the expectation tag of the case it was drawn from on every
+  `simplify` and `complicate` step.
+- The `Broad` population shall use a value tree that never shrinks a case from one side into the other
+  side, including when proptest's union shrinking would switch to an earlier alternative.
+- The census runner of [FR-011](./FR-011-numeric-harness-campaigns.md) shall not shrink, because it
+  reports each failing census case exactly as enumerated.
+- The runner shall count every shrink replay in `attempted`, as interface-001 `accounting_unit`
+  states.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-012-AC-1 | Walking the complete shrink tree (every `simplify`/`complicate` step) from 1,000 seeded `Satisfying` and `Violating` `VersionUnchanged` cases, every visited candidate lies in 0..=1000 and keeps its original tag. | Test (TC-021) |
-| FR-012-AC-2 | For every operator over the exhaustive small-domain census of FR-009-AC-2, every visited shrink candidate satisfies its population's domain and relation side. | Test (TC-021) |
-| FR-012-AC-3 | A deliberately failing subject that fails only when post = pre + 1 shrinks to a counterexample whose values are in domain and whose tag is `Violated`. | Test (TC-021) |
-| FR-012-AC-4 | A residual fixture whose shrink candidates can leave the shaped constraint records each such candidate in `rejected`, and no such candidate is counted as accepted or passed. | Test (TC-021) |
+| FR-012-AC-1 | For every operator and every domain of 1 to 4 members from FR-009-AC-2, an exhaustive walk of every `simplify` and `complicate` path of `Satisfying`, `Violating`, and `Broad` value trees visits only in-domain candidates that keep their original tag. | Test (TC-021) |
+| FR-012-AC-2 | For 1,000 seeded `VersionUnchanged` value trees of each population over 0..=1000, every candidate on the greedy shrink path stays in domain and keeps its tag. | Test (TC-021) |
+| FR-012-AC-3 | A `Violating` `VersionUnchanged` campaign whose oracle is replaced by `post == pre || post == pre + 1` (so only `Violated` cases with post = pre + 1 mismatch) reports a minimal counterexample with post = pre + 1, both in 0..=1000, tagged `Violated`. | Test (TC-021) |
+| FR-012-AC-4 | After a shrinking campaign, `attempted` equals the number of oracle evaluations the runner performed, including shrink replays. | Test (TC-021) |
 
 ## Dependencies
 
 - **Upstream**: [FR-009](./FR-009-constructive-correlated-populations.md),
+  [FR-011](./FR-011-numeric-harness-campaigns.md); FR-002-AC-4 in
   [FR-002](../FR-002-tristate-proptest.md).
 - **Downstream**: [TC-021](../../test/strategies/TC-021-constraint-preserving-shrinking.md).

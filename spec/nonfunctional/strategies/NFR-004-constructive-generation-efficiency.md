@@ -6,6 +6,8 @@ quality_attribute: performance_efficiency
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-009
     type: constrains
+  - target: ix://agent-ix/quire-contract-codegen/FR-010
+    type: constrains
   - target: ix://agent-ix/quire-contract-codegen/FR-011
     type: constrains
 ---
@@ -13,42 +15,51 @@ relationships:
 
 ## Statement
 
-The generated numeric strategies shall produce every requested case without discards or global
-rejects, while a campaign runs at the proptest default of 256 cases per property and at a
-10,000-case stress setting.
+The generated bound strategies and conformance runner shall produce every requested case without
+discards, proptest global rejects, or framework exhaustion, and the boundary census shall stay small
+enough to evaluate exhaustively.
 
 ## Scope
 
-- Applies to: `Satisfying`, `Violating`, `Broad`, and `Boundary` populations generated under
-  [FR-009](../../functional/strategies/FR-009-constructive-correlated-populations.md) and
-  [FR-010](../../functional/strategies/FR-010-domain-boundary-campaigns.md).
-- Excludes residual populations, whose rejection is intentional and is reported under
+- Applies to: `Satisfying`, `Violating`, and `Broad` populations under
+  [FR-009](../../functional/strategies/FR-009-constructive-correlated-populations.md), the census under
+  [FR-010](../../functional/strategies/FR-010-domain-boundary-campaigns.md), and the runner under
   [FR-011](../../functional/strategies/FR-011-numeric-harness-campaigns.md).
+- Excludes caller-supplied `ResidualExclusion` constraints of the existing integer strategy API, whose
+  rejection is intentional under [FR-002](../../functional/FR-002-tristate-proptest.md).
 
 ## Rationale
 
 A strategy that filters would reach proptest's global-reject limit on narrow correlated relations,
 such as post = pre over 0..=1000, where a uniform pair has a 1 in 1001 chance of satisfying the
 relation. The resulting `Exhausted` outcome would hide the missing coverage behind a framework
-reason. Constructive generation removes that failure mode and makes the discard rate a checkable
-zero, rather than a tuning parameter.
+reason. Constructive generation, and a runner that records rejected preconditions instead of
+returning them as global rejects, remove that failure mode and make the discard rate a checkable zero.
 
 ## Measurement and Evaluation
 
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
-| Discarded / attempted on constructive populations (10,000-case seeded run) | 0 | 0 | Seeded campaign accounting |
-| Global rejects on constructive populations (10,000-case seeded run) | 0 | 0 | proptest `TestRunner` reject count |
-| Campaigns ending `Exhausted` on constructive populations | 0 | 0 | Seeded campaign accounting |
-| Generated `Boundary` census size per admitted clause of two reads | ≤ 40 cases | ≤ 64 cases | Census count |
+| Discarded / attempted on a fresh 10,000-case campaign per population and fixture | 0 | 0 | Generated summary `discard_rate()` |
+| Proptest global rejects on the same campaigns | 0 | 0 | `TestRunner` reject count |
+| Campaigns ending `Exhausted` on the same campaigns, and on 256-case default-config campaigns | 0 | 0 | Generated campaign conclusion |
+| In-domain plus out-of-domain census cases per admitted clause | ≤ 22 | ≤ 22 | Census array lengths |
+
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+|----|----------|--------------|
+| NFR-004-AC-1 | Fresh 10,000-case and 256-case campaigns of every population over `VersionUnchanged`, `amount < 7`, and a `Precondition` fixture record zero discards, zero proptest global rejects, and no `Exhausted` conclusion. | Test (TC-020) |
+| NFR-004-AC-2 | For every admitted fixture in TC-019, the in-domain census plus out-of-domain array holds at most 22 cases. | Test (TC-019) |
 
 ## Verification
 
-TC-018 and TC-020 run 10,000-case seeded campaigns over `VersionUnchanged` and `amount < 7`, asserting
-the discard count, the global reject count, and the `Exhausted` count are each zero. TC-019 counts the
-`Boundary` census for every admitted fixture.
+TC-020 runs the campaigns and reads the summary, the runner's reject count, and the conclusion. TC-019
+counts the census arrays for every admitted fixture; 22 is the largest census the FR-010 rules can
+produce (12 in-domain plus 10 out-of-domain cases for two reads).
 
 ## Dependencies
 
 - **Upstream**: [FR-009](../../functional/strategies/FR-009-constructive-correlated-populations.md),
+  [FR-010](../../functional/strategies/FR-010-domain-boundary-campaigns.md),
   [FR-011](../../functional/strategies/FR-011-numeric-harness-campaigns.md).

@@ -1,8 +1,10 @@
 ---
 id: FR-011
-title: "Run numeric campaigns through the tri-state runner and report rates"
+title: "Run numeric oracle-conformance campaigns and report rates"
 type: FR
 relationships:
+  - target: ix://agent-ix/quire-contract-codegen/StR-001
+    type: satisfies
   - target: ix://agent-ix/quire-contract-codegen/FR-009
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/FR-010
@@ -12,66 +14,89 @@ relationships:
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
 ---
-# FR-011: Run numeric campaigns through the tri-state runner and report rates
+# FR-011: Run numeric oracle-conformance campaigns and report rates
 
 ## Description
 
-When numeric populations from [FR-009](./FR-009-constructive-correlated-populations.md) or
-[FR-010](./FR-010-domain-boundary-campaigns.md) run, the generated campaign runner shall map each
-case's expectation onto the tri-state verdict for the clause's anchor. It shall keep out-of-domain
-cases out of truth evaluation, and its summary shall report the discard rate and the rejection rate
-exactly.
+When a bound strategy bundle is generated, the generator shall also emit an oracle-conformance
+campaign runner. The runner evaluates the clause's generated oracle on each generated valuation,
+records the runtime verdict for the clause kind, and requires that verdict to equal the case's
+expectation. Its summary reports the discard rate and the rejection rate exactly.
+
+The runner invokes no subject. A numeric subject harness, where an operation produces the post-state,
+is outside this slice and stays under [FR-002](../FR-002-tristate-proptest.md)'s Boolean harness
+until specified.
 
 ## Inputs
 
-- A generated numeric population and the clause's `ExecutionPoint` anchor.
+- A generated population from [FR-009](./FR-009-constructive-correlated-populations.md), or the
+  in-domain census from [FR-010](./FR-010-domain-boundary-campaigns.md).
+- The clause's generated oracle from bound oracle generation, embedded in the same bundle.
+- A caller-owned proptest `TestRunner` and `quire_contract_runtime::CampaignReport`.
 - The existing campaign policy: minimum accepted, minimum rejected, and maximum discarded counts.
-- A consumer-supplied domain-admission result for each `OutOfDomain` case.
 
 ## Outputs
 
-- The existing generated campaign summary and error types, extended with two rate accessors.
+- A generated population runner and a generated census runner.
+- A generated summary type with the existing `attempted`, `accepted`, `rejected`, `failed`, and
+  `discarded` fields, plus `discard_rate()` and `rejection_rate()`.
+- The existing generated campaign error type, plus a `ConformanceMismatch` variant carrying the case
+  values, the expected tag, and the observed verdict kind.
 
 ## Behavior
 
-- For a `Pre`-anchored clause:
-  - a `Holds` case shall expect an accepted verdict, `Passed` or `FailedPostcondition`;
-  - a `Violated` case shall expect `RejectedPrecondition`.
-- For a `Post`-anchored clause:
-  - a `Holds` case shall expect `Passed`;
-  - a `Violated` case shall expect `FailedPostcondition`.
-- For any other anchor, the generator shall refuse with `UnsupportedAnchor` until that anchor's
-  verdict mapping is specified.
-- The runner shall not evaluate the oracle for an `OutOfDomain` case. It shall require the consumer's
-  domain-admission result for that case to be a refusal. It shall fail the campaign with
-  `ExpectationMismatch` if the consumer admits the value.
-- The runner shall count each consumer-refused `OutOfDomain` case in a separate `out_of_domain`
-  summary counter, outside accepted, rejected, and discarded.
-- The runner shall not convert an `OutOfDomain` case into a `false` verdict.
-- The generated summary shall expose `discard_rate()` and `rejection_rate()`:
-  - each returns the exact pair `(numerator, attempted)`, discarded or rejected over attempted, using
-    the existing `attempted` denominator from interface-001's `accounting_unit`;
-  - each returns `None` when `attempted` is zero, never a zero rate.
-- Constructive numeric populations shall never invoke the explicit-discard channel.
-- If a constructive population's campaign observes a non-zero `discarded` count, then the runner shall
-  report that count unchanged and fail a policy whose discard ceiling is zero.
-- Existing floor, ceiling, `Exhausted`, and `Failed` conclusions from
-  [FR-002](../FR-002-tristate-proptest.md) shall apply unchanged to numeric campaigns.
+- The runner shall map an oracle result to a runtime verdict by clause kind:
+  - for a `Precondition` clause, `true` to `Passed` and `false` to `RejectedPrecondition`;
+  - for a `Postcondition` clause, `true` to `Passed` and `false` to `FailedPostcondition`;
+  - for an `Invariant` clause, `true` to `Passed` and `false` to `FailedPostcondition` whose observation
+    has `ClauseKind::Invariant`.
+- The runner shall construct each verdict through the runtime `VerdictContext` with the clause
+  identity, execution point, and observed read values; a false invariant carries
+  `FailureKind::Contract`.
+- The runner shall record each verdict with `CampaignReport::record_verdict`, so a rejected
+  precondition counts in `rejected` and a false postcondition or invariant counts in `failed`.
+- If `record_verdict` returns `IdentityMismatch`, then the runner shall fail the campaign with that
+  error and record nothing further.
+- When the observed verdict equals the verdict the case's tag predicts, the runner shall return a
+  passing proptest result, including for an expected `RejectedPrecondition`.
+- If the observed verdict differs from the verdict the case's tag predicts, then the runner shall fail
+  the campaign with `ConformanceMismatch`.
+- The runner shall never return a proptest global reject or an explicit discard, so framework
+  exhaustion cannot come from rejected preconditions.
+- The census runner shall evaluate every in-domain census case exactly once, in census order, without
+  proptest sampling or shrinking.
+- The runner shall not evaluate out-of-domain cases.
+- The generated summary shall expose `discard_rate()` and `rejection_rate()`, each returning the exact
+  pair `(discarded, attempted)` or `(rejected, attempted)` over the existing `attempted` denominator
+  from interface-001 `accounting_unit`.
+- When `attempted` is zero, `discard_rate()` and `rejection_rate()` shall return `None`.
+- The generator shall emit the rate accessors on the bound-strategy summary type only, leaving the
+  PR #22 harness summary unchanged.
+- The runner shall apply the existing floor, ceiling, and `Exhausted` conclusions of
+  [FR-002](../FR-002-tristate-proptest.md) to the complete supplied report unchanged.
+- When proptest reports a failing case, the runner shall conclude `ConformanceMismatch` after the
+  discard-ceiling check, so the runner never concludes the harness `Failed`.
+- The rule that a subject harness never converts a rejected precondition to success stays unchanged:
+  this runner's passing result asserts that the oracle agreed with the expectation, while the
+  rejection stays counted in `rejected`.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-011-AC-1 | A `Post`-anchored `VersionUnchanged` campaign maps `Holds` to `Passed` and `Violated` to `FailedPostcondition`; a `Pre`-anchored integer clause maps `Violated` to `RejectedPrecondition`; a mismatch fails the campaign with the case values in the failure. | Test (TC-020) |
-| FR-011-AC-2 | An `OutOfDomain` case never reaches the oracle adapter; a consumer that admits it fails the campaign with `ExpectationMismatch`; a consumer that refuses it increments `out_of_domain` and no other counter. | Test (TC-020) |
-| FR-011-AC-3 | A seeded campaign with known counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with the exact pinned values; a zero-attempt summary returns `None` for both. | Test (TC-020) |
-| FR-011-AC-4 | A constructive numeric campaign reports `discard_rate() == Some((0, attempted))` with `attempted > 0`, and passes a zero discard ceiling. | Test (TC-020) |
-| FR-011-AC-5 | A clause anchored at `Initialization` or `Handler` is refused with `UnsupportedAnchor`. | Test (TC-020) |
+| FR-011-AC-1 | A `VersionUnchanged` (`Postcondition`) `Broad` campaign records `Holds` cases as `Passed` and `Violated` cases as `FailedPostcondition` and passes; a `Precondition` fixture records `Violated` cases as `RejectedPrecondition` in `rejected` and passes with zero proptest global rejects; the `amount < 7` `Invariant` records `Violated` cases as `FailedPostcondition`. | Test (TC-020) |
+| FR-011-AC-2 | An oracle deliberately swapped for its negation fails each campaign with `ConformanceMismatch` carrying the case values, expected tag, and observed verdict kind. | Test (TC-020) |
+| FR-011-AC-3 | The census runner evaluates each of the 10 `VersionUnchanged` in-domain census cases exactly once, in census order, and evaluates none of the out-of-domain cases. | Test (TC-020) |
+| FR-011-AC-4 | A campaign over a report seeded with pinned prior counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with those exact values, and a fresh zero-attempt summary returns `None` for both. | Test (TC-020) |
+| FR-011-AC-5 | A fresh 10,000-case `Broad` campaign for each fixture returns `discard_rate() == Some((0, attempted))` with `attempted > 0`, passes a zero discard ceiling, and does not end `Exhausted`. | Test (TC-020) |
 
 ## Dependencies
 
-- **Upstream**: [FR-002](../FR-002-tristate-proptest.md) campaign runner,
+- **Upstream**: [FR-002](../FR-002-tristate-proptest.md) campaign policy and conclusions,
   [FR-009](./FR-009-constructive-correlated-populations.md),
   [FR-010](./FR-010-domain-boundary-campaigns.md).
-- **Downstream**: [FR-013](./FR-013-it010-consumable-output.md),
+- **Constrained by**:
+  [NFR-004](../../nonfunctional/strategies/NFR-004-constructive-generation-efficiency.md).
+- **Downstream**: [FR-012](./FR-012-constraint-preserving-shrinking.md),
+  [FR-013](./FR-013-it010-consumable-output.md),
   [TC-020](../../test/strategies/TC-020-numeric-harness-campaigns.md).

@@ -70,8 +70,9 @@ evidence contract. TC-001 through TC-007 form the initial verification matrix. A
 bind the intended use, trusted boundary, risks, measurement policy, and open human decision.
 
 FR-008 through FR-013 refine FR-002 for bound numeric and state-scalar clauses
-(agent-ix/quire-contract-codegen#3 under agent-ix/quire-spec-language#83) and are constrained by
-NFR-004. TC-017 through TC-022 verify them. Numbers skip FR-007, NFR-003, and TC-014 through TC-016
+(agent-ix/quire-contract-codegen#3 under agent-ix/quire-spec-language#83), admit only clauses that the
+FR-001 bounded-integer oracle grammar of agent-ix/quire-contract-codegen#4 admits, and are constrained
+by NFR-004. TC-017 through TC-022 verify them. Numbers skip FR-007, NFR-003, and TC-014 through TC-016
 because a parked expansion branch allocated them.
 
 ### Subsystem layout
