@@ -52,4 +52,3 @@ implementation, evidence, or specification gap remains.
 - None in FR-008 through FR-013, NFR-004, TC-017 through TC-022, Task-008, or Task-009.
 - PLAN-001 retains unrelated Task-005, Task-006, and Task-007 work. This subset review does not mark
   those tasks or the complete plan done.
-
