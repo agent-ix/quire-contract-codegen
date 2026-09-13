@@ -2,7 +2,7 @@
 id: Task-009
 title: "Bound strategy admission, runner, and consumer bundle"
 type: Task
-status: in_progress
+status: done
 track: B
 priority: P0
 relationships:
@@ -44,7 +44,7 @@ accounting, and emit the complete consumer bundle with its Quoin proof attestati
 - [x] Implement the FR-011 proptest and census runners, exact counters, rates, and conclusions.
 - [x] Count all FR-012 shrink replays in `attempted`.
 - [x] Implement the FR-013 case identity surface, bundle assembly, and proof attestation.
-- [ ] Run TC-017 through TC-022, Rust 1.75, Rust review, gap analysis, and the full local gate.
+- [x] Run TC-017 through TC-022, Rust 1.75, Rust review, gap analysis, and the full local gate.
 
 ## Deliverables
 
@@ -56,3 +56,5 @@ accounting, and emit the complete consumer bundle with its Quoin proof attestati
 
 - Task-004's codegen #4 implementation landed as PR #29 at `e0be330`; this branch consumes that
   merged revision and retains the matrix changes from both work streams.
+- Closing Rust review SR-016 and gap analysis SR-017 found and repaired incomplete TC-017,
+  TC-020, and TC-022 controls before approving all 34 slice criteria.

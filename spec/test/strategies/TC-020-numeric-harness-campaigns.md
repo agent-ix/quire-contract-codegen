@@ -21,13 +21,15 @@ exact rates.
 1. In a generated-crate fixture, run `Satisfying`, `Violating`, and `Broad` campaigns through the
    generated population runner for `VersionUnchanged` (`Postcondition`), `amount < 7` (`Invariant`),
    and a `Precondition` fixture `amount <= 500`, each with a fresh report, at 256 cases under the
-   default configuration and at 10,000 cases.
+   deterministic configuration with `max_global_rejects: 0` and at 10,000 cases.
 2. Repeat step 1's 256-case `Broad` campaigns with each generated oracle replaced by its negation.
 3. Run the census runner for `VersionUnchanged` with an instrumented oracle that records every
    valuation it receives.
 4. Run a campaign over a report seeded with pinned prior accepted, rejected, and discarded counts,
-   then read both rates; read both rates on a fresh zero-attempt summary and on a report driven to
-   `at_limit`.
+   then read both rates; read both rates on a fresh zero-attempt summary and on a runtime snapshot
+   decoded with counters at `u64::MAX`. The pinned runtime deliberately exposes no conversion from
+   an imported snapshot back to a mutable report, so the generated snapshot-summary operation is
+   the public boundary for this saturated-rate check.
 5. Read the runner's proptest global reject count and each campaign conclusion from steps 1 and 4.
 
 ## Expected Results

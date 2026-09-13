@@ -3,6 +3,7 @@
 mod common;
 
 use std::{
+    fmt::Write as _,
     fs,
     path::PathBuf,
     process::Command,
@@ -178,19 +179,22 @@ fn generate(
     .unwrap()
 }
 
-fn generate_projection(
+fn generate_projection_population(
     value: &Value,
     clause: &ClauseRef,
+    population: BoundStrategyPopulation,
+    minimum_accepted_cases: u64,
     minimum_rejected_cases: u64,
+    maximum_discarded_cases: u64,
 ) -> quire_contract_codegen::GeneratedArtifactBundle {
     let package = decode(value);
     generate_bound_strategy(&BoundStrategyRequest {
         package: &package,
         clause,
-        population: BoundStrategyPopulation::Broad,
-        minimum_accepted_cases: 1,
+        population,
+        minimum_accepted_cases,
         minimum_rejected_cases,
-        maximum_discarded_cases: 0,
+        maximum_discarded_cases,
         attestation: context(),
     })
     .unwrap()
@@ -213,7 +217,29 @@ fn generated_item(source: &str, prefix: &str) -> String {
         .unwrap_or_else(|| panic!("generated source has no item beginning {prefix:?}"))
 }
 
-/// Trace: TC-017, FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-2
+fn generated_runner(source: &str) -> String {
+    source
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("pub fn bound_campaign_")
+                .filter(|tail| tail.contains("_run<Strategy>"))
+                .map(|tail| format!("bound_campaign_{}", tail.split('<').next().unwrap()))
+        })
+        .expect("generated sampled runner")
+}
+
+fn generated_census_runner(source: &str) -> String {
+    source
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("pub fn bound_campaign_")
+                .filter(|tail| tail.contains("_run_census("))
+                .map(|tail| format!("bound_campaign_{}", tail.split('(').next().unwrap()))
+        })
+        .expect("generated census runner")
+}
+
+/// Trace: TC-017, FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-1, FR-008-CON-2
 #[test]
 fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
     let package = decode(&version_projection());
@@ -351,6 +377,153 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
     ));
     assert!(error.source_span.is_some());
 
+    let amount_value = scalar_projection("test/integer-healthy", "invariant", "less", 7);
+    let amount_clause = ClauseRef::new(
+        RequirementRef::parse("test/integer-healthy", "FR-100", 3).unwrap(),
+        ClauseId::new("amount-check").unwrap(),
+    );
+    let amount = generate_projection_population(
+        &amount_value,
+        &amount_clause,
+        BoundStrategyPopulation::Broad,
+        1,
+        0,
+        0,
+    );
+    assert!(amount.rust.contents.contains("DOMAIN_MINIMUM: i64 = 0"));
+    assert!(amount.rust.contents.contains("DOMAIN_MAXIMUM: i64 = 1000"));
+    assert!(amount.rust.contents.contains("< 7"));
+
+    let integer =
+        json!({"kind":"integer","domain":"signed","minimum":0,"maximum":1000,"overflow":"reject"});
+    let amount_read = || json!({"node":"value_reference","name":"amount","observation":"current","source":span(4)});
+    let amount_literal = |value| json!({"node":"integer_literal","value":value,"value_type":integer,"source":span(5)});
+
+    let mut negated_value = amount_value.clone();
+    negated_value["bindings"][0]["expression"]["values"][0]["value_type"]["minimum"] = json!(-1000);
+    negated_value["bindings"][0]["expression"]["expression"]["right"]["value_type"]["minimum"] =
+        json!(-1000);
+    negated_value["bindings"][0]["expression"]["expression"]["left"] = json!({
+        "node":"numeric_negate", "operand":amount_read(), "source":span(4)
+    });
+    let mut obligation_value = amount_value.clone();
+    let nonzero = json!({
+        "node":"compare", "operator":"not_equal", "left":amount_read(),
+        "right":amount_literal(0), "source":span(4)
+    });
+    let division_bound = json!({
+        "node":"compare", "operator":"less_equal",
+        "left":{"node":"numeric","operator":"divide","left":amount_literal(10),"right":amount_read(),"source":span(4)},
+        "right":amount_literal(10), "source":span(4)
+    });
+    obligation_value["bindings"][0]["expression"]["expression"] = json!({
+        "node":"boolean", "operator":"short_circuit_and", "left":nonzero,
+        "right":division_bound, "source":span(4)
+    });
+    for (value, expected) in [
+        (
+            negated_value,
+            quire_contract_codegen::GenerationErrorCode::UnsupportedObligations,
+        ),
+        (
+            obligation_value,
+            quire_contract_codegen::GenerationErrorCode::UnsupportedObligations,
+        ),
+    ] {
+        let package = decode(&value);
+        let error = generate_bound_strategy(&BoundStrategyRequest {
+            package: &package,
+            clause: &amount_clause,
+            population: BoundStrategyPopulation::Broad,
+            minimum_accepted_cases: 1,
+            minimum_rejected_cases: 0,
+            maximum_discarded_cases: 0,
+            attestation: context(),
+        })
+        .unwrap_err();
+        assert_eq!(error.code, StrategyErrorCode::UnsupportedClause);
+        assert_eq!(error.generation_code, Some(expected));
+        assert_eq!(error.clause.as_deref(), Some(&amount_clause));
+        assert!(error.source_span.is_some());
+    }
+
+    let comparison = amount_value["bindings"][0]["expression"]["expression"].clone();
+    let mut connective_value = amount_value.clone();
+    connective_value["bindings"][0]["expression"]["expression"] = json!({
+        "node":"boolean", "operator":"total_and", "left":comparison.clone(),
+        "right":comparison, "source":span(4)
+    });
+    let mut literal_only_value = amount_value.clone();
+    literal_only_value["bindings"][0]["expression"]["expression"]["left"] = amount_literal(6);
+    literal_only_value["package"]["requirements"][0]["clauses"][0]["body"] =
+        json!({"node":"composite","children":[]});
+    let mut current_pre_value = amount_value.clone();
+    let owner = json!({"package":"test/integer-healthy","requirement":"FR-100","revision":3});
+    current_pre_value["package"]["requirements"][0]["clauses"][0]["body"] = json!({
+        "node":"composite", "children":[
+            {"node":"reference","identity":{"requirement":owner,"kind":"state","observation":"current","path":["amount"]}},
+            {"node":"reference","identity":{"requirement":owner,"kind":"state","observation":"pre","path":["amount"]}}
+        ]
+    });
+    current_pre_value["bindings"][0]["expression"]["expression"]["right"] = json!({
+        "node":"value_reference","name":"amount","observation":"pre","source":span(5)
+    });
+    for value in [
+        connective_value.clone(),
+        literal_only_value,
+        current_pre_value,
+    ] {
+        let package = decode(&value);
+        let error = generate_bound_strategy(&BoundStrategyRequest {
+            package: &package,
+            clause: &amount_clause,
+            population: BoundStrategyPopulation::Broad,
+            minimum_accepted_cases: 1,
+            minimum_rejected_cases: 0,
+            maximum_discarded_cases: 0,
+            attestation: context(),
+        })
+        .unwrap_err();
+        assert_eq!(error.code, StrategyErrorCode::UnsupportedRelation);
+        assert_eq!(error.clause.as_deref(), Some(&amount_clause));
+        assert!(error.source_span.is_some());
+    }
+
+    for kind in ["assertion", "case"] {
+        let mut value = amount_value.clone();
+        value["package"]["requirements"][0]["clauses"][0]["kind"] = json!(kind);
+        let package = decode(&value);
+        let error = generate_bound_strategy(&BoundStrategyRequest {
+            package: &package,
+            clause: &amount_clause,
+            population: BoundStrategyPopulation::Broad,
+            minimum_accepted_cases: 1,
+            minimum_rejected_cases: 0,
+            maximum_discarded_cases: 0,
+            attestation: context(),
+        })
+        .unwrap_err();
+        assert_eq!(error.code, StrategyErrorCode::UnsupportedClauseKind);
+        assert_eq!(error.clause.as_deref(), Some(&amount_clause));
+        assert!(error.source_span.is_none());
+    }
+    connective_value["package"]["requirements"][0]["clauses"][0]["kind"] = json!("assertion");
+    let combined = decode(&connective_value);
+    assert_eq!(
+        generate_bound_strategy(&BoundStrategyRequest {
+            package: &combined,
+            clause: &amount_clause,
+            population: BoundStrategyPopulation::Broad,
+            minimum_accepted_cases: 1,
+            minimum_rejected_cases: 0,
+            maximum_discarded_cases: 0,
+            attestation: context(),
+        })
+        .unwrap_err()
+        .code,
+        StrategyErrorCode::UnsupportedClauseKind
+    );
+
     for population in [
         BoundStrategyPopulation::Satisfying,
         BoundStrategyPopulation::Violating,
@@ -456,10 +629,34 @@ fn tc_020_tc_021_tc_022_generated_consumer_runs_sampled_and_census_campaigns() {
                 })
         })
         .expect("generated census runner");
+    let summary_from_snapshot = format!(
+        "{}_summary_from_snapshot",
+        runner.strip_suffix("_run").expect("runner suffix")
+    );
     let case_type = generated_item(&generated.rust.contents, "pub struct BoundCase");
+    let oracle = generated_item(&generated.rust.contents, "pub fn oracle_");
     let mut source = generated.rust.contents;
+    source = source.replacen(
+        &format!("pub fn {oracle}("),
+        &format!("fn {oracle}_uninstrumented("),
+        1,
+    );
     source.push_str(&format!(
         r#"
+
+thread_local! {{
+    static CENSUS_OBSERVATIONS: core::cell::RefCell<Vec<(i64, i64)>> = const {{ core::cell::RefCell::new(Vec::new()) }};
+}}
+
+/// Instrumented oracle used by this generated-consumer fixture.
+pub fn {oracle}(version_4_eumber_pre: i64, version_4_eumber_post: i64) -> bool {{
+    CENSUS_OBSERVATIONS.with(|values| values.borrow_mut().push((version_4_eumber_post, version_4_eumber_pre)));
+    {oracle}_uninstrumented(version_4_eumber_pre, version_4_eumber_post)
+}}
+"#
+    ));
+    source.push_str(&format!(
+        r##"
 
 #[cfg(test)]
 mod generated_checks {{
@@ -493,21 +690,42 @@ mod generated_checks {{
 
     #[test]
     fn census_is_exact_once_ordered_and_excludes_out_of_domain_cases() {{
+        CENSUS_OBSERVATIONS.with(|values| values.borrow_mut().clear());
         let mut report = report();
         let summary = {census_runner}(&mut report).unwrap();
         assert_eq!(summary.attempted, 10);
         assert_eq!(summary.accepted, 10);
         assert_eq!(summary.failed, 6);
         assert_eq!(summary.discarded, 0);
+        CENSUS_OBSERVATIONS.with(|values| assert_eq!(
+            values.borrow().as_slice(),
+            &[(0, 0), (0, 1), (1, 0), (1, 1), (1, 2), (999, 998), (999, 999), (999, 1000), (1000, 999), (1000, 1000)],
+        ));
+    }}
+
+    #[test]
+    fn zero_and_saturated_snapshots_have_no_rate() {{
+        let report = report();
+        let zero = {summary_from_snapshot}(&report.snapshot());
+        assert_eq!(zero.attempted, 0);
+        assert_eq!(zero.discard_rate(), None);
+        assert_eq!(zero.rejection_rate(), None);
+
+        let encoded = br#"{{"schemaVersion":"runtime.campaign-snapshot/v1","requirement":"FR-034","revision":"9","counterSemantics":"saturating-u64-v1","counts":{{"accepted":18446744073709551615,"rejected":0,"failed":0,"discarded":0}}}}"#;
+        let decoded = quire_contract_runtime::decode_campaign_snapshot(encoded).unwrap();
+        let saturated = {summary_from_snapshot}(&decoded.snapshot());
+        assert_eq!(saturated.attempted, u64::MAX);
+        assert_eq!(saturated.discard_rate(), None);
+        assert_eq!(saturated.rejection_rate(), None);
     }}
 }}
-"#
+"##
     ));
     let temporary = TemporaryDirectory::new("quire-bound-strategy-consumer");
     fs::write(
         temporary.0.join("Cargo.toml"),
         format!(
-            "[package]\nname = \"bound-strategy-consumer\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\" }}\n\n[workspace]\n",
+            "[package]\nname = \"bound-strategy-consumer\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\", features = [\"snapshot-json\"] }}\n\n[workspace]\n",
             quire_contract_codegen::RUNTIME_REVISION
         ),
     )
@@ -531,56 +749,130 @@ mod generated_checks {{
 /// Trace: TC-020, TC-021, FR-011-AC-2, FR-012-AC-4
 #[test]
 fn tc_020_tc_021_negated_oracle_returns_a_structured_minimal_mismatch() {
-    let generated = generate(BoundStrategyPopulation::Broad);
-    let strategy = generated_item(&generated.rust.contents, "pub fn bound_strategy_");
-    let runner = generated
-        .rust
-        .contents
-        .lines()
-        .find_map(|line| {
-            line.strip_prefix("pub fn bound_campaign_")
-                .filter(|tail| tail.contains("_run<Strategy>"))
-                .map(|tail| format!("bound_campaign_{}", tail.split('<').next().unwrap()))
-        })
-        .expect("generated sampled runner");
-    let error_type = generated_item(&generated.rust.contents, "pub enum BoundCampaignError");
-    let mut source = generated.rust.contents.replacen("\n==\n", "\n!=\n", 1);
-    assert_ne!(
-        source, generated.rust.contents,
-        "oracle operator was not replaced"
+    let pre_value = scalar_projection(
+        "test/amount-precondition",
+        "precondition",
+        "less_equal",
+        500,
     );
-    source.push_str(&format!(
-        r#"
-
-#[cfg(test)]
-mod mismatch_check {{
-    use super::*;
-
+    let pre_clause = ClauseRef::new(
+        RequirementRef::parse("test/amount-precondition", "FR-100", 3).unwrap(),
+        ClauseId::new("amount-check").unwrap(),
+    );
+    let invariant_value = scalar_projection("test/amount-invariant", "invariant", "less", 7);
+    let invariant_clause = ClauseRef::new(
+        RequirementRef::parse("test/amount-invariant", "FR-100", 3).unwrap(),
+        ClauseId::new("amount-check").unwrap(),
+    );
+    let version_value = version_projection();
+    let version_clause = clause_ref();
+    let fixtures = [
+        (
+            "version",
+            &version_value,
+            &version_clause,
+            "FR-034",
+            "9",
+            "\n==\n",
+            "\n!=\n",
+            "FailedPostcondition",
+        ),
+        (
+            "precondition",
+            &pre_value,
+            &pre_clause,
+            "FR-100",
+            "3",
+            "\n<=\n",
+            "\n>\n",
+            "RejectedPrecondition",
+        ),
+        (
+            "invariant",
+            &invariant_value,
+            &invariant_clause,
+            "FR-100",
+            "3",
+            "\n<\n",
+            "\n>=\n",
+            "FailedPostcondition",
+        ),
+    ];
+    let temporary = TemporaryDirectory::new("quire-bound-strategy-mismatch");
+    let mut root =
+        String::from("#![deny(missing_docs)]\n//! Negated-oracle conformance mismatch checks.\n\n");
+    let mut checks = String::from("#[cfg(test)]\nmod mismatch_checks {\n");
+    for (module, value, clause, requirement, revision, needle, replacement, false_kind) in fixtures
+    {
+        let generated = generate_projection_population(
+            value,
+            clause,
+            BoundStrategyPopulation::Broad,
+            1,
+            u64::from(module == "precondition"),
+            0,
+        );
+        let strategy = generated_item(&generated.rust.contents, "pub fn bound_strategy_");
+        let runner = generated_runner(&generated.rust.contents);
+        let error_type = generated_item(&generated.rust.contents, "pub enum BoundCampaignError");
+        let expectation_type =
+            generated_item(&generated.rust.contents, "pub enum BoundExpectation");
+        let source = generated.rust.contents.replacen(needle, replacement, 1);
+        assert_ne!(
+            source, generated.rust.contents,
+            "{module} oracle operator was not replaced"
+        );
+        fs::write(temporary.0.join(format!("src/{module}.rs")), source).unwrap();
+        writeln!(
+            root,
+            "/// Generated {module} campaign with a deliberately negated oracle.\npub mod {module};"
+        )
+        .unwrap();
+        writeln!(
+            checks,
+            r#"
     #[test]
-    fn shrink_replays_stay_accounted_in_the_structured_failure() {{
-        let mut config = proptest::test_runner::Config::with_cases(1);
-        config.failure_persistence = None;
-        let mut runner = proptest::test_runner::TestRunner::new(config);
-        let strategy = {strategy}();
-        let mut report = quire_contract_runtime::CampaignReport::new(
-            quire_contract_runtime::ContractIdentity::new(
-                quire_contract_runtime::RequirementId::new("FR-034"),
-                quire_contract_runtime::RevisionId::new("9"),
+    fn {module}_negation_is_a_structured_shrunk_mismatch() {{
+        let config = proptest::test_runner::Config {{
+            cases: 256,
+            max_global_rejects: 0,
+            failure_persistence: None,
+            ..proptest::test_runner::Config::default()
+        }};
+        let mut runner = proptest::test_runner::TestRunner::new_with_rng(
+            config,
+            proptest::test_runner::TestRng::deterministic_rng(
+                proptest::test_runner::RngAlgorithm::ChaCha,
             ),
         );
-        match {runner}(&mut runner, &strategy, &mut report).unwrap_err() {{
-            {error_type}::ConformanceMismatch {{ summary, primary, partner, expected: _, observed: _ }} => {{
+        let strategy = super::{module}::{strategy}();
+        let mut report = quire_contract_runtime::CampaignReport::new(
+            quire_contract_runtime::ContractIdentity::new(
+                quire_contract_runtime::RequirementId::new({requirement:?}),
+                quire_contract_runtime::RevisionId::new({revision:?}),
+            ),
+        );
+        match super::{module}::{runner}(&mut runner, &strategy, &mut report).unwrap_err() {{
+            super::{module}::{error_type}::ConformanceMismatch {{ summary, primary, partner, expected, observed }} => {{
                 assert!(summary.attempted > 1, "shrink replays were not recorded");
                 assert!((0..=1000).contains(&primary));
-                assert!(partner.is_some_and(|value| (0..=1000).contains(&value)));
+                assert!(partner.map_or(true, |value| (0..=1000).contains(&value)));
+                assert!(matches!(
+                    (expected, observed),
+                    (super::{module}::{expectation_type}::Holds, quire_contract_runtime::VerdictKind::{false_kind})
+                        | (super::{module}::{expectation_type}::Violated, quire_contract_runtime::VerdictKind::Passed)
+                ));
             }}
             other => panic!("expected conformance mismatch, got {{other:?}}"),
         }}
     }}
-}}
-"#
-    ));
-    let temporary = TemporaryDirectory::new("quire-bound-strategy-mismatch");
+"#,
+        )
+        .unwrap();
+    }
+    checks.push_str("}\n");
+    root.push_str(&checks);
+    fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
     fs::write(
         temporary.0.join("Cargo.toml"),
         format!(
@@ -589,7 +881,6 @@ mod mismatch_check {{
         ),
     )
     .unwrap();
-    fs::write(temporary.0.join("src/lib.rs"), source).unwrap();
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", temporary.0.join("target"))
@@ -605,9 +896,9 @@ mod mismatch_check {{
     );
 }
 
-/// Trace: TC-020, FR-011-AC-1, FR-011-AC-5, NFR-004-AC-1
+/// Trace: TC-020, FR-011-AC-1, FR-011-AC-4, FR-011-AC-5, NFR-004-AC-1
 #[test]
-fn tc_020_precondition_and_invariant_campaigns_run_ten_thousand_without_discards() {
+fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
     let pre_value = scalar_projection(
         "test/amount-precondition",
         "precondition",
@@ -618,102 +909,193 @@ fn tc_020_precondition_and_invariant_campaigns_run_ten_thousand_without_discards
         RequirementRef::parse("test/amount-precondition", "FR-100", 3).unwrap(),
         ClauseId::new("amount-check").unwrap(),
     );
-    let pre = generate_projection(&pre_value, &pre_clause, 1);
     let invariant_value = scalar_projection("test/amount-invariant", "invariant", "less", 7);
     let invariant_clause = ClauseRef::new(
         RequirementRef::parse("test/amount-invariant", "FR-100", 3).unwrap(),
         ClauseId::new("amount-check").unwrap(),
     );
-    let invariant = generate_projection(&invariant_value, &invariant_clause, 0);
-    assert!(pre.rust.contents.contains("Verdict::RejectedPrecondition"));
-    assert!(invariant.rust.contents.contains("ClauseKind::Invariant"));
-    assert!(invariant.rust.contents.contains("FailureKind::Contract"));
-
-    let pre_strategy = generated_item(&pre.rust.contents, "pub fn bound_strategy_");
-    let pre_runner = pre
-        .rust
-        .contents
-        .lines()
-        .find_map(|line| {
-            line.strip_prefix("pub fn bound_campaign_")
-                .filter(|tail| tail.contains("_run<Strategy>"))
-                .map(|tail| format!("bound_campaign_{}", tail.split('<').next().unwrap()))
-        })
-        .unwrap();
-    let invariant_strategy = generated_item(&invariant.rust.contents, "pub fn bound_strategy_");
-    let invariant_runner = invariant
-        .rust
-        .contents
-        .lines()
-        .find_map(|line| {
-            line.strip_prefix("pub fn bound_campaign_")
-                .filter(|tail| tail.contains("_run<Strategy>"))
-                .map(|tail| format!("bound_campaign_{}", tail.split('<').next().unwrap()))
-        })
-        .unwrap();
-
-    let temporary = TemporaryDirectory::new("quire-bound-strategy-clause-kinds");
-    fs::write(temporary.0.join("src/precondition.rs"), pre.rust.contents).unwrap();
-    fs::write(
-        temporary.0.join("src/invariant.rs"),
-        invariant.rust.contents,
-    )
-    .unwrap();
-    fs::write(
-        temporary.0.join("src/lib.rs"),
-        format!(
-            r#"#![deny(missing_docs)]
-//! Clause-kind campaign checks.
-
-/// Generated precondition campaign.
-pub mod precondition;
-/// Generated invariant campaign.
-pub mod invariant;
-
-#[cfg(test)]
-mod checks {{
-    #[test]
-    fn both_clause_kinds_run_without_discards() {{
-        let mut config = proptest::test_runner::Config::with_cases(10_000);
-        config.failure_persistence = None;
-        let mut runner = proptest::test_runner::TestRunner::new(config.clone());
-        let mut pre_report = quire_contract_runtime::CampaignReport::new(
-            quire_contract_runtime::ContractIdentity::new(
-                quire_contract_runtime::RequirementId::new("FR-100"),
-                quire_contract_runtime::RevisionId::new("3"),
-            ),
-        );
-        let pre_strategy = super::precondition::{pre_strategy}();
-        let pre = super::precondition::{pre_runner}(&mut runner, &pre_strategy, &mut pre_report).unwrap();
-        assert_eq!(pre.attempted, 10_000);
-        assert!(pre.accepted > 0 && pre.rejected > 0);
-        assert_eq!(pre.failed, 0);
-        assert_eq!(pre.discard_rate(), Some((0, 10_000)));
-
-        let mut runner = proptest::test_runner::TestRunner::new(config);
-        let mut invariant_report = quire_contract_runtime::CampaignReport::new(
-            quire_contract_runtime::ContractIdentity::new(
-                quire_contract_runtime::RequirementId::new("FR-100"),
-                quire_contract_runtime::RevisionId::new("3"),
-            ),
-        );
-        let invariant_strategy = super::invariant::{invariant_strategy}();
-        let invariant = super::invariant::{invariant_runner}(&mut runner, &invariant_strategy, &mut invariant_report).unwrap();
-        assert_eq!(invariant.attempted, 10_000);
-        assert_eq!(invariant.accepted, 10_000);
-        assert_eq!(invariant.rejected, 0);
-        assert!(invariant.failed > 0);
-        assert_eq!(invariant.discard_rate(), Some((0, 10_000)));
-    }}
-}}
-"#
+    let version_value = version_projection();
+    let version_clause = clause_ref();
+    let fixtures = [
+        (
+            "version",
+            &version_value,
+            &version_clause,
+            "FR-034",
+            "9",
+            false,
         ),
-    )
-    .unwrap();
+        ("precondition", &pre_value, &pre_clause, "FR-100", "3", true),
+        (
+            "invariant",
+            &invariant_value,
+            &invariant_clause,
+            "FR-100",
+            "3",
+            false,
+        ),
+    ];
+    let populations = [
+        ("satisfying", BoundStrategyPopulation::Satisfying),
+        ("violating", BoundStrategyPopulation::Violating),
+        ("broad", BoundStrategyPopulation::Broad),
+    ];
+    let temporary = TemporaryDirectory::new("quire-bound-strategy-all-populations");
+    let mut root =
+        String::from("#![deny(missing_docs)]\n//! Every supported clause kind and population.\n\n");
+    let mut checks = String::from("#[cfg(test)]\nmod checks {\n");
+
+    for (fixture, value, clause, requirement, revision, is_precondition) in fixtures {
+        for (population_name, population) in populations {
+            let (minimum_accepted, minimum_rejected) = if is_precondition {
+                match population {
+                    BoundStrategyPopulation::Satisfying => (1, 0),
+                    BoundStrategyPopulation::Violating => (0, 1),
+                    BoundStrategyPopulation::Broad => (1, 1),
+                    BoundStrategyPopulation::Boundary => unreachable!(),
+                }
+            } else {
+                (1, 0)
+            };
+            let maximum_discarded =
+                u64::from(is_precondition && population == BoundStrategyPopulation::Broad);
+            let generated = generate_projection_population(
+                value,
+                clause,
+                population,
+                minimum_accepted,
+                minimum_rejected,
+                maximum_discarded,
+            );
+            if is_precondition {
+                assert!(generated
+                    .rust
+                    .contents
+                    .contains("Verdict::RejectedPrecondition"));
+            }
+            if fixture == "invariant" {
+                assert!(generated.rust.contents.contains("ClauseKind::Invariant"));
+                assert!(generated.rust.contents.contains("FailureKind::Contract"));
+            }
+            let module = format!("{fixture}_{population_name}");
+            fs::write(
+                temporary.0.join(format!("src/{module}.rs")),
+                &generated.rust.contents,
+            )
+            .unwrap();
+            writeln!(
+                root,
+                "/// Generated {fixture} {population_name} campaign.\npub mod {module};"
+            )
+            .unwrap();
+            let strategy = generated_item(&generated.rust.contents, "pub fn bound_strategy_");
+            let runner = generated_runner(&generated.rust.contents);
+            writeln!(
+                checks,
+                r#"
+    #[test]
+    fn {module}_runs_256_and_10000_without_rejects_or_discards() {{
+        for cases in [256, 10_000] {{
+            let config = proptest::test_runner::Config {{
+                cases,
+                max_global_rejects: 0,
+                failure_persistence: None,
+                ..proptest::test_runner::Config::default()
+            }};
+            let mut runner = proptest::test_runner::TestRunner::new_with_rng(
+                config,
+                proptest::test_runner::TestRng::deterministic_rng(
+                    proptest::test_runner::RngAlgorithm::ChaCha,
+                ),
+            );
+            let strategy = super::{module}::{strategy}();
+            let mut report = quire_contract_runtime::CampaignReport::new(
+                quire_contract_runtime::ContractIdentity::new(
+                    quire_contract_runtime::RequirementId::new({requirement:?}),
+                    quire_contract_runtime::RevisionId::new({revision:?}),
+                ),
+            );
+            let summary = super::{module}::{runner}(&mut runner, &strategy, &mut report).unwrap();
+            assert_eq!(summary.attempted, u64::from(cases));
+            assert_eq!(summary.discarded, 0);
+            assert_eq!(summary.discard_rate(), Some((0, u64::from(cases))));
+            assert_eq!(summary.rejection_rate(), Some((summary.rejected, summary.attempted)));
+            {population_assertions}
+        }}
+    }}
+"#,
+                population_assertions = if is_precondition {
+                    match population {
+                        BoundStrategyPopulation::Satisfying => {
+                            "assert_eq!(summary.accepted, u64::from(cases)); assert_eq!(summary.rejected, 0); assert_eq!(summary.failed, 0);"
+                        }
+                        BoundStrategyPopulation::Violating => {
+                            "assert_eq!(summary.accepted, 0); assert_eq!(summary.rejected, u64::from(cases)); assert_eq!(summary.failed, 0);"
+                        }
+                        BoundStrategyPopulation::Broad => {
+                            "assert!(summary.accepted > 0); assert!(summary.rejected > 0); assert_eq!(summary.failed, 0);"
+                        }
+                        BoundStrategyPopulation::Boundary => unreachable!(),
+                    }
+                } else {
+                    match population {
+                        BoundStrategyPopulation::Satisfying => {
+                            "assert_eq!(summary.accepted, u64::from(cases)); assert_eq!(summary.rejected, 0); assert_eq!(summary.failed, 0);"
+                        }
+                        BoundStrategyPopulation::Violating => {
+                            "assert_eq!(summary.accepted, u64::from(cases)); assert_eq!(summary.rejected, 0); assert_eq!(summary.failed, u64::from(cases));"
+                        }
+                        BoundStrategyPopulation::Broad => {
+                            "assert_eq!(summary.accepted, u64::from(cases)); assert_eq!(summary.rejected, 0); assert!(summary.failed > 0); assert!(summary.failed < u64::from(cases));"
+                        }
+                        BoundStrategyPopulation::Boundary => unreachable!(),
+                    }
+                },
+            )
+            .unwrap();
+
+            if module == "precondition_broad" {
+                let census_runner = generated_census_runner(&generated.rust.contents);
+                writeln!(
+                    checks,
+                    r#"
+    #[test]
+    fn seeded_report_rates_include_prior_accepted_rejected_and_discarded_counts() {{
+        let mut report = quire_contract_runtime::CampaignReport::new(
+            quire_contract_runtime::ContractIdentity::new(
+                quire_contract_runtime::RequirementId::new("FR-100"),
+                quire_contract_runtime::RevisionId::new("3"),
+            ),
+        );
+        let prior = super::{module}::{census_runner}(&mut report).unwrap();
+        assert!(prior.accepted > 0 && prior.rejected > 0);
+        report.record_discard();
+        let config = proptest::test_runner::Config {{
+            cases: 256,
+            max_global_rejects: 0,
+            failure_persistence: None,
+            ..proptest::test_runner::Config::default()
+        }};
+        let mut runner = proptest::test_runner::TestRunner::new(config);
+        let strategy = super::{module}::{strategy}();
+        let summary = super::{module}::{runner}(&mut runner, &strategy, &mut report).unwrap();
+        assert_eq!(summary.attempted, prior.attempted + 257);
+        assert_eq!(summary.discard_rate(), Some((1, summary.attempted)));
+        assert_eq!(summary.rejection_rate(), Some((summary.rejected, summary.attempted)));
+    }}
+"#,
+                )
+                .unwrap();
+            }
+        }
+    }
+    checks.push_str("}\n");
+    root.push_str(&checks);
+    fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
     fs::write(
         temporary.0.join("Cargo.toml"),
         format!(
-            "[package]\nname = \"bound-strategy-clause-kinds\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\" }}\n\n[workspace]\n",
+            "[package]\nname = \"bound-strategy-all-populations\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\" }}\n\n[workspace]\n",
             quire_contract_codegen::RUNTIME_REVISION
         ),
     )
@@ -733,7 +1115,7 @@ mod checks {{
     );
 }
 
-/// Trace: TC-022, FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4
+/// Trace: TC-022, FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4, FR-013-AC-5
 #[test]
 fn tc_022_bundle_is_typed_rust_with_bound_identity_and_packaged_attestation() {
     let package = decode(&version_projection());
@@ -760,6 +1142,68 @@ fn tc_022_bundle_is_typed_rust_with_bound_identity_and_packaged_attestation() {
     assert_eq!(flag("--input-digest"), &digest);
     assert_eq!(flag("--requirement"), "FR-034@9");
     assert_eq!(flag("--clause"), "VersionUnchanged");
+
+    let mut changed_package_value = version_projection();
+    changed_package_value["bindings"][0]["expression"]["values"][0]["value_type"]["maximum"] =
+        json!(999);
+    let changed_package = decode(&changed_package_value);
+    let changed_package_bundle = generate_bound_strategy(&BoundStrategyRequest {
+        package: &changed_package,
+        clause: &clause_ref(),
+        population: BoundStrategyPopulation::Broad,
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 0,
+        attestation: context(),
+    })
+    .unwrap();
+    assert_ne!(changed_package.digest(), package.digest());
+    assert_ne!(changed_package_bundle.rust.path, generated.rust.path);
+    assert_ne!(
+        changed_package_bundle.attestation.path,
+        generated.attestation.path
+    );
+    assert!(changed_package_bundle
+        .rust
+        .contents
+        .contains(&changed_package.digest().to_string()));
+
+    let mut changed_clause_value = version_projection();
+    changed_clause_value["package"]["requirements"][0]["clauses"][0]["id"] =
+        json!("VersionStillUnchanged");
+    changed_clause_value["bindings"][0]["clause"]["clause"] = json!("VersionStillUnchanged");
+    let changed_clause = ClauseRef::new(
+        clause_ref().requirement().clone(),
+        ClauseId::new("VersionStillUnchanged").unwrap(),
+    );
+    let changed_clause_bundle = generate_projection_population(
+        &changed_clause_value,
+        &changed_clause,
+        BoundStrategyPopulation::Broad,
+        1,
+        0,
+        0,
+    );
+    assert_ne!(changed_clause_bundle.rust.path, generated.rust.path);
+    assert_ne!(
+        changed_clause_bundle.attestation.path,
+        generated.attestation.path
+    );
+    assert!(changed_clause_bundle
+        .rust
+        .contents
+        .contains("test/version-strategy/FR-034@9/VersionStillUnchanged"));
+    let changed_attestation: ProofAttestationBody =
+        serde_json::from_str(&changed_clause_bundle.attestation.contents).unwrap();
+    let changed_argv = &changed_attestation.command.argv;
+    assert_eq!(
+        changed_argv[changed_argv
+            .iter()
+            .position(|item| item == "--clause")
+            .unwrap()
+            + 1],
+        "VersionStillUnchanged"
+    );
 
     let schema = common::packaged_attestation_schema();
     let validator = common::packaged_attestation_validator(&schema);

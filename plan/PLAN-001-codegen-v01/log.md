@@ -19,3 +19,6 @@ description: "Chronological changes to the codegen v0.1 plan bundle."
   constructs before the numeric/state Kani work begins.
 - **2026-09-12** - Merged Task-004's numeric/state oracle implementation from `main`, clearing
   Task-009's upstream dependency and starting admission, runner, bundle, and attestation integration.
+- **2026-09-12** - Completed Task-009 after TC-017 through TC-022 passed on stable and Rust 1.75,
+  the full pinned-toolchain gate passed, and closing reviews SR-016/SR-017 repaired the discovered
+  admission, rate-boundary, campaign-matrix, census-order, and identity-mutation evidence gaps.

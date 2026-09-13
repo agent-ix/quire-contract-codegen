@@ -284,6 +284,7 @@ pub fn generate_bound_strategy(
     Ok(GeneratedArtifactBundle { rust, attestation })
 }
 
+// Implements: FR-008-CON-1
 fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiagnostic> {
     let expression = clause.expression().expression();
     let ExpressionKind::Compare {
@@ -313,7 +314,13 @@ fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiag
         (Some(left), Some(right)) => (left, Some(right), OperandPosition::Left),
         (Some(left), None) => (left, None, OperandPosition::Left),
         (None, Some(right)) => (right, None, OperandPosition::Right),
-        (None, None) => unreachable!("handled above"),
+        (None, None) => {
+            return Err(relation_diagnostic(
+                clause,
+                expression,
+                "a literal-only comparison has no constructible read population",
+            ));
+        }
     };
     if partner.as_ref().is_some_and(|partner| {
         partner.name == primary.name && partner.observation == primary.observation
@@ -373,13 +380,20 @@ fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiag
         None => {
             let literal = match (expression.kind(), position) {
                 (ExpressionKind::Compare { right, .. }, OperandPosition::Left) => {
-                    integer_literal(right).expect("admitted non-read operand")
+                    integer_literal(right)
                 }
                 (ExpressionKind::Compare { left, .. }, OperandPosition::Right) => {
-                    integer_literal(left).expect("admitted non-read operand")
+                    integer_literal(left)
                 }
-                _ => unreachable!("the root and position were checked"),
-            };
+                _ => None,
+            }
+            .ok_or_else(|| {
+                relation_diagnostic(
+                    clause,
+                    expression,
+                    "the non-read comparison operand is not an integer literal",
+                )
+            })?;
             Relation::with_literal(operator, position, literal)
         }
     };
@@ -515,7 +529,7 @@ fn render_complete_source(
         oracle_function,
         item_suffix,
         suffix,
-    ));
+    )?);
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(bound_diagnostic(
             StrategyErrorCode::ResourceLimitExceeded,
@@ -574,6 +588,7 @@ fn case_metadata(population: &RenderedPopulation, admitted: &AdmittedRelation) -
 }
 
 #[allow(clippy::too_many_arguments)]
+// Implements: FR-013-AC-5
 fn runner_source(
     request: &BoundStrategyRequest<'_>,
     clause: &BoundClause,
@@ -583,7 +598,7 @@ fn runner_source(
     oracle_function: &str,
     item_suffix: &str,
     suffix: &str,
-) -> String {
+) -> Result<String, StrategyDiagnostic> {
     let base = format!("bound_campaign_{suffix}");
     let summary = format!("BoundCampaignSummary{}", &suffix[..16]);
     let error = format!("BoundCampaignError{}", &suffix[..16]);
@@ -608,22 +623,21 @@ fn runner_source(
         })
         .collect::<Vec<_>>()
         .join(", ");
-    let runtime_kind = match clause.kind() {
-        ClauseKind::Precondition => "Precondition",
-        ClauseKind::Postcondition => "Postcondition",
-        ClauseKind::Invariant => "Invariant",
-        _ => unreachable!("admission checked clause kind"),
-    };
-    let false_verdict = match clause.kind() {
-        ClauseKind::Precondition => "RejectedPrecondition",
-        ClauseKind::Postcondition | ClauseKind::Invariant => "FailedPostcondition",
-        _ => unreachable!("admission checked clause kind"),
-    };
-    let failure_kind = match clause.kind() {
-        ClauseKind::Precondition => "Precondition",
-        ClauseKind::Postcondition => "Postcondition",
-        ClauseKind::Invariant => "Contract",
-        _ => unreachable!("admission checked clause kind"),
+    let (runtime_kind, false_verdict, failure_kind) = match clause.kind() {
+        ClauseKind::Precondition => ("Precondition", "RejectedPrecondition", "Precondition"),
+        ClauseKind::Postcondition => ("Postcondition", "FailedPostcondition", "Postcondition"),
+        ClauseKind::Invariant => ("Invariant", "FailedPostcondition", "Contract"),
+        _ => {
+            return Err(bound_diagnostic(
+                StrategyErrorCode::UnsupportedClauseKind,
+                GenerationTerminalState::Unsupported,
+                None,
+                request.clause,
+                None,
+                "clause.kind",
+                "bound numeric strategies support preconditions, postconditions, and invariants",
+            ));
+        }
     };
     let false_outcome = if clause.kind() == ClauseKind::Precondition {
         "Rejected"
@@ -686,7 +700,7 @@ pub fn {census_runner}(report: &mut quire_contract_runtime::CampaignReport<'stat
         String::new()
     };
 
-    format!(
+    Ok(format!(
         "/// Returns the selected `{population_name}` bound population.\n\
 pub fn {selected_strategy}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n{selected_body}\n}}\n\n\
 /// Complete exact invocation accounting for one bound numeric campaign.\n\
@@ -725,9 +739,15 @@ impl {error} {{\n\
         match self {{ Self::BelowAcceptedFloor {{ summary }} | Self::BelowRejectedFloor {{ summary }} | Self::AboveDiscardCeiling {{ summary }} | Self::Exhausted {{ summary, .. }} | Self::ConformanceMismatch {{ summary, .. }} | Self::IdentityMismatch {{ summary, .. }} => summary }}\n\
     }}\n\
 }}\n\n\
-fn {base}_summary(report: &quire_contract_runtime::CampaignReport<'static>) -> {summary} {{\n\
-    let snapshot = report.snapshot();\n    let counts = snapshot.counts();\n\
+/// Derives exact rate-bearing accounting from one immutable runtime snapshot.\n\
+#[must_use]\n\
+pub fn {base}_summary_from_snapshot(snapshot: &quire_contract_runtime::CampaignSnapshot<'_>) -> {summary} {{\n\
+    let counts = snapshot.counts();\n\
     {summary} {{ attempted: counts.total(), accepted: counts.accepted(), rejected: counts.rejected(), failed: counts.failed(), discarded: counts.discarded(), at_limit: snapshot.at_limit() }}\n\
+}}\n\n\
+fn {base}_summary(report: &quire_contract_runtime::CampaignReport<'static>) -> {summary} {{\n\
+    let snapshot = report.snapshot();\n\
+    {base}_summary_from_snapshot(&snapshot)\n\
 }}\n\n\
 fn {conclude}(report: &quire_contract_runtime::CampaignReport<'static>, framework_error: Option<String>) -> Result<{summary}, {error}> {{\n\
     let summary = {base}_summary(report);\n\
@@ -783,7 +803,7 @@ where Strategy: proptest::strategy::Strategy<Value = {case_type}> {{\n\
             .reads
             .get(1)
             .map_or_else(|| "None".to_owned(), |read| format!("Some(case.{})", read.identifier)),
-    )
+    ))
 }
 
 fn strategy_identity(request: &BoundStrategyRequest<'_>, admitted: &AdmittedRelation) -> String {
