@@ -137,19 +137,21 @@ pub enum StrategyErrorCode {
     AttestationGenerationFailed,
     /// Generated Rust exceeded the attested source-size limit.
     ResourceLimitExceeded,
+    /// A requested bound population side has no value over the shared domain.
+    EmptyPopulation,
 }
 
 impl StrategyErrorCode {
-    const fn terminal_state(self) -> GenerationTerminalState {
+    pub(crate) const fn terminal_state(self) -> GenerationTerminalState {
         match self {
             Self::InvalidRange
             | Self::InvalidMembership
             | Self::CorrelationOverflow
             | Self::InvalidStrategyIdentity
             | Self::InvalidEnumIdentity => GenerationTerminalState::InvalidInput,
-            Self::UnsupportedCampaignConstraint | Self::ResourceLimitExceeded => {
-                GenerationTerminalState::Unsupported
-            }
+            Self::UnsupportedCampaignConstraint
+            | Self::ResourceLimitExceeded
+            | Self::EmptyPopulation => GenerationTerminalState::Unsupported,
             Self::InvalidGeneratedSyntax | Self::AttestationGenerationFailed => {
                 GenerationTerminalState::Inconclusive
             }

@@ -6,5 +6,7 @@
 
 // Implements: FR-010
 pub mod census;
+// Implements: FR-009, FR-012
+pub mod population;
 // Implements: FR-010
 pub mod relation;
