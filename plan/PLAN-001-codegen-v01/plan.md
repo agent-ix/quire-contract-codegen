@@ -53,7 +53,7 @@ Task-004 bounded-integer oracle admission ---+
 | [Task-005](./tasks/Task-005-backends.md) | Harness, proptest, Kani, and vacuity backends | in_progress |
 | [Task-006](./tasks/Task-006-parity.md) | CLI, golden, differential, and parity closure | in_progress |
 | [Task-007](./tasks/Task-007-human-release.md) | Human source-release decision | not_started |
-| [Task-008](./tasks/Task-008-numeric-strategy-core.md) | Constructive populations, shrinking, and boundary census | in_progress |
+| [Task-008](./tasks/Task-008-numeric-strategy-core.md) | Constructive populations, shrinking, and boundary census | done |
 | [Task-009](./tasks/Task-009-bound-strategy-integration.md) | Bound admission, runner, consumer bundle, and attestation | blocked |
 
 ## Numeric/state strategy plan delta

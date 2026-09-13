@@ -12,3 +12,5 @@ description: "Chronological changes to the codegen v0.1 plan bundle."
 - **2026-09-12** - Added the codegen #3 numeric/state strategy plan delta: Task-008 owns the
   independently buildable population, shrinking, and census core; Task-009 owns admission, runner,
   bundle, and attestation integration after codegen #4 lands.
+- **2026-09-12** - Completed Task-008 after stable/MSRV tests, a full pinned-toolchain `make ci`,
+  closing Rust review SR-014, and scoped gap analysis SR-015. Task-009 remains blocked.

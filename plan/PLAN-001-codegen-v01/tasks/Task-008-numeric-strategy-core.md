@@ -2,7 +2,7 @@
 id: Task-008
 title: "Constructive numeric strategy core"
 type: Task
-status: in_progress
+status: done
 track: B
 priority: P0
 relationships:
@@ -36,7 +36,7 @@ before the bounded-integer oracle grammar lands.
 - [x] Prevent `Broad` shrinking from crossing its initially drawn relation side.
 - [x] Emit the in-domain, out-of-domain, and unrepresentable-edge census arrays.
 - [x] Verify the six operators across small domains and `i64::MIN..=i64::MAX`.
-- [ ] Complete Rust review, gap analysis, pinned-toolchain gates, and matrix reconciliation.
+- [x] Complete Rust review, gap analysis, pinned-toolchain gates, and matrix reconciliation.
 
 ## Deliverables
 
