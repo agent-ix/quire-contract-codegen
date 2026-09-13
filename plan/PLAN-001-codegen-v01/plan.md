@@ -20,8 +20,10 @@ contract IR into runtime-backed oracles, harnesses, proofs, vacuity maps, and Qu
 
 ```text
 Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
-                         ^
-              shared ProofAttestationV1 + accepted IR/runtime revisions
+                                      \
+                                       -> Task-008 numeric/state Kani -> SL IT-010
+
+Task-003 also supplies shared ProofAttestationV1 plus accepted IR/runtime revisions.
 ```
 
 ## Task File Mapping
@@ -35,6 +37,7 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 | [Task-005](./tasks/Task-005-backends.md) | Harness, proptest, Kani, and vacuity backends | in_progress |
 | [Task-006](./tasks/Task-006-parity.md) | CLI, golden, differential, and parity closure | in_progress |
 | [Task-007](./tasks/Task-007-human-release.md) | Human source-release decision | not_started |
+| [Task-008](./tasks/Task-008-numeric-state-kani.md) | Numeric/state Kani ticket increment | done |
 
 ## Coordination Rule
 

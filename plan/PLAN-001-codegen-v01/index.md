@@ -16,3 +16,4 @@ description: "Contents of the PLAN-001 codegen plan bundle."
 - [Task-005: Harness, proof, and vacuity backends](./tasks/Task-005-backends.md)
 - [Task-006: CLI and parity closure](./tasks/Task-006-parity.md)
 - [Task-007: Human source-release decision](./tasks/Task-007-human-release.md)
+- [Task-008: Numeric/state Kani increment](./tasks/Task-008-numeric-state-kani.md)
