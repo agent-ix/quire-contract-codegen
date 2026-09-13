@@ -1,10 +1,11 @@
-//! Deterministic, fail-closed lowering for the first Boolean-oracle slice.
+//! Deterministic, fail-closed lowering for Boolean clauses over Boolean and integer values.
 
 use std::{collections::BTreeMap, fmt::Write as _, sync::OnceLock};
 
 use quire_contract_ir::{
-    BooleanOperator, CanonicalProfile, ClauseId, DependencyIdentity, DependencyKind, Expression,
-    ExpressionKind, RequirementRef, StateObservation, TypedExpression, ValueType,
+    BooleanOperator, CanonicalProfile, ClauseId, ComparisonOperator, DependencyIdentity,
+    DependencyKind, Expression, ExpressionKind, RequirementRef, SourceSpan, StateObservation,
+    TypedExpression, ValueType,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -39,7 +40,7 @@ const HARNESS_SPEC: &[u8] = include_bytes!("../spec/functional/FR-002-tristate-p
 const BUILD_SOURCE: &[u8] = include_bytes!("../build.rs");
 const LOCKFILE: &[u8] = include_bytes!("../Cargo.lock");
 
-/// One validated clause supplied to the Boolean lowering core.
+/// One validated clause supplied to the oracle lowering core.
 ///
 /// This low-level boundary does not establish complete package binding. Normal package consumers
 /// use [`crate::generate_bound_oracles`] with the IR-owned validated projection.
@@ -155,6 +156,9 @@ pub struct GenerationDiagnostic {
     pub clause_id: String,
     /// Stable path to the rejected input element.
     pub path: String,
+    /// Exact IR-owned locus for expression-related failures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_span: Option<SourceSpan>,
     /// Human-readable detail that is not used as machine identity.
     pub message: String,
 }
@@ -345,6 +349,40 @@ struct RenderedExpression {
     implication_regions: Vec<(u32, u32)>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RustValueType {
+    Boolean,
+    Integer,
+}
+
+impl RustValueType {
+    const fn source_name(self) -> &'static str {
+        match self {
+            Self::Boolean => "bool",
+            Self::Integer => "i64",
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ReferenceInfo {
+    value_type: RustValueType,
+    source: SourceSpan,
+}
+
+#[derive(Default)]
+struct ExpressionAnalysis {
+    references: BTreeMap<String, ReferenceInfo>,
+    reference_order: Vec<String>,
+}
+
+struct DependencyParameter {
+    dependency: DependencyIdentity,
+    identifier: String,
+    value_type: RustValueType,
+    source: SourceSpan,
+}
+
 enum SerializationError {
     Json(serde_json::Error),
     Utf8(std::string::FromUtf8Error),
@@ -440,26 +478,33 @@ fn generate_boolean_oracle_inner(
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     validate_attestation_context(request)?;
     if request.expression.value_type() != &ValueType::Boolean {
-        return Err(single_diagnostic(
+        return Err(expression_diagnostic(
             request,
             GenerationErrorCode::NonBooleanRoot,
             "expression.value_type",
             "oracle roots must have Boolean type",
+            request.expression.expression().source(),
         ));
     }
-    if !request.expression.obligations().is_empty() {
-        return Err(single_diagnostic(
+    if let Some(obligation) = request.expression.obligations().first() {
+        return Err(expression_diagnostic(
             request,
             GenerationErrorCode::UnsupportedObligations,
             "expression.obligations",
-            "the Boolean slice cannot preserve discharged definedness obligations",
+            "the oracle slice cannot preserve discharged definedness obligations",
+            obligation.source(),
         ));
     }
 
-    let parameters = dependency_parameters(request)?;
+    let parameters = typed_dependency_parameters(request)?;
     let parameter_lookup = parameters
         .iter()
-        .map(|(dependency, identifier)| (dependency_key(dependency), identifier.clone()))
+        .map(|parameter| {
+            (
+                dependency_key(&parameter.dependency),
+                parameter.identifier.clone(),
+            )
+        })
         .collect::<BTreeMap<_, _>>();
     let rendered = render_expression(request, request.expression.expression(), &parameter_lookup)?;
 
@@ -479,7 +524,13 @@ fn generate_boolean_oracle_inner(
     let clause_literal = format!("{clause:?}");
     let parameter_text = parameters
         .iter()
-        .map(|(_, identifier)| format!("{identifier}: bool"))
+        .map(|parameter| {
+            format!(
+                "{}: {}",
+                parameter.identifier,
+                parameter.value_type.source_name()
+            )
+        })
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -681,6 +732,49 @@ fn is_lowercase_hexadecimal(value: &str, minimum: usize, maximum: usize) -> bool
 pub(crate) fn dependency_parameters(
     request: &OracleRequest<'_>,
 ) -> Result<Vec<(DependencyIdentity, String)>, Vec<GenerationDiagnostic>> {
+    let parameters = typed_dependency_parameters(request)?;
+    if let Some(parameter) = parameters
+        .iter()
+        .find(|parameter| parameter.value_type != RustValueType::Boolean)
+    {
+        return Err(expression_diagnostic(
+            request,
+            GenerationErrorCode::UnsupportedDependency,
+            "expression.dependencies",
+            "this Boolean harness slice does not support integer dependencies",
+            &parameter.source,
+        ));
+    }
+    Ok(parameters
+        .into_iter()
+        .map(|parameter| (parameter.dependency, parameter.identifier))
+        .collect())
+}
+
+fn typed_dependency_parameters(
+    request: &OracleRequest<'_>,
+) -> Result<Vec<DependencyParameter>, Vec<GenerationDiagnostic>> {
+    let analysis = analyze_supported_expression(request)?;
+    for key in &analysis.reference_order {
+        let represented = request.expression.dependencies().iter().any(|dependency| {
+            matches!(
+                dependency.kind(),
+                DependencyKind::Input | DependencyKind::State
+            ) && dependency.path().len() == 1
+                && dependency_key(dependency) == *key
+        });
+        if !represented {
+            let reference = &analysis.references[key];
+            return Err(expression_diagnostic(
+                request,
+                GenerationErrorCode::UnsupportedDependency,
+                "expression.value_reference",
+                "typed dependency census does not contain the referenced value",
+                &reference.source,
+            ));
+        }
+    }
+
     let mut parameters = Vec::with_capacity(request.expression.dependencies().len());
     let mut generated_names = BTreeMap::new();
     for dependency in request.expression.dependencies() {
@@ -689,13 +783,24 @@ pub(crate) fn dependency_parameters(
             DependencyKind::Input | DependencyKind::State
         ) || dependency.path().len() != 1
         {
-            return Err(single_diagnostic(
+            return Err(expression_diagnostic(
                 request,
                 GenerationErrorCode::UnsupportedDependency,
                 "expression.dependencies",
-                "the Boolean slice supports only direct input or state dependencies",
+                "the oracle slice supports only direct input or state dependencies",
+                first_reference_span(request, &analysis),
             ));
         }
+        let key = dependency_key(dependency);
+        let Some(reference) = analysis.references.get(&key) else {
+            return Err(expression_diagnostic(
+                request,
+                GenerationErrorCode::UnsupportedDependency,
+                "expression.dependencies",
+                "typed dependency census contains no matching value reference",
+                first_reference_span(request, &analysis),
+            ));
+        };
         let name = dependency.path()[0].as_str();
         let identifier = reference_identifier(name, dependency.observation());
         if let Some(existing) = generated_names.insert(identifier.clone(), dependency) {
@@ -711,9 +816,221 @@ pub(crate) fn dependency_parameters(
                 ),
             ));
         }
-        parameters.push((dependency.clone(), identifier));
+        parameters.push(DependencyParameter {
+            dependency: dependency.clone(),
+            identifier,
+            value_type: reference.value_type,
+            source: reference.source.clone(),
+        });
     }
     Ok(parameters)
+}
+
+fn first_reference_span<'a>(
+    request: &'a OracleRequest<'_>,
+    analysis: &'a ExpressionAnalysis,
+) -> &'a SourceSpan {
+    analysis
+        .reference_order
+        .first()
+        .and_then(|key| analysis.references.get(key))
+        .map_or_else(
+            || request.expression.expression().source(),
+            |item| &item.source,
+        )
+}
+
+fn analyze_supported_expression(
+    request: &OracleRequest<'_>,
+) -> Result<ExpressionAnalysis, Vec<GenerationDiagnostic>> {
+    let mut analysis = ExpressionAnalysis::default();
+    let mut next_index = 0_u32;
+    analyze_node(
+        request,
+        request.expression.expression(),
+        &mut next_index,
+        &mut analysis,
+    )?;
+    if next_index as usize != request.expression.nodes().len() {
+        let span = request
+            .expression
+            .nodes()
+            .get(next_index as usize)
+            .map_or_else(
+                || request.expression.expression().source(),
+                |node| node.source(),
+            );
+        return Err(expression_diagnostic(
+            request,
+            GenerationErrorCode::UnsupportedExpression,
+            "expression.nodes",
+            "typed node census does not match the authored expression tree",
+            span,
+        ));
+    }
+    Ok(analysis)
+}
+
+fn analyze_node(
+    request: &OracleRequest<'_>,
+    expression: &Expression,
+    next_index: &mut u32,
+    analysis: &mut ExpressionAnalysis,
+) -> Result<RustValueType, Vec<GenerationDiagnostic>> {
+    let index = *next_index;
+    *next_index = next_index.saturating_add(1);
+    let Some(typed_node) = request.expression.nodes().get(index as usize) else {
+        return Err(expression_diagnostic(
+            request,
+            GenerationErrorCode::UnsupportedExpression,
+            "expression.nodes",
+            "typed node census ended before the authored expression tree",
+            expression.source(),
+        ));
+    };
+    if typed_node.index() != index || typed_node.source() != expression.source() {
+        return Err(expression_diagnostic(
+            request,
+            GenerationErrorCode::UnsupportedExpression,
+            "expression.nodes",
+            "typed node identity does not match authored preorder",
+            expression.source(),
+        ));
+    }
+    let typed_value = rust_value_type(typed_node.value_type());
+    let analyzed = match expression.kind() {
+        ExpressionKind::BooleanLiteral { .. } => RustValueType::Boolean,
+        ExpressionKind::IntegerLiteral { value_type, .. } => {
+            if typed_node.value_type() != &ValueType::integer(value_type.clone()) {
+                return Err(unsupported_node(
+                    request,
+                    expression,
+                    "integer literal type differs from its typed node",
+                ));
+            }
+            RustValueType::Integer
+        }
+        ExpressionKind::ValueReference { name, observation } => {
+            let Some(value_type) = typed_value else {
+                return Err(expression_diagnostic(
+                    request,
+                    GenerationErrorCode::UnsupportedDependency,
+                    "expression.value_reference",
+                    "only Boolean and bounded-integer direct values can be oracle parameters",
+                    expression.source(),
+                ));
+            };
+            let key = reference_key(name.as_str(), Some(*observation));
+            match analysis.references.get(&key) {
+                Some(existing) if existing.value_type != value_type => {
+                    return Err(expression_diagnostic(
+                        request,
+                        GenerationErrorCode::UnsupportedDependency,
+                        "expression.value_reference",
+                        "one dependency identity has conflicting typed value references",
+                        expression.source(),
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    analysis.reference_order.push(key.clone());
+                    analysis.references.insert(
+                        key,
+                        ReferenceInfo {
+                            value_type,
+                            source: expression.source().clone(),
+                        },
+                    );
+                }
+            }
+            value_type
+        }
+        ExpressionKind::BooleanNot { operand } => {
+            require_boolean_child(request, operand, next_index, analysis, expression)?;
+            RustValueType::Boolean
+        }
+        ExpressionKind::Boolean { left, right, .. } => {
+            require_boolean_child(request, left, next_index, analysis, expression)?;
+            require_boolean_child(request, right, next_index, analysis, expression)?;
+            RustValueType::Boolean
+        }
+        ExpressionKind::Compare { left, right, .. } => {
+            let left_type = analyze_node(request, left, next_index, analysis)?;
+            let right_type = analyze_node(request, right, next_index, analysis)?;
+            if left_type != RustValueType::Integer || right_type != RustValueType::Integer {
+                return Err(unsupported_node(
+                    request,
+                    expression,
+                    "the oracle slice supports comparisons only between bounded integers",
+                ));
+            }
+            RustValueType::Boolean
+        }
+        ExpressionKind::Numeric { .. } | ExpressionKind::NumericNegate { .. } => {
+            return Err(unsupported_node(
+                request,
+                expression,
+                "numeric arithmetic and negation require an invalid-result API and are refused",
+            ));
+        }
+        _ => {
+            return Err(unsupported_node(
+                request,
+                expression,
+                format!(
+                    "unsupported expression in oracle slice: {}",
+                    node_name(expression.kind())
+                ),
+            ));
+        }
+    };
+    if typed_value != Some(analyzed) {
+        return Err(unsupported_node(
+            request,
+            expression,
+            "typed node value type does not match the supported expression grammar",
+        ));
+    }
+    Ok(analyzed)
+}
+
+fn rust_value_type(value_type: &ValueType) -> Option<RustValueType> {
+    match value_type {
+        ValueType::Boolean => Some(RustValueType::Boolean),
+        ValueType::Integer { .. } => Some(RustValueType::Integer),
+        _ => None,
+    }
+}
+
+fn require_boolean_child(
+    request: &OracleRequest<'_>,
+    child: &Expression,
+    next_index: &mut u32,
+    analysis: &mut ExpressionAnalysis,
+    parent: &Expression,
+) -> Result<(), Vec<GenerationDiagnostic>> {
+    if analyze_node(request, child, next_index, analysis)? != RustValueType::Boolean {
+        return Err(unsupported_node(
+            request,
+            parent,
+            "Boolean operators require Boolean operands",
+        ));
+    }
+    Ok(())
+}
+
+fn unsupported_node(
+    request: &OracleRequest<'_>,
+    expression: &Expression,
+    message: impl Into<String>,
+) -> Vec<GenerationDiagnostic> {
+    expression_diagnostic(
+        request,
+        GenerationErrorCode::UnsupportedExpression,
+        "expression.node",
+        message,
+        expression.source(),
+    )
 }
 
 fn render_expression(
@@ -739,14 +1056,23 @@ fn render_node(
         ExpressionKind::BooleanLiteral { value } => {
             output.line(if *value { "true" } else { "false" })
         }
+        ExpressionKind::IntegerLiteral { value, .. } => {
+            let literal = if *value == i64::MIN {
+                "i64::MIN".to_owned()
+            } else {
+                format!("{value}_i64")
+            };
+            output.line(&literal)
+        }
         ExpressionKind::ValueReference { name, observation } => {
             let key = reference_key(name.as_str(), Some(*observation));
             let Some(identifier) = parameters.get(&key) else {
-                return Err(single_diagnostic(
+                return Err(expression_diagnostic(
                     request,
                     GenerationErrorCode::UnsupportedDependency,
                     "expression.value_reference",
-                    "typed dependency census does not contain the referenced Boolean value",
+                    "typed dependency census does not contain the referenced value",
+                    expression.source(),
                 ));
             };
             output.line(identifier)
@@ -797,15 +1123,37 @@ fn render_node(
             output.line("},").map_err(|_| resource_error(request))?;
             output.line(")")
         }
+        ExpressionKind::Compare {
+            operator,
+            left,
+            right,
+        } => {
+            let operator = match operator {
+                ComparisonOperator::Equal => "==",
+                ComparisonOperator::NotEqual => "!=",
+                ComparisonOperator::Less => "<",
+                ComparisonOperator::LessEqual => "<=",
+                ComparisonOperator::Greater => ">",
+                ComparisonOperator::GreaterEqual => ">=",
+            };
+            output.line("(").map_err(|_| resource_error(request))?;
+            render_node(request, left, parameters, output)?;
+            output.line(")").map_err(|_| resource_error(request))?;
+            output.line(operator).map_err(|_| resource_error(request))?;
+            output.line("(").map_err(|_| resource_error(request))?;
+            render_node(request, right, parameters, output)?;
+            output.line(")")
+        }
         other => {
-            return Err(single_diagnostic(
+            return Err(expression_diagnostic(
                 request,
                 GenerationErrorCode::UnsupportedExpression,
                 "expression.node",
                 format!(
-                    "unsupported expression in Boolean slice: {}",
+                    "unsupported expression in oracle slice: {}",
                     node_name(other)
                 ),
+                expression.source(),
             ));
         }
     };
@@ -1374,6 +1722,33 @@ fn single_diagnostic(
     path: impl Into<String>,
     message: impl Into<String>,
 ) -> Vec<GenerationDiagnostic> {
+    diagnostic(request, code, path, message, None)
+}
+
+fn expression_diagnostic(
+    request: &OracleRequest<'_>,
+    code: GenerationErrorCode,
+    path: impl Into<String>,
+    message: impl Into<String>,
+    source_span: &SourceSpan,
+) -> Vec<GenerationDiagnostic> {
+    debug_assert!(matches!(
+        code,
+        GenerationErrorCode::NonBooleanRoot
+            | GenerationErrorCode::UnsupportedExpression
+            | GenerationErrorCode::UnsupportedDependency
+            | GenerationErrorCode::UnsupportedObligations
+    ));
+    diagnostic(request, code, path, message, Some(source_span.clone()))
+}
+
+fn diagnostic(
+    request: &OracleRequest<'_>,
+    code: GenerationErrorCode,
+    path: impl Into<String>,
+    message: impl Into<String>,
+    source_span: Option<SourceSpan>,
+) -> Vec<GenerationDiagnostic> {
     vec![GenerationDiagnostic {
         code,
         terminal_state: code.terminal_state(),
@@ -1381,6 +1756,7 @@ fn single_diagnostic(
         requirement_revision: request.requirement.revision().get(),
         clause_id: request.clause.as_str().to_owned(),
         path: path.into(),
+        source_span,
         message: message.into(),
     }]
 }
