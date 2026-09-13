@@ -8,6 +8,8 @@ relationships:
     type: constrains
   - target: ix://agent-ix/quire-contract-codegen/FR-005
     type: constrains
+  - target: ix://agent-ix/quire-contract-codegen/FR-003
+    type: constrains
 ---
 # NFR-001: Reproducible and atomic generation
 

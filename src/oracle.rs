@@ -4,8 +4,8 @@ use std::{collections::BTreeMap, fmt::Write as _, sync::OnceLock};
 
 use quire_contract_ir::{
     BooleanOperator, CanonicalProfile, ClauseId, ComparisonOperator, DependencyIdentity,
-    DependencyKind, Expression, ExpressionKind, RequirementRef, SourceSpan, StateObservation,
-    TypedExpression, ValueType,
+    DependencyKind, Expression, ExpressionKind, IntegerType, RequirementRef, SourceSpan,
+    StateObservation, TypedExpression, ValueType,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -349,17 +349,17 @@ struct RenderedExpression {
     implication_regions: Vec<(u32, u32)>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum RustValueType {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RustValueType {
     Boolean,
-    Integer,
+    Integer(IntegerType),
 }
 
 impl RustValueType {
-    const fn source_name(self) -> &'static str {
+    const fn source_name(&self) -> &'static str {
         match self {
             Self::Boolean => "bool",
-            Self::Integer => "i64",
+            Self::Integer(_) => "i64",
         }
     }
 }
@@ -376,11 +376,11 @@ struct ExpressionAnalysis {
     reference_order: Vec<String>,
 }
 
-struct DependencyParameter {
-    dependency: DependencyIdentity,
-    identifier: String,
-    value_type: RustValueType,
-    source: SourceSpan,
+pub(crate) struct DependencyParameter {
+    pub(crate) dependency: DependencyIdentity,
+    pub(crate) identifier: String,
+    pub(crate) value_type: RustValueType,
+    pub(crate) source: SourceSpan,
 }
 
 enum SerializationError {
@@ -751,7 +751,7 @@ pub(crate) fn dependency_parameters(
         .collect())
 }
 
-fn typed_dependency_parameters(
+pub(crate) fn typed_dependency_parameters(
     request: &OracleRequest<'_>,
 ) -> Result<Vec<DependencyParameter>, Vec<GenerationDiagnostic>> {
     let analysis = analyze_supported_expression(request)?;
@@ -819,7 +819,7 @@ fn typed_dependency_parameters(
         parameters.push(DependencyParameter {
             dependency: dependency.clone(),
             identifier,
-            value_type: reference.value_type,
+            value_type: reference.value_type.clone(),
             source: reference.source.clone(),
         });
     }
@@ -908,10 +908,10 @@ fn analyze_node(
                     "integer literal type differs from its typed node",
                 ));
             }
-            RustValueType::Integer
+            RustValueType::Integer(value_type.clone())
         }
         ExpressionKind::ValueReference { name, observation } => {
-            let Some(value_type) = typed_value else {
+            let Some(value_type) = typed_value.as_ref() else {
                 return Err(expression_diagnostic(
                     request,
                     GenerationErrorCode::UnsupportedDependency,
@@ -922,7 +922,7 @@ fn analyze_node(
             };
             let key = reference_key(name.as_str(), Some(*observation));
             match analysis.references.get(&key) {
-                Some(existing) if existing.value_type != value_type => {
+                Some(existing) if &existing.value_type != value_type => {
                     return Err(expression_diagnostic(
                         request,
                         GenerationErrorCode::UnsupportedDependency,
@@ -937,13 +937,13 @@ fn analyze_node(
                     analysis.references.insert(
                         key,
                         ReferenceInfo {
-                            value_type,
+                            value_type: value_type.clone(),
                             source: expression.source().clone(),
                         },
                     );
                 }
             }
-            value_type
+            value_type.clone()
         }
         ExpressionKind::BooleanNot { operand } => {
             require_boolean_child(request, operand, next_index, analysis, expression)?;
@@ -957,7 +957,9 @@ fn analyze_node(
         ExpressionKind::Compare { left, right, .. } => {
             let left_type = analyze_node(request, left, next_index, analysis)?;
             let right_type = analyze_node(request, right, next_index, analysis)?;
-            if left_type != RustValueType::Integer || right_type != RustValueType::Integer {
+            if !matches!(left_type, RustValueType::Integer(_))
+                || !matches!(right_type, RustValueType::Integer(_))
+            {
                 return Err(unsupported_node(
                     request,
                     expression,
@@ -984,7 +986,7 @@ fn analyze_node(
             ));
         }
     };
-    if typed_value != Some(analyzed) {
+    if typed_value.as_ref() != Some(&analyzed) {
         return Err(unsupported_node(
             request,
             expression,
@@ -997,7 +999,7 @@ fn analyze_node(
 fn rust_value_type(value_type: &ValueType) -> Option<RustValueType> {
     match value_type {
         ValueType::Boolean => Some(RustValueType::Boolean),
-        ValueType::Integer { .. } => Some(RustValueType::Integer),
+        ValueType::Integer { value } => Some(RustValueType::Integer(value.clone())),
         _ => None,
     }
 }

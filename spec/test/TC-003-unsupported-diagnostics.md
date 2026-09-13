@@ -24,7 +24,15 @@ dependencies, object/graph reads such as dereference and reachability, and every
 outside the supported grammar. Where more than one expression node or obligation is unsupported,
 require the deterministic first locus declared by FR-001 rather than accepting any failing span.
 
+For Kani, also vary pre/post placement and one cross-clause binding dimension at a time: dependency
+kind, observation, Boolean/integer type, integer domain/minimum/maximum/overflow policy, subject ABI,
+backend version, executable digest, unwind, solver and identity. A post-state dependency in a
+precondition, conflicting declarations for one dependency, or any range not taken from the checked
+IR is unrepresentable and must refuse before source, graph, or attestation publication.
+
 ## Expected Results
 
 Each fixture produces its expected stable diagnostic, unsupported nodes and obligations name their
-exact IR source span, and no fixture produces a falsely complete backend artifact.
+exact IR source span, and no fixture produces a falsely complete backend artifact. Kani binding
+refusals never fall back to Boolean parameters, unconstrained `i64`, machine extrema, or a proptest
+strategy range.

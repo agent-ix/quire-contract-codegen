@@ -1,9 +1,14 @@
 //! Deterministic, version-adapted Kani proof lowering.
 
-use std::{collections::BTreeSet, fmt::Write as _, sync::OnceLock};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Write as _,
+    sync::OnceLock,
+};
 
 use quire_contract_ir::{
-    ClauseId, DependencyIdentity, DependencyKind, RequirementRef, StateObservation, TypedExpression,
+    ClauseId, DependencyIdentity, DependencyKind, IntegerDomain, OverflowPolicy, RequirementRef,
+    SourceSpan, StateObservation, TypedExpression,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -11,8 +16,9 @@ use sha2::{Digest as _, Sha256};
 use crate::{
     generate_boolean_oracle,
     oracle::{
-        attestation_context_is_valid, dependency_parameters, generated_output_attestation,
-        length_delimited_identity, oracle_symbol, GeneratedAttestationSpec,
+        attestation_context_is_valid, generated_output_attestation, length_delimited_identity,
+        oracle_symbol, typed_dependency_parameters, DependencyParameter, GeneratedAttestationSpec,
+        RustValueType,
     },
     Artifact, AttestationContext, GenerationErrorCode, GenerationTerminalState, OracleRequest,
     MAX_GENERATED_SOURCE_BYTES,
@@ -22,10 +28,10 @@ use crate::{
 pub const KANI_BACKEND_VERSION: &str = "0.67.0";
 
 /// Stable identity for the isolated first function-contract adapter.
-pub const KANI_ADAPTER_PROFILE: &str = "kani-0.67.0-function-contracts-v1";
+pub const KANI_ADAPTER_PROFILE: &str = "kani-0.67.0-function-contracts-v2";
 
-const PROOF_GRAPH_SCHEMA: &[u8] = include_bytes!("../schemas/kani-proof-graph-v1.schema.json");
-const RUST_KANI_SCHEMA: &[u8] = include_bytes!("../schemas/generated-rust-kani-v1.schema.json");
+const PROOF_GRAPH_SCHEMA: &[u8] = include_bytes!("../schemas/kani-proof-graph-v2.schema.json");
+const RUST_KANI_SCHEMA: &[u8] = include_bytes!("../schemas/generated-rust-kani-v2.schema.json");
 const KANI_SPEC: &[u8] = include_bytes!("../spec/functional/FR-003-kani-lowering.md");
 const KANI_SOURCE: &[u8] = include_bytes!("kani.rs");
 const ORACLE_SOURCE: &[u8] = include_bytes!("oracle.rs");
@@ -70,6 +76,67 @@ pub enum ProofReadiness {
     Conditional,
     /// A required proof is missing or failed.
     Incomplete,
+}
+
+/// Position of one primitive dependency in the generated subject ABI.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniBindingRole {
+    /// A copied current/pre value passed to the customer subject.
+    Argument,
+    /// A copied post-state value returned by the customer subject.
+    Result,
+}
+
+/// Rust primitive used for one generated Kani subject binding.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniPrimitiveType {
+    /// Rust `bool`.
+    Boolean,
+    /// Rust `i64`.
+    I64,
+}
+
+impl KaniPrimitiveType {
+    const fn source_name(self) -> &'static str {
+        match self {
+            Self::Boolean => "bool",
+            Self::I64 => "i64",
+        }
+    }
+}
+
+/// Exact checked IR domain retained for one bounded-integer binding.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct KaniIntegerBounds {
+    /// Signed or unsigned checked IR domain.
+    pub domain: IntegerDomain,
+    /// Inclusive checked minimum.
+    pub minimum: i64,
+    /// Inclusive checked maximum.
+    pub maximum: i64,
+    /// Checked overflow policy; generation never replaces it.
+    pub overflow: OverflowPolicy,
+}
+
+/// One normalized primitive argument or result in the generated subject ABI.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct KaniSubjectBinding {
+    /// Complete checked dependency identity used for uniqueness and ordering.
+    pub dependency: DependencyIdentity,
+    /// Deterministic generated Rust identifier.
+    pub identifier: String,
+    /// Argument or result position.
+    pub role: KaniBindingRole,
+    /// Rust primitive type.
+    pub primitive_type: KaniPrimitiveType,
+    /// Exact integer bounds, or `None` for Boolean bindings.
+    pub integer_bounds: Option<KaniIntegerBounds>,
+    /// Every authored occurrence contributing this normalized binding.
+    pub source_spans: Vec<SourceSpan>,
 }
 
 /// Supported solver choice for the first pinned adapter.
@@ -191,6 +258,9 @@ pub struct KaniDiagnostic {
     pub generation_code: Option<GenerationErrorCode>,
     /// Stable path to the rejected request element.
     pub path: String,
+    /// Exact IR-owned locus when clause lowering identified one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_span: Option<SourceSpan>,
     /// Human-readable detail not used as machine identity.
     pub message: String,
 }
@@ -233,6 +303,10 @@ pub struct ProofDependencyGraph {
     pub readiness: ProofReadiness,
     /// Explicit proof execution state; generation never executes or classifies a proof.
     pub proof_execution_state: String,
+    /// Ordered copied current/pre values supplied to the customer subject.
+    pub subject_arguments: Vec<KaniSubjectBinding>,
+    /// Ordered post-state values returned by the customer subject.
+    pub subject_results: Vec<KaniSubjectBinding>,
     /// Generated Rust artifact path.
     pub source_artifact_path: String,
     /// Generated Rust artifact digest.
@@ -254,9 +328,28 @@ pub struct KaniArtifactBundle {
     pub proof_graph_attestation: Artifact,
 }
 
-struct KaniBinding {
-    input_name: String,
-    state_name: String,
+struct SubjectAbi {
+    arguments: Vec<KaniSubjectBinding>,
+    results: Vec<KaniSubjectBinding>,
+}
+
+struct KaniSource<'a> {
+    requirement: &'a str,
+    revision: u64,
+    proof_id: &'a str,
+    subject_path: &'a str,
+    module_symbol: &'a str,
+    contract_symbol: &'a str,
+    harness_symbol: &'a str,
+    precondition_symbol: &'a str,
+    postcondition_symbol: &'a str,
+    precondition_arguments: &'a str,
+    postcondition_arguments: &'a str,
+    precondition_source: &'a str,
+    postcondition_source: &'a str,
+    stub_attributes: &'a str,
+    dependency_assumptions: &'a str,
+    abi: &'a SubjectAbi,
 }
 
 /// Generates one bounded Kani contract/proof bundle or structured diagnostics with no partial output.
@@ -281,11 +374,11 @@ pub fn generate_kani_bundle(
         .map_err(|values| map_clause_diagnostics("precondition", values))?;
     let postcondition = generate_boolean_oracle(&postcondition_request)
         .map_err(|values| map_clause_diagnostics("postcondition", values))?;
-    let precondition_parameters = dependency_parameters(&precondition_request)
+    let precondition_parameters = typed_dependency_parameters(&precondition_request)
         .map_err(|values| map_clause_diagnostics("precondition", values))?;
-    let postcondition_parameters = dependency_parameters(&postcondition_request)
+    let postcondition_parameters = typed_dependency_parameters(&postcondition_request)
         .map_err(|values| map_clause_diagnostics("postcondition", values))?;
-    let binding = derive_binding(&precondition_parameters, &postcondition_parameters)?;
+    let abi = derive_subject_abi(&precondition_parameters, &postcondition_parameters)?;
     let requirement = request.requirement.requirement().as_str();
     let revision = request.requirement.revision().get();
     let symbol = kani_symbol(requirement, revision, request.proof_id);
@@ -304,8 +397,8 @@ pub fn generate_kani_bundle(
         revision,
         request.postcondition_clause.as_str(),
     );
-    let precondition_arguments = predicate_arguments(&precondition_parameters, false)?;
-    let postcondition_arguments = predicate_arguments(&postcondition_parameters, true)?;
+    let precondition_arguments = predicate_arguments(&precondition_parameters, &abi, false)?;
+    let postcondition_arguments = predicate_arguments(&postcondition_parameters, &abi, true)?;
     let exact_harness = format!("{module_symbol}::{harness_symbol}");
     let options = adapter_options(
         &exact_harness,
@@ -334,7 +427,7 @@ pub fn generate_kani_bundle(
                 })
         })
         .collect::<String>();
-    let assumption_statements = source_dependencies
+    let dependency_assumptions = source_dependencies
         .iter()
         .filter(|dependency| dependency.kind == ProofDependencyKind::Assumed)
         .filter_map(|dependency| {
@@ -346,58 +439,24 @@ pub fn generate_kani_bundle(
             })
         })
         .collect::<String>();
-    let conditional_attribute = "cfg";
-    let kani_configuration = "kani";
-    let source = format!(
-        "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
-// Generated by quire-contract-codegen {}; DO NOT EDIT.\n\
-// Requirement: {requirement}@{revision}; Proof: {}\n\
-// Kani adapter: {KANI_ADAPTER_PROFILE}; backend: {KANI_BACKEND_VERSION}\n\
-\n\
-{}\n\
-{}\n\
-#[{conditional_attribute}({kani_configuration})]\n\
-mod {module_symbol} {{\n\
-    use super::*;\n\
-\n\
-    // BEGIN framing\n\
-    // proof-id: {}\n\
-    // input-binding: {}\n\
-    // state-binding: {}\n\
-    // END framing\n\
-\n\
-    // BEGIN binding\n\
-    fn call_subject(input: bool, pre_state: bool) -> bool {{\n\
-        {}(input, pre_state)\n\
-    }}\n\
-    // END binding\n\
-\n\
-    // BEGIN contract\n\
-    #[kani::requires({precondition_symbol}({precondition_arguments}))]\n\
-    #[kani::ensures(|post_state: &bool| {postcondition_symbol}({postcondition_arguments}))]\n\
-    fn {contract_symbol}(input: bool, pre_state: bool) -> bool {{\n\
-        call_subject(input, pre_state)\n\
-    }}\n\
-    // END contract\n\
-\n\
-    // BEGIN proof harness\n\
-{stub_attributes}    #[kani::proof_for_contract({contract_symbol})]\n\
-    fn {harness_symbol}() {{\n\
-{assumption_statements}        let input: bool = kani::any();\n\
-        let pre_state: bool = kani::any();\n\
-        let _post_state = {contract_symbol}(input, pre_state);\n\
-    }}\n\
-    // END proof harness\n\
-}}\n",
-        env!("CARGO_PKG_VERSION"),
-        request.proof_id,
-        precondition.rust.contents,
-        postcondition.rust.contents,
-        request.proof_id,
-        binding.input_name,
-        binding.state_name,
-        request.subject_path,
-    );
+    let source = render_kani_source(&KaniSource {
+        requirement,
+        revision,
+        proof_id: request.proof_id,
+        subject_path: request.subject_path,
+        module_symbol: &module_symbol,
+        contract_symbol: &contract_symbol,
+        harness_symbol: &harness_symbol,
+        precondition_symbol: &precondition_symbol,
+        postcondition_symbol: &postcondition_symbol,
+        precondition_arguments: &precondition_arguments,
+        postcondition_arguments: &postcondition_arguments,
+        precondition_source: &precondition.rust.contents,
+        postcondition_source: &postcondition.rust.contents,
+        stub_attributes: &stub_attributes,
+        dependency_assumptions: &dependency_assumptions,
+        abi: &abi,
+    });
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(single_diagnostic(
             KaniErrorCode::ResourceLimitExceeded,
@@ -414,7 +473,7 @@ mod {module_symbol} {{\n\
     })?;
     let rust = artifact(format!("src/generated/{symbol}.rs"), source);
     let graph_value = ProofDependencyGraph {
-        schema_version: "quire.kani-proof-graph/v1".to_owned(),
+        schema_version: "quire.kani-proof-graph/v2".to_owned(),
         proof_id: request.proof_id.to_owned(),
         requirement_id: requirement.to_owned(),
         requirement_revision: revision,
@@ -424,6 +483,8 @@ mod {module_symbol} {{\n\
         options: options.clone(),
         readiness: dependency_readiness(&normalized_dependencies),
         proof_execution_state: "not_run".to_owned(),
+        subject_arguments: abi.arguments.clone(),
+        subject_results: abi.results.clone(),
         source_artifact_path: rust.path.clone(),
         source_artifact_sha256: rust.sha256.clone(),
         dependencies: normalized_dependencies,
@@ -490,7 +551,7 @@ mod {module_symbol} {{\n\
             input_digest: None,
             output_role: "generated-rust-kani-proof",
             media_type: "text/x-rust",
-            output_schema: "quire.codegen.rust-kani/v1",
+            output_schema: "quire.codegen.rust-kani/v2",
             schema_digest: Some(rust_kani_schema_digest()),
             canonical_profile: KANI_ADAPTER_PROFILE,
             backend: "cargo-kani",
@@ -510,7 +571,7 @@ mod {module_symbol} {{\n\
             input_digest: None,
             output_role: "kani-proof-dependency-graph",
             media_type: "application/json",
-            output_schema: "quire.codegen.kani-proof-graph/v1",
+            output_schema: "quire.codegen.kani-proof-graph/v2",
             schema_digest: Some(proof_graph_schema_digest()),
             canonical_profile: KANI_ADAPTER_PROFILE,
             backend: "cargo-kani",
@@ -650,91 +711,356 @@ fn validate_path(value: &str, path: &str) -> Result<(), Vec<KaniDiagnostic>> {
     }
 }
 
-fn derive_binding(
-    precondition: &[(DependencyIdentity, String)],
-    postcondition: &[(DependencyIdentity, String)],
-) -> Result<KaniBinding, Vec<KaniDiagnostic>> {
-    let mut inputs = BTreeSet::new();
-    let mut states = BTreeSet::new();
-    for (role, dependencies) in [
-        ("precondition", precondition),
-        ("postcondition", postcondition),
-    ] {
-        for (dependency, _) in dependencies {
-            let name = dependency.path()[0].as_str();
-            match (role, dependency.kind(), dependency.observation()) {
-                (_, DependencyKind::Input, None | Some(StateObservation::Current)) => {
-                    inputs.insert(name.to_owned());
-                }
-                ("precondition", DependencyKind::State, Some(StateObservation::Pre))
+fn derive_subject_abi(
+    precondition: &[DependencyParameter],
+    postcondition: &[DependencyParameter],
+) -> Result<SubjectAbi, Vec<KaniDiagnostic>> {
+    let mut arguments: BTreeMap<DependencyIdentity, KaniSubjectBinding> = BTreeMap::new();
+    let mut results: BTreeMap<DependencyIdentity, KaniSubjectBinding> = BTreeMap::new();
+    let mut logical_types: BTreeMap<(DependencyKind, Vec<String>), RustValueType> = BTreeMap::new();
+    let mut generated_names: BTreeMap<String, DependencyIdentity> = BTreeMap::new();
+    for (is_postcondition, parameters) in [(false, precondition), (true, postcondition)] {
+        for parameter in parameters {
+            let dependency = &parameter.dependency;
+            let role = match (dependency.kind(), dependency.observation()) {
+                (DependencyKind::Input, None | Some(StateObservation::Current))
                 | (
-                    "postcondition",
                     DependencyKind::State,
-                    Some(StateObservation::Pre | StateObservation::Post),
-                ) => {
-                    states.insert(name.to_owned());
+                    Some(StateObservation::Current | StateObservation::Pre),
+                ) => KaniBindingRole::Argument,
+                (DependencyKind::State, Some(StateObservation::Post)) if is_postcondition => {
+                    KaniBindingRole::Result
+                }
+                (DependencyKind::State, Some(StateObservation::Post)) => {
+                    return Err(single_diagnostic(
+                        KaniErrorCode::UnsupportedBinding,
+                        "precondition.dependencies",
+                        "post-state data cannot be bound in a Kani precondition",
+                    ));
                 }
                 _ => {
                     return Err(single_diagnostic(
                         KaniErrorCode::UnsupportedBinding,
                         "clauses.dependencies",
-                        "the first Kani slice supports current input plus pre/post state only",
+                        "the Kani adapter supports only direct current input/current state/pre-state arguments and post-state results",
                     ));
                 }
+            };
+            let logical_key = (
+                dependency.kind(),
+                dependency
+                    .path()
+                    .iter()
+                    .map(|part| part.as_str().to_owned())
+                    .collect::<Vec<_>>(),
+            );
+            if let Some(existing) = logical_types.get(&logical_key) {
+                if existing != &parameter.value_type {
+                    return Err(single_diagnostic(
+                        KaniErrorCode::UnsupportedBinding,
+                        "clauses.dependencies",
+                        "one logical dependency has conflicting primitive types or integer domains",
+                    ));
+                }
+            } else {
+                logical_types.insert(logical_key, parameter.value_type.clone());
+            }
+            if let Some(existing) = generated_names.get(&parameter.identifier) {
+                if existing != dependency {
+                    return Err(single_diagnostic(
+                        KaniErrorCode::UnsupportedBinding,
+                        "clauses.dependencies",
+                        "distinct dependency identities collide in the generated subject ABI",
+                    ));
+                }
+            } else {
+                generated_names.insert(parameter.identifier.clone(), dependency.clone());
+            }
+            let bindings = match role {
+                KaniBindingRole::Argument => &mut arguments,
+                KaniBindingRole::Result => &mut results,
+            };
+            if let Some(existing) = bindings.get_mut(dependency) {
+                if existing.identifier != parameter.identifier
+                    || existing.role != role
+                    || !binding_matches_value_type(existing, &parameter.value_type)
+                {
+                    return Err(single_diagnostic(
+                        KaniErrorCode::UnsupportedBinding,
+                        "clauses.dependencies",
+                        "one dependency identity has incompatible generated bindings",
+                    ));
+                }
+                existing.source_spans.push(parameter.source.clone());
+                existing.source_spans.sort();
+                existing.source_spans.dedup();
+            } else {
+                bindings.insert(dependency.clone(), subject_binding(parameter, role));
             }
         }
     }
-    if inputs.len() != 1 || states.len() != 1 {
-        return Err(single_diagnostic(
-            KaniErrorCode::UnsupportedBinding,
-            "clauses.dependencies",
-            "the first Kani slice requires exactly one Boolean input and one Boolean state",
-        ));
-    }
-    let input_name = inputs.into_iter().next().ok_or_else(|| {
-        single_diagnostic(
-            KaniErrorCode::UnsupportedBinding,
-            "clauses.dependencies",
-            "the input binding is unavailable",
-        )
-    })?;
-    let state_name = states.into_iter().next().ok_or_else(|| {
-        single_diagnostic(
-            KaniErrorCode::UnsupportedBinding,
-            "clauses.dependencies",
-            "the state binding is unavailable",
-        )
-    })?;
-    Ok(KaniBinding {
-        input_name,
-        state_name,
+    Ok(SubjectAbi {
+        arguments: arguments.into_values().collect(),
+        results: results.into_values().collect(),
     })
 }
 
+fn subject_binding(parameter: &DependencyParameter, role: KaniBindingRole) -> KaniSubjectBinding {
+    let (primitive_type, integer_bounds) = match &parameter.value_type {
+        RustValueType::Boolean => (KaniPrimitiveType::Boolean, None),
+        RustValueType::Integer(value) => (
+            KaniPrimitiveType::I64,
+            Some(KaniIntegerBounds {
+                domain: value.domain(),
+                minimum: value.minimum(),
+                maximum: value.maximum(),
+                overflow: value.overflow(),
+            }),
+        ),
+    };
+    KaniSubjectBinding {
+        dependency: parameter.dependency.clone(),
+        identifier: parameter.identifier.clone(),
+        role,
+        primitive_type,
+        integer_bounds,
+        source_spans: vec![parameter.source.clone()],
+    }
+}
+
+fn binding_matches_value_type(binding: &KaniSubjectBinding, value_type: &RustValueType) -> bool {
+    match (value_type, binding.primitive_type, &binding.integer_bounds) {
+        (RustValueType::Boolean, KaniPrimitiveType::Boolean, None) => true,
+        (RustValueType::Integer(value), KaniPrimitiveType::I64, Some(bounds)) => {
+            bounds.domain == value.domain()
+                && bounds.minimum == value.minimum()
+                && bounds.maximum == value.maximum()
+                && bounds.overflow == value.overflow()
+        }
+        _ => false,
+    }
+}
+
 fn predicate_arguments(
-    parameters: &[(DependencyIdentity, String)],
+    parameters: &[DependencyParameter],
+    abi: &SubjectAbi,
     postcondition: bool,
 ) -> Result<String, Vec<KaniDiagnostic>> {
     parameters
         .iter()
-        .map(
-            |(dependency, _)| match (dependency.kind(), dependency.observation()) {
-                (DependencyKind::Input, None | Some(StateObservation::Current)) => {
-                    Ok("input".to_owned())
+        .map(|parameter| {
+            if let Some(binding) = abi
+                .arguments
+                .iter()
+                .find(|binding| binding.dependency == parameter.dependency)
+            {
+                return Ok(binding.identifier.clone());
+            }
+            if postcondition {
+                if let Some(index) = abi
+                    .results
+                    .iter()
+                    .position(|binding| binding.dependency == parameter.dependency)
+                {
+                    return Ok(result_access(abi.results.len(), index));
                 }
-                (DependencyKind::State, Some(StateObservation::Pre)) => Ok("pre_state".to_owned()),
-                (DependencyKind::State, Some(StateObservation::Post)) if postcondition => {
-                    Ok("*post_state".to_owned())
-                }
-                _ => Err(single_diagnostic(
-                    KaniErrorCode::UnsupportedBinding,
-                    "clauses.dependencies",
-                    "a clause dependency cannot be represented in the first Kani adapter",
-                )),
-            },
-        )
+            }
+            Err(single_diagnostic(
+                KaniErrorCode::UnsupportedBinding,
+                "clauses.dependencies",
+                "a clause dependency has no position in the normalized subject ABI",
+            ))
+        })
         .collect::<Result<Vec<_>, _>>()
         .map(|values| values.join(", "))
+}
+
+fn result_access(result_count: usize, index: usize) -> String {
+    if result_count == 1 {
+        "*post_state".to_owned()
+    } else {
+        format!("post_state.{index}")
+    }
+}
+
+fn render_kani_source(value: &KaniSource<'_>) -> String {
+    let argument_declarations = value
+        .abi
+        .arguments
+        .iter()
+        .map(|binding| {
+            format!(
+                "{}: {}",
+                binding.identifier,
+                binding.primitive_type.source_name()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let argument_names = value
+        .abi
+        .arguments
+        .iter()
+        .map(|binding| binding.identifier.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let result_type = result_type(&value.abi.results);
+    let framing = render_framing(value.abi);
+    let symbolic_arguments = render_symbolic_arguments(&value.abi.arguments);
+    let result_bounds = render_result_bounds(&value.abi.results);
+    let postcondition_call = format!(
+        "{}({})",
+        value.postcondition_symbol, value.postcondition_arguments
+    );
+    let ensures = if result_bounds.is_empty() {
+        postcondition_call
+    } else {
+        format!("({result_bounds}) && ({postcondition_call})")
+    };
+    let post_state_name = if value.abi.results.is_empty() {
+        "_post_state"
+    } else {
+        "post_state"
+    };
+    format!(
+        "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
+// Generated by quire-contract-codegen {}; DO NOT EDIT.\n\
+// Requirement: {}@{}; Proof: {}\n\
+// Kani adapter: {KANI_ADAPTER_PROFILE}; backend: {KANI_BACKEND_VERSION}\n\
+\n\
+{}\n\
+{}\n\
+#[cfg(kani)]\n\
+mod {} {{\n\
+    use super::*;\n\
+\n\
+    // BEGIN framing\n\
+    // proof-id: {}\n\
+{}    // END framing\n\
+\n\
+    // BEGIN binding\n\
+    fn call_subject({argument_declarations}) -> {result_type} {{\n\
+        {}({argument_names})\n\
+    }}\n\
+    // END binding\n\
+\n\
+    // BEGIN contract\n\
+    #[kani::requires({}({}))]\n\
+    #[kani::ensures(|{post_state_name}: &{result_type}| {ensures})]\n\
+    fn {}({argument_declarations}) -> {result_type} {{\n\
+        call_subject({argument_names})\n\
+    }}\n\
+    // END contract\n\
+\n\
+    // BEGIN proof harness\n\
+{}    #[kani::proof_for_contract({})]\n\
+    fn {}() {{\n\
+{}{}        let _post_state = {}({argument_names});\n\
+    }}\n\
+    // END proof harness\n\
+}}\n",
+        env!("CARGO_PKG_VERSION"),
+        value.requirement,
+        value.revision,
+        value.proof_id,
+        value.precondition_source,
+        value.postcondition_source,
+        value.module_symbol,
+        value.proof_id,
+        framing,
+        value.subject_path,
+        value.precondition_symbol,
+        value.precondition_arguments,
+        value.contract_symbol,
+        value.stub_attributes,
+        value.contract_symbol,
+        value.harness_symbol,
+        value.dependency_assumptions,
+        symbolic_arguments,
+        value.contract_symbol,
+    )
+}
+
+fn render_framing(abi: &SubjectAbi) -> String {
+    abi.arguments
+        .iter()
+        .chain(&abi.results)
+        .map(|binding| {
+            let role = match binding.role {
+                KaniBindingRole::Argument => "argument",
+                KaniBindingRole::Result => "result",
+            };
+            format!(
+                "    // {role}-binding: {}:{}\n",
+                binding.identifier,
+                binding.primitive_type.source_name()
+            )
+        })
+        .collect()
+}
+
+fn result_type(results: &[KaniSubjectBinding]) -> String {
+    match results {
+        [] => "()".to_owned(),
+        [binding] => binding.primitive_type.source_name().to_owned(),
+        values => format!(
+            "({})",
+            values
+                .iter()
+                .map(|binding| binding.primitive_type.source_name())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
+fn render_symbolic_arguments(arguments: &[KaniSubjectBinding]) -> String {
+    let mut source = String::new();
+    for binding in arguments {
+        let _ = writeln!(
+            source,
+            "        let {}: {} = kani::any();",
+            binding.identifier,
+            binding.primitive_type.source_name()
+        );
+        if let Some(bounds) = &binding.integer_bounds {
+            let _ = writeln!(
+                source,
+                "        kani::assume({} >= {} && {} <= {});",
+                binding.identifier,
+                i64_literal(bounds.minimum),
+                binding.identifier,
+                i64_literal(bounds.maximum)
+            );
+        }
+    }
+    source
+}
+
+fn render_result_bounds(results: &[KaniSubjectBinding]) -> String {
+    results
+        .iter()
+        .enumerate()
+        .filter_map(|(index, binding)| {
+            binding.integer_bounds.as_ref().map(|bounds| {
+                let access = result_access(results.len(), index);
+                format!(
+                    "{access} >= {} && {access} <= {}",
+                    i64_literal(bounds.minimum),
+                    i64_literal(bounds.maximum)
+                )
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(" && ")
+}
+
+fn i64_literal(value: i64) -> String {
+    match value {
+        i64::MIN => "i64::MIN".to_owned(),
+        i64::MAX => "i64::MAX".to_owned(),
+        _ => format!("{value}_i64"),
+    }
 }
 
 fn normalize_dependencies(dependencies: &[ProofDependencyRequest<'_>]) -> Vec<ProofDependencyEdge> {
@@ -789,6 +1115,8 @@ fn adapter_options(
         options.extend(["-Z".to_owned(), "stubbing".to_owned()]);
     }
     options.extend([
+        "-Z".to_owned(),
+        "concrete-playback".to_owned(),
         "--harness".to_owned(),
         harness.to_owned(),
         "--exact".to_owned(),
@@ -796,6 +1124,10 @@ fn adapter_options(
         unwind.to_string(),
         "--solver".to_owned(),
         solver.as_str().to_owned(),
+        "--output-format".to_owned(),
+        "regular".to_owned(),
+        "--concrete-playback".to_owned(),
+        "print".to_owned(),
     ]);
     options
 }
@@ -811,6 +1143,7 @@ fn map_clause_diagnostics(
             terminal_state: diagnostic.terminal_state,
             generation_code: Some(diagnostic.code),
             path: format!("{role}.{}", diagnostic.path),
+            source_span: diagnostic.source_span,
             message: diagnostic.message,
         })
         .collect()
@@ -834,6 +1167,7 @@ fn single_diagnostic(code: KaniErrorCode, path: &str, message: &str) -> Vec<Kani
         terminal_state: code.terminal_state(),
         generation_code: None,
         path: path.to_owned(),
+        source_span: None,
         message: message.to_owned(),
     }]
 }

@@ -31,7 +31,11 @@ correlated relations; only explicitly residual constraints may use rejection.
 
 The bounded Kani adapter reuses the exact oracle predicates, emits distinct
 framing/binding/contract/harness regions, derives a complete dependency graph, and records proof
-execution as `not_run`.
+execution as `not_run`. Its next reviewed increment generalizes direct Boolean bindings to bounded
+`i64` current-input/current-state/pre-state arguments and post-state results. Inclusive assumptions
+come only from checked IR `IntegerType` domains; post-state results carry the same domain in the
+ensures contract. The v2 adapter and graph retain the complete typed ABI, bounds, cargo-kani 0.67.0
+identity/options and concrete-playback configuration while preserving v1 artifacts historically.
 
 ## PR #22 round 8 repair delta
 
@@ -57,10 +61,27 @@ runtime-owned campaign transport and an authorized native producer/shared verifi
 are separate ownership gates; no private counters or attestation/receipt framework fills them.
 Every generated-source guard remains unchanged.
 
+The numeric/state Kani increment specified by FR-003 and TC-014 is complete. It consumes issue #4's
+executable-oracle analyzer and rendered predicates directly, derives its bounds only from checked IR
+domains, and proves the healthy Boolean/`i64` multi-result and ConfigVersion-style fixtures with the
+pinned Kani backend. It does not consume, change, or duplicate issue #3's model-domain strategy
+interface; agent E retains ownership of that branch and file set. Native replay of printed
+counterexamples remains the downstream quire-spec-language IT-010 boundary.
+
 - Current `main` is the branch base; superseded bespoke-assurance PRs are not revived or restacked.
   It carries the reviewed PR #22, #26, #23 and #25 heads, so this integration adds bound-package
   oracle generation and bound coverage analysis on top of them rather than restacking them.
 - Unsupported state, constraint, or shrinking semantics fail with a structured diagnostic rather
   than falling back to an unreported filter.
-- Vacuity is partial and closes no full FR-004 row. Kani landed as its own bounded slice and stays
-  a draft until independent current-head review.
+- Vacuity is partial and closes no full FR-004 row. Boolean and numeric/state Kani are complete for
+  FR-003; Task-005 stays `in_progress` because the independently owned issue #3 strategy slice and
+  remaining vacuity scope are not claimed by this increment.
+
+## Numeric/state Kani completion evidence
+
+The issue #2 increment generates deterministic zero/one/multiple-result Boolean/`i64` subject ABIs,
+exact inclusive IR-domain assumptions, v2 proof graphs and attestations, and source-spanned explicit
+refusals. The local SUITE-008 run exercises cargo-kani 0.67.0 with the recorded executable digest and
+exact options: healthy mixed and ConfigVersion-style identity subjects prove, while changed-state and
+strict-comparison subjects print concrete counterexamples. TC-003, TC-005, and TC-014 are complete;
+the FR-003 portion of TC-007 is complete, while TC-007 overall stays planned for FR-005 parity.

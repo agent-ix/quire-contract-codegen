@@ -40,9 +40,9 @@ operations:
     output: GeneratedArtifactBundle | StrategyDiagnostic
     semantics: admits only clauses bound oracle generation admits, narrowed to one Compare; domains taken from the clause's IR IntegerType declarations; constructive Holds/Violated populations, an exhaustive in-domain census and an untagged out-of-domain array; a subject-free oracle-conformance runner whose summary reports discard and rejection rates; see bound_strategy_slice
   - name: generate_kani_bundle
-    inputs: [typed precondition, typed postcondition, subject path, pinned backend identity, dependency census, attestation context]
+    inputs: [typed precondition, typed postcondition, direct checked dependency types and observations, subject path, pinned backend identity, dependency census, attestation context]
     output: KaniArtifactBundle | KaniDiagnosticSet
-    semantics: deterministic Kani source and dependency graph; generation records proof execution as not_run and never claims proof completion
+    semantics: deterministic Boolean/i64 Kani source and v2 dependency/binding graph using exact oracle predicates and IR-owned model bounds; generation records proof execution as not_run and never claims proof completion
   - name: write_bundle_atomic
     inputs: [ArtifactBundle, destination directory]
     output: PublishedBundleIdentity | IO diagnostic
@@ -142,12 +142,23 @@ bound_strategy_slice:
   consumer: case types expose one i64 field per read named by the generated oracle's dependency parameter identifier, plus constant IR declaration SymbolName and observation-name (current, pre, post; input declarations are always current) strings, where a quire-spec-language field projection's SymbolName is SL's deterministic field alias mapped back through SL FR-034 read correspondence; generated code depends only on proptest, quire-contract-runtime, and core/std; no serialized case, census, or summary format and no new schemas/ file; ProofAttestationV1 body (quoin FR-064, sealed through quoin FR-068) under PROOF-codegen-generated-rust-strategy whose codegen-owned argv renders --requirement <requirement>@<revision> --clause <clause id> as bound oracle attestations do and binds the quire-contract-ir FR-023 BoundPackage digest through --input-digest; the generated header states the BoundPackage digest and full ClauseRef
   out_of_scope: Boolean connectives over comparisons; Boolean literal, reference, and negation roots; a Compare of one read with itself; Current mixed with Pre or Post of one declaration; arithmetic, negation, and definedness obligations, which oracle admission refuses so no admitted clause has an overflow edge (owned by codegen#4 and the qcir/runtime undefined-result decision under quire-spec-language#83); a numeric subject harness where an operation produces the post-state; StatePinned and NoEvent campaigns, which stay on the caller-constraint generate_i64_strategy API
 kani_slice:
-  adapter: exactly `cargo-kani 0.67.0` under profile `kani-0.67.0-function-contracts-v1`; another requested version is backend-unavailable
-  binding: one Boolean input, one Boolean pre/post state, and an explicit customer `fn(bool, bool) -> bool` path
-  outputs: generated Rust plus a schema-validated proof-dependency graph, each with its own Quoin ProofAttestationV1 body
+  adapter: exactly `cargo-kani 0.67.0` under profile `kani-0.67.0-function-contracts-v2`; another requested version is backend-unavailable
+  semantics_source: the executable-oracle analyzer and rendered predicates are reused exactly; the Kani adapter does not carry a second expression interpreter
+  argument_binding: unique direct current input, current state and pre-state dependencies become ordered subject arguments; order is normalized dependency identity, not source spelling or traversal accident
+  result_binding: unique direct post-state dependencies become the subject result; zero uses `()`, one uses its primitive, and multiple use an ordered tuple
+  binding_identity: uniqueness and ordering use the full checked DependencyIdentity of kind, normalized path and observation; repeated identical references unify, while incompatible declarations for one logical kind/path refuse
+  primitive_types: Boolean maps to bool; bounded integer maps to i64 with the checked IntegerType domain, inclusive minimum, inclusive maximum and overflow policy retained
+  bounds: every symbolic i64 argument receives an inclusive `kani::assume` from its checked IR model domain; post-state i64 results must satisfy the same domain in ensures; no caller range, proptest strategy, clamp or widened machine range substitutes
+  compatibility: the existing one-Boolean-input plus one-Boolean-pre/post-state transition is the corresponding generalized ABI instance and retains its semantics
+  outputs: generated Rust profile `quire.codegen.rust-kani/v2` plus schema-validated graph `quire.codegen.kani-proof-graph/v2`, each with its own Quoin ProofAttestationV1 body; v1 schema files remain historical and are not relabeled
   completion_boundary: graph readiness is derived from the full dependency census, but `proofExecutionState` is always `not_run`; artifact-generation attestations use output-specific proof obligations and do not attest that Kani proved the contract
   dependency_rule: missing or failed required edges yield incomplete; any assumption or stub yields conditional; only passed required edges yield ready
-  source_sites: every assumption and stub has one digest-bound source marker and one graph edge
+  source_sites: every proof assumption and stub has one digest-bound source marker and one graph edge; model-domain assumptions are separate typed binding records and never completed proof edges
+  framing: generated contracts quantify only over copied primitive arguments and returned primitive values; they claim no unmodeled global, heap, alias, indirect, object or graph state
+  subject_boundary: generation validates the customer subject as a Rust path and derives its required signature from checked bindings, but does not inspect or execute the external function; signature/link/body failures are external Rust or Kani observations and cannot become successful generation or proof claims
+  options: exact adapter options are `-Z function-contracts`, optional `-Z stubbing`, `-Z concrete-playback`, exact fully qualified harness, `--exact`, explicit unwind, explicit solver, `--output-format regular`, and `--concrete-playback print`; graph and attestations retain the complete ordered vector
+  refusal: UnsupportedBinding identifies post-state in a precondition, unsupported observations/dependency shapes, cross-clause type/domain conflicts and unrepresentable ABI; ClauseGenerationFailed retains the originating executable-oracle code and SourceSpan for definedness obligations or unsupported expressions; UnsupportedBackendVersion, InvalidIdentity, InvalidDependency, InvalidUnwind, InvalidAttestationContext, InvalidGeneratedSyntax, SerializationFailed and ResourceLimitExceeded remain distinct stable codes; every refusal returns no partial output
+  replay_boundary: printed Kani concrete-playback data and the graph's typed binding order are sufficient inputs for the downstream SL IT-010 replay; runtime input construction and `runtime::execute` verdict ownership remain in quire-spec-language
 coverage_analysis_slice:
   qualified_profile: cargo-llvm-cov 0.9.0 with rustc 1.94.1 on x86_64-unknown-linux-gnu in test profile producing llvm.coverage.json.export version 3.0.1; primitives validate export metadata, not native executable provenance
   implementation_boundary: parse_llvm_coverage, LlvmCoverage.observe, and classify_clause remain unbound observation primitives; the separate bound observation API does not implement native-qualified aggregate analysis, campaign binding, coverage attestation, or obligation discharge

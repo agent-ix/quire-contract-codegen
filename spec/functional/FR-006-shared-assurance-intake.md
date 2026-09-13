@@ -117,6 +117,7 @@ is to say what a change deleted — so the criterion also requires that file not
 name the format, which is the only way the claim holds over the one surface its
 own test cannot see.
 
-FR-003 and FR-004 are specified and not implemented at this revision. This requirement covers the
-generation behaviour that exists; it does not create a proof obligation over absent code, because a
-proof obligation whose subject does not exist is the most complete false green available.
+FR-003 is implemented and locally reviewed at this revision; FR-004 remains specified without a
+complete implementation. This requirement covers the generation behaviour that exists; it does not
+create a proof obligation over absent code, because a proof obligation whose subject does not exist
+is the most complete false green available.

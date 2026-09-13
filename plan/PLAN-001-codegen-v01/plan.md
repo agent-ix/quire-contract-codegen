@@ -40,6 +40,8 @@ Task-001 -> Task-002 -> Task-003 -> Task-004 -> Task-005 -> Task-006 -> Task-007
 Task-008 -------------------------------> Task-009
                                              ^
 Task-004 bounded-integer oracle admission ---+
+
+Task-004 -> Task-010 numeric/state Kani -> SL IT-010
 ```
 
 ## Task File Mapping
@@ -55,6 +57,7 @@ Task-004 bounded-integer oracle admission ---+
 | [Task-007](./tasks/Task-007-human-release.md) | Human source-release decision | not_started |
 | [Task-008](./tasks/Task-008-numeric-strategy-core.md) | Constructive populations, shrinking, and boundary census | done |
 | [Task-009](./tasks/Task-009-bound-strategy-integration.md) | Bound admission, runner, consumer bundle, and attestation | done |
+| [Task-010](./tasks/Task-010-numeric-state-kani.md) | Numeric/state Kani ticket increment | done |
 
 ## Numeric/state strategy plan delta
 
@@ -119,9 +122,13 @@ Task-004 is complete through the numeric/state oracle slice from
 `agent-ix/quire-spec-language#83`: obligation-free bounded-integer comparisons over direct input and
 current/pre/post state observations. Definedness obligations, arithmetic/negation requiring an
 invalid-result representation, indirect dependencies, and object/graph reads remain explicit
-refusals. Task-005's numeric/state Kani increment follows only after this oracle slice merges.
-
-The numeric/state strategy core in Task-008 and its bound-package integration in Task-009 are
-complete. Task-009 consumes Task-004's landed bounded-integer oracle grammar and supplies the
+refusals. The numeric/state strategy core in Task-008 and its bound-package integration in Task-009
+are complete. Task-009 consumes Task-004's landed bounded-integer oracle grammar and supplies the
 admission, runner, consumer bundle, and attestation required to cover FR-008 through FR-013 and
-NFR-004; matrix changes from the two work streams are retained as a union.
+NFR-004.
+
+Task-010, Task-005's numeric/state Kani increment, is also complete against that merged oracle core:
+checked IR domains exclusively determine symbolic bounds, the generalized subject ABI covers direct
+Boolean and bounded-`i64` current/pre/post observations, and Kani 0.67.0 concrete playback is retained
+for downstream IT-010 replay. Task-005 remains in progress for its remaining vacuity work; the
+strategy and Kani increments retain separate requirements, tests, and review evidence.

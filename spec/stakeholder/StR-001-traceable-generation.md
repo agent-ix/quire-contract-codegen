@@ -5,6 +5,8 @@ type: StR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-001
     type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-003
+    type: satisfied_by
 ---
 # StR-001: Traceable multi-backend contract generation
 

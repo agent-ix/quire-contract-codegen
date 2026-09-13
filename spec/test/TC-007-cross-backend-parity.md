@@ -18,9 +18,13 @@ permitted differential fixture has an attributed disposition.
 ## Test Procedure
 
 Execute the same canonical cases through each backend and compare normalized clause outcomes,
-diagnostics, dependencies, and proof attestations with golden and permitted attributed fixtures.
+diagnostics, dependencies, and proof attestations with golden and permitted attributed fixtures. For
+the Kani slice, compare the exact embedded executable-oracle predicates and enumerate the bounded
+Boolean/integer corpus, including each inclusive model endpoint and immediately outside values.
 
 ## Expected Results
 
 Shared semantics agree exactly; each difference is retained as a regression fixture or documented
-profile/backend distinction rather than suppressed.
+profile/backend distinction rather than suppressed. Kani quantifies only over IR-domain values;
+outside-domain executable-oracle results remain observable comparison data and are not silently
+reclassified as proof inputs.
