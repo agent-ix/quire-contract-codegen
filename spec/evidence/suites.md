@@ -52,9 +52,9 @@ with the executable-oracle output, and runs representative bundles under the
 pinned Kani backend. The numeric/state increment adds v2 typed subject bindings,
 IR-owned integer assumptions, exact boundary/outside controls, and successful plus
 falsifying concrete-playback runs without changing the generation-time `not_run`
-classification. It remains local pre-review evidence until the current-head review
-and does not classify graph readiness as a completed proof. FR-004 still has no
-suite because its implementation does not yet exist.
+classification. Its issue #2 current-head Rust review and gap analysis accept this local evidence;
+the suite still does not classify graph readiness as a completed proof. FR-004 still has no suite
+because its complete implementation does not yet exist.
 
 SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
 failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,

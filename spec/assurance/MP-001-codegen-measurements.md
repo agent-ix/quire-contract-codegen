@@ -242,17 +242,17 @@ a pass.
 
 Two limitations are load-bearing and are stated here rather than left to be inferred.
 
-FR-003 Kani obligation lowering has a Boolean draft and the numeric/state increment is specified for
-the same local suite. Its generated graph states `proofExecutionState: not_run`: dependency readiness
-is not proof completion, and the two ProofAttestationV1 bodies attest only successful artifact
-generation. Successful and failing cargo-kani observations qualify only the exact recorded 0.67.0
-profile and options. Native counterexample replay remains quire-spec-language IT-010 and cannot be
+FR-003 Kani obligation lowering has reviewed Boolean and numeric/state implementations in the same
+local suite. Its generated graph states `proofExecutionState: not_run`: dependency readiness is not
+proof completion, and the two ProofAttestationV1 bodies attest only successful artifact generation.
+Successful and failing cargo-kani observations qualify only the exact recorded 0.67.0 executable,
+profile, and options. Native counterexample replay remains quire-spec-language IT-010 and cannot be
 claimed from codegen's generated source or Kani text alone. FR-004 has bounded LLVM
 observation primitives, six actual generated-oracle native controls, and complete bound observations
 through `analyze_bound_coverage`, every outcome of which retains `provenance: unqualified`; it has
 no campaign-run provenance and no consuming obligation gate. Neither backend has a shared proof
-obligation claiming completed assurance here. Their TM-001 rows stay 🚧 Planned until independent
-current-head review and retained execution evidence.
+obligation claiming completed assurance here. FR-003's TM-001 rows are covered by SUITE-008 and its
+ticket-scoped review; FR-004's rows stay 🚧 Planned.
 
 The atomic publisher's fault model injects refusal before every artifact and ownership-marker write,
 before destination swap, during replacement swap and failed rollback, and after commit before backup

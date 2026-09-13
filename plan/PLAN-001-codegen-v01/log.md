@@ -16,3 +16,7 @@ description: "Chronological changes to the codegen v0.1 plan bundle."
   predicates, deterministic Boolean/`i64` subject ABI, checked IR inclusive bounds, v2 adapter/graph,
   exact cargo-kani 0.67.0 options, healthy and falsifying concrete-playback cases, explicit refusal,
   and the downstream native replay boundary. Implementation remains gated on the selected review.
+- **2026-09-13** - Completed and PR-time reviewed Task-005's issue #2 increment. Local SUITE-008
+  proves the healthy mixed and ConfigVersion-style subjects, retains actual cargo-kani identity and
+  options, and prints bounded counterexamples for the downstream IT-010 replay. Task-005 remains
+  active for the independently owned strategy and vacuity work.

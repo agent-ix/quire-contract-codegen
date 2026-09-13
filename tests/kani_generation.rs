@@ -14,7 +14,7 @@ use quire_contract_codegen::{
     KaniPrimitiveType, KaniRequest, KaniSolver, OracleRequest, ProofAttestationBody,
     ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
     ProofReadiness, IR_CANDIDATE_REVISION, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
-    RUNTIME_REVISION,
+    MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
@@ -357,7 +357,9 @@ fn cargo_kani_sha256() -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-/// TC-003 / TC-005 / TC-007.
+/// TC-003
+/// TC-005
+/// TC-007
 #[test]
 fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     let dependencies = [ProofDependencyRequest {
@@ -450,7 +452,11 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     );
 }
 
-/// TC-014 / FR-003-AC-2 / FR-003-AC-4 / FR-003-AC-5 / FR-003-AC-8.
+/// TC-014
+/// FR-003-AC-2
+/// FR-003-AC-4
+/// FR-003-AC-5
+/// FR-003-AC-8
 #[test]
 fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
     let bounded = integer_type(0, 1000);
@@ -652,7 +658,10 @@ fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
     );
 }
 
-/// TC-014 / FR-003-AC-2 / FR-003-AC-5 / FR-003-AC-7.
+/// TC-014
+/// FR-003-AC-2
+/// FR-003-AC-5
+/// FR-003-AC-7
 #[test]
 fn every_integer_comparison_supports_a_zero_result_bounded_subject() {
     let bounded = integer_type(0, 1000);
@@ -724,7 +733,11 @@ fn every_integer_comparison_supports_a_zero_result_bounded_subject() {
     }
 }
 
-/// TC-007 / TC-014 / FR-003-AC-2 / FR-003-AC-5 / FR-003-AC-7.
+/// TC-007
+/// TC-014
+/// FR-003-AC-2
+/// FR-003-AC-5
+/// FR-003-AC-7
 #[test]
 fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
     let bounded = integer_type(0, 1000);
@@ -838,7 +851,9 @@ fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
     );
 }
 
-/// TC-014 / FR-003-AC-2 / FR-003-AC-8.
+/// TC-014
+/// FR-003-AC-2
+/// FR-003-AC-8
 #[test]
 fn declaration_and_dependency_order_do_not_change_the_normalized_bundle() {
     let bounded = integer_type(0, 1000);
@@ -920,7 +935,11 @@ fn declaration_and_dependency_order_do_not_change_the_normalized_bundle() {
     );
 }
 
-/// TC-014 / FR-003-AC-2 / FR-003-AC-5 / FR-003-AC-6 / FR-003-AC-7.
+/// TC-014
+/// FR-003-AC-2
+/// FR-003-AC-5
+/// FR-003-AC-6
+/// FR-003-AC-7
 #[test]
 fn pinned_kani_proves_identity_and_prints_numeric_counterexamples() {
     let version = Command::new("cargo")
@@ -1101,7 +1120,8 @@ fn pinned_kani_proves_identity_and_prints_numeric_counterexamples() {
     );
 }
 
-/// TC-005.
+/// TC-005
+/// FR-003-AC-1
 #[test]
 fn proof_dependency_graph_derives_readiness_and_preserves_source_sites() {
     let missing = [ProofDependencyRequest {
@@ -1181,7 +1201,8 @@ fn proof_dependency_graph_derives_readiness_and_preserves_source_sites() {
     assert!(graph_validator.validate(&laundered_graph).is_err());
 }
 
-/// TC-003.
+/// TC-003
+/// FR-003-AC-3
 #[test]
 fn invalid_kani_requests_return_structured_non_generated_states() {
     let environment = environment();
@@ -1414,9 +1435,28 @@ fn invalid_kani_requests_return_structured_non_generated_states() {
     let mut expected_legacy = diagnostic.clone();
     expected_legacy.source_span = None;
     assert_eq!(legacy_diagnostic, expected_legacy);
+
+    let oversized_proof_id = "x".repeat(MAX_GENERATED_SOURCE_BYTES + 1);
+    let mut oversized_request = request(
+        &environment,
+        &precondition,
+        &postcondition,
+        &precondition_clause,
+        &postcondition_clause,
+        &[],
+    );
+    oversized_request.proof_id = &oversized_proof_id;
+    let diagnostic = &generate_kani_bundle(&oversized_request)
+        .expect_err("oversized generated source should be rejected")[0];
+    assert_eq!(diagnostic.code, KaniErrorCode::ResourceLimitExceeded);
+    assert_eq!(
+        diagnostic.terminal_state,
+        GenerationTerminalState::Unsupported
+    );
+    assert_eq!(diagnostic.path, "generated.rust");
 }
 
-/// TC-007.
+/// TC-007
 #[test]
 fn generated_kani_predicates_are_the_exact_executable_oracles_for_the_boolean_corpus() {
     let environment = environment();
@@ -1492,7 +1532,7 @@ fn generated_kani_predicates_are_the_exact_executable_oracles_for_the_boolean_co
     }
 }
 
-/// TC-007.
+/// TC-007
 #[test]
 fn pinned_kani_executes_the_generated_contract_proof() {
     let version = Command::new("cargo")
