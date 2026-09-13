@@ -11,16 +11,16 @@ use common::{packaged_attestation_schema, packaged_attestation_validator, seal_a
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     generate_boolean_oracle, generator_source_is_dirty, Artifact, AttestationContext,
-    AttestationResult, GenerationErrorCode, GenerationTerminalState, OracleRequest,
-    ProofAttestationBody, GENERATOR_SOURCE_REVISION, IR_CANDIDATE_REVISION,
+    AttestationResult, GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
+    OracleRequest, ProofAttestationBody, GENERATOR_SOURCE_REVISION, IR_CANDIDATE_REVISION,
     MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, CanonicalProfile, ClauseId, ComparisonOperator,
     DeclarationEnvironment, ExecutionPoint, Expression, ExpressionKind, IntegerDomain, IntegerType,
-    NumericOperator, OverflowPolicy, PackageId, RequirementId, RequirementRef, RequirementRevision,
-    SourceDocumentId, SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation,
-    SymbolName, ValueDeclaration, ValueDeclarationKind, ValueType,
+    NumericOperator, OverflowPolicy, PackageId, RationalType, RequirementId, RequirementRef,
+    RequirementRevision, SourceDocumentId, SourceIdentity, SourceLocation, SourceRevision,
+    SourceSpan, StateObservation, SymbolName, ValueDeclaration, ValueDeclarationKind, ValueType,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -180,6 +180,30 @@ fn differential_environment() -> DeclarationEnvironment {
     .unwrap()
 }
 
+fn integer_environment(value_type: &IntegerType) -> DeclarationEnvironment {
+    DeclarationEnvironment::new(
+        requirement(),
+        vec![],
+        [
+            ("x", ValueDeclarationKind::Input),
+            ("version", ValueDeclarationKind::State),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, (value, kind))| {
+            ValueDeclaration::new(
+                name(value),
+                kind,
+                ValueType::integer(value_type.clone()),
+                span(index as u64, index as u64 + 1),
+            )
+        })
+        .collect(),
+        vec![],
+    )
+    .unwrap()
+}
+
 fn boolean(value: bool, at: u64) -> Expression {
     Expression::new(ExpressionKind::BooleanLiteral { value }, span(at, at + 1))
 }
@@ -193,6 +217,32 @@ fn observed_value(name_value: &str, observation: StateObservation, at: u64) -> E
         ExpressionKind::ValueReference {
             name: name(name_value),
             observation,
+        },
+        span(at, at + 1),
+    )
+}
+
+fn integer_literal(value: i64, value_type: &IntegerType, at: u64) -> Expression {
+    Expression::new(
+        ExpressionKind::IntegerLiteral {
+            value,
+            value_type: value_type.clone(),
+        },
+        span(at, at + 1),
+    )
+}
+
+fn comparison(
+    operator: ComparisonOperator,
+    left: Expression,
+    right: Expression,
+    at: u64,
+) -> Expression {
+    Expression::new(
+        ExpressionKind::Compare {
+            operator,
+            left: Box::new(left),
+            right: Box::new(right),
         },
         span(at, at + 1),
     )
@@ -242,7 +292,7 @@ fn source_symbol(source: &str) -> &str {
         .unwrap()
 }
 
-/// Trace: TC-001, TC-006
+/// Trace: TC-001, TC-006, FR-001-AC-5
 #[test]
 fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     use quire_contract_codegen::{
@@ -425,7 +475,7 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     }
 }
 
-/// Trace: TC-001, NFR-002-AC-1
+/// Trace: TC-001, FR-001-AC-1, FR-001-AC-3, NFR-002-AC-1
 ///
 /// NFR-002-AC-1 declares its verification method as Test (TC-001), and this is
 /// that test: it asserts that each emitted proof attestation records the tool
@@ -970,6 +1020,75 @@ fn model_expression(model: &ModelExpression, next_span: &mut u64) -> Expression 
     }
 }
 
+#[derive(Clone, Copy)]
+enum IntegerOperand {
+    Literal(i64),
+    Input,
+    State(StateObservation),
+}
+
+impl IntegerOperand {
+    fn expression(self, value_type: &IntegerType, at: u64) -> Expression {
+        match self {
+            Self::Literal(value) => integer_literal(value, value_type, at),
+            Self::Input => observed_value("x", StateObservation::Current, at),
+            Self::State(observation) => observed_value("version", observation, at),
+        }
+    }
+
+    fn evaluate(self, input: i64, current: i64, pre: i64, post: i64) -> i64 {
+        match self {
+            Self::Literal(value) => value,
+            Self::Input => input,
+            Self::State(StateObservation::Current) => current,
+            Self::State(StateObservation::Pre) => pre,
+            Self::State(StateObservation::Post) => post,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct IntegerComparison {
+    operator: ComparisonOperator,
+    left: IntegerOperand,
+    right: IntegerOperand,
+}
+
+impl IntegerComparison {
+    fn expression(self, value_type: &IntegerType, at: u64) -> Expression {
+        comparison(
+            self.operator,
+            self.left.expression(value_type, at + 1),
+            self.right.expression(value_type, at + 2),
+            at,
+        )
+    }
+
+    fn evaluate(self, input: i64, current: i64, pre: i64, post: i64) -> bool {
+        let left = self.left.evaluate(input, current, pre, post);
+        let right = self.right.evaluate(input, current, pre, post);
+        match self.operator {
+            ComparisonOperator::Equal => left == right,
+            ComparisonOperator::NotEqual => left != right,
+            ComparisonOperator::Less => left < right,
+            ComparisonOperator::LessEqual => left <= right,
+            ComparisonOperator::Greater => left > right,
+            ComparisonOperator::GreaterEqual => left >= right,
+        }
+    }
+
+    const fn token(self) -> &'static str {
+        match self.operator {
+            ComparisonOperator::Equal => "==",
+            ComparisonOperator::NotEqual => "!=",
+            ComparisonOperator::Less => "<",
+            ComparisonOperator::LessEqual => "<=",
+            ComparisonOperator::Greater => ">",
+            ComparisonOperator::GreaterEqual => ">=",
+        }
+    }
+}
+
 /// TC-002.
 #[test]
 fn tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluator() {
@@ -1177,7 +1296,148 @@ fn tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluato
     );
 }
 
-/// TC-001.
+/// TC-002
+/// FR-001-AC-2
+/// FR-001-AC-8
+#[test]
+fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_model() {
+    let value_type =
+        IntegerType::new(IntegerDomain::Signed, -2, 2, OverflowPolicy::Reject).unwrap();
+    let environment = integer_environment(&value_type);
+    let models = [
+        IntegerComparison {
+            operator: ComparisonOperator::Equal,
+            left: IntegerOperand::Input,
+            right: IntegerOperand::Literal(0),
+        },
+        IntegerComparison {
+            operator: ComparisonOperator::NotEqual,
+            left: IntegerOperand::State(StateObservation::Current),
+            right: IntegerOperand::Input,
+        },
+        IntegerComparison {
+            operator: ComparisonOperator::Less,
+            left: IntegerOperand::State(StateObservation::Pre),
+            right: IntegerOperand::State(StateObservation::Post),
+        },
+        IntegerComparison {
+            operator: ComparisonOperator::LessEqual,
+            left: IntegerOperand::State(StateObservation::Post),
+            right: IntegerOperand::Literal(2),
+        },
+        IntegerComparison {
+            operator: ComparisonOperator::Greater,
+            left: IntegerOperand::Input,
+            right: IntegerOperand::State(StateObservation::Pre),
+        },
+        IntegerComparison {
+            operator: ComparisonOperator::GreaterEqual,
+            left: IntegerOperand::State(StateObservation::Current),
+            right: IntegerOperand::State(StateObservation::Post),
+        },
+    ];
+    let values = [-3_i64, -2, 0, 2, 3];
+    let mut generated_program =
+        String::from("#![deny(warnings)]\n//! Numeric generated-oracle differential corpus.\n");
+    let mut assertions = String::from("fn main() {\n");
+
+    for (index, model) in models.into_iter().enumerate() {
+        let expression = model.expression(&value_type, 2_000 + index as u64 * 3);
+        let typed = environment
+            .check_expression(&expression, &ValueType::Boolean, &handler(), true)
+            .unwrap();
+        assert!(typed.obligations().is_empty());
+        let clause = ClauseId::new(format!("integer-differential-{index}")).unwrap();
+        let request = OracleRequest {
+            requirement: environment.owner(),
+            clause: &clause,
+            expression: &typed,
+            attestation: attestation_context(),
+        };
+        let bundle = generate_boolean_oracle(&request).unwrap();
+        let repeated = generate_boolean_oracle(&request).unwrap();
+        assert_eq!(
+            bundle, repeated,
+            "numeric generation changed for case {index}"
+        );
+        assert!(bundle.rust.contents.contains(": i64"));
+        assert!(bundle
+            .rust
+            .contents
+            .contains(&format!("\n{}\n", model.token())));
+        assert!(!bundle.rust.contents.contains(": bool"));
+        let symbol = source_symbol(&bundle.rust.contents).to_owned();
+        generated_program.push_str(&bundle.rust.contents);
+
+        let parameters = typed
+            .dependencies()
+            .iter()
+            .map(|dependency| {
+                (
+                    dependency.path()[0].as_str(),
+                    dependency
+                        .observation()
+                        .unwrap_or(StateObservation::Current),
+                )
+            })
+            .collect::<Vec<_>>();
+        for input in values {
+            for current in values {
+                for pre in values {
+                    for post in values {
+                        let arguments = parameters
+                            .iter()
+                            .map(|(parameter, observation)| {
+                                match (*parameter, *observation) {
+                                    ("x", StateObservation::Current) => input,
+                                    ("version", StateObservation::Current) => current,
+                                    ("version", StateObservation::Pre) => pre,
+                                    ("version", StateObservation::Post) => post,
+                                    other => panic!("unexpected numeric parameter {other:?}"),
+                                }
+                                .to_string()
+                            })
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        assertions.push_str(&format!(
+                            "assert_eq!({symbol}({arguments}), {});\n",
+                            model.evaluate(input, current, pre, post)
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    assertions.push_str("}\n");
+    generated_program.push_str(&assertions);
+
+    let directory = TemporaryDirectory::new("quire-codegen-numeric-differential");
+    let source_directory = directory.0.join("src");
+    fs::create_dir_all(&source_directory).unwrap();
+    fs::write(source_directory.join("main.rs"), generated_program).unwrap();
+    fs::write(
+        directory.0.join("Cargo.toml"),
+        format!(
+            "[package]\nname = \"generated-numeric-oracle-differential\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
+        ),
+    )
+    .unwrap();
+    let execution = Command::new("cargo")
+        .args(["run", "--offline", "--quiet", "--target-dir"])
+        .arg(directory.0.join("target-codex-backends"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&directory.0)
+        .output()
+        .unwrap();
+    assert!(
+        execution.status.success(),
+        "generated numeric corpus did not compile and execute against runtime {RUNTIME_REVISION}: {}",
+        String::from_utf8_lossy(&execution.stderr)
+    );
+}
+
+/// TC-001
+/// FR-001-AC-5
 #[test]
 fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
     let environment = boolean_environment(&["a", "b", "implies_short_circuit"]);
@@ -1260,34 +1520,48 @@ fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
     );
 }
 
-/// TC-003.
+/// TC-003
+/// FR-001-AC-4
 #[test]
 fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
-    let integer = IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Reject).unwrap();
+    let integer =
+        IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Saturate).unwrap();
     let environment = DeclarationEnvironment::new(requirement(), vec![], vec![], vec![]).unwrap();
-    let expression = Expression::new(
-        ExpressionKind::Compare {
-            operator: ComparisonOperator::Equal,
-            left: Box::new(Expression::new(
-                ExpressionKind::IntegerLiteral {
-                    value: 1,
-                    value_type: integer.clone(),
-                },
-                span(30, 31),
-            )),
-            right: Box::new(Expression::new(
-                ExpressionKind::IntegerLiteral {
-                    value: 1,
-                    value_type: integer.clone(),
-                },
-                span(31, 32),
-            )),
+    let first_unsupported_span = span(30, 32);
+    let addition = Expression::new(
+        ExpressionKind::Numeric {
+            operator: NumericOperator::Add,
+            left: Box::new(integer_literal(1, &integer, 30)),
+            right: Box::new(integer_literal(1, &integer, 31)),
         },
-        span(30, 32),
+        first_unsupported_span.clone(),
+    );
+    let negation = Expression::new(
+        ExpressionKind::NumericNegate {
+            operand: Box::new(integer_literal(1, &integer, 35)),
+        },
+        span(35, 36),
+    );
+    let expression = boolean_op(
+        BooleanOperator::TotalAnd,
+        comparison(
+            ComparisonOperator::Equal,
+            addition,
+            integer_literal(2, &integer, 32),
+            29,
+        ),
+        comparison(
+            ComparisonOperator::Equal,
+            negation,
+            integer_literal(-1, &integer, 36),
+            34,
+        ),
+        29,
     );
     let typed = environment
         .check_expression(&expression, &ValueType::Boolean, &pre(), true)
         .unwrap();
+    assert!(typed.obligations().is_empty());
     let clause = ClauseId::new("unsupported").unwrap();
     let diagnostic = &generate_boolean_oracle(&OracleRequest {
         requirement: environment.owner(),
@@ -1301,13 +1575,34 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
         diagnostic.terminal_state,
         GenerationTerminalState::Unsupported
     );
+    assert_eq!(
+        diagnostic.source_span.as_ref(),
+        Some(&first_unsupported_span),
+        "the first unsupported node in authored preorder must win"
+    );
+    let encoded = serde_json::to_string(diagnostic).unwrap();
+    let decoded: GenerationDiagnostic = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(
+        &decoded, diagnostic,
+        "the exact IR span must survive the API wire form"
+    );
+    let mut legacy_value = serde_json::to_value(diagnostic).unwrap();
+    legacy_value.as_object_mut().unwrap().remove("sourceSpan");
+    let legacy_decoded: GenerationDiagnostic = serde_json::from_value(legacy_value).unwrap();
+    let mut expected_legacy = diagnostic.clone();
+    expected_legacy.source_span = None;
+    assert_eq!(
+        legacy_decoded, expected_legacy,
+        "diagnostics serialized before sourceSpan existed must remain readable"
+    );
 
+    let root_span = span(33, 34);
     let integer_root = Expression::new(
         ExpressionKind::IntegerLiteral {
             value: 1,
             value_type: integer.clone(),
         },
-        span(33, 34),
+        root_span.clone(),
     );
     let typed_root = environment
         .check_expression(&integer_root, &ValueType::integer(integer), &pre(), false)
@@ -1325,6 +1620,7 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
         root_diagnostic.terminal_state,
         GenerationTerminalState::InvalidInput
     );
+    assert_eq!(root_diagnostic.source_span.as_ref(), Some(&root_span));
 
     assert_eq!(
         GenerationErrorCode::InvalidGeneratedSyntax.terminal_state(),
@@ -1454,7 +1750,57 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
             diagnostics[0].terminal_state
         );
         assert_eq!(diagnostics[0].path, "attestation.context", "{name}");
+        assert!(diagnostics[0].source_span.is_none(), "{name}");
     }
+}
+
+/// TC-003
+/// FR-001-AC-4
+#[test]
+fn tc_003_unsupported_dependency_reports_the_first_reference_span() {
+    let rational = RationalType::new(-10, 10, 10).unwrap();
+    let environment = DeclarationEnvironment::new(
+        requirement(),
+        vec![],
+        vec![ValueDeclaration::new(
+            name("ratio"),
+            ValueDeclarationKind::Input,
+            ValueType::rational(rational.clone()),
+            span(40, 41),
+        )],
+        vec![],
+    )
+    .unwrap();
+    let reference_span = span(41, 42);
+    let reference = Expression::new(
+        ExpressionKind::ValueReference {
+            name: name("ratio"),
+            observation: StateObservation::Current,
+        },
+        reference_span.clone(),
+    );
+    let literal = Expression::new(
+        ExpressionKind::RationalLiteral {
+            numerator: 1,
+            denominator: 2,
+            value_type: rational,
+        },
+        span(42, 43),
+    );
+    let expression = comparison(ComparisonOperator::Equal, reference, literal, 40);
+    let typed = environment
+        .check_expression(&expression, &ValueType::Boolean, &pre(), true)
+        .unwrap();
+    let clause = ClauseId::new("unsupported-rational-dependency").unwrap();
+    let diagnostic = &generate_boolean_oracle(&OracleRequest {
+        requirement: environment.owner(),
+        clause: &clause,
+        expression: &typed,
+        attestation: attestation_context(),
+    })
+    .unwrap_err()[0];
+    assert_eq!(diagnostic.code, GenerationErrorCode::UnsupportedDependency);
+    assert_eq!(diagnostic.source_span.as_ref(), Some(&reference_span));
 }
 
 /// TC-003.
@@ -1531,7 +1877,8 @@ fn tc_003_normalization_is_injective_for_dependencies_and_clause_artifacts() {
     }
 }
 
-/// TC-003.
+/// TC-003
+/// FR-001-AC-4
 #[test]
 fn tc_003_discharged_obligations_are_explicitly_rejected() {
     let integer = IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Reject).unwrap();
@@ -1592,6 +1939,7 @@ fn tc_003_discharged_obligations_are_explicitly_rejected() {
         .check_expression(&guarded, &ValueType::Boolean, &pre(), true)
         .unwrap();
     assert!(!typed.obligations().is_empty());
+    let first_obligation_span = typed.obligations()[0].source().clone();
     let clause = ClauseId::new("guarded-division").unwrap();
     let diagnostic = &generate_boolean_oracle(&OracleRequest {
         requirement: environment.owner(),
@@ -1602,6 +1950,10 @@ fn tc_003_discharged_obligations_are_explicitly_rejected() {
     .unwrap_err()[0];
     assert_eq!(diagnostic.code, GenerationErrorCode::UnsupportedObligations);
     assert_eq!(diagnostic.path, "expression.obligations");
+    assert_eq!(
+        diagnostic.source_span.as_ref(),
+        Some(&first_obligation_span)
+    );
 }
 
 /// TC-001.

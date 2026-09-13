@@ -49,7 +49,7 @@ Task-004 bounded-integer oracle admission ---+
 | [Task-001](./tasks/Task-001-foundation-spec.md) | Foundation specification and assurance | done |
 | [Task-002](./tasks/Task-002-foundation-evidence.md) | Foundation evidence and gap review | done |
 | [Task-003](./tasks/Task-003-dependency-reconciliation.md) | Upstream dependency reconciliation | done |
-| [Task-004](./tasks/Task-004-oracles.md) | Deterministic oracles and attestations | in_progress |
+| [Task-004](./tasks/Task-004-oracles.md) | Deterministic oracles and attestations | done |
 | [Task-005](./tasks/Task-005-backends.md) | Harness, proptest, Kani, and vacuity backends | in_progress |
 | [Task-006](./tasks/Task-006-parity.md) | CLI, golden, differential, and parity closure | in_progress |
 | [Task-007](./tasks/Task-007-human-release.md) | Human source-release decision | not_started |
@@ -115,7 +115,12 @@ serialized CLI surface and cross-backend parity. Task-004 and Task-005 remain in
 their semantic acceptance criteria and current-head review findings close. This integration
 promotes no planned coverage or parity row. Automation must not complete Task-007.
 
-The numeric/state strategy core in Task-008 may land independently. Task-009 must not copy or edit
-the uncommitted codegen #4 worktree; it resumes only after Task-004's bounded-integer oracle grammar
-lands on `main`. At that point its matrix conflicts are resolved as unions and the bound bundle is
-built in the order FR-008, FR-011, FR-013.
+Task-004 is complete through the numeric/state oracle slice from
+`agent-ix/quire-spec-language#83`: obligation-free bounded-integer comparisons over direct input and
+current/pre/post state observations. Definedness obligations, arithmetic/negation requiring an
+invalid-result representation, indirect dependencies, and object/graph reads remain explicit
+refusals. Task-005's numeric/state Kani increment follows only after this oracle slice merges.
+
+The numeric/state strategy core in Task-008 is complete. Task-009 consumes Task-004's landed
+bounded-integer oracle grammar and builds the remaining bound bundle in the order FR-008, FR-011,
+FR-013; matrix changes from the two work streams are retained as a union.

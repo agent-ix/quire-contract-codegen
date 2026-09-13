@@ -10,12 +10,13 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-001 | FR-001-AC-1, FR-001-AC-3 | TC-001 | 🚧 Planned |
-| FR-001 | FR-001-AC-2 | TC-002 | 🚧 Planned |
-| FR-001 | FR-001-AC-4 | TC-003 | 🚧 Planned |
-| FR-001 | FR-001-AC-5 | TC-001, TC-006 | 🚧 Planned |
-| FR-001 | FR-001-AC-6 | TC-001, TC-002 | Local bound-consumer controls pass; integrated assurance pending |
-| FR-001 | FR-001-AC-7 | TC-001 | Local bound-consumer controls pass; integrated assurance pending |
+| FR-001 | FR-001-AC-1, FR-001-AC-3 | TC-001 | ✅ Covered |
+| FR-001 | FR-001-AC-2 | TC-002 | ✅ Covered |
+| FR-001 | FR-001-AC-4 | TC-003 | ✅ Covered |
+| FR-001 | FR-001-AC-5 | TC-001, TC-006 | ✅ Covered |
+| FR-001 | FR-001-AC-6 | TC-001, TC-002 | ✅ Covered |
+| FR-001 | FR-001-AC-7 | TC-001 | ✅ Covered |
+| FR-001 | FR-001-AC-8 | TC-002 | ✅ Covered |
 | FR-002 | FR-002-AC-1 through FR-002-AC-6 | TC-004 | 🚧 Planned |
 | FR-003 | FR-003-AC-1 | TC-005 | 🚧 Planned |
 | FR-003 | FR-003-AC-2 | TC-007 | 🚧 Planned |
@@ -58,9 +59,10 @@ reimplementing them. FR-003 now has an implemented draft and SUITE-008, but rema
 independent current-head review. FR-004 has no implementation or suite.
 
 FR-009, FR-010, and the value-tree portion of FR-012 have requirement-tagged local controls. Their
-IR-independent core is implemented while the public bound bundle, admission, runner, replay
-accounting, and consumer attestation remain blocked on the bounded-integer oracle grammar of
-agent-ix/quire-contract-codegen#4. FR-008, FR-011, FR-012-AC-4, and FR-013 remain planned.
+IR-independent core is implemented. The bounded-integer oracle grammar from
+agent-ix/quire-contract-codegen#4 has now landed, so public bound bundle admission, runner, replay
+accounting, and consumer attestation integration can proceed. FR-008, FR-011, FR-012-AC-4, and
+FR-013 remain planned until their named tests pass.
 
 ## Non-Functional Requirement Coverage
 
@@ -85,9 +87,9 @@ agent-ix/quire-contract-codegen#4. FR-008, FR-011, FR-012-AC-4, and FR-013 remai
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
-| TC-001 | Reproduce artifacts and attestations | Integration | P0 | FR-001-AC-1, FR-001-AC-3, FR-005-AC-2, NFR-001-AC-1, NFR-002-AC-1, NFR-002-AC-2 | 🚧 Planned |
-| TC-002 | Compile and publish atomically | Integration | P0 | FR-001-AC-2, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3 | 🚧 Planned |
-| TC-003 | Reject unsupported inputs explicitly | Integration | P0 | FR-001-AC-4, FR-003-AC-3, NFR-002-AC-3 | 🚧 Planned |
+| TC-001 | Reproduce artifacts and attestations | Integration | P0 | FR-001-AC-1, FR-001-AC-3, FR-005-AC-2, NFR-001-AC-1, NFR-002-AC-1, NFR-002-AC-2 | ✅ Covered |
+| TC-002 | Compile and publish atomically | Integration | P0 | FR-001-AC-2, FR-001-AC-8, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3 | ✅ Covered |
+| TC-003 | Reject unsupported inputs explicitly | Integration | P0 | FR-001-AC-4, FR-003-AC-3, NFR-002-AC-3 | ✅ Covered |
 | TC-004 | Preserve shaped proptest strategies | Property | P0 | FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4, FR-002-AC-5, FR-002-AC-6 | 🚧 Planned |
 | TC-005 | Enforce Kani proof dependencies | Analysis | P0 | FR-003-AC-1 | 🚧 Planned |
 | TC-006 | Distinguish vacuity and unexecuted flow | Integration | P0 | FR-004-AC-1, FR-004-AC-2, FR-004-AC-3, FR-004-AC-5, FR-004-AC-6 | 🚧 Planned |
@@ -104,11 +106,12 @@ agent-ix/quire-contract-codegen#4. FR-008, FR-011, FR-012-AC-4, and FR-013 remai
 | TC-021 | Verify shrinking preserves numeric constraints | Property | P0 | FR-012-AC-1, FR-012-AC-2, FR-012-AC-3, FR-012-AC-4 | 🚧 Local value-tree controls pass; runner accounting pending |
 | TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4 | 🚧 Planned |
 
-TC-001 through TC-007 remain deliberately planned until their complete ticket scope is independently
-reviewed. The oracle and harness drafts carry bound implementation symbols for TC-001 through TC-004;
-the Kani draft directly exercises TC-003, TC-005, and the FR-003 portion of TC-007. TC-002 now has
-local compilation, independent-evaluator, and atomic-publication coverage, but remains planned
-pending independent exact-head review; no row is promoted by these drafts.
+TC-001 through TC-003 are covered after issue #4's exact-head Rust review and gap analysis. Together
+they establish deterministic identity-bearing artifacts, compilation and independent evaluation for
+the Boolean and obligation-free bounded-integer grammar, public bound-package generation, atomic
+publication controls, and exact fail-closed diagnostics. TC-004 through TC-007 remain planned until
+their complete backend/parity ticket scopes are independently reviewed. The Kani draft directly
+exercises TC-003, TC-005, and the FR-003 portion of TC-007 without promoting those FR-003 rows.
 
 TC-008 through TC-013 are the shared-assurance migration's own rows and are covered by named tests.
 

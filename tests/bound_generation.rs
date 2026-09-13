@@ -63,6 +63,62 @@ fn generated(value: &Value) -> quire_contract_codegen::GeneratedBoundOracles {
     }
 }
 
+fn state_integer_projection() -> Value {
+    let mut value = projection("test/state-scalar", 1, false);
+    let point = json!({"kind":"post","operation":"attemptUpdate"});
+    let owner = value["bindings"][0]["clause"]["requirement"].clone();
+    value["package"]["requirements"][0]["clauses"][0]["kind"] = json!("postcondition");
+    value["package"]["requirements"][0]["clauses"][0]["anchor"] = point.clone();
+    value["bindings"][0]["expression"]["execution_point"] = point;
+    value["bindings"][0]["expression"]["values"] = json!([{
+        "name":"versionNumber",
+        "kind":"state",
+        "value_type":{
+            "kind":"integer",
+            "domain":"signed",
+            "minimum":0,
+            "maximum":1000,
+            "overflow":"reject"
+        },
+        "source":span()
+    }]);
+    value["bindings"][0]["expression"]["expression"] = json!({
+        "node":"compare",
+        "operator":"equal",
+        "left":{
+            "node":"value_reference",
+            "name":"versionNumber",
+            "observation":"post",
+            "source":span()
+        },
+        "right":{
+            "node":"value_reference",
+            "name":"versionNumber",
+            "observation":"pre",
+            "source":span()
+        },
+        "source":span()
+    });
+    value["package"]["requirements"][0]["clauses"][0]["body"] = json!({
+        "node":"composite",
+        "children":[
+            {"node":"reference","identity":{
+                "requirement":owner,
+                "kind":"state",
+                "observation":"post",
+                "path":["versionNumber"]
+            }},
+            {"node":"reference","identity":{
+                "requirement":owner,
+                "kind":"state",
+                "observation":"pre",
+                "path":["versionNumber"]
+            }}
+        ]
+    });
+    value
+}
+
 /// TC-001
 /// FR-001-AC-6
 /// FR-001-AC-7
@@ -129,6 +185,22 @@ fn distinct_packages_never_alias_oracle_paths_or_symbols() {
         first.clauses()[0].bundle().rust.contents,
         second.clauses()[0].bundle().rust.contents
     );
+}
+
+/// TC-002
+/// FR-001-AC-2
+/// FR-001-AC-8
+#[test]
+fn public_bound_state_scalar_projection_generates_typed_observation_parameters() {
+    let value = state_integer_projection();
+    let first = generated(&value);
+    let second = generated(&value);
+    assert_eq!(first, second);
+    let source = &first.clauses()[0].bundle().rust.contents;
+    assert!(source.contains("version_4eumber_pre: i64"), "{source}");
+    assert!(source.contains("version_4eumber_post: i64"), "{source}");
+    assert!(source.contains("\n==\n"), "{source}");
+    assert!(!source.contains(": bool"), "{source}");
 }
 
 /// TC-001
