@@ -44,9 +44,9 @@ valuation. The generator never draws a candidate and then filters it out.
   equal to its primary value. ConfigVersion `VersionUnchanged` (post = pre) is this case.
 - For `NotEqual`, the generator shall construct "domain minus one point" by drawing an index over the
   reduced size and mapping it around the excluded point.
-- The generator shall compute interval sizes, index offsets, and edge values with checked 128-bit
-  integer arithmetic, so a domain as wide as `i64::MIN..=i64::MAX` needs no wrapping, saturation, or
-  truncation.
+- The generator shall compute interval sizes and edge values in widened `i128`/`u128` arithmetic and
+  emit only bounds-proven `i64` index offsets, so a domain as wide as `i64::MIN..=i64::MAX` needs no
+  wrapping, saturation, or truncation.
 - The `Broad` population shall contain both the `Satisfying` and `Violating` populations, with each
   case keeping its own tag.
 - If the requested side has no value over the domain, then the generator shall refuse that population

@@ -27,9 +27,9 @@ shape bound to the source package, and that no local serialized format exists.
 4. List the bundle's files, and diff `schemas/` against the base revision.
 5. Validate the strategy attestation body against the bytes `quoin change-assurance schema` publishes,
    with format assertion on, and seal it through the real CLI.
-6. Regenerate with a different `BoundPackage` digest, then with a different `ClauseRef`, and compare
-   the header, the `--requirement`, `--clause`, and `--input-digest` argv, and the artifact
-   identities.
+6. Regenerate with a different `BoundPackage` digest, then generate two different `ClauseRef`s from
+   one package with one fixed digest, and compare the header, the `--requirement`, `--clause`, and
+   `--input-digest` argv, and the artifact identities.
 
 ## Expected Results
 

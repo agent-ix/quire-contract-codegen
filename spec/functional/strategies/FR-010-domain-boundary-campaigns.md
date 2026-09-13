@@ -50,7 +50,8 @@ generated oracle returns for it.
   with partner `min`, and primary `max + 1` with partner `max`.
 - The generator shall order both arrays by primary value, then partner value, ascending, with
   duplicates removed.
-- The generator shall compute every edge value with checked 128-bit integer arithmetic.
+- The generator shall compute every edge value in widened `i128` arithmetic before testing whether
+  it is representable as `i64`.
 - If an edge value such as `i64::MIN - 1` is outside the `i64` range, then the generator shall list it
   in the unrepresentable-edge array instead of clamping, wrapping, or silently dropping it.
 - The generator shall test representability only for values that would be out-of-domain cases:

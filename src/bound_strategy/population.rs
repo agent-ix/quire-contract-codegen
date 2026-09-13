@@ -211,6 +211,7 @@ pub enum ValueSet {
     Interval(Interval),
     /// Every member of `domain` except `excluded`, which lies in `domain`; `domain` has at least two
     /// members. Generated code draws an index over the reduced size and maps it around the point.
+    #[non_exhaustive]
     DomainExceptPoint {
         /// The interval the point is removed from.
         domain: Interval,
@@ -293,6 +294,7 @@ pub enum SideValues {
         primary: ValueSet,
     },
     /// A primary read compared with a partner read.
+    #[non_exhaustive]
     Correlated {
         /// Every primary value whose partner set on this side is non-empty.
         primary: Interval,

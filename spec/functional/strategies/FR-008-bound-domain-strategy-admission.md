@@ -74,7 +74,8 @@ integer declaration ([quire-contract-ir FR-013](ix://agent-ix/quire-contract-ir/
   before applying any strategy rule.
 - If bound oracle admission refuses the clause, then the generator shall refuse with
   `UnsupportedClause`, preserving the oracle's lower-level code, terminal state, and exact IR source
-  span.
+  span, except that an explicitly recognized unsupported comparison operand described below shall be
+  normalized to `UnsupportedRelation` at that operand's locus.
 - If the clause kind is not `Precondition`, `Postcondition`, or `Invariant`, then the generator shall
   refuse with `UnsupportedClauseKind`.
 - The generator shall admit an oracle-admitted clause only when its root is exactly one `Compare` node
@@ -116,7 +117,7 @@ integer declaration ([quire-contract-ir FR-013](ix://agent-ix/quire-contract-ir/
 | ID | Constraint | Type | Validation |
 |----|------------|------|------------|
 | FR-008-CON-1 | The generator SHALL read domain bounds only through the public `quire_contract_ir` API at the pinned revision, with no private decoder or local copy of the IR wire shape. The pin is `04eb6f8`; quire-spec-language pins `690bde7`, and quire-contract-ir FR-012 through FR-015 and FR-023 are unchanged between them. | Interface | Inspection |
-| FR-008-CON-2 | The generator SHALL decide admission before rendering any source, so a refused clause yields no partial bundle. | Integrity | Test (TC-017) |
+| FR-008-CON-2 | The generator SHALL decide strategy admission before rendering strategy, population, census, or runner source; bound-oracle admission renders only its private candidate while applying the shared admission path, and a refusal returns no source artifact or partial bundle. | Integrity | Test (TC-017) |
 
 ## Acceptance Criteria
 

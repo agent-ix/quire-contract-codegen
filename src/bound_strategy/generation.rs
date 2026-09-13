@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use quire_contract_ir::{
     BoundClause, BoundPackage, ClauseKind, ClauseRef, ComparisonOperator as IrComparisonOperator,
-    ExecutionPoint, Expression, ExpressionKind, StateObservation, ValueType,
+    ExecutionPoint, Expression, ExpressionKind, StateObservation, ValueDeclarationKind, ValueType,
     BOUND_IDENTITY_PROFILE,
 };
 use sha2::{Digest as _, Sha256};
@@ -80,6 +80,7 @@ pub struct BoundStrategyRequest<'a> {
 #[derive(Clone)]
 struct Read {
     name: String,
+    declaration_kind: ValueDeclarationKind,
     observation: StateObservation,
     identifier: String,
 }
@@ -87,7 +88,14 @@ struct Read {
 struct AdmittedRelation {
     relation: Relation,
     domain: Domain,
-    reads: Vec<Read>,
+    primary: Read,
+    partner: Option<Read>,
+}
+
+impl AdmittedRelation {
+    fn reads(&self) -> impl Iterator<Item = &Read> {
+        std::iter::once(&self.primary).chain(self.partner.iter())
+    }
 }
 
 /// Generates a deterministic strategy, census, oracle-conformance runner, and one attestation.
@@ -182,19 +190,18 @@ pub fn generate_bound_strategy(
 
     let admitted = admit_relation(clause)?;
     let read_identifiers = admitted
-        .reads
-        .iter()
+        .reads()
         .map(|read| read.identifier.as_str())
         .collect::<Vec<_>>();
     let census = compute_census(admitted.relation, admitted.domain)
         .map_err(|diagnostic| scope_diagnostic(diagnostic, request.clause))?;
-    let boundary_available = census.boundary_population().is_ok();
-    if request.population == BoundStrategyPopulation::Boundary && !boundary_available {
-        return Err(scope_diagnostic(
-            census.boundary_population().expect_err("checked above"),
-            request.clause,
-        ));
-    }
+    let boundary_available = match census.boundary_population() {
+        Ok(_) => true,
+        Err(diagnostic) if request.population == BoundStrategyPopulation::Boundary => {
+            return Err(scope_diagnostic(diagnostic, request.clause));
+        }
+        Err(_) => false,
+    };
     let identity = strategy_identity(request, &admitted);
     let suffix = sha256(identity.as_bytes());
     let item_suffix = &suffix[..16];
@@ -397,14 +404,11 @@ fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiag
             Relation::with_literal(operator, position, literal)
         }
     };
-    let mut reads = vec![primary];
-    if let Some(partner) = partner {
-        reads.push(partner);
-    }
     Ok(AdmittedRelation {
         relation,
         domain,
-        reads,
+        primary,
+        partner,
     })
 }
 
@@ -431,6 +435,7 @@ fn read_operand(
             }
             Ok(Some(Read {
                 name: name.as_str().to_owned(),
+                declaration_kind: declaration.kind(),
                 observation: *observation,
                 identifier: reference_identifier(name.as_str(), Some(*observation)),
             }))
@@ -490,6 +495,8 @@ const fn map_operator(operator: IrComparisonOperator) -> ComparisonOperator {
     }
 }
 
+// These inputs are the already-admitted components of one source file; grouping them would only
+// hide the generation boundary behind another unvalidated carrier type.
 #[allow(clippy::too_many_arguments)]
 fn render_complete_source(
     request: &BoundStrategyRequest<'_>,
@@ -569,7 +576,7 @@ fn population_component(source: &str) -> String {
 
 fn case_metadata(population: &RenderedPopulation, admitted: &AdmittedRelation) -> String {
     let mut source = format!("impl {} {{\n", population.case_type);
-    for read in &admitted.reads {
+    for read in admitted.reads() {
         let constant = read.identifier.to_ascii_uppercase();
         let _ = writeln!(
             source,
@@ -582,13 +589,21 @@ fn case_metadata(population: &RenderedPopulation, admitted: &AdmittedRelation) -
             read.identifier,
             observation_name(read.observation)
         );
+        let _ = writeln!(
+            source,
+            "    /// Exact IR declaration kind for `{}`.\n    pub const {constant}_DECLARATION_KIND: &'static str = {:?};",
+            read.identifier,
+            declaration_kind_name(read.declaration_kind)
+        );
     }
     source.push_str("}\n");
     source
 }
 
-#[allow(clippy::too_many_arguments)]
 // Implements: FR-013-AC-5
+// The renderer consumes the complete admitted request and its independently rendered components;
+// retaining them as explicit parameters keeps their provenance visible at this trust boundary.
+#[allow(clippy::too_many_arguments)]
 fn runner_source(
     request: &BoundStrategyRequest<'_>,
     clause: &BoundClause,
@@ -665,8 +680,7 @@ fn runner_source(
         let constant = format!("IN_DOMAIN_CENSUS_{}", item_suffix.to_ascii_uppercase());
         let census_type = format!("CensusTag{item_suffix}");
         let field_values = admitted
-            .reads
-            .iter()
+            .reads()
             .map(|read| format!("{}: census.{}", read.identifier, read.identifier))
             .collect::<Vec<_>>()
             .join(", ");
@@ -681,8 +695,7 @@ fn runner_source(
         let constant = format!("IN_DOMAIN_CENSUS_{}", item_suffix.to_ascii_uppercase());
         let census_type = format!("CensusTag{item_suffix}");
         let field_values = admitted
-            .reads
-            .iter()
+            .reads()
             .map(|read| format!("{}: census.{}", read.identifier, read.identifier))
             .collect::<Vec<_>>()
             .join(", ");
@@ -787,8 +800,7 @@ where Strategy: proptest::strategy::Strategy<Value = {case_type}> {{\n\
     let report = report.into_inner();\n\
     if let Some(error) = failure.into_inner() {{\n\
         let summary = {base}_summary(report);\n\
-        if summary.discarded > {maximum_discarded} {{ return Err({error}::AboveDiscardCeiling {{ summary }}); }}\n\
-        return Err(match error {{ {error}::ConformanceMismatch {{ primary, partner, expected, observed, .. }} => {error}::ConformanceMismatch {{ summary, primary, partner, expected, observed }}, {error}::IdentityMismatch {{ expected_requirement, expected_revision, actual_requirement, actual_revision, .. }} => {error}::IdentityMismatch {{ summary, expected_requirement, expected_revision, actual_requirement, actual_revision }}, other => other }});\n\
+        return Err(match error {{ {error}::ConformanceMismatch {{ .. }} if summary.discarded > {maximum_discarded} => {error}::AboveDiscardCeiling {{ summary }}, {error}::ConformanceMismatch {{ primary, partner, expected, observed, .. }} => {error}::ConformanceMismatch {{ summary, primary, partner, expected, observed }}, {error}::IdentityMismatch {{ expected_requirement, expected_revision, actual_requirement, actual_revision, .. }} => {error}::IdentityMismatch {{ summary, expected_requirement, expected_revision, actual_requirement, actual_revision }}, other => other }});\n\
     }}\n\
     match run_result {{ Ok(()) => {conclude}(report, None), Err(proptest::test_runner::TestError::Abort(reason)) => {conclude}(report, Some(reason.to_string())), Err(proptest::test_runner::TestError::Fail(reason, _)) => {conclude}(report, Some(reason.to_string())) }}\n\
 }}\n{census_support}",
@@ -798,10 +810,10 @@ where Strategy: proptest::strategy::Strategy<Value = {case_type}> {{\n\
         } else {
             "failure"
         },
-        primary = admitted.reads[0].identifier,
+        primary = admitted.primary.identifier,
         partner_value = admitted
-            .reads
-            .get(1)
+            .partner
+            .as_ref()
             .map_or_else(|| "None".to_owned(), |read| format!("Some(case.{})", read.identifier)),
     ))
 }
@@ -841,6 +853,13 @@ fn observation_name(observation: StateObservation) -> &'static str {
         StateObservation::Current => "current",
         StateObservation::Pre => "pre",
         StateObservation::Post => "post",
+    }
+}
+
+const fn declaration_kind_name(kind: ValueDeclarationKind) -> &'static str {
+    match kind {
+        ValueDeclarationKind::Input => "input",
+        ValueDeclarationKind::State => "state",
     }
 }
 
@@ -933,6 +952,8 @@ fn scope_diagnostic(mut diagnostic: StrategyDiagnostic, clause: &ClauseRef) -> S
     diagnostic
 }
 
+// A strategy diagnostic mirrors the stable envelope fields one-for-one; a parameter object would
+// permit invalid combinations without reducing the call-site surface.
 #[allow(clippy::too_many_arguments)]
 fn bound_diagnostic(
     code: StrategyErrorCode,

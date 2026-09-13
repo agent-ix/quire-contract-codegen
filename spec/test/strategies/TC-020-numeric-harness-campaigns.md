@@ -31,6 +31,8 @@ exact rates.
    an imported snapshot back to a mutable report, so the generated snapshot-summary operation is
    the public boundary for this saturated-rate check.
 5. Read the runner's proptest global reject count and each campaign conclusion from steps 1 and 4.
+6. Run a generated campaign with a report whose requirement identity is wrong and whose prior
+   discarded count already exceeds the configured ceiling.
 
 ## Expected Results
 
@@ -46,3 +48,5 @@ exact rates.
 - Every fresh campaign in step 1 reports `discard_rate() == Some((0, attempted))` with
   `attempted > 0`, passes a zero discard ceiling, records zero global rejects, and does not end
   `Exhausted`.
+- The report in step 6 returns `IdentityMismatch`; its prior discard does not mask the identity
+  failure as `AboveDiscardCeiling`.

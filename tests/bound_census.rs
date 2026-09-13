@@ -14,7 +14,7 @@ use quire_contract_codegen::{
         },
         relation::{ComparisonOperator, Domain, OperandPosition, Partner, Relation},
     },
-    GenerationTerminalState, StrategyErrorCode,
+    GenerationErrorCode, GenerationTerminalState, StrategyErrorCode,
 };
 
 struct TemporaryDirectory(PathBuf);
@@ -504,6 +504,22 @@ fn tc_019_invalid_domain_and_field_names_are_structured_refusals() {
             GenerationTerminalState::InvalidInput
         );
     }
+
+    let oversized = "A".repeat(100_000);
+    let refusal = render_edge_constants(
+        &census,
+        CensusNames {
+            item_suffix: &oversized,
+            fields: &["post", "pre"],
+        },
+    )
+    .unwrap_err();
+    assert_eq!(refusal.code, StrategyErrorCode::ResourceLimitExceeded);
+    assert_eq!(
+        refusal.generation_code,
+        Some(GenerationErrorCode::ResourceLimitExceeded)
+    );
+    assert_eq!(refusal.terminal_state, GenerationTerminalState::Unsupported);
 }
 
 fn sweep_domains() -> Vec<Domain> {
@@ -598,7 +614,7 @@ fn tc_019_exhaustive_sweep_tags_domains_order_size_and_determinism() {
                 .all(|pair| pair[0] < pair[1]));
 
             let size = census.in_domain().len() + census.out_of_domain().len();
-            assert!(size <= 22, "{relation:?} {domain:?} holds {size} cases");
+            assert!(size <= 20, "{relation:?} {domain:?} holds {size} cases");
             largest = largest.max(size);
 
             let again = compute_census(relation, domain).unwrap();

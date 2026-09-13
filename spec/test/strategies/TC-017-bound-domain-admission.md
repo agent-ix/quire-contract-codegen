@@ -24,9 +24,12 @@ order with a located diagnostic and no bundle.
    - oracle-refused clauses: a `Numeric` addition, a `NumericNegate`, and a clause carrying a
      definedness obligation;
    - strategy-refused clauses: a total-and connective over two integer comparisons, `amount == amount`,
-     and a comparison of `Current` and `Pre` reads of one declaration;
+     a Boolean equality, Boolean literal/reference/negation roots, a Text operand, a literal-only
+     comparison, and a comparison of `Current` and `Pre` reads of one declaration;
    - an `Assertion` clause and a `Case` clause over `amount < 7`;
-   - a clause that is both an `Assertion` and a Boolean connective.
+   - a clause that is both an `Assertion` and a Boolean connective, and one that is both an
+     `Assertion` and oracle-refused;
+   - an oracle-refused package requested through an absent `ClauseRef`.
 2. Request strategy generation for each fixture, and for a `ClauseRef` absent from the package.
 3. Run bound oracle generation over the oracle-refused fixtures.
 
@@ -39,4 +42,5 @@ order with a located diagnostic and no bundle.
 - The `Assertion` and `Case` fixtures return `UnsupportedClauseKind`; the absent `ClauseRef` returns
   `UnknownClause` with `invalid-input`.
 - The combined `Assertion` connective returns only `UnsupportedClauseKind`.
-- Every refusal carries the full `ClauseRef` and the offending span, and no refusal emits an artifact.
+- Every refusal carries the full `ClauseRef`, and no refusal emits an artifact. Expression failures
+  carry the exact offending span; `UnknownClause` and `UnsupportedClauseKind` carry no span.

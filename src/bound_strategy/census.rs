@@ -7,7 +7,10 @@
 use std::{collections::BTreeSet, fmt::Write as _};
 
 use super::relation::{Domain, Partner, Relation};
-use crate::{GenerationErrorCode, GenerationTerminalState, StrategyDiagnostic, StrategyErrorCode};
+use crate::{
+    GenerationErrorCode, GenerationTerminalState, StrategyDiagnostic, StrategyErrorCode,
+    MAX_GENERATED_SOURCE_BYTES,
+};
 
 /// Value the clause's oracle returns for one in-domain census case.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -452,6 +455,14 @@ pub const UNREPRESENTABLE_EDGES{constant_suffix}: [UnrepresentableEdge{suffix}; 
             .chain(trailing_newline(unrepresentable.len()))
             .collect::<String>(),
     );
+    if source.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(diagnostic_with_generation(
+            StrategyErrorCode::ResourceLimitExceeded,
+            Some(GenerationErrorCode::ResourceLimitExceeded),
+            "generated.rust",
+            "the rendered census exceeds the source-size limit",
+        ));
+    }
     syn::parse_file(&source).map_err(|error| {
         diagnostic_with_generation(
             StrategyErrorCode::InvalidGeneratedSyntax,
@@ -500,6 +511,22 @@ fn integer(value: i64) -> String {
 }
 
 fn validate_names(relation: Relation, names: CensusNames<'_>) -> Result<(), StrategyDiagnostic> {
+    // Every name is repeated throughout the generated item family. Reject oversized public inputs
+    // before case rendering can multiply their allocation cost.
+    let maximum_name_bytes = MAX_GENERATED_SOURCE_BYTES / 64;
+    if names.item_suffix.len() > maximum_name_bytes
+        || names
+            .fields
+            .iter()
+            .any(|field| field.len() > maximum_name_bytes)
+    {
+        return Err(diagnostic_with_generation(
+            StrategyErrorCode::ResourceLimitExceeded,
+            Some(GenerationErrorCode::ResourceLimitExceeded),
+            "names",
+            "generated census names exceed the source-size budget",
+        ));
+    }
     if !names
         .item_suffix
         .chars()
