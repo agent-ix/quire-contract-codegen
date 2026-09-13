@@ -19,6 +19,7 @@ mod strategy;
 mod vacuity;
 // Implements: FR-004 (complete domain observations, always unqualified).
 mod bound_coverage;
+pub mod bound_strategy;
 
 pub use bound_coverage::{
     analyze_bound_coverage, ArtifactBytes, BoundAnalysisState, BoundCoverageAnalysis,
