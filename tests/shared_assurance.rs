@@ -869,14 +869,7 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
         // is a generated lock or licence whose contents this repository does not
         // author. Each exclusion is named individually below; the count in this
         // comment is the length of the array, so it cannot drift from it.
-        const NOT_SCANNED: [&str; 6] = [
-            "Cargo.lock",
-            "LICENSE",
-            "LICENSE-APACHE",
-            "LICENSE-MIT",
-            "SHA256SUMS",
-            ".gitkeep",
-        ];
+        const NOT_SCANNED: [&str; 4] = ["Cargo.lock", "LICENSE", "SHA256SUMS", ".gitkeep"];
         const NOT_SCANNED_EXTENSIONS: [&str; 12] = [
             "lock", "png", "jpg", "jpeg", "gif", "ico", "pdf", "zip", "gz", "golden", "pyc", "pyo",
         ];
