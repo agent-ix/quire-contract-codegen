@@ -157,7 +157,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
         .artifacts
         .oracle
         .contents
-        .contains("2i128 >= 0i128"));
+        .contains("1i128.checked_add(1i128)"));
     assert!(!arithmetic
         .artifacts
         .kani_harness

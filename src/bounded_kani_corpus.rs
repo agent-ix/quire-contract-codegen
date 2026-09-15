@@ -132,10 +132,7 @@ pub fn generate_bounded_kani_corpus_case(
             (
                 true,
                 format!("value={}", lowered.value),
-                format!(
-                    "({}i128 >= {}i128) && ({}i128 <= {}i128)",
-                    lowered.value, lowered.request.minimum, lowered.value, lowered.request.maximum
-                ),
+                render_arithmetic_oracle(&lowered),
             )
         }
         BoundedCorpusRequest::Graph(request) => {
@@ -204,6 +201,23 @@ pub fn generate_bounded_kani_corpus_case(
         artifacts,
         counterexample,
     })
+}
+
+fn render_arithmetic_oracle(lowered: &quire_contract_ir::kani::ArithmeticLowering) -> String {
+    let operator = match lowered.request.operator {
+        quire_contract_ir::NumericOperator::Add => "checked_add",
+        quire_contract_ir::NumericOperator::Subtract => "checked_sub",
+        quire_contract_ir::NumericOperator::Multiply => "checked_mul",
+        quire_contract_ir::NumericOperator::Divide => "checked_div",
+        quire_contract_ir::NumericOperator::Remainder => "checked_rem",
+    };
+    format!(
+        "{}i128.{operator}({}i128).is_some_and(|value| value >= {}i128 && value <= {}i128)",
+        lowered.request.left,
+        lowered.request.right,
+        lowered.request.minimum,
+        lowered.request.maximum,
+    )
 }
 
 fn render_graph_oracle(
