@@ -23,6 +23,8 @@ mod bounded_collections;
 mod finite_reference_graphs;
 // Implements: FR-007
 mod bounded_kani_replay;
+// Implements: FR-007
+mod bounded_kani_corpus;
 // Implements: FR-002
 mod strategy;
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
@@ -34,6 +36,10 @@ pub mod bound_strategy;
 pub use bound_strategy::{generate_bound_strategy, BoundStrategyPopulation, BoundStrategyRequest};
 
 pub use bounded_collections::prepare_bounded_collection_query;
+pub use bounded_kani_corpus::{
+    generate_bounded_kani_corpus_case, BoundedCorpusArtifacts, BoundedCorpusCase,
+    BoundedCorpusFamily, BoundedCorpusRequest,
+};
 pub use bounded_kani_profile::{classify_bounded_kani_profile, BoundedKaniProfile};
 pub use bounded_kani_replay::replay_codegen_counterexample;
 pub use definedness_arithmetic::prepare_checked_arithmetic;
