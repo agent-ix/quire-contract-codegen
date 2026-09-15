@@ -191,7 +191,7 @@ coverage_analysis_slice:
 compatibility:
   draft_pins: must be reconciled before leaving draft
   generated_runtime_dependency: quire-contract-runtime, proptest, plus declared customer types only
-  licensing: MIT OR Apache-2.0
+  licensing: crate AGPL-3.0-or-later; emitted Rust carries the MIT OR Apache-2.0 SPDX identity required by NFR-002
   publication: disabled through the human v0.1 source-release decision
 open_design_gates:
   native_campaign_transport: pinned runtime CampaignReport has no validated native-process snapshot decoder; no Display parsing, fake verdict replay, or private counter lookalike may substitute

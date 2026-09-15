@@ -56,4 +56,8 @@ testing, provenance review, and the recorded human release decision.
 
 ## License
 
-Licensed under either of Apache License, Version 2.0 or MIT license at your option.
+Licensed under the GNU Affero General Public License, version 3 or (at your option) any later
+version (`AGPL-3.0-or-later`). See [LICENSE](LICENSE).
+
+Rust source emitted by the generator carries its own `SPDX-License-Identifier: MIT OR Apache-2.0`
+header, as NFR-002 requires; that identifies the generated output, not this crate.
