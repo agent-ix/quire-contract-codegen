@@ -1761,7 +1761,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // FR-006 — never runs.
     //
     // Matching the bare string `test --locked` was not enough, and an adversarial
-    // review proved it: `msrv:` is `cargo +1.75.0 test --locked`, so it supplies
+    // review proved it: `msrv:` is `cargo +1.98.1 test --locked`, so it supplies
     // that string on its own and `test` could be deleted from `ci:` undetected.
     // The two are distinguished by the toolchain selector, which is the only thing
     // that differs between them.
@@ -1771,7 +1771,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
         if !line.contains("test --locked") {
             continue;
         }
-        if line.contains("+1.75.0") {
+        if line.contains("+1.98.1") {
             msrv_runner = true;
         } else {
             stable_runner = true;

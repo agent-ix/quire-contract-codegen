@@ -40,7 +40,7 @@
 TRUSTED_HOME := $(shell /usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
 override BASH := /usr/bin/bash
 override CARGO := $(TRUSTED_HOME)/.cargo/bin/cargo
-override MSRV := 1.75.0
+override MSRV := 1.98.1
 override PYTHON := /usr/bin/python3
 override QUIRE := $(TRUSTED_HOME)/.npm-global/bin/quire
 override QUOIN := $(TRUSTED_HOME)/.npm-global/bin/quoin

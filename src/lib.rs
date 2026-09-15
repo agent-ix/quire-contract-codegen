@@ -13,6 +13,8 @@ mod publication;
 mod harness;
 // Implements: FR-003
 mod kani;
+// Implements: FR-007
+mod bounded_kani_profile;
 // Implements: FR-002
 mod strategy;
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
@@ -22,6 +24,8 @@ mod bound_coverage;
 pub mod bound_strategy;
 
 pub use bound_strategy::{generate_bound_strategy, BoundStrategyPopulation, BoundStrategyRequest};
+
+pub use bounded_kani_profile::{classify_bounded_kani_profile, BoundedKaniProfile};
 
 pub use bound_coverage::{
     analyze_bound_coverage, ArtifactBytes, BoundAnalysisState, BoundCoverageAnalysis,

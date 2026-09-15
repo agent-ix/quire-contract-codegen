@@ -15,7 +15,7 @@ type: SuiteRegistry
 | SUITE-003 | Strict specification validation | `quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'` | quire 0.31.0 / quire-rs 0.46.0 | Analysis |
 | SUITE-004 | Static specification and coverage export | `quire coverage --scope . --json` | quire 0.31.0 / quire-rs 0.46.0 | Static |
 | SUITE-006 | Shared assurance intake chain | `python3 scripts/assurance_chain.py --candidate-revision <sha>` | quoin 0.23.1 change-assurance and evidence surfaces | Integration |
-| SUITE-007 | Minimum supported Rust version build | `rustup run 1.75.0 cargo check --locked --all-targets --message-format=json` | rustc 1.75.0 | Static |
+| SUITE-007 | Minimum supported Rust version build | `rustup run 1.98.1 cargo check --locked --all-targets --message-format=json` | rustc 1.98.1 | Static |
 | SUITE-008 | Bounded Kani generation and execution | `cargo test --locked --target-dir target-codex-backends --test kani_generation -- --test-threads=1` | cargo-kani 0.67.0 / rustc | Analysis |
 | SUITE-010 | Atomic generated-boundary publication | `cargo test --lib publication` | quire-contract-codegen 0.1.0 / rustc | Integration |
 

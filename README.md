@@ -20,7 +20,7 @@ accepted upstream revisions.
 make ci
 ```
 
-This runs formatting, specification/plan validation, Clippy, tests, an explicit Rust 1.75
+This runs formatting, specification/plan validation, Clippy, tests, an explicit Rust 1.98.1
 compatibility check, license checks, and the unsafe-code audit. CI workflows are manual-only; remote
 runs must be deliberately dispatched and retained when they are used as evidence.
 

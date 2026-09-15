@@ -77,7 +77,7 @@ confirm it.
 `quire coverage --scope . --json` is the authoritative static specification, obligation and coverage
 export. Quire exports; it never executes a producer.
 
-`rustup run 1.75.0 cargo check --locked --all-targets --message-format=json` is the MSRV build, whose
+`rustup run 1.98.1 cargo check --locked --all-targets --message-format=json` is the MSRV build, whose
 verdict is read from cargo's own `build-finished` message rather than from its transcript.
 
 TC-006 will add a coverage producer only after FR-004's independent specification review. The
