@@ -18,7 +18,7 @@ type: TestMatrix
 | FR-001 | FR-001-AC-7 | TC-001 | ✅ Covered |
 | FR-001 | FR-001-AC-8 | TC-002 | ✅ Covered |
 | FR-002 | FR-002-AC-1 through FR-002-AC-6 | TC-004 | 🚧 Planned |
-| FR-007 | FR-007-AC-1 through FR-007-AC-5 | TC-023 | 🚧 Planned |
+| FR-007 | FR-007-AC-1 through FR-007-AC-5 | TC-023 | ✅ Covered |
 | FR-003 | FR-003-AC-1 | TC-005, TC-014 | ✅ Covered |
 | FR-003 | FR-003-AC-2 | TC-007, TC-014 | ✅ Covered |
 | FR-003 | FR-003-AC-3 | TC-003, TC-014 | ✅ Covered |
@@ -111,7 +111,7 @@ attestation validation/sealing, closing Rust review SR-016, and gap analysis SR-
 | TC-020 | Verify numeric conformance campaigns and rate reporting | Integration | P0 | FR-011-AC-1, FR-011-AC-2, FR-011-AC-3, FR-011-AC-4, FR-011-AC-5, NFR-004-AC-1 | ✅ Covered |
 | TC-021 | Verify shrinking preserves numeric constraints | Property | P0 | FR-012-AC-1, FR-012-AC-2, FR-012-AC-3, FR-012-AC-4 | ✅ Covered |
 | TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4 | ✅ Covered |
-| TC-023 | Verify bounded Kani profile corpus parity | Integration | P0 | FR-007-AC-1, FR-007-AC-2, FR-007-AC-3, FR-007-AC-4, FR-007-AC-5 | 🚧 Planned |
+| TC-023 | Verify bounded Kani profile corpus parity | Integration | P0 | FR-007-AC-1, FR-007-AC-2, FR-007-AC-3, FR-007-AC-4, FR-007-AC-5 | ✅ Covered |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and
