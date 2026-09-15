@@ -3,15 +3,15 @@
 use std::{collections::BTreeMap, fmt::Write as _, sync::OnceLock};
 
 use quire_contract_ir::{
-    BooleanOperator, CanonicalProfile, ClauseId, ComparisonOperator, DependencyIdentity,
-    DependencyKind, Expression, ExpressionKind, IntegerType, RequirementRef, SourceSpan,
-    StateObservation, TypedExpression, ValueType,
+    BooleanOperator, CanonicalProfile, ClauseId, ComparisonOperator, DefinednessObligationKind,
+    DependencyIdentity, DependencyKind, Expression, ExpressionKind, IntegerType, NumericOperator,
+    RequirementRef, SourceSpan, StateObservation, TypedExpression, ValueType,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 /// Exact reviewed public executable-binding IR revision consumed by this implementation.
-pub const IR_CANDIDATE_REVISION: &str = "04eb6f849c03be23177d373549c6c272551f957d";
+pub const IR_CANDIDATE_REVISION: &str = "29c1432c0204f08265f16ae715b77ea8ab48b999";
 
 /// Exact merged runtime revision required by generated source.
 pub const RUNTIME_REVISION: &str = "8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354";
@@ -486,7 +486,12 @@ fn generate_boolean_oracle_inner(
             request.expression.expression().source(),
         ));
     }
-    if let Some(obligation) = request.expression.obligations().first() {
+    if let Some(obligation) = request.expression.obligations().iter().find(|obligation| {
+        !matches!(
+            obligation.kind(),
+            DefinednessObligationKind::NonZeroDivisor | DefinednessObligationKind::CheckedRange
+        )
+    }) {
         return Err(expression_diagnostic(
             request,
             GenerationErrorCode::UnsupportedObligations,
@@ -968,11 +973,23 @@ fn analyze_node(
             }
             RustValueType::Boolean
         }
-        ExpressionKind::Numeric { .. } | ExpressionKind::NumericNegate { .. } => {
+        ExpressionKind::Numeric { left, right, .. } => {
+            let left_type = analyze_node(request, left, next_index, analysis)?;
+            let right_type = analyze_node(request, right, next_index, analysis)?;
+            if !matches!(left_type, RustValueType::Integer(_)) || left_type != right_type {
+                return Err(unsupported_node(
+                    request,
+                    expression,
+                    "checked arithmetic requires matching bounded integer operands",
+                ));
+            }
+            left_type
+        }
+        ExpressionKind::NumericNegate { .. } => {
             return Err(unsupported_node(
                 request,
                 expression,
-                "numeric arithmetic and negation require an invalid-result API and are refused",
+                "numeric negation requires an invalid-result API and is refused",
             ));
         }
         _ => {
@@ -1137,6 +1154,26 @@ fn render_node(
                 ComparisonOperator::LessEqual => "<=",
                 ComparisonOperator::Greater => ">",
                 ComparisonOperator::GreaterEqual => ">=",
+            };
+            output.line("(").map_err(|_| resource_error(request))?;
+            render_node(request, left, parameters, output)?;
+            output.line(")").map_err(|_| resource_error(request))?;
+            output.line(operator).map_err(|_| resource_error(request))?;
+            output.line("(").map_err(|_| resource_error(request))?;
+            render_node(request, right, parameters, output)?;
+            output.line(")")
+        }
+        ExpressionKind::Numeric {
+            operator,
+            left,
+            right,
+        } => {
+            let operator = match operator {
+                NumericOperator::Add => "+",
+                NumericOperator::Subtract => "-",
+                NumericOperator::Multiply => "*",
+                NumericOperator::Divide => "/",
+                NumericOperator::Remainder => "%",
             };
             output.line("(").map_err(|_| resource_error(request))?;
             render_node(request, left, parameters, output)?;

@@ -1527,20 +1527,21 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
     let integer =
         IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Saturate).unwrap();
     let environment = DeclarationEnvironment::new(requirement(), vec![], vec![], vec![]).unwrap();
-    let first_unsupported_span = span(30, 32);
+    let addition_span = span(30, 32);
     let addition = Expression::new(
         ExpressionKind::Numeric {
             operator: NumericOperator::Add,
             left: Box::new(integer_literal(1, &integer, 30)),
             right: Box::new(integer_literal(1, &integer, 31)),
         },
-        first_unsupported_span.clone(),
+        addition_span,
     );
+    let first_unsupported_span = span(35, 36);
     let negation = Expression::new(
         ExpressionKind::NumericNegate {
             operand: Box::new(integer_literal(1, &integer, 35)),
         },
-        span(35, 36),
+        first_unsupported_span.clone(),
     );
     let expression = boolean_op(
         BooleanOperator::TotalAnd,
@@ -1880,7 +1881,7 @@ fn tc_003_normalization_is_injective_for_dependencies_and_clause_artifacts() {
 /// TC-003
 /// FR-001-AC-4
 #[test]
-fn tc_003_discharged_obligations_are_explicitly_rejected() {
+fn tc_023_native_proven_numeric_obligations_render_without_assumptions() {
     let integer = IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Reject).unwrap();
     let environment = DeclarationEnvironment::new(
         requirement(),
@@ -1939,21 +1940,15 @@ fn tc_003_discharged_obligations_are_explicitly_rejected() {
         .check_expression(&guarded, &ValueType::Boolean, &pre(), true)
         .unwrap();
     assert!(!typed.obligations().is_empty());
-    let first_obligation_span = typed.obligations()[0].source().clone();
     let clause = ClauseId::new("guarded-division").unwrap();
-    let diagnostic = &generate_boolean_oracle(&OracleRequest {
+    let bundle = generate_boolean_oracle(&OracleRequest {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed,
         attestation: attestation_context(),
     })
-    .unwrap_err()[0];
-    assert_eq!(diagnostic.code, GenerationErrorCode::UnsupportedObligations);
-    assert_eq!(diagnostic.path, "expression.obligations");
-    assert_eq!(
-        diagnostic.source_span.as_ref(),
-        Some(&first_obligation_span)
-    );
+    .expect("native-proven nonzero divisor and checked range may render");
+    assert!(bundle.rust.contents.contains('/'));
 }
 
 /// TC-001.
