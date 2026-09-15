@@ -85,8 +85,7 @@ fn main() {
             ".",
         ],
     );
-    let source_dirty =
-        status.as_ref().map_or(true, |value| !value.is_empty()) || !revision_available;
+    let source_dirty = status.as_ref().is_none_or(|value| !value.is_empty()) || !revision_available;
     let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_owned());
     let toolchain = command_output(&rustc, &["--version"])
         .unwrap_or_else(|| "rustc identity unavailable".to_owned());

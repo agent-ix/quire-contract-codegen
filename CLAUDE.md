@@ -10,7 +10,7 @@ make fmt-check        # verify formatting (CI gate)
 make lint             # locked clippy with -D warnings
 make test             # locked cargo test; depends on assurance-inputs
 make build            # locked release build
-make msrv             # execute all tests with exact Rust 1.75.0
+make msrv             # execute all tests with exact Rust 1.98.1
 make spec             # Quire-validate the specification, planning, plan and review documents
 make clean            # cargo clean and drop the assurance environment
 make deny             # all configured cargo-deny lanes
@@ -93,7 +93,7 @@ the build. The Makefile header carries the numbers; the residual is issue #14.
 
 Backported from `agent-ix/ecaz`:
 
-- `clippy.toml` pins MSRV to `1.75` and caps cognitive complexity / arg count
+- `clippy.toml` pins MSRV to `1.98.1` and caps cognitive complexity / arg count
 - `deny.toml` allow-lists licenses and denies unknown registries/git sources
 - `scripts/check_unsafe_comments.sh` runs in CI and locally via `make audit-unsafe`. Every `unsafe {` block must have a `// SAFETY:` comment within the 3 preceding lines, or be listed in `scripts/unsafe_comment_baseline.txt`. Update the baseline with `bash scripts/check_unsafe_comments.sh --update-baseline`. A tree with no Rust source roots, or a scan that fails, exits 2 as inconclusive rather than printing "unsafe audit passed"; the earlier version reported success when it had nothing to audit.
 - This unsafe-audit script intentionally strengthens the shared seven-repository version by scanning tests, benches, and examples and emitting a positive completion marker; the shared policy owner should upstream those differences.

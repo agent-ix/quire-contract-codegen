@@ -587,7 +587,7 @@ fn tc_019_exhaustive_sweep_tags_domains_order_size_and_determinism() {
             for case in census.in_domain() {
                 assert!(inside(case.primary), "{relation:?} {domain:?} {case:?}");
                 assert_eq!(case.partner.is_some(), relation.has_partner_read());
-                assert!(case.partner.map_or(true, inside));
+                assert!(case.partner.is_none_or(inside));
                 let expected = if independent_holds(relation, case.primary, case.partner) {
                     CensusTag::Holds
                 } else {
