@@ -17,6 +17,8 @@ mod kani;
 mod bounded_kani_profile;
 // Implements: FR-007
 mod definedness_arithmetic;
+// Implements: FR-007
+mod bounded_collections;
 // Implements: FR-002
 mod strategy;
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
@@ -27,6 +29,7 @@ pub mod bound_strategy;
 
 pub use bound_strategy::{generate_bound_strategy, BoundStrategyPopulation, BoundStrategyRequest};
 
+pub use bounded_collections::prepare_bounded_collection_query;
 pub use bounded_kani_profile::{classify_bounded_kani_profile, BoundedKaniProfile};
 pub use definedness_arithmetic::prepare_checked_arithmetic;
 
