@@ -120,7 +120,8 @@ const QUANTITY_COMPARISONS: [Compare<Quantity>; 6] = [
     quantity_at_least,
 ];
 /// Generated `[0, 4]` admissions in `TextProfile::ALL` order.
-const ADMISSIONS: [fn(&TextPayload, &mut Meter) -> Result<Outcome<Text>, OracleStop>; 6] = [
+type Admit = fn(&TextPayload, &mut Meter) -> Result<Outcome<Text>, OracleStop>;
+const ADMISSIONS: [Admit; 6] = [
     admit_unicode_scalars,
     admit_nfc,
     admit_nfd,
