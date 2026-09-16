@@ -248,8 +248,16 @@ fn run_integer_oracles(cases: &[(&str, &str)]) {
     let mut checks = String::from("#[cfg(test)]\nmod checks {\n");
     for (index, (generated, expected)) in cases.iter().enumerate() {
         let oracle = generated_item(generated, "pub fn oracle_");
-        fs::write(temporary.0.join(format!("src/oracle_{index}.rs")), generated).unwrap();
-        writeln!(root, "/// Generated oracle {index}.\npub mod oracle_{index};").unwrap();
+        fs::write(
+            temporary.0.join(format!("src/oracle_{index}.rs")),
+            generated,
+        )
+        .unwrap();
+        writeln!(
+            root,
+            "/// Generated oracle {index}.\npub mod oracle_{index};"
+        )
+        .unwrap();
         writeln!(
             checks,
             r#"
@@ -419,8 +427,15 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         other => panic!("expected generated arithmetic oracle, got {other:?}"),
     };
     assert_eq!(arithmetic_oracles.clauses().len(), 1);
-    assert_eq!(arithmetic_oracles.clauses()[0].identity(), &arithmetic_clause);
-    let arithmetic_body = arithmetic_oracles.clauses()[0].bundle().rust.contents.clone();
+    assert_eq!(
+        arithmetic_oracles.clauses()[0].identity(),
+        &arithmetic_clause
+    );
+    let arithmetic_body = arithmetic_oracles.clauses()[0]
+        .bundle()
+        .rust
+        .contents
+        .clone();
     assert!(arithmetic_body.contains("amount_current\n)\n+\n(\n0_i64\n)\n)\n<\n(\n7_i64\n)"));
     // The strategy slice samples only integer reads compared with integer literals, so the
     // generated oracle does not widen it: the arithmetic relation stays a typed refusal.
@@ -536,7 +551,11 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
     };
     assert_eq!(obligation_oracles.clauses().len(), 1);
     assert_eq!(obligation_oracles.clauses()[0].identity(), &amount_clause);
-    let obligation_body = obligation_oracles.clauses()[0].bundle().rust.contents.clone();
+    let obligation_body = obligation_oracles.clauses()[0]
+        .bundle()
+        .rust
+        .contents
+        .clone();
     assert!(obligation_body.contains("quire_contract_runtime::operators::and_short_circuit("));
     let error = generate_bound_strategy(&BoundStrategyRequest {
         package: &obligation,
@@ -548,10 +567,17 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         attestation: context(),
     })
     .unwrap_err();
-    assert_eq!(error.code, StrategyErrorCode::UnsupportedRelation, "{error:?}");
+    assert_eq!(
+        error.code,
+        StrategyErrorCode::UnsupportedRelation,
+        "{error:?}"
+    );
     assert_eq!(error.terminal_state, GenerationTerminalState::Unsupported);
     assert_eq!(error.clause.as_deref(), Some(&amount_clause));
-    run_integer_oracles(&[(&arithmetic_body, "0_i64..7"), (&obligation_body, "1_i64..=1000")]);
+    run_integer_oracles(&[
+        (&arithmetic_body, "0_i64..7"),
+        (&obligation_body, "1_i64..=1000"),
+    ]);
 
     let comparison = amount_value["bindings"][0]["expression"]["expression"].clone();
     let mut connective_value = amount_value.clone();

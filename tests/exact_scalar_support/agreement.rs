@@ -138,6 +138,20 @@ macro_rules! shared_helpers {
             Integer::from(value)
         }
 
+        /// The `[-1000, 1000]` integer domain the corpus IR bounds integers to.
+        pub fn wide() -> IntegerDomain {
+            IntegerDomain::Bounded(IntegerInterval::new(int(-1000), int(1000)).unwrap())
+        }
+
+        /// The corpus rational range: numerators `[-1000, 1000]`, denominators `[1, 1000]`.
+        pub fn wide_rational() -> RationalDomain {
+            RationalDomain::new(
+                IntegerInterval::new(int(-1000), int(1000)).unwrap(),
+                IntegerInterval::new(int(1), int(1000)).unwrap(),
+            )
+            .unwrap()
+        }
+
         pub fn big(spelling: &str) -> Integer {
             spelling.parse().unwrap()
         }

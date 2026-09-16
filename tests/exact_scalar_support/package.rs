@@ -6,8 +6,15 @@
 //! Scalar types, values and expressions are appended under readable
 //! zero-padded keys, and the package identity is re-derived exactly as the
 //! Contract IR fixture support does.
+//!
+//! Bounds are `bounded_domain` nodes keyed by the digest of their content and
+//! listed in the dependencies of each expression that uses them, so each
+//! expression reaches exactly the bounds it declares. Their bodies use the
+//! encoding `quire_contract_codegen::exact_scalar` documents.
 
 #![allow(dead_code)] // Each test binary uses a different subset.
+
+use std::collections::BTreeSet;
 
 use quire_contract_codegen::{
     DecimalOperator, ExactScalarItem, ExactScalarOperation, IeeeArithmeticOperator,
@@ -59,7 +66,7 @@ fn aggregate() -> Value {
     json!({"term": "aggregate", "members": []})
 }
 
-fn literal(kind: &str, value: &str) -> Value {
+pub fn literal(kind: &str, value: &str) -> Value {
     json!({"term": "literal", "value_kind": kind, "value": value})
 }
 
@@ -70,6 +77,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 /// A V2 package under construction.
 pub struct PackageBuilder {
     value: Value,
+    bounds: BTreeSet<String>,
 }
 
 impl Default for PackageBuilder {
@@ -77,6 +85,7 @@ impl Default for PackageBuilder {
         let text = include_str!("../fixtures/exact_scalar/positive-nominal-identities.json");
         Self {
             value: serde_json::from_str(text).expect("vendored fixture is JSON"),
+            bounds: BTreeSet::new(),
         }
     }
 }
@@ -90,6 +99,24 @@ impl PackageBuilder {
         semantic_type: &str,
         body: Value,
     ) -> &mut Self {
+        self.node_with(digest, tag, form, semantic_type, body, &[])
+    }
+
+    pub fn node_with(
+        &mut self,
+        digest: &str,
+        tag: &str,
+        form: &str,
+        semantic_type: &str,
+        body: Value,
+        dependencies: &[String],
+    ) -> &mut Self {
+        let dependencies = dependencies
+            .iter()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|digest| node_ref(digest))
+            .collect::<Vec<_>>();
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
@@ -99,7 +126,7 @@ impl PackageBuilder {
             "node_tag": tag,
             "semantic_form": form,
             "semantic_type": node_ref(semantic_type),
-            "dependencies": [],
+            "dependencies": dependencies,
             "occurrences": [{"role": "declaration", "ordinal": 0}],
             "body": body,
         }));
@@ -130,6 +157,38 @@ impl PackageBuilder {
         self.node(&key(code), tag, form, semantic_type, body)
     }
 
+    /// A node that depends on `bounds`, adding each bound node once.
+    pub fn bounded(
+        &mut self,
+        code: u32,
+        tag: &str,
+        form: &str,
+        semantic_type: &str,
+        body: Value,
+        bounds: &[Bound],
+    ) -> &mut Self {
+        let keys = bounds
+            .iter()
+            .map(|bound| self.bound(bound))
+            .collect::<Vec<_>>();
+        self.node_with(&key(code), tag, form, semantic_type, body, &keys)
+    }
+
+    /// Add `bound` once, returning its key.
+    pub fn bound(&mut self, bound: &Bound) -> String {
+        let digest = bound.key();
+        if self.bounds.insert(digest.clone()) {
+            self.node(
+                &digest,
+                "bounded_domain",
+                bound.form(),
+                &bound.bounded_type(),
+                bound.body(),
+            );
+        }
+        digest
+    }
+
     /// The wire document with its identity projection and package id refreshed.
     pub fn wire(&self) -> Value {
         let mut package = self.value.clone();
@@ -150,13 +209,13 @@ impl PackageBuilder {
     }
 
     pub fn admit(&self) -> CheckedPackageV2 {
+        self.admit_with(CheckedPackageReadLimits::bounded())
+    }
+
+    pub fn admit_with(&self, limits: CheckedPackageReadLimits) -> CheckedPackageV2 {
         let wire = self.wire();
         let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
-        match CheckedPackageV2::read(
-            &bytes,
-            CheckedPackageReadLimits::bounded(),
-            &evidence(&wire),
-        ) {
+        match CheckedPackageV2::read(&bytes, limits, &evidence(&wire)) {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
             other => panic!("expected V2 admission, got {other:?}"),
         }
@@ -196,6 +255,112 @@ fn evidence(package: &Value) -> CheckedPackageEvidence {
     evidence
 }
 
+// ---- bounds ------------------------------------------------------------------
+
+/// One `bounded_domain` node on a corpus scalar type.
+#[derive(Clone, Debug)]
+pub enum Bound {
+    /// `integer_range` on `T_INTEGER`.
+    Integer(i64, i64),
+    /// `rational_range` on `T_RATIONAL`: numerator and denominator intervals.
+    Rational(i64, i64, i64, i64),
+    /// `decimal_range` on `T_DECIMAL`.
+    Decimal(i64, i64, u64, u64, &'static str),
+    /// `float_rounding` on the named float type.
+    Rounding(&'static str, &'static str),
+    /// `text_bounds` on `T_TEXT`.
+    Text(u64, u64, &'static str),
+    /// Any form on any corpus type with any body.
+    Raw {
+        form: &'static str,
+        bounded: &'static str,
+        body: Value,
+    },
+}
+
+fn integer_literal(value: impl ToString) -> Value {
+    literal("integer", &value.to_string())
+}
+
+impl Bound {
+    pub fn form(&self) -> &'static str {
+        match self {
+            Self::Integer(..) => "integer_range",
+            Self::Rational(..) => "rational_range",
+            Self::Decimal(..) => "decimal_range",
+            Self::Rounding(..) => "float_rounding",
+            Self::Text(..) => "text_bounds",
+            Self::Raw { form, .. } => form,
+        }
+    }
+
+    fn bounded_form(&self) -> &'static str {
+        match self {
+            Self::Integer(..) => "integer",
+            Self::Rational(..) => "rational",
+            Self::Decimal(..) => "decimal",
+            Self::Rounding(float, _) => float,
+            Self::Text(..) => "text",
+            Self::Raw { bounded, .. } => bounded,
+        }
+    }
+
+    pub fn bounded_type(&self) -> String {
+        result_type(self.bounded_form())
+    }
+
+    pub fn body(&self) -> Value {
+        let members = match self {
+            Self::Integer(lower, upper) => vec![integer_literal(lower), integer_literal(upper)],
+            Self::Rational(nl, nu, dl, du) => vec![
+                integer_literal(nl),
+                integer_literal(nu),
+                integer_literal(dl),
+                integer_literal(du),
+            ],
+            Self::Decimal(lower, upper, min, max, rounding) => vec![
+                integer_literal(lower),
+                integer_literal(upper),
+                integer_literal(min),
+                integer_literal(max),
+                literal("text", rounding),
+            ],
+            Self::Rounding(_, rounding) => vec![literal("text", rounding)],
+            Self::Text(min, max, profile) => vec![
+                integer_literal(min),
+                integer_literal(max),
+                literal("text", profile),
+            ],
+            Self::Raw { body, .. } => return body.clone(),
+        };
+        json!({"term": "aggregate", "members": members})
+    }
+
+    /// The node key: a digest of the form, the bounded type and the body.
+    pub fn key(&self) -> String {
+        let content = json!([self.form(), self.bounded_type(), self.body()]);
+        sha256_hex(&serde_json::to_vec(&content).expect("bound content"))
+    }
+}
+
+/// An integer range whose upper bound is spelled non-canonically.
+pub fn unreadable_bound() -> Bound {
+    Bound::Raw {
+        form: "integer_range",
+        bounded: "integer",
+        body: json!({
+            "term": "aggregate",
+            "members": [literal("integer", "-5"), literal("integer", "05")],
+        }),
+    }
+}
+
+pub const INT: Bound = Bound::Integer(-1000, 1000);
+pub const INT5: Bound = Bound::Integer(-5, 5);
+pub const RAT: Bound = Bound::Rational(-1000, 1000, 1, 1000);
+pub const DEC: Bound = Bound::Decimal(-1000, 1000, 0, 2, "nearest-even");
+pub const TEXT: Bound = Bound::Text(0, 64, "nfc");
+
 // ---- the scalar corpus -------------------------------------------------------
 
 pub const T_BOOLEAN: u32 = 1;
@@ -205,6 +370,7 @@ pub const T_DECIMAL: u32 = 4;
 pub const T_FLOAT32: u32 = 5;
 pub const T_FLOAT64: u32 = 6;
 pub const T_TEXT: u32 = 7;
+pub const V_BOOLEAN: u32 = 101;
 pub const V_INTEGER: u32 = 102;
 pub const V_RATIONAL: u32 = 103;
 pub const V_DECIMAL: u32 = 104;
@@ -212,6 +378,11 @@ pub const V_FLOAT32: u32 = 105;
 pub const V_FLOAT64: u32 = 106;
 pub const V_TEXT: u32 = 107;
 pub const V_QUANTITY: u32 = 108;
+/// A value whose semantic type is a bound, not a scalar type.
+pub const V_UNTYPED: u32 = 109;
+
+/// The corpus integer subtraction, whose right operand is an inline literal.
+pub const LITERAL_OPERAND: u32 = 1003;
 
 /// Non-generated nodes, each with the reason it is refused.
 pub const COMPOSITE: u32 = 2001;
@@ -228,17 +399,53 @@ pub const WRONG_OPERAND: u32 = 2014;
 pub const DUPLICATED: u32 = 2015;
 pub const WRONG_RESULT: u32 = 2016;
 pub const WRONG_ARITY: u32 = 2017;
+/// An integer addition reaching an unbounded integer type.
+pub const UNBOUNDED: u32 = 2021;
+/// An integer addition bounded in the IR, requested as mathematical.
+pub const MATHEMATICAL: u32 = 2022;
+/// A binary32 addition with no rounding bound.
+pub const MISSING_ROUNDING: u32 = 2023;
+/// An integer addition reaching two integer ranges.
+pub const AMBIGUOUS: u32 = 2024;
+/// An integer addition whose range spells a bound non-canonically.
+pub const UNREADABLE: u32 = 2025;
+/// An integer addition whose only integer bound has the text form.
+pub const WRONG_BOUND_FORM: u32 = 2026;
+/// A floor division bounded `[-5, 5]`, requested over `[-1000, 1000]`.
+pub const DOMAIN_MISMATCH: u32 = 2027;
+/// A quantity conversion to a bounded rational, requested as exact.
+pub const QUANTITY_EXACT: u32 = 2028;
+/// An integer addition whose left operand is itself an application.
+pub const EXPRESSION_OPERAND: u32 = 2029;
+/// A quantity addition whose right operand is a literal.
+pub const LITERAL_QUANTITY: u32 = 2030;
+/// An integer addition whose right operand has no scalar type.
+pub const UNTYPED_OPERAND: u32 = 2031;
 pub const MISSING: u32 = 9999;
 
 fn integer(value: i64) -> Integer {
     Integer::from(value)
 }
 
-fn interval(lower: i64, upper: i64) -> IntegerInterval {
+pub fn interval(lower: i64, upper: i64) -> IntegerInterval {
     IntegerInterval::new(integer(lower), integer(upper)).expect("interval")
 }
 
-fn decimal_type(lower: i64, upper: i64, min: u64, max: u64, rounding: RoundingMode) -> DecimalType {
+pub fn bounded(lower: i64, upper: i64) -> IntegerDomain {
+    IntegerDomain::Bounded(interval(lower, upper))
+}
+
+pub fn rational_domain(nl: i64, nu: i64, dl: i64, du: i64) -> RationalDomain {
+    RationalDomain::new(interval(nl, nu), interval(dl, du)).expect("domain")
+}
+
+pub fn decimal_type(
+    lower: i64,
+    upper: i64,
+    min: u64,
+    max: u64,
+    rounding: RoundingMode,
+) -> DecimalType {
     DecimalType::new(integer(lower), integer(upper), min, max, rounding).expect("decimal type")
 }
 
@@ -250,6 +457,7 @@ pub struct Expression {
     pub operands: &'static [&'static str],
     pub result: &'static str,
     pub operation: ExactScalarOperation,
+    pub bounds: Vec<Bound>,
 }
 
 fn expression(
@@ -258,6 +466,7 @@ fn expression(
     operands: &'static [&'static str],
     result: &'static str,
     operation: ExactScalarOperation,
+    bounds: Vec<Bound>,
 ) -> Expression {
     Expression {
         code,
@@ -266,6 +475,7 @@ fn expression(
         operands,
         result,
         operation,
+        bounds,
     }
 }
 
@@ -276,6 +486,7 @@ const CONVERSION: (&str, &str) = ("conversion", "convert");
 const INT2: &[&str] = &["integer", "integer"];
 const INT1: &[&str] = &["integer"];
 const RAT2: &[&str] = &["rational", "rational"];
+const RAT1: &[&str] = &["rational"];
 const DEC2: &[&str] = &["decimal", "decimal"];
 const DEC1: &[&str] = &["decimal"];
 const F32_2: &[&str] = &["float32", "float32"];
@@ -288,203 +499,312 @@ const QTY2: &[&str] = &["unit", "unit"];
 const QTY_INT: &[&str] = &["unit", "integer"];
 const QTY1: &[&str] = &["unit"];
 
-/// Every generated family, one expression each (division profiles and
-/// conversion targets once per law).
+/// Codes of the text, enum and quantity comparisons, in `ComparisonOperator::ALL` order.
+pub const TEXT_COMPARISONS: [u32; 6] = [1111, 1112, 1072, 1113, 1114, 1115];
+pub const ENUM_COMPARISONS: [u32; 6] = [1121, 1122, 1073, 1123, 1124, 1125];
+pub const QUANTITY_COMPARISONS: [u32; 6] = [1131, 1132, 1084, 1133, 1134, 1135];
+/// Codes of the text admissions, in `TextProfile::ALL` order, all `[0, 4]`.
+pub const TEXT_ADMISSIONS: [u32; 6] = [1074, 1071, 1075, 1076, 1077, 1078];
+
+/// Every generated family: each integer, rational and decimal operator, each
+/// division law, each IEEE operator and comparison exercised, each text
+/// profile, each comparison operator, and each bounded conversion target.
 pub fn corpus() -> Vec<Expression> {
     use ExactScalarOperation as Op;
-    let bounded5 = || IntegerDomain::Bounded(interval(-5, 5));
-    vec![
+    let integer = |code, shape, operands, operator, domain: IntegerDomain, bound: Bound| {
         expression(
+            code,
+            shape,
+            operands,
+            "integer",
+            Op::IntegerArithmetic { operator, domain },
+            vec![bound],
+        )
+    };
+    let division = |code, profile, lower, upper, bound: Bound| {
+        expression(
+            code,
+            BINARY,
+            INT2,
+            "integer",
+            Op::IntegerDivision {
+                profile,
+                domain: bounded(lower, upper),
+            },
+            vec![bound],
+        )
+    };
+    let rational = |code, shape, operands, operator, domain, bounds| {
+        expression(
+            code,
+            shape,
+            operands,
+            "rational",
+            Op::RationalArithmetic {
+                operator,
+                domain: Some(domain),
+            },
+            bounds,
+        )
+    };
+    let ordering = |code, operands, operator, kind, bound: Bound| {
+        expression(
+            code,
+            BINARY,
+            operands,
+            "boolean",
+            Op::Ordering {
+                operator,
+                operands: kind,
+            },
+            vec![bound],
+        )
+    };
+    let decimal = |code, shape, operands, operator, target, bound: Bound| {
+        expression(
+            code,
+            shape,
+            operands,
+            "decimal",
+            Op::DecimalArithmetic { operator, target },
+            vec![bound],
+        )
+    };
+    let ieee = |code, operands, result, operator, width, rounding: RoundingMode| {
+        expression(
+            code,
+            BINARY,
+            operands,
+            result,
+            Op::IeeeArithmetic {
+                operator,
+                width,
+                rounding,
+            },
+            vec![Bound::Rounding(result, rounding.as_str())],
+        )
+    };
+    let ieee_comparison = |code, operands, comparison, width| {
+        expression(
+            code,
+            BINARY,
+            operands,
+            "boolean",
+            Op::IeeeComparison { comparison, width },
+            Vec::new(),
+        )
+    };
+    let wide_decimal = || decimal_type(-1000, 1000, 0, 2, RoundingMode::NearestEven);
+    let quantity = |code, operands, operator| {
+        expression(
+            code,
+            BINARY,
+            operands,
+            "unit",
+            Op::QuantityArithmetic { operator },
+            if operands == QTY_INT {
+                vec![INT]
+            } else {
+                Vec::new()
+            },
+        )
+    };
+
+    let mut corpus = vec![
+        integer(
             1001,
             BINARY,
             INT2,
-            "integer",
-            Op::IntegerArithmetic {
-                operator: IntegerOperator::Add,
-                domain: IntegerDomain::Mathematical,
-            },
+            IntegerOperator::Add,
+            bounded(-1000, 1000),
+            INT,
         ),
-        expression(
+        integer(
             1002,
             UNARY,
             INT1,
-            "integer",
-            Op::IntegerArithmetic {
-                operator: IntegerOperator::Negate,
-                domain: IntegerDomain::Bounded(interval(-8, 7)),
-            },
+            IntegerOperator::Negate,
+            bounded(-8, 7),
+            Bound::Integer(-8, 7),
         ),
-        expression(
-            1011,
+        integer(
+            1003,
             BINARY,
             INT2,
-            "integer",
-            Op::IntegerDivision {
-                profile: DivisionProfile::Truncating,
-                domain: IntegerDomain::Mathematical,
-            },
+            IntegerOperator::Subtract,
+            bounded(-1000, 1000),
+            INT,
         ),
-        expression(
-            1012,
+        integer(
+            1004,
             BINARY,
             INT2,
-            "integer",
-            Op::IntegerDivision {
-                profile: DivisionProfile::Floor,
-                domain: IntegerDomain::Mathematical,
-            },
+            IntegerOperator::Multiply,
+            bounded(-1000, 1000),
+            INT,
         ),
-        expression(
-            1013,
-            BINARY,
-            INT2,
-            "integer",
-            Op::IntegerDivision {
-                profile: DivisionProfile::Euclidean,
-                domain: IntegerDomain::Mathematical,
-            },
-        ),
-        expression(
-            1014,
-            BINARY,
-            INT2,
-            "integer",
-            Op::IntegerDivision {
-                profile: DivisionProfile::Truncating,
-                domain: bounded5(),
-            },
-        ),
+        division(1011, DivisionProfile::Truncating, -1000, 1000, INT),
+        division(1012, DivisionProfile::Floor, -1000, 1000, INT),
+        division(1013, DivisionProfile::Euclidean, -1000, 1000, INT),
+        division(1014, DivisionProfile::Truncating, -5, 5, INT5),
         expression(
             1021,
             BINARY,
             INT2,
             "integer",
-            Op::IntegerModulo { domain: bounded5() },
+            Op::IntegerModulo {
+                domain: bounded(-5, 5),
+            },
+            vec![INT5],
         ),
-        expression(
+        rational(
             1031,
             BINARY,
             RAT2,
-            "rational",
-            Op::RationalArithmetic {
-                operator: RationalOperator::Add,
-                domain: None,
-            },
+            RationalOperator::Add,
+            rational_domain(-1000, 1000, 1, 1000),
+            vec![RAT],
         ),
-        expression(
+        rational(
             1032,
             BINARY,
             RAT2,
-            "rational",
-            Op::RationalArithmetic {
-                operator: RationalOperator::Divide,
-                domain: Some(
-                    RationalDomain::new(interval(-10, 10), interval(1, 4)).expect("domain"),
-                ),
-            },
+            RationalOperator::Divide,
+            rational_domain(-10, 10, 1, 4),
+            vec![Bound::Rational(-10, 10, 1, 4)],
         ),
-        expression(
+        rational(
             1033,
             BINARY,
             INT2,
-            "rational",
-            Op::RationalArithmetic {
-                operator: RationalOperator::IntegerDivide,
-                domain: None,
-            },
+            RationalOperator::IntegerDivide,
+            rational_domain(-1000, 1000, 1, 1000),
+            vec![INT, RAT],
         ),
-        expression(
-            1041,
-            BINARY,
-            INT2,
-            "boolean",
-            Op::Ordering {
-                operator: OrderingOperator::Less,
-                operands: OrderingOperandKind::Integer,
-            },
-        ),
-        expression(
-            1042,
-            BINARY,
-            DEC2,
-            "boolean",
-            Op::Ordering {
-                operator: OrderingOperator::LessOrEqual,
-                operands: OrderingOperandKind::Decimal,
-            },
-        ),
-        expression(
-            1043,
+        rational(
+            1034,
             BINARY,
             RAT2,
-            "boolean",
-            Op::Ordering {
-                operator: OrderingOperator::Greater,
-                operands: OrderingOperandKind::Rational,
-            },
+            RationalOperator::Subtract,
+            rational_domain(-1000, 1000, 1, 1000),
+            vec![RAT],
         ),
-        expression(
+        rational(
+            1035,
+            BINARY,
+            RAT2,
+            RationalOperator::Multiply,
+            rational_domain(-1000, 1000, 1, 1000),
+            vec![RAT],
+        ),
+        rational(
+            1036,
+            UNARY,
+            RAT1,
+            RationalOperator::Negate,
+            rational_domain(-1000, 1000, 1, 1000),
+            vec![RAT],
+        ),
+        ordering(
+            1041,
+            INT2,
+            OrderingOperator::Less,
+            OrderingOperandKind::Integer,
+            INT,
+        ),
+        ordering(
+            1042,
+            DEC2,
+            OrderingOperator::LessOrEqual,
+            OrderingOperandKind::Decimal,
+            DEC,
+        ),
+        ordering(
+            1043,
+            RAT2,
+            OrderingOperator::Greater,
+            OrderingOperandKind::Rational,
+            RAT,
+        ),
+        ordering(
+            1044,
+            INT2,
+            OrderingOperator::LessOrEqual,
+            OrderingOperandKind::Integer,
+            INT,
+        ),
+        ordering(
+            1045,
+            INT2,
+            OrderingOperator::GreaterOrEqual,
+            OrderingOperandKind::Integer,
+            INT,
+        ),
+        decimal(
             1051,
             BINARY,
             DEC2,
-            "decimal",
-            Op::DecimalArithmetic {
-                operator: DecimalOperator::Add,
-                target: decimal_type(-1000, 1000, 0, 2, RoundingMode::NearestEven),
-            },
+            DecimalOperator::Add,
+            wide_decimal(),
+            DEC,
         ),
-        expression(
+        decimal(
             1052,
             BINARY,
             DEC2,
-            "decimal",
-            Op::DecimalArithmetic {
-                operator: DecimalOperator::Divide,
-                target: decimal_type(-1000, 1000, 0, 2, RoundingMode::TowardZero),
-            },
+            DecimalOperator::Divide,
+            decimal_type(-1000, 1000, 0, 2, RoundingMode::TowardZero),
+            Bound::Decimal(-1000, 1000, 0, 2, "toward-zero"),
         ),
-        expression(
+        decimal(
             1053,
             CONVERSION,
             DEC1,
-            "decimal",
-            Op::DecimalArithmetic {
-                operator: DecimalOperator::Round,
-                target: decimal_type(-100, 100, 0, 0, RoundingMode::NearestAway),
-            },
+            DecimalOperator::Round,
+            decimal_type(-100, 100, 0, 0, RoundingMode::NearestAway),
+            Bound::Decimal(-100, 100, 0, 0, "nearest-away"),
         ),
-        expression(
-            1061,
+        decimal(
+            1054,
             BINARY,
+            DEC2,
+            DecimalOperator::Subtract,
+            wide_decimal(),
+            DEC,
+        ),
+        decimal(
+            1055,
+            BINARY,
+            DEC2,
+            DecimalOperator::Multiply,
+            wide_decimal(),
+            DEC,
+        ),
+        decimal(
+            1056,
+            UNARY,
+            DEC1,
+            DecimalOperator::Negate,
+            wide_decimal(),
+            DEC,
+        ),
+        ieee(
+            1061,
             F32_2,
             "float32",
-            Op::IeeeArithmetic {
-                operator: IeeeArithmeticOperator::Add,
-                width: IeeeWidth::Binary32,
-                rounding: RoundingMode::NearestEven,
-            },
+            IeeeArithmeticOperator::Add,
+            IeeeWidth::Binary32,
+            RoundingMode::NearestEven,
         ),
-        expression(
+        ieee(
             1062,
-            BINARY,
             F64_2,
             "float64",
-            Op::IeeeArithmetic {
-                operator: IeeeArithmeticOperator::Divide,
-                width: IeeeWidth::Binary64,
-                rounding: RoundingMode::TowardZero,
-            },
+            IeeeArithmeticOperator::Divide,
+            IeeeWidth::Binary64,
+            RoundingMode::TowardZero,
         ),
-        expression(
-            1063,
-            BINARY,
-            F64_2,
-            "boolean",
-            Op::IeeeComparison {
-                comparison: IeeeComparison::TotalOrder,
-                width: IeeeWidth::Binary64,
-            },
-        ),
+        ieee_comparison(1063, F64_2, IeeeComparison::TotalOrder, IeeeWidth::Binary64),
         expression(
             1064,
             CONVERSION,
@@ -495,79 +815,41 @@ pub fn corpus() -> Vec<Expression> {
                 target: IeeeWidth::Binary32,
                 rounding: RoundingMode::NearestEven,
             },
+            vec![Bound::Rounding("float32", "nearest-even")],
         ),
-        expression(
-            1071,
-            CONVERSION,
-            TEXT1,
-            "text",
-            Op::TextAdmission {
-                text_type: TextType::new(0, 4, TextProfile::Nfc).expect("text type"),
-            },
+        ieee(
+            1065,
+            F32_2,
+            "float32",
+            IeeeArithmeticOperator::Subtract,
+            IeeeWidth::Binary32,
+            RoundingMode::NearestEven,
         ),
-        expression(
-            1072,
-            BINARY,
-            TEXT2,
-            "boolean",
-            Op::TextComparison {
-                operator: ComparisonOperator::Less,
-            },
+        ieee(
+            1066,
+            F64_2,
+            "float64",
+            IeeeArithmeticOperator::Multiply,
+            IeeeWidth::Binary64,
+            RoundingMode::TowardPositive,
         ),
-        expression(
-            1073,
-            BINARY,
-            ENUM2,
-            "boolean",
-            Op::EnumComparison {
-                operator: ComparisonOperator::Less,
-            },
+        ieee_comparison(
+            1067,
+            F32_2,
+            IeeeComparison::NumericEqual,
+            IeeeWidth::Binary32,
         ),
-        expression(
-            1081,
-            BINARY,
-            QTY2,
-            "unit",
-            Op::QuantityArithmetic {
-                operator: QuantityOperator::Add,
-            },
+        ieee_comparison(
+            1068,
+            F64_2,
+            IeeeComparison::BitIdentical,
+            IeeeWidth::Binary64,
         ),
-        expression(
-            1082,
-            BINARY,
-            QTY2,
-            "unit",
-            Op::QuantityArithmetic {
-                operator: QuantityOperator::Multiply,
-            },
-        ),
-        expression(
-            1083,
-            BINARY,
-            QTY_INT,
-            "unit",
-            Op::QuantityArithmetic {
-                operator: QuantityOperator::Power,
-            },
-        ),
-        expression(
-            1084,
-            BINARY,
-            QTY2,
-            "boolean",
-            Op::QuantityComparison {
-                operator: ComparisonOperator::Less,
-            },
-        ),
-        expression(
-            1085,
-            CONVERSION,
-            QTY1,
-            "rational",
-            Op::QuantityConversion {
-                target: QuantityTarget::Exact,
-            },
-        ),
+        quantity(1081, QTY2, QuantityOperator::Add),
+        quantity(1082, QTY2, QuantityOperator::Multiply),
+        quantity(1083, QTY_INT, QuantityOperator::Power),
+        quantity(1088, QTY2, QuantityOperator::Subtract),
+        quantity(1089, QTY2, QuantityOperator::Divide),
         expression(
             1086,
             CONVERSION,
@@ -582,6 +864,7 @@ pub fn corpus() -> Vec<Expression> {
                     RoundingMode::NearestEven,
                 )),
             },
+            vec![Bound::Decimal(-100_000, 100_000, 0, 2, "nearest-even")],
         ),
         expression(
             1087,
@@ -594,8 +877,49 @@ pub fn corpus() -> Vec<Expression> {
                     rounding: RoundingMode::TowardZero,
                 },
             },
+            vec![INT],
         ),
-    ]
+    ];
+    for (code, profile) in TEXT_ADMISSIONS.into_iter().zip(TextProfile::ALL) {
+        corpus.push(expression(
+            code,
+            CONVERSION,
+            TEXT1,
+            "text",
+            Op::TextAdmission {
+                text_type: TextType::new(0, 4, profile).expect("text type"),
+            },
+            vec![Bound::Text(0, 4, profile.as_str())],
+        ));
+    }
+    for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {
+        corpus.push(expression(
+            TEXT_COMPARISONS[index],
+            BINARY,
+            TEXT2,
+            "boolean",
+            Op::TextComparison { operator },
+            vec![TEXT],
+        ));
+        corpus.push(expression(
+            ENUM_COMPARISONS[index],
+            BINARY,
+            ENUM2,
+            "boolean",
+            Op::EnumComparison { operator },
+            Vec::new(),
+        ));
+        corpus.push(expression(
+            QUANTITY_COMPARISONS[index],
+            BINARY,
+            QTY2,
+            "boolean",
+            Op::QuantityComparison { operator },
+            Vec::new(),
+        ));
+    }
+    corpus.sort_by_key(|expression| expression.code);
+    corpus
 }
 
 /// The operand value node of a scalar form.
@@ -613,7 +937,7 @@ fn operand(form: &str) -> String {
     }
 }
 
-/// The type node of a scalar result form.
+/// The type node of a scalar form.
 fn result_type(form: &str) -> String {
     match form {
         "boolean" => key(T_BOOLEAN),
@@ -626,6 +950,13 @@ fn result_type(form: &str) -> String {
         "unit" => UNIT_TYPE.to_owned(),
         other => panic!("no type node for {other}"),
     }
+}
+
+fn integer_pair() -> Value {
+    application(
+        "binary",
+        vec![reference(&key(V_INTEGER)), reference(&key(V_INTEGER))],
+    )
 }
 
 /// The complete package: types, values, the corpus, and refused nodes.
@@ -653,31 +984,118 @@ pub fn corpus_package() -> PackageBuilder {
     ] {
         builder.code(code, "value", "literal", &ty, literal(kind, value));
     }
+    builder.code(
+        V_BOOLEAN,
+        "value",
+        "literal",
+        &key(T_BOOLEAN),
+        json!({"term": "literal", "value_kind": "boolean", "value": true}),
+    );
+    let int_bound = builder.bound(&INT);
+    builder.code(
+        V_UNTYPED,
+        "value",
+        "literal",
+        &int_bound,
+        literal("integer", "3"),
+    );
     for expression in corpus() {
-        let arguments = expression
+        let mut arguments = expression
             .operands
             .iter()
             .map(|form| reference(&operand(form)))
-            .collect();
-        builder.code(
+            .collect::<Vec<_>>();
+        if expression.code == LITERAL_OPERAND {
+            arguments[1] = literal("integer", "3");
+        }
+        builder.bounded(
             expression.code,
             "expression",
             expression.form,
             &result_type(expression.result),
             application(expression.operator, arguments),
+            &expression.bounds,
         );
     }
-    let boolean = key(T_BOOLEAN);
-    for code in [DUPLICATED, WRONG_RESULT, WRONG_ARITY] {
-        let arguments = vec![reference(&key(V_INTEGER)), reference(&key(V_INTEGER))];
-        builder.code(
+    let integer_type = key(T_INTEGER);
+    for (code, bounds) in [
+        (DUPLICATED, vec![INT]),
+        (WRONG_RESULT, vec![INT]),
+        (WRONG_ARITY, vec![INT]),
+        (UNBOUNDED, Vec::new()),
+        (MATHEMATICAL, vec![INT]),
+        (AMBIGUOUS, vec![INT, INT5]),
+        (UNREADABLE, vec![unreadable_bound()]),
+        (
+            WRONG_BOUND_FORM,
+            vec![Bound::Raw {
+                form: "text_bounds",
+                bounded: "integer",
+                body: Bound::Text(0, 4, "nfc").body(),
+            }],
+        ),
+        (DOMAIN_MISMATCH, vec![INT5]),
+    ] {
+        builder.bounded(
             code,
             "expression",
             "binary",
-            &key(T_INTEGER),
-            application("binary", arguments),
+            &integer_type,
+            integer_pair(),
+            &bounds,
         );
     }
+    builder
+        .bounded(
+            MISSING_ROUNDING,
+            "expression",
+            "binary",
+            &key(T_FLOAT32),
+            application(
+                "binary",
+                vec![reference(&key(V_FLOAT32)), reference(&key(V_FLOAT32))],
+            ),
+            &[],
+        )
+        .bounded(
+            QUANTITY_EXACT,
+            "expression",
+            "conversion",
+            &key(T_RATIONAL),
+            application("convert", vec![reference(&key(V_QUANTITY))]),
+            &[RAT],
+        )
+        .bounded(
+            EXPRESSION_OPERAND,
+            "expression",
+            "binary",
+            &integer_type,
+            application("binary", vec![integer_pair(), reference(&key(V_INTEGER))]),
+            &[INT],
+        )
+        .bounded(
+            LITERAL_QUANTITY,
+            "expression",
+            "binary",
+            UNIT_TYPE,
+            application(
+                "binary",
+                vec![reference(&key(V_QUANTITY)), literal("rational", "1")],
+            ),
+            &[],
+        )
+        .bounded(
+            UNTYPED_OPERAND,
+            "expression",
+            "binary",
+            &integer_type,
+            application(
+                "binary",
+                vec![reference(&key(V_INTEGER)), reference(&key(V_UNTYPED))],
+            ),
+            &[INT],
+        );
+    let boolean = key(T_BOOLEAN);
     builder
         .code(COMPOSITE, "composite_type", "record", &boolean, aggregate())
         .code(
@@ -704,40 +1122,43 @@ pub fn corpus_package() -> PackageBuilder {
             &boolean,
             application("protocol_control", vec![]),
         )
-        .code(
+        .bounded(
             CALLS_FUNCTION,
             "expression",
             "binary",
-            &key(T_INTEGER),
+            &integer_type,
             application(
                 "binary",
                 vec![reference(&key(FUNCTION)), reference(&key(V_INTEGER))],
             ),
+            &[INT],
         )
-        .code(
+        .bounded(
             WRONG_BODY,
             "expression",
             "binary",
-            &key(T_INTEGER),
+            &integer_type,
             application("unary", vec![reference(&key(V_INTEGER))]),
+            &[INT],
         )
-        .code(
+        .bounded(
             WRONG_OPERAND,
             "expression",
             "binary",
-            &key(T_INTEGER),
+            &integer_type,
             application(
                 "binary",
                 vec![reference(&key(V_INTEGER)), reference(&key(V_DECIMAL))],
             ),
+            &[INT, DEC],
         );
     builder
 }
 
-fn integer_add() -> ExactScalarOperation {
+pub fn integer_add() -> ExactScalarOperation {
     ExactScalarOperation::IntegerArithmetic {
         operator: IntegerOperator::Add,
-        domain: IntegerDomain::Mathematical,
+        domain: bounded(-1000, 1000),
     }
 }
 
@@ -760,9 +1181,15 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         WRONG_BODY,
         WRONG_OPERAND,
         MISSING,
-        V_INTEGER,
+        V_BOOLEAN,
         DUPLICATED,
         DUPLICATED,
+        UNBOUNDED,
+        AMBIGUOUS,
+        UNREADABLE,
+        WRONG_BOUND_FORM,
+        EXPRESSION_OPERAND,
+        UNTYPED_OPERAND,
     ]
     .into_iter()
     .map(|code| item(code, integer_add()))
@@ -778,7 +1205,41 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         WRONG_ARITY,
         ExactScalarOperation::IntegerArithmetic {
             operator: IntegerOperator::Negate,
+            domain: bounded(-1000, 1000),
+        },
+    ));
+    items.push(item(
+        MATHEMATICAL,
+        ExactScalarOperation::IntegerArithmetic {
+            operator: IntegerOperator::Add,
             domain: IntegerDomain::Mathematical,
+        },
+    ));
+    items.push(item(
+        MISSING_ROUNDING,
+        ExactScalarOperation::IeeeArithmetic {
+            operator: IeeeArithmeticOperator::Add,
+            width: IeeeWidth::Binary32,
+            rounding: RoundingMode::NearestEven,
+        },
+    ));
+    items.push(item(
+        DOMAIN_MISMATCH,
+        ExactScalarOperation::IntegerDivision {
+            profile: DivisionProfile::Floor,
+            domain: bounded(-1000, 1000),
+        },
+    ));
+    items.push(item(
+        QUANTITY_EXACT,
+        ExactScalarOperation::QuantityConversion {
+            target: QuantityTarget::Exact,
+        },
+    ));
+    items.push(item(
+        LITERAL_QUANTITY,
+        ExactScalarOperation::QuantityArithmetic {
+            operator: QuantityOperator::Add,
         },
     ));
     items

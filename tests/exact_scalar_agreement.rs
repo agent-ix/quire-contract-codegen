@@ -24,6 +24,8 @@ mod generated {
 use generated::{
     oracle_0000000000000000000000000000000000000000000000000000000000001001 as integer_add,
     oracle_0000000000000000000000000000000000000000000000000000000000001002 as integer_negate,
+    oracle_0000000000000000000000000000000000000000000000000000000000001003 as integer_subtract,
+    oracle_0000000000000000000000000000000000000000000000000000000000001004 as integer_multiply,
     oracle_0000000000000000000000000000000000000000000000000000000000001011 as divide_truncating,
     oracle_0000000000000000000000000000000000000000000000000000000000001012 as divide_floor,
     oracle_0000000000000000000000000000000000000000000000000000000000001013 as divide_euclidean,
@@ -32,29 +34,100 @@ use generated::{
     oracle_0000000000000000000000000000000000000000000000000000000000001031 as rational_add,
     oracle_0000000000000000000000000000000000000000000000000000000000001032 as rational_divide,
     oracle_0000000000000000000000000000000000000000000000000000000000001033 as integer_divide,
+    oracle_0000000000000000000000000000000000000000000000000000000000001034 as rational_subtract,
+    oracle_0000000000000000000000000000000000000000000000000000000000001035 as rational_multiply,
+    oracle_0000000000000000000000000000000000000000000000000000000000001036 as rational_negate,
     oracle_0000000000000000000000000000000000000000000000000000000000001041 as integer_less,
     oracle_0000000000000000000000000000000000000000000000000000000000001042 as decimal_at_most,
     oracle_0000000000000000000000000000000000000000000000000000000000001043 as rational_greater,
+    oracle_0000000000000000000000000000000000000000000000000000000000001044 as integer_at_most,
+    oracle_0000000000000000000000000000000000000000000000000000000000001045 as integer_at_least,
     oracle_0000000000000000000000000000000000000000000000000000000000001051 as decimal_add,
     oracle_0000000000000000000000000000000000000000000000000000000000001052 as decimal_divide,
     oracle_0000000000000000000000000000000000000000000000000000000000001053 as decimal_round,
+    oracle_0000000000000000000000000000000000000000000000000000000000001054 as decimal_subtract,
+    oracle_0000000000000000000000000000000000000000000000000000000000001055 as decimal_multiply,
+    oracle_0000000000000000000000000000000000000000000000000000000000001056 as decimal_negate,
     oracle_0000000000000000000000000000000000000000000000000000000000001061 as binary32_add,
     oracle_0000000000000000000000000000000000000000000000000000000000001062 as binary64_divide,
     oracle_0000000000000000000000000000000000000000000000000000000000001063 as binary64_total_order,
     oracle_0000000000000000000000000000000000000000000000000000000000001064 as narrow_to_binary32,
+    oracle_0000000000000000000000000000000000000000000000000000000000001065 as binary32_subtract,
+    oracle_0000000000000000000000000000000000000000000000000000000000001066 as binary64_multiply,
+    oracle_0000000000000000000000000000000000000000000000000000000000001067 as binary32_numeric_equal,
+    oracle_0000000000000000000000000000000000000000000000000000000000001068 as binary64_bit_identical,
     oracle_0000000000000000000000000000000000000000000000000000000000001071 as admit_nfc,
     oracle_0000000000000000000000000000000000000000000000000000000000001072 as text_less,
     oracle_0000000000000000000000000000000000000000000000000000000000001073 as enum_less,
+    oracle_0000000000000000000000000000000000000000000000000000000000001074 as admit_unicode_scalars,
+    oracle_0000000000000000000000000000000000000000000000000000000000001075 as admit_nfd,
+    oracle_0000000000000000000000000000000000000000000000000000000000001076 as admit_nfkc,
+    oracle_0000000000000000000000000000000000000000000000000000000000001077 as admit_nfkd,
+    oracle_0000000000000000000000000000000000000000000000000000000000001078 as admit_binary_utf8,
     oracle_0000000000000000000000000000000000000000000000000000000000001081 as quantity_add,
     oracle_0000000000000000000000000000000000000000000000000000000000001082 as quantity_multiply,
     oracle_0000000000000000000000000000000000000000000000000000000000001083 as quantity_power,
     oracle_0000000000000000000000000000000000000000000000000000000000001084 as quantity_less,
-    oracle_0000000000000000000000000000000000000000000000000000000000001085 as convert_exact,
     oracle_0000000000000000000000000000000000000000000000000000000000001086 as convert_decimal,
     oracle_0000000000000000000000000000000000000000000000000000000000001087 as convert_integer,
+    oracle_0000000000000000000000000000000000000000000000000000000000001088 as quantity_subtract,
+    oracle_0000000000000000000000000000000000000000000000000000000000001089 as quantity_divide,
+    oracle_0000000000000000000000000000000000000000000000000000000000001111 as text_equal,
+    oracle_0000000000000000000000000000000000000000000000000000000000001112 as text_not_equal,
+    oracle_0000000000000000000000000000000000000000000000000000000000001113 as text_at_most,
+    oracle_0000000000000000000000000000000000000000000000000000000000001114 as text_greater,
+    oracle_0000000000000000000000000000000000000000000000000000000000001115 as text_at_least,
+    oracle_0000000000000000000000000000000000000000000000000000000000001121 as enum_equal,
+    oracle_0000000000000000000000000000000000000000000000000000000000001122 as enum_not_equal,
+    oracle_0000000000000000000000000000000000000000000000000000000000001123 as enum_at_most,
+    oracle_0000000000000000000000000000000000000000000000000000000000001124 as enum_greater,
+    oracle_0000000000000000000000000000000000000000000000000000000000001125 as enum_at_least,
+    oracle_0000000000000000000000000000000000000000000000000000000000001131 as quantity_equal,
+    oracle_0000000000000000000000000000000000000000000000000000000000001132 as quantity_not_equal,
+    oracle_0000000000000000000000000000000000000000000000000000000000001133 as quantity_at_most,
+    oracle_0000000000000000000000000000000000000000000000000000000000001134 as quantity_greater,
+    oracle_0000000000000000000000000000000000000000000000000000000000001135 as quantity_at_least,
     OracleStop,
 };
-use quire_contract_runtime::exact::{IllTyped, Outcome};
+use quire_contract_runtime::exact::{
+    EnumValue, IllTyped, Meter, Outcome, Quantity, Text, TextPayload,
+};
+
+/// Generated oracles in `ComparisonOperator::ALL` order.
+type Compare<T> = fn(&T, &T, &mut Meter) -> Result<Outcome<bool>, OracleStop>;
+const TEXT_COMPARISONS: [Compare<Text>; 6] = [
+    text_equal,
+    text_not_equal,
+    text_less,
+    text_at_most,
+    text_greater,
+    text_at_least,
+];
+const ENUM_COMPARISONS: [Compare<EnumValue>; 6] = [
+    enum_equal,
+    enum_not_equal,
+    enum_less,
+    enum_at_most,
+    enum_greater,
+    enum_at_least,
+];
+const QUANTITY_COMPARISONS: [Compare<Quantity>; 6] = [
+    quantity_equal,
+    quantity_not_equal,
+    quantity_less,
+    quantity_at_most,
+    quantity_greater,
+    quantity_at_least,
+];
+/// Generated `[0, 4]` admissions in `TextProfile::ALL` order.
+const ADMISSIONS: [fn(&TextPayload, &mut Meter) -> Result<Outcome<Text>, OracleStop>; 6] = [
+    admit_unicode_scalars,
+    admit_nfc,
+    admit_nfd,
+    admit_nfkc,
+    admit_nfkd,
+    admit_binary_utf8,
+];
 
 /// An oracle over an infallible runtime operator. Its generated constants are
 /// valid, so a stop is a generator defect.
@@ -86,9 +159,9 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); },
                 direct: |m| (
-                    divide(DivisionProfile::Truncating, &a, &b, &IntegerDomain::Mathematical, m),
-                    divide(DivisionProfile::Floor, &a, &b, &IntegerDomain::Mathematical, m),
-                    divide(DivisionProfile::Euclidean, &a, &b, &IntegerDomain::Mathematical, m),
+                    divide(DivisionProfile::Truncating, &a, &b, &wide(), m),
+                    divide(DivisionProfile::Floor, &a, &b, &wide(), m),
+                    divide(DivisionProfile::Euclidean, &a, &b, &wide(), m),
                 ),
                 generated: |m| (
                     done(divide_truncating(&a, &b, m)),
@@ -126,7 +199,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
         agree3! {
             limits: limits(tuple),
             setup: { let (a, b) = (int(a), int(b)); },
-            direct: |m| divide(DivisionProfile::Truncating, &a, &b, &IntegerDomain::Mathematical, m),
+            direct: |m| divide(DivisionProfile::Truncating, &a, &b, &wide(), m),
             generated: |m| done(divide_truncating(&a, &b, m)),
         };
         named += 1;
@@ -169,7 +242,13 @@ fn tc_024_tc185_decimal_oracles_agree() {
             direct: |m| evaluate_decimal(DecimalOperation::Round(&a), &target, m),
             generated: |m| done(decimal_round(&a, m)),
         };
-        vectors += 1;
+        agree3! {
+            limits: UNLIMITED,
+            setup: { let a = dec(*ca, *sa); let target = decimal_type(-1000, 1000, 0, 2, RoundingMode::NearestEven); },
+            direct: |m| evaluate_decimal(DecimalOperation::Negate(&a), &target, m),
+            generated: |m| done(decimal_negate(&a, m)),
+        };
+        vectors += 2;
         for (cb, sb) in &operands {
             agree3! {
                 limits: UNLIMITED,
@@ -180,14 +259,21 @@ fn tc_024_tc185_decimal_oracles_agree() {
                 },
                 direct: |m| (
                     evaluate_decimal(DecimalOperation::Add(&a, &b), &add, m),
+                    evaluate_decimal(DecimalOperation::Subtract(&a, &b), &add, m),
+                    evaluate_decimal(DecimalOperation::Multiply(&a, &b), &add, m),
                     evaluate_decimal(DecimalOperation::Divide(&a, &b), &divide, m),
                 ),
-                generated: |m| (done(decimal_add(&a, &b, m)), done(decimal_divide(&a, &b, m))),
+                generated: |m| (
+                    done(decimal_add(&a, &b, m)),
+                    done(decimal_subtract(&a, &b, m)),
+                    done(decimal_multiply(&a, &b, m)),
+                    done(decimal_divide(&a, &b, m)),
+                ),
             };
-            vectors += 2;
+            vectors += 4;
         }
     }
-    assert_eq!(vectors, 30 + 2 * 30 * 30);
+    assert_eq!(vectors, 2 * 30 + 4 * 30 * 30);
 
     // D03 (both signed halves), D05, D06, D09 exact and short, D15.
     let mut named = 0_usize;
@@ -280,30 +366,34 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
     const T14: [u64; 10] = [0, 0, 0, 5, 3, 0, 0, 2, 3, 1];
     const T16: [u64; 10] = [0, 0, 0, 3, 2, 2, 0, 1, 5, 1];
     let mut admissions = 0_usize;
-    for input in SEQUENCES {
-        for tuple in [[u64::MAX; 10], T11, T14, T16] {
-            agree3! {
-                limits: limits(tuple),
-                setup: { let input = payload(input); let target = text_type(0, 4, TextProfile::Nfc); },
-                direct: |m| admit_text(&input, &target, m),
-                generated: |m| done(admit_nfc(&input, m)),
-            };
-            admissions += 1;
+    for (p, admit) in ADMISSIONS.into_iter().enumerate() {
+        for input in SEQUENCES {
+            for tuple in [[u64::MAX; 10], T11, T14, T16] {
+                agree3! {
+                    limits: limits(tuple),
+                    setup: { let input = payload(input); let target = text_type(0, 4, TextProfile::ALL[p]); },
+                    direct: |m| admit_text(&input, &target, m),
+                    generated: |m| done(admit(&input, m)),
+                };
+                admissions += 1;
+            }
         }
     }
-    assert_eq!(admissions, 12 * 4);
+    assert_eq!(admissions, 6 * 12 * 4);
 
     let mut comparisons = 0_usize;
-    for p in 0..6_usize {
-        for left in SEQUENCES {
-            for right in SEQUENCES {
-                agree3! {
-                    limits: UNLIMITED,
-                    setup: { let (l, r) = (text(left, TextProfile::ALL[p]), text(right, TextProfile::ALL[p])); },
-                    direct: |m| compare_text(ComparisonOperator::Less, &l, &r, m),
-                    generated: |m| typed(text_less(&l, &r, m)),
-                };
-                comparisons += 1;
+    for (o, compare) in TEXT_COMPARISONS.into_iter().enumerate() {
+        for p in 0..6_usize {
+            for left in SEQUENCES {
+                for right in SEQUENCES {
+                    agree3! {
+                        limits: UNLIMITED,
+                        setup: { let (l, r) = (text(left, TextProfile::ALL[p]), text(right, TextProfile::ALL[p])); },
+                        direct: |m| compare_text(ComparisonOperator::ALL[o], &l, &r, m),
+                        generated: |m| typed(compare(&l, &r, m)),
+                    };
+                    comparisons += 1;
+                }
             }
         }
     }
@@ -322,7 +412,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
         };
         comparisons += 1;
     }
-    assert_eq!(comparisons, 6 * 12 * 12 + 4);
+    assert_eq!(comparisons, 6 * 6 * 12 * 12 + 4);
 
     // T07, T08, T09 (recomputed keys) and T15 over every declaration pair.
     let declarations: [(&str, bool, &[&str]); 4] = [
@@ -336,23 +426,25 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
         for (rn, ro, rm) in declarations {
             for lc in lm {
                 for rc in rm {
-                    for tuple in [[u64::MAX; 10], [0; 10]] {
-                        agree3! {
-                            limits: limits(tuple),
-                            setup: {
-                                let left = enum_declaration(ln, lo, lm).unwrap().value(lc).unwrap();
-                                let right = enum_declaration(rn, ro, rm).unwrap().value(rc).unwrap();
-                            },
-                            direct: |m| compare_enum(ComparisonOperator::Less, &left, &right, m),
-                            generated: |m| typed(enum_less(&left, &right, m)),
-                        };
-                        enums += 1;
+                    for (o, compare) in ENUM_COMPARISONS.into_iter().enumerate() {
+                        for tuple in [[u64::MAX; 10], [0; 10]] {
+                            agree3! {
+                                limits: limits(tuple),
+                                setup: {
+                                    let left = enum_declaration(ln, lo, lm).unwrap().value(lc).unwrap();
+                                    let right = enum_declaration(rn, ro, rm).unwrap().value(rc).unwrap();
+                                },
+                                direct: |m| compare_enum(ComparisonOperator::ALL[o], &left, &right, m),
+                                generated: |m| typed(compare(&left, &right, m)),
+                            };
+                            enums += 1;
+                        }
                     }
                 }
             }
         }
     }
-    assert_eq!(enums, 10 * 10 * 2);
+    assert_eq!(enums, 10 * 10 * 6 * 2);
     println!("TC-186 three-way agreement: {admissions} admissions, {comparisons} text comparisons, {enums} enum comparisons");
 }
 
@@ -378,22 +470,20 @@ fn tc_024_tc187_quantity_oracles_agree() {
                             let integer = QuantityTarget::Integer { domain: IntegerInterval::new(int(-1000), int(1000)).unwrap(), rounding: RoundingMode::TowardZero };
                         },
                         direct: |m| (
-                            convert_quantity(&quantity, &unit, &QuantityTarget::Exact, m),
                             convert_quantity(&quantity, &unit, &decimal, m),
                             convert_quantity(&quantity, &unit, &integer, m),
                         ),
                         generated: |m| (
-                            typed(convert_exact(&quantity, &unit, m)),
                             typed(convert_decimal(&quantity, &unit, m)),
                             typed(convert_integer(&quantity, &unit, m)),
                         ),
                     };
-                    conversions += 3;
+                    conversions += 2;
                 }
             }
         }
     }
-    assert_eq!(conversions, 3 * (5 * 5 + 6 * 6) * 5);
+    assert_eq!(conversions, 2 * (5 * 5 + 6 * 6) * 5);
 
     let mut operations = 0_usize;
     for name in ["m", "cm", "in", "rev", "u2"] {
@@ -404,16 +494,27 @@ fn tc_024_tc187_quantity_oracles_agree() {
                     setup: { let f = fixture(); let (a, b) = (f.q(ratio(ln, ld), name), f.q(ratio(rn, rd), name)); },
                     direct: |m| (
                         evaluate_quantity(QuantityOperation::Add(&a, &b), m),
+                        evaluate_quantity(QuantityOperation::Subtract(&a, &b), m),
                         evaluate_quantity(QuantityOperation::Multiply(&a, &b), m),
-                        compare_quantity(ComparisonOperator::Less, &a, &b, m),
+                        evaluate_quantity(QuantityOperation::Divide(&a, &b), m),
                     ),
                     generated: |m| (
                         typed(quantity_add(&a, &b, m)),
+                        typed(quantity_subtract(&a, &b, m)),
                         typed(quantity_multiply(&a, &b, m)),
-                        typed(quantity_less(&a, &b, m)),
+                        typed(quantity_divide(&a, &b, m)),
                     ),
                 };
-                operations += 3;
+                operations += 4;
+                for (o, compare) in QUANTITY_COMPARISONS.into_iter().enumerate() {
+                    agree3! {
+                        limits: UNLIMITED,
+                        setup: { let f = fixture(); let (a, b) = (f.q(ratio(ln, ld), name), f.q(ratio(rn, rd), name)); },
+                        direct: |m| compare_quantity(ComparisonOperator::ALL[o], &a, &b, m),
+                        generated: |m| typed(compare(&a, &b, m)),
+                    };
+                    operations += 1;
+                }
             }
             for exponent in ["-2", "-1", "0", "1", "2", "3"] {
                 agree3! {
@@ -426,7 +527,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
             }
         }
     }
-    assert_eq!(operations, 5 * (5 * 5 * 3 + 5 * 6));
+    assert_eq!(operations, 5 * (5 * 5 * (4 + 6) + 5 * 6));
 
     // U19/U24 same-unit sums, U28 compound product, U13/U21 powers, U23
     // comparison tuples, and U03/U05 dimension mismatches.
@@ -530,10 +631,18 @@ fn tc_024_tc193_ieee_oracles_agree() {
             agree3! {
                 limits: UNLIMITED,
                 setup: { let (x, y) = (ieee(0, *a), ieee(0, *b)); },
-                direct: |m| evaluate_ieee(IeeeOperation::Add(x, y), RoundingMode::NearestEven, m),
-                generated: |m| typed(binary32_add(x, y, m)),
+                direct: |m| (
+                    evaluate_ieee(IeeeOperation::Add(x, y), RoundingMode::NearestEven, m),
+                    evaluate_ieee(IeeeOperation::Subtract(x, y), RoundingMode::NearestEven, m),
+                    compare_ieee(IeeeComparison::NumericEqual, x, y, m),
+                ),
+                generated: |m| (
+                    typed(binary32_add(x, y, m)),
+                    typed(binary32_subtract(x, y, m)),
+                    typed(binary32_numeric_equal(x, y, m)),
+                ),
             };
-            vectors += 1;
+            vectors += 3;
         }
     }
     for a in &wide {
@@ -543,11 +652,18 @@ fn tc_024_tc193_ieee_oracles_agree() {
                 setup: { let (x, y) = (ieee(1, *a), ieee(1, *b)); },
                 direct: |m| (
                     evaluate_ieee(IeeeOperation::Divide(x, y), RoundingMode::TowardZero, m),
+                    evaluate_ieee(IeeeOperation::Multiply(x, y), RoundingMode::TowardPositive, m),
                     compare_ieee(IeeeComparison::TotalOrder, x, y, m),
+                    compare_ieee(IeeeComparison::BitIdentical, x, y, m),
                 ),
-                generated: |m| (typed(binary64_divide(x, y, m)), typed(binary64_total_order(x, y, m))),
+                generated: |m| (
+                    typed(binary64_divide(x, y, m)),
+                    typed(binary64_multiply(x, y, m)),
+                    typed(binary64_total_order(x, y, m)),
+                    typed(binary64_bit_identical(x, y, m)),
+                ),
             };
-            vectors += 2;
+            vectors += 4;
         }
         agree3! {
             limits: UNLIMITED,
@@ -557,7 +673,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
         };
         vectors += 1;
     }
-    assert_eq!(vectors, 20 * 20 + 2 * 20 * 20 + 20);
+    assert_eq!(vectors, 3 * 20 * 20 + 4 * 20 * 20 + 20);
 
     // F21 zero sums and F09 under NearestEven, then the F31 narrowing tuples.
     let mut named = 0_usize;
@@ -597,7 +713,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
     println!("TC-193 three-way agreement: {vectors} class-matrix vectors, {named} tabled tuples");
 }
 
-/// Trace: FR-014-CON-2, TC-024.
+/// Trace: FR-014-AC-9, TC-024.
 #[test]
 fn tc_024_operand_width_mismatch_is_a_typed_stop_before_any_charge() {
     use quire_contract_runtime::exact::{IeeeValue, Meter, ScalarLimits};
@@ -646,23 +762,46 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); },
                 direct: |m| (
-                    evaluate_integer(IntegerOperation::Add(&a, &b), &IntegerDomain::Mathematical, m),
-                    evaluate_rational(RationalOperation::IntegerDivide(&a, &b), None, m),
-                    evaluate_ordering(OrderingOperator::Less, OrderingOperands::Integer(&a, &b), m),
+                    evaluate_integer(IntegerOperation::Add(&a, &b), &wide(), m),
+                    evaluate_integer(IntegerOperation::Subtract(&a, &b), &wide(), m),
+                    evaluate_integer(IntegerOperation::Multiply(&a, &b), &wide(), m),
+                    evaluate_rational(RationalOperation::IntegerDivide(&a, &b), Some(&wide_rational()), m),
                 ),
                 generated: |m| (
                     done(integer_add(&a, &b, m)),
+                    done(integer_subtract(&a, &b, m)),
+                    done(integer_multiply(&a, &b, m)),
                     done(integer_divide(&a, &b, m)),
-                    done(integer_less(&a, &b, m)),
                 ),
             };
-            vectors += 3;
+            agree2! {
+                limits: UNLIMITED,
+                setup: { let (a, b) = (int(a), int(b)); },
+                direct: |m| (
+                    evaluate_ordering(OrderingOperator::Less, OrderingOperands::Integer(&a, &b), m),
+                    evaluate_ordering(OrderingOperator::LessOrEqual, OrderingOperands::Integer(&a, &b), m),
+                    evaluate_ordering(OrderingOperator::GreaterOrEqual, OrderingOperands::Integer(&a, &b), m),
+                ),
+                generated: |m| (
+                    done(integer_less(&a, &b, m)),
+                    done(integer_at_most(&a, &b, m)),
+                    done(integer_at_least(&a, &b, m)),
+                ),
+            };
+            vectors += 7;
         }
     }
     let rationals = (-6_i64..=6)
         .flat_map(|n| (1_i64..=3).map(move |d| (n, d)))
         .collect::<Vec<_>>();
     for (ln, ld) in &rationals {
+        agree2! {
+            limits: UNLIMITED,
+            setup: { let a = ratio(*ln, *ld); },
+            direct: |m| evaluate_rational(RationalOperation::Negate(&a), Some(&wide_rational()), m),
+            generated: |m| done(rational_negate(&a, m)),
+        };
+        vectors += 1;
         for (rn, rd) in &rationals {
             agree2! {
                 limits: UNLIMITED,
@@ -671,19 +810,23 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
                     let domain = RationalDomain::new(IntegerInterval::new(int(-10), int(10)).unwrap(), IntegerInterval::new(int(1), int(4)).unwrap()).unwrap();
                 },
                 direct: |m| (
-                    evaluate_rational(RationalOperation::Add(&a, &b), None, m),
+                    evaluate_rational(RationalOperation::Add(&a, &b), Some(&wide_rational()), m),
+                    evaluate_rational(RationalOperation::Subtract(&a, &b), Some(&wide_rational()), m),
+                    evaluate_rational(RationalOperation::Multiply(&a, &b), Some(&wide_rational()), m),
                     evaluate_rational(RationalOperation::Divide(&a, &b), Some(&domain), m),
                     evaluate_ordering(OrderingOperator::Greater, OrderingOperands::Rational(&a, &b), m),
                 ),
                 generated: |m| (
                     done(rational_add(&a, &b, m)),
+                    done(rational_subtract(&a, &b, m)),
+                    done(rational_multiply(&a, &b, m)),
                     done(rational_divide(&a, &b, m)),
                     done(rational_greater(&a, &b, m)),
                 ),
             };
-            vectors += 3;
+            vectors += 5;
         }
     }
-    assert_eq!(vectors, 41 + 3 * 41 * 41 + 3 * 39 * 39);
+    assert_eq!(vectors, 41 + 7 * 41 * 41 + 39 + 5 * 39 * 39);
     println!("runtime-only agreement (no QSL d9d5273 operator): {vectors} vectors");
 }
