@@ -6,6 +6,28 @@
 //! built from Contract Runtime `exact` values, and this module cross-checks
 //! that descriptor against the lowered node before emitting anything.
 //!
+//! Every parameter the node can carry is checked against the IR: the
+//! descriptor's integer, rational and decimal domains, IEEE rounding and text
+//! bounds must equal the reachable `bounded_domain` node on the node's result
+//! type, and lowering requires every reachable integer, rational, decimal and
+//! text type to be bounded. The operator itself (which division law, add or
+//! multiply, which comparison) is not carried by CheckedPackage V2, so every
+//! claim records its operation as [`OperationProvenance::CallerDeclared`] and
+//! the claim map lists [`UpstreamBlocker::OperationIdentityNotCarried`].
+//!
+//! V2 does not define a normative body for `bounded_domain` nodes. This
+//! generator reads exactly one encoding and refuses anything else as
+//! [`ExactScalarRefusal::UnreadableBound`]: an `aggregate` whose members are
+//! literals, integers as canonical decimal strings and spellings as text.
+//!
+//! | Form | Members |
+//! |------|---------|
+//! | `integer_range` | lower, upper |
+//! | `rational_range` | numerator lower, numerator upper, denominator lower, denominator upper |
+//! | `decimal_range` | lower, upper, minimum scale, maximum scale, rounding |
+//! | `float_rounding` | rounding |
+//! | `text_bounds` | minimum length, maximum length, profile |
+//!
 //! Generated functions call the pinned runtime operator with a caller-supplied
 //! `Meter`: every charge comes from the runtime, and no amount is copied into
 //! the generated source. An item that fails any check receives a typed
@@ -18,9 +40,9 @@ use quire_contract_ir::{
     CompleteLoweringRecordV2,
 };
 use quire_contract_runtime::exact::{
-    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, IntegerDomain,
-    IntegerInterval, OrderingOperator, QuantityTarget, RationalDomain, RoundingMode, TextProfile,
-    TextType,
+    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
+    IntegerDomain, IntegerInterval, OrderingOperator, QuantityTarget, RationalDomain, RoundingMode,
+    TextProfile, TextType,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -278,7 +300,35 @@ impl ScalarForm {
     }
 }
 
-/// Upstream work an unsupported family is blocked on.
+/// A `bounded_domain` form this generator reads.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BoundForm {
+    /// `integer_range`.
+    IntegerRange,
+    /// `rational_range`.
+    RationalRange,
+    /// `decimal_range`.
+    DecimalRange,
+    /// `float_rounding`.
+    FloatRounding,
+    /// `text_bounds`.
+    TextBounds,
+}
+
+impl BoundForm {
+    fn wire(self) -> &'static str {
+        match self {
+            Self::IntegerRange => "integer_range",
+            Self::RationalRange => "rational_range",
+            Self::DecimalRange => "decimal_range",
+            Self::FloatRounding => "float_rounding",
+            Self::TextBounds => "text_bounds",
+        }
+    }
+}
+
+/// Upstream work an item or the whole slice is blocked on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum UpstreamBlocker {
     /// Composite, collection and function semantics.
@@ -287,6 +337,30 @@ pub enum UpstreamBlocker {
     /// Model and relation semantics.
     #[serde(rename = "agent-ix/quire-spec-language#120")]
     QuireSpecLanguage120,
+    /// CheckedPackage V2 names an operator class, not the operation law.
+    #[serde(rename = "operation identity not carried by CheckedPackage V2")]
+    OperationIdentityNotCarried,
+}
+
+/// Where a claim's operation identity comes from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum OperationProvenance {
+    /// The request descriptor declared it and the IR cannot confirm it; a
+    /// consumer must not treat the operation law as checked.
+    CallerDeclared {
+        /// The missing upstream transport.
+        blocked_on: UpstreamBlocker,
+    },
+}
+
+/// The operation a claim-map entry is about.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct OperationClaim {
+    /// Stable identity of the declared operation.
+    pub identity: String,
+    /// Where the identity comes from.
+    pub provenance: OperationProvenance,
 }
 
 /// Why one requested item generated no code.
@@ -317,6 +391,44 @@ pub enum ExactScalarRefusal {
     RequiresBound {
         /// The unbounded type.
         unbounded_type: CheckedNodeId,
+    },
+    /// No reachable bound of the form the descriptor needs bounds the result type.
+    MissingBound {
+        /// The result type.
+        bounded_type: CheckedNodeId,
+        /// The form the descriptor needs.
+        expected_form: BoundForm,
+    },
+    /// More than one reachable bound of that form bounds the result type.
+    AmbiguousBound {
+        /// The result type.
+        bounded_type: CheckedNodeId,
+        /// The repeated form.
+        expected_form: BoundForm,
+    },
+    /// The bound's body is not the encoding this generator reads.
+    UnreadableBound {
+        /// The bound node.
+        bound: CheckedNodeId,
+    },
+    /// The descriptor's parameter differs from the IR bound.
+    BoundMismatch {
+        /// The bound node.
+        bound: CheckedNodeId,
+        /// Its form.
+        form: BoundForm,
+    },
+    /// An operand is a term other than a literal or a reference.
+    OperandUnsupported {
+        /// Zero-based argument position.
+        position: usize,
+        /// The term kind.
+        term: String,
+    },
+    /// A literal stands where a quantity is required; a literal carries no unit.
+    UnitlessLiteralOperand {
+        /// Zero-based argument position.
+        position: usize,
     },
     /// A reachable body refused re-validation.
     InvalidBody {
@@ -389,6 +501,8 @@ pub struct GeneratedScalarClaim {
     pub claims: Vec<CheckedNodeId>,
     /// Reachable bounding-domain keys.
     pub bounds: Vec<CheckedNodeId>,
+    /// The bounds the descriptor's parameters were checked equal to, ascending.
+    pub checked_bounds: Vec<CheckedNodeId>,
     /// Every reachable key.
     pub dependencies: Vec<CheckedNodeId>,
 }
@@ -411,8 +525,8 @@ pub enum ExactScalarDisposition {
 pub struct ExactScalarClaim {
     /// Requested node.
     pub node_id: CheckedNodeId,
-    /// Stable identity of the declared operation.
-    pub operation: String,
+    /// The declared operation and its provenance.
+    pub operation: OperationClaim,
     /// Outcome.
     pub result: ExactScalarDisposition,
 }
@@ -426,7 +540,9 @@ pub struct ExactScalarClaimMap {
     pub package_id: CheckedSemanticId,
     /// Pinned runtime revision the oracles call.
     pub runtime_revision: &'static str,
-    /// Entries ascending by node digest.
+    /// Upstream gaps every entry is subject to.
+    pub blocked: Vec<UpstreamBlocker>,
+    /// Entries ascending by node id: digest domain, then digest.
     pub items: Vec<ExactScalarClaim>,
 }
 
@@ -478,7 +594,8 @@ pub fn generate_exact_scalar_oracles(
         let (identity, checked) = match operations.as_slice() {
             [operation] => (
                 operation_identity(operation),
-                check_item(&graph, record, operation).map(|node| (node, *operation)),
+                check_item(&graph, record, operation)
+                    .map(|(node, checked_bounds)| (node, *operation, checked_bounds)),
             ),
             // Every copy is refused. The entry is named by the least identity
             // so that it does not depend on which copy arrived first.
@@ -490,7 +607,7 @@ pub fn generate_exact_scalar_oracles(
             }
         };
         let result = match checked {
-            Ok((node, operation)) => {
+            Ok((node, operation, checked_bounds)) => {
                 let symbol = format!("oracle_{}", node.node.node_id.digest);
                 source.oracle(&symbol, node_id, &identity, operation);
                 ExactScalarDisposition::Generated(GeneratedScalarClaim {
@@ -501,6 +618,7 @@ pub fn generate_exact_scalar_oracles(
                     source_map: node.source_map.clone(),
                     claims: node.claims.clone(),
                     bounds: node.bounds.clone(),
+                    checked_bounds,
                     dependencies: node.dependencies.clone(),
                 })
             }
@@ -508,7 +626,12 @@ pub fn generate_exact_scalar_oracles(
         };
         claims.push(ExactScalarClaim {
             node_id: node_id.clone(),
-            operation: identity,
+            operation: OperationClaim {
+                identity,
+                provenance: OperationProvenance::CallerDeclared {
+                    blocked_on: UpstreamBlocker::OperationIdentityNotCarried,
+                },
+            },
             result,
         });
     }
@@ -517,6 +640,7 @@ pub fn generate_exact_scalar_oracles(
         version: EXACT_SCALAR_CLAIM_MAP_VERSION,
         package_id: lowering.package_id,
         runtime_revision: RUNTIME_REVISION,
+        blocked: vec![UpstreamBlocker::OperationIdentityNotCarried],
         items: claims,
     };
     let lib = source.finish(&claim_map.package_id);
@@ -548,18 +672,21 @@ fn scalar_profile() -> CompleteLoweringProfileV2 {
             CheckedNodeTag::Claim,
             CheckedNodeTag::Correspondence,
         ]),
-        require_bounds: false,
+        require_bounds: true,
         work_limit: SCALAR_LOWERING_WORK_LIMIT,
     }
 }
 
 type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
 
+/// The lowered node and the bounds its descriptor was checked against.
+type CheckedItem<'r> = (&'r CompleteContractNodeV2, Vec<CheckedNodeId>);
+
 fn check_item<'r>(
     graph: &Graph<'_>,
     record: &'r CompleteLoweringRecordV2,
     operation: &ExactScalarOperation,
-) -> Result<&'r CompleteContractNodeV2, ExactScalarRefusal> {
+) -> Result<CheckedItem<'r>, ExactScalarRefusal> {
     let node = lowered(record)?;
     if node.node_tag != CheckedNodeTag::Expression {
         return Err(ExactScalarRefusal::NotExpression {
@@ -587,16 +714,10 @@ fn check_item<'r>(
         });
     }
     for (position, (argument, expected)) in arguments.iter().zip(shape.operands).enumerate() {
-        let found = operand_form(graph, argument);
-        if found.as_deref() != Some(expected.wire()) {
-            return Err(ExactScalarRefusal::OperandTypeMismatch {
-                position,
-                expected: *expected,
-                found,
-            });
-        }
+        check_operand(graph, position, argument, *expected)?;
     }
-    Ok(node)
+    let checked_bounds = check_parameters(graph, node, operation)?;
+    Ok((node, checked_bounds))
 }
 
 fn lowered(
@@ -675,16 +796,250 @@ fn type_form(graph: &Graph<'_>, type_id: &CheckedNodeId) -> Option<String> {
         .then(|| node.semantic_form.to_string())
 }
 
-fn operand_form(graph: &Graph<'_>, term: &Value) -> Option<String> {
-    match term.get("term")?.as_str()? {
-        "literal" => ScalarForm::from_literal_kind(term.get("value_kind")?.as_str()?)
-            .map(|form| form.wire().to_owned()),
-        "reference" => {
-            let target: CheckedNodeId = serde_json::from_value(term.get("target")?.clone()).ok()?;
-            type_form(graph, &graph.get(&target)?.semantic_type)
+/// An operand is a literal classified by its value kind, or a reference
+/// classified by its target's scalar type. A literal carries no unit, so it is
+/// never a quantity; any other term is refused as unsupported.
+fn check_operand(
+    graph: &Graph<'_>,
+    position: usize,
+    term: &Value,
+    expected: ScalarForm,
+) -> Result<(), ExactScalarRefusal> {
+    let kind = term.get("term").and_then(Value::as_str).unwrap_or_default();
+    let found = match kind {
+        "literal" if expected == ScalarForm::Unit => {
+            return Err(ExactScalarRefusal::UnitlessLiteralOperand { position });
         }
-        _ => None,
+        "literal" => term
+            .get("value_kind")
+            .and_then(Value::as_str)
+            .and_then(ScalarForm::from_literal_kind)
+            .map(|form| form.wire().to_owned()),
+        "reference" => reference_form(graph, term),
+        other => {
+            return Err(ExactScalarRefusal::OperandUnsupported {
+                position,
+                term: other.to_owned(),
+            });
+        }
+    };
+    if found.as_deref() == Some(expected.wire()) {
+        Ok(())
+    } else {
+        Err(ExactScalarRefusal::OperandTypeMismatch {
+            position,
+            expected,
+            found,
+        })
     }
+}
+
+fn reference_form(graph: &Graph<'_>, term: &Value) -> Option<String> {
+    let target: CheckedNodeId = serde_json::from_value(term.get("target")?.clone()).ok()?;
+    type_form(graph, &graph.get(&target)?.semantic_type)
+}
+
+// ---------------------------------------------------------------------------
+// Parameters against IR bounds
+// ---------------------------------------------------------------------------
+
+/// Check every descriptor parameter the IR carries against the one reachable
+/// bound of its form on the node's result type, returning the bounds checked.
+fn check_parameters(
+    graph: &Graph<'_>,
+    node: &CompleteContractNodeV2,
+    operation: &ExactScalarOperation,
+) -> Result<Vec<CheckedNodeId>, ExactScalarRefusal> {
+    let bounds = Bounds { graph, node };
+    let checked = match operation {
+        ExactScalarOperation::IntegerArithmetic { domain, .. }
+        | ExactScalarOperation::IntegerDivision { domain, .. }
+        | ExactScalarOperation::IntegerModulo { domain } => {
+            let declared = match domain {
+                IntegerDomain::Bounded(interval) => Some(interval),
+                IntegerDomain::Mathematical => None,
+            };
+            bounds.equal(BoundForm::IntegerRange, read_integer_range, declared)?
+        }
+        ExactScalarOperation::RationalArithmetic { domain, .. } => bounds.equal(
+            BoundForm::RationalRange,
+            read_rational_range,
+            domain.as_ref(),
+        )?,
+        ExactScalarOperation::DecimalArithmetic { target, .. } => {
+            bounds.equal(BoundForm::DecimalRange, read_decimal_range, Some(target))?
+        }
+        ExactScalarOperation::IeeeArithmetic { rounding, .. }
+        | ExactScalarOperation::IeeeWidthConversion { rounding, .. } => bounds.equal(
+            BoundForm::FloatRounding,
+            read_float_rounding,
+            Some(rounding),
+        )?,
+        ExactScalarOperation::TextAdmission { text_type } => {
+            bounds.equal(BoundForm::TextBounds, read_text_bounds, Some(text_type))?
+        }
+        ExactScalarOperation::QuantityConversion { target } => match target {
+            QuantityTarget::Exact => bounds.equal::<RationalDomain>(
+                BoundForm::RationalRange,
+                read_rational_range,
+                None,
+            )?,
+            QuantityTarget::Decimal(decimal) => {
+                bounds.equal(BoundForm::DecimalRange, read_decimal_range, Some(decimal))?
+            }
+            // The rounding of an integer conversion has no IR bound; it stays
+            // caller-declared with the operation.
+            QuantityTarget::Integer { domain, .. } => {
+                bounds.equal(BoundForm::IntegerRange, read_integer_range, Some(domain))?
+            }
+        },
+        ExactScalarOperation::Ordering { .. }
+        | ExactScalarOperation::IeeeComparison { .. }
+        | ExactScalarOperation::TextComparison { .. }
+        | ExactScalarOperation::EnumComparison { .. }
+        | ExactScalarOperation::QuantityArithmetic { .. }
+        | ExactScalarOperation::QuantityComparison { .. } => return Ok(Vec::new()),
+    };
+    Ok(vec![checked])
+}
+
+struct Bounds<'g, 'n> {
+    graph: &'g Graph<'g>,
+    node: &'n CompleteContractNodeV2,
+}
+
+impl Bounds<'_, '_> {
+    /// Read the single bound of `form` on the result type and require the
+    /// declared parameter to equal it. An absent declaration (an unbounded
+    /// descriptor) never equals an IR bound.
+    fn equal<T: PartialEq>(
+        &self,
+        form: BoundForm,
+        read: fn(&[Value]) -> Option<T>,
+        declared: Option<&T>,
+    ) -> Result<CheckedNodeId, ExactScalarRefusal> {
+        let bounded_type = &self.node.semantic_type;
+        let candidates = self
+            .node
+            .bounds
+            .iter()
+            .filter_map(|id| self.graph.get(id))
+            .filter(|bound| {
+                &bound.semantic_type == bounded_type && &*bound.semantic_form == form.wire()
+            })
+            .collect::<Vec<_>>();
+        let bound = match candidates.as_slice() {
+            [bound] => bound,
+            [] => {
+                return Err(ExactScalarRefusal::MissingBound {
+                    bounded_type: bounded_type.clone(),
+                    expected_form: form,
+                })
+            }
+            [_, _, ..] => {
+                return Err(ExactScalarRefusal::AmbiguousBound {
+                    bounded_type: bounded_type.clone(),
+                    expected_form: form,
+                })
+            }
+        };
+        let value = aggregate_members(&bound.body)
+            .and_then(read)
+            .ok_or_else(|| ExactScalarRefusal::UnreadableBound {
+                bound: bound.node_id.clone(),
+            })?;
+        if declared == Some(&value) {
+            Ok(bound.node_id.clone())
+        } else {
+            Err(ExactScalarRefusal::BoundMismatch {
+                bound: bound.node_id.clone(),
+                form,
+            })
+        }
+    }
+}
+
+fn aggregate_members(body: &Value) -> Option<&[Value]> {
+    if body.get("term")?.as_str()? != "aggregate" {
+        return None;
+    }
+    body.get("members")?.as_array().map(Vec::as_slice)
+}
+
+fn literal<'v>(term: &'v Value, kind: &str) -> Option<&'v str> {
+    if term.get("term")?.as_str()? != "literal" || term.get("value_kind")?.as_str()? != kind {
+        return None;
+    }
+    term.get("value")?.as_str()
+}
+
+/// A canonical decimal integer literal.
+fn literal_integer(term: &Value) -> Option<Integer> {
+    let spelling = literal(term, "integer")?;
+    let value: Integer = spelling.parse().ok()?;
+    (value.to_string() == spelling).then_some(value)
+}
+
+/// A canonical decimal integer literal within `u64`.
+fn literal_count(term: &Value) -> Option<u64> {
+    let spelling = literal(term, "integer")?;
+    let value: u64 = spelling.parse().ok()?;
+    (value.to_string() == spelling).then_some(value)
+}
+
+fn literal_interval(lower: &Value, upper: &Value) -> Option<IntegerInterval> {
+    IntegerInterval::new(literal_integer(lower)?, literal_integer(upper)?).ok()
+}
+
+fn read_integer_range(members: &[Value]) -> Option<IntegerInterval> {
+    let [lower, upper] = members else {
+        return None;
+    };
+    literal_interval(lower, upper)
+}
+
+fn read_rational_range(members: &[Value]) -> Option<RationalDomain> {
+    let [numerator_lower, numerator_upper, denominator_lower, denominator_upper] = members else {
+        return None;
+    };
+    RationalDomain::new(
+        literal_interval(numerator_lower, numerator_upper)?,
+        literal_interval(denominator_lower, denominator_upper)?,
+    )
+    .ok()
+}
+
+fn read_decimal_range(members: &[Value]) -> Option<DecimalType> {
+    let [lower, upper, min_scale, max_scale, rounding] = members else {
+        return None;
+    };
+    DecimalType::new(
+        literal_integer(lower)?,
+        literal_integer(upper)?,
+        literal_count(min_scale)?,
+        literal_count(max_scale)?,
+        RoundingMode::from_code(literal(rounding, "text")?)?,
+    )
+    .ok()
+}
+
+fn read_float_rounding(members: &[Value]) -> Option<RoundingMode> {
+    let [rounding] = members else {
+        return None;
+    };
+    RoundingMode::from_code(literal(rounding, "text")?)
+}
+
+fn read_text_bounds(members: &[Value]) -> Option<TextType> {
+    let [min, max, profile] = members else {
+        return None;
+    };
+    TextType::new(
+        literal_count(min)?,
+        literal_count(max)?,
+        TextProfile::from_code(literal(profile, "text")?)?,
+    )
+    .ok()
 }
 
 impl ScalarForm {
@@ -1111,7 +1466,7 @@ impl SourceBuilder {
     fn decimal_type(&mut self, decimal: &DecimalType) -> String {
         self.needs_integer = true;
         format!(
-            "rt::DecimalType::new(integer(\"{}\")?, integer(\"{}\")?, {}, {}, {}).map_err(OracleStop::IllTyped)?",
+            "rt::DecimalType::new(integer(\"{}\")?, integer(\"{}\")?, {}, {}, {}).map_err(|_| OracleStop::InvalidConstant)?",
             decimal.lower(),
             decimal.upper(),
             decimal.min_scale(),
@@ -1457,5 +1812,59 @@ fn artifact(path: &str, contents: String) -> Artifact {
         path: path.to_owned(),
         contents,
         sha256,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quire_contract_ir::{
+        CheckedPackageIncomplete, CheckedPackageLimit, CheckedPackageRefusal,
+        CheckedPackageRefusalCode,
+    };
+
+    fn node_id(digit: char) -> CheckedNodeId {
+        serde_json::from_value(serde_json::json!({
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": digit.to_string().repeat(64),
+        }))
+        .expect("node id")
+    }
+
+    /// Admission re-validates every body before lowering, so an admitted package
+    /// cannot produce these records; they are built directly.
+    ///
+    /// Trace: FR-014-AC-3, TC-024.
+    #[test]
+    fn tc_024_invalid_and_incomplete_bodies_are_typed_refusals() {
+        let invalid = CompleteLoweringRecordV2::InvalidBody {
+            node_id: node_id('a'),
+            body_node_id: node_id('b'),
+            refusal: CheckedPackageRefusal {
+                code: CheckedPackageRefusalCode::InvalidSemanticGraph,
+                path: "semantic_graph.nodes.body".into(),
+            },
+        };
+        assert_eq!(
+            lowered(&invalid).err(),
+            Some(ExactScalarRefusal::InvalidBody {
+                body_node_id: node_id('b')
+            })
+        );
+        let incomplete = CompleteLoweringRecordV2::BodyIncomplete {
+            node_id: node_id('a'),
+            body_node_id: node_id('c'),
+            incomplete: CheckedPackageIncomplete {
+                limit_kind: CheckedPackageLimit::Depth,
+                limit: 128,
+                consumed: 129,
+            },
+        };
+        assert_eq!(
+            lowered(&incomplete).err(),
+            Some(ExactScalarRefusal::BodyIncomplete {
+                body_node_id: node_id('c')
+            })
+        );
     }
 }
