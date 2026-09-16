@@ -48,7 +48,7 @@ type: TestMatrix
 | FR-012 | FR-012-AC-4 | TC-021 | ✅ Covered |
 | FR-013 | FR-013-AC-1 through FR-013-AC-4 | TC-022 | ✅ Covered |
 | FR-013 | FR-013-AC-5 | Inspection | ✅ Covered |
-| FR-014 | FR-014-AC-1 through FR-014-AC-8, FR-014-CON-1, FR-014-CON-2 | TC-024 | 🚧 Planned |
+| FR-014 | FR-014-AC-1 through FR-014-AC-8, FR-014-CON-1, FR-014-CON-2 | TC-024 | ✅ Covered |
 | FR-015 | FR-015-AC-1 through FR-015-AC-4 | TC-025 | 🚧 Planned |
 | FR-016 | FR-016-AC-1 through FR-016-AC-4 | TC-026 | 🚧 Planned |
 
@@ -115,7 +115,7 @@ attestation validation/sealing, closing Rust review SR-016, and gap analysis SR-
 | TC-021 | Verify shrinking preserves numeric constraints | Property | P0 | FR-012-AC-1, FR-012-AC-2, FR-012-AC-3, FR-012-AC-4 | ✅ Covered |
 | TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4 | ✅ Covered |
 | TC-023 | Verify bounded Kani profile corpus parity | Integration | P0 | FR-007-AC-1, FR-007-AC-2, FR-007-AC-3, FR-007-AC-4, FR-007-AC-5 | ✅ Covered |
-| TC-024 | Verify exact complete-V1 scalar oracle generation and agreement | Integration | P0 | FR-014-AC-1, FR-014-AC-2, FR-014-AC-3, FR-014-AC-4, FR-014-AC-5, FR-014-AC-6, FR-014-AC-7, FR-014-AC-8 | 🚧 Planned |
+| TC-024 | Verify exact complete-V1 scalar oracle generation and agreement | Integration | P0 | FR-014-AC-1, FR-014-AC-2, FR-014-AC-3, FR-014-AC-4, FR-014-AC-5, FR-014-AC-6, FR-014-AC-7, FR-014-AC-8 | ✅ Covered |
 | TC-025 | Verify separate bounded Kani obligations | Analysis | P0 | FR-015-AC-1, FR-015-AC-2, FR-015-AC-3, FR-015-AC-4 | 🚧 Planned |
 | TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4 | 🚧 Planned |
 

@@ -1,0 +1,16 @@
+[package]
+name = "quire-exact-scalar-oracles"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+quire-contract-runtime = { git = "https://github.com/agent-ix/quire-contract-runtime", rev = "a04bd476926463607474a37865e770415397cd8f", features = ["exact"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[workspace]

@@ -26,7 +26,8 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
 4. Compile the golden oracle into the test crate and execute it on vectors
    adapted from QSpec TC-185, TC-186, TC-187, TC-192 and TC-193; compare each
    outcome, admitted charges and consumed counters with direct runtime
-   execution and with `quire_spec_language::value`.
+   execution and with `quire_spec_language::value`, including the outcome of
+   denying each admitted charge in turn.
 5. Compile the generated crate manifest.
 
 ## Expected Results
@@ -35,3 +36,8 @@ Every family is generated; every refused item is absent from the source and
 carries its typed reason; bytes are identical across runs and orderings; all
 three executions agree on every vector; the generated crate compiles with
 `publish = false` and contains no charge literal.
+
+Integer arithmetic, rational arithmetic and ordering (including the decimal
+ordering charges QSpec added after QSL d9d5273) have no operator in the pinned
+authority. Their oracles agree with direct runtime execution only, and are
+counted separately.

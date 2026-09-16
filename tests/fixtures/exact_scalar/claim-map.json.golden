@@ -1,0 +1,2115 @@
+{
+  "version": "quire.codegen.exact-scalar-claim-map/v1",
+  "package_id": {
+    "domain": "quire.package.semantic/v2",
+    "algorithm": "sha256",
+    "digest": "dede935ebcaee6de78207031be587a1a3e6d7548f08d24a4f1a201f0e6a7ffc3"
+  },
+  "runtime_revision": "a04bd476926463607474a37865e770415397cd8f",
+  "items": [
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "not_expression",
+          "node_tag": "value"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001001"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001001",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "fb0c0461a61f37039e067f16beea126d305f06f701762f0490d977885ee9a563"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001001"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 18,
+                "end": 19
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001002"
+      },
+      "operation": "integer.negate domain=[-8,7]",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001002",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "75fded8f38bbd2ffb891655a824f9caa6e35c8bf13518fa4b86fe02eebebfb7c"
+        },
+        "semantic_form": "unary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001002"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 19,
+                "end": 20
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001011"
+      },
+      "operation": "quire.value.integer-division.truncating/v1 domain=mathematical",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001011",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "dd9ffcb7b53ba0af738fd26d784de63f185ef3f611719a47e52dd686618e5b10"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001011"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 20,
+                "end": 21
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001012"
+      },
+      "operation": "quire.value.integer-division.floor/v1 domain=mathematical",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001012",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "b032d8fa7f1d1b56a7471a388a810fca894de4f35ec6ce6d7dab5002d86119e9"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001012"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 21,
+                "end": 22
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001013"
+      },
+      "operation": "quire.value.integer-division.euclidean/v1 domain=mathematical",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001013",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "56d5e93531729f6244c3357f869131073a37d36025d1d5bed3c8b26ff1221fa0"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001013"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 22,
+                "end": 23
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001014"
+      },
+      "operation": "quire.value.integer-division.truncating/v1 domain=[-5,5]",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001014",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "e13d9ca846d5d35f8322d6b6c5e22ee5d5726042a949b25fa027899f77ea4c5c"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001014"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 23,
+                "end": 24
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001021"
+      },
+      "operation": "integer.modulo domain=[-5,5]",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001021",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "8d0d173859adca07e92214cce9f69a9059b68313cceafd8546566208a18aabc0"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001021"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 24,
+                "end": 25
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001031"
+      },
+      "operation": "rational.add domain=unbounded",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001031",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "4906bb1cedcfc0fad7a468503fb7ec4401ce720e4e01b1ee564befac1d05f866"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001031"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 25,
+                "end": 26
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000103"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001032"
+      },
+      "operation": "rational.divide domain=[-10,10]/[1,4]",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001032",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "7919db6291e1e2d598a0a553b765f343c6b4b4a57b8dbff86f2876c88c400f34"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001032"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 26,
+                "end": 27
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000103"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001033"
+      },
+      "operation": "rational.integer_divide domain=unbounded",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001033",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "2a357db127df4455c01558b240ece36ad8c45768498f7d7a05a101b160786983"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001033"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 27,
+                "end": 28
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001041"
+      },
+      "operation": "ordering.less operands=integer",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001041",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "123ac4bbc591a6d3a4ec69fcb625185ca935778b2feab7d33daeef08de1f4e27"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001041"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 28,
+                "end": 29
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001042"
+      },
+      "operation": "ordering.less_or_equal operands=decimal",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001042",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "ffe02e07c14bdd228a4ad9d19b1572004cead3bfa031ed74f3e277c7bfd198aa"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001042"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 29,
+                "end": 30
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000104"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001043"
+      },
+      "operation": "ordering.greater operands=rational",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001043",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "2e382163ea1bff0d5372e01c076e8bb75f45ac54586ebcb8a0fc2c14bc8a940a"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001043"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 30,
+                "end": 31
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000103"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001051"
+      },
+      "operation": "decimal.add target=[-1000,1000] scale=[0,2] rounding=nearest-even",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001051",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "03acaa8798ec1ae87259177ec482056c405b93088c7bc46b9240b1f169638c4a"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001051"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 31,
+                "end": 32
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000104"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001052"
+      },
+      "operation": "decimal.divide target=[-1000,1000] scale=[0,2] rounding=toward-zero",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001052",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "85afbb678524f63005bb14b9e88676fdfab4c9df2f1c55079b5eff4daba8a79e"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001052"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 32,
+                "end": 33
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000104"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001053"
+      },
+      "operation": "decimal.round target=[-100,100] scale=[0,0] rounding=nearest-away",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001053",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "ad913e1cb90389793f53424fc1318bcf43411ccfbdaa71b31ecdfd6f99a95397"
+        },
+        "semantic_form": "conversion",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001053"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 33,
+                "end": 34
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000104"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001061"
+      },
+      "operation": "ieee.add width=binary32 rounding=nearest-even",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001061",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "aa0746430581d27b284605eba0c9a0021f65bddbc6ccf771b029dbca813e5391"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000005"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001061"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 34,
+                "end": 35
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000005"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000105"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001062"
+      },
+      "operation": "ieee.divide width=binary64 rounding=toward-zero",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001062",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "63271725901975b11368f242ef025908d83e71e2df7cd2ff085fc80405f85e68"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000006"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001062"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 35,
+                "end": 36
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000006"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000106"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001063"
+      },
+      "operation": "ieee.total_order width=binary64",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001063",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "c549677550a215afaa804f6c82685fe959c4041e481a3bdb055f585a26823984"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001063"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 36,
+                "end": 37
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000006"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000106"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001064"
+      },
+      "operation": "ieee.convert_width source=binary64 target=binary32 rounding=nearest-even",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001064",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "19f95258715a94ed19e431547fd77f92e2a8a7481bdd3450fecd4f8a08758221"
+        },
+        "semantic_form": "conversion",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000005"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001064"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 37,
+                "end": 38
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000005"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000006"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000106"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001071"
+      },
+      "operation": "text.admit length=[0,4] profile=nfc",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001071",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "680e0e00f22f5ce73c107b6989f98e21b12549548234f38408f1f6fdfe3613a8"
+        },
+        "semantic_form": "conversion",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000007"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001071"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 38,
+                "end": 39
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000107"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001072"
+      },
+      "operation": "text.compare.less",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001072",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "28fa1f8f37cc880fc0e6e84e7065b9789b3510813364ff34e8a1b9a4e51b40a4"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001072"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 39,
+                "end": 40
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000107"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001073"
+      },
+      "operation": "enum.compare.less",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001073",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "c21a91890c18b1858560e19c18d173efca4ed2c9230f337dcd9fe69aaf8c999a"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001073"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 40,
+                "end": 41
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "42ba51e7e622d99f292a5e6dcc196bd216efb98b33755910e54af4d65078d032"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001081"
+      },
+      "operation": "quantity.add",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001081",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "d52c586f3953f485b5f9b3c734dcc584916df2892ea0451e3808640fe7026772"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001081"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 41,
+                "end": 42
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001082"
+      },
+      "operation": "quantity.multiply",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001082",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "514a8ff0e04352203b44626f29e904b332438d4aef27689bf46dfc77745f3977"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001082"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 42,
+                "end": 43
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001083"
+      },
+      "operation": "quantity.power",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001083",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "b2530377a584f41e36074a1467b5705a764152712dd9f9970e5e25281e81a7a2"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001083"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 43,
+                "end": 44
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001084"
+      },
+      "operation": "quantity.compare.less",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001084",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "8dca519aa1491c535951afa816f4ba20cdaa93be342215b0516aaaf196a6c1ea"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001084"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 44,
+                "end": 45
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001085"
+      },
+      "operation": "quantity.convert target=exact",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001085",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "8c41364f17a05ad1871f532d1a0037b5af3a912c9f00d7a87b30ab21c02fe6fb"
+        },
+        "semantic_form": "conversion",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001085"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 45,
+                "end": 46
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001086"
+      },
+      "operation": "quantity.convert target=decimal[-100000,100000] scale=[0,2] rounding=nearest-even",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001086",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "3611d5707d456eabc6f2100c3fdd335a4efad1599cda0dec3a609b7800d79592"
+        },
+        "semantic_form": "conversion",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001086"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 46,
+                "end": 47
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000001087"
+      },
+      "operation": "quantity.convert target=integer[-1000,1000] rounding=toward-zero",
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_0000000000000000000000000000000000000000000000000000000000001087",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "800dbfe3592e85d5c78740ab64f7be430650e5a729827bb884853217c6a8c7ca"
+        },
+        "semantic_form": "conversion",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000001087"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 47,
+                "end": 48
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "bounds": [],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002001"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "blocked_on_upstream",
+          "unsupported_node_id": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000002001"
+          },
+          "node_tag": "composite_type",
+          "issue": "agent-ix/quire-spec-language#119"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002002"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "blocked_on_upstream",
+          "unsupported_node_id": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000002002"
+          },
+          "node_tag": "function",
+          "issue": "agent-ix/quire-spec-language#119"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002003"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "blocked_on_upstream",
+          "unsupported_node_id": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000002003"
+          },
+          "node_tag": "model",
+          "issue": "agent-ix/quire-spec-language#120"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002004"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "blocked_on_upstream",
+          "unsupported_node_id": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000002004"
+          },
+          "node_tag": "relation",
+          "issue": "agent-ix/quire-spec-language#120"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002005"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "unsupported",
+          "unsupported_node_id": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000002005"
+          },
+          "node_tag": "state"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002006"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "unsupported",
+          "unsupported_node_id": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000002006"
+          },
+          "node_tag": "temporal"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002007"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "unsupported",
+          "unsupported_node_id": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000002007"
+          },
+          "node_tag": "protocol"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002011"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "blocked_on_upstream",
+          "unsupported_node_id": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000002002"
+          },
+          "node_tag": "function",
+          "issue": "agent-ix/quire-spec-language#119"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002013"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "body_mismatch",
+          "expected_operator": "binary",
+          "expected_arguments": 2
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002014"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "operand_type_mismatch",
+          "position": 1,
+          "expected": "integer",
+          "found": "decimal"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002015"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "duplicate_request"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002016"
+      },
+      "operation": "decimal.add target=[-1,1] scale=[0,0] rounding=nearest-even",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "result_type_mismatch",
+          "expected": "decimal",
+          "found": "integer"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000002017"
+      },
+      "operation": "integer.negate domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "form_mismatch",
+          "expected": "unary",
+          "found": "binary"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000009999"
+      },
+      "operation": "integer.add domain=mathematical",
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "invalid_input"
+        }
+      }
+    }
+  ]
+}
