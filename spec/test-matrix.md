@@ -49,7 +49,8 @@ type: TestMatrix
 | FR-013 | FR-013-AC-1 through FR-013-AC-4 | TC-022 | ✅ Covered |
 | FR-013 | FR-013-AC-5 | Inspection | ✅ Covered |
 | FR-014 | FR-014-AC-1 through FR-014-AC-11 | TC-024 | ✅ Covered |
-| FR-015 | FR-015-AC-1 through FR-015-AC-6 | TC-025 | 🚧 Planned |
+| FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned |
+| FR-015 | FR-015-AC-3 through FR-015-AC-6 | TC-025 | ✅ Covered |
 | FR-016 | FR-016-AC-1 through FR-016-AC-7 | TC-026 | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
@@ -71,6 +72,20 @@ oracle grammar landed in PR #29. The evidence includes exhaustive small-domain p
 shrink walks, exact boundary censuses, all supported clause-kind/population campaigns at 256 and
 10,000 cases with zero global rejects, generated-consumer compilation, identity mutation, packaged
 attestation validation/sealing, closing Rust review SR-016, and gap analysis SR-017.
+
+FR-015 is split (codegen#49 slice A). `tests/kani_obligations.rs` backs AC-3 through AC-6: unbounded,
+non-finite and upstream-blocked items, unsatisfiable IR bounds and every `caller_declared` V2 scalar
+operation are refused with a typed reason and no harness, and the V1 harness assumptions constrain
+only arguments to their IR `bounded_domain` bounds. The same file backs the V1 half of AC-1 and AC-2:
+precondition, postcondition and invariant each lower to a separate harness whose identity carries IR
+bounds and every Kani pin, and `make kani` verifies all three and falsifies a seeded defect with a
+concrete counterexample under the committed backend pins, and reports jointly unsatisfiable
+`requires` as `cover_unsatisfied` rather than verified. AC-1 and AC-2 stay `🚧 Planned`. Frame
+obligations cannot be generated from the merged IR: V1 `ClauseKind` has no frame kind, FR-014
+refuses V2 `state` nodes as `NoFiniteEncoding`, and the by-value harness arguments cannot express
+`kani::modifies`, so a frame needs a typed IR frame item first. Every V2 scalar obligation carries
+only a caller-declared operation identity and is blocked on agent-ix/quire-specification#76. Model
+and graph bounds are blocked on agent-ix/quire-spec-language#120.
 
 ## Non-Functional Requirement Coverage
 
