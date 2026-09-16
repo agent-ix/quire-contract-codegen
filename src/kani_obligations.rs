@@ -124,15 +124,14 @@ pub enum KaniObligationError {
         /// The requested bound.
         unwind: u32,
     },
-    /// A pin is malformed.
-    MalformedPin {
-        /// The malformed field.
+    /// The requested backend is not the committed one ([`KaniToolPins::pinned`]).
+    UnpinnedBackend {
+        /// The first differing field.
         field: KaniPinField,
-    },
-    /// The pinned Kani version has no adapter.
-    UnsupportedKaniVersion {
-        /// The pinned version.
-        version: String,
+        /// The committed value.
+        expected: String,
+        /// The requested value.
+        supplied: String,
     },
     /// The attestation binding is malformed.
     InvalidAttestationContext,
@@ -207,6 +206,14 @@ pub enum UnsupportedObligation {
     },
     /// Two dependencies claim one subject slot with different types or bounds.
     AbiConflict {
+        /// The slot identifier.
+        identifier: String,
+    },
+    /// Contract obligations on one operation each bind, but their union gives one subject slot
+    /// two types or bounds, so no single subject signature serves all of their harnesses.
+    SubjectSignatureConflict {
+        /// The shared operation.
+        operation: String,
         /// The slot identifier.
         identifier: String,
     },
@@ -511,12 +518,13 @@ fn validate_request(request: &KaniObligationRequest<'_>) -> Result<(), KaniOblig
             unwind: request.unwind,
         });
     }
-    if let Some(field) = request.pins.first_malformed() {
-        return Err(KaniObligationError::MalformedPin { field });
-    }
-    if request.pins.kani_version != KANI_BACKEND_VERSION {
-        return Err(KaniObligationError::UnsupportedKaniVersion {
-            version: request.pins.kani_version.clone(),
+    if let Some((field, expected, supplied)) =
+        request.pins.first_difference(&KaniToolPins::pinned())
+    {
+        return Err(KaniObligationError::UnpinnedBackend {
+            field,
+            expected,
+            supplied,
         });
     }
     if !attestation_context_is_valid(&request.attestation) {
@@ -579,6 +587,11 @@ struct LoweredClause<'a> {
     symbols: Symbols,
     /// Preconditions sharing the anchor, with their oracles, filled by `resolve_assumptions`.
     assumed: Vec<ClauseOracle>,
+    /// For a contract obligation, the clause contexts its subject signature is built from: its
+    /// own and those of every other supported contract obligation on the same operation, so all
+    /// harnesses for one subject call it with one argument list. Filled by
+    /// `unify_subject_signatures`.
+    signature: Vec<(ClauseOracle, SlotContext)>,
 }
 
 #[derive(Clone)]
@@ -676,6 +689,7 @@ fn classify_clause<'a>(
                         symbols: symbols(clause_ref, kind),
                         oracle,
                         assumed: Vec::new(),
+                        signature: Vec::new(),
                     })),
                     Err(reason) => Outcome::Unsupported(reason),
                 }
@@ -1072,6 +1086,71 @@ fn resolve_assumptions(states: &mut [ItemState<'_>]) {
             state.outcome = Outcome::Unsupported(reason);
         }
     }
+    unify_subject_signatures(states);
+}
+
+/// The subject a group of contract obligations share.
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+enum SubjectGroup {
+    /// Every contract obligation anchored to this operation.
+    Operation(String),
+    /// A contract obligation with no operation anchor, alone.
+    Item(usize),
+}
+
+/// Gives every supported contract obligation on one operation the same subject signature, the
+/// union of their slots, or refuses all of them when that union conflicts.
+fn unify_subject_signatures(states: &mut [ItemState<'_>]) {
+    let mut groups: BTreeMap<SubjectGroup, Vec<usize>> = BTreeMap::new();
+    for (index, state) in states.iter().enumerate() {
+        let Outcome::Lowered(lowered) = &state.outcome else {
+            continue;
+        };
+        if lowered.kind == ObligationKind::Precondition {
+            continue;
+        }
+        let group = anchor_operation(&lowered.oracle.anchor)
+            .map_or(SubjectGroup::Item(index), |operation| {
+                SubjectGroup::Operation(operation.to_owned())
+            });
+        groups.entry(group).or_default().push(index);
+    }
+    for (group, members) in groups {
+        let signature = members
+            .iter()
+            .filter_map(|&index| match &states[index].outcome {
+                Outcome::Lowered(lowered) => Some(contract_contexts(lowered)),
+                _ => None,
+            })
+            .flatten()
+            .map(|(oracle, context)| (oracle.clone(), context))
+            .collect::<Vec<_>>();
+        let union = abi(&signature
+            .iter()
+            .map(|(oracle, context)| (oracle, *context))
+            .collect::<Vec<_>>());
+        let refusal = match (union, group) {
+            (Ok(_), _) => None,
+            (
+                Err(UnsupportedObligation::AbiConflict { identifier }),
+                SubjectGroup::Operation(operation),
+            ) => Some(UnsupportedObligation::SubjectSignatureConflict {
+                operation,
+                identifier,
+            }),
+            (Err(reason), _) => Some(reason),
+        };
+        for index in members {
+            match &refusal {
+                Some(reason) => states[index].outcome = Outcome::Unsupported(reason.clone()),
+                None => {
+                    if let Outcome::Lowered(lowered) = &mut states[index].outcome {
+                        lowered.signature.clone_from(&signature);
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn contract_contexts<'l>(lowered: &'l LoweredClause<'_>) -> Vec<(&'l ClauseOracle, SlotContext)> {
@@ -1243,7 +1322,16 @@ fn render(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredClause<'_>,
 ) -> Option<KaniObligationHarness> {
-    let contexts = contract_contexts(lowered);
+    let contexts = match lowered.kind {
+        ObligationKind::Precondition => contract_contexts(lowered),
+        ObligationKind::Postcondition | ObligationKind::Invariant | ObligationKind::Frame => {
+            lowered
+                .signature
+                .iter()
+                .map(|(oracle, context)| (oracle, *context))
+                .collect()
+        }
+    };
     let abi = abi(&contexts).ok()?;
     let exact_harness = format!("{}::{}", lowered.symbols.module, lowered.symbols.harness);
     let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
@@ -1400,6 +1488,11 @@ mod {module} {{\n\
     ))
 }
 
+/// The non-vacuity cover every contract harness ends with. It is reachable only on a path where
+/// the IR argument bounds and every `requires` hold together, so an unsatisfied cover means the
+/// `ensures` was never checked.
+const CONTRACT_COVER: &str = "contract requires and IR bounds are jointly satisfiable";
+
 fn render_contract(subject_path: &str, lowered: &LoweredClause<'_>, abi: &Abi) -> Option<String> {
     let mut requires = lowered
         .assumed
@@ -1484,6 +1577,7 @@ mod {module} {{\n\
     #[kani::proof_for_contract({contract})]\n\
     fn {harness}() {{\n\
 {arguments}        let _ = {contract}({names});\n\
+        kani::cover!(true, \"{CONTRACT_COVER}\");\n\
     }}\n\
 }}\n",
         module = lowered.symbols.module,

@@ -95,8 +95,9 @@ test: assurance-inputs
 
 # The pinned Kani lane (FR-015, TC-025). Kani and CBMC are memory-heavy, so the
 # lane holds a host-wide lock, runs one harness at a time, and builds in its own
-# target directory. The launcher, driver, CBMC and toolchain are asserted against
-# the pins the obligations were generated for before anything runs.
+# target directory. The installed Kani version, launcher and driver digests, CBMC,
+# toolchain and target are asserted equal to the committed pins
+# (KaniToolPins::pinned in src/kani_execution.rs) before anything runs.
 .PHONY: kani
 kani:
 	flock /tmp/agent-e-heavy-build.lock $(CARGO) +$(MSRV) test --locked -j 4 \

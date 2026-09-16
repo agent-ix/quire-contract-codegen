@@ -1,8 +1,9 @@
 //! Pinned execution of one generated Kani obligation harness (FR-015).
 //!
-//! The pins a harness was generated against are re-measured from the installed
-//! backend before anything runs: a launcher, driver, CBMC, toolchain or target
-//! that differs from the harness identity is a typed refusal and no proof is
+//! The backend is pinned by committed values ([`KaniToolPins::pinned`]). Before
+//! anything runs, the harness identity's pins and the pins re-measured from the
+//! installed backend are both compared with them: any differing Kani version,
+//! launcher, driver, CBMC, toolchain or target is a typed refusal and no proof is
 //! attempted. The run outcome is read from the backend's own output and is never
 //! defaulted: a harness this module did not observe verifying is not `verified`.
 
@@ -15,7 +16,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    kani::{is_sha256, sha256},
+    kani::{sha256, KANI_BACKEND_VERSION},
     kani_obligations::{KaniObligationHarness, ObligationKind},
 };
 
@@ -58,7 +59,45 @@ pub enum KaniPinField {
     TargetTriple,
 }
 
+/// The one installed backend this adapter is pinned to: the values measured by
+/// [`KaniInstallation::observe`] from the Kani 0.67.0 installation the kani lane was recorded
+/// against on x86_64 Linux. A backend with any other value is refused before a harness is
+/// generated and again before one runs.
+const PINNED_LAUNCHER_SHA256: &str =
+    "7f143a251d11c7e6e232bbf2cbccf56f9ce66a5f0107eeb3008698e6715f55d9";
+const PINNED_DRIVER_SHA256: &str =
+    "683f3ad1216e67686a39b2fcd6dc661f5090574f55fde9dd407966dca42cbfad";
+const PINNED_CBMC_VERSION: &str = "6.8.0 (cbmc-6.8.0)";
+const PINNED_RUST_TOOLCHAIN: &str = "nightly-2025-11-21-x86_64-unknown-linux-gnu";
+const PINNED_TARGET_TRIPLE: &str = "x86_64-unknown-linux-gnu";
+
 impl KaniToolPins {
+    /// The committed backend pins: Kani [`KANI_BACKEND_VERSION`], its launcher and driver
+    /// digests, CBMC 6.8.0, toolchain `nightly-2025-11-21` and target `x86_64-unknown-linux-gnu`.
+    #[must_use]
+    pub fn pinned() -> Self {
+        Self {
+            kani_version: KANI_BACKEND_VERSION.to_owned(),
+            launcher_sha256: PINNED_LAUNCHER_SHA256.to_owned(),
+            driver_sha256: PINNED_DRIVER_SHA256.to_owned(),
+            cbmc_version: PINNED_CBMC_VERSION.to_owned(),
+            rust_toolchain: PINNED_RUST_TOOLCHAIN.to_owned(),
+            target_triple: PINNED_TARGET_TRIPLE.to_owned(),
+        }
+    }
+
+    /// The first field that differs from `expected`, with the expected and actual values.
+    pub(crate) fn first_difference(
+        &self,
+        expected: &Self,
+    ) -> Option<(KaniPinField, String, String)> {
+        self.fields()
+            .into_iter()
+            .zip(expected.fields())
+            .find(|((_, actual), (_, wanted))| actual != wanted)
+            .map(|((field, actual), (_, wanted))| (field, wanted.to_owned(), actual.to_owned()))
+    }
+
     /// Every field with its value, in declaration order.
     #[must_use]
     pub fn fields(&self) -> [(KaniPinField, &str); 6] {
@@ -70,23 +109,6 @@ impl KaniToolPins {
             (KaniPinField::RustToolchain, &self.rust_toolchain),
             (KaniPinField::TargetTriple, &self.target_triple),
         ]
-    }
-
-    /// The first field whose value is malformed: an executable digest that is not
-    /// lowercase SHA-256, or any other field that is empty or has surrounding space.
-    pub(crate) fn first_malformed(&self) -> Option<KaniPinField> {
-        self.fields().into_iter().find_map(|(field, value)| {
-            let valid = match field {
-                KaniPinField::LauncherSha256 | KaniPinField::DriverSha256 => is_sha256(value),
-                KaniPinField::KaniVersion
-                | KaniPinField::CbmcVersion
-                | KaniPinField::RustToolchain
-                | KaniPinField::TargetTriple => {
-                    !value.is_empty() && value.trim() == value && !value.contains('\n')
-                }
-            };
-            (!valid).then_some(field)
-        })
     }
 }
 
@@ -275,13 +297,14 @@ pub struct KaniExecutionRequest<'a> {
 pub enum KaniExecutionRefusal {
     /// The installed backend could not be measured.
     Tool(KaniToolError),
-    /// An installed backend component differs from the harness pin.
+    /// The harness identity, or else the installed backend, differs from the committed pins
+    /// ([`KaniToolPins::pinned`]).
     PinDrift {
         /// The differing field.
         field: KaniPinField,
-        /// The harness pin.
+        /// The committed pin.
         expected: String,
-        /// The installed value.
+        /// The harness's value, or the installed value when the harness matches.
         observed: String,
     },
     /// The crate's `src/lib.rs` does not contain the harness source.
@@ -301,7 +324,7 @@ impl fmt::Display for KaniExecutionRefusal {
                 observed,
             } => write!(
                 formatter,
-                "{field:?} drifted: pinned {expected:?}, installed {observed:?}"
+                "{field:?} drifted: pinned {expected:?}, found {observed:?}"
             ),
             Self::HarnessNotInCrate { harness_path } => {
                 write!(formatter, "the crate does not contain {harness_path}")
@@ -326,23 +349,30 @@ pub enum KaniInconclusiveReason {
     FailedWithoutCounterexample,
     /// Kani printed no verification verdict: a build, launcher or solver failure.
     NoVerdict,
-    /// Kani reported success for a precondition harness without a cover summary.
+    /// Kani reported success without a readable, non-empty cover summary, so non-vacuity was
+    /// not observed.
     MissingCoverSummary,
+    /// An unwinding assertion failed: the loop bound was exhausted before the property
+    /// could be decided, so no failure is a counterexample.
+    UnwindBoundExhausted,
 }
 
 /// The backend-reported outcome of one run.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum KaniRunOutcome {
-    /// Every property held; for a precondition harness, every cover was satisfied.
+    /// Every property held and every cover was satisfied, so the harness's assumptions,
+    /// requires and IR bounds are jointly satisfiable.
     Verified,
-    /// A property failed and Kani printed a concrete counterexample.
+    /// A property other than an unwinding assertion failed and Kani printed a concrete
+    /// counterexample for it.
     Falsified {
-        /// The concrete-playback test Kani printed, verbatim.
+        /// The concrete-playback test Kani printed for the failed check, verbatim.
         counterexample: String,
     },
-    /// A precondition harness's cover was not satisfiable within the bounds: every
-    /// obligation assuming that precondition holds vacuously.
+    /// Vacuous: no property failed, but a cover was not satisfied within the bounds. For a
+    /// precondition harness the precondition is unsatisfiable; for a contract harness the
+    /// requires and IR bounds are jointly unsatisfiable, so the ensures was never checked.
     CoverUnsatisfied {
         /// Satisfied cover properties.
         satisfied: u64,
@@ -399,14 +429,13 @@ pub fn execute_kani_obligation(
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let identity = &request.harness.identity;
     let observed = request.installation.observe()?;
-    for ((field, expected), (_, installed)) in
-        identity.pins.fields().into_iter().zip(observed.fields())
-    {
-        if expected != installed {
+    // The harness pins, and the installed backend, must both be the committed pins.
+    for pins in [&identity.pins, &observed] {
+        if let Some((field, expected, observed)) = pins.first_difference(&KaniToolPins::pinned()) {
             return Err(KaniExecutionRefusal::PinDrift {
                 field,
-                expected: expected.to_owned(),
-                observed: installed.to_owned(),
+                expected,
+                observed,
             });
         }
     }
@@ -457,28 +486,42 @@ pub fn execute_kani_obligation(
         unwind: identity.unwind,
         solver: identity.solver.clone(),
         exit_code: output.status.code(),
-        outcome: classify_run(identity.kind, output.status.success(), &text),
+        outcome: classify_run(output.status.success(), &text),
     })
 }
 
 const SUCCESS: &str = "VERIFICATION:- SUCCESSFUL";
 const FAILURE: &str = "VERIFICATION:- FAILED";
+const FAILED_CHECKS: &str = "Failed Checks: ";
+const UNWINDING_ASSERTION: &str = "unwinding assertion";
 
-fn classify_run(kind: ObligationKind, exited_successfully: bool, text: &str) -> KaniRunOutcome {
+/// Classifies one run. Every generated harness, of every kind, carries exactly the covers that
+/// witness its assumptions are satisfiable, so success without every cover satisfied is vacuous
+/// and never `Verified`.
+fn classify_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
     if exited_successfully && text.contains(SUCCESS) && !text.contains(FAILURE) {
-        if kind != ObligationKind::Precondition {
-            return KaniRunOutcome::Verified;
-        }
         return match cover_summary(text) {
             Some((satisfied, total)) if total > 0 && satisfied == total => KaniRunOutcome::Verified,
-            Some((satisfied, total)) => KaniRunOutcome::CoverUnsatisfied { satisfied, total },
-            None => KaniRunOutcome::Inconclusive {
+            Some((satisfied, total)) if total > 0 => {
+                KaniRunOutcome::CoverUnsatisfied { satisfied, total }
+            }
+            Some(_) | None => KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::MissingCoverSummary,
             },
         };
     }
     if text.contains(FAILURE) {
-        return match concrete_playback(text) {
+        let unwound = text.lines().any(|line| {
+            line.trim()
+                .strip_prefix(FAILED_CHECKS)
+                .is_some_and(|check| check.starts_with(UNWINDING_ASSERTION))
+        });
+        if unwound {
+            return KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::UnwindBoundExhausted,
+            };
+        }
+        return match failure_playback(text) {
             Some(counterexample) => KaniRunOutcome::Falsified { counterexample },
             None => KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::FailedWithoutCounterexample,
@@ -490,12 +533,17 @@ fn classify_run(kind: ObligationKind, exited_successfully: bool, text: &str) -> 
     }
 }
 
-/// Reads Kani's `** <satisfied> of <total> cover properties satisfied` line.
+/// Reads Kani's `** <satisfied> of <total> cover properties satisfied[ (<n> unreachable)]` line.
 fn cover_summary(text: &str) -> Option<(u64, u64)> {
     text.lines().find_map(|line| {
         let rest = line.trim().strip_prefix("** ")?;
         let (counts, tail) = rest.split_once(" cover properties satisfied")?;
-        if !tail.is_empty() {
+        let tail_is_summary = tail.is_empty()
+            || tail
+                .strip_prefix(" (")
+                .and_then(|inner| inner.strip_suffix(" unreachable)"))
+                .is_some_and(|count| count.parse::<u64>().is_ok());
+        if !tail_is_summary {
             return None;
         }
         let (satisfied, total) = counts.split_once(" of ")?;
@@ -503,16 +551,25 @@ fn cover_summary(text: &str) -> Option<(u64, u64)> {
     })
 }
 
-/// Extracts the fenced concrete-playback unit test Kani prints after a failure.
-fn concrete_playback(text: &str) -> Option<String> {
-    let start = text.find("Concrete playback unit test")?;
-    let tail = &text[start..];
-    let fence = tail.find("```")?;
-    let body = &tail[fence + 3..];
-    let end = body.find("```")?;
-    let test = body[..end].trim();
-    test.contains("kani::concrete_playback_run")
-        .then(|| test.to_owned())
+/// Extracts the fenced concrete-playback unit test Kani prints for a failed check. Kani also
+/// prints playbacks for satisfied covers; those witness reachability and are not counterexamples.
+fn failure_playback(text: &str) -> Option<String> {
+    let mut rest = text;
+    while let Some(start) = rest.find("Concrete playback unit test") {
+        let tail = &rest[start..];
+        let fence = tail.find("```")?;
+        let body = &tail[fence + 3..];
+        let end = body.find("```")?;
+        let test = body[..end].trim();
+        let is_cover = test
+            .lines()
+            .any(|line| line.starts_with("/// Check for `cover`"));
+        if test.contains("kani::concrete_playback_run") && !is_cover {
+            return Some(test.to_owned());
+        }
+        rest = &body[end + 3..];
+    }
+    None
 }
 
 fn run(tool: KaniTool, program: &Path, arguments: &[&str]) -> Result<String, KaniToolError> {
@@ -561,65 +618,24 @@ fn file_sha256(tool: KaniTool, path: &Path) -> Result<String, KaniToolError> {
 mod tests {
     use super::*;
 
-    /// Trace: FR-015-AC-2, TC-025.
+    const COVER_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `cover`: \"contract assumptions are jointly satisfiable\"\n\n#[test]\nfn kani_concrete_playback_h_1() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![0, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
+    const ASSERTION_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `assertion`: \"|post_state: &i64| *post_state <= 5\"\n\n#[test]\nfn kani_concrete_playback_h_2() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![8, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
+
+    /// Success is `Verified` only with every cover satisfied, for every obligation kind; a
+    /// vacuous run is `CoverUnsatisfied`. Summaries are Kani 0.67.0's own output.
+    ///
+    /// Trace: FR-015-AC-2, FR-015-AC-4, TC-025
     #[test]
     fn tc_025_run_classification_never_defaults_to_verified() {
-        let playback = "Concrete playback unit test for `m::h`:\n```\n#[test]\nfn kani_concrete_playback_h() {\n    kani::concrete_playback_run(vec![], m::h);\n}\n```\n";
-        assert_eq!(
-            classify_run(
-                ObligationKind::Postcondition,
-                true,
-                "VERIFICATION:- SUCCESSFUL"
-            ),
-            KaniRunOutcome::Verified
+        let verified = format!(
+            "SUMMARY:\n ** 0 of 43 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n{COVER_PLAYBACK}"
         );
-        assert!(matches!(
-            classify_run(
-                ObligationKind::Postcondition,
-                false,
-                &format!("VERIFICATION:- FAILED\n{playback}")
-            ),
-            KaniRunOutcome::Falsified { counterexample } if counterexample.contains("concrete_playback_run")
-        ));
-        for (kind, success, text, expected) in [
-            (
-                ObligationKind::Postcondition,
-                false,
-                "VERIFICATION:- FAILED",
-                KaniInconclusiveReason::FailedWithoutCounterexample,
-            ),
-            (
-                ObligationKind::Postcondition,
-                false,
-                "error[E0308]: mismatched types",
-                KaniInconclusiveReason::NoVerdict,
-            ),
-            // Success text from a process that exited unsuccessfully is not success.
-            (
-                ObligationKind::Invariant,
-                false,
-                "VERIFICATION:- SUCCESSFUL",
-                KaniInconclusiveReason::NoVerdict,
-            ),
-            (
-                ObligationKind::Precondition,
-                true,
-                "VERIFICATION:- SUCCESSFUL",
-                KaniInconclusiveReason::MissingCoverSummary,
-            ),
-        ] {
-            assert_eq!(
-                classify_run(kind, success, text),
-                KaniRunOutcome::Inconclusive { reason: expected },
-                "{text}"
-            );
-        }
+        assert_eq!(classify_run(true, &verified), KaniRunOutcome::Verified);
+        // Jointly unsatisfiable requires: every check succeeds, the ensures is unreachable, and
+        // the cover after the contract call is unreachable. Reproduced under Kani 0.67.0.
+        let vacuous = "SUMMARY:\n ** 0 of 49 failed (1 unreachable)\n\n ** 0 of 1 cover properties satisfied (1 unreachable)\n\n\nVERIFICATION:- SUCCESSFUL\n";
         assert_eq!(
-            classify_run(
-                ObligationKind::Precondition,
-                true,
-                "SUMMARY:\n ** 0 of 1 cover properties satisfied\n\nVERIFICATION:- SUCCESSFUL"
-            ),
+            classify_run(true, vacuous),
             KaniRunOutcome::CoverUnsatisfied {
                 satisfied: 0,
                 total: 1
@@ -627,11 +643,106 @@ mod tests {
         );
         assert_eq!(
             classify_run(
-                ObligationKind::Precondition,
                 true,
-                " ** 1 of 1 cover properties satisfied\nVERIFICATION:- SUCCESSFUL"
+                " ** 1 of 2 cover properties satisfied\nVERIFICATION:- SUCCESSFUL"
             ),
-            KaniRunOutcome::Verified
+            KaniRunOutcome::CoverUnsatisfied {
+                satisfied: 1,
+                total: 2
+            }
+        );
+        // The failure's counterexample is the assertion playback, not the cover playback.
+        let falsified = format!(
+            "SUMMARY:\n ** 1 of 43 failed\nFailed Checks: |post_state: &i64| *post_state <= 5\n\n ** 1 of 1 cover properties satisfied\n\nVERIFICATION:- FAILED\n{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"
+        );
+        assert!(matches!(
+            classify_run(false, &falsified),
+            KaniRunOutcome::Falsified { counterexample }
+                if counterexample.contains("Check for `assertion`") && !counterexample.contains("Check for `cover`")
+        ));
+        for (success, text, expected) in [
+            (
+                false,
+                format!("VERIFICATION:- FAILED\n{COVER_PLAYBACK}"),
+                KaniInconclusiveReason::FailedWithoutCounterexample,
+            ),
+            (
+                false,
+                "error[E0308]: mismatched types".to_owned(),
+                KaniInconclusiveReason::NoVerdict,
+            ),
+            // Success text from a process that exited unsuccessfully is not success.
+            (false, verified.clone(), KaniInconclusiveReason::NoVerdict),
+            (
+                true,
+                "VERIFICATION:- SUCCESSFUL".to_owned(),
+                KaniInconclusiveReason::MissingCoverSummary,
+            ),
+            (
+                true,
+                " ** 0 of 0 cover properties satisfied\nVERIFICATION:- SUCCESSFUL".to_owned(),
+                KaniInconclusiveReason::MissingCoverSummary,
+            ),
+            (
+                true,
+                " ** 1 of 1 cover properties satisfied (garbage)\nVERIFICATION:- SUCCESSFUL"
+                    .to_owned(),
+                KaniInconclusiveReason::MissingCoverSummary,
+            ),
+        ] {
+            assert_eq!(
+                classify_run(success, &text),
+                KaniRunOutcome::Inconclusive { reason: expected },
+                "{text}"
+            );
+        }
+    }
+
+    /// An exhausted unwind bound is inconclusive even when Kani prints a playback. The output
+    /// is Kani 0.67.0's for a loop past `--unwind 4`.
+    ///
+    /// Trace: FR-015-AC-2, TC-025
+    #[test]
+    fn tc_025_an_exhausted_unwind_bound_is_inconclusive_not_falsified() {
+        let unwound = format!(
+            "VERIFICATION RESULT:\n ** 1 of 39 failed (38 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\nFailed Checks: unwinding assertion loop 0\n File: \"src/lib.rs\", line 10, in looping\n\nVERIFICATION:- FAILED\n[Kani] info: Verification output shows one or more unwinding failures.\n{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"
+        );
+        assert_eq!(
+            classify_run(false, &unwound),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::UnwindBoundExhausted
+            }
+        );
+        // A succeeded unwinding check in the results listing is not a failure.
+        let listed = format!(
+            "Check 1: f.unwind.1\n\t - Status: SUCCESS\n\t - Description: \"unwinding assertion loop 0\"\n ** 1 of 1 cover properties satisfied\nVERIFICATION:- SUCCESSFUL\n{COVER_PLAYBACK}"
+        );
+        assert_eq!(classify_run(true, &listed), KaniRunOutcome::Verified);
+    }
+
+    /// Only the committed pins pass; each field is compared.
+    ///
+    /// Trace: FR-015-AC-2, TC-025
+    #[test]
+    fn tc_025_pins_are_compared_field_by_field_against_the_committed_backend() {
+        let pinned = KaniToolPins::pinned();
+        assert_eq!(pinned.kani_version, "0.67.0");
+        assert_eq!(pinned.cbmc_version, "6.8.0 (cbmc-6.8.0)");
+        assert_eq!(
+            pinned.rust_toolchain,
+            "nightly-2025-11-21-x86_64-unknown-linux-gnu"
+        );
+        assert_eq!(pinned.target_triple, "x86_64-unknown-linux-gnu");
+        assert_eq!(pinned.first_difference(&KaniToolPins::pinned()), None);
+        let mut other = KaniToolPins::pinned();
+        other.target_triple = "aarch64-unknown-linux-gnu".to_owned();
+        assert_eq!(
+            other.first_difference(&pinned),
+            Some((
+                KaniPinField::TargetTriple,
+                "x86_64-unknown-linux-gnu".to_owned(),
+                "aarch64-unknown-linux-gnu".to_owned()
+            ))
         );
     }
 }
