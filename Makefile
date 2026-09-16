@@ -54,6 +54,7 @@ help:
 	@echo "  make lint             - Clippy with -D warnings"
 	@echo "  make test             - cargo test"
 	@echo "  make build            - Release build"
+	@echo "  make kani             - Run the pinned Kani obligation lane serially"
 	@echo "  make msrv             - Check the crate with Rust $(MSRV)"
 	@echo "  make spec             - Quire-validate the specification"
 	@echo "  make clean            - cargo clean"
@@ -91,6 +92,16 @@ lint:
 .PHONY: test
 test: assurance-inputs
 	$(CARGO) test --locked
+
+# The pinned Kani lane (FR-015, TC-025). Kani and CBMC are memory-heavy, so the
+# lane holds a host-wide lock, runs one harness at a time, and builds in its own
+# target directory. The launcher, driver, CBMC and toolchain are asserted against
+# the pins the obligations were generated for before anything runs.
+.PHONY: kani
+kani:
+	flock /tmp/agent-e-heavy-build.lock $(CARGO) +$(MSRV) test --locked -j 4 \
+		--test kani_obligations --target-dir target-codex-backends \
+		-- --ignored --test-threads=1
 
 .PHONY: build
 build:
