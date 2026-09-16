@@ -13,6 +13,10 @@ mod publication;
 mod harness;
 // Implements: FR-003
 mod kani;
+// Implements: FR-015
+mod kani_obligations;
+// Implements: FR-015
+mod kani_execution;
 // Implements: FR-007
 mod bounded_kani_profile;
 // Implements: FR-007
@@ -76,6 +80,18 @@ pub use kani::{
     KaniIntegerBounds, KaniPrimitiveType, KaniRequest, KaniSolver, KaniSubjectBinding,
     ProofDependencyEdge, ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest,
     ProofDependencyState, ProofReadiness, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
+};
+pub use kani_execution::{
+    execute_kani_obligation, KaniExecutionEvidence, KaniExecutionRefusal, KaniExecutionRequest,
+    KaniInconclusiveReason, KaniInstallation, KaniPinField, KaniRunOutcome, KaniTool,
+    KaniToolError, KaniToolPins, KANI_EXECUTION_SCHEMA,
+};
+pub use kani_obligations::{
+    negotiate_kani_obligations, DerivedDomain, EmbeddedOracle, InvalidObligationItem,
+    KaniObligationError, KaniObligationHarness, KaniObligationIdentity, KaniObligationOutcome,
+    KaniObligationRequest, ObligationBinding, ObligationDisposition, ObligationItem,
+    ObligationKind, ObligationRecord, ObligationSubject, UnsupportedObligation,
+    KANI_OBLIGATION_PROFILE, KANI_OBLIGATION_SCHEMA, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 pub use publication::{
     write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,

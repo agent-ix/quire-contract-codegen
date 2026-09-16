@@ -1,0 +1,1110 @@
+//! FR-015 separate bounded Kani obligations and Contract IR FR-036 backend negotiation.
+//!
+//! The default lane checks negotiation, refusal and harness shape without running Kani. The
+//! `kani` lane (`make kani`, `#[ignore]` here) measures the installed backend, runs real
+//! verified and seeded-failing harnesses one at a time, and writes execution evidence under
+//! `CARGO_TARGET_TMPDIR/kani-obligation-evidence`.
+
+#[path = "exact_scalar_support/package.rs"]
+mod package;
+
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use package::{
+    application, code_id, corpus_package, golden_items, integer_add, key, reference, Bound,
+    MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED, V_INTEGER,
+};
+use quire_contract_codegen::{
+    execute_kani_obligation, generate_exact_scalar_oracles, negotiate_kani_obligations,
+    AttestationContext, DerivedDomain, ExactScalarClaimMap, ExactScalarDisposition,
+    ExactScalarItem, InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest,
+    KaniInstallation, KaniObligationError, KaniObligationHarness, KaniObligationOutcome,
+    KaniObligationRequest, KaniPinField, KaniRunOutcome, KaniTool, KaniToolError, KaniToolPins,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
+    UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION,
+    KANI_OBLIGATION_PROFILE, RUNTIME_REVISION,
+};
+use quire_contract_ir::{
+    BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
+    EXECUTABLE_PROJECTION_FORMAT,
+};
+use serde_json::{json, Value};
+
+const PACKAGE: &str = "test/kani-obligations";
+const PRECONDITION: &str = "amount-within-balance";
+const POSTCONDITION: &str = "balance-never-grows";
+const INVARIANT: &str = "balance-nonnegative";
+const DEFINEDNESS: &str = "doubled-amount-fits";
+const ASSERTION: &str = "amount-nonnegative";
+
+fn context() -> AttestationContext<'static> {
+    AttestationContext {
+        record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
+        candidate_revision: IR_CANDIDATE_REVISION,
+    }
+}
+
+fn pins() -> KaniToolPins {
+    KaniToolPins {
+        kani_version: KANI_BACKEND_VERSION.to_owned(),
+        launcher_sha256: "1".repeat(64),
+        driver_sha256: "2".repeat(64),
+        cbmc_version: "6.8.0 (cbmc-6.8.0)".to_owned(),
+        rust_toolchain: "nightly-2025-11-21-x86_64-unknown-linux-gnu".to_owned(),
+        target_triple: "x86_64-unknown-linux-gnu".to_owned(),
+    }
+}
+
+// ---- V1 fixture --------------------------------------------------------------
+
+fn span(line: u64) -> Value {
+    let source = json!({"document":"kani-obligations", "revision":1});
+    json!({"start":{"source":source,"line":line,"column":1,"byte_offset":line - 1},
+        "end":{"source":source,"line":line,"column":2,"byte_offset":line}})
+}
+
+fn int(minimum: i64, maximum: i64) -> Value {
+    json!({"kind":"integer","domain":"signed","minimum":minimum,"maximum":maximum,"overflow":"reject"})
+}
+
+fn owner() -> Value {
+    json!({"package":PACKAGE,"requirement":"FR-200","revision":1})
+}
+
+fn read(name: &str, observation: &str, line: u64) -> Value {
+    json!({"node":"value_reference","name":name,"observation":observation,"source":span(line)})
+}
+
+fn identity(kind: &str, name: &str, observation: &str) -> Value {
+    json!({"node":"reference","identity":{"requirement":owner(),"kind":kind,"observation":observation,"path":[name]}})
+}
+
+struct ClauseFixture {
+    id: &'static str,
+    kind: &'static str,
+    anchor: Value,
+    line: u64,
+    references: Vec<Value>,
+    values: Vec<Value>,
+    expression: Value,
+}
+
+fn amount(line: u64) -> Value {
+    json!({"name":"amount","kind":"input","value_type":int(0, 1000),"source":span(line)})
+}
+
+fn balance(line: u64, maximum: i64) -> Value {
+    json!({"name":"balance","kind":"state","value_type":int(0, maximum),"source":span(line)})
+}
+
+fn clauses(balance_maximum_in_invariant: i64) -> Vec<ClauseFixture> {
+    let pre = json!({"kind":"pre","operation":"withdraw"});
+    vec![
+        ClauseFixture {
+            id: PRECONDITION,
+            kind: "precondition",
+            anchor: pre.clone(),
+            line: 10,
+            references: vec![
+                identity("input", "amount", "current"),
+                identity("state", "balance", "current"),
+            ],
+            values: vec![amount(11), balance(12, 1000)],
+            expression: json!({"node":"compare","operator":"less_equal",
+                "left":read("amount", "current", 13),"right":read("balance", "current", 14),
+                "source":span(11)}),
+        },
+        ClauseFixture {
+            id: POSTCONDITION,
+            kind: "postcondition",
+            anchor: json!({"kind":"post","operation":"withdraw"}),
+            line: 20,
+            references: vec![
+                identity("state", "balance", "post"),
+                identity("state", "balance", "pre"),
+            ],
+            values: vec![balance(21, 1000)],
+            expression: json!({"node":"compare","operator":"less_equal",
+                "left":read("balance", "post", 22),"right":read("balance", "pre", 23),
+                "source":span(21)}),
+        },
+        ClauseFixture {
+            id: INVARIANT,
+            kind: "invariant",
+            anchor: json!({"kind":"handler","name":"withdraw"}),
+            line: 30,
+            references: vec![identity("state", "balance", "current")],
+            values: vec![balance(31, balance_maximum_in_invariant)],
+            expression: json!({"node":"compare","operator":"greater_equal",
+                "left":read("balance", "current", 32),
+                "right":{"node":"integer_literal","value":0,"value_type":int(0, balance_maximum_in_invariant),"source":span(33)},
+                "source":span(31)}),
+        },
+        ClauseFixture {
+            id: DEFINEDNESS,
+            kind: "precondition",
+            anchor: json!({"kind":"pre","operation":"deposit"}),
+            line: 40,
+            references: vec![identity("input", "amount", "current")],
+            values: vec![amount(41)],
+            // `amount != 0 && 1000 / amount <= 1000`: the division carries a guarded
+            // non-zero-divisor obligation.
+            expression: json!({"node":"boolean","operator":"short_circuit_and",
+                "left":{"node":"compare","operator":"not_equal","left":read("amount", "current", 42),
+                    "right":{"node":"integer_literal","value":0,"value_type":int(0, 1000),"source":span(43)},
+                    "source":span(42)},
+                "right":{"node":"compare","operator":"less_equal",
+                    "left":{"node":"numeric","operator":"divide",
+                        "left":{"node":"integer_literal","value":1000,"value_type":int(0, 1000),"source":span(44)},
+                        "right":read("amount", "current", 45),"source":span(44)},
+                    "right":{"node":"integer_literal","value":1000,"value_type":int(0, 1000),"source":span(46)},
+                    "source":span(44)},
+                "source":span(41)}),
+        },
+        ClauseFixture {
+            id: ASSERTION,
+            kind: "assertion",
+            anchor: json!({"kind":"pre","operation":"audit"}),
+            line: 50,
+            references: vec![identity("input", "amount", "current")],
+            values: vec![amount(51)],
+            expression: json!({"node":"compare","operator":"greater_equal",
+                "left":read("amount", "current", 52),
+                "right":{"node":"integer_literal","value":0,"value_type":int(0, 1000),"source":span(53)},
+                "source":span(51)}),
+        },
+    ]
+}
+
+fn projection(balance_maximum_in_invariant: i64) -> Value {
+    let fixtures = clauses(balance_maximum_in_invariant);
+    let package_clauses = fixtures
+        .iter()
+        .map(|clause| {
+            let body = match clause.references.as_slice() {
+                [single] => single.clone(),
+                many => json!({"node":"composite","children":many}),
+            };
+            json!({"id":clause.id,"kind":clause.kind,"anchor":clause.anchor,
+                "source":span(clause.line),"body":body})
+        })
+        .collect::<Vec<_>>();
+    let bindings = fixtures
+        .iter()
+        .map(|clause| {
+            json!({"clause":{"requirement":owner(),"clause":clause.id},
+                "expression":{"owner":owner(),"types":[],"values":clause.values,"functions":[],
+                    "expression":clause.expression,"expected_type":{"kind":"boolean"},
+                    "execution_point":clause.anchor,"clause_root":true}})
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "format":EXECUTABLE_PROJECTION_FORMAT,
+        "package":{"id":PACKAGE,"schema_version":{"major":1,"minor":1},
+            "source":{"document":"kani-obligations","revision":1},
+            "requirements":[{"id":"FR-200","revision":1,"source":span(1),"clauses":package_clauses}]},
+        "bindings":bindings
+    })
+}
+
+fn bound_package(balance_maximum_in_invariant: i64) -> BoundPackage {
+    BoundPackage::from_json_bytes(
+        &serde_json::to_vec(&projection(balance_maximum_in_invariant)).unwrap(),
+    )
+    .unwrap_or_else(|diagnostics| panic!("fixture projection must bind: {diagnostics:?}"))
+}
+
+fn clause(id: &str) -> ClauseRef {
+    ClauseRef::new(
+        RequirementRef::parse(PACKAGE, "FR-200", 1).unwrap(),
+        ClauseId::new(id).unwrap(),
+    )
+}
+
+fn request<'a>(
+    items: &'a [ObligationItem<'a>],
+    pins: &'a KaniToolPins,
+    subject_path: &'a str,
+) -> KaniObligationRequest<'a> {
+    KaniObligationRequest {
+        items,
+        subject_path,
+        pins,
+        unwind: 4,
+        attestation: context(),
+    }
+}
+
+fn emitted(outcome: KaniObligationOutcome) -> (Vec<ObligationRecord>, Vec<KaniObligationHarness>) {
+    match outcome {
+        KaniObligationOutcome::Emitted { records, harnesses } => (records, harnesses),
+        KaniObligationOutcome::Rejected { records } => panic!("unexpected rejection: {records:#?}"),
+    }
+}
+
+fn unsupported(record: &ObligationRecord) -> &UnsupportedObligation {
+    match &record.disposition {
+        ObligationDisposition::Unsupported { reason } => reason,
+        other => panic!("expected unsupported, got {other:?}"),
+    }
+}
+
+fn supported_contract_harnesses(
+    package: &BoundPackage,
+    pins: &KaniToolPins,
+    subject: &str,
+) -> Vec<KaniObligationHarness> {
+    let refs = [
+        clause(PRECONDITION),
+        clause(POSTCONDITION),
+        clause(INVARIANT),
+    ];
+    let items = refs
+        .iter()
+        .map(|clause| ObligationItem::BoundClause { package, clause })
+        .collect::<Vec<_>>();
+    let (records, harnesses) =
+        emitted(negotiate_kani_obligations(&request(&items, pins, subject)).unwrap());
+    assert!(records
+        .iter()
+        .all(|record| matches!(record.disposition, ObligationDisposition::Supported { .. })));
+    harnesses
+}
+
+// ---- V2 fixture --------------------------------------------------------------
+
+/// An integer addition whose only bound admits no value.
+const UNSATISFIABLE: u32 = 3001;
+/// A frame clause.
+const FRAME: u32 = 3002;
+
+fn scalar_package() -> (CheckedPackageV2, ExactScalarClaimMap) {
+    let mut builder = corpus_package();
+    builder
+        .bounded(
+            UNSATISFIABLE,
+            "expression",
+            "binary",
+            &key(T_INTEGER),
+            application(
+                "binary",
+                vec![reference(&key(V_INTEGER)), reference(&key(V_INTEGER))],
+            ),
+            &[Bound::Integer(5, -5)],
+        )
+        .code(
+            FRAME,
+            "state",
+            "frame",
+            &key(T_BOOLEAN),
+            json!({"term": "aggregate", "members": []}),
+        );
+    let package = builder.admit();
+    let mut items = golden_items();
+    for code in [UNSATISFIABLE, FRAME] {
+        items.push(ExactScalarItem {
+            node_id: code_id(code),
+            operation: integer_add(),
+        });
+    }
+    let oracles = generate_exact_scalar_oracles(&package, &items).expect("claim map");
+    (package, oracles.claim_map)
+}
+
+fn scalar_records(
+    package: &CheckedPackageV2,
+    claim_map: &ExactScalarClaimMap,
+    codes: &[u32],
+) -> Vec<ObligationRecord> {
+    let ids = codes.iter().map(|code| code_id(*code)).collect::<Vec<_>>();
+    let items = ids
+        .iter()
+        .map(|node_id| ObligationItem::ScalarClaim {
+            package,
+            claim_map,
+            node_id,
+        })
+        .collect::<Vec<_>>();
+    let pins = pins();
+    let (records, harnesses) =
+        emitted(negotiate_kani_obligations(&request(&items, &pins, "crate::subject")).unwrap());
+    assert!(harnesses.is_empty(), "no V2 item may emit a harness");
+    records
+}
+
+// ---- default lane ------------------------------------------------------------
+
+/// Each precondition, postcondition and invariant clause is its own obligation, harness and
+/// proof, with its clause, source span, IR digests and assumed preconditions recorded.
+///
+/// Trace: FR-015-AC-1, TC-025
+/// Upstream: agent-ix/quire-contract-ir FR-036-AC-3, TC-045
+#[test]
+fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
+    let package = bound_package(1000);
+    let pins = pins();
+    let harnesses = supported_contract_harnesses(&package, &pins, "crate::withdraw");
+    assert_eq!(harnesses.len(), 3);
+    let expected = [
+        (PRECONDITION, ObligationKind::Precondition, 10, 0),
+        (POSTCONDITION, ObligationKind::Postcondition, 20, 1),
+        (INVARIANT, ObligationKind::Invariant, 30, 2),
+    ];
+    let package_clauses = package.clauses();
+    for (harness, (id, kind, line, requires)) in harnesses.iter().zip(expected) {
+        let identity = &harness.identity;
+        assert_eq!(identity.kind, kind);
+        assert_eq!(identity.clause, clause(id));
+        assert_eq!(identity.source_span.start().line(), line);
+        let ir = package_clauses
+            .iter()
+            .find(|candidate| candidate.identity() == &clause(id))
+            .unwrap();
+        assert_eq!(
+            identity.expression_digest,
+            ir.expression_digest().to_string()
+        );
+        assert_eq!(
+            identity.declaration_digest,
+            ir.declaration_digest().to_string()
+        );
+        assert_eq!(identity.bound_package_digest, package.digest().to_string());
+        assert_eq!(identity.adapter_profile, KANI_OBLIGATION_PROFILE);
+        assert_eq!(identity.oracles[0].clause, clause(id));
+        let source = &harness.rust.contents;
+        assert!(source.contains(&format!(
+            "// Obligation identity sha256: {}",
+            harness.identity_sha256
+        )));
+        assert_eq!(source.matches("#[kani::requires(").count(), requires);
+        let is_precondition = kind == ObligationKind::Precondition;
+        assert_eq!(
+            source.matches("#[kani::proof]").count(),
+            usize::from(is_precondition)
+        );
+        assert_eq!(
+            source.matches("#[kani::proof_for_contract(").count(),
+            usize::from(!is_precondition)
+        );
+        assert_eq!(
+            source.matches("#[kani::ensures(").count(),
+            usize::from(!is_precondition)
+        );
+        assert_eq!(
+            source.matches("kani::cover!(").count(),
+            usize::from(is_precondition)
+        );
+        assert_eq!(identity.subject_path.is_some(), !is_precondition);
+        let record: Value = serde_json::from_str(&harness.record.contents).unwrap();
+        assert_eq!(record["identitySha256"], harness.identity_sha256);
+        assert_eq!(record["rustSha256"], harness.rust.sha256);
+        assert_eq!(record["identity"]["kind"], json!(kind));
+    }
+    // The contract harnesses assume exactly the precondition sharing their anchor, and no
+    // harness embeds any other obligation's oracle.
+    let precondition_symbol = &harnesses[0].identity.oracles[0].symbol;
+    for harness in &harnesses[1..] {
+        let oracles = &harness.identity.oracles;
+        assert_eq!(oracles.len(), 2);
+        assert_eq!(oracles[1].clause, clause(PRECONDITION));
+        assert_eq!(oracles[1].kind, ObligationKind::Precondition);
+        assert!(harness.rust.contents.contains(&format!(
+            "#[kani::requires({precondition_symbol}(amount_current, balance_pre))]"
+        )));
+    }
+    for (index, harness) in harnesses.iter().enumerate() {
+        for (other_index, other) in harnesses.iter().enumerate() {
+            let other_symbol = &other.identity.oracles[0].symbol;
+            let embeds = harness.rust.contents.contains(other_symbol.as_str());
+            assert_eq!(
+                embeds,
+                other_index == index || other_index == 0,
+                "{index} embeds {other_index}"
+            );
+        }
+    }
+
+    // Without its precondition a postcondition is refused rather than proved under fewer
+    // assumptions than the contract states.
+    let post = clause(POSTCONDITION);
+    let items = [ObligationItem::BoundClause {
+        package: &package,
+        clause: &post,
+    }];
+    let (records, harnesses) =
+        emitted(negotiate_kani_obligations(&request(&items, &pins, "crate::withdraw")).unwrap());
+    assert!(harnesses.is_empty());
+    assert_eq!(records[0].kind, Some(ObligationKind::Postcondition));
+    assert_eq!(
+        unsupported(&records[0]),
+        &UnsupportedObligation::PreconditionNotNegotiated {
+            precondition: clause(PRECONDITION)
+        }
+    );
+    assert_eq!(
+        records[0].subject,
+        ObligationSubject::BoundClause {
+            clause: post,
+            source_span: Some(
+                package
+                    .clauses()
+                    .iter()
+                    .find(|candidate| candidate.identity() == &clause(POSTCONDITION))
+                    .unwrap()
+                    .source()
+                    .clone()
+            ),
+        }
+    );
+}
+
+/// Symbolic ranges are the IR's inclusive domains, and every pin, flag and revision is part of
+/// the harness identity.
+///
+/// Trace: FR-015-AC-2, TC-025
+/// Upstream: agent-ix/quire-contract-ir FR-036-AC-1, TC-045
+#[test]
+fn tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity() {
+    let package = bound_package(1000);
+    let pins = pins();
+    let harnesses = supported_contract_harnesses(&package, &pins, "crate::withdraw");
+    let postcondition = &harnesses[1];
+    let identity = &postcondition.identity;
+    let bounds = identity
+        .arguments
+        .iter()
+        .chain(&identity.results)
+        .map(|binding| {
+            let bounds = binding.integer_bounds.as_ref().unwrap();
+            (binding.identifier.as_str(), bounds.minimum, bounds.maximum)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        bounds,
+        [
+            ("amount_current", 0, 1000),
+            ("balance_pre", 0, 1000),
+            ("balance_post", 0, 1000)
+        ]
+    );
+    let source = &postcondition.rust.contents;
+    assert!(source.contains("kani::assume(amount_current >= 0_i64 && amount_current <= 1000_i64);"));
+    assert!(source.contains("kani::assume(balance_pre >= 0_i64 && balance_pre <= 1000_i64);"));
+    assert!(source.contains("|post_state: &i64| (*post_state >= 0_i64 && *post_state <= 1000_i64)"));
+    assert_eq!(identity.runtime_revision, RUNTIME_REVISION);
+    assert_eq!(identity.ir_revision, IR_CANDIDATE_REVISION);
+    assert_eq!(identity.pins, pins);
+    assert_eq!(identity.solver, "cadical");
+    assert_eq!(identity.unwind, 4);
+    let exact = format!("{}::{}", identity.module_symbol, identity.harness_symbol);
+    for flag in [
+        "function-contracts",
+        "concrete-playback",
+        "--harness",
+        exact.as_str(),
+        "--exact",
+        "--unwind",
+        "4",
+        "--solver",
+        "cadical",
+    ] {
+        assert!(
+            identity.options.iter().any(|option| option == flag),
+            "{flag}"
+        );
+    }
+
+    // Every pin, the unwind bound and the subject change both the identity and the source.
+    let mutations: [fn(&mut KaniToolPins); 5] = [
+        |pins| pins.launcher_sha256 = "3".repeat(64),
+        |pins| pins.driver_sha256 = "4".repeat(64),
+        |pins| pins.cbmc_version = "6.8.1".to_owned(),
+        |pins| pins.rust_toolchain = "nightly-2025-11-22".to_owned(),
+        |pins| pins.target_triple = "aarch64-unknown-linux-gnu".to_owned(),
+    ];
+    let mut seen = vec![postcondition.identity_sha256.clone()];
+    for mutate in &mutations {
+        let mut changed = pins.clone();
+        mutate(&mut changed);
+        let other = &supported_contract_harnesses(&package, &changed, "crate::withdraw")[1];
+        assert!(!seen.contains(&other.identity_sha256));
+        assert_ne!(other.rust.sha256, postcondition.rust.sha256);
+        seen.push(other.identity_sha256.clone());
+    }
+    let refs = [clause(PRECONDITION), clause(POSTCONDITION)];
+    let items = refs
+        .iter()
+        .map(|clause| ObligationItem::BoundClause {
+            package: &package,
+            clause,
+        })
+        .collect::<Vec<_>>();
+    let mut unwound = request(&items, &pins, "crate::withdraw");
+    unwound.unwind = 5;
+    let (_, other) = emitted(negotiate_kani_obligations(&unwound).unwrap());
+    assert!(!seen.contains(&other[1].identity_sha256));
+    let (_, other) =
+        emitted(negotiate_kani_obligations(&request(&items, &pins, "crate::other")).unwrap());
+    assert!(!seen.contains(&other[1].identity_sha256));
+    // Regeneration is byte-identical.
+    assert_eq!(
+        supported_contract_harnesses(&package, &pins, "crate::withdraw"),
+        harnesses
+    );
+
+    // A V2 claim's domain is read from its IR bound, inclusive at both ends.
+    let (scalar, claim_map) = scalar_package();
+    let records = scalar_records(&scalar, &claim_map, &[1001]);
+    let UnsupportedObligation::CallerDeclaredOperation {
+        derived_domains, ..
+    } = unsupported(&records[0])
+    else {
+        panic!("expected a caller-declared refusal: {records:?}");
+    };
+    assert!(matches!(
+        derived_domains.as_slice(),
+        [DerivedDomain::IntegerRange { lower, upper, .. }] if lower == "-1000" && upper == "1000"
+    ));
+
+    // Request-level refusals: nothing is negotiated under an unusable pin set.
+    let items = [ObligationItem::BoundClause {
+        package: &package,
+        clause: &refs[0],
+    }];
+    let mut bad = pins.clone();
+    bad.kani_version = "0.68.0".to_owned();
+    assert_eq!(
+        negotiate_kani_obligations(&request(&items, &bad, "crate::withdraw")),
+        Err(KaniObligationError::UnsupportedKaniVersion {
+            version: "0.68.0".to_owned()
+        })
+    );
+    let mut bad = pins.clone();
+    bad.driver_sha256 = "not-a-digest".to_owned();
+    assert_eq!(
+        negotiate_kani_obligations(&request(&items, &bad, "crate::withdraw")),
+        Err(KaniObligationError::MalformedPin {
+            field: KaniPinField::DriverSha256
+        })
+    );
+}
+
+/// Unbounded, non-finite, model-dependent, frame and definedness-bearing items are typed
+/// refusals with no harness.
+///
+/// Trace: FR-015-AC-3, TC-025
+/// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
+#[test]
+fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses() {
+    let (scalar, claim_map) = scalar_package();
+    let records = scalar_records(
+        &scalar,
+        &claim_map,
+        &[UNBOUNDED, MISSING_ROUNDING, MODEL, STATE, FRAME],
+    );
+    assert_eq!(
+        records[0].disposition,
+        ObligationDisposition::RequiresBound {
+            unbounded_type: code_id(T_INTEGER)
+        }
+    );
+    assert!(matches!(
+        records[1].disposition,
+        ObligationDisposition::RequiresBound { .. }
+    ));
+    assert_eq!(
+        unsupported(&records[2]),
+        &UnsupportedObligation::BlockedOnUpstream {
+            node_id: code_id(MODEL),
+            node_tag: "model",
+            issue: UpstreamBlocker::QuireSpecLanguage120,
+        }
+    );
+    assert_eq!(
+        unsupported(&records[3]),
+        &UnsupportedObligation::NoFiniteEncoding {
+            node_id: code_id(STATE),
+            node_tag: "state",
+        }
+    );
+    assert_eq!(records[4].kind, Some(ObligationKind::Frame));
+    assert_eq!(
+        unsupported(&records[4]),
+        &UnsupportedObligation::NoFiniteEncoding {
+            node_id: code_id(FRAME),
+            node_tag: "state",
+        }
+    );
+    assert!(matches!(
+        &records[4].subject,
+        ObligationSubject::CheckedNode { node_id, source_map } if node_id == &code_id(FRAME) && !source_map.is_empty()
+    ));
+
+    let package = bound_package(1000);
+    let refs = [clause(DEFINEDNESS), clause(ASSERTION)];
+    let items = refs
+        .iter()
+        .map(|clause| ObligationItem::BoundClause {
+            package: &package,
+            clause,
+        })
+        .collect::<Vec<_>>();
+    let pins = pins();
+    let (records, harnesses) =
+        emitted(negotiate_kani_obligations(&request(&items, &pins, "crate::deposit")).unwrap());
+    assert!(harnesses.is_empty());
+    assert!(matches!(
+        unsupported(&records[0]),
+        UnsupportedObligation::DefinednessNotEncoded { obligations } if *obligations > 0
+    ));
+    assert_eq!(records[1].kind, None);
+    assert_eq!(
+        unsupported(&records[1]),
+        &UnsupportedObligation::ClauseKindNotObligation {
+            kind: ClauseKind::Assertion
+        }
+    );
+}
+
+/// The only assumptions are the IR bounds of symbolic arguments; nothing constrains results,
+/// and clause predicates appear only as the contract's own requires and ensures.
+///
+/// Trace: FR-015-AC-4, TC-025
+#[test]
+fn tc_025_assumptions_constrain_only_arguments_to_their_ir_bounds() {
+    let package = bound_package(1000);
+    let pins = pins();
+    for harness in supported_contract_harnesses(&package, &pins, "crate::withdraw") {
+        let identity = &harness.identity;
+        let assumptions = harness
+            .rust
+            .contents
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.contains("kani::assume"))
+            .collect::<Vec<_>>();
+        let expected = identity
+            .arguments
+            .iter()
+            .map(|binding| {
+                let bounds = binding.integer_bounds.as_ref().unwrap();
+                format!(
+                    "kani::assume({id} >= {}_i64 && {id} <= {}_i64);",
+                    bounds.minimum,
+                    bounds.maximum,
+                    id = binding.identifier
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(assumptions, expected, "{}", harness.rust.contents);
+        for result in &identity.results {
+            assert!(!assumptions
+                .iter()
+                .any(|line| line.contains(&result.identifier)));
+        }
+        let requires = harness
+            .rust
+            .contents
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with("#[kani::requires("))
+            .count();
+        let expected_requires = match identity.kind {
+            ObligationKind::Precondition => 0,
+            ObligationKind::Postcondition => identity.oracles.len() - 1,
+            ObligationKind::Invariant => identity.oracles.len(),
+            ObligationKind::Frame => unreachable!("no frame harness"),
+        };
+        assert_eq!(requires, expected_requires);
+    }
+}
+
+/// A bound whose lower limit exceeds its upper limit is refused, not emitted as an empty proof.
+///
+/// Trace: FR-015-AC-5, TC-025
+/// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
+#[test]
+fn tc_025_unsatisfiable_bounds_are_refused() {
+    let (scalar, claim_map) = scalar_package();
+    let records = scalar_records(&scalar, &claim_map, &[UNSATISFIABLE]);
+    assert_eq!(
+        unsupported(&records[0]),
+        &UnsupportedObligation::UnsatisfiableBound {
+            bound: package::id(&Bound::Integer(5, -5).key()),
+            form: "integer_range".to_owned(),
+            lower: "5".to_owned(),
+            upper: "-5".to_owned(),
+        }
+    );
+    // V1 integer types cannot carry an inverted range: IR refuses the projection itself.
+    let inverted = serde_json::to_vec(&projection(-1)).unwrap();
+    assert!(BoundPackage::from_json_bytes(&inverted).is_err());
+}
+
+/// Every V2 scalar claim FR-014 generates is caller-declared and refused, with no harness.
+///
+/// Trace: FR-015-AC-6, TC-025
+#[test]
+fn tc_025_every_caller_declared_operation_is_refused() {
+    let (scalar, claim_map) = scalar_package();
+    let generated = claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(claim.result, ExactScalarDisposition::Generated(_)))
+        .map(|claim| claim.node_id.clone())
+        .collect::<Vec<_>>();
+    assert!(generated.len() > 40, "the corpus generates every family");
+    let items = generated
+        .iter()
+        .map(|node_id| ObligationItem::ScalarClaim {
+            package: &scalar,
+            claim_map: &claim_map,
+            node_id,
+        })
+        .collect::<Vec<_>>();
+    let pins = pins();
+    let (records, harnesses) =
+        emitted(negotiate_kani_obligations(&request(&items, &pins, "crate::subject")).unwrap());
+    assert!(harnesses.is_empty());
+    assert_eq!(records.len(), generated.len());
+    for (record, claim) in records.iter().zip(
+        claim_map
+            .items
+            .iter()
+            .filter(|claim| matches!(claim.result, ExactScalarDisposition::Generated(_))),
+    ) {
+        assert_eq!(
+            unsupported(record),
+            &UnsupportedObligation::CallerDeclaredOperation {
+                operation_identity: claim.operation.identity.clone(),
+                blocked_on: UpstreamBlocker::OperationIdentityNotCarried,
+                derived_domains: match unsupported(record) {
+                    UnsupportedObligation::CallerDeclaredOperation {
+                        derived_domains, ..
+                    } => derived_domains.clone(),
+                    other => panic!("{other:?}"),
+                },
+            }
+        );
+    }
+}
+
+/// One invalid item rejects the request after every item is accounted, and exposes no bytes.
+///
+/// Trace: TC-025
+/// Upstream: agent-ix/quire-contract-ir FR-036-AC-4, TC-045
+#[test]
+fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
+    let package = bound_package(1000);
+    let other_package = bound_package(999);
+    let (scalar, claim_map) = scalar_package();
+    let pins = pins();
+    let refs = [
+        clause(PRECONDITION),
+        clause(POSTCONDITION),
+        clause("no-such-clause"),
+        clause(DEFINEDNESS),
+    ];
+    let missing = code_id(MISSING);
+    let unbounded = code_id(UNBOUNDED);
+    let items = [
+        ObligationItem::BoundClause {
+            package: &package,
+            clause: &refs[0],
+        },
+        ObligationItem::BoundClause {
+            package: &package,
+            clause: &refs[1],
+        },
+        ObligationItem::BoundClause {
+            package: &package,
+            clause: &refs[0],
+        },
+        ObligationItem::BoundClause {
+            package: &package,
+            clause: &refs[2],
+        },
+        ObligationItem::BoundClause {
+            package: &other_package,
+            clause: &refs[3],
+        },
+        ObligationItem::ScalarClaim {
+            package: &scalar,
+            claim_map: &claim_map,
+            node_id: &missing,
+        },
+        ObligationItem::ScalarClaim {
+            package: &scalar,
+            claim_map: &claim_map,
+            node_id: &unbounded,
+        },
+    ];
+    let outcome = negotiate_kani_obligations(&request(&items, &pins, "crate::withdraw")).unwrap();
+    let KaniObligationOutcome::Rejected { records } = &outcome else {
+        panic!("an invalid item must reject the request: {outcome:?}");
+    };
+    assert_eq!(records.len(), items.len());
+    assert_eq!(
+        records
+            .iter()
+            .map(|record| record.request_index)
+            .collect::<Vec<_>>(),
+        (0..items.len()).collect::<Vec<_>>()
+    );
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    assert!(matches!(
+        records[1].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let invalid = |index: usize| match &records[index].disposition {
+        ObligationDisposition::InvalidRequest { reason } => reason.clone(),
+        other => panic!("{index}: {other:?}"),
+    };
+    assert_eq!(
+        invalid(2),
+        InvalidObligationItem::DuplicateItem { first_index: 0 }
+    );
+    assert_eq!(invalid(3), InvalidObligationItem::UnknownClause);
+    assert_eq!(invalid(4), InvalidObligationItem::MixedBoundPackages);
+    assert_eq!(invalid(5), InvalidObligationItem::UnknownNode);
+    assert!(matches!(
+        records[6].disposition,
+        ObligationDisposition::RequiresBound { .. }
+    ));
+
+    // A claim map from another package is a mismatch, not a lookup.
+    let (_, foreign_map) = {
+        let mut builder = corpus_package();
+        builder.code(
+            4001,
+            "value",
+            "literal",
+            &key(T_INTEGER),
+            package::literal("integer", "4"),
+        );
+        let foreign = builder.admit();
+        let map = generate_exact_scalar_oracles(&foreign, &golden_items())
+            .unwrap()
+            .claim_map;
+        (foreign, map)
+    };
+    let node = code_id(1001);
+    let items = [ObligationItem::ScalarClaim {
+        package: &scalar,
+        claim_map: &foreign_map,
+        node_id: &node,
+    }];
+    let outcome = negotiate_kani_obligations(&request(&items, &pins, "crate::subject")).unwrap();
+    assert_eq!(
+        outcome.records()[0].disposition,
+        ObligationDisposition::InvalidRequest {
+            reason: InvalidObligationItem::PackageMismatch
+        }
+    );
+
+    for (items, subject, unwind, expected) in [
+        (
+            &[][..],
+            "crate::withdraw",
+            4,
+            KaniObligationError::EmptyRequest,
+        ),
+        (
+            &items[..],
+            "not a path",
+            4,
+            KaniObligationError::InvalidSubjectPath,
+        ),
+        (
+            &items[..],
+            "crate::withdraw",
+            0,
+            KaniObligationError::InvalidUnwind { unwind: 0 },
+        ),
+    ] {
+        let mut value = request(items, &pins, subject);
+        value.unwind = unwind;
+        assert_eq!(negotiate_kani_obligations(&value), Err(expected));
+    }
+}
+
+/// A missing backend is a typed refusal before anything runs.
+///
+/// Trace: FR-015-AC-2, TC-025
+#[test]
+fn tc_025_an_unmeasurable_backend_is_refused_before_running() {
+    let package = bound_package(1000);
+    let pins = pins();
+    let harness = supported_contract_harnesses(&package, &pins, "crate::withdraw").remove(1);
+    let directory = scratch("missing-backend");
+    let installation = KaniInstallation {
+        launcher: directory.join("cargo-kani"),
+        kani_home: directory.join("kani-home"),
+    };
+    let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        installation: &installation,
+        harness: &harness,
+        crate_directory: &directory,
+        target_directory: &directory.join("target"),
+    })
+    .unwrap_err();
+    assert!(matches!(
+        refusal,
+        KaniExecutionRefusal::Tool(KaniToolError::Missing {
+            tool: KaniTool::Launcher,
+            ..
+        })
+    ));
+    let _ = fs::remove_dir_all(directory);
+}
+
+// ---- kani lane ---------------------------------------------------------------
+
+fn scratch(name: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = env::temp_dir().join(format!(
+        "quire-kani-obligations-{name}-{}-{nonce}",
+        std::process::id()
+    ));
+    fs::create_dir_all(path.join("src")).unwrap();
+    path
+}
+
+const HEALTHY_SUBJECT: &str = "/// Withdraws `amount` from `balance`.\n#[must_use]\npub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre - amount_current\n}\n";
+const SEEDED_FAILING_SUBJECT: &str = "/// Seeded defect: credits instead of debiting.\n#[must_use]\npub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre + amount_current\n}\n";
+
+fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
+    let directory = scratch("crate");
+    fs::write(
+        directory.join("src/lib.rs"),
+        format!(
+            "//! Generated obligation check crate.\n\n{}\n{subject}",
+            harness.rust.contents
+        ),
+    )
+    .unwrap();
+    fs::write(
+        directory.join("Cargo.toml"),
+        format!(
+            "[package]\nname = \"generated-kani-obligation\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
+        ),
+    )
+    .unwrap();
+    fs::write(
+        directory.join("build.rs"),
+        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+    )
+    .unwrap();
+    directory
+}
+
+fn run(
+    installation: &KaniInstallation,
+    harness: &KaniObligationHarness,
+    subject: &str,
+    evidence_directory: &Path,
+    label: &str,
+) -> quire_contract_codegen::KaniExecutionEvidence {
+    let crate_directory = write_crate(harness, subject);
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        installation,
+        harness,
+        crate_directory: &crate_directory,
+        target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligations"),
+    })
+    .unwrap_or_else(|refusal| panic!("{label}: {refusal}"));
+    fs::write(
+        evidence_directory.join(format!("{label}.json")),
+        serde_json::to_string_pretty(&evidence).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        evidence_directory.join(format!("{label}.harness.rs")),
+        &harness.rust.contents,
+    )
+    .unwrap();
+    let _ = fs::remove_dir_all(crate_directory);
+    evidence
+}
+
+/// Real pinned Kani runs: the precondition, postcondition and invariant of a healthy subject
+/// verify separately, a seeded defect is falsified with a concrete counterexample, and drifted
+/// pins refuse before running.
+///
+/// Trace: FR-015-AC-1, FR-015-AC-2, TC-025
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect() {
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let pins = installation.observe().expect("the backend is measurable");
+    assert_eq!(pins.kani_version, KANI_BACKEND_VERSION);
+    let evidence_directory =
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligation-evidence");
+    fs::create_dir_all(&evidence_directory).unwrap();
+    let package = bound_package(1000);
+    let harnesses = supported_contract_harnesses(&package, &pins, "crate::withdraw");
+
+    for (harness, label) in harnesses
+        .iter()
+        .zip(["precondition", "postcondition", "invariant"])
+    {
+        let evidence = run(
+            &installation,
+            harness,
+            HEALTHY_SUBJECT,
+            &evidence_directory,
+            &format!("verified-{label}"),
+        );
+        assert_eq!(evidence.outcome, KaniRunOutcome::Verified, "{label}");
+        assert_eq!(evidence.observed_pins, pins);
+        assert_eq!(evidence.exit_code, Some(0));
+        assert_eq!(evidence.arguments[1..], harness.identity.options[..]);
+        assert_eq!(evidence.oracle_digest, harness.identity.oracle_digest);
+        assert_eq!(evidence.cargo_lock_sha256.len(), 64);
+    }
+
+    let evidence = run(
+        &installation,
+        &harnesses[1],
+        SEEDED_FAILING_SUBJECT,
+        &evidence_directory,
+        "falsified-postcondition",
+    );
+    let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
+        panic!("the seeded defect must be falsified: {evidence:?}");
+    };
+    assert!(counterexample.contains("kani::concrete_playback_run"));
+    assert!(counterexample.contains(&harnesses[1].identity.harness_symbol));
+    assert_ne!(evidence.exit_code, Some(0));
+
+    let mut drifted = pins.clone();
+    drifted.driver_sha256 = "0".repeat(64);
+    let stale = supported_contract_harnesses(&package, &drifted, "crate::withdraw").remove(1);
+    let crate_directory = write_crate(&stale, HEALTHY_SUBJECT);
+    let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        installation: &installation,
+        harness: &stale,
+        crate_directory: &crate_directory,
+        target_directory: &crate_directory.join("target"),
+    })
+    .unwrap_err();
+    assert!(matches!(
+        refusal,
+        KaniExecutionRefusal::PinDrift {
+            field: KaniPinField::DriverSha256,
+            ..
+        }
+    ));
+    assert!(!crate_directory.join("target").exists(), "nothing ran");
+    let _ = fs::remove_dir_all(crate_directory);
+}

@@ -99,7 +99,7 @@ pub enum KaniPrimitiveType {
 }
 
 impl KaniPrimitiveType {
-    const fn source_name(self) -> &'static str {
+    pub(crate) const fn source_name(self) -> &'static str {
         match self {
             Self::Boolean => "bool",
             Self::I64 => "i64",
@@ -148,7 +148,7 @@ pub enum KaniSolver {
 }
 
 impl KaniSolver {
-    const fn as_str(self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Cadical => "cadical",
         }
@@ -1055,7 +1055,7 @@ fn render_result_bounds(results: &[KaniSubjectBinding]) -> String {
         .join(" && ")
 }
 
-fn i64_literal(value: i64) -> String {
+pub(crate) fn i64_literal(value: i64) -> String {
     match value {
         i64::MIN => "i64::MIN".to_owned(),
         i64::MAX => "i64::MAX".to_owned(),
@@ -1104,7 +1104,7 @@ fn dependency_readiness(dependencies: &[ProofDependencyEdge]) -> ProofReadiness 
     }
 }
 
-fn adapter_options(
+pub(crate) fn adapter_options(
     harness: &str,
     unwind: u32,
     solver: KaniSolver,
@@ -1190,7 +1190,7 @@ fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
     )
 }
 
-fn readable_component(value: &str) -> String {
+pub(crate) fn readable_component(value: &str) -> String {
     let mut result = String::with_capacity(value.len().min(12));
     for byte in value.bytes().take(12) {
         if byte.is_ascii_alphanumeric() {
@@ -1223,14 +1223,14 @@ fn artifact(path: String, contents: String) -> Artifact {
     }
 }
 
-fn is_sha256(value: &str) -> bool {
+pub(crate) fn is_sha256(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn sha256(bytes: &[u8]) -> String {
+pub(crate) fn sha256(bytes: &[u8]) -> String {
     let mut result = String::with_capacity(64);
     for byte in Sha256::digest(bytes) {
         let _ = write!(result, "{byte:02x}");

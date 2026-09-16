@@ -959,7 +959,7 @@ impl Bounds<'_, '_> {
     }
 }
 
-fn aggregate_members(body: &Value) -> Option<&[Value]> {
+pub(crate) fn aggregate_members(body: &Value) -> Option<&[Value]> {
     if body.get("term")?.as_str()? != "aggregate" {
         return None;
     }
@@ -974,14 +974,14 @@ fn literal<'v>(term: &'v Value, kind: &str) -> Option<&'v str> {
 }
 
 /// A canonical decimal integer literal.
-fn literal_integer(term: &Value) -> Option<Integer> {
+pub(crate) fn literal_integer(term: &Value) -> Option<Integer> {
     let spelling = literal(term, "integer")?;
     let value: Integer = spelling.parse().ok()?;
     (value.to_string() == spelling).then_some(value)
 }
 
 /// A canonical decimal integer literal within `u64`.
-fn literal_count(term: &Value) -> Option<u64> {
+pub(crate) fn literal_count(term: &Value) -> Option<u64> {
     let spelling = literal(term, "integer")?;
     let value: u64 = spelling.parse().ok()?;
     (value.to_string() == spelling).then_some(value)
