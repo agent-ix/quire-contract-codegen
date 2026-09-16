@@ -11,10 +11,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 /// Exact reviewed public executable-binding IR revision consumed by this implementation.
-pub const IR_CANDIDATE_REVISION: &str = "29c1432c0204f08265f16ae715b77ea8ab48b999";
+pub const IR_CANDIDATE_REVISION: &str = "a5154d394d067fe6f3b8eee81b17c2b5d7cdbd1c";
 
 /// Exact merged runtime revision required by generated source.
-pub const RUNTIME_REVISION: &str = "8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354";
+pub const RUNTIME_REVISION: &str = "a04bd476926463607474a37865e770415397cd8f";
 
 /// Exact codegen Git revision captured by the build.
 pub const GENERATOR_SOURCE_REVISION: &str = env!("QUIRE_CODEGEN_SOURCE_REVISION");

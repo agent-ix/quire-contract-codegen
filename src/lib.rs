@@ -27,6 +27,8 @@ mod bounded_kani_replay;
 mod bounded_kani_corpus;
 // Implements: FR-002
 mod strategy;
+// Implements: FR-014
+mod exact_scalar;
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
 mod vacuity;
 // Implements: FR-004 (complete domain observations, always unqualified).
@@ -43,6 +45,14 @@ pub use bounded_kani_corpus::{
 pub use bounded_kani_profile::{classify_bounded_kani_profile, BoundedKaniProfile};
 pub use bounded_kani_replay::replay_codegen_counterexample;
 pub use definedness_arithmetic::prepare_checked_arithmetic;
+pub use exact_scalar::{
+    generate_exact_scalar_oracles, BoundForm, DecimalOperator, ExactScalarClaim,
+    ExactScalarClaimMap, ExactScalarDisposition, ExactScalarGenerationError, ExactScalarItem,
+    ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, GeneratedScalarClaim,
+    IeeeArithmeticOperator, IntegerOperator, OperationClaim, OperationProvenance,
+    OrderingOperandKind, QuantityOperator, RationalOperator, ScalarForm, UpstreamBlocker,
+    EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_WORK_LIMIT,
+};
 pub use finite_reference_graphs::prepare_finite_graph_reaches;
 
 pub use bound_coverage::{

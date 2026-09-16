@@ -240,6 +240,62 @@ fn generated_census_runner(source: &str) -> String {
         .expect("generated census runner")
 }
 
+/// Compiles generated single-integer oracles and checks each accepts exactly `expected` over the
+/// declared `[0, 1000]` domain.
+fn run_integer_oracles(cases: &[(&str, &str)]) {
+    let temporary = TemporaryDirectory::new("quire-bound-integer-oracles");
+    let mut root = String::from("//! Generated integer oracles.\n\n");
+    let mut checks = String::from("#[cfg(test)]\nmod checks {\n");
+    for (index, (generated, expected)) in cases.iter().enumerate() {
+        let oracle = generated_item(generated, "pub fn oracle_");
+        fs::write(
+            temporary.0.join(format!("src/oracle_{index}.rs")),
+            generated,
+        )
+        .unwrap();
+        writeln!(
+            root,
+            "/// Generated oracle {index}.\npub mod oracle_{index};"
+        )
+        .unwrap();
+        writeln!(
+            checks,
+            r#"
+    #[test]
+    fn oracle_{index}_accepts_exactly_the_expected_domain_values() {{
+        let accepted = (0_i64..=1000).filter(|amount| super::oracle_{index}::{oracle}(*amount)).collect::<Vec<_>>();
+        assert_eq!(accepted, ({expected}).collect::<Vec<i64>>());
+    }}
+"#
+        )
+        .unwrap();
+    }
+    checks.push_str("}\n");
+    root.push_str(&checks);
+    fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
+    fs::write(
+        temporary.0.join("Cargo.toml"),
+        format!(
+            "[package]\nname = \"bound-integer-oracles\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\" }}\n\n[workspace]\n",
+            quire_contract_codegen::RUNTIME_REVISION
+        ),
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO"))
+        .args(["test", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&temporary.0)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "generated integer oracle consumer failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 /// Trace: TC-017, FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-1, FR-008-CON-2
 #[test]
 fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
@@ -366,17 +422,23 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         RequirementRef::parse("test/arithmetic", "FR-100", 3).unwrap(),
         ClauseId::new("amount-check").unwrap(),
     );
-    let oracle_error = match generate_bound_oracles(&arithmetic, context()).unwrap_err() {
-        BoundGenerationError::Clause {
-            identity,
-            mut diagnostics,
-        } => {
-            assert_eq!(identity, arithmetic_clause);
-            assert_eq!(diagnostics.len(), 1);
-            diagnostics.remove(0)
-        }
-        other => panic!("expected clause refusal, got {other:?}"),
+    let arithmetic_oracles = match generate_bound_oracles(&arithmetic, context()).unwrap() {
+        quire_contract_codegen::BoundOracleGeneration::Generated(generated) => generated,
+        other => panic!("expected generated arithmetic oracle, got {other:?}"),
     };
+    assert_eq!(arithmetic_oracles.clauses().len(), 1);
+    assert_eq!(
+        arithmetic_oracles.clauses()[0].identity(),
+        &arithmetic_clause
+    );
+    let arithmetic_body = arithmetic_oracles.clauses()[0]
+        .bundle()
+        .rust
+        .contents
+        .clone();
+    assert!(arithmetic_body.contains("amount_current\n)\n+\n(\n0_i64\n)\n)\n<\n(\n7_i64\n)"));
+    // The strategy slice samples only integer reads compared with integer literals, so the
+    // generated oracle does not widen it: the arithmetic relation stays a typed refusal.
     let error = generate_bound_strategy(&BoundStrategyRequest {
         package: &arithmetic,
         clause: &arithmetic_clause,
@@ -387,13 +449,11 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         attestation: context(),
     })
     .unwrap_err();
-    assert_eq!(error.code, StrategyErrorCode::UnsupportedClause);
-    assert_eq!(error.generation_code, Some(oracle_error.code));
-    assert_eq!(error.terminal_state, oracle_error.terminal_state);
-    assert_eq!(
-        error.source_span.as_deref(),
-        oracle_error.source_span.as_ref()
-    );
+    assert_eq!(error.code, StrategyErrorCode::UnsupportedRelation);
+    assert_eq!(error.terminal_state, GenerationTerminalState::Unsupported);
+    assert_eq!(error.generation_code, None);
+    assert_eq!(error.clause.as_deref(), Some(&arithmetic_clause));
+    assert_eq!(error.source_span.as_ref().unwrap().start().line(), 4);
 
     let amount_value = scalar_projection("test/integer-healthy", "invariant", "less", 7);
     let amount_clause = ClauseRef::new(
@@ -446,48 +506,78 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         "node":"boolean", "operator":"short_circuit_and", "left":nonzero,
         "right":division_bound, "source":span(4)
     });
-    for (value, expected) in [
-        (
-            negated_value,
-            quire_contract_codegen::GenerationErrorCode::UnsupportedObligations,
-        ),
-        (
-            obligation_value,
-            quire_contract_codegen::GenerationErrorCode::UnsupportedObligations,
-        ),
-    ] {
-        let package = decode(&value);
-        let oracle_error = match generate_bound_oracles(&package, context()).unwrap_err() {
-            BoundGenerationError::Clause {
-                identity,
-                mut diagnostics,
-            } => {
-                assert_eq!(identity, amount_clause);
-                assert_eq!(diagnostics.len(), 1);
-                diagnostics.remove(0)
-            }
-            other => panic!("expected clause refusal, got {other:?}"),
-        };
-        let error = generate_bound_strategy(&BoundStrategyRequest {
-            package: &package,
-            clause: &amount_clause,
-            population: BoundStrategyPopulation::Broad,
-            minimum_accepted_cases: 1,
-            minimum_rejected_cases: 0,
-            maximum_discarded_cases: 0,
-            attestation: context(),
-        })
-        .unwrap_err();
-        assert_eq!(error.code, StrategyErrorCode::UnsupportedClause);
-        assert_eq!(oracle_error.code, expected);
-        assert_eq!(error.generation_code, Some(oracle_error.code));
-        assert_eq!(error.terminal_state, oracle_error.terminal_state);
-        assert_eq!(error.clause.as_deref(), Some(&amount_clause));
-        assert_eq!(
-            error.source_span.as_deref(),
-            oracle_error.source_span.as_ref()
-        );
-    }
+    let negated = decode(&negated_value);
+    let oracle_error = match generate_bound_oracles(&negated, context()).unwrap_err() {
+        BoundGenerationError::Clause {
+            identity,
+            mut diagnostics,
+        } => {
+            assert_eq!(identity, amount_clause);
+            assert_eq!(diagnostics.len(), 1);
+            diagnostics.remove(0)
+        }
+        other => panic!("expected clause refusal, got {other:?}"),
+    };
+    let error = generate_bound_strategy(&BoundStrategyRequest {
+        package: &negated,
+        clause: &amount_clause,
+        population: BoundStrategyPopulation::Broad,
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 0,
+        attestation: context(),
+    })
+    .unwrap_err();
+    assert_eq!(
+        oracle_error.code,
+        quire_contract_codegen::GenerationErrorCode::UnsupportedExpression,
+        "{oracle_error:?}"
+    );
+    assert_eq!(error.code, StrategyErrorCode::UnsupportedClause);
+    assert_eq!(error.generation_code, Some(oracle_error.code));
+    assert_eq!(error.terminal_state, oracle_error.terminal_state);
+    assert_eq!(error.clause.as_deref(), Some(&amount_clause));
+    assert_eq!(
+        error.source_span.as_deref(),
+        oracle_error.source_span.as_ref()
+    );
+
+    // The guarded division discharges its non-zero-divisor obligation, so the oracle generates;
+    // the strategy slice still refuses the connective relation with a typed diagnostic.
+    let obligation = decode(&obligation_value);
+    let obligation_oracles = match generate_bound_oracles(&obligation, context()).unwrap() {
+        quire_contract_codegen::BoundOracleGeneration::Generated(generated) => generated,
+        other => panic!("expected generated guarded-division oracle, got {other:?}"),
+    };
+    assert_eq!(obligation_oracles.clauses().len(), 1);
+    assert_eq!(obligation_oracles.clauses()[0].identity(), &amount_clause);
+    let obligation_body = obligation_oracles.clauses()[0]
+        .bundle()
+        .rust
+        .contents
+        .clone();
+    assert!(obligation_body.contains("quire_contract_runtime::operators::and_short_circuit("));
+    let error = generate_bound_strategy(&BoundStrategyRequest {
+        package: &obligation,
+        clause: &amount_clause,
+        population: BoundStrategyPopulation::Broad,
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 0,
+        attestation: context(),
+    })
+    .unwrap_err();
+    assert_eq!(
+        error.code,
+        StrategyErrorCode::UnsupportedRelation,
+        "{error:?}"
+    );
+    assert_eq!(error.terminal_state, GenerationTerminalState::Unsupported);
+    assert_eq!(error.clause.as_deref(), Some(&amount_clause));
+    run_integer_oracles(&[
+        (&arithmetic_body, "0_i64..7"),
+        (&obligation_body, "1_i64..=1000"),
+    ]);
 
     let comparison = amount_value["bindings"][0]["expression"]["expression"].clone();
     let mut connective_value = amount_value.clone();
@@ -599,6 +689,7 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
     assertion_arithmetic_value["package"]["requirements"][0]["clauses"][0]["kind"] =
         json!("assertion");
     let assertion_arithmetic = decode(&assertion_arithmetic_value);
+    // The arithmetic oracle now generates, so the assertion kind is what refuses the clause.
     assert_eq!(
         generate_bound_strategy(&BoundStrategyRequest {
             package: &assertion_arithmetic,
@@ -611,7 +702,7 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         })
         .unwrap_err()
         .code,
-        StrategyErrorCode::UnsupportedClause
+        StrategyErrorCode::UnsupportedClauseKind
     );
     let absent_arithmetic = ClauseRef::new(
         arithmetic_clause.requirement().clone(),
