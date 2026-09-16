@@ -17,11 +17,13 @@ natively before any failure is reported.
 
 ## Test Procedure
 
-Replay a reproducing witness, a malformed witness, an out-of-domain witness, a
-witness whose native outcome disagrees with the harness, and a witness whose
-native replay is unavailable.
+Replay a reproducing witness, a malformed witness, a witness bound to another
+harness identity, a witness over the decode size limit, an out-of-domain
+witness, a witness whose native value or charges disagree with the harness, and
+a witness whose native replay is unavailable.
 
 ## Expected Results
 
 Only the reproducing witness is reported as a failure; the others yield
-malformed, out-of-domain, mismatch and unavailable results respectively.
+malformed (three cases), out-of-domain, mismatch and unavailable results
+respectively.
