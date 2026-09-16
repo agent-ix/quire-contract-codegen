@@ -28,3 +28,21 @@ and assumptions, and run the pinned Kani backend on the bounded harnesses.
 Four distinct harnesses carry their bounds and backend pin; no assumption
 excludes an undefined, refused or incomplete outcome; the unbounded, the
 unsatisfiable and the caller-declared obligations are refused with no harness.
+
+## Implementation
+
+`tests/kani_obligations.rs`. The default lane negotiates every item before any
+harness is exposed and checks separate harnesses, IR-derived bounds, pins,
+assumptions and every refusal. `make kani` runs the ignored lane serially under
+a host lock: it asserts the observed Kani, launcher, driver, CBMC and toolchain
+pins, verifies the precondition, postcondition and invariant harnesses, falsifies
+a seeded postcondition defect with a concrete counterexample, and refuses a
+drifted driver digest before running.
+
+## Blocked
+
+- Frame harnesses and every V2 scalar harness: V2 scalar obligations carry only a
+  caller-declared operation identity, so they are refused until
+  agent-ix/quire-specification#76 lands.
+- Model and graph bounds: refused as blocked until
+  agent-ix/quire-spec-language#120 lands.
