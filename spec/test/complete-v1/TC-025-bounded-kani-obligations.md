@@ -34,15 +34,21 @@ unsatisfiable and the caller-declared obligations are refused with no harness.
 `tests/kani_obligations.rs`. The default lane negotiates every item before any
 harness is exposed and checks separate harnesses, IR-derived bounds, pins,
 assumptions and every refusal. `make kani` runs the ignored lane serially under
-a host lock: it asserts the observed Kani, launcher, driver, CBMC and toolchain
-pins, verifies the precondition, postcondition and invariant harnesses, falsifies
-a seeded postcondition defect with a concrete counterexample, and refuses a
-drifted driver digest before running.
+a host lock: it asserts the installed backend equals the committed pins (Kani
+0.67.0, launcher and driver digests, CBMC 6.8.0, toolchain nightly-2025-11-21,
+target x86_64-unknown-linux-gnu), verifies the precondition, postcondition and
+invariant harnesses, falsifies a seeded postcondition defect with a concrete
+counterexample, reports a contract harness with jointly unsatisfiable requires
+as `cover_unsatisfied`, and refuses a drifted driver digest before running.
 
 ## Blocked
 
-- Frame harnesses and every V2 scalar harness: V2 scalar obligations carry only a
-  caller-declared operation identity, so they are refused until
-  agent-ix/quire-specification#76 lands.
+- Frame harnesses: not constructible from the merged IR. V1 `ClauseKind` has no
+  frame kind, FR-014 refuses V2 `state` nodes as `NoFiniteEncoding`, and
+  by-value harness arguments cannot express `kani::modifies`. A typed IR frame
+  item is required first.
+- Every V2 scalar harness: V2 scalar obligations carry only a caller-declared
+  operation identity, so they are refused until agent-ix/quire-specification#76
+  lands.
 - Model and graph bounds: refused as blocked until
   agent-ix/quire-spec-language#120 lands.

@@ -79,9 +79,12 @@ operation are refused with a typed reason and no harness, and the V1 harness ass
 only arguments to their IR `bounded_domain` bounds. The same file backs the V1 half of AC-1 and AC-2:
 precondition, postcondition and invariant each lower to a separate harness whose identity carries IR
 bounds and every Kani pin, and `make kani` verifies all three and falsifies a seeded defect with a
-concrete counterexample under the pinned backend. AC-1 and AC-2 stay `🚧 Planned`: frame
-obligations exist only as V2 State nodes, and every V2 scalar obligation carries only a
-caller-declared operation identity, so they are blocked on agent-ix/quire-specification#76; model
+concrete counterexample under the committed backend pins, and reports jointly unsatisfiable
+`requires` as `cover_unsatisfied` rather than verified. AC-1 and AC-2 stay `🚧 Planned`. Frame
+obligations cannot be generated from the merged IR: V1 `ClauseKind` has no frame kind, FR-014
+refuses V2 `state` nodes as `NoFiniteEncoding`, and the by-value harness arguments cannot express
+`kani::modifies`, so a frame needs a typed IR frame item first. Every V2 scalar obligation carries
+only a caller-declared operation identity and is blocked on agent-ix/quire-specification#76. Model
 and graph bounds are blocked on agent-ix/quire-spec-language#120.
 
 ## Non-Functional Requirement Coverage
