@@ -33,26 +33,26 @@ fn expect_width(value: rt::IeeeValue, width: rt::IeeeWidth) -> Result<rt::IeeeVa
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001001`: `integer.add domain=[-1000,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001001(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Integer>, OracleStop> {
-    let domain = rt::IntegerDomain::Bounded(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?);
-    Ok(rt::evaluate_integer(rt::IntegerOperation::Add(left, right), &domain, meter))
+    let domain = rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?;
+    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Add(left, right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001002`: `integer.negate domain=[-8,7]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001002(operand: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Integer>, OracleStop> {
-    let domain = rt::IntegerDomain::Bounded(rt::IntegerInterval::new(integer("-8")?, integer("7")?).map_err(|_| OracleStop::InvalidConstant)?);
-    Ok(rt::evaluate_integer(rt::IntegerOperation::Negate(operand), &domain, meter))
+    let domain = rt::IntegerInterval::new(integer("-8")?, integer("7")?).map_err(|_| OracleStop::InvalidConstant)?;
+    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Negate(operand), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001003`: `integer.subtract domain=[-1000,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001003(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Integer>, OracleStop> {
-    let domain = rt::IntegerDomain::Bounded(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?);
-    Ok(rt::evaluate_integer(rt::IntegerOperation::Subtract(left, right), &domain, meter))
+    let domain = rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?;
+    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Subtract(left, right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001004`: `integer.multiply domain=[-1000,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001004(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Integer>, OracleStop> {
-    let domain = rt::IntegerDomain::Bounded(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?);
-    Ok(rt::evaluate_integer(rt::IntegerOperation::Multiply(left, right), &domain, meter))
+    let domain = rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?;
+    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Multiply(left, right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001011`: `quire.value.integer-division.truncating/v1 domain=[-1000,1000]`.
@@ -88,62 +88,64 @@ pub fn oracle_0000000000000000000000000000000000000000000000000000000000001021(l
 /// Node `0000000000000000000000000000000000000000000000000000000000001031`: `rational.add domain=[-1000,1000]/[1,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001031(left: &rt::Rational, right: &rt::Rational, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Rational>, OracleStop> {
     let domain = rt::RationalDomain::new(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?, rt::IntegerInterval::new(integer("1")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?).map_err(|_| OracleStop::InvalidConstant)?;
-    Ok(rt::evaluate_rational(rt::RationalOperation::Add(left, right), Some(&domain), meter))
+    Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Add(left, right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001032`: `rational.divide domain=[-10,10]/[1,4]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001032(left: &rt::Rational, right: &rt::Rational, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Rational>, OracleStop> {
     let domain = rt::RationalDomain::new(rt::IntegerInterval::new(integer("-10")?, integer("10")?).map_err(|_| OracleStop::InvalidConstant)?, rt::IntegerInterval::new(integer("1")?, integer("4")?).map_err(|_| OracleStop::InvalidConstant)?).map_err(|_| OracleStop::InvalidConstant)?;
-    Ok(rt::evaluate_rational(rt::RationalOperation::Divide(left, right), Some(&domain), meter))
+    Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Divide(left, right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001033`: `rational.integer_divide domain=[-1000,1000]/[1,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001033(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Rational>, OracleStop> {
     let domain = rt::RationalDomain::new(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?, rt::IntegerInterval::new(integer("1")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?).map_err(|_| OracleStop::InvalidConstant)?;
-    Ok(rt::evaluate_rational(rt::RationalOperation::IntegerDivide(left, right), Some(&domain), meter))
+    let left = rt::Rational::from_integer(left.clone());
+    let right = rt::Rational::from_integer(right.clone());
+    Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Divide(&left, &right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001034`: `rational.subtract domain=[-1000,1000]/[1,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001034(left: &rt::Rational, right: &rt::Rational, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Rational>, OracleStop> {
     let domain = rt::RationalDomain::new(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?, rt::IntegerInterval::new(integer("1")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?).map_err(|_| OracleStop::InvalidConstant)?;
-    Ok(rt::evaluate_rational(rt::RationalOperation::Subtract(left, right), Some(&domain), meter))
+    Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Subtract(left, right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001035`: `rational.multiply domain=[-1000,1000]/[1,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001035(left: &rt::Rational, right: &rt::Rational, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Rational>, OracleStop> {
     let domain = rt::RationalDomain::new(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?, rt::IntegerInterval::new(integer("1")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?).map_err(|_| OracleStop::InvalidConstant)?;
-    Ok(rt::evaluate_rational(rt::RationalOperation::Multiply(left, right), Some(&domain), meter))
+    Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Multiply(left, right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001036`: `rational.negate domain=[-1000,1000]/[1,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001036(operand: &rt::Rational, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Rational>, OracleStop> {
     let domain = rt::RationalDomain::new(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?, rt::IntegerInterval::new(integer("1")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?).map_err(|_| OracleStop::InvalidConstant)?;
-    Ok(rt::evaluate_rational(rt::RationalOperation::Negate(operand), Some(&domain), meter))
+    Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Negate(operand), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001041`: `ordering.less operands=integer`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001041(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, OracleStop> {
-    Ok(rt::evaluate_ordering(rt::OrderingOperator::Less, rt::OrderingOperands::Integer(left, right), meter))
+    Ok(rt::order_numbers(rt::OrderingOperator::Less, rt::OrderedOperands::Integers(left, right), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001042`: `ordering.less_or_equal operands=decimal`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001042(left: &rt::Decimal, right: &rt::Decimal, meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, OracleStop> {
-    Ok(rt::evaluate_ordering(rt::OrderingOperator::LessOrEqual, rt::OrderingOperands::Decimal(left, right), meter))
+    Ok(rt::order_numbers(rt::OrderingOperator::LessOrEqual, rt::OrderedOperands::Decimals(left, right), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001043`: `ordering.greater operands=rational`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001043(left: &rt::Rational, right: &rt::Rational, meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, OracleStop> {
-    Ok(rt::evaluate_ordering(rt::OrderingOperator::Greater, rt::OrderingOperands::Rational(left, right), meter))
+    Ok(rt::order_numbers(rt::OrderingOperator::Greater, rt::OrderedOperands::Rationals(left, right), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001044`: `ordering.less_or_equal operands=integer`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001044(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, OracleStop> {
-    Ok(rt::evaluate_ordering(rt::OrderingOperator::LessOrEqual, rt::OrderingOperands::Integer(left, right), meter))
+    Ok(rt::order_numbers(rt::OrderingOperator::LessOrEqual, rt::OrderedOperands::Integers(left, right), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001045`: `ordering.greater_or_equal operands=integer`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001045(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, OracleStop> {
-    Ok(rt::evaluate_ordering(rt::OrderingOperator::GreaterOrEqual, rt::OrderingOperands::Integer(left, right), meter))
+    Ok(rt::order_numbers(rt::OrderingOperator::GreaterOrEqual, rt::OrderedOperands::Integers(left, right), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001051`: `decimal.add target=[-1000,1000] scale=[0,2] rounding=nearest-even`.

@@ -1454,6 +1454,22 @@ impl SourceBuilder {
         }
     }
 
+    /// `rt::evaluate_integer_arithmetic`'s bound argument, `Option<&rt::IntegerInterval>`: the
+    /// same two states codegen's own `IntegerDomain` carries, since the runtime dropped the
+    /// redundant `Mathematical`/`Bounded` wrapper in favor of `None`/`Some` directly over the
+    /// interval it already had (`quire-contract-runtime` `src/exact/numeric.rs`). Unlike
+    /// [`Self::integer_domain`], which still emits the wrapper for `rt::divide`/`rt::modulo`,
+    /// this is only for `evaluate_integer_arithmetic`'s call site.
+    fn integer_arithmetic_bound(&mut self, domain: &IntegerDomain) -> (Vec<String>, String) {
+        match domain {
+            IntegerDomain::Mathematical => (Vec::new(), "None".to_owned()),
+            IntegerDomain::Bounded(interval) => (
+                vec![format!("let domain = {};", self.interval(interval))],
+                "Some(&domain)".to_owned(),
+            ),
+        }
+    }
+
     fn interval(&mut self, interval: &IntegerInterval) -> String {
         self.needs_integer = true;
         format!(
@@ -1478,7 +1494,7 @@ impl SourceBuilder {
     fn body(&mut self, operation: &ExactScalarOperation) -> Body {
         match operation {
             ExactScalarOperation::IntegerArithmetic { operator, domain } => {
-                let domain = self.integer_domain(domain);
+                let (prelude, domain_argument) = self.integer_arithmetic_bound(domain);
                 let (parameters, operation) = match operator {
                     IntegerOperator::Negate => (unary("&rt::Integer"), "Negate(operand)"),
                     IntegerOperator::Add => (binary("&rt::Integer"), "Add(left, right)"),
@@ -1488,9 +1504,9 @@ impl SourceBuilder {
                 Body {
                     parameters,
                     output: "rt::Integer",
-                    prelude: vec![format!("let domain = {domain};")],
+                    prelude,
                     call: format!(
-                        "Ok(rt::evaluate_integer(rt::IntegerOperation::{operation}, &domain, meter))"
+                        "Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::{operation}, {domain_argument}, meter))"
                     ),
                 }
             }
@@ -1520,7 +1536,7 @@ impl SourceBuilder {
                 }
             }
             ExactScalarOperation::RationalArithmetic { operator, domain } => {
-                let (prelude, domain_argument) = match domain {
+                let (domain_prelude, domain_argument) = match domain {
                     Some(domain) => {
                         let numerator = self.interval(domain.numerator());
                         let denominator = self.interval(domain.denominator());
@@ -1533,26 +1549,46 @@ impl SourceBuilder {
                     }
                     None => (Vec::new(), "None"),
                 };
-                let (parameters, operation) = match operator {
-                    RationalOperator::Negate => (unary("&rt::Rational"), "Negate(operand)"),
-                    RationalOperator::Add => (binary("&rt::Rational"), "Add(left, right)"),
+                // `RationalArithmetic` has no `IntegerDivide` variant: its own doc comment
+                // specifies the lowering, `n` and `m` each as `n/1`/`m/1` via
+                // `Rational::from_integer`, then `Divide` (quire-contract-runtime
+                // src/exact/numeric.rs). The deleted `IntegerDivide` variant charged the
+                // same four rational-arithmetic points via the same `fn rational()`, so
+                // bit-for-bit identical operands charge identically here. What actually
+                // moved is upstream's own redesign of `fn rational()` itself (`.size` to
+                // `.exact_size`, normalize-on-unreduced instead of normalize-on-reduced),
+                // which affects every `RationalArithmetic` node uniformly, not something
+                // specific to this lowering; `from_integer` itself is an uncharged
+                // construction, so the lift below is free.
+                let (parameters, lift_prelude, operation) = match operator {
+                    RationalOperator::Negate => (unary("&rt::Rational"), Vec::new(), "Negate(operand)"),
+                    RationalOperator::Add => (binary("&rt::Rational"), Vec::new(), "Add(left, right)"),
                     RationalOperator::Subtract => {
-                        (binary("&rt::Rational"), "Subtract(left, right)")
+                        (binary("&rt::Rational"), Vec::new(), "Subtract(left, right)")
                     }
                     RationalOperator::Multiply => {
-                        (binary("&rt::Rational"), "Multiply(left, right)")
+                        (binary("&rt::Rational"), Vec::new(), "Multiply(left, right)")
                     }
-                    RationalOperator::Divide => (binary("&rt::Rational"), "Divide(left, right)"),
-                    RationalOperator::IntegerDivide => {
-                        (binary("&rt::Integer"), "IntegerDivide(left, right)")
+                    RationalOperator::Divide => {
+                        (binary("&rt::Rational"), Vec::new(), "Divide(left, right)")
                     }
+                    RationalOperator::IntegerDivide => (
+                        binary("&rt::Integer"),
+                        vec![
+                            "let left = rt::Rational::from_integer(left.clone());".to_owned(),
+                            "let right = rt::Rational::from_integer(right.clone());".to_owned(),
+                        ],
+                        "Divide(&left, &right)",
+                    ),
                 };
+                let mut prelude = domain_prelude;
+                prelude.extend(lift_prelude);
                 Body {
                     parameters,
                     output: "rt::Rational",
                     prelude,
                     call: format!(
-                        "Ok(rt::evaluate_rational(rt::RationalOperation::{operation}, {domain_argument}, meter))"
+                        "Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::{operation}, {domain_argument}, meter))"
                     ),
                 }
             }
@@ -1564,16 +1600,16 @@ impl SourceBuilder {
                     OrderingOperator::GreaterOrEqual => "GreaterOrEqual",
                 };
                 let (ty, kind) = match operands {
-                    OrderingOperandKind::Integer => ("&rt::Integer", "Integer"),
-                    OrderingOperandKind::Rational => ("&rt::Rational", "Rational"),
-                    OrderingOperandKind::Decimal => ("&rt::Decimal", "Decimal"),
+                    OrderingOperandKind::Integer => ("&rt::Integer", "Integers"),
+                    OrderingOperandKind::Rational => ("&rt::Rational", "Rationals"),
+                    OrderingOperandKind::Decimal => ("&rt::Decimal", "Decimals"),
                 };
                 Body {
                     parameters: binary(ty),
                     output: "bool",
                     prelude: Vec::new(),
                     call: format!(
-                        "Ok(rt::evaluate_ordering(rt::OrderingOperator::{operator}, rt::OrderingOperands::{kind}(left, right), meter))"
+                        "Ok(rt::order_numbers(rt::OrderingOperator::{operator}, rt::OrderedOperands::{kind}(left, right), meter))"
                     ),
                 }
             }

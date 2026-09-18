@@ -45,7 +45,8 @@ one naming a different law over equal bounds is generated only as
 three executions agree on every vector; the generated crate compiles with
 `publish = false` and contains no charge literal.
 
-Integer arithmetic, rational arithmetic and ordering (including the decimal
-ordering charges QSpec added after QSL d9d5273) have no operator in the pinned
-authority. Their oracles agree with direct runtime execution only, and are
-counted separately.
+Integer arithmetic, rational arithmetic and ordering (including decimal
+ordering) now have an operator in the pinned authority (QSL 21c507e exports
+`evaluate_integer_arithmetic`, `evaluate_rational_arithmetic`, and
+`order_numbers`). Their oracles are still checked against direct runtime
+execution only, not yet against the authority, and are counted separately.

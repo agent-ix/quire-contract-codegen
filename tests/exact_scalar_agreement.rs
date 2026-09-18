@@ -8,9 +8,13 @@
 //! oracle has a fixed operator and type, so a vector is an operand tuple and a
 //! limit tuple taken from the TC's tabled or generated vectors.
 //!
-//! Integer arithmetic, rational arithmetic and ordering have no operator in
-//! the pinned authority (QSL d9d5273). Those oracles are checked against
-//! direct runtime execution only, and are counted separately.
+//! Integer arithmetic, rational arithmetic and ordering are checked against
+//! direct runtime execution only (`agree2!`), and are counted separately.
+//! The pinned authority is QSL 21c507e, which does now export these
+//! operators (`order_numbers`, `evaluate_integer_arithmetic`,
+//! `evaluate_rational_arithmetic`, QSL #119); these vectors stay
+//! runtime-only because this crate has not yet added the `agree3!`
+//! authority leg for them, not because the authority lacks the operator.
 
 #[path = "exact_scalar_support/agreement.rs"]
 #[macro_use]
@@ -311,15 +315,17 @@ fn tc_024_tc185_decimal_oracles_agree() {
     }
     assert_eq!(named, 9);
 
-    // Decimal ordering: the pinned authority does not meter it (QSpec 5d88578
-    // D20/D21 postdate QSL d9d5273), so it is runtime-only.
+    // Decimal ordering: the pinned authority (QSL 21c507e) now exports
+    // `OrderedOperands::Decimals` (QSL #119), so this is no longer a case of
+    // no authority operator existing. It stays runtime-only (`agree2!`)
+    // because this crate has not yet added the `agree3!` authority leg.
     let mut ordering = 0_usize;
     for (ca, sa) in &operands {
         for (cb, sb) in &operands {
             agree2! {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (dec(*ca, *sa), dec(*cb, *sb)); },
-                direct: |m| evaluate_ordering(OrderingOperator::LessOrEqual, OrderingOperands::Decimal(&a, &b), m),
+                direct: |m| order_numbers(OrderingOperator::LessOrEqual, OrderedOperands::Decimals(&a, &b), m),
                 generated: |m| done(decimal_at_most(&a, &b, m)),
             };
             ordering += 1;
@@ -332,7 +338,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
         agree2! {
             limits: limits(tuple),
             setup: { let (a, b) = (dec(15, 1), dec(2, 0)); },
-            direct: |m| evaluate_ordering(OrderingOperator::LessOrEqual, OrderingOperands::Decimal(&a, &b), m),
+            direct: |m| order_numbers(OrderingOperator::LessOrEqual, OrderedOperands::Decimals(&a, &b), m),
             generated: |m| done(decimal_at_most(&a, &b, m)),
         };
         ordering += 1;
@@ -754,7 +760,7 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
         agree2! {
             limits: UNLIMITED,
             setup: { let a = int(a); let domain = IntegerDomain::Bounded(IntegerInterval::new(int(-8), int(7)).unwrap()); },
-            direct: |m| evaluate_integer(IntegerOperation::Negate(&a), &domain, m),
+            direct: |m| evaluate_integer_arithmetic(IntegerArithmetic::Negate(&a), as_bound(&domain), m),
             generated: |m| done(integer_negate(&a, m)),
         };
         vectors += 1;
@@ -763,10 +769,13 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); },
                 direct: |m| (
-                    evaluate_integer(IntegerOperation::Add(&a, &b), &wide(), m),
-                    evaluate_integer(IntegerOperation::Subtract(&a, &b), &wide(), m),
-                    evaluate_integer(IntegerOperation::Multiply(&a, &b), &wide(), m),
-                    evaluate_rational(RationalOperation::IntegerDivide(&a, &b), Some(&wide_rational()), m),
+                    evaluate_integer_arithmetic(IntegerArithmetic::Add(&a, &b), as_bound(&wide()), m),
+                    evaluate_integer_arithmetic(IntegerArithmetic::Subtract(&a, &b), as_bound(&wide()), m),
+                    evaluate_integer_arithmetic(IntegerArithmetic::Multiply(&a, &b), as_bound(&wide()), m),
+                    {
+                        let (da, db) = (Rational::from_integer(a.clone()), Rational::from_integer(b.clone()));
+                        evaluate_rational_arithmetic(RationalArithmetic::Divide(&da, &db), Some(&wide_rational()), m)
+                    },
                 ),
                 generated: |m| (
                     done(integer_add(&a, &b, m)),
@@ -779,9 +788,9 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); },
                 direct: |m| (
-                    evaluate_ordering(OrderingOperator::Less, OrderingOperands::Integer(&a, &b), m),
-                    evaluate_ordering(OrderingOperator::LessOrEqual, OrderingOperands::Integer(&a, &b), m),
-                    evaluate_ordering(OrderingOperator::GreaterOrEqual, OrderingOperands::Integer(&a, &b), m),
+                    order_numbers(OrderingOperator::Less, OrderedOperands::Integers(&a, &b), m),
+                    order_numbers(OrderingOperator::LessOrEqual, OrderedOperands::Integers(&a, &b), m),
+                    order_numbers(OrderingOperator::GreaterOrEqual, OrderedOperands::Integers(&a, &b), m),
                 ),
                 generated: |m| (
                     done(integer_less(&a, &b, m)),
@@ -799,7 +808,7 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
         agree2! {
             limits: UNLIMITED,
             setup: { let a = ratio(*ln, *ld); },
-            direct: |m| evaluate_rational(RationalOperation::Negate(&a), Some(&wide_rational()), m),
+            direct: |m| evaluate_rational_arithmetic(RationalArithmetic::Negate(&a), Some(&wide_rational()), m),
             generated: |m| done(rational_negate(&a, m)),
         };
         vectors += 1;
@@ -811,11 +820,11 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
                     let domain = RationalDomain::new(IntegerInterval::new(int(-10), int(10)).unwrap(), IntegerInterval::new(int(1), int(4)).unwrap()).unwrap();
                 },
                 direct: |m| (
-                    evaluate_rational(RationalOperation::Add(&a, &b), Some(&wide_rational()), m),
-                    evaluate_rational(RationalOperation::Subtract(&a, &b), Some(&wide_rational()), m),
-                    evaluate_rational(RationalOperation::Multiply(&a, &b), Some(&wide_rational()), m),
-                    evaluate_rational(RationalOperation::Divide(&a, &b), Some(&domain), m),
-                    evaluate_ordering(OrderingOperator::Greater, OrderingOperands::Rational(&a, &b), m),
+                    evaluate_rational_arithmetic(RationalArithmetic::Add(&a, &b), Some(&wide_rational()), m),
+                    evaluate_rational_arithmetic(RationalArithmetic::Subtract(&a, &b), Some(&wide_rational()), m),
+                    evaluate_rational_arithmetic(RationalArithmetic::Multiply(&a, &b), Some(&wide_rational()), m),
+                    evaluate_rational_arithmetic(RationalArithmetic::Divide(&a, &b), Some(&domain), m),
+                    order_numbers(OrderingOperator::Greater, OrderedOperands::Rationals(&a, &b), m),
                 ),
                 generated: |m| (
                     done(rational_add(&a, &b, m)),
@@ -829,5 +838,5 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
         }
     }
     assert_eq!(vectors, 41 + 7 * 41 * 41 + 39 + 5 * 39 * 39);
-    println!("runtime-only agreement (no QSL d9d5273 operator): {vectors} vectors");
+    println!("runtime-only agreement (no agree3! authority leg yet): {vectors} vectors");
 }
