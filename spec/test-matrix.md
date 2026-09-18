@@ -122,12 +122,12 @@ direct runtime execution and the pinned quire-spec-language authority — becaus
 crate is blessable with `QUIRE_CODEGEN_BLESS=1` and pins nothing by itself, and only against a
 native run whose descriptor comes from the request rather than from the generated crate.
 
-That promotion has a hard prerequisite: agent-ix/quire-contract-codegen#75, which re-pins Contract
-Runtime `a04bd47`→`4e33052` and quire-spec-language `d9d5273`→`21c507e`. At the revisions pinned
-today the equality surface FR-018 calls is not visible from this repository, and
-`quire_spec_language::value` publishes no `check_equality`, `CheckedEquality` or `plan_equality`, so
-the third leg of the agreement has nothing to call. TC-029 cannot run, and FR-018 cannot be
-promoted, before #75 lands.
+That promotion had a hard prerequisite, now satisfied: agent-ix/quire-contract-codegen#75, merged as
+`e74d592`, re-pinned Contract Runtime `a04bd47`→`4e33052` and quire-spec-language
+`d9d5273`→`21c507e`. Before it the equality surface FR-018 calls was not visible from this
+repository and `quire_spec_language::value` published no `check_equality`, `CheckedEquality` or
+`plan_equality`, so the third leg of the agreement had nothing to call. What blocks the promotion
+now is only the implementation, which does not exist.
 
 FR-018 does not claim the rest of codegen#48. Function application has no runtime surface to call
 (agent-ix/quire-contract-runtime#34), the model graph awaits agent-ix/quire-spec-language#120, and

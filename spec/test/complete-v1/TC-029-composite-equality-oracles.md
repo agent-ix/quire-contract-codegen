@@ -25,11 +25,11 @@ crate step 4 compiles and executes against independently constructed native
 runs whose descriptor comes from the request. A blessed golden whose emitted
 operator, operand order or descriptor changed fails step 4.
 
-This test cannot run before agent-ix/quire-contract-codegen#75 re-pins Contract
-Runtime to `4e33052` and quire-spec-language to `21c507e`. At the revisions this
-repository pins today the equality surface step 4(a) calls is not visible here,
-and `quire_spec_language::value` publishes no `check_equality`, `CheckedEquality`
-or `plan_equality` for step 4(b) to call at all.
+This test depends on the re-pin agent-ix/quire-contract-codegen#75 merged as
+`e74d592`: Contract Runtime `4e33052` and quire-spec-language `21c507e`. At the
+revisions pinned before it, the equality surface step 4(a) calls was not visible
+here and `quire_spec_language::value` published no `check_equality`,
+`CheckedEquality` or `plan_equality` for step 4(b) to call at all.
 
 ## Test Procedure
 
@@ -49,9 +49,10 @@ or `plan_equality` for step 4(b) to call at all.
    exceeds the lowering work limit.
 2. Generate twice and with a permuted request that includes both descriptors of
    step 7 over one node id; compare bytes with each other and with the committed
-   golden, and inspect claim-map ordering by node id (digest domain, then digest)
-   and then by descriptor — node id alone ties those two entries — reconstructed
-   declaration keys against
+   golden, and inspect claim-map ordering by the descriptor key — expression node
+   id, operator rank, then each operand's source-type and conversion-target node
+   ids, every node id compared by digest domain then digest; the expression node
+   id alone ties those two entries — reconstructed declaration keys against
    `NodeKey::from_hex` of the V2 digests, and `caller_declared` provenance.
    Assert each entry's recorded descriptor is equal to the one the request
    supplied — operator, both operand source types, both conversion targets — and
@@ -81,10 +82,10 @@ or `plan_equality` for step 4(b) to call at all.
    `Outcome::Incomplete` naming that point and that the denied charge was not
    applied — every counter equal to those of the same run stopped immediately
    before that point, not to the counters at entry.
-6. Call each generated oracle over a composite or collection operand type with a
+6. Call each generated oracle whose operand types reach a declaration key with a
    `TypeEnvironment` other than the one its environment constructor returns — an
-   empty environment, and one omitting or renaming a key its operand types reach;
-   confirm `Outcome::Refused(Refusal::CheckedInvariant)`, no panic, and no charge
+   empty environment, and one omitting a key its operand types reach, and one
+   declaring that closure under a different key; confirm `Outcome::Refused(Refusal::CheckedInvariant)`, no panic, and no charge
    admitted on the `Meter`. Assert that this is the emitted `check_type` calls
    deciding it, by confirming the same environments pass `check_equality`: that
    call consults the environment only through `contains_ieee`, which returns
@@ -92,9 +93,11 @@ or `plan_equality` for step 4(b) to call at all.
    `CheckedEquality::evaluate` takes no environment at all — so without
    `check_type` these vectors complete with a Boolean.
 7. Request one node twice in one request under descriptors differing only in
-   `EqualityOperator`; confirm both generate under distinct symbols, that the
-   symbols differ because the descriptors do and not because any declaration or
-   field name was rendered into them, that both are marked `caller_declared`, and
+   `EqualityOperator`; confirm both generate under distinct symbols, that each
+   symbol is the digest over its descriptor key's node id digests and operator
+   rank — so the two differ only because the operator ranks do, and no
+   declaration or field name is rendered into either — that both are marked
+   `caller_declared`, and
    that their outcomes are complementary on a vector whose operands differ. This
    is not the duplicate case of step 1: a duplicate is one node id under one
    descriptor.
