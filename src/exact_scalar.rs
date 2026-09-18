@@ -1490,7 +1490,7 @@ impl SourceBuilder {
                     output: "rt::Integer",
                     prelude: vec![format!("let domain = {domain};")],
                     call: format!(
-                        "Ok(rt::evaluate_integer(rt::IntegerOperation::{operation}, &domain, meter))"
+                        "Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::{operation}, &domain, meter))"
                     ),
                 }
             }
@@ -1552,7 +1552,7 @@ impl SourceBuilder {
                     output: "rt::Rational",
                     prelude,
                     call: format!(
-                        "Ok(rt::evaluate_rational(rt::RationalOperation::{operation}, {domain_argument}, meter))"
+                        "Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::{operation}, {domain_argument}, meter))"
                     ),
                 }
             }
@@ -1564,16 +1564,16 @@ impl SourceBuilder {
                     OrderingOperator::GreaterOrEqual => "GreaterOrEqual",
                 };
                 let (ty, kind) = match operands {
-                    OrderingOperandKind::Integer => ("&rt::Integer", "Integer"),
-                    OrderingOperandKind::Rational => ("&rt::Rational", "Rational"),
-                    OrderingOperandKind::Decimal => ("&rt::Decimal", "Decimal"),
+                    OrderingOperandKind::Integer => ("&rt::Integer", "Integers"),
+                    OrderingOperandKind::Rational => ("&rt::Rational", "Rationals"),
+                    OrderingOperandKind::Decimal => ("&rt::Decimal", "Decimals"),
                 };
                 Body {
                     parameters: binary(ty),
                     output: "bool",
                     prelude: Vec::new(),
                     call: format!(
-                        "Ok(rt::evaluate_ordering(rt::OrderingOperator::{operator}, rt::OrderingOperands::{kind}(left, right), meter))"
+                        "Ok(rt::order_numbers(rt::OrderingOperator::{operator}, rt::OrderedOperands::{kind}(left, right), meter))"
                     ),
                 }
             }

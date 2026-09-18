@@ -221,8 +221,10 @@ macro_rules! shared_helpers {
                 .map(|point| {
                     seen.push(point);
                     let occurrence = seen.iter().filter(|p| **p == point).count() as u64;
-                    let mut denied = Meter::new(limits)
-                        .with_injected_denial(InjectedDenial { point, occurrence });
+                    let mut denied = Meter::new(limits).with_injected_denial(InjectedDenial {
+                        point,
+                        occurrence: to_occurrence(occurrence),
+                    });
                     let outcome = run(&mut denied);
                     (
                         point,
@@ -465,6 +467,14 @@ pub mod qsl_side {
     use quire_spec_language::value as authority;
     pub use quire_spec_language::value::*;
 
+    /// The authority's `InjectedDenial::occurrence` is a plain `u64`; only the runtime side makes
+    /// it `NonZeroU64` (`agent-ix/quire-contract-runtime#20`), so `shared_helpers!`'s `denials`,
+    /// and any `agree!` vector that injects a denial directly, call this per-side conversion
+    /// rather than hard-coding either type.
+    pub fn to_occurrence(n: u64) -> u64 {
+        n
+    }
+
     shared_helpers!();
 
     fn lock() -> &'static DefinitionLock {
@@ -605,6 +615,13 @@ pub mod rt_side {
     use std::collections::BTreeMap;
 
     pub use quire_contract_runtime::exact::*;
+
+    /// See the `qsl_side` twin of this function: the runtime's `InjectedDenial::occurrence` is
+    /// `NonZeroU64` (`agent-ix/quire-contract-runtime#20`). Every caller in this crate passes a
+    /// literal or a derived count that is always at least one, so this never panics.
+    pub fn to_occurrence(n: u64) -> std::num::NonZeroU64 {
+        std::num::NonZeroU64::new(n).unwrap()
+    }
 
     shared_helpers!();
 

@@ -591,7 +591,7 @@ dependencies = [
  "proptest",
  "quire-contract-ir",
  "quire-contract-runtime",
- "quire-spec-language 0.2.0 (git+https://github.com/agent-ix/quire-spec-language?rev=d9d5273614cc3a28a3e906b42deb1e7db7783af9)",
+ "quire-spec-language 0.2.0 (git+https://github.com/agent-ix/quire-spec-language?rev=21c507e50cb009497ee9d306e1d18c1919346611)",
  "serde",
  "serde_json",
  "sha2",
@@ -646,7 +646,7 @@ dependencies = [
 [[package]]
 name = "quire-contract-runtime"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-runtime?rev=a04bd476926463607474a37865e770415397cd8f#a04bd476926463607474a37865e770415397cd8f"
+source = "git+https://github.com/agent-ix/quire-contract-runtime?rev=4e330525be513fe57c67717dc22b969d36656b85#4e330525be513fe57c67717dc22b969d36656b85"
 dependencies = [
  "num-bigint",
  "num-integer",
@@ -681,9 +681,8 @@ dependencies = [
 [[package]]
 name = "quire-spec-language"
 version = "0.2.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?rev=d9d5273614cc3a28a3e906b42deb1e7db7783af9#d9d5273614cc3a28a3e906b42deb1e7db7783af9"
+source = "git+https://github.com/agent-ix/quire-spec-language?rev=21c507e50cb009497ee9d306e1d18c1919346611#21c507e50cb009497ee9d306e1d18c1919346611"
 dependencies = [
- "agent-ix-baseline-producer",
  "logos",
  "num-bigint",
  "num-integer",

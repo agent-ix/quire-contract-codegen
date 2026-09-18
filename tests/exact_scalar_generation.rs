@@ -155,19 +155,19 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
     let mut calls = vec![
         (
             1001,
-            "rt::evaluate_integer(rt::IntegerOperation::Add(".to_owned(),
+            "rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Add(".to_owned(),
         ),
         (
             1002,
-            "rt::evaluate_integer(rt::IntegerOperation::Negate(".to_owned(),
+            "rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Negate(".to_owned(),
         ),
         (
             1003,
-            "rt::evaluate_integer(rt::IntegerOperation::Subtract(".to_owned(),
+            "rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Subtract(".to_owned(),
         ),
         (
             1004,
-            "rt::evaluate_integer(rt::IntegerOperation::Multiply(".to_owned(),
+            "rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Multiply(".to_owned(),
         ),
         (
             1011,
@@ -185,47 +185,47 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         (1021, "rt::modulo(".to_owned()),
         (
             1031,
-            "rt::evaluate_rational(rt::RationalOperation::Add(".to_owned(),
+            "rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Add(".to_owned(),
         ),
         (
             1032,
-            "rt::evaluate_rational(rt::RationalOperation::Divide(".to_owned(),
+            "rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Divide(".to_owned(),
         ),
         (
             1033,
-            "rt::evaluate_rational(rt::RationalOperation::IntegerDivide(".to_owned(),
+            "rt::evaluate_rational_arithmetic(rt::RationalArithmetic::IntegerDivide(".to_owned(),
         ),
         (
             1034,
-            "rt::evaluate_rational(rt::RationalOperation::Subtract(".to_owned(),
+            "rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Subtract(".to_owned(),
         ),
         (
             1035,
-            "rt::evaluate_rational(rt::RationalOperation::Multiply(".to_owned(),
+            "rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Multiply(".to_owned(),
         ),
         (
             1036,
-            "rt::evaluate_rational(rt::RationalOperation::Negate(".to_owned(),
+            "rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Negate(".to_owned(),
         ),
         (
             1041,
-            "rt::OrderingOperator::Less, rt::OrderingOperands::Integer(".to_owned(),
+            "rt::OrderingOperator::Less, rt::OrderedOperands::Integers(".to_owned(),
         ),
         (
             1042,
-            "rt::OrderingOperator::LessOrEqual, rt::OrderingOperands::Decimal(".to_owned(),
+            "rt::OrderingOperator::LessOrEqual, rt::OrderedOperands::Decimals(".to_owned(),
         ),
         (
             1043,
-            "rt::OrderingOperator::Greater, rt::OrderingOperands::Rational(".to_owned(),
+            "rt::OrderingOperator::Greater, rt::OrderedOperands::Rationals(".to_owned(),
         ),
         (
             1044,
-            "rt::OrderingOperator::LessOrEqual, rt::OrderingOperands::Integer(".to_owned(),
+            "rt::OrderingOperator::LessOrEqual, rt::OrderedOperands::Integers(".to_owned(),
         ),
         (
             1045,
-            "rt::OrderingOperator::GreaterOrEqual, rt::OrderingOperands::Integer(".to_owned(),
+            "rt::OrderingOperator::GreaterOrEqual, rt::OrderedOperands::Integers(".to_owned(),
         ),
         (
             1051,
@@ -875,7 +875,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     ));
     let subtract = function_body(lib, &symbol(LITERAL_OPERAND));
     assert!(
-        subtract.contains("rt::IntegerOperation::Subtract("),
+        subtract.contains("rt::IntegerArithmetic::Subtract("),
         "{subtract}"
     );
 
