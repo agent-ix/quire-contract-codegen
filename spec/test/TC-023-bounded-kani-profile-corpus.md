@@ -32,4 +32,5 @@ Every supported case has matching typed classification and exact retained
 identity across backends. Every unsupported or adverse case has its original
 typed non-Boolean result and no partial artifact or proof claim. Every retained
 counterexample either reproduces native false or reports a typed replay
-non-success. The dependency graph keeps Contract IR below codegen.
+non-success. The dependency graph keeps Contract IR below codegen. Two distinct
+corpus cases of the same semantic family emit distinct `#[kani::proof]` symbols.

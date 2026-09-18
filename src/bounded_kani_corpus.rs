@@ -269,7 +269,12 @@ fn render_artifacts(
     let mut harness = String::new();
     let _ = writeln!(harness, "// Generated Kani harness: {identity}");
     let _ = writeln!(harness, "#[kani::proof]");
-    let _ = writeln!(harness, "fn corpus_case_{label}() {{");
+    // The proof symbol carries the same per-case identity as the artifact path
+    // (`corpus/{label}-{identity}.kani.rs`) rather than only the family label: two
+    // corpus cases of the same family are distinct proofs and must not share a
+    // `#[kani::proof]` symbol, or two different files carrying the same symbol name
+    // become indistinguishable proofs in Kani's own output.
+    let _ = writeln!(harness, "fn corpus_case_{label}_{identity}() {{");
     let _ = writeln!(harness, "    assert!(corpus_oracle());");
     let _ = writeln!(harness, "}}");
     let provenance = format!(
@@ -551,5 +556,72 @@ mod tests {
             .oracle
             .contents
             .contains("values.iter().any(|value| *value == 7i128)"));
+    }
+
+    /// Reproduces #61 directly. Two distinct corpus cases of the same semantic family emit
+    /// different artifact files (`corpus/{label}-{identity}.kani.rs`) already, but before the fix
+    /// both files declared the identical `#[kani::proof] fn corpus_case_{label}()` symbol: within
+    /// one crate that fails to compile, but the corpus's actual shape is one file per case, and
+    /// across separate crates the same symbol name is indistinguishable in Kani's own output —
+    /// exactly the silent case the issue calls out. The symbol must carry the case identity the
+    /// path already does.
+    ///
+    /// Trace: FR-007-AC-6, TC-023.
+    #[test]
+    fn tc_023_same_family_corpus_cases_get_distinct_kani_proof_symbols() {
+        let (profile, dispatch, input) = fixture();
+        let first = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "first",
+                operator: NumericOperator::Add,
+                left: 1,
+                right: 1,
+                minimum: 0,
+                maximum: 2,
+            }),
+        )
+        .unwrap();
+        let second = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "second",
+                operator: NumericOperator::Add,
+                left: 1,
+                right: 0,
+                minimum: 0,
+                maximum: 2,
+            }),
+        )
+        .unwrap();
+        assert_ne!(
+            first.artifacts.kani_harness.path, second.artifacts.kani_harness.path,
+            "distinct cases must already emit distinct files"
+        );
+        let first_symbol = proof_symbol(&first.artifacts.kani_harness.contents);
+        let second_symbol = proof_symbol(&second.artifacts.kani_harness.contents);
+        assert_ne!(
+            first_symbol, second_symbol,
+            "two corpus cases of the same family emitted the same Kani proof symbol \
+             ({first_symbol}); in separate crates these are indistinguishable in Kani's own output"
+        );
+        assert!(first_symbol.starts_with("corpus_case_arithmetic_"));
+        assert!(second_symbol.starts_with("corpus_case_arithmetic_"));
+    }
+
+    /// Extracts the `#[kani::proof]` function's name from generated harness source, verbatim.
+    fn proof_symbol(contents: &str) -> &str {
+        let after_fn = contents
+            .split("\nfn ")
+            .nth(1)
+            .expect("generated harness must declare a proof function");
+        after_fn
+            .split('(')
+            .next()
+            .expect("proof function name must be followed by its parameter list")
     }
 }
