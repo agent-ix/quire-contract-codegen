@@ -26,7 +26,9 @@ oracle crate whose functions evaluate each node by calling the pinned
 Contract Runtime `exact` operators and metering. It never approximates a
 scalar family through another family and never copies a resource charge.
 
-This is issue #48, the scalar slice of complete-V1 oracle generation.
+This is issue #48, the scalar slice of complete-V1 oracle generation. Its
+composite/structural equality sibling is
+[FR-018](./FR-018-composite-equality-oracles.md).
 
 ## Inputs
 

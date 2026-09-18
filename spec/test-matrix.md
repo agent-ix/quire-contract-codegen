@@ -55,6 +55,7 @@ type: TestMatrix
 | FR-016 | FR-016-AC-1 through FR-016-AC-7 | TC-026 | 🚧 Planned |
 | FR-017 | FR-017-AC-2 through FR-017-AC-5, FR-017-AC-8, FR-017-AC-9, FR-017-CON-2 | TC-027 | ✅ Covered |
 | FR-017 | FR-017-AC-1, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1 | TC-027 | 🚧 Planned |
+| FR-018 | FR-018-AC-1 through FR-018-AC-13 | TC-029 | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
@@ -113,6 +114,22 @@ build, and never converting a non-verified outcome into a proof claim — are ba
 timed-out criterion is written, because the run has no wall-clock budget to fail one — that is
 codegen#58, and TC-027 records it as blocked rather than specifying around it.
 
+FR-018 and TC-029 are `🚧 Planned` and nothing else: they are the composite/structural equality
+slice of codegen#48, authored ahead of any implementation. No generator code, test file or fixture
+for them exists, so no criterion is backed and none is claimed. When the slice lands, the row is
+promoted only on the strength of TC-029 step 4 — the three-way agreement of generated oracle,
+direct runtime execution and the pinned quire-spec-language authority — because the committed golden
+crate is blessable with `QUIRE_CODEGEN_BLESS=1` and pins nothing by itself.
+
+FR-018 does not claim the rest of codegen#48. Function application has no runtime surface to call
+(agent-ix/quire-contract-runtime#34), the model graph awaits agent-ix/quire-spec-language#120, and
+temporal and protocol await agent-ix/quire-spec-language#121; FR-018 refuses all three with distinct
+typed blockers rather than specifying around them, and FR-019 and FR-020 remain unwritten.
+
+`interface-001` gains no operation for FR-018. Its declared surface is asserted equal to the
+generator's by TC-028, which is `✅ Covered`; declaring an operation that does not exist would make
+that row false. The slice adds its interface entry when it adds its code.
+
 ## Interface Requirement Coverage
 
 | Interface | Acceptance Criteria | Test Cases | Status |
@@ -167,6 +184,7 @@ codegen#58, and TC-027 records it as blocked rather than specifying around it.
 | TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4, FR-016-AC-5, FR-016-AC-6, FR-016-AC-7 | 🚧 Planned |
 | TC-027 | Verify pinned Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-1, FR-017-AC-2, FR-017-AC-3, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-8, FR-017-AC-9, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
 | TC-028 | Verify interface-001's declared API surface and identity envelope match the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-3, interface-001-AC-4, interface-001-AC-5 | ✅ Covered |
+| TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13 | 🚧 Planned |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and
