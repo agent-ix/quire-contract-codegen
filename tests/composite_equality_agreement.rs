@@ -302,7 +302,13 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
 ///
 /// Full coverage of every `admits_equality_conversion` row (TC-029 step 1)
 /// is out of scope for this vector; it demonstrates the harness can express
-/// a `converted` operand at all, which it could not before this test.
+/// a `converted` operand at all, which it could not before this test. It
+/// proves the emitted *typing* of a converted operand is right, not that
+/// conversion metering is exercised: `Int[-100, 100] -> Integer` is a free
+/// reinterpretation with no `Meter` call
+/// (`operand_value`'s `(Integer | Int(_), Integer)` arm), so it admits no
+/// conversion charge point at all. `tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges`
+/// below adds a vector that does.
 #[test]
 fn tc_029_ac2_a_converted_operand_agrees() {
     for (l, r) in [(5_i64, 5_i64), (5, 6)] {
@@ -326,6 +332,49 @@ fn tc_029_ac2_a_converted_operand_agrees() {
                 m,
             ),
             generated: |g| crate::generated::oracle_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c(
+                &environment, &left, &right, g,
+            ),
+        };
+    }
+}
+
+/// Trace: FR-018-AC-9, TC-029.
+///
+/// FR-018-AC-9 names "each conversion charge point in turn"; the vector
+/// above admits none, so this one converts `Int[-100, 100]` to
+/// `Decimal[-100, 100; 0, 0]`, which charges `DecimalOperands`,
+/// `DecimalScaleExpansion`, `DecimalArithmetic` and `DecimalResultRetain`
+/// (`operand_value`'s `Decimal` target arm). `agree3!` denies each of those
+/// in turn, alongside the plan charges, across all three legs, comparing
+/// every `LimitKind` counter of the run each denial stops — not only
+/// `ResultUnits` — so a counter two of the three implementations get wrong
+/// in the same denied run cannot pass silently.
+#[test]
+fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
+    for (l, r) in [(5_i64, 5_i64), (5, 6)] {
+        agree3! {
+            limits: UNLIMITED,
+            setup: {
+                let target = DecimalType::new(
+                    Integer::from(-100_i64), Integer::from(100_i64), 0, 0, RoundingMode::NearestEven,
+                ).unwrap();
+                let environment = environment_option();
+                let left = Value::Integer(Integer::from(l));
+                let right = Value::Decimal(Decimal::new(Integer::from(r), 0));
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::Equal,
+                operand_converted(
+                    ValueType::Int(IntegerInterval::new(Integer::from(-100_i64), Integer::from(100_i64)).unwrap()),
+                    ValueType::Decimal(target.clone()),
+                ),
+                operand_typed(ValueType::Decimal(target.clone())),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| crate::generated::oracle_920fcd5f4eda255e45adf61cd83538ed2022f0c7534a244ede8545564195ae66(
                 &environment, &left, &right, g,
             ),
         };

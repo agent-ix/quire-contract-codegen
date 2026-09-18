@@ -268,6 +268,8 @@ pub const T_FLOAT64: u32 = 4;
 pub const BD_TEXT: u32 = 6;
 pub const T_INTEGER_BOUNDED: u32 = 7;
 pub const BD_INTEGER: u32 = 8;
+pub const T_DECIMAL_SMALL: u32 = 9;
+pub const BD_DECIMAL: u32 = 10;
 
 pub const R_POINT: u32 = 20;
 pub const R_FLOAT: u32 = 21;
@@ -301,6 +303,7 @@ pub const E_SELF: u32 = 110;
 pub const E_CONV: u32 = 111;
 pub const E_COLLECTION: u32 = 112;
 pub const E_PAIR_OF_POINTS: u32 = 113;
+pub const E_CONV_CHARGE: u32 = 114;
 
 /// A package carrying the full composite/structural equality corpus.
 pub fn corpus_package() -> PackageBuilder {
@@ -353,6 +356,26 @@ pub fn corpus_package() -> PackageBuilder {
             "integer_range",
             T_INTEGER_BOUNDED,
             aggregate(vec![integer_literal(-100), integer_literal(100)]),
+        )
+        .code(
+            T_DECIMAL_SMALL,
+            "scalar_type",
+            "decimal",
+            T_DECIMAL_SMALL,
+            aggregate(vec![]),
+        )
+        .code(
+            BD_DECIMAL,
+            "bounded_domain",
+            "decimal_range",
+            T_DECIMAL_SMALL,
+            aggregate(vec![
+                integer_literal(-100),
+                integer_literal(100),
+                integer_literal(0),
+                integer_literal(0),
+                literal("text", "nearest-even"),
+            ]),
         );
 
     builder
@@ -517,6 +540,13 @@ pub fn corpus_package() -> PackageBuilder {
             "binary",
             T_BOOLEAN,
             binary_body(),
+        )
+        .code(
+            E_CONV_CHARGE,
+            "expression",
+            "binary",
+            T_BOOLEAN,
+            binary_body(),
         );
 
     builder
@@ -613,6 +643,12 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
             EqualityOperatorKind::Equal,
             converted(T_INTEGER_BOUNDED, T_INTEGER),
             typed(T_INTEGER),
+        ),
+        item(
+            E_CONV_CHARGE,
+            EqualityOperatorKind::Equal,
+            converted(T_INTEGER_BOUNDED, T_DECIMAL_SMALL),
+            typed(T_DECIMAL_SMALL),
         ),
     ]
 }

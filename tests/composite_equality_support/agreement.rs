@@ -163,12 +163,17 @@ macro_rules! shared_helpers {
         }
 
         /// Deny each admitted charge occurrence in turn, discovered
-        /// dynamically from a full run: `(point, occurrence, outcome, result
-        /// units consumed)`.
+        /// dynamically from a full run: `(point, occurrence, outcome, every
+        /// counter of the run stopped immediately before that occurrence —
+        /// the denied charge is never applied, so this *is* that run's
+        /// final state)`. All ten `LimitKind`s are carried, not only
+        /// `ResultUnits`, so `agree3!`'s cross-leg `Debug` comparison checks
+        /// every counter the three independent legs compute for each denial,
+        /// not just one of them.
         pub fn denials<T>(
             limits: ScalarLimits,
             run: impl Fn(&mut Meter) -> T,
-        ) -> Vec<(ChargePoint, u64, T, u64)> {
+        ) -> Vec<(ChargePoint, u64, T, Vec<u64>)> {
             let mut meter = Meter::new(limits);
             let _ = run(&mut meter);
             let charges = meter.admitted_charges().to_vec();
@@ -183,12 +188,11 @@ macro_rules! shared_helpers {
                         occurrence: DenialOccurrence::denial_occurrence(occurrence),
                     });
                     let outcome = run(&mut denied);
-                    (
-                        point,
-                        occurrence,
-                        outcome,
-                        denied.consumed(LimitKind::ResultUnits),
-                    )
+                    let counters = LimitKind::ALL
+                        .iter()
+                        .map(|kind| denied.consumed(*kind))
+                        .collect();
+                    (point, occurrence, outcome, counters)
                 })
                 .collect()
         }

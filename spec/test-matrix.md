@@ -119,9 +119,10 @@ FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-9 through FR-018-AC-1
 the composite/structural equality slice of codegen#48 that TC-029 backs with a passing test for every
 clause those criteria name. Generation lives in `src/composite_equality.rs`; the committed golden
 crate under `tests/fixtures/composite_equality/` is the crate TC-029 step 4 compiles and executes,
-over all 9 of its oracles — both `EqualityOperator` variants on the record node, and the text,
-enum, option, collection, self-recursive and nested-composite shapes — plus one `converted`-operand
-vector, in `tests/composite_equality_agreement.rs`'s `agree3!` macro. Each of these criteria's own
+over all 11 of its oracles — both `EqualityOperator` variants on the record node, and the tuple,
+text, enum, option, collection, self-recursive and nested-composite shapes — plus two
+`converted`-operand vectors, one of which admits real `Decimal*` conversion charges — in
+`tests/composite_equality_agreement.rs`'s `agree3!` macro. Each of these criteria's own
 FR-018 mutation was applied, confirmed to turn its test red, and reverted, including AC-2's
 conversion-ordering row (swapping which operand's `convert<T>` target the emitted code applies) and
 both of AC-10's: ordering claim-map entries by expression node id alone (which ties two descriptors on

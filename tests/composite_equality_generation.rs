@@ -8,6 +8,7 @@
 //! outcomes) are covered by `tests/composite_equality_agreement.rs`.
 
 use std::{
+    collections::BTreeSet,
     fs,
     path::PathBuf,
     process::Command,
@@ -20,7 +21,16 @@ use quire_contract_codegen::{
     CompositeEqualityUpstreamBlocker, DeclarationRefusalCause, EqualityOperandDescriptor,
     EqualityOperatorKind, IllTypedCauseKind, RecordedSchedule, COMPOSITE_EQUALITY_CRATE_NAME,
 };
-use quire_contract_ir::CheckedPackageV2;
+use quire_contract_ir::{
+    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CompleteLoweringProfileV2,
+    CompleteLoweringRecordV2,
+};
+use quire_contract_runtime::exact::{
+    CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration, CompositeShape,
+    FieldDeclaration, IeeeWidth, NodeKey, ObjectTypeDeclaration, Presence, TypeEnvironment,
+    ValueType,
+};
+use sha2::{Digest, Sha256};
 
 #[path = "composite_equality_support/package.rs"]
 mod package;
@@ -28,6 +38,50 @@ mod package;
 use package::*;
 
 const BLESS: &str = "QUIRE_CODEGEN_BLESS";
+
+/// Independently recomputed `DescriptorKey::digest` (FR-018-AC-11): a SHA-256
+/// over the expression node id, the operator's rank, then each operand's
+/// source and conversion-target node ids, mirroring `hash_node_id` and
+/// `hash_optional_node_id` byte for byte, and over no rendered name. Kept
+/// deliberately independent of `src/composite_equality.rs` (no `pub` symbol
+/// there is reused) so a generator mutation to the real digest cannot also
+/// mutate this check.
+fn recomputed_symbol_digest(
+    node_id: &CheckedNodeId,
+    operator: EqualityOperatorKind,
+    left_source: &CheckedNodeId,
+    left_target: Option<&CheckedNodeId>,
+    right_source: &CheckedNodeId,
+    right_target: Option<&CheckedNodeId>,
+) -> String {
+    fn hash_node_id(hasher: &mut Sha256, node_id: &CheckedNodeId) {
+        hasher.update((node_id.domain.len() as u64).to_le_bytes());
+        hasher.update(node_id.domain.as_bytes());
+        hasher.update((node_id.digest.len() as u64).to_le_bytes());
+        hasher.update(node_id.digest.as_bytes());
+    }
+    fn hash_optional_node_id(hasher: &mut Sha256, node_id: Option<&CheckedNodeId>) {
+        match node_id {
+            None => hasher.update([0_u8]),
+            Some(node_id) => {
+                hasher.update([1_u8]);
+                hash_node_id(hasher, node_id);
+            }
+        }
+    }
+    let mut hasher = Sha256::new();
+    hash_node_id(&mut hasher, node_id);
+    hasher.update([operator as u8]);
+    hash_node_id(&mut hasher, left_source);
+    hash_optional_node_id(&mut hasher, left_target);
+    hash_node_id(&mut hasher, right_source);
+    hash_optional_node_id(&mut hasher, right_target);
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
 
 struct TemporaryDirectory(PathBuf);
 
@@ -285,6 +339,34 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
             cause: IllTypedCauseKind::OperatorIneligible
         }
     ));
+
+    // Reconstruct SEQ_R_FLOAT (a sequence of R_FLOAT { f: Float64 }) exactly
+    // as the runtime environment sees it, and confirm the refusal above
+    // agrees with an independent, direct `contains_ieee` call over that
+    // reconstructed type at both its depths (the record field, and the
+    // sequence wrapping it) rather than merely riding on the same code path.
+    let float_record_key = NodeKey::from_hex(&key(R_FLOAT)).unwrap();
+    let environment = TypeEnvironment::new(
+        vec![CompositeDeclaration::new(
+            float_record_key,
+            "R_FLOAT",
+            CompositeShape::Record(vec![FieldDeclaration::new(
+                "f",
+                ValueType::Float(IeeeWidth::Binary64),
+                Presence::Required,
+            )]),
+        )],
+        core::iter::empty::<ObjectTypeDeclaration>(),
+    )
+    .unwrap();
+    let record_type = ValueType::Composite(float_record_key);
+    let sequence_type = ValueType::Collection(Box::new(CollectionType::new(
+        CollectionKind::Sequence,
+        record_type.clone(),
+        CardinalityBound::new(0, 8).unwrap(),
+    )));
+    assert!(environment.contains_ieee(&record_type));
+    assert!(environment.contains_ieee(&sequence_type));
 }
 
 /// Trace: FR-018-AC-7, TC-029.
@@ -488,6 +570,25 @@ fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_d
         generated(equal).environment_symbol,
         generated(not_equal).environment_symbol
     );
+    // The symbol itself is that digest (TC-029 step 7), not merely distinct
+    // from its sibling: a symbol derived from a request ordinal plus the
+    // operator would also pass the two `assert_ne!`s above without being
+    // this digest.
+    for claim in [equal, not_equal] {
+        let descriptor = &generated(claim).descriptor;
+        let expected = format!(
+            "oracle_{}",
+            recomputed_symbol_digest(
+                &claim.node_id,
+                descriptor.operator,
+                &descriptor.left_source_type,
+                descriptor.left_conversion_target.as_ref(),
+                &descriptor.right_source_type,
+                descriptor.right_conversion_target.as_ref(),
+            )
+        );
+        assert_eq!(generated(claim).oracle_symbol, expected);
+    }
     for claim in &claims {
         assert_eq!(
             claim.operation.provenance,
@@ -657,4 +758,67 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
         nested.declaration_runtime_keys,
         vec![key(R_POINT), key(R_PAIR_OF_POINTS)]
     );
+
+    // FR-018-AC-13 also names node id, IR id, package id, source map, claims
+    // and the selected schedule. Recompute each independently — never by
+    // reading it back off the golden claim-map — using the same public
+    // `CheckedPackageV2::lower` the generator calls, but with a
+    // self-constructed, maximally permissive profile (`CheckedNodeTag::ALL`)
+    // so this recomputation shares no private profile constant with the
+    // generator. `ir_id` is a pure digest over the lowered closure's own
+    // content (`LOWERED_NODE_PREIMAGE`), so it, `claims` and `source_map`
+    // must agree regardless of which permissive profile computed them.
+    let profile = CompleteLoweringProfileV2 {
+        supported_tags: CheckedNodeTag::ALL.into_iter().collect::<BTreeSet<_>>(),
+        require_bounds: false,
+        work_limit: 10_000,
+    };
+    assert_eq!(only_claim(&oracles, E_RECORD).node_id, code_id(E_RECORD));
+    assert_eq!(
+        only_claim(&oracles, E_PAIR_OF_POINTS).node_id,
+        code_id(E_PAIR_OF_POINTS)
+    );
+    assert_eq!(single.schedule, RecordedSchedule::Plan);
+    assert_eq!(nested.schedule, RecordedSchedule::Plan);
+    assert_eq!(single.package_id, *package.package_id());
+    assert_eq!(nested.package_id, *package.package_id());
+
+    let single_lowering = package.lower(&[code_id(E_RECORD)], &profile);
+    assert_eq!(single_lowering.package_id, *package.package_id());
+    match &single_lowering.records[..] {
+        [CompleteLoweringRecordV2::Lowered { node }] => {
+            assert_eq!(
+                single.ir_id, node.ir_id,
+                "ir_id must equal the independently lowered node's"
+            );
+            assert_eq!(
+                single.claims, node.claims,
+                "claims must equal the independently lowered node's"
+            );
+            assert_eq!(
+                single.source_map, node.source_map,
+                "source_map must equal the independently lowered node's"
+            );
+        }
+        other => panic!("expected exactly one Lowered record, found {other:?}"),
+    }
+
+    let nested_lowering = package.lower(&[code_id(E_PAIR_OF_POINTS)], &profile);
+    match &nested_lowering.records[..] {
+        [CompleteLoweringRecordV2::Lowered { node }] => {
+            assert_eq!(
+                nested.ir_id, node.ir_id,
+                "ir_id must equal the independently lowered node's"
+            );
+            assert_eq!(
+                nested.claims, node.claims,
+                "claims must equal the independently lowered node's"
+            );
+            assert_eq!(
+                nested.source_map, node.source_map,
+                "source_map must equal the independently lowered node's"
+            );
+        }
+        other => panic!("expected exactly one Lowered record, found {other:?}"),
+    }
 }
