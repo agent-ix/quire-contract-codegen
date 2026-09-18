@@ -125,13 +125,21 @@ text, enum, option, collection, self-recursive and nested-composite shapes — p
 `tests/composite_equality_agreement.rs`'s `agree3!` macro. Each of these criteria's own
 FR-018 mutation was applied, confirmed to turn its test red, and reverted, including AC-2's
 conversion-ordering row (swapping which operand's `convert<T>` target the emitted code applies) and
-both of AC-10's: ordering claim-map entries by expression node id alone (which ties two descriptors on
-one node and lets a permuted request permute them), and the circularity check — blessing a golden
-whose emitted operator was corrupted while the native leg reads its descriptor from that same golden.
-The circularity mutation is the one that tests whether the golden defence holds rather than merely
-exists: with the corrupted golden re-blessed, the byte-comparison test passes by construction, but the
-AC-2 three-way agreement over the record node's `not_equal` oracle — the one the corruption reaches —
-still goes red.
+all four of AC-10's: ordering claim-map entries by expression node id alone (which ties two descriptors
+on one node and lets a permuted request permute them); the circularity check — blessing a golden whose
+emitted operator was corrupted while the native leg reads its descriptor from that same golden; swapping
+which operand's runtime value or conversion target is evaluated as left versus right
+(`checked.evaluate(left, right, meter)` and `check_equality(op, left_operand, right_operand)`, each
+swapped independently); and swapping the emitted `left_source`/`right_source` descriptor itself. The
+circularity mutation is the one that tests whether the golden defence holds rather than merely exists:
+with the corrupted golden re-blessed, the byte-comparison test passes by construction, but the AC-2
+three-way agreement over the record node's `not_equal` oracle — the one the corruption reaches — still
+goes red. The two operand-order/descriptor mutations are caught only because `E_CONV_CHARGE`
+(FR-018-AC-9) is the corpus's first vector with an asymmetric operand pair — every other vector's left
+and right share an identical descriptor, so equality over identical types is symmetric and a swap is
+undetectable there; re-blessing under either swap with `E_CONV_CHARGE` in the corpus turns
+`tc_029_ac2_a_converted_operand_agrees` and `tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges`
+red.
 
 That coverage had a hard prerequisite, now satisfied: agent-ix/quire-contract-codegen#75, merged as
 `e74d592`, re-pinned Contract Runtime `a04bd47`→`4e33052` and quire-spec-language

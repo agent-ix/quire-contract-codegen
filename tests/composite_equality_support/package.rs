@@ -283,6 +283,10 @@ pub const R_SELF: u32 = 29;
 pub const OPT_SELF: u32 = 30;
 pub const R_PAIR_OF_POINTS: u32 = 31;
 pub const SEQ_INT: u32 = 32;
+/// Not registered in `corpus_package()`: used only as a `key()`/`code_id()`
+/// input to build a standalone `TypeEnvironment` for FR-018-AC-6's negative
+/// control, exactly as `R_FLOAT` is reused for its positive one.
+pub const R_NOT_FLOAT: u32 = 33;
 
 pub const M_BARE: u32 = 40;
 pub const F_BARE: u32 = 41;

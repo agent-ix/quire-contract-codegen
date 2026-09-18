@@ -365,8 +365,41 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
         record_type.clone(),
         CardinalityBound::new(0, 8).unwrap(),
     )));
+    // The leaf itself: `ValueType::Float(_) => return true` is `contains_ieee`'s
+    // base case, unasserted by the record/sequence checks above (both of those
+    // pass by *reaching* an IEEE leaf through a composite, never by naming the
+    // leaf type directly).
+    assert!(environment.contains_ieee(&ValueType::Float(IeeeWidth::Binary64)));
     assert!(environment.contains_ieee(&record_type));
     assert!(environment.contains_ieee(&sequence_type));
+
+    // Negative control: an unconditional `true` (or a check that never visits
+    // a field) would pass every assertion above. A structurally identical
+    // record and sequence, but with an `Integer` field instead of `Float64`,
+    // must report `false` at both depths.
+    let not_float_record_key = NodeKey::from_hex(&key(R_NOT_FLOAT)).unwrap();
+    let not_ieee_environment = TypeEnvironment::new(
+        vec![CompositeDeclaration::new(
+            not_float_record_key,
+            "R_NOT_FLOAT",
+            CompositeShape::Record(vec![FieldDeclaration::new(
+                "f",
+                ValueType::Integer,
+                Presence::Required,
+            )]),
+        )],
+        core::iter::empty::<ObjectTypeDeclaration>(),
+    )
+    .unwrap();
+    let not_float_record_type = ValueType::Composite(not_float_record_key);
+    let not_float_sequence_type = ValueType::Collection(Box::new(CollectionType::new(
+        CollectionKind::Sequence,
+        not_float_record_type.clone(),
+        CardinalityBound::new(0, 8).unwrap(),
+    )));
+    assert!(!not_ieee_environment.contains_ieee(&ValueType::Integer));
+    assert!(!not_ieee_environment.contains_ieee(&not_float_record_type));
+    assert!(!not_ieee_environment.contains_ieee(&not_float_sequence_type));
 }
 
 /// Trace: FR-018-AC-7, TC-029.

@@ -170,10 +170,18 @@ macro_rules! shared_helpers {
         /// `ResultUnits`, so `agree3!`'s cross-leg `Debug` comparison checks
         /// every counter the three independent legs compute for each denial,
         /// not just one of them.
-        pub fn denials<T>(
+        ///
+        /// Asserted, not merely reasoned about: `Outcome::Incomplete`'s own
+        /// `consumed` field is the meter's counter *as recorded at the
+        /// moment of refusal*, independent of `Meter::consumed`'s accessor
+        /// path queried afterward on the same meter. The two are computed
+        /// through different code inside the pinned runtime, so requiring
+        /// them to agree is a real check of "every counter equals the run
+        /// stopped immediately before that point," not a restatement of it.
+        pub fn denials(
             limits: ScalarLimits,
-            run: impl Fn(&mut Meter) -> T,
-        ) -> Vec<(ChargePoint, u64, T, Vec<u64>)> {
+            run: impl Fn(&mut Meter) -> Outcome<bool>,
+        ) -> Vec<(ChargePoint, u64, Outcome<bool>, Vec<u64>)> {
             let mut meter = Meter::new(limits);
             let _ = run(&mut meter);
             let charges = meter.admitted_charges().to_vec();
@@ -188,6 +196,16 @@ macro_rules! shared_helpers {
                         occurrence: DenialOccurrence::denial_occurrence(occurrence),
                     });
                     let outcome = run(&mut denied);
+                    if let Outcome::Incomplete(incomplete) = &outcome {
+                        assert_eq!(
+                            denied.consumed(incomplete.limit_kind),
+                            incomplete.consumed,
+                            "denying {point:?}#{occurrence}: the meter's own consumed({:?}) \
+                             must equal the Incomplete payload's consumed, both being the \
+                             counter of the run stopped immediately before the denied charge",
+                            incomplete.limit_kind
+                        );
+                    }
                     let counters = LimitKind::ALL
                         .iter()
                         .map(|kind| denied.consumed(*kind))
