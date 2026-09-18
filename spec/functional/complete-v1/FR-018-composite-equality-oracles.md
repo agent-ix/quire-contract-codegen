@@ -150,11 +150,10 @@ digest, whose domain is `NODE_KEY_DOMAIN`.
 - If an operand type reaches a `composite_type` of form `reference`, or the node
   belongs to the model or relation families, then the generator shall refuse it
   as blocked on quire-spec-language#120. The reason is input-side, not runtime
-  capability: the runtime implements reference equality and `ObjectReference::new`
+  capability: the runtime implements reference equality, and `ObjectReference::new`
   over `UniverseIdentity::new` and `ObjectIdentity::new` constructs a reference
-  from arbitrary canonical bytes, but CheckedPackage V2 carries no form that
-  yields a reference operand, and the identity binding that would give one
-  meaning is quire-spec-language#120.
+  from arbitrary canonical bytes; what a reference operand lacks is the identity
+  binding that gives it meaning, which is quire-spec-language#120.
 - If the node belongs to the function family, or is an expression of form `call`,
   then the generator shall refuse it as blocked on quire-contract-runtime#34; the
   state, temporal and protocol families as blocked on quire-spec-language#121.
@@ -227,7 +226,7 @@ without one is not written.
 | FR-018-AC-7 | Collapse the three blockers into one "unsupported" reason, or generate an oracle over a `reference` operand. |
 | FR-018-AC-8 | Emit only `check_equality`, omitting the `check_type` calls; `check_equality` consults the environment solely through `contains_ieee`, which returns `false` for an absent composite key, so an empty environment completes with a Boolean instead of refusing. Or emit `.expect(..)`, which panics instead. |
 | FR-018-AC-9 | Emit closures returning plain `bool`, as `src/oracle.rs` does for Boolean connectives; a denial then has no representable result. |
-| FR-018-AC-10 | Order claim-map entries by the expression node id alone, which ties the two items of one node and lets a permuted request permute them; or bless a golden whose emitted operator was changed while the native leg reads its descriptor from that same golden. |
+| FR-018-AC-10 | Order claim-map entries by the expression node id alone, which ties the two items of one node and lets a permuted request permute them; or bless a golden whose emitted operator was changed while the native leg reads its descriptor from that same golden; or swap which operand's runtime value or conversion target is evaluated as left versus right; or swap the emitted `left_source`/`right_source` descriptor itself. |
 | FR-018-AC-11 | Mark the operation checked rather than `caller_declared`; refuse the second descriptor as a duplicate; or derive both symbols from the node's declaration name, so the two items collide. |
 | FR-018-AC-12 | Emit the plan's pair count or a charge amount as a literal constant in the generated source. |
 | FR-018-AC-13 | Key declarations by request ordinal instead of by the V2 node id digest. |

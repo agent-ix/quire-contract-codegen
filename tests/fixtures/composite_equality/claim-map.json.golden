@@ -1,0 +1,885 @@
+{
+  "version": "quire.codegen.composite-equality-claim-map/v1",
+  "package_id": {
+    "domain": "quire.package.semantic/v2",
+    "algorithm": "sha256",
+    "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+  },
+  "runtime_revision": "4e330525be513fe57c67717dc22b969d36656b85",
+  "blocked": [
+    "operation identity not carried by CheckedPackage V2"
+  ],
+  "items": [
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000100"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_15f4bacf0908fb59db407fd5451621cf30ff18f498af4c10999d959dffa2d9a6",
+        "oracle_symbol": "oracle_15f4bacf0908fb59db407fd5451621cf30ff18f498af4c10999d959dffa2d9a6",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "e83a60514962b328799a8630411548f6967d623a9cf18f8402c6483333e67439"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000100"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 29,
+                "end": 30
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000020"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000020"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000020"
+          }
+        ],
+        "declaration_runtime_keys": [
+          "0000000000000000000000000000000000000000000000000000000000000020"
+        ],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000100"
+      },
+      "operation": {
+        "identity": "equality.not_equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_d710d3e47cbf0de46401ae4200ee16178c4b09b5c42dde2a7932a5ab12eafc9f",
+        "oracle_symbol": "oracle_d710d3e47cbf0de46401ae4200ee16178c4b09b5c42dde2a7932a5ab12eafc9f",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "e83a60514962b328799a8630411548f6967d623a9cf18f8402c6483333e67439"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000100"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 29,
+                "end": 30
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "not_equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000020"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000020"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000020"
+          }
+        ],
+        "declaration_runtime_keys": [
+          "0000000000000000000000000000000000000000000000000000000000000020"
+        ],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_c917767e5a48d3f6ba8f8804a76cdee231ca38dd3a2f340202f8bea2437e6021",
+        "oracle_symbol": "oracle_c917767e5a48d3f6ba8f8804a76cdee231ca38dd3a2f340202f8bea2437e6021",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "c31a3eb4a2fa8fcc7b44f63ab87c148184a14cb9e1c581f6c53d2526f1a001cb"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000102"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 31,
+                "end": 32
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000024"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000024"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000024"
+          }
+        ],
+        "declaration_runtime_keys": [
+          "0000000000000000000000000000000000000000000000000000000000000024"
+        ],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000103"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_19fe98bf2b61e3d287b91d96038ca3cfba585e6aa9d9fe396023e97f58252af7",
+        "oracle_symbol": "oracle_19fe98bf2b61e3d287b91d96038ca3cfba585e6aa9d9fe396023e97f58252af7",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "cb6ebbc5d8b61fe7023b844a61e956f43b26c1f984bd0883aa2434ece8678e3a"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000103"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 32,
+                "end": 33
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000025"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000025"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000104"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_6c3907cac3cc8b8def849dd9a7ccc97bd2e4965d6088a8d1e66073cfed623edf",
+        "oracle_symbol": "oracle_6c3907cac3cc8b8def849dd9a7ccc97bd2e4965d6088a8d1e66073cfed623edf",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "3b92b1cc151a8ed3ef1292dd69164bae4096d3b435410c4a5363e38abc99aec3"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000104"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 33,
+                "end": 34
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "text"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000105"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_e88ebbb852f2c82a1bd2db38e1b7341e7314f5dfa10716a9567dc7ae7e05420b",
+        "oracle_symbol": "oracle_e88ebbb852f2c82a1bd2db38e1b7341e7314f5dfa10716a9567dc7ae7e05420b",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "93161a24fd793f511f32a36fea20b2e2ca5996c9be596d9a43295b5baca1af9d"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000105"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 34,
+                "end": 35
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "enum"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000110"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_295074cf411f93dea95fe591f3e87ab4360e53bd096eeffe2e6999eae57f81e9",
+        "oracle_symbol": "oracle_295074cf411f93dea95fe591f3e87ab4360e53bd096eeffe2e6999eae57f81e9",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "50cfac2f6de5064e8c019cc5578dbd045f7e60da7a5b2d815105677c372e5e29"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000110"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 39,
+                "end": 40
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000029"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000029"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000029"
+          }
+        ],
+        "declaration_runtime_keys": [
+          "0000000000000000000000000000000000000000000000000000000000000029"
+        ],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000111"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c",
+        "oracle_symbol": "oracle_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "36960e5957e75784d11b31993ce4be649f06942fcf10d21893935ffcfe39bede"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000111"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 40,
+                "end": 41
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
+          },
+          "left_conversion_target": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000112"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_de0bc9911bbaf25c8346ed1416cc325826cf3440884090ff975156bd744704a5",
+        "oracle_symbol": "oracle_de0bc9911bbaf25c8346ed1416cc325826cf3440884090ff975156bd744704a5",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "4cebcd92cc9f848f2f8b6cad5e61ca5b5fe76decbb33e2a634be9ba24c29b6b8"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000112"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 41,
+                "end": 42
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000032"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000032"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000113"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_960fbf99330aa3db769521829ca3626509908d5088735094a70b5d09f94ab04a",
+        "oracle_symbol": "oracle_960fbf99330aa3db769521829ca3626509908d5088735094a70b5d09f94ab04a",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "af29377347b65eb55ff297910b9020e67ebd22456ecd63d8d77dc0741f74581a"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000113"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 42,
+                "end": 43
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000031"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000031"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000020"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000031"
+          }
+        ],
+        "declaration_runtime_keys": [
+          "0000000000000000000000000000000000000000000000000000000000000020",
+          "0000000000000000000000000000000000000000000000000000000000000031"
+        ],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000114"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_920fcd5f4eda255e45adf61cd83538ed2022f0c7534a244ede8545564195ae66",
+        "oracle_symbol": "oracle_920fcd5f4eda255e45adf61cd83538ed2022f0c7534a244ede8545564195ae66",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "e117b473df5200fe25ff2b7391f4c5821ae90e2bdba79281692c073153e8d842"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "f5828a01b4d338a275b5773b82c69bca0c56f481cfdf359e47e6cb97065570f5"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000114"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 43,
+                "end": 44
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
+          },
+          "left_conversion_target": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000009"
+          },
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000009"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    }
+  ]
+}
