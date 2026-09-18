@@ -269,7 +269,13 @@ fn render_artifacts(
     let mut harness = String::new();
     let _ = writeln!(harness, "// Generated Kani harness: {identity}");
     let _ = writeln!(harness, "#[kani::proof]");
-    let _ = writeln!(harness, "fn corpus_case_{label}() {{");
+    // The proof symbol is derived from the case's own identity digest and carries the
+    // same identity the artifact path (`corpus/{label}-{identity}.kani.rs`) carries,
+    // rather than only the family label: two files sharing a `#[kani::proof]` symbol
+    // would be indistinguishable proofs in Kani's own output. This binds the symbol to
+    // the case's identity; it does not by itself make that identity unique across every
+    // distinct case (tracked separately as #73).
+    let _ = writeln!(harness, "fn corpus_case_{label}_{identity}() {{");
     let _ = writeln!(harness, "    assert!(corpus_oracle());");
     let _ = writeln!(harness, "}}");
     let provenance = format!(
@@ -551,5 +557,90 @@ mod tests {
             .oracle
             .contents
             .contains("values.iter().any(|value| *value == 7i128)"));
+    }
+
+    /// Reproduces #61 directly, and pins the fix to derivation rather than to a uniqueness
+    /// guarantee the code does not hold (identity/symbol uniqueness across distinct cases with the
+    /// same result value is tracked separately as #73, and is not claimed by FR-007-AC-6). Before
+    /// the fix, every corpus case of a family declared the identical
+    /// `#[kani::proof] fn corpus_case_{label}()` symbol regardless of case identity: within one
+    /// crate that fails to compile, but the corpus's actual shape is one file per case, and across
+    /// separate crates the same symbol name is indistinguishable in Kani's own output. The fix
+    /// makes the symbol carry the case's own identity digest -- the same identity its artifact path
+    /// already carries -- so this asserts the symbol's suffix literally equals the identity embedded
+    /// in the case's own `kani_harness.path`, not merely that two arbitrarily chosen cases differ.
+    ///
+    /// Trace: FR-007-AC-6, TC-023.
+    #[test]
+    fn tc_023_kani_proof_symbol_is_derived_from_the_case_identity_in_its_artifact_path() {
+        let (profile, dispatch, input) = fixture();
+        let first = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "first",
+                operator: NumericOperator::Add,
+                left: 1,
+                right: 1,
+                minimum: 0,
+                maximum: 2,
+            }),
+        )
+        .unwrap();
+        let second = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "second",
+                operator: NumericOperator::Add,
+                left: 1,
+                right: 0,
+                minimum: 0,
+                maximum: 2,
+            }),
+        )
+        .unwrap();
+        for case in [&first, &second] {
+            let symbol = proof_symbol(&case.artifacts.kani_harness.contents);
+            let identity = symbol
+                .strip_prefix("corpus_case_arithmetic_")
+                .expect("arithmetic proof symbol must be prefixed corpus_case_arithmetic_");
+            // Pins derivation, not just a difference: a symbol built from any digest other than
+            // the exact identity embedded in the artifact path (for example `digest(detail)`
+            // instead of `identity`) would still produce two differing, correctly prefixed
+            // symbols, but would fail this equality.
+            assert_eq!(
+                case.artifacts.kani_harness.path,
+                format!("corpus/arithmetic-{identity}.kani.rs"),
+                "the proof symbol's identity suffix must equal the identity in its own artifact \
+                 path, not merely differ from another case's"
+            );
+        }
+        // These two cases were chosen with different result values (1+1 vs 1+0), so their
+        // identities -- and therefore their symbols -- do differ here. That is a property of this
+        // pair's inputs, not a universal the generator enforces: see #73.
+        assert_ne!(
+            first.artifacts.kani_harness.path, second.artifacts.kani_harness.path,
+            "these two cases have distinct result values and must emit distinct files"
+        );
+        assert_ne!(
+            proof_symbol(&first.artifacts.kani_harness.contents),
+            proof_symbol(&second.artifacts.kani_harness.contents),
+            "these two cases have distinct identities and must emit distinct proof symbols"
+        );
+    }
+
+    /// Extracts the `#[kani::proof]` function's name from generated harness source, verbatim.
+    fn proof_symbol(contents: &str) -> &str {
+        let after_fn = contents
+            .split("\nfn ")
+            .nth(1)
+            .expect("generated harness must declare a proof function");
+        after_fn
+            .split('(')
+            .next()
+            .expect("proof function name must be followed by its parameter list")
     }
 }

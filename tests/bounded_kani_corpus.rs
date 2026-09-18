@@ -1,4 +1,11 @@
 //! Public integration coverage for the bounded Kani corpus API.
+//!
+//! `--harness <name>` below is a substring filter over the fully qualified harness name, not an
+//! exact match (`--exact` is not passed), so e.g. `--harness corpus_case_arithmetic` matches the
+//! generated `corpus_case_arithmetic_<identity>` symbol. Each temporary crate here writes exactly
+//! one harness, so the filter is effectively exact in this file today, but read literally it is a
+//! prefix over the whole `arithmetic`/`graph`/`collection` family: a crate containing more than one
+//! case of the same family would have every one of them selected by this same filter.
 
 use std::{
     fs,
@@ -348,9 +355,23 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
         .current_dir(&directory.0)
         .output()
         .expect("cargo kani should launch");
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(
         !output.status.success(),
         "false generated corpus case must not be reported as a Kani proof"
+    );
+    // A nonzero exit alone does not prove the harness ran and was falsified: a harness-filter
+    // mismatch ("error: no harnesses matched the harness filter") also exits nonzero under
+    // Kani 0.67.0, and would pass the assertion above vacuously. Require the backend's own
+    // verification-failed banner so this test cannot pass on a filter that matched nothing.
+    assert!(
+        text.contains("VERIFICATION:- FAILED"),
+        "expected a genuine Kani verification failure (VERIFICATION:- FAILED), not merely a \
+         nonzero exit, which a harness-filter mismatch also produces; got:\n{text}"
     );
     let agreement = replay_codegen_counterexample(packet, |native_input| {
         quire_contract_ir::kani::KaniOutcome::counterexample(
