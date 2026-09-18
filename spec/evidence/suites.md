@@ -18,6 +18,7 @@ type: SuiteRegistry
 | SUITE-007 | Minimum supported Rust version build | `rustup run 1.98.1 cargo check --locked --all-targets --message-format=json` | rustc 1.98.1 | Static |
 | SUITE-008 | Bounded Kani generation and execution | `cargo test --locked --target-dir target-codex-backends --test kani_generation -- --test-threads=1` | cargo-kani 0.67.0 / rustc | Analysis |
 | SUITE-010 | Atomic generated-boundary publication | `cargo test --lib publication` | quire-contract-codegen 0.1.0 / rustc | Integration |
+| SUITE-011 | Pinned Kani obligation execution | `make kani` | cargo-kani 0.67.0 / rustc | Analysis |
 
 ## Notes
 
@@ -64,13 +65,15 @@ serialized-package CLI remains blocked on an IR expression-binding design. The s
 focused local check; the full repository test target also includes these tests, but SUITE-010 has no
 separate structured execution-result producer yet.
 
-SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
-failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,
-complete ownership-census verification, and refusal of modified, extra-entry, unmarked, and symlinked
-destinations. It is local pre-review evidence for the publication portion of TC-002; the
-serialized-package CLI remains blocked on an IR expression-binding design. The suite command is a
-focused local check; the full repository test target also includes these tests, but SUITE-010 has no
-separate structured execution-result producer yet.
+SUITE-011 is the FR-015 and FR-017 obligation lane. `make kani` runs `tests/kani_obligations.rs`'s
+`#[ignore]`d lane serially under a host-wide lock and in its own target directory, because Kani and
+CBMC are memory-heavy. It asserts the installed backend equals the committed pins before anything
+runs, verifies the precondition, postcondition and invariant harnesses of a healthy subject,
+falsifies a seeded defect with a concrete counterexample, reports a jointly unsatisfiable contract as
+cover-unsatisfied rather than verified, and refuses a drifted driver digest and a crate that does not
+contain its harness. It is deliberately not a `make ci` gate: it needs a real pinned installation,
+which is why the FR-017 rows it alone backs are `🚧 Planned`. SUITE-008 is the FR-003 lane and does
+not cover this one; that gap is agent-ix/quire-contract-codegen#66.
 
 `make ci` is deliberately not a suite. A suite whose command is "everything"
 cannot say which obligation a result discharged, and `make ci` is a gate rather

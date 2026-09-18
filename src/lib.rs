@@ -15,7 +15,7 @@ mod harness;
 mod kani;
 // Implements: FR-015
 mod kani_obligations;
-// Implements: FR-015
+// Implements: FR-017
 mod kani_execution;
 // Implements: FR-007
 mod bounded_kani_profile;

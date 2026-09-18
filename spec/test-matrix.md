@@ -51,7 +51,10 @@ type: TestMatrix
 | FR-014 | FR-014-AC-1 through FR-014-AC-11 | TC-024 | ✅ Covered |
 | FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned |
 | FR-015 | FR-015-AC-3 through FR-015-AC-6 | TC-025 | ✅ Covered |
+| FR-015 | FR-015-AC-7 through FR-015-AC-12 | TC-025 | ✅ Covered |
 | FR-016 | FR-016-AC-1 through FR-016-AC-7 | TC-026 | 🚧 Planned |
+| FR-017 | FR-017-AC-2 through FR-017-AC-5, FR-017-AC-8, FR-017-AC-9, FR-017-CON-2 | TC-027 | ✅ Covered |
+| FR-017 | FR-017-AC-1, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1 | TC-027 | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
@@ -80,12 +83,41 @@ only arguments to their IR `bounded_domain` bounds. The same file backs the V1 h
 precondition, postcondition and invariant each lower to a separate harness whose identity carries IR
 bounds and every Kani pin, and `make kani` verifies all three and falsifies a seeded defect with a
 concrete counterexample under the committed backend pins, and reports jointly unsatisfiable
-`requires` as `cover_unsatisfied` rather than verified. AC-1 and AC-2 stay `🚧 Planned`. Frame
+`requires` as `cover_unsatisfied` rather than verified.
+
+AC-7 through AC-12 are added by codegen#56, which found the decisions that make an FR-015 harness
+sound stated nowhere: the non-vacuity covers that are the only thing separating a proof from a
+vacuous run, the sibling-precondition assumptions that make a postcondition harness prove a weaker
+claim than the clause states, the hard-coded solver, the byte-identity of regeneration, the
+IR-domain assumption on every symbolic argument, and the request-level ceilings. All six are backed
+by the named tests in `tests/kani_obligations.rs` that already exercised them without a criterion to
+bind to. AC-1 and AC-2 stay `🚧 Planned`. Frame
 obligations cannot be generated from the merged IR: V1 `ClauseKind` has no frame kind, FR-014
 refuses V2 `state` nodes as `NoFiniteEncoding`, and the by-value harness arguments cannot express
 `kani::modifies`, so a frame needs a typed IR frame item first. Every V2 scalar obligation carries
 only a caller-declared operation identity and is blocked on agent-ix/quire-specification#76. Model
 and graph bounds are blocked on agent-ix/quire-spec-language#120.
+
+FR-017 is the execution and evidence half of codegen#49, separated from FR-015 under codegen#55
+because `src/kani_execution.rs` — pin measurement, the pre-run drift refusal, the seven-value
+outcome vocabulary and the execution evidence document — had no owning requirement at all. AC-2
+through AC-5, AC-8, AC-9 and CON-2 are `✅ Covered` by the default lane: the classification and
+pin-comparison unit tests in `src/kani_execution.rs` run on every `cargo test` over the backend's own
+recorded output; the absent-launcher refusal, the identity-pin-drift-before-measurement refusal, the
+generation/execution boundary (CON-2), and the aggregate-verdict/retained-evidence census (AC-8,
+AC-9) are all in `tests/kani_obligations.rs` and run without a Kani installation. AC-1, AC-6, AC-7 and
+CON-1 are `🚧 Planned`: the parts of them that require a real installed backend — an installed-backend
+pin difference, the full pinned-lane evidence shape, the library-containment refusal after a real
+build, and never converting a non-verified outcome into a proof claim — are backed only by the
+`#[ignore]`d `make kani` lane, which needs a real pinned installation and is not a `make ci` gate. No
+timed-out criterion is written, because the run has no wall-clock budget to fail one — that is
+codegen#58, and TC-027 records it as blocked rather than specifying around it.
+
+## Interface Requirement Coverage
+
+| Interface | Acceptance Criteria | Test Cases | Status |
+|---|---|---|---|
+| interface-001 | interface-001-AC-1 through interface-001-AC-5 | TC-028 | ✅ Covered |
 
 ## Non-Functional Requirement Coverage
 
@@ -131,8 +163,10 @@ and graph bounds are blocked on agent-ix/quire-spec-language#120.
 | TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4 | ✅ Covered |
 | TC-023 | Verify bounded Kani profile corpus parity | Integration | P0 | FR-007-AC-1, FR-007-AC-2, FR-007-AC-3, FR-007-AC-4, FR-007-AC-5 | ✅ Covered |
 | TC-024 | Verify exact complete-V1 scalar oracle generation and agreement | Integration | P0 | FR-014-AC-1, FR-014-AC-2, FR-014-AC-3, FR-014-AC-4, FR-014-AC-5, FR-014-AC-6, FR-014-AC-7, FR-014-AC-8, FR-014-AC-9, FR-014-AC-10, FR-014-AC-11 | ✅ Covered |
-| TC-025 | Verify separate bounded Kani obligations | Analysis | P0 | FR-015-AC-1, FR-015-AC-2, FR-015-AC-3, FR-015-AC-4, FR-015-AC-5, FR-015-AC-6 | 🚧 Planned |
+| TC-025 | Verify separate bounded Kani obligations | Analysis | P0 | FR-015-AC-1, FR-015-AC-2, FR-015-AC-3, FR-015-AC-4, FR-015-AC-5, FR-015-AC-6, FR-015-AC-7, FR-015-AC-8, FR-015-AC-9, FR-015-AC-10, FR-015-AC-11, FR-015-AC-12 | 🚧 Planned |
 | TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4, FR-016-AC-5, FR-016-AC-6, FR-016-AC-7 | 🚧 Planned |
+| TC-027 | Verify pinned Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-1, FR-017-AC-2, FR-017-AC-3, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-8, FR-017-AC-9, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
+| TC-028 | Verify interface-001's declared API surface and identity envelope match the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-3, interface-001-AC-4, interface-001-AC-5 | ✅ Covered |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and

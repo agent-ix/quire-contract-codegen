@@ -69,6 +69,12 @@ results and is constrained by NFR-002.
 evidence contract. TC-001 through TC-007 and TC-023 form the verification matrix. Assurance artifacts
 bind the intended use, trusted boundary, risks, measurement policy, and open human decision.
 
+FR-014 through FR-017 are the complete-V1 slice. FR-015 generates separate bounded Kani
+obligations from FR-014's exact scalar oracles; FR-017 runs one of them under the committed backend
+pins and retains its typed evidence; FR-016 decodes and natively replays the counterexample FR-017
+retains. Generation and execution are separate requirements because a harness that was emitted and a
+harness that was observed verifying are different claims. TC-024 through TC-027 verify them.
+
 FR-008 through FR-013 refine FR-002 for bound numeric and state-scalar clauses
 (agent-ix/quire-contract-codegen#3 under agent-ix/quire-spec-language#83), admit only clauses that the
 FR-001 bounded-integer oracle grammar of agent-ix/quire-contract-codegen#4 admits, and are constrained
