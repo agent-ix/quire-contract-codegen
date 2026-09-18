@@ -19,9 +19,10 @@ operations:
     output: BoundOracleGeneration | BoundGenerationError
     semantics: complete ordered executable-clause batch over the supported Boolean and obligation-free bounded-integer comparison grammar, or explicit NoExecutable with bound digest and informational references but no publishable artifact; unsupported executable content fails the entire batch
   - name: generate_bundle
+    status: planned; the implemented first consumer is library-only generate_bound_oracles
     inputs: [contract package bytes, generation configuration]
     output: ArtifactBundle | DiagnosticSet
-    semantics: planned multi-backend operation; the implemented first consumer is library-only generate_bound_oracles
+    semantics: planned multi-backend operation
   - name: generate_tristate_harness
     inputs: [typed precondition, typed postcondition, explicit bindings, minimum accepted cases, minimum rejected cases, maximum discarded cases, attestation context]
     output: GeneratedArtifactBundle | HarnessDiagnosticSet
@@ -163,7 +164,7 @@ kani_obligation_execution_slice:
   requirements: [FR-017]
   scope: running one FR-015 harness; FR-015 generation, and the FR-014 oracles it embeds, have no slice of their own yet and are governed by their requirements alone
   adapter: profile `kani-0.67.0-separate-obligations-v1`, distinct from the FR-003 `kani-0.67.0-function-contracts-v2` slice above; the obligation path fixes solver `cadical` and emits no stubbing option, so FR-003's caller-supplied solver is not carried into it
-  pins: six measured fields — Kani version, `cargo-kani` launcher SHA-256, `kani-driver` SHA-256, CBMC version, the release's recorded Rust toolchain, and the host target triple from `rustc -vV`; the committed values are one installation's, and both the harness identity's pins and the measured pins must equal them before a process runs
+  pins: [kaniVersion, launcherSha256, driverSha256, cbmcVersion, rustToolchain, targetTriple] — the six measured fields: Kani version, `cargo-kani` launcher SHA-256, `kani-driver` SHA-256, CBMC version, the release's recorded Rust toolchain, and the host target triple from `rustc -vV`; the committed values are one installation's, and both the harness identity's pins and the measured pins must equal them before a process runs
   refusals: pin drift naming the first differing field with expected and observed values; a tool refusal naming an absent, unreadable, unsuccessful or unparsable backend component and its path; and a refusal when the crate's library source does not contain the harness source byte for byte. Every one of them runs nothing
   outcomes: `verified`, `falsified` with the concrete playback verbatim, `cover_unsatisfied` with satisfied and total counts, and `inconclusive` with one of `failed_without_counterexample`, `no_verdict`, `missing_cover_summary`, `unwind_bound_exhausted`. Success is never defaulted: without a readable, fully satisfied cover summary a successful run is not `verified`
   evidence: schema `quire.codegen.kani-execution/v1`, carrying the obligation identity digest, kind, harness path and source digest, the pins measured immediately before the run, the launcher path, the complete argument vector, the generated crate's `Cargo.lock` digest, the oracle digest, the runtime revision, the unwind bound, the solver, the exit code and the outcome. This repository retains none of it and computes no aggregate verdict; retention and attestation stay Quoin's
@@ -212,11 +213,11 @@ open_design_gates:
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| interface-001-AC-1 | Every `operations` entry this contract declares without a `status: planned` caveat is exported as a public function of `quire_contract_codegen` under the exact name given here: `generate_bound_oracles`, `generate_tristate_harness`, `generate_i64_strategy`, `generate_enum_strategy`, `generate_bound_strategy`, `generate_kani_bundle`, `write_bundle_atomic`, `analyze_bound_coverage`. | Test |
-| interface-001-AC-2 | Every `operations` entry this contract marks `status: planned` — `generate_bundle`, `analyze_coverage`, `cli_generate` — is absent from the public API, so an implementation cannot silently outrun the status this contract declares for it. | Test |
-| interface-001-AC-3 | `identity_envelope.required` names exactly the fields of `ProofAttestationBody`, and `identity_envelope.results` names exactly the four `AttestationResult` variants, so the envelope this contract describes is the envelope the generator emits. | Test |
-| interface-001-AC-4 | `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants, and no seventh state exists for `implemented_mapping` to omit. | Test |
-| interface-001-AC-5 | `kani_obligation_execution_slice.pins` names exactly the six measured fields of `KaniToolPins`. | Test |
+| interface-001-AC-1 | Every `operations` entry this contract declares without a `status: planned` caveat is exported as a public function of `quire_contract_codegen` under the exact name given here: `generate_bound_oracles`, `generate_tristate_harness`, `generate_i64_strategy`, `generate_enum_strategy`, `generate_bound_strategy`, `generate_kani_bundle`, `write_bundle_atomic`, `analyze_bound_coverage`. | Inspection |
+| interface-001-AC-2 | Every `operations` entry this contract marks `status: planned` — `generate_bundle`, `analyze_coverage`, `cli_generate` — is absent from the public API, so an implementation cannot silently outrun the status this contract declares for it. | Inspection |
+| interface-001-AC-3 | `identity_envelope.required` names exactly the fields of `ProofAttestationBody`, and `identity_envelope.results` names exactly the four `AttestationResult` variants, so the envelope this contract describes is the envelope the generator emits. | Inspection |
+| interface-001-AC-4 | `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants, and no seventh state exists for `implemented_mapping` to omit. | Inspection |
+| interface-001-AC-5 | `kani_obligation_execution_slice.pins` names exactly the six measured fields of `KaniToolPins`. | Inspection |
 
 ## Open items
 
@@ -225,15 +226,26 @@ open_design_gates:
   for an operation this contract itself says is not implemented would be written to be satisfied by
   nothing. Criteria for their real semantics belong with the requirement that implements them, once
   one exists.
+- `tests/interface_001.rs` parses this document's own fenced YAML block — the `operations` status
+  census, `identity_envelope.required`/`results`, `diagnostics.terminal_states`, and
+  `kani_obligation_execution_slice.pins` — and compares the parsed vocabulary against the crate's
+  actual exports, enum variants, and struct fields, per TC-028. A seventh `GenerationTerminalState`
+  variant, a renamed `KaniToolPins` field, or an `operations` entry added without updating its
+  export therefore fails the suite; these criteria catch contract-versus-code drift rather than
+  restating the code as prose.
 - The active `spec-artifacts-process` module declares matrix-mining archetypes for `FR`, `NFR`,
   `StR`, `TestMatrix`, `SuiteRegistry` and `Inspections`, but none for `interface` documents, so
-  `quire coverage` cannot resolve `interface-001-AC-1` through `interface-001-AC-5` as declared
-  trace targets: the `## Interface Requirement Coverage` row in `spec/test-matrix.md` and the
-  `/// Trace:` comments in `tests/interface_001.rs` are correct and the five tests genuinely back
-  these criteria, but `quire coverage --strict` reports the row and the five traces as unbacked or
-  dangling until that module gains an interface archetype. This is a tooling gap, not an unbacked
-  criterion; verification of interface-001's acceptance criteria is by inspection of
-  `tests/interface_001.rs` until then.
+  `quire coverage` cannot mine this document at all: `interface-001-AC-1` through
+  `interface-001-AC-5` resolve to no declared row for any archetype to check, and the
+  `## Interface Requirement Coverage` row in `spec/test-matrix.md` is never cross-checked against
+  this file's acceptance-criteria table, so a `✅ Covered` there could never be contradicted by the
+  gate. Rather than carry a Test-traced status the gate cannot verify, these five criteria and the
+  matrix row are recorded `Inspection` — verified by the parsing tests above and TC-028, but backed
+  by human/reviewer attestation rather than a `quire coverage`-resolved trace — until
+  `spec-artifacts-process` gains an interface archetype, at which point they should be re-traced as
+  `Test`. The `/// Trace:` comments in `tests/interface_001.rs` therefore cite `TC-028` only, not the
+  individual AC ids, matching how `Inspection`-verified criteria are traced elsewhere in this repo
+  (for example FR-008-CON-1).
 - The remaining prose fields this contract's slices carry — admission order, refusal vocabulary,
   domain and campaign rules, and so on — are the executable half of the FR that owns each slice
   (FR-008 through FR-013 for `bound_strategy_slice`, FR-003 for `kani_slice`, FR-017 for

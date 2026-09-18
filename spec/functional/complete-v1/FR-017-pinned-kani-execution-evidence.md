@@ -116,7 +116,7 @@ and it is stated here because `src/kani_execution.rs` had no owning requirement
 | FR-017-AC-6 | Execution evidence identifies its schema and carries the harness identity digest, obligation kind, harness path and source digest, the pins measured immediately before the run, the launcher path, the complete argument vector, the crate lockfile digest when the lockfile was readable after the run, the oracle digest, the runtime revision, the unwind bound, the solver, the exit code and the outcome. | Test (TC-027) |
 | FR-017-AC-7 | A crate whose library source does not contain the harness source byte for byte is refused, and no backend runs. | Test (TC-027) |
 | FR-017-AC-8 | The generator computes no aggregate verdict over runs: no function in the execution surface accepts more than one run's evidence or outcome to produce a summary. | Test (TC-027) |
-| FR-017-AC-9 | The generator retains no evidence of its own: the execution surface writes no file: the caller receives the returned evidence and owns its retention. | Test (TC-027) |
+| FR-017-AC-9 | The generator retains no evidence of its own: the execution surface writes no file. The caller receives the returned evidence and owns its retention. | Test (TC-027) |
 
 ## Dependencies
 

@@ -86,10 +86,12 @@ its oracle digest and a lockfile digest; the seeded defect is falsified with a
 concrete counterexample naming its harness symbol and a nonzero exit code; the
 jointly unsatisfiable contract is cover-unsatisfied rather than verified; the
 harness run against a `Cargo.lock` directory reports evidence — not a refusal —
-inconclusive with `no_verdict` and no lockfile digest, because the backend
-already ran; the drifted driver digest is refused as pin drift on that field
-with no target directory created; and the crate that does not contain the
-harness is refused with no run.
+carrying the backend's own verdict (the healthy subject verified) and no
+lockfile digest, because the backend already ran and a lockfile read failure is
+missing evidence about that run, never grounds to discard its verdict; the
+drifted driver digest is refused as pin drift on that field with no target
+directory created; and the crate that does not contain the harness is refused
+with no run.
 
 ## Implementation
 

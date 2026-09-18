@@ -8,7 +8,9 @@
 //! defaulted: a harness this module did not observe verifying is not `verified`.
 
 use std::{
-    env, fmt, fs, io,
+    env,
+    ffi::OsString,
+    fmt, fs, io,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -204,17 +206,36 @@ impl KaniInstallation {
     /// (default `$HOME/.cargo/bin`) first, then `PATH` — and the Kani home as
     /// `$KANI_HOME`, else `$HOME/.kani`.
     pub fn discover() -> Result<Self, KaniToolError> {
-        let home = env::var_os("HOME").map(PathBuf::from);
+        Self::discover_from(
+            env::var_os("HOME"),
+            env::var_os("CARGO_HOME"),
+            env::var_os("KANI_HOME"),
+            env::var_os("PATH"),
+        )
+    }
+
+    /// `discover`'s resolution logic, taking each environment variable as an explicit argument
+    /// instead of reading the process environment. `discover` is the only caller in this crate;
+    /// tests call this directly so every `HOME`/`CARGO_HOME`/`KANI_HOME`/`PATH` combination is
+    /// exercised as a pure function of its arguments, never by mutating process-wide state with
+    /// `env::set_var`/`env::remove_var`, which races with any other thread reading `environ` —
+    /// including a concurrently spawned child process snapshotting the environment at fork/exec.
+    fn discover_from(
+        home: Option<OsString>,
+        cargo_home: Option<OsString>,
+        kani_home_var: Option<OsString>,
+        path: Option<OsString>,
+    ) -> Result<Self, KaniToolError> {
+        let home = home.map(PathBuf::from);
         let launcher_name = format!("cargo-kani{}", env::consts::EXE_SUFFIX);
-        let cargo_home = env::var_os("CARGO_HOME")
+        let cargo_home = cargo_home
             .map(PathBuf::from)
             .or_else(|| home.as_ref().map(|home| home.join(".cargo")));
         let launcher = cargo_home
             .map(|directory| directory.join("bin").join(&launcher_name))
             .into_iter()
             .chain(
-                env::var_os("PATH")
-                    .map(|value| env::split_paths(&value).collect::<Vec<_>>())
+                path.map(|value| env::split_paths(&value).collect::<Vec<_>>())
                     .unwrap_or_default()
                     .into_iter()
                     .map(|directory| directory.join(&launcher_name)),
@@ -224,7 +245,7 @@ impl KaniInstallation {
                 tool: KaniTool::Launcher,
                 path: PathBuf::from(&launcher_name),
             })?;
-        let kani_home = env::var_os("KANI_HOME")
+        let kani_home = kani_home_var
             .map(PathBuf::from)
             .or_else(|| home.map(|home| home.join(".kani")))
             .ok_or_else(|| KaniToolError::Missing {
@@ -409,9 +430,10 @@ pub struct KaniExecutionEvidence {
     /// Complete argument vector after the launcher.
     pub arguments: Vec<String>,
     /// SHA-256 of the generated crate's `Cargo.lock` after the run, or `None` when the run
-    /// happened but the lockfile could not be read afterward — the outcome is then
-    /// [`KaniInconclusiveReason::NoVerdict`], because evidence about a run that occurred is
-    /// incomplete rather than absent.
+    /// happened but the lockfile could not be read afterward. This is independent of `outcome`:
+    /// a lockfile read failure is missing evidence about a run that occurred, not grounds to
+    /// discard the backend's own verdict, so `outcome` is always `classify_run`'s classification
+    /// of what the backend printed, whether or not the lockfile digest is available.
     pub cargo_lock_sha256: Option<String>,
     /// Digest of the oracle sources the harness embeds.
     pub oracle_digest: String,
@@ -482,21 +504,14 @@ pub fn execute_kani_obligation(
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    // The backend already ran by this point: a lockfile that cannot be read now is incomplete
-    // evidence about a real run, not grounds to refuse as though nothing happened. The outcome
-    // is downgraded to inconclusive rather than the run being reported as a pre-run refusal.
-    let (cargo_lock_sha256, outcome) = match file_sha256(
-        KaniTool::Lockfile,
-        &request.crate_directory.join("Cargo.lock"),
-    ) {
-        Ok(digest) => (Some(digest), classify_run(output.status.success(), &text)),
-        Err(_) => (
-            None,
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::NoVerdict,
-            },
+    let (cargo_lock_sha256, outcome) = run_evidence(
+        output.status.success(),
+        &text,
+        file_sha256(
+            KaniTool::Lockfile,
+            &request.crate_directory.join("Cargo.lock"),
         ),
-    };
+    );
     Ok(KaniExecutionEvidence {
         schema: KANI_EXECUTION_SCHEMA,
         obligation_identity_sha256: request.harness.identity_sha256.clone(),
@@ -514,6 +529,19 @@ pub fn execute_kani_obligation(
         exit_code: output.status.code(),
         outcome,
     })
+}
+
+/// Combines the post-run `Cargo.lock` digest with the backend's own classification of what it
+/// printed. The two are independent: a lockfile that cannot be read once the backend has
+/// already run is missing evidence about that run, never grounds to discard its verdict, so
+/// `outcome` is always `classify_run`'s classification of `text` regardless of whether
+/// `lockfile` succeeded.
+fn run_evidence(
+    exited_successfully: bool,
+    text: &str,
+    lockfile: Result<String, KaniToolError>,
+) -> (Option<String>, KaniRunOutcome) {
+    (lockfile.ok(), classify_run(exited_successfully, text))
 }
 
 const SUCCESS: &str = "VERIFICATION:- SUCCESSFUL";
@@ -770,5 +798,116 @@ mod tests {
                 "aarch64-unknown-linux-gnu".to_owned()
             ))
         );
+    }
+
+    /// A lockfile read failure after the backend already ran must not discard the backend's own
+    /// verdict: this reproduces the defect directly — `run_evidence` given a falsifying run's
+    /// text and a failed lockfile read must still return the falsified outcome with its
+    /// concrete playback, not `Inconclusive { reason: NoVerdict }`, and `cargo_lock_sha256`
+    /// must be `None` only because the read itself failed.
+    ///
+    /// Trace: FR-017-AC-5, FR-017-AC-6, TC-027
+    #[test]
+    fn tc_027_a_falsifying_run_keeps_its_verdict_when_the_lockfile_is_unreadable() {
+        let falsified = format!(
+            "SUMMARY:\n ** 1 of 43 failed\nFailed Checks: |post_state: &i64| *post_state <= 5\n\n ** 1 of 1 cover properties satisfied\n\nVERIFICATION:- FAILED\n{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"
+        );
+        let unreadable_lockfile = Err(KaniToolError::Missing {
+            tool: KaniTool::Lockfile,
+            path: PathBuf::from("Cargo.lock"),
+        });
+        let (cargo_lock_sha256, outcome) = run_evidence(false, &falsified, unreadable_lockfile);
+        assert!(
+            matches!(
+                &outcome,
+                KaniRunOutcome::Falsified { counterexample }
+                    if counterexample.contains("Check for `assertion`")
+                        && !counterexample.contains("Check for `cover`")
+            ),
+            "a falsifying run must keep its own verdict, not be discarded: {outcome:?}"
+        );
+        assert_eq!(cargo_lock_sha256, None);
+
+        // The same falsifying text with a readable lockfile carries the digest unchanged: the
+        // outcome does not depend on whether the lockfile read succeeded.
+        let (cargo_lock_sha256, readable_outcome) =
+            run_evidence(false, &falsified, Ok("digest".to_owned()));
+        assert_eq!(outcome, readable_outcome);
+        assert_eq!(cargo_lock_sha256, Some("digest".to_owned()));
+    }
+
+    /// A scratch directory unique to this process and this call, so parallel tests never
+    /// collide and nothing here touches a real `$HOME` or `$CARGO_HOME`.
+    fn discover_scratch(name: &str) -> PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = env::temp_dir().join(format!(
+            "quire-kani-discover-{name}-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    /// `discover_from` is a pure function of its arguments, so every `HOME`/`CARGO_HOME`/
+    /// `KANI_HOME` combination is exercised directly here with no process environment
+    /// mutation. `discover`'s previous test mutated `$HOME`/`$KANI_HOME` with
+    /// `env::remove_var`/`env::set_var`, which races with any other thread reading `environ` —
+    /// including a concurrently spawned child process snapshotting the environment at
+    /// fork/exec — even when the mutating test restores the values before returning.
+    ///
+    /// Trace: FR-017-AC-2, TC-027
+    #[test]
+    fn tc_027_kani_home_is_refused_when_neither_kani_home_nor_home_is_set() {
+        let directory = discover_scratch("kani-home-missing");
+        let cargo_home = directory.join("cargo-home");
+        fs::create_dir_all(cargo_home.join("bin")).unwrap();
+        fs::write(cargo_home.join("bin/cargo-kani"), b"").unwrap();
+
+        // The launcher resolves through `cargo_home` alone, proving the refusal below is really
+        // about `KaniHome` and not a `Launcher` refusal in disguise; neither `home` nor
+        // `kani_home_var` is supplied.
+        let error = KaniInstallation::discover_from(
+            None,
+            Some(cargo_home.clone().into_os_string()),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                error,
+                KaniToolError::Missing {
+                    tool: KaniTool::KaniHome,
+                    ..
+                }
+            ),
+            "got {error}"
+        );
+
+        // `$HOME/.kani` is used when `KANI_HOME` is absent but `HOME` is supplied.
+        let installation = KaniInstallation::discover_from(
+            Some(directory.clone().into_os_string()),
+            Some(cargo_home.clone().into_os_string()),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(installation.kani_home, directory.join(".kani"));
+
+        // `KANI_HOME` wins over `$HOME/.kani` when both are supplied.
+        let kani_home = directory.join("explicit-kani-home");
+        let installation = KaniInstallation::discover_from(
+            Some(directory.clone().into_os_string()),
+            Some(cargo_home.into_os_string()),
+            Some(kani_home.clone().into_os_string()),
+            None,
+        )
+        .unwrap();
+        assert_eq!(installation.kani_home, kani_home);
+
+        let _ = fs::remove_dir_all(directory);
     }
 }

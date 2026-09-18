@@ -23,12 +23,11 @@ use quire_contract_codegen::{
     execute_kani_obligation, generate_exact_scalar_oracles, negotiate_kani_obligations,
     AttestationContext, DerivedDomain, ExactScalarClaimMap, ExactScalarDisposition,
     ExactScalarItem, InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest,
-    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
-    KaniObligationOutcome, KaniObligationRequest, KaniPinField, KaniRunOutcome, KaniTool,
-    KaniToolError, KaniToolPins, ObligationDisposition, ObligationItem, ObligationKind,
-    ObligationRecord, ObligationSubject, UnsupportedObligation, UpstreamBlocker,
-    IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION, KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS,
-    MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
+    KaniInstallation, KaniObligationError, KaniObligationHarness, KaniObligationOutcome,
+    KaniObligationRequest, KaniPinField, KaniRunOutcome, KaniTool, KaniToolError, KaniToolPins,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
+    UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION,
+    KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -1469,58 +1468,6 @@ fn tc_027_every_backend_component_is_refused_with_its_own_typed_reason() {
     }
 }
 
-/// `KaniInstallation::discover` refuses with a typed `KaniHome` reason when neither `$KANI_HOME`
-/// nor `$HOME` name a Kani home, the same as every other component: absent means refused, not
-/// defaulted. `HOME` and `KANI_HOME` are cleared only for the extent of this one call and
-/// restored immediately after, and no other test in this binary reads either variable, so the
-/// mutation cannot race another test's assertions.
-///
-/// Trace: FR-017-AC-2, TC-027
-#[test]
-fn tc_027_kani_home_is_refused_when_neither_kani_home_nor_home_is_set() {
-    let saved_home = env::var_os("HOME");
-    let saved_kani_home = env::var_os("KANI_HOME");
-    // SAFETY: no other test in this binary reads or writes `HOME` or `KANI_HOME`; both are
-    // restored before this function returns, including on the panic path via the guard below.
-    struct RestoreEnv {
-        home: Option<std::ffi::OsString>,
-        kani_home: Option<std::ffi::OsString>,
-    }
-    impl Drop for RestoreEnv {
-        fn drop(&mut self) {
-            unsafe {
-                match &self.home {
-                    Some(value) => env::set_var("HOME", value),
-                    None => env::remove_var("HOME"),
-                }
-                match &self.kani_home {
-                    Some(value) => env::set_var("KANI_HOME", value),
-                    None => env::remove_var("KANI_HOME"),
-                }
-            }
-        }
-    }
-    let _restore = RestoreEnv {
-        home: saved_home,
-        kani_home: saved_kani_home,
-    };
-    unsafe {
-        env::remove_var("HOME");
-        env::remove_var("KANI_HOME");
-    }
-    let error = KaniInstallation::discover().unwrap_err();
-    assert!(
-        matches!(
-            error,
-            KaniToolError::Missing {
-                tool: KaniTool::KaniHome,
-                ..
-            }
-        ),
-        "got {error}"
-    );
-}
-
 /// A harness identity that differs from the committed pins is refused before the backend is
 /// ever measured. The installation here points at paths that do not exist, so if `observe()`
 /// ran at all before the identity comparison, it would surface as `KaniToolError::Missing`
@@ -1564,12 +1511,26 @@ fn tc_027_harness_identity_pin_drift_is_refused_before_the_backend_is_measured()
 /// one run's evidence or outcome, and nothing in it writes a file. Retention, audit and
 /// aggregation stay Quoin's; the caller receives one run's evidence and owns what happens to it.
 ///
+/// This is a substring census, a tripwire and floor rather than a proof: it catches the literal
+/// forms named below but not an equivalent rewrite, such as `impl IntoIterator<Item =
+/// KaniExecutionEvidence>`, a `[KaniExecutionEvidence; 2]` array parameter, a type alias that
+/// hides `Vec<...>` behind another name, `fs::copy` used in place of `fs::write`, `use std::fs::write
+/// as emit`, or splitting the execution surface across a second module this test does not read.
+/// Closing those gaps needs a stronger check than a grep; until then this test is the floor FR-017
+/// stands on, not a guarantee nothing under it can shift.
+///
 /// Trace: FR-017-AC-8, FR-017-AC-9, TC-027
 #[test]
 fn tc_027_no_aggregate_verdict_and_no_retained_evidence_of_its_own() {
-    let source =
+    let full_source =
         fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/kani_execution.rs"))
             .expect("src/kani_execution.rs must be readable from the crate root");
+    // Only the shipped execution surface, not its own `#[cfg(test)]` module: tests build fake
+    // on-disk installations to exercise backend discovery and measurement, which is neither an
+    // aggregate verdict nor evidence retention by the surface itself.
+    let source = full_source
+        .split_once("\n#[cfg(test)]\n")
+        .map_or(full_source.as_str(), |(production, _)| production);
 
     // No aggregate verdict: nothing accepts a collection of runs' evidence or outcomes.
     for forbidden in [
@@ -1591,6 +1552,68 @@ fn tc_027_no_aggregate_verdict_and_no_retained_evidence_of_its_own() {
             !source.contains(forbidden),
             "src/kani_execution.rs must retain no evidence of its own: found {forbidden:?}"
         );
+    }
+}
+
+/// Concatenates every `.rs` file under `directory`, recursively, so a source census below can
+/// find text that might live in any module rather than one hardcoded path.
+fn concatenated_source(directory: &Path) -> String {
+    let mut entries = fs::read_dir(directory)
+        .unwrap_or_else(|error| panic!("{} must be readable: {error}", directory.display()))
+        .map(|entry| entry.expect("directory entry").path())
+        .collect::<Vec<_>>();
+    entries.sort();
+    let mut combined = String::new();
+    for path in entries {
+        if path.is_dir() {
+            combined.push_str(&concatenated_source(&path));
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            combined
+                .push_str(&fs::read_to_string(&path).unwrap_or_else(|error| {
+                    panic!("{} must be readable: {error}", path.display())
+                }));
+        }
+    }
+    combined
+}
+
+/// FR-017-CON-2 is backed by `tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses`
+/// and `tc_025_every_item_is_accounted_before_any_harness_is_exposed`, which are a sound but
+/// type-level argument: every generation-time refusal (`ObligationDisposition`,
+/// `UnsupportedObligation`, `KaniObligationError`, `KaniObligationOutcome`) produces no
+/// `KaniObligationHarness`, so `execute_kani_obligation` structurally has nothing to convert.
+/// Neither test calls `execute_kani_obligation` or constructs a `KaniRunOutcome`, so this census
+/// — in the style of FR-017-AC-8/AC-9's own census above — is what would actually fail if a
+/// future change added a conversion from the generation-time vocabulary to the execution-time
+/// one (`KaniRunOutcome`, `KaniInconclusiveReason`, `KaniExecutionRefusal`,
+/// `KaniExecutionEvidence`) and let a generation-time classification start reporting itself as
+/// an execution outcome.
+///
+/// Trace: FR-017-CON-2, TC-027
+#[test]
+fn tc_027_no_conversion_exists_between_generation_and_execution_vocabularies() {
+    let source = concatenated_source(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"));
+    let generation_types = [
+        "ObligationDisposition",
+        "UnsupportedObligation",
+        "KaniObligationError",
+        "KaniObligationOutcome",
+    ];
+    let execution_types = [
+        "KaniRunOutcome",
+        "KaniInconclusiveReason",
+        "KaniExecutionRefusal",
+        "KaniExecutionEvidence",
+    ];
+    for generation in generation_types {
+        for execution in execution_types {
+            let forbidden = format!("From<{generation}> for {execution}");
+            assert!(
+                !source.contains(&forbidden),
+                "FR-017-CON-2 forbids reporting a generation-time classification as an \
+                 execution outcome, but found a conversion: {forbidden}"
+            );
+        }
     }
 }
 
@@ -1747,10 +1770,11 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
         "jointly unsatisfiable requires must never verify"
     );
 
-    // A lockfile that cannot be read after the backend has already run degrades the outcome to
-    // inconclusive; it is not reported as a pre-run refusal, because the run did happen and its
-    // evidence is merely incomplete. `Cargo.lock` is occupied by a directory before the run, so
-    // the launcher still runs (a real process starts) but the post-run digest read fails.
+    // A lockfile that cannot be read after the backend has already run is missing evidence
+    // about that run, never grounds to discard its own verdict: the outcome below is still
+    // this healthy subject's real `Verified` classification, not a pre-run refusal and not
+    // degraded to inconclusive. `Cargo.lock` is occupied by a directory before the run, so the
+    // launcher still runs (a real process starts) but the post-run digest read fails.
     let harness = &harnesses[0];
     let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
     fs::create_dir_all(crate_directory.join("Cargo.lock")).unwrap();
@@ -1763,12 +1787,7 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
     .unwrap_or_else(|refusal| {
         panic!("a run that already happened must not surface as a refusal: {refusal}")
     });
-    assert_eq!(
-        evidence.outcome,
-        KaniRunOutcome::Inconclusive {
-            reason: KaniInconclusiveReason::NoVerdict
-        }
-    );
+    assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
     assert_eq!(evidence.cargo_lock_sha256, None);
     let _ = fs::remove_dir_all(crate_directory);
 
