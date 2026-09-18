@@ -10,7 +10,7 @@ mod common;
 use quire_contract_codegen::{
     generate_tristate_harness, AttestationContext, AttestationResult, GenerationErrorCode,
     GenerationTerminalState, HarnessErrorCode, HarnessRequest, ProofAttestationBody,
-    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES,
+    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, DeclarationEnvironment, ExecutionPoint, Expression,
@@ -272,7 +272,9 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
     );
 
     let temporary = TemporaryDirectory::new("quire-generated-harness");
-    let manifest = "[package]\nname = \"generated-harness-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"a04bd476926463607474a37865e770415397cd8f\", features = [\"proptest\"] }\n";
+    let manifest = format!(
+        "[package]\nname = \"generated-harness-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"proptest\"] }}\n"
+    );
     fs::write(temporary.0.join("Cargo.toml"), manifest).unwrap();
     let tests = r#"
 
@@ -726,7 +728,9 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
         let temporary = TemporaryDirectory::new(&format!("quire-generated-harness-{name}"));
         fs::write(
             temporary.0.join("Cargo.toml"),
-            "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"a04bd476926463607474a37865e770415397cd8f\", features = [\"proptest\"] }\n",
+            format!(
+                "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"proptest\"] }}\n"
+            ),
         )
         .unwrap();
         let generated_test = format!(
