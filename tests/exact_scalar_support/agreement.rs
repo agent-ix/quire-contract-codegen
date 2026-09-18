@@ -623,6 +623,16 @@ pub mod rt_side {
         std::num::NonZeroU64::new(n).unwrap()
     }
 
+    /// `evaluate_integer_arithmetic`'s bound is `Option<&IntegerInterval>`, the same two states
+    /// `IntegerDomain` already carried before the runtime dropped the wrapper
+    /// (`Mathematical` -> `None`, `Bounded(interval)` -> `Some(&interval)`).
+    pub fn as_bound(domain: &IntegerDomain) -> Option<&IntegerInterval> {
+        match domain {
+            IntegerDomain::Mathematical => None,
+            IntegerDomain::Bounded(interval) => Some(interval),
+        }
+    }
+
     shared_helpers!();
 
     pub struct Fixture {

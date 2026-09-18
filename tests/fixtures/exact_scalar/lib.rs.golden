@@ -33,26 +33,26 @@ fn expect_width(value: rt::IeeeValue, width: rt::IeeeWidth) -> Result<rt::IeeeVa
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001001`: `integer.add domain=[-1000,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001001(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Integer>, OracleStop> {
-    let domain = rt::IntegerDomain::Bounded(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?);
-    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Add(left, right), &domain, meter))
+    let domain = rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?;
+    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Add(left, right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001002`: `integer.negate domain=[-8,7]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001002(operand: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Integer>, OracleStop> {
-    let domain = rt::IntegerDomain::Bounded(rt::IntegerInterval::new(integer("-8")?, integer("7")?).map_err(|_| OracleStop::InvalidConstant)?);
-    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Negate(operand), &domain, meter))
+    let domain = rt::IntegerInterval::new(integer("-8")?, integer("7")?).map_err(|_| OracleStop::InvalidConstant)?;
+    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Negate(operand), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001003`: `integer.subtract domain=[-1000,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001003(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Integer>, OracleStop> {
-    let domain = rt::IntegerDomain::Bounded(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?);
-    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Subtract(left, right), &domain, meter))
+    let domain = rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?;
+    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Subtract(left, right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001004`: `integer.multiply domain=[-1000,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001004(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Integer>, OracleStop> {
-    let domain = rt::IntegerDomain::Bounded(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?);
-    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Multiply(left, right), &domain, meter))
+    let domain = rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?;
+    Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::Multiply(left, right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001011`: `quire.value.integer-division.truncating/v1 domain=[-1000,1000]`.
@@ -100,7 +100,9 @@ pub fn oracle_0000000000000000000000000000000000000000000000000000000000001032(l
 /// Node `0000000000000000000000000000000000000000000000000000000000001033`: `rational.integer_divide domain=[-1000,1000]/[1,1000]`.
 pub fn oracle_0000000000000000000000000000000000000000000000000000000000001033(left: &rt::Integer, right: &rt::Integer, meter: &mut rt::Meter) -> Result<rt::Outcome<rt::Rational>, OracleStop> {
     let domain = rt::RationalDomain::new(rt::IntegerInterval::new(integer("-1000")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?, rt::IntegerInterval::new(integer("1")?, integer("1000")?).map_err(|_| OracleStop::InvalidConstant)?).map_err(|_| OracleStop::InvalidConstant)?;
-    Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::IntegerDivide(left, right), Some(&domain), meter))
+    let left = rt::Rational::from_integer(left.clone());
+    let right = rt::Rational::from_integer(right.clone());
+    Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Divide(&left, &right), Some(&domain), meter))
 }
 
 /// Node `0000000000000000000000000000000000000000000000000000000000001034`: `rational.subtract domain=[-1000,1000]/[1,1000]`.

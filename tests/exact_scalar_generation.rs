@@ -193,7 +193,8 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ),
         (
             1033,
-            "rt::evaluate_rational_arithmetic(rt::RationalArithmetic::IntegerDivide(".to_owned(),
+            "rt::evaluate_rational_arithmetic(rt::RationalArithmetic::Divide(&left, &right)"
+                .to_owned(),
         ),
         (
             1034,

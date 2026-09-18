@@ -754,7 +754,7 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
         agree2! {
             limits: UNLIMITED,
             setup: { let a = int(a); let domain = IntegerDomain::Bounded(IntegerInterval::new(int(-8), int(7)).unwrap()); },
-            direct: |m| evaluate_integer_arithmetic(IntegerArithmetic::Negate(&a), &domain, m),
+            direct: |m| evaluate_integer_arithmetic(IntegerArithmetic::Negate(&a), as_bound(&domain), m),
             generated: |m| done(integer_negate(&a, m)),
         };
         vectors += 1;
@@ -763,10 +763,13 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); },
                 direct: |m| (
-                    evaluate_integer_arithmetic(IntegerArithmetic::Add(&a, &b), &wide(), m),
-                    evaluate_integer_arithmetic(IntegerArithmetic::Subtract(&a, &b), &wide(), m),
-                    evaluate_integer_arithmetic(IntegerArithmetic::Multiply(&a, &b), &wide(), m),
-                    evaluate_rational_arithmetic(RationalArithmetic::IntegerDivide(&a, &b), Some(&wide_rational()), m),
+                    evaluate_integer_arithmetic(IntegerArithmetic::Add(&a, &b), as_bound(&wide()), m),
+                    evaluate_integer_arithmetic(IntegerArithmetic::Subtract(&a, &b), as_bound(&wide()), m),
+                    evaluate_integer_arithmetic(IntegerArithmetic::Multiply(&a, &b), as_bound(&wide()), m),
+                    {
+                        let (da, db) = (Rational::from_integer(a.clone()), Rational::from_integer(b.clone()));
+                        evaluate_rational_arithmetic(RationalArithmetic::Divide(&da, &db), Some(&wide_rational()), m)
+                    },
                 ),
                 generated: |m| (
                     done(integer_add(&a, &b, m)),
