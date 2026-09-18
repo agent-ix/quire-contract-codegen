@@ -124,7 +124,13 @@ recursive and nested-composite vectors — because the committed golden crate is
 `QUIRE_CODEGEN_BLESS=1` and pins nothing by itself, and only against a native run whose environment,
 operands and descriptor are constructed in the test from the request, never read back from the
 generated crate. Every acceptance criterion's own FR-018 mutation was applied, confirmed to turn its
-test red, and reverted.
+test red, and reverted, including both of AC-10's: ordering claim-map entries by expression node id
+alone (which ties two descriptors on one node and lets a permuted request permute them), and the
+circularity check — blessing a golden whose emitted operator was corrupted while the native leg reads
+its descriptor from that same golden. The second is the one that tests whether the golden defence
+holds rather than merely exists: with the corrupted golden re-blessed, the byte-comparison test passes
+by construction, but `tc_029_ac11_operator_variants_produce_complementary_outcomes`, whose expectation
+is independent semantic behaviour rather than anything read from the golden, still goes red.
 
 That promotion had a hard prerequisite, now satisfied: agent-ix/quire-contract-codegen#75, merged as
 `e74d592`, re-pinned Contract Runtime `a04bd47`→`4e33052` and quire-spec-language
