@@ -5,13 +5,21 @@
 //! sync with code.
 //!
 //! Every test also parses the contract document's own fenced YAML block and compares the parsed
-//! vocabulary against the Rust vocabulary, rather than a hand-copied literal: a seventh
-//! `GenerationTerminalState` variant, a renamed `KaniToolPins` field, or an `operations` entry
-//! added without updating its export/status caveat drifts the parsed contract text away from the
-//! hardcoded Rust-side census below and fails the assertion, so contract-versus-code drift is
-//! actually caught rather than merely restated in two places by hand. `quire coverage` cannot
-//! resolve these criteria as declared rows (see the contract document's Open items), so they are
-//! recorded `Inspection` there; this file is the real verification.
+//! vocabulary against the Rust vocabulary. For `GenerationTerminalState` and `AttestationResult`
+//! the Rust side is `GenerationTerminalState::ALL` and `AttestationResult::ALL`, the census each
+//! enum carries beside its own definition in `src/oracle.rs`, rather than a second hand-copied
+//! literal living only in this file. A renamed `KaniToolPins` field or an `operations` entry added
+//! without updating its export/status caveat drifts the parsed contract text away from this file's
+//! own struct-field and string censuses and fails the assertion below. A seventh
+//! `GenerationTerminalState` variant or a fifth `AttestationResult` variant fails the build instead:
+//! `label()` beside each enum is an exhaustive match, so the build breaks until the new variant is
+//! named there. Nothing compiler-enforced then carries that variant into `ALL` too — Rust has no
+//! stable way to link an array's contents to an enum's variant set without a proc-macro crate this
+//! workspace does not depend on — so a variant added and named in `label()` but never added to
+//! `ALL` would still pass the assertion below. `quire coverage` cannot resolve these criteria as
+//! declared rows (see the contract document's Open items), so `interface-001-AC-1` through
+//! `interface-001-AC-5` are traced `Test (TC-028)` and backed by this file rather than by a
+//! `quire coverage`-verified row.
 
 use std::{fs, path::Path};
 
@@ -122,7 +130,7 @@ fn sorted(mut items: Vec<String>) -> Vec<String> {
 /// a declared operation this list omits — implemented or not censused here — fails the assertion
 /// rather than silently outrunning this file.
 ///
-/// Trace: TC-028
+/// Trace: interface-001-AC-1, TC-028
 #[test]
 fn it_001_implemented_operations_are_exported_under_their_declared_names() {
     let _ = generate_bound_oracles;
@@ -166,7 +174,7 @@ fn it_001_implemented_operations_are_exported_under_their_declared_names() {
 /// hardcoded list below is compared against the contract's own parsed `operations` vocabulary, so
 /// a newly planned or newly un-planned operation this list omits fails the assertion.
 ///
-/// Trace: TC-028
+/// Trace: interface-001-AC-2, TC-028
 #[test]
 fn it_001_planned_operations_are_not_exported() {
     let source = lib_source();
@@ -193,12 +201,13 @@ fn it_001_planned_operations_are_not_exported() {
 
 /// `identity_envelope.required` names exactly the fields of `ProofAttestationBody`, and
 /// `identity_envelope.results` names exactly the four `AttestationResult` variants: serializing
-/// one full body yields exactly the eleven declared top-level field names, and the match below is
-/// exhaustive over `AttestationResult`, so a fifth variant would fail this to compile rather than
+/// one full body yields exactly the eleven declared top-level field names, and
+/// `AttestationResult::label` is exhaustive, so a fifth variant would fail the build rather than
 /// pass silently. Both expected lists are parsed from the contract document itself, not
-/// hand-copied.
+/// hand-copied; the results side reads `AttestationResult::ALL`, the census declared beside the
+/// enum in `src/oracle.rs`, rather than a second hand-typed list local to this file.
 ///
-/// Trace: TC-028
+/// Trace: interface-001-AC-3, TC-028
 #[test]
 fn it_001_identity_envelope_matches_the_emitted_attestation_body() {
     let body = ProofAttestationBody {
@@ -240,60 +249,33 @@ fn it_001_identity_envelope_matches_the_emitted_attestation_body() {
     let required = sorted(parse_flow_list(&yaml, "required: ["));
     assert_eq!(keys, required);
 
-    // Exhaustive: a fifth `AttestationResult` variant makes this match fail to compile, so
-    // these four names are the complete `identity_envelope.results` vocabulary, not merely four
-    // that happen to exist today.
-    fn label(result: AttestationResult) -> &'static str {
-        match result {
-            AttestationResult::Passed => "passed",
-            AttestationResult::Failed => "failed",
-            AttestationResult::Unavailable => "unavailable",
-            AttestationResult::NotComputed => "not_computed",
-        }
-    }
-    let labels = [
-        AttestationResult::Passed,
-        AttestationResult::Failed,
-        AttestationResult::Unavailable,
-        AttestationResult::NotComputed,
-    ]
-    .into_iter()
-    .map(label)
-    .map(str::to_owned)
-    .collect::<Vec<_>>();
+    // `AttestationResult::label` is exhaustive: a fifth variant fails the build until it is
+    // named there. `AttestationResult::ALL` is the census declared beside the enum, so this test
+    // reads the real vocabulary rather than a second hand-typed copy.
+    let labels = AttestationResult::ALL
+        .into_iter()
+        .map(AttestationResult::label)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
     let results = parse_flow_list(&yaml, "results: [");
     assert_eq!(sorted(labels), sorted(results));
 }
 
-/// `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants. The
-/// match is exhaustive, so a seventh variant this list does not name would fail to compile. The
-/// expected list is parsed from the contract document itself, not hand-copied.
+/// `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants.
+/// `GenerationTerminalState::label` is exhaustive, so a seventh variant this file does not name
+/// fails the build rather than compiling silently. The Rust side reads
+/// `GenerationTerminalState::ALL`, the census declared beside the enum in `src/oracle.rs`, rather
+/// than a second hand-typed list local to this file; the expected list is parsed from the contract
+/// document itself, not hand-copied.
 ///
-/// Trace: TC-028
+/// Trace: interface-001-AC-4, TC-028
 #[test]
 fn it_001_terminal_states_are_exactly_the_declared_six() {
-    fn label(state: GenerationTerminalState) -> &'static str {
-        match state {
-            GenerationTerminalState::Generated => "generated",
-            GenerationTerminalState::Unsupported => "unsupported",
-            GenerationTerminalState::InvalidInput => "invalid-input",
-            GenerationTerminalState::BackendUnavailable => "backend-unavailable",
-            GenerationTerminalState::IoFailed => "io-failed",
-            GenerationTerminalState::Inconclusive => "inconclusive",
-        }
-    }
-    let labels = [
-        GenerationTerminalState::Generated,
-        GenerationTerminalState::Unsupported,
-        GenerationTerminalState::InvalidInput,
-        GenerationTerminalState::BackendUnavailable,
-        GenerationTerminalState::IoFailed,
-        GenerationTerminalState::Inconclusive,
-    ]
-    .into_iter()
-    .map(label)
-    .map(str::to_owned)
-    .collect::<Vec<_>>();
+    let labels = GenerationTerminalState::ALL
+        .into_iter()
+        .map(GenerationTerminalState::label)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
     let terminal_states = parse_flow_list(&contract_yaml(), "terminal_states: [");
     assert_eq!(sorted(labels), sorted(terminal_states));
 }
@@ -302,7 +284,7 @@ fn it_001_terminal_states_are_exactly_the_declared_six() {
 /// `KaniToolPins`: serializing one instance yields exactly those six keys. The expected list is
 /// parsed from the contract document's own `pins: [...]` flow list, not hand-copied.
 ///
-/// Trace: TC-028
+/// Trace: interface-001-AC-5, TC-028
 #[test]
 fn it_001_kani_obligation_pins_are_exactly_six_fields() {
     let pins = KaniToolPins::pinned();

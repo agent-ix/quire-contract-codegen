@@ -117,7 +117,7 @@ codegen#58, and TC-027 records it as blocked rather than specifying around it.
 
 | Interface | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| interface-001 | interface-001-AC-1 through interface-001-AC-5 | Inspection | ✅ Covered |
+| interface-001 | interface-001-AC-1 through interface-001-AC-5 | TC-028 | ✅ Covered |
 
 ## Non-Functional Requirement Coverage
 

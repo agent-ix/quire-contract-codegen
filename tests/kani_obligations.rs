@@ -1589,6 +1589,13 @@ fn concatenated_source(directory: &Path) -> String {
 /// `KaniExecutionEvidence`) and let a generation-time classification start reporting itself as
 /// an execution outcome.
 ///
+/// This is a substring census, a tripwire and floor rather than a proof: it catches the literal
+/// `From<G> for E` forms named below but not an equivalent rewrite, such as an inherent
+/// `impl UnsupportedObligation { fn into_outcome(self) -> KaniRunOutcome }`, a free function, a
+/// `TryFrom` or `Into` implementation, or a rustfmt wrap that puts `for` on its own line. Closing
+/// those gaps needs a stronger check than a grep; until then this test is the floor FR-017-CON-2
+/// stands on, not a guarantee nothing under it can shift.
+///
 /// Trace: FR-017-CON-2, TC-027
 #[test]
 fn tc_027_no_conversion_exists_between_generation_and_execution_vocabularies() {

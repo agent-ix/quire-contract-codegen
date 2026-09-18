@@ -97,6 +97,42 @@ pub enum GenerationTerminalState {
     Inconclusive,
 }
 
+impl GenerationTerminalState {
+    /// Every terminal state, in declaration order. This is the census `tests/interface_001.rs`
+    /// compares against interface-001's declared `diagnostics.terminal_states`, kept beside the
+    /// enum rather than hand-copied into the test, so the two live in the same file a developer
+    /// edits when adding a variant.
+    ///
+    /// This array is not itself compiler-checked against the enum's variant set — Rust has no
+    /// stable way to derive that without a proc-macro crate this workspace does not depend on.
+    /// What the compiler does enforce is [`Self::label`] below: its `match` is exhaustive, so an
+    /// added variant fails the build until it is named there. Nothing forces the same edit to
+    /// reach this array; that is left to the developer fixing the build, standing right next to
+    /// it.
+    pub const ALL: [Self; 6] = [
+        Self::Generated,
+        Self::Unsupported,
+        Self::InvalidInput,
+        Self::BackendUnavailable,
+        Self::IoFailed,
+        Self::Inconclusive,
+    ];
+
+    /// interface-001's declared label for this terminal state. Exhaustive: a variant not named
+    /// here fails the build.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Generated => "generated",
+            Self::Unsupported => "unsupported",
+            Self::InvalidInput => "invalid-input",
+            Self::BackendUnavailable => "backend-unavailable",
+            Self::IoFailed => "io-failed",
+            Self::Inconclusive => "inconclusive",
+        }
+    }
+}
+
 /// Stable machine-readable generation failure category.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -276,6 +312,38 @@ pub enum AttestationResult {
     Unavailable,
     /// The proof was attempted and reached no conclusion.
     NotComputed,
+}
+
+impl AttestationResult {
+    /// Every result, in declaration order. This is the census `tests/interface_001.rs` compares
+    /// against interface-001's declared `identity_envelope.results`, kept beside the enum rather
+    /// than hand-copied into the test, so the two live in the same file a developer edits when
+    /// adding a variant.
+    ///
+    /// This array is not itself compiler-checked against the enum's variant set — Rust has no
+    /// stable way to derive that without a proc-macro crate this workspace does not depend on.
+    /// What the compiler does enforce is [`Self::label`] below: its `match` is exhaustive, so an
+    /// added variant fails the build until it is named there. Nothing forces the same edit to
+    /// reach this array; that is left to the developer fixing the build, standing right next to
+    /// it.
+    pub const ALL: [Self; 4] = [
+        Self::Passed,
+        Self::Failed,
+        Self::Unavailable,
+        Self::NotComputed,
+    ];
+
+    /// interface-001's declared label for this result. Exhaustive: a variant not named here fails
+    /// the build.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Passed => "passed",
+            Self::Failed => "failed",
+            Self::Unavailable => "unavailable",
+            Self::NotComputed => "not_computed",
+        }
+    }
 }
 
 /// One `ProofAttestationV1` body, emitted beside the artifact it describes.
