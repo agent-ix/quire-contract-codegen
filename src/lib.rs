@@ -33,6 +33,8 @@ mod bounded_kani_corpus;
 mod strategy;
 // Implements: FR-014
 mod exact_scalar;
+// Implements: FR-018
+mod composite_equality;
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
 mod vacuity;
 // Implements: FR-004 (complete domain observations, always unqualified).
@@ -58,6 +60,17 @@ pub use exact_scalar::{
     EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_WORK_LIMIT,
 };
 pub use finite_reference_graphs::prepare_finite_graph_reaches;
+
+pub use composite_equality::{
+    generate_composite_equality_oracles, CompositeEqualityClaim, CompositeEqualityClaimMap,
+    CompositeEqualityDisposition, CompositeEqualityGenerationError, CompositeEqualityItem,
+    CompositeEqualityOracles, CompositeEqualityRefusal, CompositeOperationClaim,
+    CompositeOperationProvenance, DeclarationRefusalCause, EqualityOperandDescriptor,
+    EqualityOperatorKind, GeneratedCompositeEqualityClaim, IllTypedCauseKind, RecordedDescriptor,
+    RecordedSchedule, RecursionEdgesKind, UpstreamBlocker as CompositeEqualityUpstreamBlocker,
+    COMPOSITE_EQUALITY_CLAIM_MAP_VERSION, COMPOSITE_EQUALITY_CRATE_NAME,
+    COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT,
+};
 
 pub use bound_coverage::{
     analyze_bound_coverage, ArtifactBytes, BoundAnalysisState, BoundCoverageAnalysis,

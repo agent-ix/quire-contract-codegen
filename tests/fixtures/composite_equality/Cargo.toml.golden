@@ -1,0 +1,16 @@
+[package]
+name = "quire-composite-equality-oracles"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+quire-contract-runtime = { git = "https://github.com/agent-ix/quire-contract-runtime", rev = "4e330525be513fe57c67717dc22b969d36656b85", features = ["exact"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[workspace]
