@@ -225,6 +225,15 @@ open_design_gates:
   for an operation this contract itself says is not implemented would be written to be satisfied by
   nothing. Criteria for their real semantics belong with the requirement that implements them, once
   one exists.
+- The active `spec-artifacts-process` module declares matrix-mining archetypes for `FR`, `NFR`,
+  `StR`, `TestMatrix`, `SuiteRegistry` and `Inspections`, but none for `interface` documents, so
+  `quire coverage` cannot resolve `interface-001-AC-1` through `interface-001-AC-5` as declared
+  trace targets: the `## Interface Requirement Coverage` row in `spec/test-matrix.md` and the
+  `/// Trace:` comments in `tests/interface_001.rs` are correct and the five tests genuinely back
+  these criteria, but `quire coverage --strict` reports the row and the five traces as unbacked or
+  dangling until that module gains an interface archetype. This is a tooling gap, not an unbacked
+  criterion; verification of interface-001's acceptance criteria is by inspection of
+  `tests/interface_001.rs` until then.
 - The remaining prose fields this contract's slices carry — admission order, refusal vocabulary,
   domain and campaign rules, and so on — are the executable half of the FR that owns each slice
   (FR-008 through FR-013 for `bound_strategy_slice`, FR-003 for `kani_slice`, FR-017 for
