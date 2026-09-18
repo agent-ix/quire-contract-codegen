@@ -31,11 +31,22 @@ each pinned to its backend identity and model-domain bounds. This is issue
 - The pins: the Kani launcher and driver executable digests, the Kani version,
   the CBMC version, solver and options, the unwind bound, the adapter profile,
   the FR-014 oracle crate digest, and the Contract Runtime revision.
+- A complete request. A postcondition or invariant is proved under the
+  preconditions of its own anchor operation, so the request must name every
+  package precondition sharing that anchor as an item of the same request. The
+  caller does not choose a solver on this path; FR-003's caller-supplied solver
+  is not carried into separate-obligation lowering.
+- The loop unwind bound, which is a request-level value in `1..=1024`.
 
 ## Outputs
 
 - One Kani harness per obligation kind and claim, with its bounds and every
   pin recorded in its identity.
+- Exactly one non-vacuity cover per harness, which is what distinguishes a
+  proof from a harness whose assumptions are jointly unsatisfiable.
+- For a postcondition or invariant, the assumed preconditions recorded in the
+  harness identity's embedded oracles, so a reader can see the claim actually
+  proved rather than the claim the clause states alone.
 - A typed refusal for each obligation that has no finite encoding.
 
 ## Behavior
@@ -54,6 +65,38 @@ each pinned to its backend identity and model-domain bounds. This is issue
 - If an obligation depends on an FR-014 oracle whose operation identity is
   `caller_declared`, then the generator shall refuse it with a typed reason
   naming that blocked item and emit no harness.
+- The generator shall end every generated harness with exactly one
+  non-vacuity cover: a precondition harness covers that the precondition holds
+  within the IR bounds, and a contract harness covers, at a point after the
+  contract call, that the requires and the IR bounds are jointly satisfiable. A
+  backend run that reports success without satisfying that cover has proved
+  nothing, and the cover is the only thing that says so.
+- When lowering a postcondition or invariant, the generator shall assume every
+  package precondition sharing the obligation's anchor operation, emitting each
+  as a `requires` on the generated contract and recording it in the harness
+  identity's embedded oracles. The claim proved is therefore the obligation
+  under those preconditions, and never the obligation alone.
+- If a precondition sharing that anchor is not a supported item of the same
+  request, then the generator shall refuse the obligation with a typed reason
+  naming that precondition and emit no harness, rather than proving the
+  obligation under fewer assumptions than the contract states.
+- The generator shall lower every obligation against the `cadical` solver and
+  without stubbing, and shall record the solver and the complete ordered option
+  vector in the harness identity. No option enabling stubbing is emitted,
+  because a stub is an assumption this requirement does not admit.
+- The generator shall bound every symbolic argument by an inclusive assumption
+  taken from its IR `bounded_domain`, and shall require a bounded-integer
+  post-state result to remain inside the same domain before the clause can
+  hold.
+- The generated source shall carry no `#[kani::unwind]`; the unwind bound
+  reaches the backend only as an explicit option in the recorded vector, so the
+  bound a harness was proved under is read from its identity rather than from
+  its text.
+- Regeneration from equal inputs shall be byte-identical, and the unwind bound
+  and the customer subject shall each change the harness identity.
+- If the request names no items, more than 256 items, or an unwind bound
+  outside `1..=1024`, then the generator shall refuse the whole request and
+  account no item.
 
 ## Acceptance Criteria
 
@@ -65,6 +108,12 @@ each pinned to its backend identity and model-domain bounds. This is issue
 | FR-015-AC-4 | No harness assumption excludes an undefined, refused or incomplete runtime outcome. | Test (TC-025) |
 | FR-015-AC-5 | An obligation whose bounds are unsatisfiable is refused with a typed reason and no harness. | Test (TC-025) |
 | FR-015-AC-6 | An obligation over an oracle whose operation identity is `caller_declared` is refused with a typed reason and no harness. | Test (TC-025) |
+| FR-015-AC-7 | Every generated harness contains exactly one non-vacuity cover; a precondition harness covers that the precondition holds within the IR bounds, and a contract harness's cover stands after the contract call, so a run that satisfies every check without satisfying the cover is not a proof. | Test (TC-025) |
+| FR-015-AC-8 | A postcondition or invariant harness emits every package precondition sharing its anchor operation as a `requires` on its generated contract and records each in its identity's embedded oracles; it embeds no other obligation's oracle; and an obligation whose sibling precondition is not a supported item of the same request is refused with a typed reason naming that precondition and no harness. | Test (TC-025) |
+| FR-015-AC-9 | Every harness identity records solver `cadical` and the complete ordered option vector — function contracts, concrete playback, the exact fully qualified harness, `--exact`, the explicit unwind and the explicit solver — and no option enabling stubbing is emitted. | Test (TC-025) |
+| FR-015-AC-10 | Regeneration from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes the harness identity digest. | Test (TC-025) |
+| FR-015-AC-11 | Every symbolic argument carries an inclusive assumption equal to its IR `bounded_domain`, and a bounded-integer post-state result is required to lie in the same domain; no generated source carries a `#[kani::unwind]`. | Test (TC-025) |
+| FR-015-AC-12 | A request naming no items, more than 256 items, an unparsable subject path, or an unwind bound outside `1..=1024` is refused whole, with no item accounted and no harness exposed. | Test (TC-025) |
 
 ## Dependencies
 

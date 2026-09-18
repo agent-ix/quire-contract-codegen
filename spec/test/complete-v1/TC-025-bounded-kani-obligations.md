@@ -23,11 +23,33 @@ with an unbounded domain, one with unsatisfiable bounds, and one over a
 caller-declared oracle operation. Inspect harness identities, bounds, every pin
 and assumptions, and run the pinned Kani backend on the bounded harnesses.
 
+Additionally: count the covers in each generated harness and locate the
+contract cover relative to the contract call; request a postcondition without
+the precondition sharing its anchor; read the solver and the option vector out
+of each identity; regenerate from equal inputs and compare bytes; regenerate
+with a changed unwind bound and a changed subject and compare identities;
+search each harness source for a loop bound; and submit a request with no
+items, with more items than the ceiling, with an unparsable subject path, and
+with an unwind bound on each side of the admissible range.
+
 ## Expected Results
 
 Four distinct harnesses carry their bounds and backend pin; no assumption
 excludes an undefined, refused or incomplete outcome; the unbounded, the
 unsatisfiable and the caller-declared obligations are refused with no harness.
+
+Each harness contains exactly one cover, and the contract harness's cover
+follows its contract call. Each contract harness carries a `requires` for every
+package precondition sharing its anchor and embeds no other obligation's
+oracle; the postcondition requested without its sibling precondition is refused
+naming that precondition, with no harness. Every identity records solver
+`cadical` and the ordered option vector, and no option enables stubbing.
+Regeneration is byte-identical, while the changed unwind bound and the changed
+subject each produce a different identity digest. Every symbolic argument
+carries an inclusive assumption equal to its IR domain, the post-state result
+is required to lie in the same domain, and no harness source contains a loop
+bound. Each of the four malformed requests is refused whole, with no item
+accounted.
 
 ## Implementation
 

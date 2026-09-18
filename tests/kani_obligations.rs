@@ -26,7 +26,7 @@ use quire_contract_codegen::{
     KaniObligationRequest, KaniPinField, KaniRunOutcome, KaniTool, KaniToolError, KaniToolPins,
     ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
     UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION,
-    KANI_OBLIGATION_PROFILE, RUNTIME_REVISION,
+    KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -435,7 +435,7 @@ fn scalar_records(
 /// Each precondition, postcondition and invariant clause is its own obligation, harness and
 /// proof, with its clause, source span, IR digests and assumed preconditions recorded.
 ///
-/// Trace: FR-015-AC-1, TC-025
+/// Trace: FR-015-AC-1, FR-015-AC-7, FR-015-AC-8, TC-025
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-3, TC-045
 #[test]
 fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
@@ -562,7 +562,7 @@ fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
 /// Symbolic ranges are the IR's inclusive domains, and every pin, flag and revision is part of
 /// the harness identity.
 ///
-/// Trace: FR-015-AC-2, TC-025
+/// Trace: FR-015-AC-2, FR-015-AC-9, FR-015-AC-10, FR-015-AC-11, TC-025
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-1, TC-045
 #[test]
 fn tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity() {
@@ -592,6 +592,11 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity() {
     assert!(source.contains("kani::assume(amount_current >= 0_i64 && amount_current <= 1000_i64);"));
     assert!(source.contains("kani::assume(balance_pre >= 0_i64 && balance_pre <= 1000_i64);"));
     assert!(source.contains("|post_state: &i64| (*post_state >= 0_i64 && *post_state <= 1000_i64)"));
+    // The unwind bound reaches the backend through the option vector alone; no harness source
+    // states a bound of its own, so the identity is the only place it can be read from.
+    for harness in &harnesses {
+        assert!(!harness.rust.contents.contains("kani::unwind"));
+    }
     assert_eq!(identity.runtime_revision, RUNTIME_REVISION);
     assert_eq!(identity.ir_revision, IR_CANDIDATE_REVISION);
     assert_eq!(identity.pins, pins);
@@ -614,6 +619,15 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity() {
             "{flag}"
         );
     }
+    // A stub is an assumption this obligation path does not admit, so no option enables one.
+    assert!(
+        !identity
+            .options
+            .iter()
+            .any(|option| option.contains("stub")),
+        "{:?}",
+        identity.options
+    );
 
     // The committed pins are the identity's pins; any other backend is refused before
     // negotiation, field by field.
@@ -827,7 +841,7 @@ fn tc_025_assumptions_constrain_only_arguments_to_their_ir_bounds() {
 /// harness `CoverUnsatisfied`); here the harness must carry the cover after the call and embed
 /// both preconditions, so nothing about it can be reported verified without that cover.
 ///
-/// Trace: FR-015-AC-4, FR-015-AC-5, TC-025
+/// Trace: FR-015-AC-4, FR-015-AC-5, FR-015-AC-7, FR-015-AC-8, TC-025
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
 #[test]
 fn tc_025_jointly_unsatisfiable_preconditions_leave_a_cover_that_decides_vacuity() {
@@ -1041,7 +1055,7 @@ fn tc_025_every_caller_declared_operation_is_refused() {
 
 /// One invalid item rejects the request after every item is accounted, and exposes no bytes.
 ///
-/// Trace: TC-025
+/// Trace: FR-015-AC-12, TC-025
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-4, TC-045
 #[test]
 fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
@@ -1174,11 +1188,28 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
             0,
             KaniObligationError::InvalidUnwind { unwind: 0 },
         ),
+        (
+            &items[..],
+            "crate::withdraw",
+            MAX_OBLIGATION_UNWIND + 1,
+            KaniObligationError::InvalidUnwind {
+                unwind: MAX_OBLIGATION_UNWIND + 1,
+            },
+        ),
     ] {
         let mut value = request(items, &pins, subject);
         value.unwind = unwind;
         assert_eq!(negotiate_kani_obligations(&value), Err(expected));
     }
+
+    // The item ceiling is a request-level refusal too: nothing is accounted.
+    let over_limit = vec![items[0]; MAX_OBLIGATION_ITEMS + 1];
+    assert_eq!(
+        negotiate_kani_obligations(&request(&over_limit, &pins, "crate::withdraw")),
+        Err(KaniObligationError::TooManyItems {
+            count: MAX_OBLIGATION_ITEMS + 1
+        })
+    );
 }
 
 /// A missing backend is a typed refusal before anything runs.
