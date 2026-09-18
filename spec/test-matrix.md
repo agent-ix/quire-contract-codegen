@@ -40,7 +40,7 @@ type: TestMatrix
 | FR-006 | FR-006-AC-6 | TC-013 | ✅ Covered |
 | FR-006 | FR-006-AC-7 | TC-013 | ✅ Covered |
 | FR-008 | FR-008-AC-1 through FR-008-AC-5, FR-008-CON-2 | TC-017 | ✅ Covered |
-| FR-008 | FR-008-CON-1 | TC-017 | ✅ Covered |
+| FR-008 | FR-008-CON-1 | Inspection | ✅ Covered |
 | FR-009 | FR-009-AC-1 through FR-009-AC-6 | TC-018 | ✅ Covered |
 | FR-010 | FR-010-AC-1 through FR-010-AC-5 | TC-019 | ✅ Covered |
 | FR-011 | FR-011-AC-1 through FR-011-AC-5 | TC-020 | ✅ Covered |
@@ -145,7 +145,7 @@ specifying around it.
 | TC-012 | Verify the demonstrable verification outcomes stay distinguishable | Integration | P0 | FR-006-AC-5, NFR-002-AC-3 | ✅ Covered |
 | TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6, FR-006-AC-7 | ✅ Covered |
 | TC-014 | Verify bounded numeric and state Kani contracts | Analysis | P0 | FR-003-AC-2, FR-003-AC-3, FR-003-AC-4, FR-003-AC-5, FR-003-AC-6, FR-003-AC-7, FR-003-AC-8 | ✅ Covered |
-| TC-017 | Verify bound-clause domain derivation and refusal | Integration | P0 | FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-1, FR-008-CON-2 | ✅ Covered |
+| TC-017 | Verify bound-clause domain derivation and refusal | Integration | P0 | FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-2 | ✅ Covered |
 | TC-018 | Verify constructive satisfying and violating populations | Property | P0 | FR-009-AC-1, FR-009-AC-2, FR-009-AC-3, FR-009-AC-4, FR-009-AC-5, FR-009-AC-6 | ✅ Covered |
 | TC-019 | Verify domain and relation boundary censuses | Integration | P0 | FR-010-AC-1, FR-010-AC-2, FR-010-AC-3, FR-010-AC-4, FR-010-AC-5, NFR-004-AC-2 | ✅ Covered |
 | TC-020 | Verify numeric conformance campaigns and rate reporting | Integration | P0 | FR-011-AC-1, FR-011-AC-2, FR-011-AC-3, FR-011-AC-4, FR-011-AC-5, NFR-004-AC-1 | ✅ Covered |

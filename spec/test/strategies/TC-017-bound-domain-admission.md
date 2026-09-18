@@ -36,10 +36,6 @@ order with a located diagnostic and no bundle.
 ## Expected Results
 
 - `VersionUnchanged` and `amount < 7` produce the census stated in FR-008-AC-1 and FR-008-AC-2.
-- Every fixture reaches the generator as a `quire_contract_ir::BoundPackage` decoded through the
-  public API at the pinned revision, and each read's inclusive domain in the generated source equals
-  its `IntegerType` minimum and maximum, so a generator holding a private decoder or a local copy of
-  the IR wire shape cannot produce these results (FR-008-CON-1).
 - Each oracle-refused fixture returns `UnsupportedClause` with the same lower-level code, terminal
   state, and span that step 3 reports.
 - Each strategy-refused fixture returns `UnsupportedRelation` with terminal state `unsupported`.
