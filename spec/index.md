@@ -75,6 +75,14 @@ pins and retains its typed evidence; FR-016 decodes and natively replays the cou
 retains. Generation and execution are separate requirements because a harness that was emitted and a
 harness that was observed verifying are different claims. TC-024 through TC-027 verify them.
 
+FR-018 is the second family of the complete-V1 oracle slice: composite and structural equality over
+exact complete-V1 values, generated against the runtime's FR-008 `check_equality`/`evaluate` surface.
+TC-029 verifies it. It is authored ahead of its implementation and is `🚧 Planned` throughout the
+test matrix. The remaining families of agent-ix/quire-contract-codegen#48 have no requirement yet
+and FR-018 refuses them by name: function application has no runtime surface
+(agent-ix/quire-contract-runtime#34), the model graph awaits agent-ix/quire-spec-language#120, and
+temporal and protocol await agent-ix/quire-spec-language#121.
+
 FR-008 through FR-013 refine FR-002 for bound numeric and state-scalar clauses
 (agent-ix/quire-contract-codegen#3 under agent-ix/quire-spec-language#83), admit only clauses that the
 FR-001 bounded-integer oracle grammar of agent-ix/quire-contract-codegen#4 admits, and are constrained
