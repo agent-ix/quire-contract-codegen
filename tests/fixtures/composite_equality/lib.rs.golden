@@ -410,6 +410,61 @@ pub fn oracle_295074cf411f93dea95fe591f3e87ab4360e53bd096eeffe2e6999eae57f81e9(
     checked.evaluate(left, right, meter)
 }
 
+fn composites_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c() -> Vec<rt::CompositeDeclaration> {
+    vec![]
+}
+
+fn left_source_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c() -> rt::ValueType {
+    rt::ValueType::Int(rt::IntegerInterval::new(integer("-100"), integer("100")).expect("generation-time validation guarantees this bound reconstructs"))
+}
+fn left_target_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c() -> Option<rt::ValueType> {
+    Some(rt::ValueType::Integer)
+}
+fn right_source_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c() -> rt::ValueType {
+    rt::ValueType::Integer
+}
+fn right_target_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c() -> Option<rt::ValueType> {
+    None
+}
+
+/// Node `0000000000000000000000000000000000000000000000000000000000000111`: `equality.equal`. Its operation identity is caller-declared: CheckedPackage V2 carries
+/// an operator class, not this operator law.
+pub fn environment_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c() -> Result<rt::TypeEnvironment, rt::InvalidDeclaration> {
+    rt::TypeEnvironment::new(composites_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c(), core::iter::empty::<rt::ObjectTypeDeclaration>())
+}
+
+/// Node `0000000000000000000000000000000000000000000000000000000000000111`, environment-checked oracle for `equality.equal`.
+pub fn oracle_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c(
+    environment: &rt::TypeEnvironment,
+    left: &rt::Value,
+    right: &rt::Value,
+    meter: &mut rt::Meter,
+) -> rt::Outcome<bool> {
+    let left_target = left_target_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c();
+    let left_comparison = left_target.clone().unwrap_or_else(left_source_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c);
+    if environment.check_type(&left_comparison).is_err() {
+        return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);
+    }
+    let right_target = right_target_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c();
+    let right_comparison = right_target.clone().unwrap_or_else(right_source_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c);
+    if environment.check_type(&right_comparison).is_err() {
+        return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);
+    }
+    let left_operand = match left_target {
+        Some(target) => rt::EqualityOperand::converted(left_source_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c(), target),
+        None => rt::EqualityOperand::typed(left_source_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c()),
+    };
+    let right_operand = match right_target {
+        Some(target) => rt::EqualityOperand::converted(right_source_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c(), target),
+        None => rt::EqualityOperand::typed(right_source_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c()),
+    };
+    let checked = match environment.check_equality(rt::EqualityOperator::Equal, left_operand, right_operand) {
+        Ok(checked) => checked,
+        Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),
+    };
+    checked.evaluate(left, right, meter)
+}
+
 fn composites_de0bc9911bbaf25c8346ed1416cc325826cf3440884090ff975156bd744704a5() -> Vec<rt::CompositeDeclaration> {
     vec![]
 }

@@ -28,13 +28,18 @@ use package::*;
 use quire_contract_runtime::exact as rt;
 use support::rt_side;
 
-/// Trace: FR-018-AC-2, FR-018-AC-9, TC-029.
+/// Trace: FR-018-AC-2, FR-018-AC-9, FR-018-AC-10, TC-029.
 ///
 /// Every vector below is run under `UNLIMITED` limits, which lets `agree3!`
 /// exercise a full, uncontested run against both the direct Contract Runtime
 /// and the pinned QSL authority (AC-2) and, from the charges that run
 /// actually admits, a denial of each one in turn (AC-9) in the same call:
 /// `denials` discovers admitted charges dynamically rather than naming them.
+///
+/// Every one of the golden's 9 oracles is executed here (the `not_equal`
+/// record, text and enum vectors close the gap AC-10's own defence had: a
+/// mutated `EqualityOperatorKind::path()`, re-blessed, previously left every
+/// AC-10 test green because 3 of 9 oracles were never run under AC-2).
 #[test]
 fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree() {
     // Record (E_RECORD, `equal`): equal and unequal points.
@@ -49,8 +54,8 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
             direct: |m| direct_equality(
                 &environment,
                 EqualityOperator::Equal,
-                composite_type(R_POINT),
-                composite_type(R_POINT),
+                operand_typed(composite_type(R_POINT)),
+                operand_typed(composite_type(R_POINT)),
                 &left,
                 &right,
                 m,
@@ -77,8 +82,8 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
             direct: |m| direct_equality(
                 &environment,
                 EqualityOperator::Equal,
-                composite_type(TUP_PAIR),
-                composite_type(TUP_PAIR),
+                operand_typed(composite_type(TUP_PAIR)),
+                operand_typed(composite_type(TUP_PAIR)),
                 &left,
                 &right,
                 m,
@@ -106,8 +111,8 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
             direct: |m| direct_equality(
                 &environment,
                 EqualityOperator::Equal,
-                ValueType::option(ValueType::Integer),
-                ValueType::option(ValueType::Integer),
+                operand_typed(ValueType::option(ValueType::Integer)),
+                operand_typed(ValueType::option(ValueType::Integer)),
                 &left,
                 &right,
                 m,
@@ -134,8 +139,8 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
             direct: |m| direct_equality(
                 &environment,
                 EqualityOperator::Equal,
-                ValueType::collection(sequence_type()),
-                ValueType::collection(sequence_type()),
+                operand_typed(ValueType::collection(sequence_type())),
+                operand_typed(ValueType::collection(sequence_type())),
                 &left,
                 &right,
                 m,
@@ -160,8 +165,8 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
             direct: |m| direct_equality(
                 &environment,
                 EqualityOperator::Equal,
-                composite_type(R_SELF),
-                composite_type(R_SELF),
+                operand_typed(composite_type(R_SELF)),
+                operand_typed(composite_type(R_SELF)),
                 &left,
                 &right,
                 m,
@@ -187,13 +192,140 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
             direct: |m| direct_equality(
                 &environment,
                 EqualityOperator::Equal,
-                composite_type(R_PAIR_OF_POINTS),
-                composite_type(R_PAIR_OF_POINTS),
+                operand_typed(composite_type(R_PAIR_OF_POINTS)),
+                operand_typed(composite_type(R_PAIR_OF_POINTS)),
                 &left,
                 &right,
                 m,
             ),
             generated: |g| crate::generated::oracle_960fbf99330aa3db769521829ca3626509908d5088735094a70b5d09f94ab04a(
+                &environment, &left, &right, g,
+            ),
+        };
+    }
+
+    // Record (E_RECORD, `not_equal`): the golden's second operator variant
+    // over the same node id. Without this vector, mutating
+    // `EqualityOperatorKind::path()` so `NotEqual` emits
+    // `rt::EqualityOperator::Equal` and re-blessing the golden left every
+    // AC-10 test green (FR-018-AC-10's own defect report): this oracle was
+    // never executed under AC-2, only referenced by AC-11's complementary
+    // check.
+    for (lx, ly, rx, ry) in [(1, 2, 1, 2), (1, 2, 3, 4)] {
+        agree3! {
+            limits: UNLIMITED,
+            setup: {
+                let environment = environment_record();
+                let left = record_point(&environment, lx, ly);
+                let right = record_point(&environment, rx, ry);
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::NotEqual,
+                operand_typed(composite_type(R_POINT)),
+                operand_typed(composite_type(R_POINT)),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| crate::generated::oracle_d710d3e47cbf0de46401ae4200ee16178c4b09b5c42dde2a7932a5ab12eafc9f(
+                &environment, &left, &right, g,
+            ),
+        };
+    }
+
+    // Text (E_TEXT, `equal`): equal and unequal short strings within
+    // BD_TEXT's bound. Previously referenced by nothing (module doc gap).
+    for (lt, rt_) in [("abc", "abc"), ("abc", "xyz")] {
+        agree3! {
+            limits: UNLIMITED,
+            setup: {
+                let environment = environment_option();
+                let left = text_value(lt);
+                let right = text_value(rt_);
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::Equal,
+                operand_typed(ValueType::Text(TextType::new(0, 16, TextProfile::Nfc).unwrap())),
+                operand_typed(ValueType::Text(TextType::new(0, 16, TextProfile::Nfc).unwrap())),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| crate::generated::oracle_6c3907cac3cc8b8def849dd9a7ccc97bd2e4965d6088a8d1e66073cfed623edf(
+                &environment, &left, &right, g,
+            ),
+        };
+    }
+
+    // Enum (E_ENUM, `equal`): equal and unequal members of the vendored
+    // `Example.Status` declaration. Previously referenced by nothing (module
+    // doc gap).
+    for (l, r) in [("READY", "READY"), ("READY", "DONE")] {
+        agree3! {
+            limits: UNLIMITED,
+            setup: {
+                let environment = environment_option();
+                let declaration = enum_status();
+                let left = declaration.value(l);
+                let right = declaration.value(r);
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::Equal,
+                operand_typed(enum_status_type()),
+                operand_typed(enum_status_type()),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| crate::generated::oracle_e88ebbb852f2c82a1bd2db38e1b7341e7314f5dfa10716a9567dc7ae7e05420b(
+                &environment, &left, &right, g,
+            ),
+        };
+    }
+}
+
+/// Trace: FR-018-AC-2, TC-029.
+///
+/// The one `converted` execution vector (FR-018-AC-2's disclosed gap):
+/// E_CONV's left operand is `convert<Integer>(e)` for `e: Int[-100, 100]`
+/// (the same pair FR-018-AC-3's generation-time test already uses), and the
+/// right operand is untouched `Integer`. `direct_equality` builds this from
+/// the request's own descriptor, independently of the generated source, so a
+/// generator mutation that cross-wires which operand's conversion target
+/// lands on which operand — FR-018-AC-2's "apply the right operand's
+/// conversion before the left's" mutation row — makes the generated leg
+/// disagree with the direct and authority legs rather than passing by
+/// construction.
+///
+/// Full coverage of every `admits_equality_conversion` row (TC-029 step 1)
+/// is out of scope for this vector; it demonstrates the harness can express
+/// a `converted` operand at all, which it could not before this test.
+#[test]
+fn tc_029_ac2_a_converted_operand_agrees() {
+    for (l, r) in [(5_i64, 5_i64), (5, 6)] {
+        agree3! {
+            limits: UNLIMITED,
+            setup: {
+                let environment = environment_option();
+                let left = Value::Integer(Integer::from(l));
+                let right = Value::Integer(Integer::from(r));
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::Equal,
+                operand_converted(
+                    ValueType::Int(IntegerInterval::new(Integer::from(-100_i64), Integer::from(100_i64)).unwrap()),
+                    ValueType::Integer,
+                ),
+                operand_typed(ValueType::Integer),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| crate::generated::oracle_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c(
                 &environment, &left, &right, g,
             ),
         };

@@ -608,5 +608,11 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
             typed(R_SELF),
             typed(R_SELF),
         ),
+        item(
+            E_CONV,
+            EqualityOperatorKind::Equal,
+            converted(T_INTEGER_BOUNDED, T_INTEGER),
+            typed(T_INTEGER),
+        ),
     ]
 }

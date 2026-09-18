@@ -55,7 +55,8 @@ type: TestMatrix
 | FR-016 | FR-016-AC-1 through FR-016-AC-7 | TC-026 | 🚧 Planned |
 | FR-017 | FR-017-AC-2 through FR-017-AC-5, FR-017-AC-8, FR-017-AC-9, FR-017-CON-2 | TC-027 | ✅ Covered |
 | FR-017 | FR-017-AC-1, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1 | TC-027 | 🚧 Planned |
-| FR-018 | FR-018-AC-1 through FR-018-AC-13 | TC-029 | ✅ Covered |
+| FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-9 through FR-018-AC-13 | TC-029 | ✅ Covered |
+| FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7, FR-018-AC-8 | TC-029 | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
@@ -114,25 +115,24 @@ build, and never converting a non-verified outcome into a proof claim — are ba
 timed-out criterion is written, because the run has no wall-clock budget to fail one — that is
 codegen#58, and TC-027 records it as blocked rather than specifying around it.
 
-FR-018 and TC-029 are `✅ Covered`: the composite/structural equality slice of codegen#48. Generation
-lives in `src/composite_equality.rs`; the committed golden crate under
-`tests/fixtures/composite_equality/` is the crate TC-029 step 4 compiles and executes. The row is
-promoted on the strength of that step 4 — the three-way agreement of generated oracle, direct
-runtime execution and the pinned quire-spec-language authority, exercised in
-`tests/composite_equality_agreement.rs`'s `agree3!` macro over record, tuple, option, collection,
-recursive and nested-composite vectors — because the committed golden crate is blessable with
-`QUIRE_CODEGEN_BLESS=1` and pins nothing by itself, and only against a native run whose environment,
-operands and descriptor are constructed in the test from the request, never read back from the
-generated crate. Every acceptance criterion's own FR-018 mutation was applied, confirmed to turn its
-test red, and reverted, including both of AC-10's: ordering claim-map entries by expression node id
-alone (which ties two descriptors on one node and lets a permuted request permute them), and the
-circularity check — blessing a golden whose emitted operator was corrupted while the native leg reads
-its descriptor from that same golden. The second is the one that tests whether the golden defence
-holds rather than merely exists: with the corrupted golden re-blessed, the byte-comparison test passes
-by construction, but `tc_029_ac11_operator_variants_produce_complementary_outcomes`, whose expectation
-is independent semantic behaviour rather than anything read from the golden, still goes red.
+FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-9 through FR-018-AC-13 are `✅ Covered`:
+the composite/structural equality slice of codegen#48 that TC-029 backs with a passing test for every
+clause those criteria name. Generation lives in `src/composite_equality.rs`; the committed golden
+crate under `tests/fixtures/composite_equality/` is the crate TC-029 step 4 compiles and executes,
+over all 9 of its oracles — both `EqualityOperator` variants on the record node, and the text,
+enum, option, collection, self-recursive and nested-composite shapes — plus one `converted`-operand
+vector, in `tests/composite_equality_agreement.rs`'s `agree3!` macro. Each of these criteria's own
+FR-018 mutation was applied, confirmed to turn its test red, and reverted, including AC-2's
+conversion-ordering row (swapping which operand's `convert<T>` target the emitted code applies) and
+both of AC-10's: ordering claim-map entries by expression node id alone (which ties two descriptors on
+one node and lets a permuted request permute them), and the circularity check — blessing a golden
+whose emitted operator was corrupted while the native leg reads its descriptor from that same golden.
+The circularity mutation is the one that tests whether the golden defence holds rather than merely
+exists: with the corrupted golden re-blessed, the byte-comparison test passes by construction, but the
+AC-2 three-way agreement over the record node's `not_equal` oracle — the one the corruption reaches —
+still goes red.
 
-That promotion had a hard prerequisite, now satisfied: agent-ix/quire-contract-codegen#75, merged as
+That coverage had a hard prerequisite, now satisfied: agent-ix/quire-contract-codegen#75, merged as
 `e74d592`, re-pinned Contract Runtime `a04bd47`→`4e33052` and quire-spec-language
 `d9d5273`→`21c507e`. Before it the equality surface FR-018 calls was not visible from this
 repository and `quire_spec_language::value` published no `check_equality`, `CheckedEquality` or
@@ -141,11 +141,25 @@ at `21c507e` mirrors the pinned Contract Runtime's equality surface under identi
 signature difference: `InjectedDenial::occurrence` is a plain `u64` there against the runtime's
 `NonZeroU64`; the agreement harness's `denials` helper abstracts over it.
 
-Two things step 4's vectors do not exercise, disclosed rather than silently passed over:
-`EqualitySchedule::Quantity` is asserted only at the generation/schedule level (AC-4, over a
-non-executed top-level pair), because the corpus admits no `Quantity`-leaf composite to execute; and
+FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 and FR-018-AC-8 are `🚧 Planned`: each names at least one clause
+TC-029 carries no test for. AC-4 requires a schedule assertion for a top-level quantity pair; the
+generator refuses `unit`/`dimension` scalars as `Unsupported { node_tag: "quantity" }`, so no quantity
+item can reach a claim-map entry for that assertion to read. AC-5 lists six refused conditions, each
+with its own `IllTypedCause`; only `convert<T>` outside `admits_equality_conversion` is tested.
+Incompatible dimensions and distinct units are unreachable in the current corpus — both need
+`ValueType::Quantity` operands, refused as `Unsupported` before `check_equality` runs — and distinct
+text profiles, distinct enum declarations, no common type, and the "admits no charge on any `Meter`"
+clause are untested but reachable. AC-7 names eight refused node forms across three distinct
+blockers; the corpus exercises six (`reference`, `model`, `function`, `call`, `state`, `temporal`) and
+confirms all three blocker values are distinct, but carries no `relation` or `protocol` node, so two
+of the eight named forms are untested. AC-8 requires a declaration refusal for "both recursion passes
+and a duplicate record field"; only the duplicate-field half is tested; no vector produces
+`DeclarationCause::Recursion` in either pass.
+
 `admits_equality_conversion`'s `converted` operand path is exercised at generation time (AC-3, AC-5)
-but not inside the three-way execution agreement, whose vectors are all `typed`.
+and, for one `Int`-to-`Integer` vector, inside the three-way execution agreement (AC-2). Full coverage
+of each `admits_equality_conversion` row, which TC-029 step 1 also demands, is not: the corpus has one
+`converted` vector, not one per row of that table.
 
 FR-018 does not claim the rest of codegen#48. Function application has no runtime surface to call
 (agent-ix/quire-contract-runtime#34), the model graph awaits agent-ix/quire-spec-language#120, and
@@ -210,7 +224,7 @@ that row false. The slice adds its interface entry when it adds its code.
 | TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4, FR-016-AC-5, FR-016-AC-6, FR-016-AC-7 | 🚧 Planned |
 | TC-027 | Verify pinned Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-1, FR-017-AC-2, FR-017-AC-3, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-8, FR-017-AC-9, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
 | TC-028 | Verify interface-001's declared API surface and identity envelope match the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-3, interface-001-AC-4, interface-001-AC-5 | ✅ Covered |
-| TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13 | ✅ Covered |
+| TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13 | 🚧 Planned |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and

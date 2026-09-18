@@ -20,6 +20,39 @@
 
 #![allow(dead_code, unused_imports)]
 
+use quire_spec_language::value as authority;
+use serde_json::{json, Value as JsonValue};
+
+/// The vendored `Example.Status` enum declaration (`quire_type_id`
+/// `package::ENUM_TYPE_DIGEST`, already verified nominal identity):
+/// `ordered`, members `READY`/`DONE` in declaration order.
+fn enum_status_declaration_json() -> JsonValue {
+    json!({
+        "version": "quire.enum-declaration-node/v1",
+        "owner": {"kind": "definition", "authority": "agent-ix", "identity": "example-model"},
+        "qualified_declaration": ["Example", "Status"],
+        "ordered": true,
+        "members": ["READY", "DONE"],
+    })
+}
+
+fn enum_status_member_json(case: &str) -> JsonValue {
+    json!({
+        "version": "quire.enum-member-node/v1",
+        "declaration_node_id": {
+            "domain": authority::NODE_KEY_DOMAIN,
+            "digest": crate::package::ENUM_TYPE_DIGEST,
+        },
+        "case": case,
+    })
+}
+
+/// Authority-computed member key for `case` of `Example.Status`.
+fn enum_status_member_key(case: &str) -> String {
+    let preimage = authority::EnumMemberPreimage::from_json(enum_status_member_json(case)).unwrap();
+    preimage.node_key().unwrap().to_string()
+}
+
 /// Authority, direct runtime and generated oracle agree, including every
 /// charge and every single-charge denial.
 macro_rules! agree3 {
@@ -349,30 +382,73 @@ macro_rules! shared_helpers {
                 .unwrap()
         }
 
+        /// The vendored `Example.Status` enum's `ValueType`, matching
+        /// `package::ENUM_TYPE_DIGEST`.
+        pub fn enum_status_type() -> ValueType {
+            ValueType::Enum(node_key_from_digest(crate::package::ENUM_TYPE_DIGEST))
+        }
+
+        fn node_key_from_digest(digest: &str) -> NodeKey {
+            NodeKey::from_hex(digest).unwrap()
+        }
+
+        /// An operand's static type for a direct `check_equality` call: a
+        /// source type and, for a `convert<T>` operand, its conversion
+        /// target — the same shape
+        /// `quire_contract_codegen::composite_equality::EqualityOperandDescriptor`
+        /// requests. [`direct_equality`] needs this, rather than a bare
+        /// `ValueType`, to express a `converted` operand (FR-018-AC-2's
+        /// conversion-ordering mutation has nothing to swap without one).
+        #[derive(Clone)]
+        pub struct DirectOperand {
+            source: ValueType,
+            target: Option<ValueType>,
+        }
+
+        /// An operand of static type `source`, applying no conversion.
+        pub fn operand_typed(source: ValueType) -> DirectOperand {
+            DirectOperand {
+                source,
+                target: None,
+            }
+        }
+
+        /// An operand `convert<target>(e)` for `e` of static type `source`.
+        pub fn operand_converted(source: ValueType, target: ValueType) -> DirectOperand {
+            DirectOperand {
+                source,
+                target: Some(target),
+            }
+        }
+
         /// `TypeEnvironment::check_equality` plus `CheckedEquality::evaluate`,
         /// invoked directly and driven from the request's own operator and
-        /// operand types (FR-018-AC-2, AC-3): no `check_type` guard, since
-        /// none of this file's requests use a `converted` operand, so the
-        /// corresponding oracle's guard never takes its early-return branch
-        /// either.
+        /// operand descriptors (FR-018-AC-2, AC-3): no `check_type` guard,
+        /// since none of this file's requests are refused by the
+        /// environment, so the corresponding oracle's guard never takes its
+        /// early-return branch either.
         pub fn direct_equality(
             environment: &TypeEnvironment,
             operator: EqualityOperator,
-            left_type: ValueType,
-            right_type: ValueType,
-            left: &Value,
-            right: &Value,
+            left: DirectOperand,
+            right: DirectOperand,
+            left_value: &Value,
+            right_value: &Value,
             meter: &mut Meter,
         ) -> Outcome<bool> {
-            let checked = match environment.check_equality(
-                operator,
-                EqualityOperand::typed(left_type),
-                EqualityOperand::typed(right_type),
-            ) {
+            let left_operand = match left.target {
+                Some(target) => EqualityOperand::converted(left.source, target),
+                None => EqualityOperand::typed(left.source),
+            };
+            let right_operand = match right.target {
+                Some(target) => EqualityOperand::converted(right.source, target),
+                None => EqualityOperand::typed(right.source),
+            };
+            let checked = match environment.check_equality(operator, left_operand, right_operand) {
                 Ok(checked) => checked,
                 Err(_) => return Outcome::Refused(Refusal::CheckedInvariant),
             };
-            checked.evaluate(left, right, meter)
+            checked.evaluate(left_value, right_value, meter)
         }
     };
 }
@@ -380,9 +456,57 @@ macro_rules! shared_helpers {
 pub mod qsl_side {
     pub use quire_spec_language::value::*;
     shared_helpers!();
+
+    /// The vendored `Example.Status` declaration, admitted under its
+    /// verified node id (`crate::package::ENUM_TYPE_DIGEST`).
+    pub struct EnumStatus(EnumDeclaration);
+
+    fn owners() -> OwnerSelection {
+        OwnerSelection::new([NodeOwner::Definition(OwnerSubject {
+            authority: "agent-ix".into(),
+            identity: "example-model".into(),
+        })])
+    }
+
+    pub fn enum_status() -> EnumStatus {
+        let preimage =
+            EnumDeclarationPreimage::from_json(crate::support::enum_status_declaration_json())
+                .unwrap();
+        let key = NodeKey::from_hex(crate::package::ENUM_TYPE_DIGEST).unwrap();
+        EnumStatus(EnumDeclaration::admit(preimage, key, &owners()).unwrap())
+    }
+
+    impl EnumStatus {
+        pub fn value(&self, case: &str) -> Value {
+            let key = crate::support::enum_status_member_key(case);
+            let preimage =
+                EnumMemberPreimage::from_json(crate::support::enum_status_member_json(case))
+                    .unwrap();
+            let member = NodeKey::from_hex(&key).unwrap();
+            Value::Enum(self.0.admit_member(&preimage, member).unwrap())
+        }
+    }
 }
 
 pub mod rt_side {
     pub use quire_contract_runtime::exact::*;
     shared_helpers!();
+
+    /// The vendored `Example.Status` declaration, under its authority-verified
+    /// node id (`crate::package::ENUM_TYPE_DIGEST`) and authority-computed
+    /// member keys, so the same identities are in play as `qsl_side`'s.
+    pub struct EnumStatus(EnumDeclaration);
+
+    pub fn enum_status() -> EnumStatus {
+        let key = NodeKey::from_hex(crate::package::ENUM_TYPE_DIGEST).unwrap();
+        EnumStatus(EnumDeclaration::new(key, true, &["READY", "DONE"]).unwrap())
+    }
+
+    impl EnumStatus {
+        pub fn value(&self, case: &str) -> Value {
+            let key = crate::support::enum_status_member_key(case);
+            let member = NodeKey::from_hex(&key).unwrap();
+            Value::Enum(self.0.member(case, member).unwrap())
+        }
+    }
 }

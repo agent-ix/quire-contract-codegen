@@ -566,6 +566,84 @@
     {
       "node_id": {
         "domain": "quire.checked-semantic-node/v1",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000111"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not carried by CheckedPackage V2"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c",
+        "oracle_symbol": "oracle_ded0d4f3fd07be4748b614b6744395c6686310e7059138ab338bb6b798683f7c",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "36960e5957e75784d11b31993ce4be649f06942fcf10d21893935ffcfe39bede"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "e3c32ce08cb08138d7bb44f434b9367369e1905dcdcf57374eee251688557b6e"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "0000000000000000000000000000000000000000000000000000000000000111"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 38,
+                "end": 39
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
+          },
+          "left_conversion_target": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
         "digest": "0000000000000000000000000000000000000000000000000000000000000112"
       },
       "operation": {
