@@ -55,8 +55,8 @@ type: TestMatrix
 | FR-016 | FR-016-AC-1 through FR-016-AC-7 | TC-026 | 🚧 Planned |
 | FR-017 | FR-017-AC-2 through FR-017-AC-5, FR-017-AC-8, FR-017-AC-9, FR-017-CON-2 | TC-027 | ✅ Covered |
 | FR-017 | FR-017-AC-1, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1 | TC-027 | 🚧 Planned |
-| FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-9 through FR-018-AC-13 | TC-029 | ✅ Covered |
-| FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7, FR-018-AC-8 | TC-029 | 🚧 Planned |
+| FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-10 through FR-018-AC-13 | TC-029 | ✅ Covered |
+| FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
@@ -115,7 +115,7 @@ build, and never converting a non-verified outcome into a proof claim — are ba
 timed-out criterion is written, because the run has no wall-clock budget to fail one — that is
 codegen#58, and TC-027 records it as blocked rather than specifying around it.
 
-FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-9 through FR-018-AC-13 are `✅ Covered`:
+FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-10 through FR-018-AC-13 are `✅ Covered`:
 the composite/structural equality slice of codegen#48 that TC-029 backs with a passing test for every
 clause those criteria name. Generation lives in `src/composite_equality.rs`; the committed golden
 crate under `tests/fixtures/composite_equality/` is the crate TC-029 step 4 compiles and executes,
@@ -150,20 +150,29 @@ at `21c507e` mirrors the pinned Contract Runtime's equality surface under identi
 signature difference: `InjectedDenial::occurrence` is a plain `u64` there against the runtime's
 `NonZeroU64`; the agreement harness's `denials` helper abstracts over it.
 
-FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 and FR-018-AC-8 are `🚧 Planned`: each names at least one clause
-TC-029 carries no test for. AC-4 requires a schedule assertion for a top-level quantity pair; the
-generator refuses `unit`/`dimension` scalars as `Unsupported { node_tag: "quantity" }`, so no quantity
-item can reach a claim-map entry for that assertion to read. AC-5 lists six refused conditions, each
-with its own `IllTypedCause`; only `convert<T>` outside `admits_equality_conversion` is tested.
-Incompatible dimensions and distinct units are unreachable in the current corpus — both need
-`ValueType::Quantity` operands, refused as `Unsupported` before `check_equality` runs — and distinct
-text profiles, distinct enum declarations, no common type, and the "admits no charge on any `Meter`"
-clause are untested but reachable. AC-7 names eight refused node forms across three distinct
+FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 are `🚧 Planned`: each names at least one
+clause TC-029 carries no test for. AC-4 requires a schedule assertion for a top-level quantity pair;
+the generator refuses `unit`/`dimension` scalars as `Unsupported { node_tag: "quantity" }`, so no
+quantity item can reach a claim-map entry for that assertion to read. AC-5 lists six refused
+conditions, each with its own `IllTypedCause`; only `convert<T>` outside `admits_equality_conversion`
+is tested. Incompatible dimensions and distinct units are unreachable in the current corpus — both
+need `ValueType::Quantity` operands, refused as `Unsupported` before `check_equality` runs — and
+distinct text profiles, distinct enum declarations, no common type, and the "admits no charge on any
+`Meter`" clause are untested but reachable. AC-7 names eight refused node forms across three distinct
 blockers; the corpus exercises six (`reference`, `model`, `function`, `call`, `state`, `temporal`) and
 confirms all three blocker values are distinct, but carries no `relation` or `protocol` node, so two
 of the eight named forms are untested. AC-8 requires a declaration refusal for "both recursion passes
 and a duplicate record field"; only the duplicate-field half is tested; no vector produces
-`DeclarationCause::Recursion` in either pass.
+`DeclarationCause::Recursion` in either pass. AC-9's conversion-charge clause ("each conversion charge
+point in turn") is backed: `E_CONV_CHARGE` admits four conversion charge points —
+`DecimalOperands`, `DecimalScaleExpansion`, `DecimalArithmetic`, `DecimalResultRetain` — and each is
+denied in turn. Its counter clause ("every counter equals those of the same run stopped immediately
+before that point") is not: `Outcome::Incomplete`'s `consumed` field and `Meter::consumed` read the
+same array slot through the same accessor, so no comparison built from this repository's tests can
+distinguish a runtime that snapshots a charge point before mutating it from one that mutates first and
+snapshots the already-moved value; and `Meter::check_injected` reports `limit_kind: WorkUnits` for
+every denial regardless of the charge's real kind, so only one of ten `LimitKind` counters is ever in
+play. The property is verified in agent-ix/quire-contract-runtime#38.
 
 `admits_equality_conversion`'s `converted` operand path is exercised at generation time (AC-3, AC-5)
 and, for one `Int`-to-`Integer` vector, inside the three-way execution agreement (AC-2). Full coverage
