@@ -35,6 +35,5 @@ counterexample either reproduces native false or reports a typed replay
 non-success. The dependency graph keeps Contract IR below codegen. Every
 generated `#[kani::proof]` symbol is derived from, and carries, its corpus
 case's own identity digest, the same identity its artifact paths carry.
-(Whether that identity is itself unique across distinct corpus cases is
-tracked separately as agent-ix/quire-contract-codegen#73 and is not asserted
-here.)
+Identity uniqueness across distinct corpus cases is specified separately
+(agent-ix/quire-contract-codegen#73).
