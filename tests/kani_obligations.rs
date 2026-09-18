@@ -1,4 +1,5 @@
-//! FR-015 separate bounded Kani obligations and Contract IR FR-036 backend negotiation.
+//! FR-015 separate bounded Kani obligations, FR-017 pinned execution, and Contract IR FR-036
+//! backend negotiation.
 //!
 //! The default lane checks negotiation, refusal and harness shape without running Kani. The
 //! `kani` lane (`make kani`, `#[ignore]` here) measures the installed backend, runs real
@@ -1214,9 +1215,9 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
 
 /// A missing backend is a typed refusal before anything runs.
 ///
-/// Trace: FR-015-AC-2, TC-025
+/// Trace: FR-017-AC-2, TC-027
 #[test]
-fn tc_025_an_unmeasurable_backend_is_refused_before_running() {
+fn tc_027_an_unmeasurable_backend_is_refused_before_running() {
     let package = bound_package(1000);
     let pins = pins();
     let harness = supported_contract_harnesses(&package, &pins, "crate::withdraw").remove(1);
@@ -1320,7 +1321,8 @@ fn run(
 /// concrete counterexample, jointly unsatisfiable requires are reported vacuous rather than
 /// verified, and drifted pins refuse before running.
 ///
-/// Trace: FR-015-AC-1, FR-015-AC-2, FR-015-AC-4, TC-025
+/// Trace: FR-015-AC-1, FR-015-AC-2, FR-015-AC-4, TC-025, FR-017-AC-1, FR-017-AC-3, FR-017-AC-4,
+/// FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1, FR-017-CON-2, TC-027
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect() {
@@ -1408,6 +1410,28 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
             field: KaniPinField::DriverSha256,
             ..
         }
+    ));
+    assert!(!crate_directory.join("target").exists(), "nothing ran");
+    let _ = fs::remove_dir_all(crate_directory);
+
+    // Evidence about a harness the crate does not contain is evidence about nothing.
+    let harness = supported_contract_harnesses(&package, &pins, "crate::withdraw").remove(1);
+    let crate_directory = write_crate(&harness, HEALTHY_SUBJECT);
+    fs::write(
+        crate_directory.join("src/lib.rs"),
+        format!("//! Generated obligation check crate.\n\n{HEALTHY_SUBJECT}"),
+    )
+    .unwrap();
+    let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        installation: &installation,
+        harness: &harness,
+        crate_directory: &crate_directory,
+        target_directory: &crate_directory.join("target"),
+    })
+    .unwrap_err();
+    assert!(matches!(
+        refusal,
+        KaniExecutionRefusal::HarnessNotInCrate { .. }
     ));
     assert!(!crate_directory.join("target").exists(), "nothing ran");
     let _ = fs::remove_dir_all(crate_directory);

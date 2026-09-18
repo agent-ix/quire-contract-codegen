@@ -1,4 +1,4 @@
-//! Pinned execution of one generated Kani obligation harness (FR-015).
+//! Pinned execution of one generated Kani obligation harness (FR-017).
 //!
 //! The backend is pinned by committed values ([`KaniToolPins::pinned`]). Before
 //! anything runs, the harness identity's pins and the pins re-measured from the
@@ -624,9 +624,9 @@ mod tests {
     /// Success is `Verified` only with every cover satisfied, for every obligation kind; a
     /// vacuous run is `CoverUnsatisfied`. Summaries are Kani 0.67.0's own output.
     ///
-    /// Trace: FR-015-AC-2, FR-015-AC-4, TC-025
+    /// Trace: FR-017-AC-4, FR-017-AC-5, TC-027
     #[test]
-    fn tc_025_run_classification_never_defaults_to_verified() {
+    fn tc_027_run_classification_never_defaults_to_verified() {
         let verified = format!(
             "SUMMARY:\n ** 0 of 43 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n{COVER_PLAYBACK}"
         );
@@ -701,9 +701,9 @@ mod tests {
     /// An exhausted unwind bound is inconclusive even when Kani prints a playback. The output
     /// is Kani 0.67.0's for a loop past `--unwind 4`.
     ///
-    /// Trace: FR-015-AC-2, TC-025
+    /// Trace: FR-017-AC-5, TC-027
     #[test]
-    fn tc_025_an_exhausted_unwind_bound_is_inconclusive_not_falsified() {
+    fn tc_027_an_exhausted_unwind_bound_is_inconclusive_not_falsified() {
         let unwound = format!(
             "VERIFICATION RESULT:\n ** 1 of 39 failed (38 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\nFailed Checks: unwinding assertion loop 0\n File: \"src/lib.rs\", line 10, in looping\n\nVERIFICATION:- FAILED\n[Kani] info: Verification output shows one or more unwinding failures.\n{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"
         );
@@ -722,9 +722,9 @@ mod tests {
 
     /// Only the committed pins pass; each field is compared.
     ///
-    /// Trace: FR-015-AC-2, TC-025
+    /// Trace: FR-017-AC-1, FR-017-AC-3, TC-027
     #[test]
-    fn tc_025_pins_are_compared_field_by_field_against_the_committed_backend() {
+    fn tc_027_pins_are_compared_field_by_field_against_the_committed_backend() {
         let pinned = KaniToolPins::pinned();
         assert_eq!(pinned.kani_version, "0.67.0");
         assert_eq!(pinned.cbmc_version, "6.8.0 (cbmc-6.8.0)");
