@@ -57,8 +57,11 @@ collection/query construct without giving Contract IR a dependency on codegen.
   identity.
 - When the generator emits a Kani harness for a supported corpus case, the
   generator shall derive the harness's `#[kani::proof]` symbol from the case's
-  own identity rather than from its semantic family alone, so no two corpus
-  cases share a proof symbol.
+  own identity digest rather than from its semantic family alone, carrying the
+  same identity the case's artifact paths carry. This binds the symbol to the
+  case's identity; it does not by itself make the identity unique across
+  distinct cases with the same result value, which is tracked separately as
+  agent-ix/quire-contract-codegen#73.
 - When a finite population, snapshot, reference, collection, or invocation is
   malformed, incomplete, unavailable, or over its selected bound, the
   generator shall return the matching typed non-Boolean result before it emits
@@ -100,7 +103,7 @@ collection/query construct without giving Contract IR a dependency on codegen.
 | FR-007-AC-3 | Invalid, incomplete, unavailable, over-bound, refused, inconclusive, timed-out, and exhausted cases retain a typed non-Boolean result and no partial artifact. | Test (TC-023) |
 | FR-007-AC-4 | Every retained Kani counterexample replays through Contract IR's native runtime boundary with the same false classification, or the replay returns a typed non-Boolean mismatch or unavailable result. | Test (TC-023) |
 | FR-007-AC-5 | The generated corpus preserves the Contract IR to codegen dependency direction and no generated artifact requires a reverse Contract IR dependency. | Inspection (TC-023) |
-| FR-007-AC-6 | The generated `#[kani::proof]` symbol for a supported corpus case carries the case's own identity, so two distinct corpus cases of the same semantic family never emit the same proof symbol. | Test (TC-023) |
+| FR-007-AC-6 | The generated `#[kani::proof]` symbol for a supported corpus case is derived from the case's own identity digest and carries the same identity the case's artifact paths carry. This criterion does not assert that the identity, or therefore the symbol, is unique across distinct corpus cases; identity/symbol uniqueness is tracked separately as agent-ix/quire-contract-codegen#73. | Test (TC-023) |
 
 ## Dependencies
 

@@ -32,5 +32,9 @@ Every supported case has matching typed classification and exact retained
 identity across backends. Every unsupported or adverse case has its original
 typed non-Boolean result and no partial artifact or proof claim. Every retained
 counterexample either reproduces native false or reports a typed replay
-non-success. The dependency graph keeps Contract IR below codegen. Two distinct
-corpus cases of the same semantic family emit distinct `#[kani::proof]` symbols.
+non-success. The dependency graph keeps Contract IR below codegen. Every
+generated `#[kani::proof]` symbol is derived from, and carries, its corpus
+case's own identity digest, the same identity its artifact paths carry.
+(Whether that identity is itself unique across distinct corpus cases is
+tracked separately as agent-ix/quire-contract-codegen#73 and is not asserted
+here.)
