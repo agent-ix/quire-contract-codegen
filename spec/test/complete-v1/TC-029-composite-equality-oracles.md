@@ -47,9 +47,11 @@ or `plan_equality` for step 4(b) to call at all.
    unlowered node, a non-`binary` form, a descriptor disagreeing with its
    operand types, one node id repeated under one descriptor, and a request that
    exceeds the lowering work limit.
-2. Generate twice and with a permuted request; compare bytes with each other and
-   with the committed golden, and inspect claim-map ordering by node id (digest
-   domain, then digest), reconstructed declaration keys against
+2. Generate twice and with a permuted request that includes both descriptors of
+   step 7 over one node id; compare bytes with each other and with the committed
+   golden, and inspect claim-map ordering by node id (digest domain, then digest)
+   and then by descriptor — node id alone ties those two entries — reconstructed
+   declaration keys against
    `NodeKey::from_hex` of the V2 digests, and `caller_declared` provenance.
    Assert each entry's recorded descriptor is equal to the one the request
    supplied — operator, both operand source types, both conversion targets — and
@@ -79,15 +81,23 @@ or `plan_equality` for step 4(b) to call at all.
    `Outcome::Incomplete` naming that point and that the denied charge was not
    applied — every counter equal to those of the same run stopped immediately
    before that point, not to the counters at entry.
-6. Call each generated oracle with a `TypeEnvironment` other than the one its
-   environment constructor returns — an empty environment, and one declaring the
-   same keys with different fields; confirm `Outcome::Refused(Refusal::CheckedInvariant)`
-   and no panic.
+6. Call each generated oracle over a composite or collection operand type with a
+   `TypeEnvironment` other than the one its environment constructor returns — an
+   empty environment, and one omitting or renaming a key its operand types reach;
+   confirm `Outcome::Refused(Refusal::CheckedInvariant)`, no panic, and no charge
+   admitted on the `Meter`. Assert that this is the emitted `check_type` calls
+   deciding it, by confirming the same environments pass `check_equality`: that
+   call consults the environment only through `contains_ieee`, which returns
+   `false` for a composite key the environment does not hold, and
+   `CheckedEquality::evaluate` takes no environment at all — so without
+   `check_type` these vectors complete with a Boolean.
 7. Request one node twice in one request under descriptors differing only in
-   `EqualityOperator`; confirm both generate with their own symbols, both are
-   marked `caller_declared`, and their outcomes are complementary on a vector
-   whose operands differ. This is not the duplicate case of step 1: a duplicate
-   is one node id under one descriptor.
+   `EqualityOperator`; confirm both generate under distinct symbols, that the
+   symbols differ because the descriptors do and not because any declaration or
+   field name was rendered into them, that both are marked `caller_declared`, and
+   that their outcomes are complementary on a vector whose operands differ. This
+   is not the duplicate case of step 1: a duplicate is one node id under one
+   descriptor.
 
 ## Expected Results
 
@@ -97,8 +107,10 @@ runs and orderings; each entry's recorded descriptor and schedule equal the
 request's and `CheckedEquality::schedule()`; all three executions agree on every
 vector's outcome, charges and counters; every injected denial yields
 `Incomplete` at its point without applying that charge; a foreign environment
-refuses as `CheckedInvariant` without panicking; the two operators generate with
-complementary results under one `caller_declared` mark; and the generated crate
+refuses as `CheckedInvariant` without panicking and without charging, decided by
+the emitted `check_type` calls; the two operators generate under distinct
+descriptor-derived symbols with complementary results and one `caller_declared`
+mark; and the generated crate
 compiles with `publish = false` and no charge or pair-count literal.
 
 Operand construction is the corpus's work, not the generator's: the composite
