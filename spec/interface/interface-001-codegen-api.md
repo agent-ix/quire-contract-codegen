@@ -207,3 +207,25 @@ open_design_gates:
   native_run_authentication: producer result digests establish consistency only; Quoin-owned authorized producer and expected record/candidate/run verification must precede qualification; no caller verified flag
   serialized_package_cli: the pinned public IR derived-projection decoder now supplies BoundPackage; cli_generate remains unimplemented, and normal projection production remains the authoritative frontend/model lane rather than a codegen-owned authored sidecar
 ```
+
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+|----|----------|--------------|
+| interface-001-AC-1 | Every `operations` entry this contract declares without a `status: planned` caveat is exported as a public function of `quire_contract_codegen` under the exact name given here: `generate_bound_oracles`, `generate_tristate_harness`, `generate_i64_strategy`, `generate_enum_strategy`, `generate_bound_strategy`, `generate_kani_bundle`, `write_bundle_atomic`, `analyze_bound_coverage`. | Test |
+| interface-001-AC-2 | Every `operations` entry this contract marks `status: planned` — `generate_bundle`, `analyze_coverage`, `cli_generate` — is absent from the public API, so an implementation cannot silently outrun the status this contract declares for it. | Test |
+| interface-001-AC-3 | `identity_envelope.required` names exactly the fields of `ProofAttestationBody`, and `identity_envelope.results` names exactly the four `AttestationResult` variants, so the envelope this contract describes is the envelope the generator emits. | Test |
+| interface-001-AC-4 | `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants, and no seventh state exists for `implemented_mapping` to omit. | Test |
+| interface-001-AC-5 | `kani_obligation_execution_slice.pins` names exactly the six measured fields of `KaniToolPins`. | Test |
+
+## Open items
+
+- `generate_bundle`, `analyze_coverage` and `cli_generate` are declared `status: planned` and have
+  no acceptance criteria beyond interface-001-AC-2's absence check: a criterion asserting behavior
+  for an operation this contract itself says is not implemented would be written to be satisfied by
+  nothing. Criteria for their real semantics belong with the requirement that implements them, once
+  one exists.
+- The remaining prose fields this contract's slices carry — admission order, refusal vocabulary,
+  domain and campaign rules, and so on — are the executable half of the FR that owns each slice
+  (FR-008 through FR-013 for `bound_strategy_slice`, FR-003 for `kani_slice`, FR-017 for
+  `kani_obligation_execution_slice`, and so on) and are backed there rather than restated here.

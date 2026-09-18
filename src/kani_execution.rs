@@ -126,6 +126,8 @@ pub enum KaniTool {
     RustToolchain,
     /// The release's `rustc`, asked for its host triple.
     Rustc,
+    /// The generated crate's `src/lib.rs`, checked for the harness's generated source.
+    Library,
     /// The generated crate's `Cargo.lock`, written by the run.
     Lockfile,
     /// The Kani home directory.
@@ -406,8 +408,11 @@ pub struct KaniExecutionEvidence {
     pub launcher_path: String,
     /// Complete argument vector after the launcher.
     pub arguments: Vec<String>,
-    /// SHA-256 of the generated crate's `Cargo.lock` after the run.
-    pub cargo_lock_sha256: String,
+    /// SHA-256 of the generated crate's `Cargo.lock` after the run, or `None` when the run
+    /// happened but the lockfile could not be read afterward — the outcome is then
+    /// [`KaniInconclusiveReason::NoVerdict`], because evidence about a run that occurred is
+    /// incomplete rather than absent.
+    pub cargo_lock_sha256: Option<String>,
     /// Digest of the oracle sources the harness embeds.
     pub oracle_digest: String,
     /// Contract Runtime revision the generated crate depends on.
@@ -428,19 +433,29 @@ pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let identity = &request.harness.identity;
+    // The harness identity's pins are known from the harness alone, without touching the
+    // backend, so a drifted identity refuses with zero processes started rather than after
+    // `observe()` has already spawned `cargo-kani kani --version`, `cbmc --version` and
+    // `rustc -vV`.
+    if let Some((field, expected, observed)) =
+        identity.pins.first_difference(&KaniToolPins::pinned())
+    {
+        return Err(KaniExecutionRefusal::PinDrift {
+            field,
+            expected,
+            observed,
+        });
+    }
     let observed = request.installation.observe()?;
-    // The harness pins, and the installed backend, must both be the committed pins.
-    for pins in [&identity.pins, &observed] {
-        if let Some((field, expected, observed)) = pins.first_difference(&KaniToolPins::pinned()) {
-            return Err(KaniExecutionRefusal::PinDrift {
-                field,
-                expected,
-                observed,
-            });
-        }
+    if let Some((field, expected, observed)) = observed.first_difference(&KaniToolPins::pinned()) {
+        return Err(KaniExecutionRefusal::PinDrift {
+            field,
+            expected,
+            observed,
+        });
     }
     let library_path = request.crate_directory.join("src").join("lib.rs");
-    let library = read_file(KaniTool::Lockfile, &library_path).map_err(|_| {
+    let library = read_file(KaniTool::Library, &library_path).map_err(|_| {
         KaniExecutionRefusal::HarnessNotInCrate {
             harness_path: request.harness.rust.path.clone(),
         }
@@ -467,10 +482,21 @@ pub fn execute_kani_obligation(
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    let cargo_lock_sha256 = file_sha256(
+    // The backend already ran by this point: a lockfile that cannot be read now is incomplete
+    // evidence about a real run, not grounds to refuse as though nothing happened. The outcome
+    // is downgraded to inconclusive rather than the run being reported as a pre-run refusal.
+    let (cargo_lock_sha256, outcome) = match file_sha256(
         KaniTool::Lockfile,
         &request.crate_directory.join("Cargo.lock"),
-    )?;
+    ) {
+        Ok(digest) => (Some(digest), classify_run(output.status.success(), &text)),
+        Err(_) => (
+            None,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::NoVerdict,
+            },
+        ),
+    };
     Ok(KaniExecutionEvidence {
         schema: KANI_EXECUTION_SCHEMA,
         obligation_identity_sha256: request.harness.identity_sha256.clone(),
@@ -486,7 +512,7 @@ pub fn execute_kani_obligation(
         unwind: identity.unwind,
         solver: identity.solver.clone(),
         exit_code: output.status.code(),
-        outcome: classify_run(output.status.success(), &text),
+        outcome,
     })
 }
 

@@ -23,11 +23,12 @@ use quire_contract_codegen::{
     execute_kani_obligation, generate_exact_scalar_oracles, negotiate_kani_obligations,
     AttestationContext, DerivedDomain, ExactScalarClaimMap, ExactScalarDisposition,
     ExactScalarItem, InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest,
-    KaniInstallation, KaniObligationError, KaniObligationHarness, KaniObligationOutcome,
-    KaniObligationRequest, KaniPinField, KaniRunOutcome, KaniTool, KaniToolError, KaniToolPins,
-    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
-    UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION,
-    KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
+    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
+    KaniObligationOutcome, KaniObligationRequest, KaniPinField, KaniRunOutcome, KaniTool,
+    KaniToolError, KaniToolPins, ObligationDisposition, ObligationItem, ObligationKind,
+    ObligationRecord, ObligationSubject, UnsupportedObligation, UpstreamBlocker,
+    IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION, KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS,
+    MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -560,6 +561,48 @@ fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
     );
 }
 
+/// The precondition harness's non-vacuity cover argument is the `precondition_holds` binding,
+/// and that binding is itself the precondition oracle applied to the harness's own symbolic
+/// arguments — not a literal. A regression to `kani::cover!(true, ...)`, or to a
+/// `precondition_holds` that is not derived from the oracle call, makes this fail: the cover
+/// would then be trivially reachable regardless of whether the precondition is satisfiable.
+///
+/// Trace: FR-015-AC-7, TC-025
+#[test]
+fn tc_025_precondition_cover_argument_is_derived_from_the_precondition_expression() {
+    let package = bound_package(1000);
+    let pins = pins();
+    let harnesses = supported_contract_harnesses(&package, &pins, "crate::withdraw");
+    let precondition = &harnesses[0];
+    assert_eq!(precondition.identity.kind, ObligationKind::Precondition);
+    let source = &precondition.rust.contents;
+    let symbol = &precondition.identity.oracles[0].symbol;
+
+    // The cover's argument names the `precondition_holds` binding, never a constant.
+    assert!(
+        source.contains("kani::cover!(precondition_holds, "),
+        "cover must be gated on the precondition_holds binding: {source}"
+    );
+    assert!(
+        !source.contains("kani::cover!(true, "),
+        "cover must not be trivially reachable: {source}"
+    );
+
+    // `precondition_holds` is bound to the precondition oracle applied to the harness's
+    // symbolic arguments, not to a constant. This pins the identifier order rather than
+    // merely asserting the oracle symbol occurs somewhere in the source.
+    let expected_binding =
+        format!("let precondition_holds = {symbol}(amount_current, balance_pre);");
+    assert!(
+        source.contains(&expected_binding),
+        "expected {expected_binding:?} in {source}"
+    );
+    assert!(
+        !source.contains("let precondition_holds = true;"),
+        "precondition_holds must not be a hardcoded literal: {source}"
+    );
+}
+
 /// Symbolic ranges are the IR's inclusive domains, and every pin, flag and revision is part of
 /// the harness identity.
 ///
@@ -604,8 +647,14 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity() {
     assert_eq!(identity.solver, "cadical");
     assert_eq!(identity.unwind, 4);
     let exact = format!("{}::{}", identity.module_symbol, identity.harness_symbol);
-    for flag in [
+    // The complete ordered option vector, not merely a set of substrings present somewhere in
+    // it: order, length and completeness are all part of FR-015-AC-9, so a truncated or
+    // reordered vector must fail here even though every flag it kept would still pass a
+    // membership check.
+    let expected_options: Vec<String> = [
+        "-Z",
         "function-contracts",
+        "-Z",
         "concrete-playback",
         "--harness",
         exact.as_str(),
@@ -614,12 +663,15 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity() {
         "4",
         "--solver",
         "cadical",
-    ] {
-        assert!(
-            identity.options.iter().any(|option| option == flag),
-            "{flag}"
-        );
-    }
+        "--output-format",
+        "regular",
+        "--concrete-playback",
+        "print",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    assert_eq!(identity.options, expected_options);
     // A stub is an assumption this obligation path does not admit, so no option enables one.
     assert!(
         !identity
@@ -707,9 +759,12 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity() {
 }
 
 /// Unbounded, non-finite, model-dependent, frame and definedness-bearing items are typed
-/// refusals with no harness.
+/// refusals with no harness. These generation-time classifications (`ObligationDisposition`,
+/// `UnsupportedObligation`) are never available to `execute_kani_obligation`, which requires a
+/// `KaniObligationHarness`: an item this test refuses never produces one, so there is no way to
+/// report the refusal as an execution outcome (`KaniRunOutcome`) instead of what it is.
 ///
-/// Trace: FR-015-AC-3, TC-025
+/// Trace: FR-015-AC-3, FR-017-CON-2, TC-025, TC-027
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
 #[test]
 fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses() {
@@ -1055,8 +1110,12 @@ fn tc_025_every_caller_declared_operation_is_refused() {
 }
 
 /// One invalid item rejects the request after every item is accounted, and exposes no bytes.
+/// The whole-request refusals below (`KaniObligationError`) are generation-time classifications
+/// too: a rejected `negotiate_kani_obligations` call returns no `KaniObligationHarness` at all,
+/// so `execute_kani_obligation` has nothing to run and nothing to misreport as an execution
+/// outcome in place of the refusal it actually is.
 ///
-/// Trace: FR-015-AC-12, TC-025
+/// Trace: FR-015-AC-12, FR-017-CON-2, TC-025, TC-027
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-4, TC-045
 #[test]
 fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
@@ -1243,6 +1302,298 @@ fn tc_027_an_unmeasurable_backend_is_refused_before_running() {
     let _ = fs::remove_dir_all(directory);
 }
 
+/// Writes an executable shell script at `path`, creating parent directories as needed.
+fn write_executable(path: &Path, script: &str) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, script).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = fs::metadata(path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).unwrap();
+}
+
+/// Builds a complete, working fake Kani installation: a launcher that answers
+/// `kani --version`, and a release tree with a driver, CBMC, a toolchain file and a `rustc`
+/// that answers `-vV`. Every component here measures successfully, so a test that wants to
+/// exercise one component's failure overwrites or removes exactly that one component after
+/// calling this, leaving the rest of the chain intact up to that point.
+fn fake_installation(name: &str) -> (KaniInstallation, PathBuf) {
+    let directory = scratch(name);
+    let kani_home = directory.join("kani-home");
+    let release = kani_home.join("kani-0.67.0");
+    write_executable(
+        &directory.join("cargo-kani"),
+        "#!/bin/sh\necho 'cargo-kani 0.67.0'\n",
+    );
+    write_executable(&release.join("bin/kani-driver"), "#!/bin/sh\nexit 0\n");
+    write_executable(
+        &release.join("bin/cbmc"),
+        "#!/bin/sh\necho '6.8.0 (cbmc-6.8.0)'\n",
+    );
+    fs::create_dir_all(&release).unwrap();
+    fs::write(
+        release.join("rust-toolchain-version"),
+        "nightly-2025-11-21-x86_64-unknown-linux-gnu\n",
+    )
+    .unwrap();
+    write_executable(
+        &release.join("toolchain/bin/rustc"),
+        "#!/bin/sh\necho 'host: x86_64-unknown-linux-gnu'\n",
+    );
+    let installation = KaniInstallation {
+        launcher: directory.join("cargo-kani"),
+        kani_home,
+    };
+    (installation, release)
+}
+
+/// Every backend component besides the launcher is refused with a typed reason naming that
+/// component, and every `KaniToolError` kind besides `Missing` (already exercised above by the
+/// launcher) is reachable: `Io` (a file that exists but cannot be read or executed), `Failed`
+/// (a component that runs and exits unsuccessfully) and `UnexpectedOutput` (a component whose
+/// output this module cannot parse). Each case starts from a fully working fake installation
+/// and breaks exactly the one component under test, so the refusal is attributable to that
+/// component and not to some other part of the chain failing first.
+///
+/// Trace: FR-017-AC-2, TC-027
+#[test]
+fn tc_027_every_backend_component_is_refused_with_its_own_typed_reason() {
+    let package = bound_package(1000);
+    let pins = pins();
+    let harness = supported_contract_harnesses(&package, &pins, "crate::withdraw").remove(1);
+
+    // RustToolchain, Missing: the release directory exists but its toolchain file does not.
+    // Reached right after the launcher's version is read, before the driver or CBMC are ever
+    // touched.
+    {
+        let (installation, release) = fake_installation("component-rust-toolchain-missing");
+        fs::remove_file(release.join("rust-toolchain-version")).unwrap();
+        let refusal = execute_kani_obligation(&KaniExecutionRequest {
+            installation: &installation,
+            harness: &harness,
+            crate_directory: &installation.kani_home,
+            target_directory: &installation.kani_home.join("target"),
+        })
+        .unwrap_err();
+        assert!(
+            matches!(
+                refusal,
+                KaniExecutionRefusal::Tool(KaniToolError::Missing {
+                    tool: KaniTool::RustToolchain,
+                    ..
+                })
+            ),
+            "got {refusal}"
+        );
+        let _ = fs::remove_dir_all(installation.kani_home.parent().unwrap());
+    }
+
+    // Rustc, UnexpectedOutput: rustc runs and exits successfully, but prints no `host: ` line,
+    // so its target triple cannot be read.
+    {
+        let (installation, release) = fake_installation("component-rustc-unexpected-output");
+        write_executable(
+            &release.join("toolchain/bin/rustc"),
+            "#!/bin/sh\necho 'not the expected shape'\n",
+        );
+        let refusal = execute_kani_obligation(&KaniExecutionRequest {
+            installation: &installation,
+            harness: &harness,
+            crate_directory: &installation.kani_home,
+            target_directory: &installation.kani_home.join("target"),
+        })
+        .unwrap_err();
+        assert!(
+            matches!(
+                refusal,
+                KaniExecutionRefusal::Tool(KaniToolError::UnexpectedOutput {
+                    tool: KaniTool::Rustc,
+                    ..
+                })
+            ),
+            "got {refusal}"
+        );
+        let _ = fs::remove_dir_all(installation.kani_home.parent().unwrap());
+    }
+
+    // Driver, Io: the driver exists as a regular file but is not readable, so hashing it fails
+    // with an underlying I/O error rather than a missing-file refusal.
+    {
+        let (installation, release) = fake_installation("component-driver-io");
+        let driver = release.join("bin/kani-driver");
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&driver, fs::Permissions::from_mode(0o000)).unwrap();
+        let refusal = execute_kani_obligation(&KaniExecutionRequest {
+            installation: &installation,
+            harness: &harness,
+            crate_directory: &installation.kani_home,
+            target_directory: &installation.kani_home.join("target"),
+        })
+        .unwrap_err();
+        fs::set_permissions(&driver, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            matches!(
+                refusal,
+                KaniExecutionRefusal::Tool(KaniToolError::Io {
+                    tool: KaniTool::Driver,
+                    ..
+                })
+            ),
+            "got {refusal}"
+        );
+        let _ = fs::remove_dir_all(installation.kani_home.parent().unwrap());
+    }
+
+    // Cbmc, Failed: CBMC exists, is executable and runs, but exits unsuccessfully.
+    {
+        let (installation, release) = fake_installation("component-cbmc-failed");
+        write_executable(&release.join("bin/cbmc"), "#!/bin/sh\nexit 7\n");
+        let refusal = execute_kani_obligation(&KaniExecutionRequest {
+            installation: &installation,
+            harness: &harness,
+            crate_directory: &installation.kani_home,
+            target_directory: &installation.kani_home.join("target"),
+        })
+        .unwrap_err();
+        assert!(
+            matches!(
+                refusal,
+                KaniExecutionRefusal::Tool(KaniToolError::Failed {
+                    tool: KaniTool::Cbmc,
+                    ..
+                })
+            ),
+            "got {refusal}"
+        );
+        let _ = fs::remove_dir_all(installation.kani_home.parent().unwrap());
+    }
+}
+
+/// `KaniInstallation::discover` refuses with a typed `KaniHome` reason when neither `$KANI_HOME`
+/// nor `$HOME` name a Kani home, the same as every other component: absent means refused, not
+/// defaulted. `HOME` and `KANI_HOME` are cleared only for the extent of this one call and
+/// restored immediately after, and no other test in this binary reads either variable, so the
+/// mutation cannot race another test's assertions.
+///
+/// Trace: FR-017-AC-2, TC-027
+#[test]
+fn tc_027_kani_home_is_refused_when_neither_kani_home_nor_home_is_set() {
+    let saved_home = env::var_os("HOME");
+    let saved_kani_home = env::var_os("KANI_HOME");
+    // SAFETY: no other test in this binary reads or writes `HOME` or `KANI_HOME`; both are
+    // restored before this function returns, including on the panic path via the guard below.
+    struct RestoreEnv {
+        home: Option<std::ffi::OsString>,
+        kani_home: Option<std::ffi::OsString>,
+    }
+    impl Drop for RestoreEnv {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.home {
+                    Some(value) => env::set_var("HOME", value),
+                    None => env::remove_var("HOME"),
+                }
+                match &self.kani_home {
+                    Some(value) => env::set_var("KANI_HOME", value),
+                    None => env::remove_var("KANI_HOME"),
+                }
+            }
+        }
+    }
+    let _restore = RestoreEnv {
+        home: saved_home,
+        kani_home: saved_kani_home,
+    };
+    unsafe {
+        env::remove_var("HOME");
+        env::remove_var("KANI_HOME");
+    }
+    let error = KaniInstallation::discover().unwrap_err();
+    assert!(
+        matches!(
+            error,
+            KaniToolError::Missing {
+                tool: KaniTool::KaniHome,
+                ..
+            }
+        ),
+        "got {error}"
+    );
+}
+
+/// A harness identity that differs from the committed pins is refused before the backend is
+/// ever measured. The installation here points at paths that do not exist, so if `observe()`
+/// ran at all before the identity comparison, it would surface as `KaniToolError::Missing`
+/// rather than as pin drift; getting `PinDrift` back is proof the backend was never touched.
+///
+/// Trace: FR-017-AC-1, TC-027
+#[test]
+fn tc_027_harness_identity_pin_drift_is_refused_before_the_backend_is_measured() {
+    let package = bound_package(1000);
+    let pins = pins();
+    let mut harness = supported_contract_harnesses(&package, &pins, "crate::withdraw").remove(1);
+    harness.identity.pins.driver_sha256 = "0".repeat(64);
+    let directory = scratch("identity-pin-drift");
+    let installation = KaniInstallation {
+        launcher: directory.join("no-such-cargo-kani"),
+        kani_home: directory.join("no-such-kani-home"),
+    };
+    let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        installation: &installation,
+        harness: &harness,
+        crate_directory: &directory,
+        target_directory: &directory.join("target"),
+    })
+    .unwrap_err();
+    assert!(
+        matches!(
+            refusal,
+            KaniExecutionRefusal::PinDrift {
+                field: KaniPinField::DriverSha256,
+                ..
+            }
+        ),
+        "the backend must not be measured before the identity pin check: got {refusal}"
+    );
+    assert!(!directory.join("target").exists(), "nothing ran");
+    let _ = fs::remove_dir_all(directory);
+}
+
+/// FR-017's execution surface computes no aggregate verdict over runs and retains no evidence
+/// of its own: no function in `src/kani_execution.rs` — the file FR-017 owns — takes more than
+/// one run's evidence or outcome, and nothing in it writes a file. Retention, audit and
+/// aggregation stay Quoin's; the caller receives one run's evidence and owns what happens to it.
+///
+/// Trace: FR-017-AC-8, FR-017-AC-9, TC-027
+#[test]
+fn tc_027_no_aggregate_verdict_and_no_retained_evidence_of_its_own() {
+    let source =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/kani_execution.rs"))
+            .expect("src/kani_execution.rs must be readable from the crate root");
+
+    // No aggregate verdict: nothing accepts a collection of runs' evidence or outcomes.
+    for forbidden in [
+        "Vec<KaniExecutionEvidence>",
+        "&[KaniExecutionEvidence]",
+        "Vec<KaniRunOutcome>",
+        "&[KaniRunOutcome]",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "src/kani_execution.rs must compute no aggregate verdict over runs: found {forbidden:?}"
+        );
+    }
+
+    // No evidence of its own: nothing in this module writes a file. The backend process it
+    // launches writes its own build artifacts; this module only ever reads them back.
+    for forbidden in ["fs::write", "File::create", "OpenOptions"] {
+        assert!(
+            !source.contains(forbidden),
+            "src/kani_execution.rs must retain no evidence of its own: found {forbidden:?}"
+        );
+    }
+}
+
 // ---- kani lane ---------------------------------------------------------------
 
 fn scratch(name: &str) -> PathBuf {
@@ -1356,7 +1707,10 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
         assert_eq!(evidence.exit_code, Some(0));
         assert_eq!(evidence.arguments[1..], harness.identity.options[..]);
         assert_eq!(evidence.oracle_digest, harness.identity.oracle_digest);
-        assert_eq!(evidence.cargo_lock_sha256.len(), 64);
+        assert_eq!(
+            evidence.cargo_lock_sha256.as_ref().map(String::len),
+            Some(64)
+        );
     }
 
     let evidence = run(
@@ -1392,6 +1746,31 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
         },
         "jointly unsatisfiable requires must never verify"
     );
+
+    // A lockfile that cannot be read after the backend has already run degrades the outcome to
+    // inconclusive; it is not reported as a pre-run refusal, because the run did happen and its
+    // evidence is merely incomplete. `Cargo.lock` is occupied by a directory before the run, so
+    // the launcher still runs (a real process starts) but the post-run digest read fails.
+    let harness = &harnesses[0];
+    let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
+    fs::create_dir_all(crate_directory.join("Cargo.lock")).unwrap();
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        installation: &installation,
+        harness,
+        crate_directory: &crate_directory,
+        target_directory: &crate_directory.join("target"),
+    })
+    .unwrap_or_else(|refusal| {
+        panic!("a run that already happened must not surface as a refusal: {refusal}")
+    });
+    assert_eq!(
+        evidence.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::NoVerdict
+        }
+    );
+    assert_eq!(evidence.cargo_lock_sha256, None);
+    let _ = fs::remove_dir_all(crate_directory);
 
     // A harness whose identity names another driver is refused before anything runs.
     let mut stale = supported_contract_harnesses(&package, &pins, "crate::withdraw").remove(1);

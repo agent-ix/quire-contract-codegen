@@ -113,8 +113,10 @@ and it is stated here because `src/kani_execution.rs` had no owning requirement
 | FR-017-AC-3 | The committed pins are the Kani version, launcher digest, driver digest, CBMC version, Rust toolchain and host target triple of one installation, and a difference in each of the six is reported as that field. | Test (TC-027) |
 | FR-017-AC-4 | A run is verified only when the process exited successfully, the backend reported success, and every cover property is reported satisfied; a successful run with an unsatisfied cover is cover-unsatisfied with its satisfied and total counts; success text from an unsuccessfully exited process, an absent cover summary, a zero-total summary and an unreadable summary are each inconclusive with their own reason. | Test (TC-027) |
 | FR-017-AC-5 | A failed non-unwinding check with a concrete playback is falsified carrying that playback verbatim and never the playback of a satisfied cover; a failure with no playback is inconclusive for that reason; a failed unwinding assertion is inconclusive as an exhausted bound rather than falsified, and a succeeded unwinding check in a results listing is not a failure. | Test (TC-027) |
-| FR-017-AC-6 | Execution evidence identifies its schema and carries the harness identity digest, obligation kind, harness path and source digest, the pins measured immediately before the run, the launcher path, the complete argument vector equal after the subcommand to the harness identity's options, the crate lockfile digest, the oracle digest, the runtime revision, the unwind bound, the solver, the exit code and the outcome. | Test (TC-027) |
+| FR-017-AC-6 | Execution evidence identifies its schema and carries the harness identity digest, obligation kind, harness path and source digest, the pins measured immediately before the run, the launcher path, the complete argument vector, the crate lockfile digest when the lockfile was readable after the run, the oracle digest, the runtime revision, the unwind bound, the solver, the exit code and the outcome. | Test (TC-027) |
 | FR-017-AC-7 | A crate whose library source does not contain the harness source byte for byte is refused, and no backend runs. | Test (TC-027) |
+| FR-017-AC-8 | The generator computes no aggregate verdict over runs: no function in the execution surface accepts more than one run's evidence or outcome to produce a summary. | Test (TC-027) |
+| FR-017-AC-9 | The generator retains no evidence of its own: the execution surface writes no file: the caller receives the returned evidence and owns its retention. | Test (TC-027) |
 
 ## Dependencies
 
@@ -136,3 +138,9 @@ requirement must not be written to bless them:
 - The outcome is read from the backend's human-readable output rather than a
   machine-readable one (agent-ix/quire-contract-codegen#59). The classification
   rule above is the intended rule; the format it reads is the defect.
+
+The retained argument vector is the `kani` subcommand followed by the harness identity's option
+vector unchanged (`src/kani_execution.rs`): the generator builds the invoked command line and the
+retained vector from the same `identity.options` value, so their equality is structural rather
+than an independently checkable behavior, and FR-017-AC-6 does not restate it as a criterion that
+could fail.
