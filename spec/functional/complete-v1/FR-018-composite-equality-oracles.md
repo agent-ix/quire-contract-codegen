@@ -150,11 +150,10 @@ digest, whose domain is `NODE_KEY_DOMAIN`.
 - If an operand type reaches a `composite_type` of form `reference`, or the node
   belongs to the model or relation families, then the generator shall refuse it
   as blocked on quire-spec-language#120. The reason is input-side, not runtime
-  capability: the runtime implements reference equality and `ObjectReference::new`
+  capability: the runtime implements reference equality, and `ObjectReference::new`
   over `UniverseIdentity::new` and `ObjectIdentity::new` constructs a reference
-  from arbitrary canonical bytes, but CheckedPackage V2 carries no form that
-  yields a reference operand, and the identity binding that would give one
-  meaning is quire-spec-language#120.
+  from arbitrary canonical bytes; what a reference operand lacks is the identity
+  binding that gives it meaning, which is quire-spec-language#120.
 - If the node belongs to the function family, or is an expression of form `call`,
   then the generator shall refuse it as blocked on quire-contract-runtime#34; the
   state, temporal and protocol families as blocked on quire-spec-language#121.
