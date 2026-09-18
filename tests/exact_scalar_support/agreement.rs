@@ -1,8 +1,8 @@
 //! Three-way agreement support: the QSL value authority, direct Contract
 //! Runtime execution, and generated oracles.
 //!
-//! Adapted from Contract Runtime a04bd47
-//! `conformance/qsl-agreement/tests/support/mod.rs` (same QSL pin d9d5273).
+//! Adapted from Contract Runtime 4e33052
+//! `conformance/qsl-agreement/tests/support/mod.rs`.
 //! A vector body is written once. [`agree3!`] evaluates the direct call with
 //! `quire_spec_language::value` in scope and again with
 //! `quire_contract_runtime::exact` in scope, and evaluates the generated

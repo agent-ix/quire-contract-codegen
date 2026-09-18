@@ -1552,10 +1552,14 @@ impl SourceBuilder {
                 // `RationalArithmetic` has no `IntegerDivide` variant: its own doc comment
                 // specifies the lowering, `n` and `m` each as `n/1`/`m/1` via
                 // `Rational::from_integer`, then `Divide` (quire-contract-runtime
-                // src/exact/numeric.rs). That charges the rational path
-                // (rational-arithmetic.operands/.arithmetic/.normalize/.result-retain)
-                // rather than whatever the deleted variant charged; `from_integer` itself is an
-                // uncharged construction, so the lift below is free.
+                // src/exact/numeric.rs). The deleted `IntegerDivide` variant charged the
+                // same four rational-arithmetic points via the same `fn rational()`, so
+                // bit-for-bit identical operands charge identically here. What actually
+                // moved is upstream's own redesign of `fn rational()` itself (`.size` to
+                // `.exact_size`, normalize-on-unreduced instead of normalize-on-reduced),
+                // which affects every `RationalArithmetic` node uniformly, not something
+                // specific to this lowering; `from_integer` itself is an uncharged
+                // construction, so the lift below is free.
                 let (parameters, lift_prelude, operation) = match operator {
                     RationalOperator::Negate => (unary("&rt::Rational"), Vec::new(), "Negate(operand)"),
                     RationalOperator::Add => (binary("&rt::Rational"), Vec::new(), "Add(left, right)"),

@@ -8,9 +8,13 @@
 //! oracle has a fixed operator and type, so a vector is an operand tuple and a
 //! limit tuple taken from the TC's tabled or generated vectors.
 //!
-//! Integer arithmetic, rational arithmetic and ordering have no operator in
-//! the pinned authority (QSL d9d5273). Those oracles are checked against
-//! direct runtime execution only, and are counted separately.
+//! Integer arithmetic, rational arithmetic and ordering are checked against
+//! direct runtime execution only (`agree2!`), and are counted separately.
+//! The pinned authority is QSL 21c507e, which does now export these
+//! operators (`order_numbers`, `evaluate_integer_arithmetic`,
+//! `evaluate_rational_arithmetic`, QSL #119); these vectors stay
+//! runtime-only because this crate has not yet added the `agree3!`
+//! authority leg for them, not because the authority lacks the operator.
 
 #[path = "exact_scalar_support/agreement.rs"]
 #[macro_use]
@@ -311,8 +315,10 @@ fn tc_024_tc185_decimal_oracles_agree() {
     }
     assert_eq!(named, 9);
 
-    // Decimal ordering: the pinned authority does not meter it (QSpec 5d88578
-    // D20/D21 postdate QSL d9d5273), so it is runtime-only.
+    // Decimal ordering: the pinned authority (QSL 21c507e) now exports
+    // `OrderedOperands::Decimals` (QSL #119), so this is no longer a case of
+    // no authority operator existing. It stays runtime-only (`agree2!`)
+    // because this crate has not yet added the `agree3!` authority leg.
     let mut ordering = 0_usize;
     for (ca, sa) in &operands {
         for (cb, sb) in &operands {
@@ -832,5 +838,5 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
         }
     }
     assert_eq!(vectors, 41 + 7 * 41 * 41 + 39 + 5 * 39 * 39);
-    println!("runtime-only agreement (no QSL d9d5273 operator): {vectors} vectors");
+    println!("runtime-only agreement (no agree3! authority leg yet): {vectors} vectors");
 }
