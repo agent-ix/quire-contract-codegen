@@ -103,7 +103,9 @@ because Kani and CBMC are memory-heavy and must run one harness at a time.
 
 ## Blocked
 
-- Timed-out runs: the run carries no wall-clock budget and there is no
-  timed-out state to observe, so no case can be written until
-  agent-ix/quire-contract-codegen#58 lands. The requirement deliberately states
-  no timed-out behaviour for the same reason.
+- Timed-out runs: the run now carries a caller-declared wall-clock budget and
+  a timed-out state is observable (agent-ix/quire-contract-codegen#58, closed
+  at the code level; traced from `src/kani_execution.rs`'s own unit test as
+  TC-023 under FR-007-AC-3). No case is written here because FR-017 itself
+  does not yet state timed-out behaviour as a requirement; adding that
+  requirement is agent-ix/quire-contract-codegen#55.

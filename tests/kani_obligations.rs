@@ -12,7 +12,7 @@ mod package;
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use package::{
@@ -23,11 +23,12 @@ use quire_contract_codegen::{
     execute_kani_obligation, generate_exact_scalar_oracles, negotiate_kani_obligations,
     AttestationContext, DerivedDomain, ExactScalarClaimMap, ExactScalarDisposition,
     ExactScalarItem, InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest,
-    KaniInstallation, KaniObligationError, KaniObligationHarness, KaniObligationOutcome,
-    KaniObligationRequest, KaniPinField, KaniRunOutcome, KaniTool, KaniToolError, KaniToolPins,
-    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
-    UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION,
-    KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
+    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
+    KaniObligationOutcome, KaniObligationRequest, KaniPinField, KaniRunOutcome, KaniTool,
+    KaniToolError, KaniToolPins, ObligationDisposition, ObligationItem, ObligationKind,
+    ObligationRecord, ObligationSubject, UnsupportedObligation, UpstreamBlocker,
+    IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION, KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS,
+    MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -41,6 +42,15 @@ const POSTCONDITION: &str = "balance-never-grows";
 const INVARIANT: &str = "balance-nonnegative";
 const DEFINEDNESS: &str = "doubled-amount-fits";
 const ASSERTION: &str = "amount-nonnegative";
+
+/// Budget for the pinned lane's real `cargo-kani` runs. Generous because CBMC is memory- and
+/// time-heavy on these small obligations; this is a ceiling against a genuine hang, not a
+/// performance target.
+const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
+/// Placeholder budget for tests that refuse before any process is spawned (a pin drift, a
+/// missing backend component, or a harness the crate does not contain): the value is never
+/// consulted, since `execute_kani_obligation` returns before reaching the launcher.
+const UNUSED_TIMEOUT: Duration = Duration::from_secs(60);
 
 fn context() -> AttestationContext<'static> {
     AttestationContext {
@@ -1289,6 +1299,7 @@ fn tc_027_an_unmeasurable_backend_is_refused_before_running() {
         harness: &harness,
         crate_directory: &directory,
         target_directory: &directory.join("target"),
+        timeout: UNUSED_TIMEOUT,
     })
     .unwrap_err();
     assert!(matches!(
@@ -1372,6 +1383,7 @@ fn tc_027_every_backend_component_is_refused_with_its_own_typed_reason() {
             harness: &harness,
             crate_directory: &installation.kani_home,
             target_directory: &installation.kani_home.join("target"),
+            timeout: UNUSED_TIMEOUT,
         })
         .unwrap_err();
         assert!(
@@ -1400,6 +1412,7 @@ fn tc_027_every_backend_component_is_refused_with_its_own_typed_reason() {
             harness: &harness,
             crate_directory: &installation.kani_home,
             target_directory: &installation.kani_home.join("target"),
+            timeout: UNUSED_TIMEOUT,
         })
         .unwrap_err();
         assert!(
@@ -1427,6 +1440,7 @@ fn tc_027_every_backend_component_is_refused_with_its_own_typed_reason() {
             harness: &harness,
             crate_directory: &installation.kani_home,
             target_directory: &installation.kani_home.join("target"),
+            timeout: UNUSED_TIMEOUT,
         })
         .unwrap_err();
         fs::set_permissions(&driver, fs::Permissions::from_mode(0o755)).unwrap();
@@ -1452,6 +1466,7 @@ fn tc_027_every_backend_component_is_refused_with_its_own_typed_reason() {
             harness: &harness,
             crate_directory: &installation.kani_home,
             target_directory: &installation.kani_home.join("target"),
+            timeout: UNUSED_TIMEOUT,
         })
         .unwrap_err();
         assert!(
@@ -1490,6 +1505,7 @@ fn tc_027_harness_identity_pin_drift_is_refused_before_the_backend_is_measured()
         harness: &harness,
         crate_directory: &directory,
         target_directory: &directory.join("target"),
+        timeout: UNUSED_TIMEOUT,
     })
     .unwrap_err();
     assert!(
@@ -1681,6 +1697,7 @@ fn run(
         harness,
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligations"),
+        timeout: REAL_KANI_TIMEOUT,
     })
     .unwrap_or_else(|refusal| panic!("{label}: {refusal}"));
     fs::write(
@@ -1700,10 +1717,12 @@ fn run(
 /// Real pinned Kani runs: the precondition, postcondition and invariant of a healthy subject
 /// verify separately under the committed backend pins, a seeded defect is falsified with a
 /// concrete counterexample, jointly unsatisfiable requires are reported vacuous rather than
-/// verified, and drifted pins refuse before running.
+/// verified, drifted pins refuse before running, and a real run given a budget it cannot meet is
+/// reported timed out rather than left to block or misreported as `NoVerdict`.
 ///
 /// Trace: FR-015-AC-1, FR-015-AC-2, FR-015-AC-4, TC-025, FR-017-AC-1, FR-017-AC-3, FR-017-AC-4,
-/// FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1, FR-017-CON-2, TC-027
+/// FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1, FR-017-CON-2, TC-027, FR-007-AC-3,
+/// TC-023
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect() {
@@ -1777,6 +1796,42 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
         "jointly unsatisfiable requires must never verify"
     );
 
+    // A budget a real run cannot meet is the typed timed-out inconclusive result, not
+    // `NoVerdict` and not success: this harness has never been built before in this crate
+    // directory, so 1ms cannot possibly be enough even to compile it, let alone run CBMC.
+    // Bounding the wall time this call itself takes is proof the run was actually killed rather
+    // than merely misclassified after being allowed to run to completion. This runs ahead of the
+    // `Cargo.lock`-as-directory case below on purpose: that case fails for a reason unrelated to
+    // this change (agent-ix/quire-contract-codegen#58) on current `cargo`, independent of this
+    // harness and independent of this branch (reproduced identically on `origin/main`), and a
+    // later panic in the same test function must not prevent this assertion from running.
+    let harness = &harnesses[0];
+    let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
+    let started = Instant::now();
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        installation: &installation,
+        harness,
+        crate_directory: &crate_directory,
+        target_directory: &crate_directory.join("target"),
+        timeout: Duration::from_millis(1),
+    })
+    .unwrap_or_else(|refusal| {
+        panic!("a run that started must not surface as a refusal: {refusal}")
+    });
+    assert!(
+        started.elapsed() < REAL_KANI_TIMEOUT,
+        "a timed-out run must not block for anywhere near a real verification's duration"
+    );
+    assert_eq!(
+        evidence.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::TimedOut
+        }
+    );
+    assert_eq!(evidence.exit_code, None);
+    assert_eq!(evidence.cargo_lock_sha256, None);
+    let _ = fs::remove_dir_all(crate_directory);
+
     // A lockfile that cannot be read after the backend has already run is missing evidence
     // about that run, never grounds to discard its own verdict: the outcome below is still
     // this healthy subject's real `Verified` classification, not a pre-run refusal and not
@@ -1790,6 +1845,7 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
         harness,
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
+        timeout: REAL_KANI_TIMEOUT,
     })
     .unwrap_or_else(|refusal| {
         panic!("a run that already happened must not surface as a refusal: {refusal}")
@@ -1807,6 +1863,7 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
         harness: &stale,
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
+        timeout: UNUSED_TIMEOUT,
     })
     .unwrap_err();
     assert!(matches!(
@@ -1832,6 +1889,7 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
         harness: &harness,
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
+        timeout: UNUSED_TIMEOUT,
     })
     .unwrap_err();
     assert!(matches!(

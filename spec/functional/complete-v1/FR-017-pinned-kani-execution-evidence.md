@@ -128,16 +128,18 @@ and it is stated here because `src/kani_execution.rs` had no owning requirement
 
 ## Open items
 
-Two defects in this surface are filed rather than specified, because a
-requirement must not be written to bless them:
+One defect in this surface is filed rather than specified, because a
+requirement must not be written to bless it:
 
-- The run carries no wall-clock budget, so a non-terminating solver run is
-  indistinguishable from a hang and no timed-out state exists to retain
-  (agent-ix/quire-contract-codegen#58). FR-007-AC-3 requires a timed-out state
-  on the corpus path, so the vocabulary exists one module away.
 - The outcome is read from the backend's human-readable output rather than a
   machine-readable one (agent-ix/quire-contract-codegen#59). The classification
   rule above is the intended rule; the format it reads is the defect.
+
+The run now carries a caller-declared wall-clock budget and reports a timed-out
+run through the same `Inconclusive` vocabulary FR-007-AC-3 requires on the
+corpus path (agent-ix/quire-contract-codegen#58, closed at the code level).
+This requirement does not yet state that timed-out behavior itself; doing so is
+agent-ix/quire-contract-codegen#55.
 
 The retained argument vector is the `kani` subcommand followed by the harness identity's option
 vector unchanged (`src/kani_execution.rs`): the generator builds the invoked command line and the

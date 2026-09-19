@@ -6,13 +6,28 @@
 //! launcher, driver, CBMC, toolchain or target is a typed refusal and no proof is
 //! attempted. The run outcome is read from the backend's own output and is never
 //! defaulted: a harness this module did not observe verifying is not `verified`.
+//!
+//! The caller states a wall-clock budget on every request
+//! ([`KaniExecutionRequest::timeout`]); nothing here defaults one. A run that does
+//! not conclude within it is killed and classified as
+//! [`KaniInconclusiveReason::TimedOut`] rather than left to block the caller
+//! forever (agent-ix/quire-contract-codegen#58). The kill reaches every process
+//! `cargo-kani` forked, not only its own pid: it forks `kani-driver`, which forks
+//! CBMC, so killing only the immediate child would leave a runaway CBMC solver
+//! process orphaned and still running past the deadline it just exceeded. See
+//! [`run_launcher_with_timeout`] for why that is done by walking `/proc` for the
+//! launcher's live descendants rather than by a process-group-wide signal.
 
 use std::{
+    collections::HashMap,
     env,
     ffi::OsString,
     fmt, fs, io,
+    io::Read,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
+    thread,
+    time::{Duration, Instant},
 };
 
 use serde::{Deserialize, Serialize};
@@ -313,6 +328,11 @@ pub struct KaniExecutionRequest<'a> {
     pub crate_directory: &'a Path,
     /// Cargo target directory for the run.
     pub target_directory: &'a Path,
+    /// Wall-clock budget for the launcher. The caller states this explicitly on every
+    /// request; there is no default that would let a run go unbounded silently. A run
+    /// that has not concluded when the budget elapses is killed and reported as
+    /// [`KaniRunOutcome::Inconclusive`] with [`KaniInconclusiveReason::TimedOut`].
+    pub timeout: Duration,
 }
 
 /// Why a harness was not run.
@@ -378,6 +398,10 @@ pub enum KaniInconclusiveReason {
     /// An unwinding assertion failed: the loop bound was exhausted before the property
     /// could be decided, so no failure is a counterexample.
     UnwindBoundExhausted,
+    /// The run did not conclude within [`KaniExecutionRequest::timeout`]. The launcher and every
+    /// process it forked were killed; no verdict, failed-check count or playback is available
+    /// because none was ever printed.
+    TimedOut,
 }
 
 /// The backend-reported outcome of one run.
@@ -489,29 +513,44 @@ pub fn execute_kani_obligation(
     }
     let mut arguments = vec!["kani".to_owned()];
     arguments.extend(identity.options.iter().cloned());
-    let output = Command::new(&request.installation.launcher)
+    let mut command = Command::new(&request.installation.launcher);
+    command
         .args(&arguments)
         .env("CARGO_TARGET_DIR", request.target_directory)
-        .current_dir(request.crate_directory)
-        .output()
-        .map_err(|error| KaniToolError::Io {
+        .current_dir(request.crate_directory);
+    let launch =
+        run_launcher_with_timeout(command, request.timeout).map_err(|error| KaniToolError::Io {
             tool: KaniTool::Launcher,
             path: request.installation.launcher.clone(),
             error,
         })?;
-    let text = format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let (cargo_lock_sha256, outcome) = run_evidence(
-        output.status.success(),
-        &text,
-        file_sha256(
-            KaniTool::Lockfile,
-            &request.crate_directory.join("Cargo.lock"),
+    let (cargo_lock_sha256, outcome, exit_code) = match launch {
+        LaunchOutcome::Completed {
+            exited_successfully,
+            exit_code,
+            text,
+        } => {
+            let (cargo_lock_sha256, outcome) = run_evidence(
+                exited_successfully,
+                &text,
+                file_sha256(
+                    KaniTool::Lockfile,
+                    &request.crate_directory.join("Cargo.lock"),
+                ),
+            );
+            (cargo_lock_sha256, outcome, exit_code)
+        }
+        // No verdict was ever printed and the process was killed mid-run, so there is no
+        // completed run to read a lockfile digest about: retaining one here would present a
+        // build artifact from an interrupted run as if it corresponded to a concluded one.
+        LaunchOutcome::TimedOut => (
+            None,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::TimedOut,
+            },
+            None,
         ),
-    );
+    };
     Ok(KaniExecutionEvidence {
         schema: KANI_EXECUTION_SCHEMA,
         obligation_identity_sha256: request.harness.identity_sha256.clone(),
@@ -526,9 +565,161 @@ pub fn execute_kani_obligation(
         runtime_revision: identity.runtime_revision.to_owned(),
         unwind: identity.unwind,
         solver: identity.solver.clone(),
-        exit_code: output.status.code(),
+        exit_code,
         outcome,
     })
+}
+
+/// How the launcher's run within its caller-declared budget ([`KaniExecutionRequest::timeout`])
+/// concluded.
+enum LaunchOutcome {
+    /// The process exited on its own within the budget.
+    Completed {
+        /// `ExitStatus::success()`.
+        exited_successfully: bool,
+        /// `ExitStatus::code()`.
+        exit_code: Option<i32>,
+        /// Combined stdout and stderr, newline-joined, matching `classify_run`'s input shape.
+        text: String,
+    },
+    /// The budget elapsed before the process exited. It and every process it forked have been
+    /// killed and reaped; nothing of it is left running.
+    TimedOut,
+}
+
+/// Polling interval while waiting for the launcher to exit within its budget. Short enough that
+/// a tight caller-declared timeout in a test is still observed promptly, long enough not to spin.
+const LAUNCHER_POLL_INTERVAL: Duration = Duration::from_millis(20);
+
+/// Runs `command` to completion or kills every process descended from it once `timeout` elapses,
+/// whichever happens first.
+///
+/// Kani's launcher forks `kani-driver`, which forks CBMC, so on a timeout `child.kill()` alone
+/// would leave CBMC — the actual solver, and the one most likely to be the non-terminating
+/// process a budget exists to bound — orphaned and still running past the deadline it just
+/// exceeded. [`kill_process_tree`] finds and signals every live descendant by its own pid instead
+/// of relying on a process-group-wide signal: a negative-pid group kill is the textbook fix, but
+/// it is deliberately not used here, because it was measured to escape its own group on the
+/// sandbox this crate was developed in — killing a freshly spawned child's isolated process group
+/// also killed the unrelated caller in the same run, reproduced with a minimal standalone
+/// program before this function was written this way. Signalling only positive, individually
+/// discovered pids cannot exhibit that failure mode.
+///
+/// Stdout and stderr are drained on their own threads as soon as the process is spawned, the same
+/// way `Command::output()` drains them internally: a full pipe buffer would otherwise stall the
+/// child while this function is only polling `try_wait`, turning a bounded run into a hang of its
+/// own.
+fn run_launcher_with_timeout(mut command: Command, timeout: Duration) -> io::Result<LaunchOutcome> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let pid = child.id();
+    let mut stdout = child.stdout.take().expect("stdout was piped at spawn");
+    let mut stderr = child.stderr.take().expect("stderr was piped at spawn");
+    let stdout_reader = thread::spawn(move || {
+        let mut buffer = Vec::new();
+        let _ = stdout.read_to_end(&mut buffer);
+        buffer
+    });
+    let stderr_reader = thread::spawn(move || {
+        let mut buffer = Vec::new();
+        let _ = stderr.read_to_end(&mut buffer);
+        buffer
+    });
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break Some(status);
+        }
+        if Instant::now() >= deadline {
+            break None;
+        }
+        thread::sleep(LAUNCHER_POLL_INTERVAL);
+    };
+
+    match status {
+        Some(status) => {
+            let stdout_bytes = stdout_reader.join().unwrap_or_default();
+            let stderr_bytes = stderr_reader.join().unwrap_or_default();
+            Ok(LaunchOutcome::Completed {
+                exited_successfully: status.success(),
+                exit_code: status.code(),
+                text: format!(
+                    "{}\n{}",
+                    String::from_utf8_lossy(&stdout_bytes),
+                    String::from_utf8_lossy(&stderr_bytes)
+                ),
+            })
+        }
+        None => {
+            kill_process_tree(pid);
+            // Belt-and-suspenders repeat targeted at the direct child alone, in case `pid` had
+            // already exited between the last `try_wait` and the tree walk above and so was
+            // absent from it (`kill_process_tree` reads `/proc` at one instant; it cannot see a
+            // process that exited before that read).
+            let _ = child.kill();
+            let _ = child.wait();
+            // The readers now see EOF: every process that held the pipes' write end has been
+            // killed, so this cannot block on output nothing will ever finish writing.
+            let _ = stdout_reader.join();
+            let _ = stderr_reader.join();
+            Ok(LaunchOutcome::TimedOut)
+        }
+    }
+}
+
+/// Kills `root` and every process descended from it, discovered by walking `/proc`'s live
+/// parent/child relationships at one instant and signalling each by its own positive pid. See
+/// [`run_launcher_with_timeout`] for why this walks the tree instead of sending one signal to a
+/// process group.
+fn kill_process_tree(root: u32) {
+    for pid in descendants_including_self(root) {
+        let _ = Command::new("kill")
+            .args(["-KILL", &pid.to_string()])
+            .status();
+    }
+}
+
+/// `root` followed by every live process transitively parented by it, in discovery order.
+/// Built from one snapshot of `/proc`, so a process forked after the snapshot is not included —
+/// the same inherent limitation any tree-walking killer has, standard practice for this problem.
+fn descendants_including_self(root: u32) -> Vec<u32> {
+    let mut children_of: HashMap<u32, Vec<u32>> = HashMap::new();
+    if let Ok(entries) = fs::read_dir("/proc") {
+        for entry in entries.flatten() {
+            let Some(pid) = entry
+                .file_name()
+                .to_str()
+                .and_then(|name| name.parse::<u32>().ok())
+            else {
+                continue;
+            };
+            if let Some(ppid) = parent_pid(pid) {
+                children_of.entry(ppid).or_default().push(pid);
+            }
+        }
+    }
+    let mut order = vec![root];
+    let mut frontier = vec![root];
+    while let Some(pid) = frontier.pop() {
+        if let Some(children) = children_of.get(&pid) {
+            for &child in children {
+                order.push(child);
+                frontier.push(child);
+            }
+        }
+    }
+    order
+}
+
+/// The parent pid recorded in `/proc/<pid>/stat`'s fourth field, or `None` when the process is
+/// gone or the field cannot be read. The executable name in the second field is
+/// parenthesized and may itself contain spaces or parentheses, so the parse splits on the last
+/// `)` in the line rather than on whitespace from the start.
+fn parent_pid(pid: u32) -> Option<u32> {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let after_comm = stat.rsplit_once(')')?.1;
+    after_comm.split_whitespace().nth(1)?.parse().ok()
 }
 
 /// Combines the post-run `Cargo.lock` digest with the backend's own classification of what it
@@ -909,5 +1100,66 @@ mod tests {
         assert_eq!(installation.kani_home, kani_home);
 
         let _ = fs::remove_dir_all(directory);
+    }
+
+    /// The launcher's whole process group is killed when the budget elapses, not only the
+    /// immediate child, reproducing the defect against a real process tree rather than asserting
+    /// it in the abstract: `exec sleep 5` replaces the spawned `sh` with `sleep` in place (same
+    /// pid, same parent), so the pid written to `pidfile` before the `exec` is the one this test
+    /// confirms is gone afterward — standing in for CBMC surviving a killed `cargo-kani` in
+    /// production, which is exactly what `run_launcher_with_timeout`'s group-wide kill prevents.
+    ///
+    /// Trace: FR-007-AC-3, TC-023
+    #[test]
+    fn tc_023_a_run_exceeding_its_budget_is_killed_and_reaped() {
+        let directory = discover_scratch("launcher-timeout");
+        let pidfile = directory.join("pid");
+        let mut command = Command::new("sh");
+        command
+            .arg("-c")
+            .arg(format!("echo $$ > {} ; exec sleep 5", pidfile.display()));
+        let outcome = run_launcher_with_timeout(command, Duration::from_millis(200)).unwrap();
+        assert!(
+            matches!(outcome, LaunchOutcome::TimedOut),
+            "a run past its budget must classify as timed out"
+        );
+
+        let pid: i32 = fs::read_to_string(&pidfile)
+            .expect("the shell writes its pid before sleeping")
+            .trim()
+            .parse()
+            .expect("a pid is an integer");
+        assert!(
+            !Path::new(&format!("/proc/{pid}")).exists(),
+            "the timed-out process (pid {pid}) must be killed, not merely detected and left \
+             running past the deadline it exceeded"
+        );
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    /// Regression coverage for the polling/draining plumbing `run_launcher_with_timeout` added:
+    /// a process that exits within its budget still reports its real exit status and combined
+    /// output, unchanged from what `Command::output()` used to hand back directly. No criterion
+    /// traces this specifically — the pinned lane's real `cargo-kani` runs
+    /// (`tests/kani_obligations.rs`) already exercise this completed path end to end; this is
+    /// only faster, hermetic coverage of the same plumbing.
+    #[test]
+    fn a_run_finishing_within_its_budget_reports_its_own_exit_status_and_output() {
+        let mut command = Command::new("sh");
+        command.arg("-c").arg("printf out; printf err 1>&2; exit 3");
+        let outcome = run_launcher_with_timeout(command, Duration::from_secs(5)).unwrap();
+        match outcome {
+            LaunchOutcome::Completed {
+                exited_successfully,
+                exit_code,
+                text,
+            } => {
+                assert!(!exited_successfully);
+                assert_eq!(exit_code, Some(3));
+                assert!(text.contains("out"));
+                assert!(text.contains("err"));
+            }
+            LaunchOutcome::TimedOut => panic!("a fast process must not be reported as timed out"),
+        }
     }
 }
