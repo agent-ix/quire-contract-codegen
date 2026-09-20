@@ -362,8 +362,9 @@ pub enum UpstreamBlocker {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OperationProvenance {
-    /// The request descriptor declared it and this generator never reads the
-    /// operation identity the IR carries to confirm it; a consumer must not
+    /// This claim's node was never lowered, so this generator never reached
+    /// the operation identity the IR carries for it and reports the request
+    /// item's own descriptor-derived identity instead; a consumer must not
     /// treat the operation law as checked.
     CallerDeclared {
         /// The missing upstream transport.

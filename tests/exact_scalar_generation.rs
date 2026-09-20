@@ -755,13 +755,12 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
     );
 }
 
-// Deliberately untraced: FR-014-AC-11 as currently written says every claim marks its operation
-// `caller_declared` and the claim map carries the blocked item "operation identity not consumed
-// by codegen's generators". IR-217 (this test's own change) reads a matching node's own
-// catalogued identity instead and marks it `IrConfirmed`, and `blocked` is per-item now (only an
-// unreached claim's own `CallerDeclared` provenance still names it), so `marked.claim_map.blocked`
-// below is `[]`, the direct negation of that AC's middle conjunct. This test asserts the current,
-// intended behavior; AC-11's prose is stale pending a spec update, not this assertion.
+/// Trace: FR-014-AC-11, TC-024.
+///
+/// Backs AC-11's first conjunct: a claim whose node lowers and whose descriptor agrees with the
+/// node's catalogued identity marks its operation `ir_confirmed` and carries no blocked item, so
+/// `marked.claim_map.blocked` is `[]`. `blocked` is per-item -- only an unreached claim's own
+/// `CallerDeclared` provenance names an upstream blocker.
 #[test]
 fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise() {
     let package = corpus_package().admit();
@@ -823,10 +822,10 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
 /// anyway -- the defect this ticket exists to close -- would render an oracle that adds where the
 /// catalog says multiply and a harness whose `operation_identity` says `mul`.
 ///
-// Deliberately untraced: no FR-014 AC states this invariant. AC-11 is the closest in subject
-// but (like the test above) asserts the opposite of what this generator now does; the other ten
-// are shape/bound/output ACs a within-shape operator swap satisfies unchanged. This test backs
-// the ticket's own defect description, not a written AC.
+/// Trace: FR-014-AC-11, TC-024.
+///
+/// Backs AC-11's last conjunct: a descriptor naming a different catalogued operation over the
+/// same bounds is not confirmed, including where the two share one operand shape.
 #[test]
 fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
     let package = corpus_package().admit();
