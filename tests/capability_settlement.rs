@@ -764,22 +764,32 @@ fn tc_030_no_item_routes_before_it_is_settled_supported() {
 /// The identity a real `cargo-kani` launcher reports, or `Absent` when the
 /// scratch installation holds no launcher at all.
 ///
-/// `KaniInstallation` is constructed directly against a scratch directory rather
-/// than by mutating `PATH`: `env::set_var` races every other thread reading the
+/// `KaniInstallation` is constructed against a scratch directory rather than by
+/// mutating `PATH`: `env::set_var` races every other thread reading the
 /// environment, including a child process snapshotting it at fork.
+///
+/// Each call takes a fresh directory, and clears it first. `CARGO_TARGET_TMPDIR`
+/// survives between runs while the counter restarts at zero, so the absent case
+/// inherited a launcher an earlier run's mismatch case had written into the same
+/// numbered directory — which is how this helper failed once inside a full
+/// `cargo test` and never in isolation. The exec is also retried on `ETXTBSY`,
+/// which Linux returns for a file still open for writing anywhere in the system.
 fn observe_launcher(version: Option<&str>) -> ToolObservation {
-    // One directory per call, not per (pid, version): the two probe tests ask
-    // for the same version and run in the same process, and a shared path made
-    // them race for one file. The counter is what keeps them independent.
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let directory = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "codegen-86-probe-{}",
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
-    let launcher = directory.join("cargo-kani");
+    let _ = fs::remove_dir_all(&directory);
     fs::create_dir_all(&directory).expect("the scratch directory is created");
+    let launcher = directory.join("cargo-kani");
     let Some(version) = version else {
-        let _ = fs::remove_file(&launcher);
+        // No launcher at all: the probe finds nothing to measure, which is the
+        // absent-tool fault without a process in it.
+        assert!(
+            !launcher.exists(),
+            "the absent case starts from an empty directory"
+        );
         return ToolObservation::Absent;
     };
     fs::write(
@@ -793,14 +803,24 @@ fn observe_launcher(version: Option<&str>) -> ToolObservation {
         fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755))
             .expect("the fake launcher is executable");
     }
-    let output = std::process::Command::new(&launcher)
-        .args(["kani", "--version"])
-        .output()
-        .expect("the fake launcher runs");
-    ToolObservation::Identity(
-        String::from_utf8(output.stdout)
-            .expect("the launcher prints UTF-8")
-            .trim()
-            .to_owned(),
-    )
+    for attempt in 0..8 {
+        match std::process::Command::new(&launcher)
+            .args(["kani", "--version"])
+            .output()
+        {
+            Ok(output) => {
+                return ToolObservation::Identity(
+                    String::from_utf8(output.stdout)
+                        .expect("the launcher prints UTF-8")
+                        .trim()
+                        .to_owned(),
+                )
+            }
+            Err(error) if error.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
+            }
+            Err(error) => panic!("the fake launcher did not run: {error}"),
+        }
+    }
+    panic!("the fake launcher stayed busy for every attempt");
 }
