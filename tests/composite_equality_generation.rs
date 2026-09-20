@@ -626,14 +626,14 @@ fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_d
         assert_eq!(
             claim.operation.provenance,
             quire_contract_codegen::CompositeOperationProvenance::CallerDeclared {
-                blocked_on: CompositeEqualityUpstreamBlocker::OperationIdentityNotCarried
+                blocked_on: CompositeEqualityUpstreamBlocker::OperationIdentityNotConsumed
             }
         );
     }
     assert!(oracles
         .claim_map
         .blocked
-        .contains(&CompositeEqualityUpstreamBlocker::OperationIdentityNotCarried));
+        .contains(&CompositeEqualityUpstreamBlocker::OperationIdentityNotConsumed));
 
     let lib = contents(&oracles, "src/lib.rs");
     let mut functions: Vec<&str> = lib

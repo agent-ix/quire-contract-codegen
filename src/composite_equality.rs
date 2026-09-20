@@ -189,9 +189,12 @@ pub enum UpstreamBlocker {
     /// Function application.
     #[serde(rename = "agent-ix/quire-contract-runtime#34")]
     QuireContractRuntime34,
-    /// CheckedPackage V2 names an operator class, not the operation law.
-    #[serde(rename = "operation identity not carried by CheckedPackage V2")]
-    OperationIdentityNotCarried,
+    /// CheckedPackage V2 carries the operation identity and its laws, but
+    /// this generator's classifiers never read `operation` -- they classify
+    /// a body from its `term`/`operator`/`arguments` and the request item's
+    /// own descriptor instead.
+    #[serde(rename = "operation identity not consumed by codegen's generators")]
+    OperationIdentityNotConsumed,
 }
 
 /// Where a claim's operation identity comes from.
@@ -642,7 +645,7 @@ pub fn generate_composite_equality_oracles(
             operation: CompositeOperationClaim {
                 identity: item.operator.identity().to_owned(),
                 provenance: CompositeOperationProvenance::CallerDeclared {
-                    blocked_on: UpstreamBlocker::OperationIdentityNotCarried,
+                    blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
                 },
             },
             result,
@@ -653,7 +656,7 @@ pub fn generate_composite_equality_oracles(
         version: COMPOSITE_EQUALITY_CLAIM_MAP_VERSION,
         package_id: lowering.package_id,
         runtime_revision: RUNTIME_REVISION,
-        blocked: vec![UpstreamBlocker::OperationIdentityNotCarried],
+        blocked: vec![UpstreamBlocker::OperationIdentityNotConsumed],
         items: claims,
     };
     let lib = source.finish(&claim_map.package_id);
