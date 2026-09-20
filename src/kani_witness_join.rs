@@ -83,8 +83,7 @@ pub fn witness_schema(
                 value_type: witness_value_type(binding.primitive_type),
             })
         })
-        .collect::<Result<Vec<_>, _>>()
-        .map(|mut v| { v.reverse(); v })   // MUT: swap binding order
+        .collect()
 }
 
 /// Total, compiler-enforced mapping from the generator's Rust primitive vocabulary to the IR's
