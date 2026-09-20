@@ -1,5 +1,7 @@
 # Quire Contract Codegen
 
+[![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/6qsdhSPE)
+
 Deterministic Rust, property-test, proof, and evidence generation from Quire contracts.
 
 ## Development status
