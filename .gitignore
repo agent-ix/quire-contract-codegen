@@ -13,4 +13,5 @@ scripts/.census-probe.py
 
 target/
 *-target/
+target-*/
 .worktrees/
