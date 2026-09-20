@@ -55,10 +55,16 @@ generator saw the package, so a consumer may treat the operation identity as
 checked. A descriptor naming a different catalogued operation over the same
 bounds is not confirmed, even where the two share one operand shape.
 
-A claim whose node is never lowered marks its operation `caller_declared` and
-carries the typed blocked item naming that: the identity the claim map reports
-is the request item's own descriptor-derived identity, and downstream
-obligations must not treat it as checked.
+A claim this generator never confirms marks its operation `caller_declared` and
+carries the typed blocked item: the identity the claim map reports is the
+request item's own descriptor-derived identity, and downstream obligations must
+not treat it as checked. A claim goes unconfirmed either because this generator
+never reached the node, or because it reached it and the descriptor and the node
+disagreed — a descriptor naming a different catalogued operation, or one whose
+implied identity matches while its law definition or its mode value is absent
+from the node's own `operation.laws` and `operation.mode`. The second case still
+lowers and still generates an oracle; it is the confirmation that is withheld,
+not the code.
 
 A bound is read from the one reachable `bounded_domain` node on the node's
 result type whose form matches the descriptor. Its body is an `aggregate` of
@@ -81,8 +87,8 @@ literals. This encoding is defined by this generator, not by V2:
 - A typed claim map with one entry per requested item: node id, Contract IR
   semantic id, package id, semantic type, source map, claims, bounds, the
   bounds its parameters were checked against, operation identity with its
-  `caller_declared` provenance, and either the generated symbol or the typed
-  refusal; plus the map-level blocked items.
+  `ir_confirmed` or `caller_declared` provenance, and either the generated
+  symbol or the typed refusal; plus the map-level blocked items.
 
 ## Behavior
 
@@ -95,8 +101,17 @@ literals. This encoding is defined by this generator, not by V2:
   with a caller-supplied `Meter`.
 - If a node is unlowered, invalid, reaches an integer, rational, decimal or
   text type with no bounding domain, is over its work limit, or disagrees with
-  its descriptor, then the generator shall return that item's typed refusal and
-  emit no code for it, without changing any other item's output.
+  its descriptor in tag, form, arity, operand type or checked bounds, then the
+  generator shall return that item's typed refusal and emit no code for it,
+  without changing any other item's output.
+- If a node lowers, then the generator shall compare the node's own
+  `operation.identity` against the catalogued identity its descriptor implies,
+  and shall compare the descriptor's law definition and mode value against the
+  node's `operation.laws` and `operation.mode`. If every one agrees the
+  generator shall mark that claim's operation `ir_confirmed`; otherwise it
+  shall generate the oracle the descriptor names and mark the claim
+  `caller_declared` with a typed blocked item. An operation disagreement is
+  therefore not a refusal: it withholds confirmation, not code.
 - If the bound a descriptor parameter needs is missing, repeated, unreadable or
   unequal to the parameter, then the generator shall refuse the item with a
   typed reason.
@@ -128,7 +143,10 @@ literals. This encoding is defined by this generator, not by V2:
 | FR-014-AC-8 | The generated crate declares `publish = false`, pins the runtime revision with the `exact` feature, contains no charge amount (every charge comes from runtime metering), and compiles. | Test (TC-024) |
 | FR-014-AC-9 | Generated oracle functions do not panic: an invalid generated constant, including a decimal target, stops as `InvalidConstant`, an operand of the wrong width stops before any charge, and generated source over its ceiling is a typed error with no output. | Test (TC-024) |
 | FR-014-AC-10 | A descriptor parameter whose bound is missing, repeated, unreadable or unequal to the reachable `bounded_domain` node, an operand that is neither a literal nor a reference, and a literal quantity operand, are each refused with a typed reason. | Test (TC-024) |
-| FR-014-AC-11 | A claim whose node lowers and whose descriptor agrees with the node's catalogued `operation.identity` and mode value marks its operation `ir_confirmed` with no blocked item; a claim whose node is never lowered marks its operation `caller_declared` with a typed blocked item; and a descriptor naming a different catalogued operation over the same bounds is not confirmed, including where the two share one operand shape. | Test (TC-024) |
+| FR-014-AC-11 | A claim whose node lowers and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value marks its operation `ir_confirmed` with no blocked item. | Test (TC-024) |
+| FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound. | Test (TC-024) |
+| FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition or mode value is absent from that node's `operation.laws` or `operation.mode` is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |
+| FR-014-AC-14 | A claim whose node this generator never reached marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |
 
 ## Dependencies
 

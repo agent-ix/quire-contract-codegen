@@ -755,12 +755,14 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
     );
 }
 
-/// Trace: FR-014-AC-11, TC-024.
+/// Trace: FR-014-AC-13, TC-024.
 ///
-/// Backs AC-11's first conjunct: a claim whose node lowers and whose descriptor agrees with the
-/// node's catalogued identity marks its operation `ir_confirmed` and carries no blocked item, so
-/// `marked.claim_map.blocked` is `[]`. `blocked` is per-item -- only an unreached claim's own
-/// `CallerDeclared` provenance names an upstream blocker.
+/// Node 1011 is a truncating division whose own `operation.laws` does not name the floor
+/// definition. A floor descriptor implies the same catalogued identity (`quire.op.integer.div`),
+/// so this is not AC-12's different-operation case, and the node does lower, so it is not
+/// AC-14's unreached case. It is the third state: the item generates the oracle its descriptor
+/// names and is marked `caller_declared` because the law disagrees. Deleting the law check would
+/// leave AC-11, AC-12 and AC-14 satisfied and this one violated.
 #[test]
 fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise() {
     let package = corpus_package().admit();
@@ -822,10 +824,12 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
 /// anyway -- the defect this ticket exists to close -- would render an oracle that adds where the
 /// catalog says multiply and a harness whose `operation_identity` says `mul`.
 ///
-/// Trace: FR-014-AC-11, TC-024.
+/// Trace: FR-014-AC-12, TC-024.
 ///
-/// Backs AC-11's last conjunct: a descriptor naming a different catalogued operation over the
-/// same bounds is not confirmed, including where the two share one operand shape.
+/// Backs AC-12: an `Add` descriptor against node 1004's catalogued `quire.op.integer.mul`, over
+/// the identical `[-1000,1000]` bound and the identical binary `&rt::Integer` shape, is not
+/// confirmed. The same function's first half asserts a node whose descriptor does agree is
+/// `ir_confirmed`, which is AC-11.
 #[test]
 fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
     let package = corpus_package().admit();

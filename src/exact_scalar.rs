@@ -362,10 +362,14 @@ pub enum UpstreamBlocker {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OperationProvenance {
-    /// This claim's node was never lowered, so this generator never reached
-    /// the operation identity the IR carries for it and reports the request
-    /// item's own descriptor-derived identity instead; a consumer must not
-    /// treat the operation law as checked.
+    /// This generator never confirmed the node's own catalogued operation
+    /// against the descriptor -- either it never reached the node, or it
+    /// reached it and the two disagreed on the catalogued identity, the law
+    /// definition or the mode value. A disagreement still lowers and still
+    /// generates the oracle the descriptor names; what is withheld is the
+    /// confirmation. Either way the reported identity is the request item's
+    /// own descriptor-derived one, and a consumer must not treat the
+    /// operation law as checked.
     CallerDeclared {
         /// The missing upstream transport.
         blocked_on: UpstreamBlocker,
