@@ -13,8 +13,9 @@
 //! design consistent with this crate's one-way generate-then-persist flow, so nothing in this
 //! crate can literally re-hydrate a typed identity from the persisted JSON. This test reads the
 //! fields the join actually needs (`identifier`, `role`, `primitiveType`) generically out of the
-//! real persisted `serde_json::Value` instead, and calls this crate's own `witness_schema` on the
-//! result — the same production function `quire_contract_codegen::decode_falsification` uses.
+//! real persisted `serde_json::Value` instead, and passes the result straight into this crate's
+//! own `quire_contract_codegen::decode_falsification` — the actual production function, not a
+//! reimplementation of it.
 
 use std::{
     env, fs,
@@ -23,15 +24,15 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    execute_kani_obligation, negotiate_kani_obligations, witness_schema, write_bundle_atomic,
+    decode_falsification, execute_kani_obligation, negotiate_kani_obligations, write_bundle_atomic,
     ArtifactBundle, AttestationContext, KaniBindingRole, KaniExecutionRequest, KaniInstallation,
     KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest, KaniPrimitiveType,
     KaniRunOutcome, KaniToolPins, ObligationBinding, ObligationDisposition, ObligationItem,
-    ObligationRecord, IR_CANDIDATE_REVISION, RUNTIME_REVISION,
+    ObligationKind, ObligationRecord, IR_CANDIDATE_REVISION, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
-    kani::{Witness, WitnessValue, WitnessValueType},
-    BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
+    kani::WitnessValue, BoundPackage, ClauseId, ClauseRef, RequirementRef,
+    EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
 
@@ -276,16 +277,8 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
 }
 
 /// Runs the seeded defect through the real pinned `execute_kani_obligation` (the actual code path
-/// this test's join relies on) and returns its real counterexample transcript, alongside the raw
-/// `** <failed> of <total> failed` summary line Kani printed for that same run — captured by a
-/// second, independent invocation of the same pinned launcher with the same options in the same
-/// crate and target directory (so it reuses the first run's build), purely to report how many
-/// checks the harness actually ran; `execute_kani_obligation` classifies but does not retain that
-/// raw count.
-fn run_falsifying(
-    installation: &KaniInstallation,
-    harness: &KaniObligationHarness,
-) -> (String, String) {
+/// this test's join relies on) and returns its real counterexample transcript.
+fn run_falsifying(installation: &KaniInstallation, harness: &KaniObligationHarness) -> String {
     let crate_directory = write_crate(harness, SEEDED_FAILING_SUBJECT);
     let target_directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-witness-join");
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
@@ -300,26 +293,8 @@ fn run_falsifying(
         KaniRunOutcome::Falsified { counterexample } => counterexample,
         other => panic!("the seeded defect must be falsified, got {other:?}"),
     };
-    let mut arguments = vec!["kani".to_owned()];
-    arguments.extend(harness.identity.options.iter().cloned());
-    let raw = std::process::Command::new(&installation.launcher)
-        .args(&arguments)
-        .env("CARGO_TARGET_DIR", &target_directory)
-        .current_dir(&crate_directory)
-        .output()
-        .expect("the pinned launcher runs a second time against the already-built crate");
-    let summary = format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&raw.stdout),
-        String::from_utf8_lossy(&raw.stderr)
-    )
-    .lines()
-    .find(|line| line.trim_start().starts_with("**") && line.contains("failed"))
-    .map(str::trim)
-    .unwrap_or("(no '** N of M failed' summary line found in the second run's output)")
-    .to_owned();
     let _ = fs::remove_dir_all(crate_directory);
-    (counterexample, summary)
+    counterexample
 }
 
 // ---- reading the persisted schema back off disk ------------------------------------------------
@@ -329,10 +304,13 @@ fn run_falsifying(
 ///
 /// `KaniObligationIdentity`/`ObligationBinding` are `Serialize`-only in this crate (by design: the
 /// generator persists, it never re-hydrates), so there is no typed `Deserialize` path back from
-/// the file. This reads exactly the three fields the join uses (`identifier`, `role`,
-/// `primitiveType`) generically instead, straight from the bytes on disk — nothing here is
-/// hand-built, it is the generator's own persisted values, just not passed through a `Deserialize`
-/// impl that does not exist.
+/// the file. This reads exactly the three fields the join actually uses (`identifier`, `role`,
+/// `primitiveType`) generically instead, straight from the bytes on disk — those three are the
+/// generator's own persisted values, not hand-built. `integer_bounds` and `dependencies` are not
+/// read back: nothing downstream of `witness_schema` consults either field, so they are given
+/// placeholder values (`None`, `Vec::new()`) here rather than parsed back out of the persisted
+/// `IntegerDomain`/`OverflowPolicy`/`DependencyIdentity` shapes this test has no reason to
+/// reconstruct.
 fn persisted_arguments(record: &Value) -> Vec<ObligationBinding> {
     record["identity"]["arguments"]
         .as_array()
@@ -391,8 +369,10 @@ fn ir_211_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
     );
 
     let harnesses = withdraw_harnesses(&pins);
-    // precondition, postcondition, invariant, in request order (see `withdraw_harnesses`).
-    let postcondition_harness = &harnesses[1];
+    let postcondition_harness = harnesses
+        .iter()
+        .find(|harness| harness.identity.kind == ObligationKind::Postcondition)
+        .expect("withdraw_harnesses negotiates a postcondition harness");
 
     // Publish the real record to a real `kani-obligations/{module}.json` on disk — the same call
     // (`ArtifactBundle::new` + `write_bundle_atomic`) a real generation pipeline makes. Nothing
@@ -425,31 +405,42 @@ fn ir_211_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
 
     // Real falsification: the seeded defect credits instead of debiting, so the postcondition
     // (`balance` never grows) is falsified under the real pinned backend.
-    let (transcript, check_summary) = run_falsifying(&installation, postcondition_harness);
-    assert!(transcript.contains("kani::concrete_playback_run"));
-    assert!(transcript.contains(&harness_symbol));
-    println!("IR-211 real Kani run check summary: {check_summary}");
+    let transcript = run_falsifying(&installation, postcondition_harness);
     println!("IR-211 real transcript:\n{transcript}");
 
-    // ---- green: the unmutated persisted schema decodes the real transcript -------------------
-    let schema = witness_schema(&persisted_arguments(&record))
-        .expect("every persisted argument binding maps to a witness binding");
-    assert_eq!(
-        schema.len(),
-        2,
-        "withdraw's union ABI has two arguments (amount_current, balance_pre): {schema:?}"
-    );
-    let witness = Witness::parse(&harness_symbol, &module_symbol, &transcript)
-        .expect("a real transcript parses");
-    let decoded = witness
-        .decode(&schema)
-        .expect("the generator's own persisted schema must decode its own real transcript");
+    // ---- green: the unmutated persisted schema decodes the real transcript, through the actual
+    // production join (`decode_falsification`), not a reimplementation of it -------------------
+    let decoded = decode_falsification(
+        &harness_symbol,
+        &module_symbol,
+        &persisted_arguments(&record),
+        &transcript,
+    )
+    .expect("the generator's own persisted schema must decode its own real transcript");
     assert_eq!(decoded.len(), 2);
+    // Asserted by identifier and position, not just by type: `amount_current` and `balance_pre`
+    // are both `i64`, so a positional misbinding between them (the exact defect this join exists
+    // to exclude) would otherwise leave `decoded.len() == 2` and both values `Integer(_)` true.
+    assert_eq!(decoded[0].0, "amount_current", "{decoded:?}");
+    assert_eq!(decoded[1].0, "balance_pre", "{decoded:?}");
+    let amount_current = match decoded[0].1 {
+        WitnessValue::Integer(value) => value,
+        ref other => panic!("amount_current must decode as an integer, got {other:?}"),
+    };
+    let balance_pre = match decoded[1].1 {
+        WitnessValue::Integer(value) => value,
+        ref other => panic!("balance_pre must decode as an integer, got {other:?}"),
+    };
+    // The decoded values must actually witness the falsification, not merely typecheck: the
+    // seeded defect returns `balance_pre + amount_current` as the new balance, which only
+    // violates "balance never grows" when the credited amount is positive.
     assert!(
-        decoded
-            .iter()
-            .all(|(_, value)| matches!(value, WitnessValue::Integer(_))),
-        "{decoded:?}"
+        amount_current > 0,
+        "the postcondition only falsifies for a positive credit: amount_current={amount_current}, balance_pre={balance_pre}"
+    );
+    assert!(
+        balance_pre + amount_current > balance_pre,
+        "the seeded defect must actually grow the balance to falsify the postcondition: balance_pre={balance_pre}, amount_current={amount_current}"
     );
     println!("IR-211 green decode against the persisted schema: {decoded:?}");
 
@@ -459,11 +450,13 @@ fn ir_211_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         .as_array_mut()
         .unwrap()
         .pop();
-    let dropped_schema = witness_schema(&persisted_arguments(&dropped)).unwrap();
-    assert_eq!(dropped_schema.len(), 1);
-    let arity_refusal = witness
-        .decode(&dropped_schema)
-        .expect_err("a dropped binding must refuse, not silently decode fewer values");
+    let arity_refusal = decode_falsification(
+        &harness_symbol,
+        &module_symbol,
+        &persisted_arguments(&dropped),
+        &transcript,
+    )
+    .expect_err("a dropped binding must refuse, not silently decode fewer values");
     assert_eq!(
         arity_refusal.code, "kani_witness_arity_mismatch",
         "{arity_refusal:?}"
@@ -475,11 +468,13 @@ fn ir_211_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
     let arguments = retyped["identity"]["arguments"].as_array_mut().unwrap();
     let first_identifier = arguments[0]["identifier"].as_str().unwrap().to_owned();
     arguments[0]["primitiveType"] = json!("boolean");
-    let retyped_schema = witness_schema(&persisted_arguments(&retyped)).unwrap();
-    assert_eq!(retyped_schema[0].value_type, WitnessValueType::Boolean);
-    let width_refusal = witness
-        .decode(&retyped_schema)
-        .expect_err("an 8-byte i64 value against a declared 1-byte boolean must refuse");
+    let width_refusal = decode_falsification(
+        &harness_symbol,
+        &module_symbol,
+        &persisted_arguments(&retyped),
+        &transcript,
+    )
+    .expect_err("an 8-byte i64 value against a declared 1-byte boolean must refuse");
     assert_eq!(
         width_refusal.code, "kani_witness_width_mismatch",
         "{width_refusal:?}"
