@@ -208,7 +208,10 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
         )
     })
     .expect("the retained false classification replays through Contract IR");
-    assert_eq!(agreement.native.boolean_claim(), Some(false));
+    let quire_contract_ir::kani::ReplayAgreement::Input(agreement) = agreement else {
+        panic!("a corpus-generated packet must settle as an Input replay agreement");
+    };
+    assert_eq!(agreement.native().boolean_claim(), Some(false));
 }
 
 /// Trace: FR-007-AC-2, FR-007-AC-5, TC-023.
@@ -380,5 +383,8 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
         )
     })
     .expect("the retained Kani counterexample must replay as native false");
-    assert_eq!(agreement.native.boolean_claim(), Some(false));
+    let quire_contract_ir::kani::ReplayAgreement::Input(agreement) = agreement else {
+        panic!("a corpus-generated packet must settle as an Input replay agreement");
+    };
+    assert_eq!(agreement.native().boolean_claim(), Some(false));
 }

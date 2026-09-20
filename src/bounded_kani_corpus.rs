@@ -4,11 +4,11 @@
 //! vertical slice: once one lowering is admitted, it renders the four corpus roles from the same
 //! profile selection and finite input.  A non-success outcome returns before any role is emitted.
 
-use std::fmt::Write as _;
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use quire_contract_ir::kani::{
     CheckedArithmeticRequest, CollectionQuery, CounterexamplePacket, DispatchIndex, GraphRequest,
-    KaniOutcome, KaniOutcomeKind, KaniProfile, ValidatedFiniteInput,
+    KaniOutcome, KaniOutcomeKind, KaniProfile, ReplaySource, ValidatedFiniteInput, WitnessValue,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -97,7 +97,10 @@ pub struct BoundedCorpusCase {
     pub outcome: KaniOutcome,
     /// Generated roles derived from the same profile and finite input selection.
     pub artifacts: BoundedCorpusArtifacts,
-    /// Retained false witness, when the admitted case is a counterexample.
+    /// Retained false counterexample, when the admitted case is a counterexample. This corpus
+    /// never runs Kani, so it never holds a backend transcript: its packet's `source` is always
+    /// `ReplaySource::Input`, carrying the canonical assignments that produced the false result,
+    /// never a fabricated `ReplaySource::Witness`.
     pub counterexample: Option<CounterexamplePacket>,
 }
 
@@ -123,9 +126,27 @@ pub fn generate_bounded_kani_corpus_case(
     }
     let family = request.family();
     let request_source_id = request.source_id().to_owned();
-    let (value, detail, oracle_body) = match request {
+    let revision = profile.selection.revision.clone();
+    let (value, detail, oracle_body, assignments) = match request {
         BoundedCorpusRequest::Arithmetic(request) => {
             let lowered = prepare_checked_arithmetic(profile, dispatch, input, request)?;
+            let mut assignments = BTreeMap::new();
+            assignments.insert(
+                "left".to_owned(),
+                integer_assignment(&request_source_id, &revision, lowered.request.left)?,
+            );
+            assignments.insert(
+                "right".to_owned(),
+                integer_assignment(&request_source_id, &revision, lowered.request.right)?,
+            );
+            assignments.insert(
+                "minimum".to_owned(),
+                integer_assignment(&request_source_id, &revision, lowered.request.minimum)?,
+            );
+            assignments.insert(
+                "maximum".to_owned(),
+                integer_assignment(&request_source_id, &revision, lowered.request.maximum)?,
+            );
             // Admission establishes the checked arithmetic/definedness property; the numeric
             // result itself is not a Boolean verdict (zero is as valid as any other in-range
             // result).
@@ -133,14 +154,26 @@ pub fn generate_bounded_kani_corpus_case(
                 true,
                 format!("value={}", lowered.value),
                 render_arithmetic_oracle(&lowered),
+                assignments,
             )
         }
         BoundedCorpusRequest::Graph(request) => {
             let lowered = prepare_finite_graph_reaches(profile, dispatch, input, request)?;
+            let mut assignments = BTreeMap::new();
+            // Widening, not narrowing: `usize` never exceeds `i128` on any supported target.
+            assignments.insert(
+                "max_expansions".to_owned(),
+                integer_assignment(
+                    &request_source_id,
+                    &revision,
+                    lowered.request.max_expansions as i128,
+                )?,
+            );
             (
                 lowered.reachable,
                 format!("expanded={}", lowered.expanded.join(",")),
                 render_graph_oracle(&lowered, input),
+                assignments,
             )
         }
         BoundedCorpusRequest::Collection(request) => {
@@ -152,18 +185,43 @@ pub fn generate_bounded_kani_corpus_case(
                 .map(|value| format!("{value}i128"))
                 .collect::<Vec<_>>()
                 .join(", ");
+            let mut exists_equal_expected = None;
             let predicate = match lowered.query.kind {
                 quire_contract_ir::kani::QueryKind::ForAllNonNegative => {
                     "values.iter().all(|value| *value >= 0i128)".to_owned()
                 }
                 quire_contract_ir::kani::QueryKind::ExistsEqual(expected) => {
+                    exists_equal_expected = Some(expected);
                     format!("values.iter().any(|value| *value == {expected}i128)")
                 }
             };
+            let mut assignments = BTreeMap::new();
+            for (index, item) in lowered.query.values.iter().enumerate() {
+                assignments.insert(
+                    format!("value_{index}"),
+                    integer_assignment(&request_source_id, &revision, *item)?,
+                );
+            }
+            // Widening, not narrowing: `usize` never exceeds `i128` on any supported target.
+            assignments.insert(
+                "max_items".to_owned(),
+                integer_assignment(
+                    &request_source_id,
+                    &revision,
+                    lowered.query.max_items as i128,
+                )?,
+            );
+            if let Some(expected) = exists_equal_expected {
+                assignments.insert(
+                    "expected".to_owned(),
+                    integer_assignment(&request_source_id, &revision, expected)?,
+                );
+            }
             (
                 lowered.value,
                 format!("examined={}", lowered.examined),
                 format!("{{ let values = [{values}]; {predicate} }}"),
+                assignments,
             )
         }
     };
@@ -193,7 +251,12 @@ pub fn generate_bounded_kani_corpus_case(
     let counterexample = (!value).then(|| CounterexamplePacket {
         profile_revision: profile.selection.revision.clone(),
         input: input.input().clone(),
-        witness: identity.clone(),
+        // This corpus is generated from a concrete, already-admitted finite selection and never
+        // runs Kani, so it never has a backend transcript to build a `Witness` from. `identity`
+        // (the artifact digest, computed above and unrelated to what produced this counterexample)
+        // and a string literal were both refused as fabrications by ir#156; `assignments` is the
+        // real per-family concrete input this case was generated from (see the match above).
+        source: ReplaySource::Input(assignments),
     });
     Ok(BoundedCorpusCase {
         family,
@@ -308,6 +371,26 @@ fn artifact(path: String, contents: String) -> Artifact {
 
 fn digest(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
+}
+
+/// Converts one bounded-Kani finite-domain integer into the closed `WitnessValue` wire
+/// representation, refusing rather than silently truncating a value this bounded domain does
+/// not actually produce.
+fn integer_assignment(
+    source_id: &str,
+    revision: &str,
+    value: i128,
+) -> Result<WitnessValue, KaniOutcome> {
+    i64::try_from(value)
+        .map(WitnessValue::Integer)
+        .map_err(|_| {
+            KaniOutcome::non_success(
+                KaniOutcomeKind::InvalidInput,
+                "kani_corpus_assignment_out_of_range",
+                source_id.to_owned(),
+                revision.to_owned(),
+            )
+        })
 }
 
 #[cfg(test)]
@@ -503,9 +586,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(generated.outcome.boolean_claim(), Some(false));
+        let packet = generated.counterexample.unwrap();
+        assert_eq!(packet.input, input.input().clone());
+        // This corpus never runs Kani, so its packet carries the real canonical input
+        // assignments as an `Input` arm, never a fabricated `Witness` (ir#156).
         assert_eq!(
-            generated.counterexample.unwrap().input,
-            input.input().clone()
+            packet.source,
+            quire_contract_ir::kani::ReplaySource::Input(std::collections::BTreeMap::from([(
+                "max_expansions".to_owned(),
+                quire_contract_ir::kani::WitnessValue::Integer(2),
+            )]))
         );
     }
 

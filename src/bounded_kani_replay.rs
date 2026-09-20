@@ -17,9 +17,11 @@ pub fn replay_codegen_counterexample(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use quire_contract_ir::kani::{
         CounterexamplePacket, FiniteInput, KaniOutcome, KaniOutcomeKind, PopulationCompleteness,
-        ProfileSelection, ResourceBounds,
+        ProfileSelection, ReplayAgreement, ReplaySource, ResourceBounds, WitnessValue,
     };
 
     use super::replay_codegen_counterexample;
@@ -48,7 +50,12 @@ mod tests {
                 objects: vec![],
                 references: vec![],
             },
-            witness: "counterexample".to_owned(),
+            // This fixture never ran Kani, so it carries canonical input assignments rather than
+            // a fabricated `Witness` (ir#156, AD-016 "Replay source").
+            source: ReplaySource::Input(BTreeMap::from([(
+                "x".to_owned(),
+                WitnessValue::Integer(1),
+            )])),
         }
     }
 
@@ -59,7 +66,10 @@ mod tests {
             KaniOutcome::counterexample(input.source_id.clone(), input.profile.revision.clone())
         })
         .expect("native false agrees with retained packet");
-        assert_eq!(agreement.native.boolean_claim(), Some(false));
+        let ReplayAgreement::Input(agreement) = agreement else {
+            panic!("an Input-arm packet must settle as an Input replay agreement");
+        };
+        assert_eq!(agreement.native().boolean_claim(), Some(false));
         let disagreement = replay_codegen_counterexample(packet(), |input| {
             KaniOutcome::proved(input.source_id.clone(), input.profile.revision.clone())
         })
