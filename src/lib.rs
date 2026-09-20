@@ -114,9 +114,11 @@ pub use kani_execution::{
 pub use kani_obligations::{
     negotiate_kani_obligations, DerivedDomain, EmbeddedOracle, InvalidObligationItem,
     KaniObligationError, KaniObligationHarness, KaniObligationIdentity, KaniObligationOutcome,
-    KaniObligationRequest, ObligationBinding, ObligationDisposition, ObligationItem,
-    ObligationKind, ObligationRecord, ObligationSubject, UnsupportedObligation,
-    KANI_OBLIGATION_PROFILE, KANI_OBLIGATION_SCHEMA, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    KaniObligationRequest, KaniScalarObligationHarness, ObligationBinding, ObligationDisposition,
+    ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, ScalarObligationArgument,
+    ScalarObligationIdentity, UnsupportedObligation, KANI_OBLIGATION_PROFILE,
+    KANI_OBLIGATION_SCHEMA, KANI_SCALAR_OBLIGATION_SCHEMA, MAX_OBLIGATION_ITEMS,
+    MAX_OBLIGATION_UNWIND,
 };
 pub use kani_witness_join::{decode_falsification, witness_schema, WitnessSchemaError};
 pub use publication::{

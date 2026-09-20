@@ -16,19 +16,20 @@ use std::{
 };
 
 use package::{
-    application, code_id, corpus_package, golden_items, integer_add, key, op, reference, Bound,
-    MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED, V_INTEGER,
+    application, bounded, code_id, corpus_package, golden_items, integer_add, key, op, reference,
+    Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED, V_INTEGER,
 };
 use quire_contract_codegen::{
     execute_kani_obligation, generate_exact_scalar_oracles, negotiate_kani_obligations,
-    AttestationContext, DerivedDomain, ExactScalarClaimMap, ExactScalarDisposition,
-    ExactScalarItem, InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest,
-    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
-    KaniObligationOutcome, KaniObligationRequest, KaniPinField, KaniRunOutcome, KaniTool,
-    KaniToolError, KaniToolPins, ObligationDisposition, ObligationItem, ObligationKind,
-    ObligationRecord, ObligationSubject, UnsupportedObligation, UpstreamBlocker,
-    IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION, KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS,
-    MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
+    AttestationContext, ExactScalarClaimMap, ExactScalarDisposition, ExactScalarItem,
+    ExactScalarOperation, IntegerOperator, InvalidObligationItem, KaniExecutionRefusal,
+    KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniObligationError,
+    KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest, KaniPinField,
+    KaniRunOutcome, KaniScalarObligationHarness, KaniTool, KaniToolError, KaniToolPins,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
+    OperationProvenance, UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION,
+    KANI_BACKEND_VERSION, KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -346,7 +347,22 @@ fn request<'a>(
 
 fn emitted(outcome: KaniObligationOutcome) -> (Vec<ObligationRecord>, Vec<KaniObligationHarness>) {
     match outcome {
-        KaniObligationOutcome::Emitted { records, harnesses } => (records, harnesses),
+        KaniObligationOutcome::Emitted {
+            records, harnesses, ..
+        } => (records, harnesses),
+        KaniObligationOutcome::Rejected { records } => panic!("unexpected rejection: {records:#?}"),
+    }
+}
+
+fn emitted_scalar(
+    outcome: KaniObligationOutcome,
+) -> (Vec<ObligationRecord>, Vec<KaniScalarObligationHarness>) {
+    match outcome {
+        KaniObligationOutcome::Emitted {
+            records,
+            scalar_harnesses,
+            ..
+        } => (records, scalar_harnesses),
         KaniObligationOutcome::Rejected { records } => panic!("unexpected rejection: {records:#?}"),
     }
 }
@@ -763,19 +779,106 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity() {
         harnesses
     );
 
-    // A V2 claim's domain is read from its IR bound, inclusive at both ends.
+    // A V2 claim's domain is read from its IR bound, inclusive at both ends. Node 1001 is
+    // `quire.op.integer.add`, IR-confirmed and renderable, so it reaches a real Kani harness
+    // whose symbolic arguments carry that same inclusive domain -- not a typed refusal.
     let (scalar, claim_map) = scalar_package();
-    let records = scalar_records(&scalar, &claim_map, &[1001]);
-    let UnsupportedObligation::CallerDeclaredOperation {
-        derived_domains, ..
-    } = unsupported(&records[0])
-    else {
-        panic!("expected a caller-declared refusal: {records:?}");
-    };
+    let node_1001 = code_id(1001);
+    let items = [ObligationItem::ScalarClaim {
+        package: &scalar,
+        claim_map: &claim_map,
+        node_id: &node_1001,
+    }];
+    let (records, scalar_harnesses) = emitted_scalar(
+        negotiate_kani_obligations(&request(&items, &pins, "crate::subject")).unwrap(),
+    );
     assert!(matches!(
-        derived_domains.as_slice(),
-        [DerivedDomain::IntegerRange { lower, upper, .. }] if lower == "-1000" && upper == "1000"
+        records[0].disposition,
+        ObligationDisposition::Supported { .. }
     ));
+    assert_eq!(scalar_harnesses.len(), 1);
+    let identity = &scalar_harnesses[0].identity;
+    assert_eq!(identity.operation_identity, "quire.op.integer.add");
+    assert_eq!(
+        identity
+            .arguments
+            .iter()
+            .map(|argument| (argument.minimum, argument.maximum))
+            .collect::<Vec<_>>(),
+        [(-1000, 1000), (-1000, 1000)]
+    );
+}
+
+/// F1: the scalar harness asserts *soundness* (whenever the outcome is
+/// `Ok(Outcome::Completed(value))`, `value` lies within the same checked domain the
+/// `kani::assume`s constrain the operands to), not *totality* (that every assumed operand pair
+/// completes). `add` over `[-1000,1000]` is genuinely partial -- `600 + 600` leaves the domain --
+/// so an unconditional "always `Completed`" assertion (this rendering's original defect) asserted
+/// a falsehood no operand assumption could fix; asserting soundness instead states what
+/// `evaluate_integer_arithmetic`'s own `bound.contains(&result)` check (`quire-contract-runtime`
+/// `src/exact/numeric.rs`) actually guarantees. `outcome.is_ok()` is still not what is matched --
+/// it is true for `Ok(Refused(_))` too, and `Refused` is exactly the outcome an out-of-domain
+/// result must produce, so the `match` below inspects only the `Completed` arm and leaves `sound`
+/// at its vacuous default otherwise. This is a source-inspection check because real `cargo kani`
+/// cannot be run in this environment (`make kani`'s pinned lane; this generator also has no
+/// in-process way to run it against a fabricated single-harness crate) -- the harness is rendered
+/// and its proposition is now correctly stated, but it is NOT claimed to be discharged here.
+///
+/// Trace: FR-015-AC-7, TC-025
+#[test]
+fn tc_025_scalar_harness_asserts_soundness_not_totality() {
+    let (scalar, claim_map) = scalar_package();
+    let pins = pins();
+    let node_1001 = code_id(1001);
+    let items = [ObligationItem::ScalarClaim {
+        package: &scalar,
+        claim_map: &claim_map,
+        node_id: &node_1001,
+    }];
+    let (_, scalar_harnesses) = emitted_scalar(
+        negotiate_kani_obligations(&request(&items, &pins, "crate::subject")).unwrap(),
+    );
+    let source = &scalar_harnesses[0].rust.contents;
+    assert!(
+        source.contains(
+            "let domain = rt::IntegerInterval::new(rt::Integer::from(-1000_i64), \
+             rt::Integer::from(1000_i64))"
+        ),
+        "the harness must reconstruct the checked domain from the same literal bounds the \
+         assumes use, to range-check the completed value against: {source}"
+    );
+    assert!(
+        source.contains("Ok(rt::Outcome::Completed(value)) => domain.contains(value),"),
+        "the harness must actually read and range-check the completed value, not merely \
+         classify the outcome variant -- an assertion that never inspects the value is the \
+         vacuity this replaced, wearing a new shape: {source}"
+    );
+    assert!(
+        source.contains("assert!(sound,"),
+        "soundness must be an assertion Kani can falsify, not only a cover: {source}"
+    );
+    assert!(
+        !source.contains("assert!(completed,"),
+        "regression to the old, false, unconditional-totality assertion: {source}"
+    );
+    assert!(
+        source.contains("kani::cover!(completed,"),
+        "the cover must gate on outcome reachability, as the FR-015-AC-7 non-vacuity guard, \
+         never on a constant: {source}"
+    );
+    assert!(
+        !source.contains("kani::cover!(true, "),
+        "the cover must not be trivially reachable: {source}"
+    );
+    assert!(
+        !source.contains("kani::cover!(outcome.is_ok(), "),
+        "regression to the vacuous Result::is_ok() check: {source}"
+    );
+    // The assumption is scoped by the same IR-derived bounds
+    // `tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity` checks via
+    // `identity.arguments` above: this is the corresponding source-level check.
+    assert!(source.contains("kani::assume(left >= -1000_i64 && left <= 1000_i64);"));
+    assert!(source.contains("kani::assume(right >= -1000_i64 && right <= 1000_i64);"));
 }
 
 /// Unbounded, non-finite, model-dependent, frame and definedness-bearing items are typed
@@ -1081,51 +1184,137 @@ fn tc_025_unsatisfiable_bounds_are_refused() {
     assert!(BoundPackage::from_json_bytes(&inverted).is_err());
 }
 
-/// Every V2 scalar claim FR-014 generates is caller-declared and refused, with no harness.
+/// Every V2 scalar claim FR-014 generates has an IR-confirmed operation. The four
+/// `IntegerArithmetic` identities this generator knows how to render (`quire.op.integer.{add,sub,
+/// mul,negate}`) each reach a real Kani harness; every other confirmed family is refused as
+/// `OperationNotRendered` -- known, honestly-named debt, never the old `CallerDeclaredOperation`
+/// lie (that provenance is unreachable here: every one of these claims' nodes was successfully
+/// lowered and checked, from an admitted package whose IR already confirmed the identity).
 ///
 /// Trace: FR-015-AC-6, TC-025
 #[test]
-fn tc_025_every_caller_declared_operation_is_refused() {
+fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
+    const RENDERED: [&str; 4] = [
+        "quire.op.integer.add",
+        "quire.op.integer.sub",
+        "quire.op.integer.mul",
+        "quire.op.integer.negate",
+    ];
     let (scalar, claim_map) = scalar_package();
     let generated = claim_map
         .items
         .iter()
         .filter(|claim| matches!(claim.result, ExactScalarDisposition::Generated(_)))
-        .map(|claim| claim.node_id.clone())
+        .cloned()
         .collect::<Vec<_>>();
     assert!(generated.len() > 40, "the corpus generates every family");
+    assert!(
+        generated
+            .iter()
+            .all(|claim| claim.operation.provenance == OperationProvenance::IrConfirmed),
+        "every generated V2 claim's operation is IR-confirmed"
+    );
     let items = generated
         .iter()
-        .map(|node_id| ObligationItem::ScalarClaim {
+        .map(|claim| ObligationItem::ScalarClaim {
             package: &scalar,
             claim_map: &claim_map,
-            node_id,
+            node_id: &claim.node_id,
         })
         .collect::<Vec<_>>();
     let pins = pins();
-    let (records, harnesses) =
-        emitted(negotiate_kani_obligations(&request(&items, &pins, "crate::subject")).unwrap());
-    assert!(harnesses.is_empty());
+    let (records, scalar_harnesses) = emitted_scalar(
+        negotiate_kani_obligations(&request(&items, &pins, "crate::subject")).unwrap(),
+    );
     assert_eq!(records.len(), generated.len());
-    for (record, claim) in records.iter().zip(
-        claim_map
-            .items
-            .iter()
-            .filter(|claim| matches!(claim.result, ExactScalarDisposition::Generated(_))),
-    ) {
-        assert_eq!(
-            unsupported(record),
-            &UnsupportedObligation::CallerDeclaredOperation {
-                operation_identity: claim.operation.identity.clone(),
-                blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
-                derived_domains: match unsupported(record) {
-                    UnsupportedObligation::CallerDeclaredOperation {
-                        derived_domains, ..
-                    } => derived_domains.clone(),
-                    other => panic!("{other:?}"),
-                },
-            }
-        );
+    let expected_rendered = generated
+        .iter()
+        .filter(|claim| RENDERED.contains(&claim.operation.identity.as_str()))
+        .count();
+    assert!(
+        expected_rendered > 0,
+        "the corpus exercises integer arithmetic"
+    );
+    assert_eq!(scalar_harnesses.len(), expected_rendered);
+    for (record, claim) in records.iter().zip(&generated) {
+        if RENDERED.contains(&claim.operation.identity.as_str()) {
+            assert!(
+                matches!(record.disposition, ObligationDisposition::Supported { .. }),
+                "{}: {:?}",
+                claim.operation.identity,
+                record.disposition
+            );
+        } else {
+            assert_eq!(
+                unsupported(record),
+                &UnsupportedObligation::OperationNotRendered {
+                    operation_identity: claim.operation.identity.clone(),
+                    derived_domains: match unsupported(record) {
+                        UnsupportedObligation::OperationNotRendered {
+                            derived_domains, ..
+                        } => derived_domains.clone(),
+                        other => panic!("{other:?}"),
+                    },
+                }
+            );
+        }
+    }
+}
+
+/// FR-015-AC-6 ("an obligation over a `caller_declared` oracle is refused with a typed reason and
+/// no harness") stayed true in code once IR-217 widened `IrConfirmed`, but the test above that is
+/// still traced to it was repurposed to check the render-or-honestly-refuse split over an
+/// all-confirmed corpus, so no test anywhere produced `UnsupportedObligation::CallerDeclaredOperation`
+/// any more. This restores a real case: node 1004 is `quire.op.integer.mul`; naming `Add` against
+/// it, with the identical `[-1000,1000]` domain, passes every `check_item` shape and bound check
+/// (see `exact_scalar_generation.rs`'s own
+/// `tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed`) but is not confirmed,
+/// so it must reach FR-015 negotiation as a typed refusal with no harness, never a proof over a
+/// mismatched operator.
+///
+/// Trace: FR-015-AC-6, TC-025
+#[test]
+fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
+    let package = corpus_package().admit();
+    let mismatched = code_id(1004);
+    let oracles = generate_exact_scalar_oracles(
+        &package,
+        &[ExactScalarItem {
+            node_id: mismatched.clone(),
+            operation: ExactScalarOperation::IntegerArithmetic {
+                operator: IntegerOperator::Add,
+                domain: bounded(-1000, 1000),
+            },
+        }],
+    )
+    .expect("claim map");
+    let claim = &oracles.claim_map.items[0];
+    assert_eq!(
+        claim.operation.provenance,
+        OperationProvenance::CallerDeclared {
+            blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+        }
+    );
+    let items = [ObligationItem::ScalarClaim {
+        package: &package,
+        claim_map: &oracles.claim_map,
+        node_id: &mismatched,
+    }];
+    let pins = pins();
+    let (records, scalar_harnesses) = emitted_scalar(
+        negotiate_kani_obligations(&request(&items, &pins, "crate::subject")).unwrap(),
+    );
+    assert!(scalar_harnesses.is_empty());
+    match unsupported(&records[0]) {
+        UnsupportedObligation::CallerDeclaredOperation {
+            operation_identity,
+            blocked_on,
+            ..
+        } => {
+            assert_eq!(operation_identity, "integer.add domain=[-1000,1000]");
+            assert_eq!(*blocked_on, UpstreamBlocker::OperationIdentityNotConsumed);
+        }
+        other => panic!("expected CallerDeclaredOperation, got {other:?}"),
     }
 }
 

@@ -14,11 +14,20 @@
 //! of the same request, and are recorded in the harness identity.
 //!
 //! Operation identity must be exact. Frozen V1 bound clauses carry their operators as IR enum
-//! variants and are lowered. CheckedPackage V2 scalar claims carry only a caller-declared
-//! operation identity, so every one is refused as [`UnsupportedObligation::CallerDeclaredOperation`]
-//! with the domains the IR does carry, until `agent-ix/quire-specification#76` transports the
-//! operation law. V1 has no frame clause kind, and V2 frames have no finite encoding in the
-//! scalar profile, so no frame harness is emitted.
+//! variants and are lowered. A CheckedPackage V2 scalar claim whose node this generator
+//! successfully lowered and checked, and whose node's own catalogued `operation.identity`,
+//! `operation.mode` and (for the one family with more than one catalogued law definition)
+//! `operation.laws` all confirm the request item's own descriptor, is [`OperationProvenance::IrConfirmed`]
+//! and -- for the `IntegerArithmetic` families this generator has a Kani renderer for
+//! (`quire.op.integer.{add,sub,mul,negate}`) -- reaches a real Kani harness via
+//! [`Outcome::LoweredScalar`]/`render_scalar`. Every other confirmed family is honestly refused as
+//! [`UnsupportedObligation::OperationNotRendered`], never silently mis-rendered. A claim this
+//! generator never reaches a node for (every refusal before lowering succeeds, every duplicate
+//! copy, and a genuine descriptor/node disagreement) still reports the request item's own
+//! descriptor-derived identity as `CallerDeclared` and is refused as
+//! [`UnsupportedObligation::CallerDeclaredOperation`] with the domains the IR does carry. V1 has no
+//! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so no frame
+//! harness is emitted.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -41,12 +50,16 @@ use crate::{
         reference_identifier, typed_dependency_parameters, DependencyParameter, RustValueType,
     },
     Artifact, AttestationContext, ExactScalarClaim, ExactScalarClaimMap, ExactScalarDisposition,
-    ExactScalarRefusal, GenerationErrorCode, OperationProvenance, OracleRequest, UpstreamBlocker,
-    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode, OperationProvenance,
+    OracleRequest, UpstreamBlocker, IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES,
+    RUNTIME_REVISION,
 };
 
 /// Schema identity of a generated obligation identity record.
 pub const KANI_OBLIGATION_SCHEMA: &str = "quire.codegen.kani-obligation/v1";
+
+/// Schema identity of a generated V2 exact-scalar obligation identity record.
+pub const KANI_SCALAR_OBLIGATION_SCHEMA: &str = "quire.codegen.kani-scalar-obligation/v1";
 
 /// Adapter profile for separate-obligation lowering against Kani 0.67.0.
 pub const KANI_OBLIGATION_PROFILE: &str = "kani-0.67.0-separate-obligations-v1";
@@ -244,6 +257,25 @@ pub enum UnsupportedObligation {
         /// The domains the IR does carry.
         derived_domains: Vec<DerivedDomain>,
     },
+    /// The operation identity is IR-confirmed, but this generator has no Kani harness renderer
+    /// for its family yet (today: every family but `IntegerArithmetic`).
+    OperationNotRendered {
+        /// The confirmed operation.
+        operation_identity: String,
+        /// The domains the IR does carry.
+        derived_domains: Vec<DerivedDomain>,
+    },
+    /// The operation identity is IR-confirmed and its checked bound is an integer range, but one
+    /// of its inclusive endpoints does not fit `i64`, so no `kani::any::<i64>()` argument can be
+    /// constrained to it.
+    DomainNotRepresentableInI64 {
+        /// The confirmed operation.
+        operation_identity: String,
+        /// Inclusive lower bound, canonical decimal.
+        lower: String,
+        /// Inclusive upper bound, canonical decimal.
+        upper: String,
+    },
     /// A reachable node family has no finite encoding.
     NoFiniteEncoding {
         /// The node.
@@ -420,6 +452,71 @@ pub struct KaniObligationHarness {
     pub record: Artifact,
 }
 
+/// One symbolic `i64` argument of a rendered scalar harness, bounded by the IR domain
+/// [`lower_scalar_claim`] read.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScalarObligationArgument {
+    /// Generated identifier.
+    pub identifier: String,
+    /// Inclusive checked minimum.
+    pub minimum: i64,
+    /// Inclusive checked maximum.
+    pub maximum: i64,
+}
+
+/// Everything a V2 scalar obligation harness's meaning depends on; its digest is embedded in the
+/// harness. Parallel to [`KaniObligationIdentity`] but for an IR-confirmed exact-scalar claim,
+/// which has no QSL clause, declaration or subject signature -- a node id and its confirmed
+/// operation identity stand in their place.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScalarObligationIdentity {
+    /// [`KANI_SCALAR_OBLIGATION_SCHEMA`].
+    pub schema: &'static str,
+    /// [`KANI_OBLIGATION_PROFILE`].
+    pub adapter_profile: &'static str,
+    /// The claimed node.
+    pub node_id: CheckedNodeId,
+    /// The node's own catalogued operation identity, IR-confirmed at package admission.
+    pub operation_identity: String,
+    /// Contract IR revision.
+    pub ir_revision: &'static str,
+    /// The embedded oracle's function symbol.
+    pub oracle_symbol: String,
+    /// SHA-256 of the embedded oracle's own source.
+    pub oracle_sha256: String,
+    /// Harness module symbol.
+    pub module_symbol: String,
+    /// Proof function symbol.
+    pub harness_symbol: String,
+    /// Symbolic arguments, in call order.
+    pub arguments: Vec<ScalarObligationArgument>,
+    /// Backend pins.
+    pub pins: KaniToolPins,
+    /// Solver.
+    pub solver: String,
+    /// Loop unwind bound.
+    pub unwind: u32,
+    /// Every flag passed after `cargo kani`.
+    pub options: Vec<String>,
+    /// Contract Runtime revision the oracle calls.
+    pub runtime_revision: &'static str,
+}
+
+/// One generated V2 exact-scalar obligation harness.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KaniScalarObligationHarness {
+    /// Identity.
+    pub identity: ScalarObligationIdentity,
+    /// SHA-256 of the identity's JSON, embedded in the Rust source.
+    pub identity_sha256: String,
+    /// Self-contained Rust source.
+    pub rust: Artifact,
+    /// JSON record of identity, identity digest and Rust digest.
+    pub record: Artifact,
+}
+
 /// The result of one negotiated request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum KaniObligationOutcome {
@@ -427,8 +524,10 @@ pub enum KaniObligationOutcome {
     Emitted {
         /// Every item's record, in request order.
         records: Vec<ObligationRecord>,
-        /// Harnesses.
+        /// V1 frozen-clause harnesses.
         harnesses: Vec<KaniObligationHarness>,
+        /// V2 IR-confirmed exact-scalar claim harnesses.
+        scalar_harnesses: Vec<KaniScalarObligationHarness>,
     },
     /// At least one item was invalid; no harness bytes are returned.
     Rejected {
@@ -467,6 +566,7 @@ pub fn negotiate_kani_obligations(
         .any(|state| matches!(state.outcome, Outcome::Invalid(_)));
     let mut records = Vec::with_capacity(states.len());
     let mut harnesses = Vec::new();
+    let mut scalar_harnesses = Vec::new();
     for (index, state) in states.into_iter().enumerate() {
         let disposition = if rejected {
             state.outcome.disposition_without_harness()
@@ -476,6 +576,18 @@ pub fn negotiate_kani_obligations(
                     Some(harness) => {
                         let symbol = harness.identity.harness_symbol.clone();
                         harnesses.push(harness);
+                        ObligationDisposition::Supported {
+                            harness_symbol: symbol,
+                        }
+                    }
+                    None => ObligationDisposition::Unsupported {
+                        reason: UnsupportedObligation::RenderFailed,
+                    },
+                },
+                Outcome::LoweredScalar(lowered) => match render_scalar(request, &lowered) {
+                    Some(harness) => {
+                        let symbol = harness.identity.harness_symbol.clone();
+                        scalar_harnesses.push(harness);
                         ObligationDisposition::Supported {
                             harness_symbol: symbol,
                         }
@@ -497,7 +609,11 @@ pub fn negotiate_kani_obligations(
     Ok(if rejected {
         KaniObligationOutcome::Rejected { records }
     } else {
-        KaniObligationOutcome::Emitted { records, harnesses }
+        KaniObligationOutcome::Emitted {
+            records,
+            harnesses,
+            scalar_harnesses,
+        }
     })
 }
 
@@ -558,6 +674,7 @@ enum ItemIdentity {
 
 enum Outcome<'a> {
     Lowered(Box<LoweredClause<'a>>),
+    LoweredScalar(Box<LoweredScalarClaim>),
     RequiresBound(CheckedNodeId),
     Unsupported(UnsupportedObligation),
     Invalid(InvalidObligationItem),
@@ -570,6 +687,9 @@ impl Outcome<'_> {
             Self::Lowered(lowered) => ObligationDisposition::Supported {
                 harness_symbol: lowered.symbols.harness,
             },
+            Self::LoweredScalar(lowered) => ObligationDisposition::Supported {
+                harness_symbol: lowered.harness_symbol,
+            },
             Self::RequiresBound(unbounded_type) => {
                 ObligationDisposition::RequiresBound { unbounded_type }
             }
@@ -577,6 +697,32 @@ impl Outcome<'_> {
             Self::Invalid(reason) => ObligationDisposition::InvalidRequest { reason },
         }
     }
+}
+
+/// An IR-confirmed V2 exact-scalar claim this generator knows how to render a Kani harness for.
+/// Scoped today to `IntegerArithmetic` (`quire.op.integer.{add,sub,mul,negate}`): its operands and
+/// result are all `rt::Integer`, and `quire_contract_runtime::exact::Integer: From<i64>` gives a
+/// direct `kani::any()` bridge with no construction of a compound runtime type. Every other
+/// confirmed family (division's `QuotientRemainder`, rational, decimal, IEEE, text, enum, quantity)
+/// has no renderer yet -- see [`lower_scalar_claim`].
+struct LoweredScalarClaim {
+    node_id: CheckedNodeId,
+    operation_identity: String,
+    /// The oracle's own self-contained source (`GeneratedScalarClaim::oracle_source`), embedded
+    /// verbatim ahead of the harness module, exactly as a V1 harness embeds its `ClauseOracle`s.
+    oracle_source: String,
+    oracle_symbol: String,
+    arity: ScalarArity,
+    lower: i64,
+    upper: i64,
+    module_symbol: String,
+    harness_symbol: String,
+}
+
+#[derive(Clone, Copy)]
+enum ScalarArity {
+    Unary,
+    Binary,
 }
 
 struct LoweredClause<'a> {
@@ -897,6 +1043,26 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                         derived_domains: derived,
                     })
                 }
+                OperationProvenance::IrConfirmed => {
+                    match lower_scalar_claim(claim, generated, &derived) {
+                        Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
+                        Err(ScalarLoweringRefusal::NoRenderer) => {
+                            Outcome::Unsupported(UnsupportedObligation::OperationNotRendered {
+                                operation_identity: claim.operation.identity.clone(),
+                                derived_domains: derived,
+                            })
+                        }
+                        Err(ScalarLoweringRefusal::BoundNotI64 { lower, upper }) => {
+                            Outcome::Unsupported(
+                                UnsupportedObligation::DomainNotRepresentableInI64 {
+                                    operation_identity: claim.operation.identity.clone(),
+                                    lower,
+                                    upper,
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
         ExactScalarDisposition::Refused { refusal } => match refusal {
@@ -952,13 +1118,104 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
             | ExactScalarRefusal::FormMismatch { .. }
             | ExactScalarRefusal::BodyMismatch { .. }
             | ExactScalarRefusal::ResultTypeMismatch { .. }
-            | ExactScalarRefusal::OperandTypeMismatch { .. } => {
+            | ExactScalarRefusal::OperandTypeMismatch { .. }
+            | ExactScalarRefusal::MissingOperationIdentity { .. } => {
                 Outcome::Unsupported(UnsupportedObligation::OracleRefused {
                     refusal: refusal.clone(),
                 })
             }
         },
     }
+}
+
+/// The renderable shape for a confirmed operation identity, or `None` when this generator has no
+/// scalar-harness renderer for it. Recognizing these four exact catalogued identities is not a
+/// vocabulary bridge -- it does not translate between codegen's own descriptor vocabulary and IR's
+/// catalog to reconcile a disagreement; it only recognizes, among identities IR already confirmed,
+/// which ones this generator additionally knows how to turn into a harness (the same kind of
+/// closed match `Shape::of` already makes over `ExactScalarOperation`).
+fn scalar_arity(operation_identity: &str) -> Option<ScalarArity> {
+    match operation_identity {
+        "quire.op.integer.add" | "quire.op.integer.sub" | "quire.op.integer.mul" => {
+            Some(ScalarArity::Binary)
+        }
+        "quire.op.integer.negate" => Some(ScalarArity::Unary),
+        _ => None,
+    }
+}
+
+/// Why [`lower_scalar_claim`] could not lower an IR-confirmed claim -- two distinct causes that
+/// [`classify_claim`] reports as two distinct [`UnsupportedObligation`] reasons, rather than
+/// folding them into one the way a single `Option` return would. A third and fourth candidate
+/// cause -- `check_parameters` recording no `checked_bounds` entry, or recording one whose own
+/// derived domain is not an `integer_range` -- are not represented here: [`scalar_arity`] only
+/// renders the `IntegerArithmetic` family, and for that family `check_parameters`'s own
+/// `Bounds::equal` returns `Ok` only after successfully reading exactly one `integer_range` bound
+/// (`exact_scalar::check_parameters`, `exact_scalar::Bounds::equal`) -- the same node, read by the
+/// same `literal_integer`, that this function's own [`derive_domain`] call reads. Given that
+/// guarantee, both failure shapes are structurally unreachable through this function today, so
+/// they are asserted with `unreachable!` below rather than modelled as a caller-visible refusal a
+/// test could never construct a fixture for.
+enum ScalarLoweringRefusal {
+    /// [`scalar_arity`] has no renderer for this operation identity.
+    NoRenderer,
+    /// The `integer_range`'s lower or upper endpoint does not fit `i64`.
+    BoundNotI64 {
+        /// Inclusive lower bound, canonical decimal.
+        lower: String,
+        /// Inclusive upper bound, canonical decimal.
+        upper: String,
+    },
+}
+
+/// Lowers one IR-confirmed V2 claim to a renderable scalar harness.
+fn lower_scalar_claim(
+    claim: &ExactScalarClaim,
+    generated: &GeneratedScalarClaim,
+    derived: &[DerivedDomain],
+) -> Result<LoweredScalarClaim, ScalarLoweringRefusal> {
+    let arity = scalar_arity(&claim.operation.identity).ok_or(ScalarLoweringRefusal::NoRenderer)?;
+    let Some(bound_id) = generated.checked_bounds.first() else {
+        unreachable!(
+            "check_parameters's Bounds::equal records exactly one checked bound for every \
+             IntegerArithmetic claim, the only family scalar_arity renders a harness for"
+        );
+    };
+    let Some(DerivedDomain::IntegerRange { lower, upper, .. }) = derived.iter().find(
+        |domain| matches!(domain, DerivedDomain::IntegerRange { bound, .. } if bound == bound_id),
+    ) else {
+        unreachable!(
+            "the same node backs bound_id here and in check_parameters, which already parsed its \
+             two members with the same literal_integer this function's derive_domain uses, so it \
+             cannot fail to be read as an IntegerRange here"
+        );
+    };
+    let (lower, upper) = match (lower.parse::<i64>(), upper.parse::<i64>()) {
+        (Ok(lower), Ok(upper)) => (lower, upper),
+        _ => {
+            return Err(ScalarLoweringRefusal::BoundNotI64 {
+                lower: lower.clone(),
+                upper: upper.clone(),
+            })
+        }
+    };
+    let digest = sha256(claim.node_id.digest.as_bytes())
+        .chars()
+        .take(32)
+        .collect::<String>();
+    let module_symbol = format!("kob_scalar_{digest}_module");
+    let harness_symbol = format!("kob_scalar_{digest}_proof");
+    Ok(LoweredScalarClaim {
+        node_id: claim.node_id.clone(),
+        operation_identity: claim.operation.identity.clone(),
+        oracle_source: generated.oracle_source.clone(),
+        oracle_symbol: generated.symbol.clone(),
+        arity,
+        lower,
+        upper,
+        module_symbol,
+        harness_symbol,
+    })
 }
 
 fn derive_domain(bound: &CheckedSemanticNodeV2) -> DerivedDomain {
@@ -1438,6 +1695,169 @@ struct HarnessRecord<'a> {
     rust_sha256: &'a str,
 }
 
+/// Renders one IR-confirmed V2 exact-scalar claim to a `kani::proof` that the embedded oracle is
+/// *sound*, not that it is *total*: `assert!` that whenever the outcome is
+/// `Ok(rt::Outcome::Completed(value))`, `value` lies within the same checked domain -- reconstructed
+/// here from the identical literal bounds the `kani::assume`s above use -- that `bound.contains(&result)`
+/// (`quire_contract_runtime::exact::numeric.rs`) itself checks before returning `Completed`. This is not
+/// `Result::is_ok()`: the oracle's `Result<rt::Outcome<T>, OracleStop>` nests the runtime's own four-way
+/// `Outcome` (`Completed`/`Undefined`/`Refused`/`Incomplete`) inside `Ok`, so `Ok(Refused(_))` is `is_ok()`
+/// without being sound-and-completed, and the `match` below only inspects the `Completed` arm; every other
+/// outcome (in particular `Refused`, which is exactly what an operand pair whose exact result leaves the
+/// domain produces) leaves `sound` at its vacuous default. The IR's own `require_bounds` closure typing
+/// makes the *operands* here (not just the result) members of the same bounded `integer` type, so the
+/// `kani::assume`s are IR-justified -- but the operation itself is genuinely partial over that domain
+/// (`quire.op.integer.add` over `[-1000,1000]` admits `600 + 600`), so asserting `Completed` unconditionally
+/// (this rendering's original defect) asserted a falsehood no operand assumption could fix. A `kani::cover!`
+/// on the same `completed` flag is the FR-015-AC-7 non-vacuity guard (this harness's proof is reachable at
+/// all), never a substitute for `sound` -- an assertion Kani cannot falsify because the harness body never
+/// runs proves nothing. Unlike a V1 contract harness, there is no precondition/postcondition pair and no
+/// subject signature to unify: the oracle's own parameters, in the order [`SourceBuilder::oracle`] declared
+/// them (`operand` for a unary operation, `left`/`right` for a binary one), are the whole ABI.
+///
+/// This harness is rendered, and its proposition (above) is the one actually stated in the generated
+/// source; it is NOT discharged by this generator. Nothing in this repository runs the Kani/CBMC solver
+/// against it -- proving it (or finding the counterexample the partial-`add` case above predicts) requires
+/// a real `cargo kani` run this generator does not perform.
+fn render_scalar(
+    request: &KaniObligationRequest<'_>,
+    lowered: &LoweredScalarClaim,
+) -> Option<KaniScalarObligationHarness> {
+    let exact_harness = format!("{}::{}", lowered.module_symbol, lowered.harness_symbol);
+    let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
+    let lower = i64_literal(lowered.lower);
+    let upper = i64_literal(lowered.upper);
+    let names: &[&str] = match lowered.arity {
+        ScalarArity::Unary => &["operand"],
+        ScalarArity::Binary => &["left", "right"],
+    };
+    let declarations = names
+        .iter()
+        .map(|name| {
+            format!(
+                "        let {name}: i64 = kani::any();\n\
+        kani::assume({name} >= {lower} && {name} <= {upper});\n\
+        let {name} = rt::Integer::from({name});\n"
+            )
+        })
+        .collect::<String>();
+    let call_args = names
+        .iter()
+        .map(|name| format!("&{name}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let arguments = names
+        .iter()
+        .map(|name| ScalarObligationArgument {
+            identifier: (*name).to_owned(),
+            minimum: lowered.lower,
+            maximum: lowered.upper,
+        })
+        .collect();
+    let body = format!(
+        "#[cfg(kani)]\n\
+mod {module} {{\n\
+    use super::*;\n\
+\n\
+    #[kani::proof]\n\
+    fn {harness}() {{\n\
+{declarations}\
+        let mut meter = rt::Meter::new(rt::ScalarLimits {{\n\
+            integer_bits: u64::MAX,\n\
+            decimal_digits: u64::MAX,\n\
+            scale_expansion: u64::MAX,\n\
+            text_input_bytes: u64::MAX,\n\
+            text_scalars: u64::MAX,\n\
+            normalized_scalars: u64::MAX,\n\
+            unit_edges: u64::MAX,\n\
+            value_occurrences: u64::MAX,\n\
+            work_units: u64::MAX,\n\
+            result_units: u64::MAX,\n\
+        }});\n\
+        let outcome = {symbol}({call_args}, &mut meter);\n\
+        let domain = rt::IntegerInterval::new(rt::Integer::from({lower}), rt::Integer::from({upper}))\n\
+            .expect(\"the checked domain's own literal bounds form a valid interval\");\n\
+        let sound = match &outcome {{\n\
+            Ok(rt::Outcome::Completed(value)) => domain.contains(value),\n\
+            _ => true,\n\
+        }};\n\
+        assert!(sound, \"a completed result must lie within the checked domain -- the generated oracle enforces `bound.contains(&result)` and never returns Completed for an operand pair whose exact result leaves it\");\n\
+        let completed = matches!(outcome, Ok(rt::Outcome::Completed(_)));\n\
+        kani::cover!(completed, \"the generated oracle's Ok(Outcome::Completed(_)) branch is reachable within its checked domain\");\n\
+    }}\n\
+}}\n",
+        module = lowered.module_symbol,
+        harness = lowered.harness_symbol,
+        symbol = lowered.oracle_symbol,
+    );
+    let identity = ScalarObligationIdentity {
+        schema: KANI_SCALAR_OBLIGATION_SCHEMA,
+        adapter_profile: KANI_OBLIGATION_PROFILE,
+        node_id: lowered.node_id.clone(),
+        operation_identity: lowered.operation_identity.clone(),
+        ir_revision: IR_CANDIDATE_REVISION,
+        oracle_symbol: lowered.oracle_symbol.clone(),
+        oracle_sha256: sha256(lowered.oracle_source.as_bytes()),
+        module_symbol: lowered.module_symbol.clone(),
+        harness_symbol: lowered.harness_symbol.clone(),
+        arguments,
+        pins: request.pins.clone(),
+        solver: "cadical".to_owned(),
+        unwind: request.unwind,
+        options,
+        runtime_revision: RUNTIME_REVISION,
+    };
+    let identity_json = serde_json::to_string(&identity).ok()?;
+    let identity_sha256 = sha256(identity_json.as_bytes());
+    let mut source = format!(
+        "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
+// Generated by quire-contract-codegen {}; DO NOT EDIT.\n\
+// Obligation: exact-scalar node {}/{}\n\
+// Kani adapter: {KANI_OBLIGATION_PROFILE}; backend: {KANI_BACKEND_VERSION}\n\
+// Obligation identity sha256: {identity_sha256}\n\n",
+        env!("CARGO_PKG_VERSION"),
+        lowered.node_id.domain,
+        lowered.node_id.digest,
+    );
+    source.push_str(&lowered.oracle_source);
+    source.push('\n');
+    source.push_str(&body);
+    if source.len() > MAX_GENERATED_SOURCE_BYTES || syn::parse_file(&source).is_err() {
+        return None;
+    }
+    let rust = artifact(
+        format!("src/generated/{}.rs", lowered.module_symbol),
+        source,
+    );
+    let record = ScalarHarnessRecord {
+        identity: &identity,
+        identity_sha256: &identity_sha256,
+        rust_path: &rust.path,
+        rust_sha256: &rust.sha256,
+    };
+    let mut record_json = serde_json::to_string(&record).ok()?;
+    record_json.push('\n');
+    let record = artifact(
+        format!("kani-obligations/{}.json", lowered.module_symbol),
+        record_json,
+    );
+    Some(KaniScalarObligationHarness {
+        identity,
+        identity_sha256,
+        rust,
+        record,
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScalarHarnessRecord<'a> {
+    identity: &'a ScalarObligationIdentity,
+    identity_sha256: &'a str,
+    rust_path: &'a str,
+    rust_sha256: &'a str,
+}
+
 fn artifact(path: String, contents: String) -> Artifact {
     Artifact {
         sha256: sha256(contents.as_bytes()),
@@ -1592,6 +2012,7 @@ mod tests {
     use serde_json::Value;
 
     use super::*;
+    use crate::OperationClaim;
 
     /// Trace: FR-015-AC-1, TC-025.
     #[test]
@@ -1664,5 +2085,77 @@ mod tests {
             )),
             Some(("4".to_owned(), "0".to_owned()))
         );
+    }
+
+    // Deliberately untraced: no FR-015 AC states this. AC-3 ("unbounded or non-finite... refused")
+    // is the closest in subject but does not describe this case -- the domain below is bounded
+    // and finite, just outside `i64` -- so citing it would misdescribe what this test proves.
+    //
+    // `ScalarLoweringRefusal::NoCheckedBound` and `::NoIntegerDomain` were removed rather than
+    // given a test here: `check_parameters`'s `Bounds::equal` (`exact_scalar.rs`) returns `Ok`
+    // only after reading exactly one `integer_range` bound via the same `literal_integer` this
+    // module's `derive_domain` uses on the identical node, so for `IntegerArithmetic` -- the only
+    // family `scalar_arity` renders -- neither an empty `checked_bounds` nor a checked bound with
+    // no `IntegerRange` domain is reachable; both are now `unreachable!` invariants in
+    // `lower_scalar_claim` instead of typed refusals no fixture could ever construct. This test
+    // is the one cause of the original four that a fixture -- built directly against
+    // `lower_scalar_claim`, not through package admission -- does reach.
+    #[test]
+    fn tc_026_a_domain_outside_i64_is_a_typed_refusal_not_a_panic() {
+        let node_id = |digest: &str| -> CheckedNodeId {
+            serde_json::from_value(serde_json::json!({
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": digest.repeat(64),
+            }))
+            .expect("node id")
+        };
+        let bound = node_id("7");
+        let claim = ExactScalarClaim {
+            node_id: node_id("2"),
+            operation: OperationClaim {
+                identity: "quire.op.integer.add".to_owned(),
+                provenance: OperationProvenance::IrConfirmed,
+            },
+            result: ExactScalarDisposition::Generated(Box::new(GeneratedScalarClaim {
+                symbol: "oracle_test".to_owned(),
+                ir_id: serde_json::from_value(serde_json::json!({
+                    "domain": "quire.checked-semantic-node/v1",
+                    "algorithm": "sha256",
+                    "digest": "3".repeat(64),
+                }))
+                .expect("ir id"),
+                semantic_form: "expression".to_owned(),
+                semantic_type: node_id("4"),
+                source_map: Vec::new(),
+                claims: Vec::new(),
+                bounds: vec![bound.clone()],
+                checked_bounds: vec![bound.clone()],
+                dependencies: Vec::new(),
+                oracle_source: String::new(),
+            })),
+        };
+        let ExactScalarDisposition::Generated(generated) = &claim.result else {
+            unreachable!("built as Generated above");
+        };
+        let lower = "-99999999999999999999999999".to_owned();
+        let upper = "99999999999999999999999999".to_owned();
+        let derived = vec![DerivedDomain::IntegerRange {
+            bound,
+            lower: lower.clone(),
+            upper: upper.clone(),
+        }];
+        match lower_scalar_claim(&claim, generated, &derived) {
+            Err(ScalarLoweringRefusal::BoundNotI64 {
+                lower: got_lower,
+                upper: got_upper,
+            }) => {
+                assert_eq!(got_lower, lower);
+                assert_eq!(got_upper, upper);
+            }
+            Err(ScalarLoweringRefusal::NoRenderer) => {
+                panic!("quire.op.integer.add has a renderer")
+            }
+            Ok(_) => panic!("an arbitrary-precision Integer domain outside i64 must not lower"),
+        }
     }
 }

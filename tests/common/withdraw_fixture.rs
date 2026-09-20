@@ -178,7 +178,9 @@ fn clause(id: &str) -> ClauseRef {
 
 fn emitted(outcome: KaniObligationOutcome) -> (Vec<ObligationRecord>, Vec<KaniObligationHarness>) {
     match outcome {
-        KaniObligationOutcome::Emitted { records, harnesses } => (records, harnesses),
+        KaniObligationOutcome::Emitted {
+            records, harnesses, ..
+        } => (records, harnesses),
         KaniObligationOutcome::Rejected { records } => panic!("unexpected rejection: {records:#?}"),
     }
 }

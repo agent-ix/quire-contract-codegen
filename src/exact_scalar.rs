@@ -12,14 +12,21 @@
 //! type, and lowering requires every reachable integer, rational, decimal and
 //! text type to be bounded. CheckedPackage V2 does carry the operation
 //! identity and its laws (`operation.identity`/`operation.laws`, checked at
-//! admission by `validate_operations`), but this generator's classifiers
-//! never read them: they classify a body from its `term`/`operator`/
-//! `arguments` and the request item's own descriptor. So which division law,
-//! add or multiply, which comparison a generated oracle implements is
-//! caller-declared because this generator chooses not to read the operation
-//! the IR carries, not because the IR lacks it. Every claim records its
-//! operation as [`OperationProvenance::CallerDeclared`] and the claim map
-//! lists [`UpstreamBlocker::OperationIdentityNotConsumed`].
+//! admission by `validate_operations`). A claim whose node this generator
+//! successfully lowers and checks against its descriptor now reads that
+//! confirmed identity from `body.operation.identity` and records it as
+//! [`OperationProvenance::IrConfirmed`], rather than re-deriving a string in
+//! this generator's own vocabulary. A claim this generator never reaches a
+//! node for (every refusal before lowering succeeds, and every duplicate
+//! copy) still reports the request item's own descriptor-derived identity as
+//! [`OperationProvenance::CallerDeclared`], with
+//! [`UpstreamBlocker::OperationIdentityNotConsumed`]: for those items this
+//! generator genuinely never reads the operation the IR carries. This
+//! generator's shape classifiers (`Shape::of`, `application_arguments`)
+//! still classify a body from its `term`/`operator`/`arguments` and the
+//! request item's own descriptor, not from `operation.identity` -- reading
+//! the confirmed identity changes what a claim reports, not how its code is
+//! generated.
 //!
 //! V2 does not define a normative body for `bounded_domain` nodes. This
 //! generator reads exactly one encoding and refuses anything else as
@@ -343,10 +350,10 @@ pub enum UpstreamBlocker {
     /// Model and relation semantics.
     #[serde(rename = "agent-ix/quire-spec-language#120")]
     QuireSpecLanguage120,
-    /// CheckedPackage V2 carries the operation identity and its laws, but
-    /// this generator's classifiers never read `operation` -- they classify
-    /// a body from its `term`/`operator`/`arguments` and the request item's
-    /// own descriptor instead.
+    /// This claim's node was never reached (every refusal before lowering
+    /// succeeds, and every duplicate copy), so this generator never read the
+    /// operation identity the IR carries for it and reports the request
+    /// item's own descriptor-derived identity instead.
     #[serde(rename = "operation identity not consumed by codegen's generators")]
     OperationIdentityNotConsumed,
 }
@@ -362,6 +369,14 @@ pub enum OperationProvenance {
         /// The missing upstream transport.
         blocked_on: UpstreamBlocker,
     },
+    /// This generator successfully lowered the claim's node and checked it
+    /// against the descriptor's shape, then read the node's own catalogued
+    /// operation identity from `body.operation.identity` -- confirmed by
+    /// quire-contract-ir dfd8bd78's `validate_operations` against the closed
+    /// `quire.checked-operation-catalog/v1` at package admission, before
+    /// this generator ever saw the package. A consumer may treat the
+    /// operation identity as checked.
+    IrConfirmed,
 }
 
 /// The operation a claim-map entry is about.
@@ -492,6 +507,12 @@ pub enum ExactScalarRefusal {
         /// Scalar form found, when the operand has one.
         found: Option<String>,
     },
+    /// The node's `operation.identity` member is absent, violating the IR
+    /// admission invariant `check_item`'s callers otherwise rely on.
+    MissingOperationIdentity {
+        /// The affected node.
+        node_id: CheckedNodeId,
+    },
 }
 
 /// Traceability for one generated oracle.
@@ -515,6 +536,15 @@ pub struct GeneratedScalarClaim {
     pub checked_bounds: Vec<CheckedNodeId>,
     /// Every reachable key.
     pub dependencies: Vec<CheckedNodeId>,
+    /// This oracle's function, self-contained (its own preamble and any
+    /// helper it needs) for direct embedding in a generated Kani harness
+    /// file. Process-internal: not part of the `quire.codegen.exact-scalar-
+    /// claim-map/v1` wire schema (this struct has no `Deserialize`, so
+    /// nothing round-trips it through `claim-map.json`), consumed only by
+    /// `kani_obligations::render_scalar` from the live claim map this
+    /// generation produced.
+    #[serde(skip)]
+    pub oracle_source: String,
 }
 
 /// Generated or refused.
@@ -522,7 +552,7 @@ pub struct GeneratedScalarClaim {
 #[serde(tag = "disposition", rename_all = "snake_case")]
 pub enum ExactScalarDisposition {
     /// One oracle function was emitted.
-    Generated(GeneratedScalarClaim),
+    Generated(Box<GeneratedScalarClaim>),
     /// Nothing was emitted.
     Refused {
         /// The typed reason.
@@ -601,47 +631,104 @@ pub fn generate_exact_scalar_oracles(
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(requests.len());
     for ((node_id, operations), record) in requests.into_iter().zip(&lowering.records) {
-        let (identity, checked) = match operations.as_slice() {
-            [operation] => (
-                operation_identity(operation),
-                check_item(&graph, record, operation)
-                    .map(|(node, checked_bounds)| (node, *operation, checked_bounds)),
-            ),
+        let operation_claim = match operations.as_slice() {
+            [operation] => match check_item(&graph, record, operation) {
+                Ok((node, checked_bounds)) => {
+                    let symbol = format!("oracle_{}", node.node.node_id.digest);
+                    // This node was lowered from an admitted package, so IR-216's
+                    // `validate_operations` already confirmed `body.operation.identity`
+                    // against the closed catalog before this generator ever saw it. That
+                    // confirms the node's own operation, not that it is the one the
+                    // descriptor named: `check_item`'s shape checks alone cannot
+                    // distinguish, say, `add` from `mul` (both are a binary
+                    // `&rt::Integer` shape) or truncating from floor division, so
+                    // `operation_confirmed` additionally compares the node's own
+                    // `operation.identity`/`operation.mode` against the descriptor's
+                    // implied catalog entry, plus the one law family with more than
+                    // one catalogued definition. Confirmed, this generator reads the
+                    // node's own identity rather than re-deriving codegen's own
+                    // descriptor string; not confirmed, it reports the descriptor's
+                    // own string exactly as before this generator ever read
+                    // `operation.identity` -- never a silent preference between the
+                    // two when they disagree.
+                    let confirmed_identity = operation_confirmed(node, operation)
+                        .then(|| catalogued_operation_identity(node))
+                        .transpose();
+                    match confirmed_identity {
+                        Err(refusal) => (
+                            caller_declared_claim(operation_identity(operation)),
+                            ExactScalarDisposition::Refused { refusal },
+                        ),
+                        Ok(maybe_identity) => {
+                            let (identity, provenance, oracle_source) = match maybe_identity {
+                                Some(identity) => {
+                                    source.oracle(&symbol, node_id, &identity, operation);
+                                    let oracle_source = standalone_oracle_source(
+                                        &lowering.package_id,
+                                        &symbol,
+                                        node_id,
+                                        &identity,
+                                        operation,
+                                    );
+                                    (identity, OperationProvenance::IrConfirmed, oracle_source)
+                                }
+                                None => {
+                                    let identity = operation_identity(operation);
+                                    source.oracle(&symbol, node_id, &identity, operation);
+                                    (
+                                        identity,
+                                        OperationProvenance::CallerDeclared {
+                                            blocked_on:
+                                                UpstreamBlocker::OperationIdentityNotConsumed,
+                                        },
+                                        String::new(),
+                                    )
+                                }
+                            };
+                            (
+                                OperationClaim {
+                                    identity,
+                                    provenance,
+                                },
+                                ExactScalarDisposition::Generated(Box::new(GeneratedScalarClaim {
+                                    symbol,
+                                    ir_id: node.ir_id.clone(),
+                                    semantic_form: node.node.semantic_form.to_string(),
+                                    semantic_type: node.semantic_type.clone(),
+                                    source_map: node.source_map.clone(),
+                                    claims: node.claims.clone(),
+                                    bounds: node.bounds.clone(),
+                                    checked_bounds,
+                                    dependencies: node.dependencies.clone(),
+                                    oracle_source,
+                                })),
+                            )
+                        }
+                    }
+                }
+                Err(refusal) => (
+                    caller_declared_claim(operation_identity(operation)),
+                    ExactScalarDisposition::Refused { refusal },
+                ),
+            },
             // Every copy is refused. The entry is named by the least identity
             // so that it does not depend on which copy arrived first.
             copies => {
                 let Some(identity) = copies.iter().map(|op| operation_identity(op)).min() else {
                     continue;
                 };
-                (identity, Err(ExactScalarRefusal::DuplicateRequest))
+                (
+                    caller_declared_claim(identity),
+                    ExactScalarDisposition::Refused {
+                        refusal: ExactScalarRefusal::DuplicateRequest,
+                    },
+                )
             }
         };
-        let result = match checked {
-            Ok((node, operation, checked_bounds)) => {
-                let symbol = format!("oracle_{}", node.node.node_id.digest);
-                source.oracle(&symbol, node_id, &identity, operation);
-                ExactScalarDisposition::Generated(GeneratedScalarClaim {
-                    symbol,
-                    ir_id: node.ir_id.clone(),
-                    semantic_form: node.node.semantic_form.to_string(),
-                    semantic_type: node.semantic_type.clone(),
-                    source_map: node.source_map.clone(),
-                    claims: node.claims.clone(),
-                    bounds: node.bounds.clone(),
-                    checked_bounds,
-                    dependencies: node.dependencies.clone(),
-                })
-            }
-            Err(refusal) => ExactScalarDisposition::Refused { refusal },
-        };
+        let (claim_operation, result) = operation_claim;
         claims.push(ExactScalarClaim {
             node_id: node_id.clone(),
-            operation: OperationClaim {
-                identity,
-                provenance: OperationProvenance::CallerDeclared {
-                    blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
-                },
-            },
+            operation: claim_operation,
             result,
         });
     }
@@ -650,7 +737,11 @@ pub fn generate_exact_scalar_oracles(
         version: EXACT_SCALAR_CLAIM_MAP_VERSION,
         package_id: lowering.package_id,
         runtime_revision: RUNTIME_REVISION,
-        blocked: vec![UpstreamBlocker::OperationIdentityNotConsumed],
+        // No blocker applies to every entry any more: a confirmed claim's
+        // provenance is `IrConfirmed`, and only an unreached claim's
+        // `CallerDeclared` provenance still names
+        // `UpstreamBlocker::OperationIdentityNotConsumed`, per-item.
+        blocked: Vec::new(),
         items: claims,
     };
     let lib = source.finish(&claim_map.package_id);
@@ -1215,6 +1306,307 @@ impl Shape {
 // ---------------------------------------------------------------------------
 // Operation identity
 // ---------------------------------------------------------------------------
+
+/// A claim whose node this generator never reached: the request item's own
+/// descriptor-derived identity, marked [`OperationProvenance::CallerDeclared`].
+fn caller_declared_claim(identity: String) -> OperationClaim {
+    OperationClaim {
+        identity,
+        provenance: OperationProvenance::CallerDeclared {
+            blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+        },
+    }
+}
+
+/// The node's own catalogued operation identity, or a typed refusal when the
+/// member IR admission is supposed to guarantee is absent. `check_item`
+/// having returned this node `Ok` already establishes that its `body` is an
+/// `application` term (`application_arguments` requires `term ==
+/// "application"`), and quire-contract-ir dfd8bd78's `validate_operations`
+/// requires `identity` on every such node's `operation` member before the
+/// package that contains it is ever admitted -- so this generator should
+/// never receive a node for which this member is absent. It is another
+/// crate's invariant, not this one's, so a violation is reported rather than
+/// panicked on.
+fn catalogued_operation_identity(
+    node: &CompleteContractNodeV2,
+) -> Result<String, ExactScalarRefusal> {
+    node.node.body["operation"]["identity"]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| ExactScalarRefusal::MissingOperationIdentity {
+            node_id: node.node.node_id.clone(),
+        })
+}
+
+/// The catalogued identity a descriptor implies, and -- where the catalog's
+/// own entry for it carries a `mode` member -- the `(kind, value)` that
+/// member must equal for the descriptor's own rounding parameter to be
+/// trusted. `None` when the descriptor names a combination the catalog has
+/// no entry for at all (same-width [`ExactScalarOperation::IeeeWidthConversion`]).
+///
+/// This mirrors `tests/exact_scalar_support/package.rs`'s own
+/// `corpus_operation`, which builds every fixture node from the identical
+/// mapping (see its own doc for the catalog cross-reference); moving it here
+/// lets [`operation_confirmed`] recognize an identity and mode IR already
+/// confirmed -- not translate between codegen's and IR's vocabularies to
+/// reconcile a disagreement between them, the same kind of closed match
+/// `Shape::of` already makes over `ExactScalarOperation`.
+struct CataloguedOperation {
+    identity: &'static str,
+    mode: Option<(&'static str, &'static str)>,
+}
+
+fn plain(identity: &'static str) -> Option<CataloguedOperation> {
+    Some(CataloguedOperation {
+        identity,
+        mode: None,
+    })
+}
+
+fn with_rounding(identity: &'static str, rounding: RoundingMode) -> Option<CataloguedOperation> {
+    Some(CataloguedOperation {
+        identity,
+        mode: Some(("rounding", rounding.as_str())),
+    })
+}
+
+fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOperation> {
+    use ExactScalarOperation as Op;
+    match operation {
+        Op::IntegerArithmetic { operator, .. } => plain(match operator {
+            IntegerOperator::Add => "quire.op.integer.add",
+            IntegerOperator::Subtract => "quire.op.integer.sub",
+            IntegerOperator::Multiply => "quire.op.integer.mul",
+            IntegerOperator::Negate => "quire.op.integer.negate",
+        }),
+        Op::IntegerDivision { .. } => plain("quire.op.integer.div"),
+        Op::IntegerModulo { .. } => plain("quire.op.integer.mod"),
+        Op::RationalArithmetic { operator, .. } => plain(match operator {
+            RationalOperator::Add => "quire.op.rational.add",
+            RationalOperator::Subtract => "quire.op.rational.sub",
+            RationalOperator::Multiply => "quire.op.rational.mul",
+            // `rational.div`'s operands are `rational_promotable` (integer or
+            // rational): there is no separate catalogued "integer division to
+            // a rational result" identity.
+            RationalOperator::Divide | RationalOperator::IntegerDivide => "quire.op.rational.div",
+            RationalOperator::Negate => "quire.op.rational.negate",
+        }),
+        Op::Ordering { operator, operands } => {
+            let family = match operands {
+                OrderingOperandKind::Integer => "integer",
+                OrderingOperandKind::Rational => "rational",
+                OrderingOperandKind::Decimal => "decimal",
+            };
+            plain(match (family, ordering_suffix(*operator)) {
+                ("integer", "lt") => "quire.op.integer.lt",
+                ("integer", "le") => "quire.op.integer.le",
+                ("integer", "gt") => "quire.op.integer.gt",
+                ("integer", "ge") => "quire.op.integer.ge",
+                ("rational", "lt") => "quire.op.rational.lt",
+                ("rational", "le") => "quire.op.rational.le",
+                ("rational", "gt") => "quire.op.rational.gt",
+                ("rational", "ge") => "quire.op.rational.ge",
+                ("decimal", "lt") => "quire.op.decimal.lt",
+                ("decimal", "le") => "quire.op.decimal.le",
+                ("decimal", "gt") => "quire.op.decimal.gt",
+                ("decimal", "ge") => "quire.op.decimal.ge",
+                _ => unreachable!("every (family, suffix) pair is covered above"),
+            })
+        }
+        Op::DecimalArithmetic { operator, target } => match operator {
+            DecimalOperator::Add => with_rounding("quire.op.decimal.add", target.rounding()),
+            DecimalOperator::Subtract => with_rounding("quire.op.decimal.sub", target.rounding()),
+            DecimalOperator::Multiply => with_rounding("quire.op.decimal.mul", target.rounding()),
+            DecimalOperator::Divide => with_rounding("quire.op.decimal.div", target.rounding()),
+            DecimalOperator::Negate => plain("quire.op.decimal.negate"),
+            DecimalOperator::Round => {
+                with_rounding("quire.op.numeric.convert_rounding", target.rounding())
+            }
+        },
+        Op::IeeeArithmetic {
+            operator,
+            width,
+            rounding,
+        } => {
+            let identity = match (width, operator) {
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::Add) => "quire.op.ieee.float32.add",
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::Subtract) => {
+                    "quire.op.ieee.float32.sub"
+                }
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::Multiply) => {
+                    "quire.op.ieee.float32.mul"
+                }
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::Divide) => {
+                    "quire.op.ieee.float32.div"
+                }
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::Add) => "quire.op.ieee.float64.add",
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::Subtract) => {
+                    "quire.op.ieee.float64.sub"
+                }
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::Multiply) => {
+                    "quire.op.ieee.float64.mul"
+                }
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
+                    "quire.op.ieee.float64.div"
+                }
+            };
+            with_rounding(identity, *rounding)
+        }
+        Op::IeeeComparison { comparison, .. } => plain(match comparison {
+            IeeeComparison::NumericEqual => "quire.op.ieee.numeric_equal",
+            IeeeComparison::TotalOrder => "quire.op.ieee.total_order",
+            IeeeComparison::BitIdentical => "quire.op.ieee.bit_identical",
+        }),
+        Op::IeeeWidthConversion {
+            source,
+            target,
+            rounding,
+        } => match (source, target) {
+            (IeeeWidth::Binary64, IeeeWidth::Binary32) => {
+                with_rounding("quire.op.ieee.to_float32", *rounding)
+            }
+            (IeeeWidth::Binary32, IeeeWidth::Binary64) => plain("quire.op.ieee.to_float64"),
+            // Same-width "conversion" has no catalogued identity at all; a
+            // descriptor naming one can never be confirmed.
+            (IeeeWidth::Binary32, IeeeWidth::Binary32)
+            | (IeeeWidth::Binary64, IeeeWidth::Binary64) => None,
+        },
+        Op::TextAdmission { .. } => plain("quire.op.numeric.convert"),
+        // `text.*`/`enum.*` comparisons carry a catalogued `text_profile` mode
+        // (`"nfc"`), but the descriptor itself has no profile-bearing field to
+        // compare it against, so only the identity is checked.
+        Op::TextComparison { operator } => plain(text_family_identity("text", *operator)),
+        Op::EnumComparison { operator } => plain(text_family_identity("enum", *operator)),
+        Op::QuantityArithmetic { operator } => plain(match operator {
+            QuantityOperator::Add => "quire.op.quantity.add",
+            QuantityOperator::Subtract => "quire.op.quantity.sub",
+            QuantityOperator::Multiply => "quire.op.quantity.mul",
+            QuantityOperator::Divide => "quire.op.quantity.div",
+            QuantityOperator::Power => "quire.op.quantity.pow",
+        }),
+        Op::QuantityComparison { operator } => plain(text_family_identity("quantity", *operator)),
+        Op::QuantityConversion { target } => {
+            let identity = "quire.op.quantity.convert";
+            match target {
+                // A conversion to `Rational[..]` is exact; the catalog's
+                // `rounding` mode is not meaningful for it and this
+                // descriptor carries no value for it either, so it is not
+                // checked.
+                QuantityTarget::Exact => plain(identity),
+                QuantityTarget::Decimal(decimal) => with_rounding(identity, decimal.rounding()),
+                QuantityTarget::Integer { rounding, .. } => with_rounding(identity, *rounding),
+            }
+        }
+    }
+}
+
+/// `lt`/`le`/`gt`/`ge` per [`OrderingOperator`] variant, shared by
+/// [`catalogued_operation`]'s integer/rational/decimal `Ordering` arm.
+fn ordering_suffix(operator: OrderingOperator) -> &'static str {
+    match operator {
+        OrderingOperator::Less => "lt",
+        OrderingOperator::LessOrEqual => "le",
+        OrderingOperator::Greater => "gt",
+        OrderingOperator::GreaterOrEqual => "ge",
+    }
+}
+
+/// `quire.op.<family>.<suffix>` for one of the catalog's six comparison
+/// identities per family (`eq`/`ne`/`lt`/`le`/`gt`/`ge`).
+fn text_family_identity(family: &'static str, operator: ComparisonOperator) -> &'static str {
+    let suffix = match operator {
+        ComparisonOperator::Equal => "eq",
+        ComparisonOperator::NotEqual => "ne",
+        ComparisonOperator::Less => "lt",
+        ComparisonOperator::LessOrEqual => "le",
+        ComparisonOperator::Greater => "gt",
+        ComparisonOperator::GreaterOrEqual => "ge",
+    };
+    match (family, suffix) {
+        ("text", "eq") => "quire.op.text.eq",
+        ("text", "ne") => "quire.op.text.ne",
+        ("text", "lt") => "quire.op.text.lt",
+        ("text", "le") => "quire.op.text.le",
+        ("text", "gt") => "quire.op.text.gt",
+        ("text", "ge") => "quire.op.text.ge",
+        ("enum", "eq") => "quire.op.enum.eq",
+        ("enum", "ne") => "quire.op.enum.ne",
+        ("enum", "lt") => "quire.op.enum.lt",
+        ("enum", "le") => "quire.op.enum.le",
+        ("enum", "gt") => "quire.op.enum.gt",
+        ("enum", "ge") => "quire.op.enum.ge",
+        ("quantity", "eq") => "quire.op.quantity.eq",
+        ("quantity", "ne") => "quire.op.quantity.ne",
+        ("quantity", "lt") => "quire.op.quantity.lt",
+        ("quantity", "le") => "quire.op.quantity.le",
+        ("quantity", "gt") => "quire.op.quantity.gt",
+        ("quantity", "ge") => "quire.op.quantity.ge",
+        _ => unreachable!("every (family, suffix) pair is covered above"),
+    }
+}
+
+/// Whether the checked node's own catalogued operation genuinely confirms the
+/// descriptor beyond `check_item`'s shape checks: its `operation.identity`
+/// names the same catalogued operation the descriptor implies
+/// ([`catalogued_operation`]), its `operation.mode` (where that catalog entry
+/// has one) carries the same value, and -- for `IntegerDivision`, the one
+/// family with more than one catalogued law definition -- its
+/// `operation.laws` names the descriptor's own division profile. IR's
+/// `integer_division` law role and this crate's own
+/// `DivisionProfile::definition_identity()` name the same three law
+/// definitions (`quire.value.integer-division.{truncating,floor,euclidean}/v1`
+/// -- see `operation_identity`'s own use of `profile.definition_identity()`),
+/// so comparing them is not a bridge between codegen's and IR's vocabularies:
+/// it is one vocabulary, read from two places. Every other family either has
+/// no more than one catalogued law definition (`ieee_profile`,
+/// `text_profile`) or none at all, so its shape and identity/mode checks are
+/// already the whole story for it.
+fn operation_confirmed(node: &CompleteContractNodeV2, operation: &ExactScalarOperation) -> bool {
+    let Some(catalogued) = catalogued_operation(operation) else {
+        return false;
+    };
+    if node.node.body["operation"]["identity"].as_str() != Some(catalogued.identity) {
+        return false;
+    }
+    if let Some((kind, value)) = catalogued.mode {
+        let mode = &node.node.body["operation"]["mode"];
+        if mode["kind"].as_str() != Some(kind) || mode["value"].as_str() != Some(value) {
+            return false;
+        }
+    }
+    if let ExactScalarOperation::IntegerDivision { profile, .. } = operation {
+        let law_confirmed = node.node.body["operation"]["laws"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|law| {
+                law["definition"]["identity"].as_str() == Some(profile.definition_identity())
+            });
+        if !law_confirmed {
+            return false;
+        }
+    }
+    true
+}
+
+/// One oracle's function, self-contained for direct embedding in a generated
+/// Kani harness file (`kani_obligations::render_scalar`): unlike
+/// [`SourceBuilder::finish`]'s crate-wide accumulation (one set of shared
+/// helpers for every oracle in the crate), this always includes whatever
+/// preamble helpers its own body needs, even when that duplicates them
+/// across separate harness files that each embed a different oracle.
+fn standalone_oracle_source(
+    package_id: &CheckedSemanticId,
+    symbol: &str,
+    node_id: &CheckedNodeId,
+    identity: &str,
+    operation: &ExactScalarOperation,
+) -> String {
+    let mut builder = SourceBuilder::default();
+    builder.oracle(symbol, node_id, identity, operation);
+    builder.finish(package_id)
+}
 
 fn operation_identity(operation: &ExactScalarOperation) -> String {
     match operation {

@@ -11,7 +11,7 @@ use std::{
 
 use quire_contract_codegen::{
     generate_exact_scalar_oracles, BoundForm, ExactScalarDisposition, ExactScalarGenerationError,
-    ExactScalarItem, ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal,
+    ExactScalarItem, ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, IntegerOperator,
     OperationProvenance, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CLAIM_MAP_VERSION,
     EXACT_SCALAR_CRATE_NAME, RUNTIME_REVISION,
 };
@@ -583,29 +583,40 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     let json: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).expect("json");
     assert_eq!(json, serde_json::to_value(map).expect("typed map"));
 
-    assert_eq!(map.blocked, [UpstreamBlocker::OperationIdentityNotConsumed]);
-    assert_eq!(
-        json["blocked"],
-        serde_json::json!(["operation identity not consumed by codegen's generators"])
-    );
+    // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and only
+    // a Refused claim (this generator never reached its node) still carries the old blocker, on
+    // its own `operation.provenance` rather than at the map level.
+    assert_eq!(map.blocked, []);
+    assert_eq!(json["blocked"], serde_json::json!([]));
     for (claim, entry) in map
         .items
         .iter()
         .zip(json["items"].as_array().expect("items"))
     {
-        assert_eq!(
-            claim.operation.provenance,
-            OperationProvenance::CallerDeclared {
-                blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+        match &claim.result {
+            ExactScalarDisposition::Generated(_) => {
+                assert_eq!(claim.operation.provenance, OperationProvenance::IrConfirmed);
+                assert_eq!(
+                    entry["operation"]["provenance"],
+                    serde_json::json!({"kind": "ir_confirmed"})
+                );
             }
-        );
-        assert_eq!(
-            entry["operation"]["provenance"],
-            serde_json::json!({
-                "kind": "caller_declared",
-                "blocked_on": "operation identity not consumed by codegen's generators",
-            })
-        );
+            ExactScalarDisposition::Refused { .. } => {
+                assert_eq!(
+                    claim.operation.provenance,
+                    OperationProvenance::CallerDeclared {
+                        blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+                    }
+                );
+                assert_eq!(
+                    entry["operation"]["provenance"],
+                    serde_json::json!({
+                        "kind": "caller_declared",
+                        "blocked_on": "operation identity not consumed by codegen's generators",
+                    })
+                );
+            }
+        }
     }
 
     let lowered = package.lower(
@@ -675,14 +686,22 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
         );
     }
 
-    // Distinct descriptors produce distinct identities.
-    let identities = map
-        .items
-        .iter()
-        .filter(|claim| matches!(claim.result, ExactScalarDisposition::Generated(_)))
-        .map(|claim| claim.operation.identity.as_str())
-        .collect::<std::collections::BTreeSet<_>>();
-    assert_eq!(identities.len(), corpus().len());
+    // The reported identity is the node's own catalogued operation, not a per-instance string:
+    // codes 1011 and 1014 are both `division(_, Truncating, ...)`, differing only in bound
+    // (`[-1000,1000]` vs `[-5,5]`) -- codegen's own descriptor-derived string used to embed the
+    // bound and so differed between them; the catalog does not, and both now report the same
+    // `quire.op.integer.div`.
+    let identity = |code| {
+        map.items
+            .iter()
+            .find(|claim| claim.node_id == code_id(code))
+            .expect("claim")
+            .operation
+            .identity
+            .clone()
+    };
+    assert_eq!(identity(1011), "quire.op.integer.div");
+    assert_eq!(identity(1014), "quire.op.integer.div");
 }
 
 /// Operations whose parameters the IR carries no bound for.
@@ -736,7 +755,13 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
     );
 }
 
-/// Trace: FR-014-AC-11, TC-024.
+// Deliberately untraced: FR-014-AC-11 as currently written says every claim marks its operation
+// `caller_declared` and the claim map carries the blocked item "operation identity not consumed
+// by codegen's generators". IR-217 (this test's own change) reads a matching node's own
+// catalogued identity instead and marks it `IrConfirmed`, and `blocked` is per-item now (only an
+// unreached claim's own `CallerDeclared` provenance still names it), so `marked.claim_map.blocked`
+// below is `[]`, the direct negation of that AC's middle conjunct. This test asserts the current,
+// intended behavior; AC-11's prose is stale pending a spec update, not this assertion.
 #[test]
 fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise() {
     let package = corpus_package().admit();
@@ -764,11 +789,14 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
 
     // Node 1011 is a truncating division; its own `operation.laws` names the
     // truncating law definition, unlike 1012's (floor) and 1013's
-    // (euclidean). CG's generators never read `operation` (they classify a
-    // body by `term`/`operator`/`arguments` and the request item's own
-    // descriptor -- see `corpus_operation`'s doc comment), so a floor
-    // descriptor still generates against node 1011's truncating body, and
-    // the claim says the law is caller-declared.
+    // (euclidean). `check_item`'s shape checks alone cannot see this --
+    // every `DivisionProfile` gives the same binary `&rt::Integer` shape --
+    // so a floor descriptor still generates against node 1011's truncating
+    // body: `law_confirmed` catches the disagreement between the
+    // descriptor's law and the node's own, and this generator does not
+    // silently prefer either. The claim still generates (from the
+    // descriptor, exactly as before this generator ever read
+    // `operation.identity`), but its law is caller-declared, not confirmed.
     let marked = generate(
         &package,
         &[ExactScalarItem {
@@ -784,9 +812,62 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
             blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
         }
     );
+    assert_eq!(marked.claim_map.blocked, []);
+}
+
+/// `Shape::of` gives `Add`, `Subtract`, `Multiply`, `IntegerDivision` and `IntegerModulo` the
+/// identical binary `&rt::Integer` shape, so `check_item`'s shape checks alone cannot distinguish
+/// an `Add` descriptor from a `Multiply` one over the same bounds. Node 1004 is
+/// `quire.op.integer.mul` over `[-1000,1000]`; naming `Add` against it, with the identical
+/// `[-1000,1000]` domain, passes every shape and bound check `check_item` makes. Confirming it
+/// anyway -- the defect this ticket exists to close -- would render an oracle that adds where the
+/// catalog says multiply and a harness whose `operation_identity` says `mul`.
+///
+// Deliberately untraced: no FR-014 AC states this invariant. AC-11 is the closest in subject
+// but (like the test above) asserts the opposite of what this generator now does; the other ten
+// are shape/bound/output ACs a within-shape operator swap satisfies unchanged. This test backs
+// the ticket's own defect description, not a written AC.
+#[test]
+fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
+    let package = corpus_package().admit();
+    let mismatched = generate(
+        &package,
+        &[ExactScalarItem {
+            node_id: code_id(1004),
+            operation: ExactScalarOperation::IntegerArithmetic {
+                operator: IntegerOperator::Add,
+                domain: bounded(-1000, 1000),
+            },
+        }],
+    );
+    let claim = &mismatched.claim_map.items[0];
+    assert!(matches!(claim.result, ExactScalarDisposition::Generated(_)));
+    assert_eq!(claim.operation.identity, "integer.add domain=[-1000,1000]");
     assert_eq!(
-        marked.claim_map.blocked,
-        [UpstreamBlocker::OperationIdentityNotConsumed]
+        claim.operation.provenance,
+        OperationProvenance::CallerDeclared {
+            blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+        },
+        "an Add descriptor over a catalogued mul node must not be marked IrConfirmed"
+    );
+
+    // The matching descriptor over the same node does confirm, reading the node's own
+    // catalogued identity rather than re-deriving codegen's own descriptor string.
+    let matched = generate(
+        &package,
+        &[ExactScalarItem {
+            node_id: code_id(1004),
+            operation: ExactScalarOperation::IntegerArithmetic {
+                operator: IntegerOperator::Multiply,
+                domain: bounded(-1000, 1000),
+            },
+        }],
+    );
+    let matched_claim = &matched.claim_map.items[0];
+    assert_eq!(matched_claim.operation.identity, "quire.op.integer.mul");
+    assert_eq!(
+        matched_claim.operation.provenance,
+        OperationProvenance::IrConfirmed
     );
 }
 
