@@ -1,16 +1,26 @@
 //! Admitted CheckedPackage V2 fixtures for exact scalar generation.
 //!
 //! The base is QSpec's `positive-nominal-identities.json` I04 vector, vendored
-//! unchanged from Contract IR, which supplies an enum declaration, one of its
+//! from Contract IR, which supplies an enum declaration, one of its
 //! members, a dimension and a declared unit under their honest nominal keys.
-//! Scalar types, values and expressions are appended under readable
-//! zero-padded keys, and the package identity is re-derived exactly as the
-//! Contract IR fixture support does.
+//! It is not currently byte-identical to Contract IR's own copy: this
+//! repository's vendored copy carries a `package_id.digest` of
+//! `a4a3d1699e33ceed6084fab17ce174bd6391a21fcd504bbf5d153710c1d2df39`, while
+//! upstream's is `b70a9f27c9ef49711fb603d56014aa5ce092379cd820c5e62a0154c89877e7b4`
+//! (both at the pinned `ef11217` revision); every other byte matches. Scalar
+//! types, values and expressions are appended under readable zero-padded
+//! keys, and the package identity is re-derived exactly as the Contract IR
+//! fixture support does.
 //!
 //! Bounds are `bounded_domain` nodes keyed by the digest of their content and
-//! listed in the dependencies of each expression that uses them, so each
-//! expression reaches exactly the bounds it declares. Their bodies use the
-//! encoding `quire_contract_codegen::exact_scalar` documents.
+//! `foreign` (see `Bound::key`/`Bound::foreign`), and listed in the
+//! dependencies of each expression that uses them. Each expression's own
+//! `bounds` reaches every `Bound` it declares plus, transitively, every
+//! `Bound` those declare as `foreign` (a bound whose body embeds a literal of
+//! another requires-bound kind reaches that kind's own bound too) -- so an
+//! expression's declared bounds are a lower bound on what it reaches, not
+//! the exact set. Bound bodies use the encoding
+//! `quire_contract_codegen::exact_scalar` documents.
 
 #![allow(dead_code)] // Each test binary uses a different subset.
 
@@ -81,17 +91,17 @@ fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
 /// Contract IR (a606059, FR-038-AC-17) requires `application.operation`
 /// and `application.result_type` as members, but admits `operation` opaquely
 /// — present and well-formed is enough, since deep operation-law validation
-/// is not implemented by the reader. Neither member is read by this crate's
+/// is not implemented by the reader. `operation` is not read by this crate's
 /// own generators (they classify a body by `term`/`operator`/`arguments`
-/// only), so `operation` is a fixed placeholder and `result_type` names the
-/// corpus's own `boolean` scalar type, a node every caller of this helper
-/// has already registered via `corpus_package`.
-pub fn application(operator: &str, arguments: Vec<Value>) -> Value {
+/// only), so it is a fixed placeholder; `result_type` names the caller's own
+/// declared node type for this expression, a node every caller of this
+/// helper has already registered.
+pub fn application(operator: &str, result_type: &str, arguments: Vec<Value>) -> Value {
     json!({
         "term": "application",
         "operator": operator,
         "operation": {"identity": "quire.op.test/placeholder", "laws": [], "mode": null, "member": null, "leaves": []},
-        "result_type": node_ref(&key(T_BOOLEAN)),
+        "result_type": node_ref(result_type),
         "arguments": arguments,
     })
 }
@@ -103,10 +113,15 @@ fn aggregate() -> Value {
 /// The corpus's own scalar-type node for a literal `value_kind`. Contract IR
 /// (a606059) requires `literal.type` as a member and validates only that it
 /// resolves to a real node (FR-038-AC-17); it does not require the target to
-/// equal the containing node's own `semantic_type`, but every hand-written
-/// corpus fixture that types itself by kind rather than by a bound follows
-/// that convention, matching the vendored `positive-nominal-identities.json`
-/// pattern (`literal.type` == the node's own `semantic_type`).
+/// equal the containing node's own `semantic_type`, and most hand-written
+/// corpus fixtures that type themselves by kind rather than by a bound do
+/// follow that convention (`literal.type` == the node's own `semantic_type`),
+/// matching the vendored `positive-nominal-identities.json` pattern. `corpus_package`'s
+/// own `V_QUANTITY` is the one exception: its `literal.type` is `rational`
+/// (this value's own `value_kind`) even though the node's `semantic_type` is
+/// `UNIT_TYPE`, because Contract IR's lowering reaches `literal.type`
+/// regardless of the containing node's declared type (see `V_QUANTITY`'s own
+/// comment in `corpus_package`).
 fn literal_type(kind: &str) -> String {
     match kind {
         "boolean" => key(T_BOOLEAN),
@@ -356,6 +371,36 @@ fn integer_literal(value: impl ToString) -> Value {
     literal("integer", &value.to_string())
 }
 
+/// The `value_kind` of every `literal` term reachable within `value`, in first-encounter
+/// order, deduplicated.
+fn literal_kinds(value: &Value) -> Vec<String> {
+    fn walk(value: &Value, kinds: &mut Vec<String>) {
+        match value {
+            Value::Object(members) => {
+                if members.get("term").and_then(Value::as_str) == Some("literal") {
+                    if let Some(kind) = members.get("value_kind").and_then(Value::as_str) {
+                        if !kinds.iter().any(|found| found == kind) {
+                            kinds.push(kind.to_owned());
+                        }
+                    }
+                }
+                for member in members.values() {
+                    walk(member, kinds);
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    walk(item, kinds);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut kinds = Vec::new();
+    walk(value, &mut kinds);
+    kinds
+}
+
 impl Bound {
     pub fn form(&self) -> &'static str {
         match self {
@@ -393,18 +438,32 @@ impl Bound {
     /// bound kind than the one it bounds must therefore also reach that
     /// kind's own bound, or the corpus expression that depends on it is
     /// refused before this crate's own bound-shape checks ever run.
+    ///
+    /// Derived from `body()`'s own literal kinds rather than hand-declared
+    /// per variant, so the two can never drift apart: every literal kind
+    /// `body()` embeds other than this bound's own `bounded_form()` names a
+    /// shared canonical bound that must be foreign here. `Raw` is the one
+    /// exception -- its body is caller-supplied and arbitrary, and its own
+    /// `foreign` field may deliberately name something other than the shared
+    /// canonical bound for its kind (see `WRONG_BOUND_FORM`'s bare,
+    /// integer-free text satisfier, which exists specifically to avoid the
+    /// shared `TEXT` constant's own embedded integer endpoints), so it is
+    /// still caller-declared rather than derived.
     fn foreign(&self) -> Vec<Bound> {
-        match self {
-            Self::Integer(..) => vec![],
-            Self::Rational(..) => vec![INT],
-            Self::Decimal(..) => vec![INT, TEXT],
-            Self::Rounding(..) => vec![TEXT],
-            // The embedded profile literal is `text`, the same kind this
-            // bound itself bounds, so only the two integer endpoints are
-            // foreign.
-            Self::Text(..) => vec![INT],
-            Self::Raw { foreign, .. } => foreign.clone(),
+        if let Self::Raw { foreign, .. } = self {
+            return foreign.clone();
         }
+        literal_kinds(&self.body())
+            .into_iter()
+            .filter(|kind| kind != self.bounded_form())
+            .map(|kind| match kind.as_str() {
+                "integer" => INT,
+                "rational" => RAT,
+                "decimal" => DEC,
+                "text" => TEXT,
+                other => panic!("no shared foreign bound registered for literal kind {other}"),
+            })
+            .collect()
     }
 
     pub fn body(&self) -> Value {
@@ -434,9 +493,14 @@ impl Bound {
         json!({"term": "aggregate", "members": members})
     }
 
-    /// The node key: a digest of the form, the bounded type and the body.
+    /// The node key: a digest of the form, the bounded type, the body, and the keys of every
+    /// foreign bound this one reaches. `foreign` is part of the key -- not just `body` -- so
+    /// two `Raw` bounds with identical form/bounded/body but different declared `foreign`
+    /// dependencies never collide in `PackageBuilder::bound`'s dedupe and silently keep only
+    /// one's foreign dependency.
     pub fn key(&self) -> String {
-        let content = json!([self.form(), self.bounded_type(), self.body()]);
+        let foreign_keys = self.foreign().iter().map(Bound::key).collect::<Vec<_>>();
+        let content = json!([self.form(), self.bounded_type(), self.body(), foreign_keys]);
         sha256_hex(&serde_json::to_vec(&content).expect("bound content"))
     }
 }
@@ -1054,6 +1118,7 @@ fn result_type(form: &str) -> String {
 fn integer_pair() -> Value {
     application(
         "binary",
+        &key(T_INTEGER),
         vec![reference(&key(V_INTEGER)), reference(&key(V_INTEGER))],
     )
 }
@@ -1132,7 +1197,7 @@ pub fn corpus_package() -> PackageBuilder {
             "expression",
             expression.form,
             &result_type(expression.result),
-            application(expression.operator, arguments),
+            application(expression.operator, &result_type(expression.result), arguments),
             &expression.bounds,
         );
     }
@@ -1186,6 +1251,7 @@ pub fn corpus_package() -> PackageBuilder {
             &key(T_FLOAT32),
             application(
                 "binary",
+                &key(T_FLOAT32),
                 vec![reference(&key(V_FLOAT32)), reference(&key(V_FLOAT32))],
             ),
             &[],
@@ -1195,7 +1261,7 @@ pub fn corpus_package() -> PackageBuilder {
             "expression",
             "conversion",
             &key(T_RATIONAL),
-            application("convert", vec![reference(&key(V_QUANTITY))]),
+            application("convert", &key(T_RATIONAL), vec![reference(&key(V_QUANTITY))]),
             &[RAT],
         )
         .bounded(
@@ -1203,7 +1269,11 @@ pub fn corpus_package() -> PackageBuilder {
             "expression",
             "binary",
             &integer_type,
-            application("binary", vec![integer_pair(), reference(&key(V_INTEGER))]),
+            application(
+                "binary",
+                &integer_type,
+                vec![integer_pair(), reference(&key(V_INTEGER))],
+            ),
             &[INT],
         )
         .bounded(
@@ -1213,6 +1283,7 @@ pub fn corpus_package() -> PackageBuilder {
             UNIT_TYPE,
             application(
                 "binary",
+                UNIT_TYPE,
                 vec![reference(&key(V_QUANTITY)), literal("rational", "1")],
             ),
             &[],
@@ -1224,6 +1295,7 @@ pub fn corpus_package() -> PackageBuilder {
             &integer_type,
             application(
                 "binary",
+                &integer_type,
                 vec![reference(&key(V_INTEGER)), reference(&key(V_UNTYPED))],
             ),
             &[INT],
@@ -1236,7 +1308,7 @@ pub fn corpus_package() -> PackageBuilder {
             "function",
             "pure_function",
             &boolean,
-            application("call", vec![]),
+            application("call", &boolean, vec![]),
         )
         .code(MODEL, "model", "model_import", &boolean, aggregate())
         .code(RELATION, "relation", "relationship", &boolean, aggregate())
@@ -1246,14 +1318,14 @@ pub fn corpus_package() -> PackageBuilder {
             "temporal",
             "temporal_clause",
             &boolean,
-            application("temporal", vec![]),
+            application("temporal", &boolean, vec![]),
         )
         .code(
             PROTOCOL,
             "protocol",
             "protocol_clause",
             &boolean,
-            application("protocol_control", vec![]),
+            application("protocol_control", &boolean, vec![]),
         )
         .bounded(
             CALLS_FUNCTION,
@@ -1262,6 +1334,7 @@ pub fn corpus_package() -> PackageBuilder {
             &integer_type,
             application(
                 "binary",
+                &integer_type,
                 vec![reference(&key(FUNCTION)), reference(&key(V_INTEGER))],
             ),
             &[INT],
@@ -1271,7 +1344,7 @@ pub fn corpus_package() -> PackageBuilder {
             "expression",
             "binary",
             &integer_type,
-            application("unary", vec![reference(&key(V_INTEGER))]),
+            application("unary", &integer_type, vec![reference(&key(V_INTEGER))]),
             &[INT],
         )
         .bounded(
@@ -1281,6 +1354,7 @@ pub fn corpus_package() -> PackageBuilder {
             &integer_type,
             application(
                 "binary",
+                &integer_type,
                 vec![reference(&key(V_INTEGER)), reference(&key(V_DECIMAL))],
             ),
             &[INT, DEC],
@@ -1388,4 +1462,63 @@ pub fn golden_items() -> Vec<ExactScalarItem> {
         })
         .chain(refused_items())
         .collect()
+}
+
+#[cfg(test)]
+mod bound_tests {
+    use super::{Bound, DEC, INT, TEXT};
+    use serde_json::json;
+
+    fn keys(bounds: &[Bound]) -> Vec<String> {
+        bounds.iter().map(Bound::key).collect()
+    }
+
+    /// Pins `Bound::foreign`'s derivation against the exact per-variant lists this crate
+    /// hand-maintained before the PR #101 review finding that `foreign()` mirrored `body()`'s
+    /// literal kinds by hand, in a second place that could silently drift from the first.
+    /// Derivation must reproduce every one of the historically correct lists.
+    #[test]
+    fn foreign_matches_the_literal_kinds_body_actually_embeds() {
+        assert_eq!(keys(&Bound::Integer(0, 1).foreign()), Vec::<String>::new());
+        assert_eq!(keys(&Bound::Rational(0, 1, 1, 2).foreign()), keys(&[INT]));
+        assert_eq!(
+            keys(&Bound::Decimal(0, 1, 0, 2, "nearest-even").foreign()),
+            keys(&[INT, TEXT])
+        );
+        assert_eq!(
+            keys(&Bound::Rounding("float32", "nearest-even").foreign()),
+            keys(&[TEXT])
+        );
+        assert_eq!(keys(&Bound::Text(0, 4, "nfc").foreign()), keys(&[INT]));
+        // `Decimal`'s digest domain never appears in `Rational`'s foreign list, and vice
+        // versa: derivation is exact per literal kind, not "any numeric foreign".
+        assert_ne!(keys(&Bound::Rational(0, 1, 1, 2).foreign()), keys(&[DEC]));
+    }
+
+    /// Regression for the PR #101 review finding that `Bound::key()` omitted `foreign`, so two
+    /// `Raw` bounds with identical form/bounded/body but different `foreign` collided in
+    /// `PackageBuilder::bound`'s digest-keyed dedupe and one silently lost its own foreign
+    /// dependency.
+    #[test]
+    fn key_differs_when_only_foreign_dependencies_differ() {
+        let body = json!({"term": "aggregate", "members": []});
+        let no_foreign = Bound::Raw {
+            form: "text_bounds",
+            bounded: "text",
+            body: body.clone(),
+            foreign: vec![],
+        };
+        let with_foreign = Bound::Raw {
+            form: "text_bounds",
+            bounded: "text",
+            body,
+            foreign: vec![INT],
+        };
+        assert_ne!(
+            no_foreign.key(),
+            with_foreign.key(),
+            "two Raw bounds with identical form/bounded/body but different foreign \
+             dependencies must not collide in the dedupe keyed by this digest"
+        );
+    }
 }

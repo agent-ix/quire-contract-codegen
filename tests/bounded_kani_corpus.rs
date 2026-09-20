@@ -212,6 +212,22 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
         panic!("a corpus-generated packet must settle as an Input replay agreement");
     };
     assert_eq!(agreement.native().boolean_claim(), Some(false));
+    // The settled `Input`-arm agreement's own assignment content, not merely that it settled:
+    // exactly the ordered population's two values, never `max_items` or the query's `expected`
+    // oracle target (see the `arithmetic_assignments`/`collection_assignments` unit tests).
+    assert_eq!(
+        agreement.input(),
+        &std::collections::BTreeMap::from([
+            (
+                "value_0".to_owned(),
+                quire_contract_ir::kani::WitnessValue::Integer(2)
+            ),
+            (
+                "value_1".to_owned(),
+                quire_contract_ir::kani::WitnessValue::Integer(2)
+            ),
+        ])
+    );
 }
 
 /// Trace: FR-007-AC-2, FR-007-AC-5, TC-023.
@@ -387,4 +403,19 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
         panic!("a corpus-generated packet must settle as an Input replay agreement");
     };
     assert_eq!(agreement.native().boolean_claim(), Some(false));
+    // Same assignment-content check as `tc_023_public_corpus_uses_the_validated_profile_boundary`,
+    // against the Kani-executed harness's own retained packet rather than a freshly generated one.
+    assert_eq!(
+        agreement.input(),
+        &std::collections::BTreeMap::from([
+            (
+                "value_0".to_owned(),
+                quire_contract_ir::kani::WitnessValue::Integer(2)
+            ),
+            (
+                "value_1".to_owned(),
+                quire_contract_ir::kani::WitnessValue::Integer(2)
+            ),
+        ])
+    );
 }

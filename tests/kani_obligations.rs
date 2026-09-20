@@ -397,6 +397,7 @@ fn scalar_package() -> (CheckedPackageV2, ExactScalarClaimMap) {
             &key(T_INTEGER),
             application(
                 "binary",
+                &key(T_INTEGER),
                 vec![reference(&key(V_INTEGER)), reference(&key(V_INTEGER))],
             ),
             &[Bound::Integer(5, -5)],

@@ -801,7 +801,7 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
         "expression",
         "binary",
         &key(T_INTEGER),
-        application("binary", arguments),
+        application("binary", &key(T_INTEGER), arguments),
         &[INT],
     );
     let limits = quire_contract_ir::CheckedPackageReadLimits {
@@ -839,6 +839,7 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
             &key(T_BOOLEAN),
             application(
                 "binary",
+                &key(T_BOOLEAN),
                 vec![reference(ENUM_MEMBER), reference(ENUM_MEMBER)],
             ),
         );
@@ -894,6 +895,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
         &key(T_INTEGER),
         application(
             "binary",
+            &key(T_INTEGER),
             vec![reference(&key(V_INTEGER)), literal("text", "3")],
         ),
         &[INT, TEXT],

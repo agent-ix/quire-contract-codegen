@@ -94,26 +94,31 @@ pub fn integer_literal(value: i64) -> Value {
 
 /// Contract IR (a606059, FR-038-AC-17) requires `application.operation`
 /// and `application.result_type` as members, admitting `operation` opaquely.
-/// Neither is read by this crate's own generators (they classify a body by
-/// `term`/`operator`/`arguments` only), so `operation` is a fixed
-/// placeholder and `result_type` names the corpus's own `boolean` scalar
-/// type, registered by every caller of this helper via `corpus_package`.
-fn application(operator: &str, arguments: Vec<Value>) -> Value {
+/// `operation` is not read by this crate's own generators (they classify a
+/// body by `term`/`operator`/`arguments` only), so it is a fixed placeholder;
+/// `result_type` names the caller's own declared node type, a node every
+/// caller of this helper has already registered via `corpus_package`.
+fn application(operator: &str, result_type: u32, arguments: Vec<Value>) -> Value {
     json!({
         "term": "application",
         "operator": operator,
         "operation": {"identity": "quire.op.test/placeholder", "laws": [], "mode": null, "member": null, "leaves": []},
-        "result_type": node_ref(&key(T_BOOLEAN)),
+        "result_type": node_ref(&key(result_type)),
         "arguments": arguments,
     })
 }
 
 /// A well-formed two-argument `binary` application body: content is
 /// irrelevant to the generator, which reads the operand types from the
-/// request descriptor, not from the body.
+/// request descriptor, not from the body. Every corpus expression using this
+/// body is a composite-equality oracle, whose result is genuinely Boolean --
+/// unlike `exact_scalar_support`'s `application`, there is only one family
+/// here, so `T_BOOLEAN` is this body's actual result type, not a fixed
+/// placeholder standing in for others.
 pub fn binary_body() -> Value {
     application(
         "binary",
+        T_BOOLEAN,
         vec![literal("boolean", "true"), literal("boolean", "true")],
     )
 }
