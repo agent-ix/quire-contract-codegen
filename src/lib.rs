@@ -17,6 +17,8 @@ mod kani;
 mod kani_obligations;
 // Implements: FR-017
 mod kani_execution;
+// IR-211: joins a real Kani witness to the generator's own persisted obligation schema.
+mod kani_witness_join;
 // Implements: FR-007
 mod bounded_kani_profile;
 // Implements: FR-007
@@ -106,6 +108,7 @@ pub use kani_obligations::{
     ObligationKind, ObligationRecord, ObligationSubject, UnsupportedObligation,
     KANI_OBLIGATION_PROFILE, KANI_OBLIGATION_SCHEMA, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
+pub use kani_witness_join::{decode_falsification, witness_schema, WitnessSchemaError};
 pub use publication::{
     write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
     PublicationErrorCode, PublishedBundleIdentity,
