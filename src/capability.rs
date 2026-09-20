@@ -25,8 +25,7 @@ pub const CAPABILITY_VOCABULARY: &str = "quire.capability-kind/v1";
 ///
 /// The vocabulary is closed. A label outside it is refused with its exact
 /// received bytes and never mapped onto a member.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CapabilityKind {
     /// Whether a Boolean clause holds for every assignment of its domain.
     ValueValidity,
@@ -89,6 +88,37 @@ impl CapabilityKind {
     #[must_use]
     pub fn from_label(label: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.label() == label)
+    }
+
+    /// This member's position in [`Self::ALL`].
+    ///
+    /// The match is exhaustive, so a new member cannot be added without giving
+    /// it an index; TC-030 then reads every index back out of `ALL` and fails if
+    /// the array was not extended to match. Without it `ALL` is a hand-kept list
+    /// whose length happens to be right, and a member missing from it is a label
+    /// `from_label` refuses while the vocabulary contains it.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        match self {
+            Self::ValueValidity => 0,
+            Self::OperationContract => 1,
+            Self::FiniteReplay => 2,
+            Self::TemporalSatisfaction => 3,
+            Self::GlobalConformance => 4,
+            Self::Monitorability => 5,
+            Self::LocalProjection => 6,
+            Self::Refinement => 7,
+            Self::Realizability => 8,
+            Self::Composition => 9,
+        }
+    }
+}
+
+impl serde::Serialize for CapabilityKind {
+    /// Serialises through [`Self::label`], so the emitted label and the label a
+    /// request is read against cannot drift apart.
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.label())
     }
 }
 
@@ -220,6 +250,12 @@ pub enum EnvelopeRefusal {
         /// Always `unsupported-version`; the field keeps the cause printable
         /// beside the item-level causes rather than implied by the variant.
         cause: &'static str,
+        /// Which member of the carrier was wrong.
+        ///
+        /// Both members refuse with one cause, so without this a consumer that
+        /// got both wrong is told only about the first and cannot tell which
+        /// field to fix from the refusal it was handed.
+        member: &'static str,
         /// The identity the carrier supplied, or the empty string when absent.
         received: String,
     },
@@ -227,7 +263,11 @@ pub enum EnvelopeRefusal {
 
 /// Why an item settled as something other than `supported`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case", tag = "cause")]
+// FR-290 spells every item-level cause in kebab-case (`absent-kind`,
+// `unknown-backend`, `inconsistent-candidates`) while the codes that type them
+// are snake (`invalid_capability`, `unsupported_projection`). A consumer
+// matching the spec's spelling never matched `absent_kind`.
+#[serde(rename_all = "kebab-case", tag = "cause")]
 pub enum Cause {
     /// The item's kind is absent or `null`.
     AbsentKind,
@@ -363,9 +403,36 @@ impl ItemSettlement {
                     "{backend} advertises {} bounded only and no finite bound is available",
                     kind.label()
                 ),
-                other => format!("unsupported: {}", other.code()),
+                Cause::ToolUnavailable {
+                    kind,
+                    backend,
+                    expected,
+                    actual,
+                } => match actual {
+                    Some(actual) => format!(
+                        "{backend} pins {expected} for {} and the probe found {actual}",
+                        kind.label()
+                    ),
+                    None => format!(
+                        "{backend} pins {expected} for {} and the probe found no tool",
+                        kind.label()
+                    ),
+                },
+                // Exhaustive on purpose. A catch-all here would give the next
+                // cause a warning that names neither the kind nor the backend
+                // FR-290 requires it to name, with nothing failing to say so.
+                Cause::AbsentKind
+                | Cause::UnknownKind { .. }
+                | Cause::AbsentExtent
+                | Cause::UnknownBackend { .. }
+                | Cause::InconsistentCandidates { .. }
+                | Cause::AmbiguousBackend { .. } => unreachable!(
+                    "an invalid_capability cause settles invalid-request, never unsupported"
+                ),
             }),
-            _ => None,
+            Disposition::Supported { .. }
+            | Disposition::RequiresBound { .. }
+            | Disposition::InvalidRequest { .. } => None,
         }
     }
 }
@@ -386,6 +453,15 @@ pub enum BackendKind {
 impl BackendKind {
     /// Every variant, for the census the settlement gate reads.
     pub const ALL: [Self; 1] = [Self::Kani];
+
+    /// This kind's position in [`Self::ALL`], kept honest the same way
+    /// [`CapabilityKind::index`] is.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        match self {
+            Self::Kani => 0,
+        }
+    }
 
     /// The backend identity this kind registers under.
     #[must_use]
@@ -419,12 +495,14 @@ pub fn negotiate_backend_provider(
     if envelope.contract_version != BACKEND_PROVIDER_CONTRACT {
         return Err(EnvelopeRefusal::InvalidCapability {
             cause: "unsupported-version",
+            member: "contract_version",
             received: envelope.contract_version.clone(),
         });
     }
     if envelope.capability_vocabulary != CAPABILITY_VOCABULARY {
         return Err(EnvelopeRefusal::InvalidCapability {
             cause: "unsupported-version",
+            member: "capability_vocabulary",
             received: envelope.capability_vocabulary.clone(),
         });
     }
@@ -501,6 +579,11 @@ fn negotiate_item(manifest: &[BackendDescriptor], item: &RequestItem) -> Disposi
                 candidates: many.to_vec(),
             },
         },
+        // FR-290's candidate table has no row for "more than one candidate and
+        // the request names one": reaching it needs a manifest that repeats a
+        // backend identity, which the registry refuses as `duplicate-backend`
+        // before a request is built. A set that disagrees with the named backend
+        // is the nearest stated row, and is what such a set is.
         many => Disposition::InvalidRequest {
             cause: Cause::InconsistentCandidates {
                 candidates: many.to_vec(),
@@ -704,9 +787,17 @@ impl ItemSettlement {
             return None;
         };
         let kind = self.kind?;
-        let descriptor = manifest
+        // Settlement matched identity *and* digest; matching identity alone here
+        // would hand the probe the pinned tool of a different manifest entry.
+        // FR-290 makes a repeated identity a registry-level refusal
+        // (`duplicate-backend`), so this answers `None` rather than choosing.
+        let mut matching = manifest
             .iter()
-            .find(|descriptor| descriptor.identity == *backend)?;
+            .filter(|descriptor| descriptor.identity == *backend);
+        let descriptor = matching.next()?;
+        if matching.next().is_some() {
+            return None;
+        }
         Some(RoutedItem {
             request_index: self.request_index,
             kind,

@@ -98,7 +98,10 @@ nothing says so.
   disposition.
 - The generator shall never surface `requires-bound` as a verification result.
 - The routed backend's adapter shall probe its pinned tool identity after
-  routing and before the run.
+  routing and before the run. Resolving that tool through `CARGO_HOME` and
+  `PATH`, and reading the identity it reports, is
+  [FR-017](./FR-017-pinned-kani-execution-evidence.md)'s; this requirement owns
+  the record an observation produces.
 - If the probe finds the tool missing, finds an identity other than the pin,
   errors, or exceeds its limit, then the adapter shall record the FR-331 result
   `unsupported` for that item, naming the capability kind, the backend and the
@@ -118,8 +121,9 @@ nothing says so.
 | FR-019-AC-2 | Every requested item receives exactly one of `supported`, `requires-bound`, `unsupported` and `invalid-request`, settled from its `candidates` and extent classification, and `candidates` is read from the request rather than computed here. | Test (TC-030) |
 | FR-019-AC-3 | An unbounded extent against a `bounded`-only advertisement settles `requires-bound` when a finite bound is available, rather than `unsupported`; with no finite bound available it settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`; and it never settles `supported`. | Test (TC-030) |
 | FR-019-AC-4 | An item with more than one candidate and no named backend settles `invalid-request` with `invalid_capability`/`ambiguous-backend`, naming every candidate in candidate order, identically under every registration order. | Test (TC-030) |
-| FR-019-AC-5 | No capability is settled outside a `negotiate_*` arm anywhere in this repository, asserted as a gate over the source rather than stated in prose. | Test (TC-030) |
-| FR-019-AC-6 | With the pinned tool absent from `PATH`, and again with a mismatched pin, the item records the FR-331 result `unsupported` with cause `unsupported_projection`/`tool-unavailable` naming the backend, the tool identity and the claim; its disposition stays `supported`; no other candidate runs; and no probe runs before routing. | Test (TC-030) |
+| FR-019-AC-5 | No capability is settled outside a `negotiate_*` arm in any Rust source this repository builds, asserted as a gate that parses the source rather than stated in prose. | Test (TC-030) |
+| FR-019-AC-6 | An absent tool and a tool whose identity differs from the pin each record the FR-331 result `unsupported` with cause `unsupported_projection`/`tool-unavailable`, naming the capability kind, the backend and the expected and actual or absent tool identity; the item keeps its `supported` disposition; and a tool that changes after a passing probe records `failed` with the same cause. | Test (TC-030) |
+| FR-019-AC-10 | Only an item settled `supported` routes, so nothing names a tool to probe before settlement has chosen the single backend that pins it, and a manifest repeating a backend identity routes nothing rather than choosing between its entries. | Test (TC-030) |
 | FR-019-AC-7 | An envelope whose `capability_vocabulary` is not exactly `quire.capability-kind/v1`, or is absent, is refused as `invalid_capability`/`unsupported-version` with none of its kinds read. | Test (TC-030) |
 | FR-019-AC-8 | An item with an absent extent classification settles `invalid-request` with `invalid_capability`/`absent-extent`, and an absent or unknown kind settles before the candidate table is consulted. | Test (TC-030) |
 | FR-019-AC-9 | A backend kind added without a negotiation arm does not compile: the dispatch is an exhaustive `match` over the closed kind with no catch-all arm. | Analysis |

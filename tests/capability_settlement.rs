@@ -7,9 +7,9 @@
 //! but the scan says so tomorrow.
 
 use std::{
+    collections::BTreeSet,
     fs,
-    path::Path,
-    sync::atomic::{AtomicUsize, Ordering},
+    path::{Path, PathBuf},
 };
 
 use quire_contract_codegen::{
@@ -445,6 +445,7 @@ fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
             refusal,
             EnvelopeRefusal::InvalidCapability {
                 cause: "unsupported-version",
+                member: "capability_vocabulary",
                 received: supplied.to_owned()
             },
             "no settlement is returned, so no label of the carrier was read"
@@ -453,35 +454,38 @@ fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
 }
 
 /// No `Disposition` is constructed outside a `negotiate_*` function anywhere in
-/// `src/`.
+/// this repository's Rust sources.
 ///
 /// This is the S9 seam stated as a gate. The arms settle correctly today with or
 /// without it; what it catches is the settlement added next year somewhere else,
 /// which would give the same behaviour at run time and leave "negotiate_* is the
 /// only settlement point" true only by coincidence.
 ///
+/// The scan parses each file with `syn` rather than reading lines. A line scan
+/// was written first and measured wrong in both directions: it missed a
+/// `pub(crate) fn` — the visibility this repository's own idioms prefer — so an
+/// injected settlement outside every arm passed green, and it failed on a
+/// rustdoc link naming a variant, blaming the function above the comment. Both
+/// are gone here because a parser distinguishes a declaration from a comment and
+/// an expression from a pattern by construction, instead of by a rule about
+/// where `=>` sits on a line.
+///
 /// Trace: TC-030
 /// Provenance: codegen#86
 #[test]
 fn tc_030_no_capability_is_settled_outside_a_negotiate_arm() {
-    let mut offences = Vec::new();
-    for file in rust_sources(Path::new("src")) {
-        let text = fs::read_to_string(&file).expect("a source file in src/ reads");
-        let mut enclosing = String::from("<file scope>");
-        for (number, line) in text.lines().enumerate() {
-            if let Some(name) = function_name(line) {
-                enclosing = name;
-            }
-            if constructs_disposition(line) && !enclosing.starts_with("negotiate_") {
-                offences.push(format!(
-                    "{}:{}: `{}` constructs a disposition outside a negotiate_* arm",
-                    file.display(),
-                    number + 1,
-                    enclosing
-                ));
-            }
-        }
-    }
+    let offences: Vec<String> = scan_roots()
+        .iter()
+        .flat_map(|root| rust_sources(root))
+        .flat_map(|file| settlement_sites(&file))
+        .filter(|site| !site.enclosing.starts_with("negotiate_"))
+        .map(|site| {
+            format!(
+                "{}: `{}` constructs a disposition outside a negotiate_* arm",
+                site.file, site.enclosing
+            )
+        })
+        .collect();
     assert!(
         offences.is_empty(),
         "capability settled outside a negotiate_* arm:\n{}",
@@ -489,92 +493,224 @@ fn tc_030_no_capability_is_settled_outside_a_negotiate_arm() {
     );
 }
 
-/// The scan finds the settlement it is meant to find.
+/// The scan reads the settlement point, and reads every arm of it.
 ///
 /// Without this, a scan that matched nothing — a moved directory, a renamed
-/// type — would report the seam intact by looking at nothing at all.
+/// type, a parser that silently failed — would report the seam intact by looking
+/// at nothing at all. The counts are the measured ones rather than a floor of
+/// one, so a refactor that moves settlement out of reach of the scan fails here
+/// even while the gate above stays green.
 ///
 /// Trace: TC-030
 /// Provenance: codegen#86
 #[test]
 fn tc_030_the_settlement_scan_reads_the_settlement_point() {
-    let mut dispositions = 0_usize;
-    let mut arms = 0_usize;
-    for file in rust_sources(Path::new("src")) {
-        let text = fs::read_to_string(&file).expect("a source file in src/ reads");
-        for line in text.lines() {
-            if function_name(line).is_some_and(|name| name.starts_with("negotiate_")) {
-                arms += 1;
+    let sites: Vec<SettlementSite> = scan_roots()
+        .iter()
+        .flat_map(|root| rust_sources(root))
+        .flat_map(|file| settlement_sites(&file))
+        .collect();
+    let arms: BTreeSet<&str> = sites
+        .iter()
+        .map(|site| site.enclosing.as_str())
+        .filter(|name| name.starts_with("negotiate_"))
+        .collect();
+    assert_eq!(
+        arms,
+        BTreeSet::from([
+            "negotiate_item",
+            "negotiate_kani",
+            "negotiate_single_candidate"
+        ]),
+        "the settlement functions the scan reads are not the ones this crate has"
+    );
+    assert!(
+        sites.len() >= 12,
+        "the scan found only {} settlement sites; it was reading 12 when this gate was written",
+        sites.len()
+    );
+}
+
+/// The roots the seam covers: every Rust source this repository builds.
+///
+/// FR-019-AC-5 says "anywhere in this repository", and a settlement added to the
+/// conformance producer under `examples/` would satisfy a `src/`-only scan while
+/// settling capabilities outside every arm.
+fn scan_roots() -> Vec<PathBuf> {
+    ["src", "examples"]
+        .into_iter()
+        .map(PathBuf::from)
+        .filter(|root| root.is_dir())
+        .collect()
+}
+
+/// One place a [`Disposition`] is constructed.
+struct SettlementSite {
+    /// `path:line`, for a message that points at the construction itself.
+    file: String,
+    /// The innermost named function containing it, or `<file scope>`.
+    enclosing: String,
+}
+
+/// Every [`Disposition`] construction in one file, with the function it sits in.
+fn settlement_sites(file: &Path) -> Vec<SettlementSite> {
+    let text = fs::read_to_string(file).expect("a Rust source reads");
+    let parsed = syn::parse_file(&text).expect("a Rust source parses");
+    let mut visitor = Settlements {
+        file: file.to_path_buf(),
+        enclosing: vec![],
+        in_disposition_impl: false,
+        aliases: disposition_aliases(&parsed),
+        found: vec![],
+    };
+    syn::visit::Visit::visit_file(&mut visitor, &parsed);
+    visitor.found
+}
+
+/// Every name that refers to [`Disposition`] in this file: the type itself, any
+/// `type` alias of it, and — when the file glob-imports its variants — the empty
+/// name, which stands for a bare `Supported { .. }`.
+fn disposition_aliases(parsed: &syn::File) -> BTreeSet<String> {
+    let mut names = BTreeSet::from(["Disposition".to_owned()]);
+    for item in &parsed.items {
+        match item {
+            syn::Item::Type(alias) => {
+                if let syn::Type::Path(path) = alias.ty.as_ref() {
+                    if last_segment(&path.path).is_some_and(|name| name == "Disposition") {
+                        names.insert(alias.ident.to_string());
+                    }
+                }
             }
-            if constructs_disposition(line) {
-                dispositions += 1;
+            syn::Item::Use(import) if glob_imports_disposition(&import.tree) => {
+                names.insert(String::new());
+            }
+            _ => {}
+        }
+    }
+    names
+}
+
+fn glob_imports_disposition(tree: &syn::UseTree) -> bool {
+    match tree {
+        syn::UseTree::Path(path) => {
+            (path.ident == "Disposition" && matches!(*path.tree, syn::UseTree::Glob(_)))
+                || glob_imports_disposition(&path.tree)
+        }
+        syn::UseTree::Group(group) => group.items.iter().any(glob_imports_disposition),
+        _ => false,
+    }
+}
+
+fn last_segment(path: &syn::Path) -> Option<String> {
+    path.segments
+        .last()
+        .map(|segment| segment.ident.to_string())
+}
+
+/// The four disposition variants. A construction names one of these.
+const VARIANTS: [&str; 4] = [
+    "Supported",
+    "RequiresBound",
+    "Unsupported",
+    "InvalidRequest",
+];
+
+struct Settlements {
+    file: PathBuf,
+    enclosing: Vec<String>,
+    in_disposition_impl: bool,
+    aliases: BTreeSet<String>,
+    found: Vec<SettlementSite>,
+}
+
+impl Settlements {
+    /// Whether `path` names a disposition variant being built.
+    ///
+    /// Three spellings reach the same variant and all three count: the qualified
+    /// `Disposition::Supported`, `Self::Supported` inside `impl Disposition`, and
+    /// a bare `Supported` in a file that glob-imports the variants. A constructor
+    /// method added to `impl Disposition` is the likely next edit, and it is the
+    /// `Self::` case.
+    fn is_settlement(&self, path: &syn::Path) -> bool {
+        let Some(variant) = last_segment(path) else {
+            return false;
+        };
+        if !VARIANTS.contains(&variant.as_str()) {
+            return false;
+        }
+        match path.segments.len() {
+            1 => self.aliases.contains(""),
+            _ => {
+                let qualifier = path.segments[path.segments.len() - 2].ident.to_string();
+                self.aliases.contains(&qualifier)
+                    || (qualifier == "Self" && self.in_disposition_impl)
             }
         }
     }
-    assert!(
-        arms >= BackendKind::ALL.len(),
-        "the scan found {arms} negotiate_* functions, fewer than the {} backend kinds",
-        BackendKind::ALL.len()
-    );
-    assert!(
-        dispositions > 0,
-        "the scan found no disposition at all, so it is asserting over an empty set"
-    );
+
+    fn record(&mut self) {
+        self.found.push(SettlementSite {
+            file: self.file.display().to_string(),
+            enclosing: self
+                .enclosing
+                .last()
+                .cloned()
+                .unwrap_or_else(|| "<file scope>".to_owned()),
+        });
+    }
 }
 
-/// Whether a line *constructs* a capability [`Disposition`], as opposed to
-/// matching one or naming a different crate's disposition type.
-///
-/// Two distinctions the scan has to make, and why each one is drawn where it is:
-///
-/// - `ObligationDisposition::`, `ExactScalarDisposition::` and the IR's own
-///   `CapabilityDisposition::` all end in the same token. The occurrence counts
-///   only when the character before it cannot continue an identifier, so those
-///   three are not this seam and do not report as breaches of it.
-/// - A pattern reads a disposition; an expression builds one, and the two are
-///   separated by where the occurrence sits. On a line with `=>` the pattern is
-///   to its left and the built value to its right, so only an occurrence after
-///   the last `=>` counts; and an occurrence that directly follows `let `,
-///   `if let ` or `while let ` is that binding's pattern, not a value. Anything
-///   else — `let settled = Disposition::…` included — is a construction, so
-///   `negotiate_kani`'s own `Mode::Bounded => Disposition::…` arms stay inside
-///   the gate rather than every match arm in the crate being exempt.
-fn constructs_disposition(line: &str) -> bool {
-    let cut = line.rfind("=>").map_or(0, |index| index + 2);
-    let Some(tail) = line.get(cut..) else {
-        return false;
-    };
-    tail.match_indices("Disposition::").any(|(index, _)| {
-        let before = &tail[..index];
-        let continues_identifier = before
-            .chars()
-            .next_back()
-            .is_some_and(|character| character.is_alphanumeric() || character == '_');
-        let binds_a_pattern = before.ends_with("let ");
-        !continues_identifier && !binds_a_pattern
-    })
-}
+impl<'ast> syn::visit::Visit<'ast> for Settlements {
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        self.enclosing.push(node.sig.ident.to_string());
+        syn::visit::visit_item_fn(self, node);
+        self.enclosing.pop();
+    }
 
-/// The name of the function a line declares, if it declares one.
-fn function_name(line: &str) -> Option<String> {
-    let trimmed = line.trim_start();
-    let rest = trimmed
-        .strip_prefix("pub fn ")
-        .or_else(|| trimmed.strip_prefix("fn "))
-        .or_else(|| trimmed.strip_prefix("pub const fn "))
-        .or_else(|| trimmed.strip_prefix("const fn "))?;
-    let name: String = rest
-        .chars()
-        .take_while(|character| character.is_alphanumeric() || *character == '_')
-        .collect();
-    (!name.is_empty()).then_some(name)
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        self.enclosing.push(node.sig.ident.to_string());
+        syn::visit::visit_impl_item_fn(self, node);
+        self.enclosing.pop();
+    }
+
+    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
+        self.enclosing.push(node.sig.ident.to_string());
+        syn::visit::visit_trait_item_fn(self, node);
+        self.enclosing.pop();
+    }
+
+    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+        let was = self.in_disposition_impl;
+        if let syn::Type::Path(path) = node.self_ty.as_ref() {
+            self.in_disposition_impl = last_segment(&path.path)
+                .is_some_and(|name| self.aliases.contains(&name) && !name.is_empty());
+        }
+        syn::visit::visit_item_impl(self, node);
+        self.in_disposition_impl = was;
+    }
+
+    // Only expressions are visited for construction. A pattern that matches a
+    // disposition reads one and is not a settlement, and the visitor never
+    // reaches a pattern through these two methods.
+    fn visit_expr_struct(&mut self, node: &'ast syn::ExprStruct) {
+        if self.is_settlement(&node.path) {
+            self.record();
+        }
+        syn::visit::visit_expr_struct(self, node);
+    }
+
+    fn visit_expr_path(&mut self, node: &'ast syn::ExprPath) {
+        if self.is_settlement(&node.path) {
+            self.record();
+        }
+        syn::visit::visit_expr_path(self, node);
+    }
 }
 
 /// Every `.rs` file under `root`, recursively.
-fn rust_sources(root: &Path) -> Vec<std::path::PathBuf> {
+fn rust_sources(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
-    let entries = fs::read_dir(root).expect("the crate has a src/ directory");
-    for entry in entries {
+    for entry in fs::read_dir(root).expect("a scan root is a directory") {
         let path = entry.expect("a directory entry reads").path();
         if path.is_dir() {
             found.extend(rust_sources(&path));
@@ -583,22 +719,24 @@ fn rust_sources(root: &Path) -> Vec<std::path::PathBuf> {
         }
     }
     found.sort();
-    assert!(!found.is_empty(), "no Rust sources found under {root:?}");
     found
 }
 
 // ---------------------------------------------------------------------------
-// FR-019-AC-6: the pinned-tool probe, after routing
+// FR-019-AC-6: the record a probe's observation produces
 // ---------------------------------------------------------------------------
 
 /// A routed item whose pinned tool is absent, and one whose tool is another
 /// identity, each record `unsupported`/`tool-unavailable` while keeping the
 /// item's `supported` disposition.
 ///
-/// The tool identities come from a real `KaniInstallation` measured out of a
-/// scratch directory — one with no launcher at all, one with a launcher that
-/// reports a version other than the pin — rather than from a hand-written
-/// string, so the probe under test is the one the execution lane runs.
+/// The observation is constructed, not measured. Resolving a launcher through
+/// `CARGO_HOME` and `PATH`, and parsing what it prints, is
+/// `KaniInstallation::discover`/`observe`'s job and is covered by FR-017's own
+/// tests; what this test owns is the record that an observation produces. An
+/// earlier version wrote a shell script and ran it, which measured nothing the
+/// assertions could catch — `record_tool_probe` compares two strings — while
+/// adding a scratch-directory race that failed once in a full suite.
 ///
 /// Trace: TC-030
 /// Provenance: codegen#86
@@ -618,7 +756,7 @@ fn tc_030_an_absent_or_mismatched_pinned_tool_records_unsupported() {
     assert_eq!(routed.backend, BackendKind::Kani.identity());
     assert_eq!(routed.pinned_tool, "cargo-kani 0.67.0");
 
-    let absent = record_tool_probe(&routed, ProbePhase::BeforeRun, &observe_launcher(None))
+    let absent = record_tool_probe(&routed, ProbePhase::BeforeRun, &ToolObservation::Absent)
         .expect("an absent tool is not a passing probe");
     assert_eq!(
         absent,
@@ -635,7 +773,7 @@ fn tc_030_an_absent_or_mismatched_pinned_tool_records_unsupported() {
     let mismatched = record_tool_probe(
         &routed,
         ProbePhase::BeforeRun,
-        &observe_launcher(Some("0.66.0")),
+        &ToolObservation::Identity("cargo-kani 0.66.0".to_owned()),
     )
     .expect("a mismatched tool is not a passing probe");
     assert_eq!(
@@ -651,9 +789,8 @@ fn tc_030_an_absent_or_mismatched_pinned_tool_records_unsupported() {
         "the record names the expected and the actual identity, not just a failure"
     );
 
-    // The disposition is not touched by either outcome. FR-290 keeps the two
-    // apart so a consumer can tell a claim no backend discharges from a claim
-    // whose backend was not installed.
+    // The disposition is not touched by either outcome: a claim no backend
+    // discharges and a claim whose backend is not installed are different facts.
     assert_eq!(
         settlement.disposition,
         Disposition::Supported {
@@ -661,13 +798,13 @@ fn tc_030_an_absent_or_mismatched_pinned_tool_records_unsupported() {
         }
     );
 
-    // A matching tool records nothing at all, so the probe is not a second place
-    // a result can be invented.
+    // A matching tool records nothing, so the probe is not a second place a
+    // result can be invented.
     assert_eq!(
         record_tool_probe(
             &routed,
             ProbePhase::BeforeRun,
-            &observe_launcher(Some("0.67.0"))
+            &ToolObservation::Identity("cargo-kani 0.67.0".to_owned())
         ),
         None
     );
@@ -691,31 +828,22 @@ fn tc_030_a_tool_that_changes_after_a_passing_probe_records_failed() {
     .routed(&manifest)
     .expect("a supported item routes");
 
-    let during = record_tool_probe(
-        &routed,
-        ProbePhase::DuringRun,
-        &observe_launcher(Some("0.66.0")),
-    )
-    .expect("a changed tool is recorded");
     let expected_cause = Cause::ToolUnavailable {
         kind: CapabilityKind::ValueValidity,
         backend: BackendKind::Kani.identity().to_owned(),
         expected: "cargo-kani 0.67.0".to_owned(),
         actual: Some("cargo-kani 0.66.0".to_owned()),
     };
+    let observed = ToolObservation::Identity("cargo-kani 0.66.0".to_owned());
     assert_eq!(
-        during,
-        ItemResult::Failed {
+        record_tool_probe(&routed, ProbePhase::DuringRun, &observed),
+        Some(ItemResult::Failed {
             cause: expected_cause.clone()
-        },
+        }),
         "the result, not the cause, separates a change mid-run from absence at probe"
     );
     assert_eq!(
-        record_tool_probe(
-            &routed,
-            ProbePhase::BeforeRun,
-            &observe_launcher(Some("0.66.0"))
-        ),
+        record_tool_probe(&routed, ProbePhase::BeforeRun, &observed),
         Some(ItemResult::Unsupported {
             cause: expected_cause
         })
@@ -731,7 +859,6 @@ fn tc_030_a_tool_that_changes_after_a_passing_probe_records_failed() {
 fn tc_030_no_item_routes_before_it_is_settled_supported() {
     let manifest = vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])];
     let unsettled = [
-        // requires-bound
         RequestItem {
             extent: unbounded(true),
             ..item(
@@ -739,19 +866,17 @@ fn tc_030_no_item_routes_before_it_is_settled_supported() {
                 Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
             )
         },
-        // unsupported
         item(
             RequestedKind::Known(CapabilityKind::Realizability),
             Candidates::Set(Vec::new()),
         ),
-        // invalid-request
         item(
             RequestedKind::Absent,
             Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
         ),
     ];
-    for item in unsettled {
-        let settlement = settle_one(manifest.clone(), item);
+    for unsettled in unsettled {
+        let settlement = settle_one(manifest.clone(), unsettled);
         assert_eq!(
             settlement.routed(&manifest),
             None,
@@ -761,66 +886,197 @@ fn tc_030_no_item_routes_before_it_is_settled_supported() {
     }
 }
 
-/// The identity a real `cargo-kani` launcher reports, or `Absent` when the
-/// scratch installation holds no launcher at all.
+/// A manifest that names one identity twice routes nothing, rather than handing
+/// the probe whichever entry came first.
 ///
-/// `KaniInstallation` is constructed against a scratch directory rather than by
-/// mutating `PATH`: `env::set_var` races every other thread reading the
-/// environment, including a child process snapshotting it at fork.
-///
-/// Each call takes a fresh directory, and clears it first. `CARGO_TARGET_TMPDIR`
-/// survives between runs while the counter restarts at zero, so the absent case
-/// inherited a launcher an earlier run's mismatch case had written into the same
-/// numbered directory — which is how this helper failed once inside a full
-/// `cargo test` and never in isolation. The exec is also retried on `ETXTBSY`,
-/// which Linux returns for a file still open for writing anywhere in the system.
-fn observe_launcher(version: Option<&str>) -> ToolObservation {
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-    let directory = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "codegen-86-probe-{}",
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    let _ = fs::remove_dir_all(&directory);
-    fs::create_dir_all(&directory).expect("the scratch directory is created");
-    let launcher = directory.join("cargo-kani");
-    let Some(version) = version else {
-        // No launcher at all: the probe finds nothing to measure, which is the
-        // absent-tool fault without a process in it.
-        assert!(
-            !launcher.exists(),
-            "the absent case starts from an empty directory"
-        );
-        return ToolObservation::Absent;
+/// Trace: TC-030
+/// Provenance: codegen#86
+#[test]
+fn tc_030_a_repeated_backend_identity_routes_nothing() {
+    let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
+    let second = BackendDescriptor {
+        manifest_digest: OTHER_DIGEST.to_owned(),
+        pinned_tool: "cargo-kani 0.68.0".to_owned(),
+        ..first.clone()
     };
-    fs::write(
-        &launcher,
-        format!("#!/bin/sh\necho 'cargo-kani {version}'\n"),
-    )
-    .expect("the fake launcher is written");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755))
-            .expect("the fake launcher is executable");
+    let manifest = vec![first, second];
+    let settlement = settle_one(
+        manifest.clone(),
+        item(
+            RequestedKind::Known(CapabilityKind::ValueValidity),
+            Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
+        ),
+    );
+    assert_eq!(
+        settlement.disposition,
+        Disposition::Supported {
+            backend: BackendKind::Kani.identity().to_owned(),
+        },
+        "settlement matched identity and digest, so it still routes to one entry"
+    );
+    assert_eq!(
+        settlement.routed(&manifest),
+        None,
+        "the probe is not handed one of two pins by position"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The emitted forms, and the censuses they are read against
+// ---------------------------------------------------------------------------
+
+/// Every kind and cause serialises in the spelling FR-290 writes.
+///
+/// Nothing else in this suite reads a serialised form, so without this the eight
+/// `Serialize` derives are a wire contract with no test: a consumer matching
+/// FR-290's `unknown-backend` never matched the `unknown_backend` an earlier
+/// `rename_all` produced, and every assertion here still passed.
+///
+/// Trace: TC-030
+/// Provenance: codegen#86
+#[test]
+fn tc_030_kinds_and_causes_serialise_in_the_spelling_the_spec_writes() {
+    for kind in CapabilityKind::ALL {
+        assert_eq!(
+            serde_json::to_value(kind).expect("a kind serialises"),
+            serde_json::Value::String(kind.label().to_owned()),
+            "a kind serialises as its own label, not as a second spelling of it"
+        );
     }
-    for attempt in 0..8 {
-        match std::process::Command::new(&launcher)
-            .args(["kani", "--version"])
-            .output()
-        {
-            Ok(output) => {
-                return ToolObservation::Identity(
-                    String::from_utf8(output.stdout)
-                        .expect("the launcher prints UTF-8")
-                        .trim()
-                        .to_owned(),
-                )
-            }
-            Err(error) if error.raw_os_error() == Some(26) => {
-                std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
-            }
-            Err(error) => panic!("the fake launcher did not run: {error}"),
-        }
+
+    let causes = [
+        (Cause::AbsentKind, "absent-kind", "invalid_capability"),
+        (
+            Cause::UnknownKind {
+                received: "nope".to_owned(),
+            },
+            "unknown-kind",
+            "invalid_capability",
+        ),
+        (Cause::AbsentExtent, "absent-extent", "invalid_capability"),
+        (
+            Cause::UnknownBackend {
+                backend: "cvc5".to_owned(),
+            },
+            "unknown-backend",
+            "invalid_capability",
+        ),
+        (
+            Cause::InconsistentCandidates {
+                candidates: Vec::new(),
+            },
+            "inconsistent-candidates",
+            "invalid_capability",
+        ),
+        (
+            Cause::AmbiguousBackend {
+                candidates: Vec::new(),
+            },
+            "ambiguous-backend",
+            "invalid_capability",
+        ),
+        (
+            Cause::UnsupportedRequestedCapability {
+                kind: CapabilityKind::Refinement,
+                backend: None,
+            },
+            "unsupported-requested-capability",
+            "unsupported_projection",
+        ),
+        (
+            Cause::UnboundedExtent {
+                kind: CapabilityKind::Refinement,
+                backend: "kani".to_owned(),
+            },
+            "unbounded-extent",
+            "unsupported_projection",
+        ),
+        (
+            Cause::ToolUnavailable {
+                kind: CapabilityKind::Refinement,
+                backend: "kani".to_owned(),
+                expected: "cargo-kani 0.67.0".to_owned(),
+                actual: None,
+            },
+            "tool-unavailable",
+            "unsupported_projection",
+        ),
+    ];
+    for (cause, spelling, code) in causes {
+        assert_eq!(
+            cause.code(),
+            code,
+            "{spelling} is typed under the wrong code"
+        );
+        let emitted = serde_json::to_value(&cause).expect("a cause serialises");
+        assert_eq!(
+            emitted.get("cause").and_then(serde_json::Value::as_str),
+            Some(spelling),
+            "the emitted cause is not the spelling FR-290 writes: {emitted}"
+        );
     }
-    panic!("the fake launcher stayed busy for every attempt");
+}
+
+/// Each census array holds every variant of its kind, in index order.
+///
+/// `index` is an exhaustive match, so a new variant cannot compile without one;
+/// reading every index back out of the array is what makes forgetting to extend
+/// the array fail too. Without it `ALL` is a hand-kept list whose length happens
+/// to be right, and `tc_030_every_backend_kind_has_a_dispatched_arm` — which
+/// iterates it — silently checks fewer variants than exist.
+///
+/// Trace: TC-030
+/// Provenance: codegen#86
+#[test]
+fn tc_030_each_census_holds_every_variant_of_its_kind() {
+    for (position, kind) in CapabilityKind::ALL.into_iter().enumerate() {
+        assert_eq!(kind.index(), position, "{kind:?} is not at its own index");
+        assert_eq!(
+            CapabilityKind::from_label(kind.label()),
+            Some(kind),
+            "a member's own label does not read back as that member"
+        );
+    }
+    for (position, backend) in BackendKind::ALL.into_iter().enumerate() {
+        assert_eq!(
+            backend.index(),
+            position,
+            "{backend:?} is not at its own index"
+        );
+    }
+    assert_eq!(
+        CapabilityKind::from_label("value-validity-v2"),
+        None,
+        "a label outside the vocabulary is refused, never mapped onto a member"
+    );
+}
+
+/// A foreign contract version refuses the carrier, and the refusal says which
+/// member was wrong.
+///
+/// Trace: TC-030
+/// Provenance: codegen#86
+#[test]
+fn tc_030_a_foreign_contract_version_refuses_the_carrier_and_names_the_member() {
+    let refusal = negotiate_backend_provider(&BackendProviderEnvelope {
+        contract_version: "quire.backend-provider/v2".to_owned(),
+        capability_vocabulary: String::new(),
+        ..envelope(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            vec![item(
+                RequestedKind::Known(CapabilityKind::ValueValidity),
+                Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
+            )],
+        )
+    })
+    .expect_err("a foreign contract version refuses the carrier");
+    assert_eq!(
+        refusal,
+        EnvelopeRefusal::InvalidCapability {
+            cause: "unsupported-version",
+            member: "contract_version",
+            received: "quire.backend-provider/v2".to_owned(),
+        },
+        "both members are wrong here, and the refusal names the one it read"
+    );
 }

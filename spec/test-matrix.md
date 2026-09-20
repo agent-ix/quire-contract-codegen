@@ -57,7 +57,7 @@ type: TestMatrix
 | FR-017 | FR-017-AC-1, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1 | TC-027 | 🚧 Planned |
 | FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-10 through FR-018-AC-13 | TC-029 | ✅ Covered |
 | FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |
-| FR-019 | FR-019-AC-1 through FR-019-AC-8 | TC-030 | ✅ Covered |
+| FR-019 | FR-019-AC-1 through FR-019-AC-8, FR-019-AC-10 | TC-030 | ✅ Covered |
 | FR-019 | FR-019-AC-9 | Analysis | ✅ Covered |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
@@ -191,14 +191,27 @@ typed blockers rather than specifying around them, and FR-020 remains unwritten.
 generator's by TC-028, which is `✅ Covered`; declaring an operation that does not exist would make
 that row false. The slice adds its interface entry when it adds its code.
 
-FR-019-AC-1 through FR-019-AC-8 are `✅ Covered`: TC-030 walks every row of FR-290's ordered rules
-against the settlement point, and each assertion names the disposition and the typed cause the row
-requires rather than only that a refusal occurred. AC-5 is the seam itself, and it is backed by a
-source scan rather than a behavioural test because the property is about where code lives: no
-`Disposition` is constructed outside a `negotiate_*` function in `src/`. The scan was confirmed to
-fail on an injected out-of-arm settlement and to pass once it was reverted, and a paired test asserts
-it reads a non-empty set, so a moved directory or a renamed type cannot report the seam intact by
-matching nothing.
+FR-019-AC-1 through FR-019-AC-8 and FR-019-AC-10 are `✅ Covered`: TC-030 walks every row of
+FR-290's ordered rules against the settlement point, and each assertion names the disposition and the
+typed cause the row requires rather than only that a refusal occurred.
+
+AC-5 is the seam itself, and it is backed by a scan of the source rather than by a behavioural test
+because the property is about where code lives: no `Disposition` is constructed outside a
+`negotiate_*` function in any Rust source this repository builds. The scan parses each file with
+`syn` and inspects expressions only. A line-based scan was written first and measured wrong in both
+directions under review — it did not recognise `pub(crate) fn`, so an injected settlement outside
+every arm passed green, and it read a rustdoc link naming a variant as code, failing and blaming the
+function above the comment. Three injections are now measured: a `pub(crate)` function and a
+`Self::Supported` constructor added to `impl Disposition` each turn it red, and the rustdoc link
+leaves it green. A paired test asserts the scan reads the three settlement functions by name and at
+least twelve construction sites, so a refactor that moves settlement out of the scan's reach fails
+even while the gate above stays green.
+
+AC-6 owns the record an observation produces, not the measurement of the tool. Resolving a launcher
+through `CARGO_HOME` and `PATH` and parsing what it prints is FR-017's, and TC-027 covers it. An
+earlier version of this test wrote a shell script and executed it; it measured nothing the assertions
+could catch, because `record_tool_probe` compares two strings, and it added a scratch-directory race
+that failed once inside a full suite and never in isolation.
 
 FR-019-AC-9 is `✅ Covered` by analysis, not by a test. The dispatch is an exhaustive `match` over
 `BackendKind` with no catch-all, so a variant added without an arm is a compile error; the evidence
@@ -271,7 +284,7 @@ requirement here claims either one.
 | TC-027 | Verify pinned Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-1, FR-017-AC-2, FR-017-AC-3, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-8, FR-017-AC-9, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
 | TC-028 | Verify interface-001's declared API surface and identity envelope match the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-3, interface-001-AC-4, interface-001-AC-5 | ✅ Covered |
 | TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13 | 🚧 Planned |
-| TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8 | ✅ Covered |
+| TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and
