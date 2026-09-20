@@ -41,12 +41,16 @@ use crate::{
         reference_identifier, typed_dependency_parameters, DependencyParameter, RustValueType,
     },
     Artifact, AttestationContext, ExactScalarClaim, ExactScalarClaimMap, ExactScalarDisposition,
-    ExactScalarRefusal, GenerationErrorCode, OperationProvenance, OracleRequest, UpstreamBlocker,
-    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode, OperationProvenance,
+    OracleRequest, UpstreamBlocker, IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES,
+    RUNTIME_REVISION,
 };
 
 /// Schema identity of a generated obligation identity record.
 pub const KANI_OBLIGATION_SCHEMA: &str = "quire.codegen.kani-obligation/v1";
+
+/// Schema identity of a generated V2 exact-scalar obligation identity record.
+pub const KANI_SCALAR_OBLIGATION_SCHEMA: &str = "quire.codegen.kani-scalar-obligation/v1";
 
 /// Adapter profile for separate-obligation lowering against Kani 0.67.0.
 pub const KANI_OBLIGATION_PROFILE: &str = "kani-0.67.0-separate-obligations-v1";
@@ -244,6 +248,14 @@ pub enum UnsupportedObligation {
         /// The domains the IR does carry.
         derived_domains: Vec<DerivedDomain>,
     },
+    /// The operation identity is IR-confirmed, but this generator has no Kani harness renderer
+    /// for its family yet (today: every family but `IntegerArithmetic`).
+    OperationNotRendered {
+        /// The confirmed operation.
+        operation_identity: String,
+        /// The domains the IR does carry.
+        derived_domains: Vec<DerivedDomain>,
+    },
     /// A reachable node family has no finite encoding.
     NoFiniteEncoding {
         /// The node.
@@ -420,6 +432,71 @@ pub struct KaniObligationHarness {
     pub record: Artifact,
 }
 
+/// One symbolic `i64` argument of a rendered scalar harness, bounded by the IR domain
+/// [`lower_scalar_claim`] read.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScalarObligationArgument {
+    /// Generated identifier.
+    pub identifier: String,
+    /// Inclusive checked minimum.
+    pub minimum: i64,
+    /// Inclusive checked maximum.
+    pub maximum: i64,
+}
+
+/// Everything a V2 scalar obligation harness's meaning depends on; its digest is embedded in the
+/// harness. Parallel to [`KaniObligationIdentity`] but for an IR-confirmed exact-scalar claim,
+/// which has no QSL clause, declaration or subject signature -- a node id and its confirmed
+/// operation identity stand in their place.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScalarObligationIdentity {
+    /// [`KANI_SCALAR_OBLIGATION_SCHEMA`].
+    pub schema: &'static str,
+    /// [`KANI_OBLIGATION_PROFILE`].
+    pub adapter_profile: &'static str,
+    /// The claimed node.
+    pub node_id: CheckedNodeId,
+    /// The node's own catalogued operation identity, IR-confirmed at package admission.
+    pub operation_identity: String,
+    /// Contract IR revision.
+    pub ir_revision: &'static str,
+    /// The embedded oracle's function symbol.
+    pub oracle_symbol: String,
+    /// SHA-256 of the embedded oracle's own source.
+    pub oracle_sha256: String,
+    /// Harness module symbol.
+    pub module_symbol: String,
+    /// Proof function symbol.
+    pub harness_symbol: String,
+    /// Symbolic arguments, in call order.
+    pub arguments: Vec<ScalarObligationArgument>,
+    /// Backend pins.
+    pub pins: KaniToolPins,
+    /// Solver.
+    pub solver: String,
+    /// Loop unwind bound.
+    pub unwind: u32,
+    /// Every flag passed after `cargo kani`.
+    pub options: Vec<String>,
+    /// Contract Runtime revision the oracle calls.
+    pub runtime_revision: &'static str,
+}
+
+/// One generated V2 exact-scalar obligation harness.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KaniScalarObligationHarness {
+    /// Identity.
+    pub identity: ScalarObligationIdentity,
+    /// SHA-256 of the identity's JSON, embedded in the Rust source.
+    pub identity_sha256: String,
+    /// Self-contained Rust source.
+    pub rust: Artifact,
+    /// JSON record of identity, identity digest and Rust digest.
+    pub record: Artifact,
+}
+
 /// The result of one negotiated request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum KaniObligationOutcome {
@@ -427,8 +504,10 @@ pub enum KaniObligationOutcome {
     Emitted {
         /// Every item's record, in request order.
         records: Vec<ObligationRecord>,
-        /// Harnesses.
+        /// V1 frozen-clause harnesses.
         harnesses: Vec<KaniObligationHarness>,
+        /// V2 IR-confirmed exact-scalar claim harnesses.
+        scalar_harnesses: Vec<KaniScalarObligationHarness>,
     },
     /// At least one item was invalid; no harness bytes are returned.
     Rejected {
@@ -467,6 +546,7 @@ pub fn negotiate_kani_obligations(
         .any(|state| matches!(state.outcome, Outcome::Invalid(_)));
     let mut records = Vec::with_capacity(states.len());
     let mut harnesses = Vec::new();
+    let mut scalar_harnesses = Vec::new();
     for (index, state) in states.into_iter().enumerate() {
         let disposition = if rejected {
             state.outcome.disposition_without_harness()
@@ -476,6 +556,18 @@ pub fn negotiate_kani_obligations(
                     Some(harness) => {
                         let symbol = harness.identity.harness_symbol.clone();
                         harnesses.push(harness);
+                        ObligationDisposition::Supported {
+                            harness_symbol: symbol,
+                        }
+                    }
+                    None => ObligationDisposition::Unsupported {
+                        reason: UnsupportedObligation::RenderFailed,
+                    },
+                },
+                Outcome::LoweredScalar(lowered) => match render_scalar(request, &lowered) {
+                    Some(harness) => {
+                        let symbol = harness.identity.harness_symbol.clone();
+                        scalar_harnesses.push(harness);
                         ObligationDisposition::Supported {
                             harness_symbol: symbol,
                         }
@@ -497,7 +589,11 @@ pub fn negotiate_kani_obligations(
     Ok(if rejected {
         KaniObligationOutcome::Rejected { records }
     } else {
-        KaniObligationOutcome::Emitted { records, harnesses }
+        KaniObligationOutcome::Emitted {
+            records,
+            harnesses,
+            scalar_harnesses,
+        }
     })
 }
 
@@ -558,6 +654,7 @@ enum ItemIdentity {
 
 enum Outcome<'a> {
     Lowered(Box<LoweredClause<'a>>),
+    LoweredScalar(Box<LoweredScalarClaim>),
     RequiresBound(CheckedNodeId),
     Unsupported(UnsupportedObligation),
     Invalid(InvalidObligationItem),
@@ -570,6 +667,9 @@ impl Outcome<'_> {
             Self::Lowered(lowered) => ObligationDisposition::Supported {
                 harness_symbol: lowered.symbols.harness,
             },
+            Self::LoweredScalar(lowered) => ObligationDisposition::Supported {
+                harness_symbol: lowered.harness_symbol,
+            },
             Self::RequiresBound(unbounded_type) => {
                 ObligationDisposition::RequiresBound { unbounded_type }
             }
@@ -577,6 +677,32 @@ impl Outcome<'_> {
             Self::Invalid(reason) => ObligationDisposition::InvalidRequest { reason },
         }
     }
+}
+
+/// An IR-confirmed V2 exact-scalar claim this generator knows how to render a Kani harness for.
+/// Scoped today to `IntegerArithmetic` (`quire.op.integer.{add,sub,mul,negate}`): its operands and
+/// result are all `rt::Integer`, and `quire_contract_runtime::exact::Integer: From<i64>` gives a
+/// direct `kani::any()` bridge with no construction of a compound runtime type. Every other
+/// confirmed family (division's `QuotientRemainder`, rational, decimal, IEEE, text, enum, quantity)
+/// has no renderer yet -- see [`lower_scalar_claim`].
+struct LoweredScalarClaim {
+    node_id: CheckedNodeId,
+    operation_identity: String,
+    /// The oracle's own self-contained source (`GeneratedScalarClaim::oracle_source`), embedded
+    /// verbatim ahead of the harness module, exactly as a V1 harness embeds its `ClauseOracle`s.
+    oracle_source: String,
+    oracle_symbol: String,
+    arity: ScalarArity,
+    lower: i64,
+    upper: i64,
+    module_symbol: String,
+    harness_symbol: String,
+}
+
+#[derive(Clone, Copy)]
+enum ScalarArity {
+    Unary,
+    Binary,
 }
 
 struct LoweredClause<'a> {
@@ -897,6 +1023,15 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                         derived_domains: derived,
                     })
                 }
+                OperationProvenance::IrConfirmed => {
+                    match lower_scalar_claim(claim, generated, &derived) {
+                        Some(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
+                        None => Outcome::Unsupported(UnsupportedObligation::OperationNotRendered {
+                            operation_identity: claim.operation.identity.clone(),
+                            derived_domains: derived,
+                        }),
+                    }
+                }
             }
         }
         ExactScalarDisposition::Refused { refusal } => match refusal {
@@ -959,6 +1094,58 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
             }
         },
     }
+}
+
+/// The renderable shape for a confirmed operation identity, or `None` when this generator has no
+/// scalar-harness renderer for it. Recognizing these four exact catalogued identities is not a
+/// vocabulary bridge -- it does not translate between codegen's own descriptor vocabulary and IR's
+/// catalog to reconcile a disagreement; it only recognizes, among identities IR already confirmed,
+/// which ones this generator additionally knows how to turn into a harness (the same kind of
+/// closed match `Shape::of` already makes over `ExactScalarOperation`).
+fn scalar_arity(operation_identity: &str) -> Option<ScalarArity> {
+    match operation_identity {
+        "quire.op.integer.add" | "quire.op.integer.sub" | "quire.op.integer.mul" => {
+            Some(ScalarArity::Binary)
+        }
+        "quire.op.integer.negate" => Some(ScalarArity::Unary),
+        _ => None,
+    }
+}
+
+/// Lowers one IR-confirmed V2 claim to a renderable scalar harness, or returns `None` when this
+/// generator has no renderer for its operation family, or its bound does not fit `i64`.
+fn lower_scalar_claim(
+    claim: &ExactScalarClaim,
+    generated: &GeneratedScalarClaim,
+    derived: &[DerivedDomain],
+) -> Option<LoweredScalarClaim> {
+    let arity = scalar_arity(&claim.operation.identity)?;
+    let bound_id = generated.checked_bounds.first()?;
+    let (lower, upper) = derived.iter().find_map(|domain| match domain {
+        DerivedDomain::IntegerRange {
+            bound,
+            lower,
+            upper,
+        } if bound == bound_id => Some((lower.parse::<i64>().ok()?, upper.parse::<i64>().ok()?)),
+        _ => None,
+    })?;
+    let digest = sha256(claim.node_id.digest.as_bytes())
+        .chars()
+        .take(32)
+        .collect::<String>();
+    let module_symbol = format!("kob_scalar_{digest}_module");
+    let harness_symbol = format!("kob_scalar_{digest}_proof");
+    Some(LoweredScalarClaim {
+        node_id: claim.node_id.clone(),
+        operation_identity: claim.operation.identity.clone(),
+        oracle_source: generated.oracle_source.clone(),
+        oracle_symbol: generated.symbol.clone(),
+        arity,
+        lower,
+        upper,
+        module_symbol,
+        harness_symbol,
+    })
 }
 
 fn derive_domain(bound: &CheckedSemanticNodeV2) -> DerivedDomain {
@@ -1433,6 +1620,142 @@ fn render(
 #[serde(rename_all = "camelCase")]
 struct HarnessRecord<'a> {
     identity: &'a KaniObligationIdentity,
+    identity_sha256: &'a str,
+    rust_path: &'a str,
+    rust_sha256: &'a str,
+}
+
+/// Renders one IR-confirmed V2 exact-scalar claim to a `kani::proof` that the embedded oracle is
+/// defined (returns `Ok`) for every operand within the IR's own bounds. Unlike a V1 contract
+/// harness, there is no precondition/postcondition pair and no subject signature to unify: the
+/// oracle's own parameters, in the order [`SourceBuilder::oracle`] declared them (`operand` for a
+/// unary operation, `left`/`right` for a binary one), are the whole ABI.
+fn render_scalar(
+    request: &KaniObligationRequest<'_>,
+    lowered: &LoweredScalarClaim,
+) -> Option<KaniScalarObligationHarness> {
+    let exact_harness = format!("{}::{}", lowered.module_symbol, lowered.harness_symbol);
+    let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
+    let lower = i64_literal(lowered.lower);
+    let upper = i64_literal(lowered.upper);
+    let names: &[&str] = match lowered.arity {
+        ScalarArity::Unary => &["operand"],
+        ScalarArity::Binary => &["left", "right"],
+    };
+    let declarations = names
+        .iter()
+        .map(|name| {
+            format!(
+                "        let {name}: i64 = kani::any();\n\
+        kani::assume({name} >= {lower} && {name} <= {upper});\n\
+        let {name} = rt::Integer::from({name});\n"
+            )
+        })
+        .collect::<String>();
+    let call_args = names
+        .iter()
+        .map(|name| format!("&{name}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let arguments = names
+        .iter()
+        .map(|name| ScalarObligationArgument {
+            identifier: (*name).to_owned(),
+            minimum: lowered.lower,
+            maximum: lowered.upper,
+        })
+        .collect();
+    let body = format!(
+        "#[cfg(kani)]\n\
+mod {module} {{\n\
+    use super::*;\n\
+\n\
+    #[kani::proof]\n\
+    fn {harness}() {{\n\
+{declarations}\
+        let mut meter = rt::Meter::new(rt::ScalarLimits {{\n\
+            integer_bits: u64::MAX,\n\
+            decimal_digits: u64::MAX,\n\
+            scale_expansion: u64::MAX,\n\
+            text_input_bytes: u64::MAX,\n\
+            text_scalars: u64::MAX,\n\
+            normalized_scalars: u64::MAX,\n\
+            unit_edges: u64::MAX,\n\
+            value_occurrences: u64::MAX,\n\
+            work_units: u64::MAX,\n\
+            result_units: u64::MAX,\n\
+        }});\n\
+        let outcome = {symbol}({call_args}, &mut meter);\n\
+        kani::cover!(outcome.is_ok(), \"the generated oracle is defined for bounded operands\");\n\
+    }}\n\
+}}\n",
+        module = lowered.module_symbol,
+        harness = lowered.harness_symbol,
+        symbol = lowered.oracle_symbol,
+    );
+    let identity = ScalarObligationIdentity {
+        schema: KANI_SCALAR_OBLIGATION_SCHEMA,
+        adapter_profile: KANI_OBLIGATION_PROFILE,
+        node_id: lowered.node_id.clone(),
+        operation_identity: lowered.operation_identity.clone(),
+        ir_revision: IR_CANDIDATE_REVISION,
+        oracle_symbol: lowered.oracle_symbol.clone(),
+        oracle_sha256: sha256(lowered.oracle_source.as_bytes()),
+        module_symbol: lowered.module_symbol.clone(),
+        harness_symbol: lowered.harness_symbol.clone(),
+        arguments,
+        pins: request.pins.clone(),
+        solver: "cadical".to_owned(),
+        unwind: request.unwind,
+        options,
+        runtime_revision: RUNTIME_REVISION,
+    };
+    let identity_json = serde_json::to_string(&identity).ok()?;
+    let identity_sha256 = sha256(identity_json.as_bytes());
+    let mut source = format!(
+        "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
+// Generated by quire-contract-codegen {}; DO NOT EDIT.\n\
+// Obligation: exact-scalar node {}/{}\n\
+// Kani adapter: {KANI_OBLIGATION_PROFILE}; backend: {KANI_BACKEND_VERSION}\n\
+// Obligation identity sha256: {identity_sha256}\n\n",
+        env!("CARGO_PKG_VERSION"),
+        lowered.node_id.domain,
+        lowered.node_id.digest,
+    );
+    source.push_str(&lowered.oracle_source);
+    source.push('\n');
+    source.push_str(&body);
+    if source.len() > MAX_GENERATED_SOURCE_BYTES || syn::parse_file(&source).is_err() {
+        return None;
+    }
+    let rust = artifact(
+        format!("src/generated/{}.rs", lowered.module_symbol),
+        source,
+    );
+    let record = ScalarHarnessRecord {
+        identity: &identity,
+        identity_sha256: &identity_sha256,
+        rust_path: &rust.path,
+        rust_sha256: &rust.sha256,
+    };
+    let mut record_json = serde_json::to_string(&record).ok()?;
+    record_json.push('\n');
+    let record = artifact(
+        format!("kani-obligations/{}.json", lowered.module_symbol),
+        record_json,
+    );
+    Some(KaniScalarObligationHarness {
+        identity,
+        identity_sha256,
+        rust,
+        record,
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScalarHarnessRecord<'a> {
+    identity: &'a ScalarObligationIdentity,
     identity_sha256: &'a str,
     rust_path: &'a str,
     rust_sha256: &'a str,
