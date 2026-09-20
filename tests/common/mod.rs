@@ -23,6 +23,10 @@ use std::{
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::Artifact;
 
+/// The `withdraw` obligation fixture, shared with whatever test negotiates it as a real bound
+/// package rather than this file's attestation-sealing helpers.
+pub mod withdraw_fixture;
+
 /// Run the pinned Quoin CLI. Its absence is a failure and never a skip.
 pub fn quoin(arguments: &[&str], stdin: Option<&str>) -> (i32, String, String) {
     let mut command = Command::new("quoin");
