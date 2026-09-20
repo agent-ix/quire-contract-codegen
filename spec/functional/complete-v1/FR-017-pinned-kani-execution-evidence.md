@@ -128,18 +128,22 @@ and it is stated here because `src/kani_execution.rs` had no owning requirement
 
 ## Open items
 
-One defect in this surface is filed rather than specified, because a
-requirement must not be written to bless it:
+Two items are open here, one a defect filed rather than specified because a
+requirement must not be written to bless it, the other a gap in this
+requirement's own criteria rather than a defect in the code:
 
 - The outcome is read from the backend's human-readable output rather than a
   machine-readable one (agent-ix/quire-contract-codegen#59). The classification
   rule above is the intended rule; the format it reads is the defect.
-
-The run now carries a caller-declared wall-clock budget and reports a timed-out
-run through the same `Inconclusive` vocabulary FR-007-AC-3 requires on the
-corpus path (agent-ix/quire-contract-codegen#58, closed at the code level).
-This requirement does not yet state that timed-out behavior itself; doing so is
-agent-ix/quire-contract-codegen#55.
+- The run now carries a caller-declared wall-clock budget and reports a
+  timed-out run as its own `KaniInconclusiveReason::TimedOut`
+  (agent-ix/quire-contract-codegen#58, closed at the code level) — a
+  classification distinct from the corpus path's `KaniOutcomeKind`, which
+  FR-017-CON-2 forbids converting between. FR-017-AC-4 and FR-017-AC-5
+  enumerate the inconclusive reasons they cover by name — unsuccessful exit,
+  absent/zero-total/unreadable cover summary, no playback, exhausted unwind
+  bound — and timed-out is not among them. Adding it as a named criterion is
+  agent-ix/quire-contract-codegen#55.
 
 The retained argument vector is the `kani` subcommand followed by the harness identity's option
 vector unchanged (`src/kani_execution.rs`): the generator builds the invoked command line and the

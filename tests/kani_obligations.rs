@@ -12,7 +12,7 @@ mod package;
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use package::{
@@ -1723,11 +1723,13 @@ fn run(
 /// Trace: FR-015-AC-1, FR-015-AC-2, FR-015-AC-4, TC-025, FR-017-AC-1, FR-017-AC-3, FR-017-AC-4,
 /// FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1, FR-017-CON-2, TC-027
 ///
-/// The timed-out case below carries no trace id. FR-007-AC-3 names a timed-out state on the
-/// corpus path, which `src/bounded_kani_corpus.rs` already backs; the execution run's timed-out
-/// behaviour has no criterion of its own, because FR-017 states none. Stating one is
-/// agent-ix/quire-contract-codegen#55, and until it exists this assertion binds to no criterion
-/// rather than claim one it does not establish.
+/// The timed-out case below carries no trace id. No test in this repository exercises a
+/// timed-out state under FR-007-AC-3: that criterion names the corpus path's own
+/// `KaniOutcomeKind` vocabulary, distinct from this module's `KaniInconclusiveReason`, which
+/// FR-017-CON-2 forbids converting between. FR-017's own acceptance criteria (AC-4, AC-5)
+/// enumerate the inconclusive reasons they cover by name, and timed-out is not among them;
+/// adding it is agent-ix/quire-contract-codegen#55, and until it exists this assertion binds to
+/// no criterion rather than claim one it does not establish.
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect() {
@@ -1803,17 +1805,20 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
 
     // A budget a real run cannot meet is the typed timed-out inconclusive result, not
     // `NoVerdict` and not success: this harness has never been built before in this crate
-    // directory, so 1ms cannot possibly be enough even to compile it, let alone run CBMC.
-    // Bounding the wall time this call itself takes is proof the run was actually killed rather
-    // than merely misclassified after being allowed to run to completion. This runs ahead of the
-    // `Cargo.lock`-as-directory case below on purpose: that case fails for a reason unrelated to
-    // this change on current `cargo`, independent of this
+    // directory, so 1ms cannot possibly be enough even to compile it, let alone run CBMC. The
+    // proof that the run was actually killed, rather than merely misclassified after being
+    // allowed to run to completion, is the mutation test against
+    // `run_launcher_with_timeout`'s deadline check in `src/kani_execution.rs`: disabling that
+    // check turns this same assertion red, because the run then completes for real and
+    // verifies. This call's own wall-clock elapsed time is not that proof — a real run that
+    // happened to finish quickly would satisfy an elapsed-time bound too — so none is asserted
+    // here. This runs ahead of the `Cargo.lock`-as-directory case below on purpose: that case
+    // fails for a reason unrelated to this change on current `cargo`, independent of this
     // harness and independent of this branch (reproduced identically on `origin/main`), and a
     // later panic in the same test function must not prevent this assertion from running.
     // That unrelated failure is agent-ix/quire-contract-codegen#85.
     let harness = &harnesses[0];
     let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
-    let started = Instant::now();
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
         harness,
@@ -1824,10 +1829,6 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
     .unwrap_or_else(|refusal| {
         panic!("a run that started must not surface as a refusal: {refusal}")
     });
-    assert!(
-        started.elapsed() < REAL_KANI_TIMEOUT,
-        "a timed-out run must not block for anywhere near a real verification's duration"
-    );
     assert_eq!(
         evidence.outcome,
         KaniRunOutcome::Inconclusive {

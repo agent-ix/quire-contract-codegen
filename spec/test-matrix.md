@@ -113,7 +113,8 @@ pin difference, the full pinned-lane evidence shape, the library-containment ref
 build, and never converting a non-verified outcome into a proof claim — are backed only by the
 `#[ignore]`d `make kani` lane, which needs a real pinned installation and is not a `make ci` gate. The
 run carries a caller-declared wall-clock budget and reports an elapsed budget as a timed-out
-inconclusive result. FR-017 states no timed-out criterion of its own; stating one is codegen#55.
+inconclusive result. FR-017-AC-4 and FR-017-AC-5 enumerate the inconclusive reasons they cover by
+name; adding timed-out to that enumeration is codegen#55.
 
 FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-10 through FR-018-AC-13 are `✅ Covered`:
 the composite/structural equality slice of codegen#48 that TC-029 backs with a passing test for every
