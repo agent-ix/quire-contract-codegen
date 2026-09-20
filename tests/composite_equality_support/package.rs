@@ -65,30 +65,86 @@ pub fn aggregate(members: Vec<Value>) -> Value {
     json!({"term": "aggregate", "members": members})
 }
 
+/// The corpus's own scalar-type node for a literal `value_kind`. Contract IR
+/// (a606059) requires `literal.type` as a member and validates only that it
+/// resolves to a real node (FR-038-AC-17); every literal this module builds
+/// types itself by kind, matching the vendored `positive-nominal-identities.
+/// json` convention (`literal.type` == the node's own `semantic_type`).
+fn literal_type(kind: &str) -> String {
+    match kind {
+        "boolean" => key(T_BOOLEAN),
+        "integer" => key(T_INTEGER),
+        "text" => key(T_TEXT),
+        other => panic!("no corpus scalar type registered for literal kind {other}"),
+    }
+}
+
 pub fn literal(kind: &str, value: &str) -> Value {
-    json!({"term": "literal", "value_kind": kind, "value": value})
+    json!({
+        "term": "literal",
+        "type": node_ref(&literal_type(kind)),
+        "value_kind": kind,
+        "value": value,
+    })
 }
 
 pub fn integer_literal(value: i64) -> Value {
     literal("integer", &value.to_string())
 }
 
-fn application(operator: &str, arguments: Vec<Value>) -> Value {
-    json!({"term": "application", "operator": operator, "arguments": arguments})
+/// Contract IR (a606059, FR-038-AC-17) requires `application.operation`
+/// and `application.result_type` as members, admitting `operation` opaquely.
+/// `operation` is not read by this crate's own generators (they classify a
+/// body by `term`/`operator`/`arguments` only), so it is a fixed placeholder;
+/// `result_type` names the caller's own declared node type, a node every
+/// caller of this helper has already registered via `corpus_package`.
+fn application(operator: &str, result_type: u32, arguments: Vec<Value>) -> Value {
+    json!({
+        "term": "application",
+        "operator": operator,
+        "operation": {"identity": "quire.op.test/placeholder", "laws": [], "mode": null, "member": null, "leaves": []},
+        "result_type": node_ref(&key(result_type)),
+        "arguments": arguments,
+    })
 }
 
 /// A well-formed two-argument `binary` application body: content is
 /// irrelevant to the generator, which reads the operand types from the
-/// request descriptor, not from the body.
+/// request descriptor, not from the body. Every corpus expression using this
+/// body is a composite-equality oracle, whose result is genuinely Boolean --
+/// unlike `exact_scalar_support`'s `application`, there is only one family
+/// here, so `T_BOOLEAN` is this body's actual result type, not a fixed
+/// placeholder standing in for others.
 pub fn binary_body() -> Value {
     application(
         "binary",
+        T_BOOLEAN,
         vec![literal("boolean", "true"), literal("boolean", "true")],
     )
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+/// Contract IR (a606059, FR-208 `DeclarationTagRules`/`DeclarationOccurrenceRule`)
+/// forbids `declaration` on `expression`/`relation`/`state`/`temporal`/
+/// `correspondence` nodes and on `value`/`enum_value` nodes, and otherwise
+/// requires it exactly when the node carries a `declaration`-role occurrence
+/// — which every node built by this module does. The qualified name is not
+/// cross-checked against anything else the reader validates (only that each
+/// segment is a nonempty ASCII identifier), so a name derived from the
+/// node's own digest is sufficient and stays unique by construction.
+fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
+    let forbidden = matches!(
+        tag,
+        "expression" | "relation" | "state" | "temporal" | "correspondence"
+    ) || (tag == "value" && form == "enum_value");
+    if forbidden {
+        None
+    } else {
+        Some(json!({"qualified_name": [format!("n{digest}")]}))
+    }
 }
 
 /// A V2 package under construction.
@@ -143,6 +199,9 @@ impl PackageBuilder {
         });
         if let Some(group) = recursion_group {
             node["recursion_group"] = json!(group);
+        }
+        if let Some(declaration) = declaration_for(tag, form, digest) {
+            node["declaration"] = declaration;
         }
         nodes.push(node);
         let source = self.value["lock"]["sources"][0].clone();

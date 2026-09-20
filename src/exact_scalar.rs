@@ -1879,6 +1879,8 @@ mod tests {
             refusal: CheckedPackageRefusal {
                 code: CheckedPackageRefusalCode::InvalidSemanticGraph,
                 path: "semantic_graph.nodes.body".into(),
+                cause: None,
+                locus: None,
             },
         };
         assert_eq!(

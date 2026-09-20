@@ -601,9 +601,9 @@ dependencies = [
 [[package]]
 name = "quire-contract-ir"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-ir?rev=a5154d394d067fe6f3b8eee81b17c2b5d7cdbd1c#a5154d394d067fe6f3b8eee81b17c2b5d7cdbd1c"
+source = "git+https://github.com/agent-ix/quire-contract-ir?rev=ef11217ad803502dd4bbd967f701a717c72693d0#ef11217ad803502dd4bbd967f701a717c72693d0"
 dependencies = [
- "quire-contract-model 0.1.0 (git+https://github.com/agent-ix/quire-contract-ir?rev=a5154d394d067fe6f3b8eee81b17c2b5d7cdbd1c)",
+ "quire-contract-model 0.1.0 (git+https://github.com/agent-ix/quire-contract-ir?rev=ef11217ad803502dd4bbd967f701a717c72693d0)",
  "quire-observation",
  "quire-protocol",
  "quire-spec-language 0.2.0 (git+https://github.com/agent-ix/quire-spec-language?rev=f1700a9264d6d3bcdd07e0f77b70f3dae9ed4c07)",
@@ -633,7 +633,7 @@ dependencies = [
 [[package]]
 name = "quire-contract-model"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-ir?rev=a5154d394d067fe6f3b8eee81b17c2b5d7cdbd1c#a5154d394d067fe6f3b8eee81b17c2b5d7cdbd1c"
+source = "git+https://github.com/agent-ix/quire-contract-ir?rev=ef11217ad803502dd4bbd967f701a717c72693d0#ef11217ad803502dd4bbd967f701a717c72693d0"
 dependencies = [
  "jsonschema",
  "serde",

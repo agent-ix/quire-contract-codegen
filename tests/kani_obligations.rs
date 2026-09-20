@@ -397,6 +397,7 @@ fn scalar_package() -> (CheckedPackageV2, ExactScalarClaimMap) {
             &key(T_INTEGER),
             application(
                 "binary",
+                &key(T_INTEGER),
                 vec![reference(&key(V_INTEGER)), reference(&key(V_INTEGER))],
             ),
             &[Bound::Integer(5, -5)],
@@ -406,7 +407,7 @@ fn scalar_package() -> (CheckedPackageV2, ExactScalarClaimMap) {
             "state",
             "frame",
             &key(T_BOOLEAN),
-            json!({"term": "aggregate", "members": []}),
+            json!({"term": "frame", "modifies": [], "creates": [], "deletes": []}),
         );
     let package = builder.admit();
     let mut items = golden_items();
