@@ -406,7 +406,7 @@ fn scalar_package() -> (CheckedPackageV2, ExactScalarClaimMap) {
             "state",
             "frame",
             &key(T_BOOLEAN),
-            json!({"term": "aggregate", "members": []}),
+            json!({"term": "frame", "modifies": [], "creates": [], "deletes": []}),
         );
     let package = builder.admit();
     let mut items = golden_items();

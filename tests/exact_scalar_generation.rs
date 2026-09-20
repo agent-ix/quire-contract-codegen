@@ -881,6 +881,11 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     );
 
     // The same shape with a text literal is refused with the literal's kind.
+    // Both `INT` and `TEXT` must be reachable: Contract IR's lowering walks
+    // `literal.type` on the injected text operand too, and with
+    // `require_bounds` on (FR-014's own generator turns it on) an unbounded
+    // `text` scalar type would refuse the request before this crate's own
+    // operand-type check ever ran.
     let mut builder = corpus_package();
     builder.bounded(
         3002,
@@ -891,7 +896,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
             "binary",
             vec![reference(&key(V_INTEGER)), literal("text", "3")],
         ),
-        &[INT],
+        &[INT, TEXT],
     );
     let refused = generate(
         &builder.admit(),

@@ -3,7 +3,7 @@
   "package_id": {
     "domain": "quire.package.semantic/v2",
     "algorithm": "sha256",
-    "digest": "0998c5ad5caae790441f3e6d7947479dbde9b6e18b09d5b637fd5d4e09db3142"
+    "digest": "6418a02a64f91ccf64005c1109b5627a57b223649ec5a5945a88a5f787405e99"
   },
   "runtime_revision": "4e330525be513fe57c67717dc22b969d36656b85",
   "blocked": [
@@ -48,7 +48,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "1475a95df6801525ea60e89dfb95b320664b40d6ee22fbd329faa7b241b53f7c"
+          "digest": "0c65c1b28789beee2814d8dc5f86d1a3c61f1041f691ade74428fabe1712936f"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -75,8 +75,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 21,
-                "end": 22
+                "start": 22,
+                "end": 23
               }
             ]
           }
@@ -85,16 +85,20 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -105,7 +109,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ]
       }
@@ -128,7 +132,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "54808c3ea88565534946775bc51c1560710b0b14542b076485d595c3d6660159"
+          "digest": "0656902d6b59132052fb5e13e2da040afc98e07318f75565e0f65e766b121050"
         },
         "semantic_form": "unary",
         "semantic_type": {
@@ -155,8 +159,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 23,
-                "end": 24
+                "start": 24,
+                "end": 25
               }
             ]
           }
@@ -165,16 +169,20 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "019cc7a6686a3fca80e0a95fc442194f919c72a619839d442b6de7665db4d022"
+            "digest": "8ebcc919e79d85d586d5da4ffcdf3549fed913bd0f8253fc47f7bc185d576df5"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "019cc7a6686a3fca80e0a95fc442194f919c72a619839d442b6de7665db4d022"
+            "digest": "8ebcc919e79d85d586d5da4ffcdf3549fed913bd0f8253fc47f7bc185d576df5"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -185,7 +193,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "019cc7a6686a3fca80e0a95fc442194f919c72a619839d442b6de7665db4d022"
+            "digest": "8ebcc919e79d85d586d5da4ffcdf3549fed913bd0f8253fc47f7bc185d576df5"
           }
         ]
       }
@@ -208,7 +216,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "95a1eb6f0677975cffd3c715e1106453473a089ecd1c467b795976e54d8048cd"
+          "digest": "dd54f521241d796be93680f9a8ba36ab7729bbca695d3c759bf38d5c3ec6bb57"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -235,8 +243,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 24,
-                "end": 25
+                "start": 25,
+                "end": 26
               }
             ]
           }
@@ -245,16 +253,20 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -265,7 +277,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ]
       }
@@ -288,7 +300,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "7f540eaac5cb08d68fda13d27536eb950addb432def1ac55f3657c9a6f68d134"
+          "digest": "a395e817041be2449702807696d4a5c6e81660f67062225950a1d46c62cc7905"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -315,8 +327,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 25,
-                "end": 26
+                "start": 26,
+                "end": 27
               }
             ]
           }
@@ -325,16 +337,20 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -345,7 +361,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ]
       }
@@ -368,7 +384,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "d94fe515aa8a7c47a6ae0673912d2367875173198deae07012231a18754f2f12"
+          "digest": "241b8aa4d1b4ad65c466033fbef8df9029fc105f7a606d1fdc5d9c38494ed375"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -395,8 +411,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 26,
-                "end": 27
+                "start": 27,
+                "end": 28
               }
             ]
           }
@@ -405,16 +421,20 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -425,7 +445,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ]
       }
@@ -448,7 +468,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "395e5082cd61d124546c50151876d22550a45f5448f98e9183791a8636d22e84"
+          "digest": "e31b5b694589d9b631501b2c1c66b7acdb40a6e9647da4a3b7f47689e1de6627"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -475,8 +495,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 27,
-                "end": 28
+                "start": 28,
+                "end": 29
               }
             ]
           }
@@ -485,16 +505,20 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -505,7 +529,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ]
       }
@@ -528,7 +552,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "8533b8ca2bd38d4f778a7a9c95c83323593fdf19b09cf09d9ac5b43eabffb349"
+          "digest": "fdd98aea9b43a9dbb7949d2011d202c173fe90538e66b2dce42211191d8584ce"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -555,8 +579,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 28,
-                "end": 29
+                "start": 29,
+                "end": 30
               }
             ]
           }
@@ -565,16 +589,20 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -585,7 +613,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ]
       }
@@ -608,7 +636,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "8071a6934a33eb9a5d1da530fc7d3d73e0c35546a90b0dbd399132fb28621897"
+          "digest": "47d4024f7090411a42d867063b8a0f3cb4a16096a365932e9fcf161d63932f88"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -635,8 +663,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 30,
-                "end": 31
+                "start": 31,
+                "end": 32
               }
             ]
           }
@@ -645,16 +673,20 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "cf6ee6d0ed30036107310449397f8dd9827c1532451b9649052e46b103346c53"
+            "digest": "794360f2ebfcac959ac2a1dca7fa834999fa36e94cc1cbdfbf9a11ae07e1d2be"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "cf6ee6d0ed30036107310449397f8dd9827c1532451b9649052e46b103346c53"
+            "digest": "794360f2ebfcac959ac2a1dca7fa834999fa36e94cc1cbdfbf9a11ae07e1d2be"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -665,7 +697,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "cf6ee6d0ed30036107310449397f8dd9827c1532451b9649052e46b103346c53"
+            "digest": "794360f2ebfcac959ac2a1dca7fa834999fa36e94cc1cbdfbf9a11ae07e1d2be"
           }
         ]
       }
@@ -688,7 +720,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "090f29f46e34bbc8b4ee4a4a35b4849d2efc9ba75de3ffd1d21b3c3d9ae52929"
+          "digest": "f4de481c1b67b6661503b7335a24076116b098432758a2a3f8ce32ba339aae82"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -715,8 +747,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 31,
-                "end": 32
+                "start": 32,
+                "end": 33
               }
             ]
           }
@@ -725,16 +757,20 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "cf6ee6d0ed30036107310449397f8dd9827c1532451b9649052e46b103346c53"
+            "digest": "794360f2ebfcac959ac2a1dca7fa834999fa36e94cc1cbdfbf9a11ae07e1d2be"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "cf6ee6d0ed30036107310449397f8dd9827c1532451b9649052e46b103346c53"
+            "digest": "794360f2ebfcac959ac2a1dca7fa834999fa36e94cc1cbdfbf9a11ae07e1d2be"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -745,7 +781,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "cf6ee6d0ed30036107310449397f8dd9827c1532451b9649052e46b103346c53"
+            "digest": "794360f2ebfcac959ac2a1dca7fa834999fa36e94cc1cbdfbf9a11ae07e1d2be"
           }
         ]
       }
@@ -768,7 +804,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "5d29c760c4f3afa2821de992dd800e5f80b00c769e60be16583a89e87896f294"
+          "digest": "4236ca87b10c394a197d9fabdece2fa25b5fc24e4e159bd3850da5ca87aa7b31"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -805,16 +841,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000003"
@@ -825,7 +873,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -848,7 +900,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "5dc9d3e28c4661c53f2eab68b268fd6a900f73ab3e79660f48650181044614e8"
+          "digest": "f0fbeddec456a59a69655ed090f3cc860cf9697917f6523be50915548b9eddaa"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -885,16 +937,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "cdb9ebe0dbf927a1400bffa7748acc596539d65d9600fbbc44a6266041ffab5b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b60ba0e6a72ba56dc333287c0a60098fa9e4056609e0bb49ee4601246447fd7d"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "cdb9ebe0dbf927a1400bffa7748acc596539d65d9600fbbc44a6266041ffab5b"
+            "digest": "b60ba0e6a72ba56dc333287c0a60098fa9e4056609e0bb49ee4601246447fd7d"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000003"
@@ -905,7 +969,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "cdb9ebe0dbf927a1400bffa7748acc596539d65d9600fbbc44a6266041ffab5b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b60ba0e6a72ba56dc333287c0a60098fa9e4056609e0bb49ee4601246447fd7d"
           }
         ]
       }
@@ -928,7 +996,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "d8d2cd31c678cbe313ddb4926f5774d2685a6f573616a6314b273efe44de5ad4"
+          "digest": "cef47e97c2b9eb05cc7eaaf9754fab16b9cab7ef4e5bbbc71c0eaa512e150050"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -965,20 +1033,24 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -993,11 +1065,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -1020,7 +1092,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "7736150b86e2e4ce7d7b23f2df89775b3981368a348e164bc76117e4d58564f4"
+          "digest": "2712e775361d1335cae1fe5e3b69827e75eb7f95af1676eb2938d40750e31d6a"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1057,16 +1129,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000003"
@@ -1077,7 +1161,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -1100,7 +1188,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "89303d3c717dc7bdbfd0c022be8e6ac86969c6f3014c7997ec83f2b51d4da96d"
+          "digest": "7870aa0a301e400c11ed22e530b2be409d3d6acdcf384b6147dfdbd36d2bba4a"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1137,16 +1225,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000003"
@@ -1157,7 +1257,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -1180,7 +1284,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "ea7d2d44bcf5d095904784183a53d5086bb325eec7e33717be13e6d508d07dbf"
+          "digest": "d0c3bb28bef0dd70791283ee3b5eb6d5633b6de8772c8df1fcfe87d4383f9733"
         },
         "semantic_form": "unary",
         "semantic_type": {
@@ -1217,16 +1321,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000003"
@@ -1237,7 +1353,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -1260,7 +1380,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "46d34f907d8a0e19f31e68e2ec77e032d487a945e0fd9e30d11868566cab925c"
+          "digest": "0b7ba7ddfa422957f5482693074a6145b17122b55c2d9c40b1a8f8d6e9bd1c90"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1297,7 +1417,7 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "checked_bounds": [],
@@ -1316,7 +1436,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ]
       }
@@ -1339,7 +1459,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "c36dfe4bf6f72edf076ea2481c4e46646241bf73e5247e8ab7f7fbc9a1a0c18a"
+          "digest": "deb081a38b5acad2a0d4e7346011ae82851b790bb203ca78f5a31448d893725e"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1366,8 +1486,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 42,
-                "end": 43
+                "start": 43,
+                "end": 44
               }
             ]
           }
@@ -1376,7 +1496,15 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [],
@@ -1387,7 +1515,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1395,7 +1531,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -1418,7 +1562,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "d076b60fd5db7f6a7f835eb77f735f0f032564339c9758b51c09f739d9011664"
+          "digest": "38b34ecb65a67097256e4d6795b92656edd38ddde9e26a8dee46e7e81201e1ee"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1445,8 +1589,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 43,
-                "end": 44
+                "start": 44,
+                "end": 45
               }
             ]
           }
@@ -1455,7 +1599,11 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "checked_bounds": [],
@@ -1463,6 +1611,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1474,7 +1626,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -1497,7 +1653,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "97e81722a958b0521327f8a06fb68cb3785cd6c800db5379e01546b7a644e7ed"
+          "digest": "65a9a230c355335f1b472763593599bd77ab1e2d439ce667688e1189e937747d"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1524,8 +1680,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 44,
-                "end": 45
+                "start": 45,
+                "end": 46
               }
             ]
           }
@@ -1534,7 +1690,7 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "checked_bounds": [],
@@ -1553,7 +1709,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ]
       }
@@ -1576,7 +1732,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "5afd8e14ae98a544a603a5f25d0d0be98c48c573c0b714b7adc8855c87c44a39"
+          "digest": "f8487034bcca026a4660a03d8b2e84cec1355c63fe73d6bc369ba0e0cd09f95e"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1603,8 +1759,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 45,
-                "end": 46
+                "start": 46,
+                "end": 47
               }
             ]
           }
@@ -1613,7 +1769,7 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "checked_bounds": [],
@@ -1632,7 +1788,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ]
       }
@@ -1655,7 +1811,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "6f609a7ddd5bb5a29895bf615277a2e8ead56c051799b026f2bee4c66e4a296e"
+          "digest": "786a30b2deebc49eb064000f86c960e767bf9b527911393ac3d1ce0ecbfaa47a"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1682,8 +1838,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 46,
-                "end": 47
+                "start": 47,
+                "end": 48
               }
             ]
           }
@@ -1692,19 +1848,39 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1712,7 +1888,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -1735,7 +1919,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "c9397dee65597590dfcf6a6e1a0f5697b8868bb3d300abfd3bf87a385dc515d6"
+          "digest": "d8868bba591cc3a264ea1fb4c6e5c9d8e50c256f8dcd4bb111a0fbebca429d55"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1762,8 +1946,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 48,
-                "end": 49
+                "start": 49,
+                "end": 50
               }
             ]
           }
@@ -1772,19 +1956,39 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "156867dd7d43fa4d9e1e88d7401ea4ed081e91616ceaaeb7b380cdb65709cf63"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "2231c294f4c0a3438f6d273317e5b8da11e591a715d6ca5da7f5cfe2c17cb6d8"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "156867dd7d43fa4d9e1e88d7401ea4ed081e91616ceaaeb7b380cdb65709cf63"
+            "digest": "2231c294f4c0a3438f6d273317e5b8da11e591a715d6ca5da7f5cfe2c17cb6d8"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1792,7 +1996,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "156867dd7d43fa4d9e1e88d7401ea4ed081e91616ceaaeb7b380cdb65709cf63"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "2231c294f4c0a3438f6d273317e5b8da11e591a715d6ca5da7f5cfe2c17cb6d8"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -1815,7 +2027,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "676c683066b2344e1277b48164bb9078c6b4d448b0720e363f5594c6b48d2b36"
+          "digest": "9c38bb0a280da7029c85318ed4c6a49ba1dd911bfe30b6425543420c28e2a00b"
         },
         "semantic_form": "conversion",
         "semantic_type": {
@@ -1842,8 +2054,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 50,
-                "end": 51
+                "start": 51,
+                "end": 52
               }
             ]
           }
@@ -1852,19 +2064,39 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "e9389de02a65838d3e591c218f50de777f41dc70b4f852f65e214e536a485e44"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "875f7468578ae8649633319ae3101bacf4635187fd0f7b4e483dc08b48015194"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "e9389de02a65838d3e591c218f50de777f41dc70b4f852f65e214e536a485e44"
+            "digest": "875f7468578ae8649633319ae3101bacf4635187fd0f7b4e483dc08b48015194"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1872,7 +2104,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "e9389de02a65838d3e591c218f50de777f41dc70b4f852f65e214e536a485e44"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "875f7468578ae8649633319ae3101bacf4635187fd0f7b4e483dc08b48015194"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -1895,7 +2135,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "1b97a32d3463f467f684debcb9be1c37db48ac71069117c4a5f870ff80241284"
+          "digest": "2952c26ba61c4309b5d1fd24fbf12328bb00d66af4d149eb334d99b9765e8524"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1922,8 +2162,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 51,
-                "end": 52
+                "start": 52,
+                "end": 53
               }
             ]
           }
@@ -1932,19 +2172,39 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1952,7 +2212,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -1975,7 +2243,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "383382218b25758d6bcf5117f162752a4cc9455be085f8e8efadcff997c24330"
+          "digest": "26600cffa337af78848345b0a62d4516b640d4299d98161ac8e27cda976bea32"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2002,8 +2270,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 52,
-                "end": 53
+                "start": 53,
+                "end": 54
               }
             ]
           }
@@ -2012,19 +2280,39 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -2032,7 +2320,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -2055,7 +2351,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "51b9c251aeb4c4385ca646201584897411274d4f74a7bc4356d52210c236cf42"
+          "digest": "998a5412ce6bb737aaf303a3dfbb33f770571d3c3628b2e7285a231150b320c2"
         },
         "semantic_form": "unary",
         "semantic_type": {
@@ -2082,8 +2378,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 53,
-                "end": 54
+                "start": 54,
+                "end": 55
               }
             ]
           }
@@ -2092,19 +2388,39 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -2112,7 +2428,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "c34c1eba9d9778afbf42a290c08ba69dfa081f71f994757a7b4372a10402b0db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1bd1c288c80e4897ef8a252ed061d39e297860c4309211a9dd054dd364bc2342"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -2135,7 +2459,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "752c451297700de836149cf59a4384d481a7e02d7db05d7f9d3528ea9c795804"
+          "digest": "4b0183c7a55e2165ff8bad6d3b311cfaa27065ccef6db12011a15f6c2ad4d032"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2162,8 +2486,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 55,
-                "end": 56
+                "start": 56,
+                "end": 57
               }
             ]
           }
@@ -2172,19 +2496,39 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "59d1232a455a270fa98fdf1b1a1dae8ab92f87329be54e7f789e851f1a3eea74"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "35a7e5cd4541980536e1967f7f0c97c6ec75c9d3fa482f3243a253f1e395ec3c"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "59d1232a455a270fa98fdf1b1a1dae8ab92f87329be54e7f789e851f1a3eea74"
+            "digest": "35a7e5cd4541980536e1967f7f0c97c6ec75c9d3fa482f3243a253f1e395ec3c"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000005"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -2192,7 +2536,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "59d1232a455a270fa98fdf1b1a1dae8ab92f87329be54e7f789e851f1a3eea74"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "35a7e5cd4541980536e1967f7f0c97c6ec75c9d3fa482f3243a253f1e395ec3c"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -2215,7 +2567,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "7443cb333c99329dc77b7545a53168c255ddba5bd603897901067952192d193e"
+          "digest": "48733987f552e8b327e8f020383d5e4dd7b0db4dafb530903c266f357cfa35f1"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2242,8 +2594,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 57,
-                "end": 58
+                "start": 58,
+                "end": 59
               }
             ]
           }
@@ -2252,19 +2604,39 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "880d4a0cbc229543760b43bfc3baa9448c4004f38687e214db12720dcbf0136e"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "21dc95884a1927b7291fa1eaa38110bcd3707fc03b72638a7a0764b469e26851"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "880d4a0cbc229543760b43bfc3baa9448c4004f38687e214db12720dcbf0136e"
+            "digest": "21dc95884a1927b7291fa1eaa38110bcd3707fc03b72638a7a0764b469e26851"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000006"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -2272,7 +2644,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "880d4a0cbc229543760b43bfc3baa9448c4004f38687e214db12720dcbf0136e"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "21dc95884a1927b7291fa1eaa38110bcd3707fc03b72638a7a0764b469e26851"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -2295,7 +2675,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "c549677550a215afaa804f6c82685fe959c4041e481a3bdb055f585a26823984"
+          "digest": "96a701af309720e8c697d13d75e3a69f07177537e371f13cb94b28909fef8a10"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2322,8 +2702,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 58,
-                "end": 59
+                "start": 59,
+                "end": 60
               }
             ]
           }
@@ -2365,7 +2745,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "dec31ba5a2097e1044fd10062a146d4c8402cab515df86d4a1de3677cf58b701"
+          "digest": "f523a5e4998150bbb930cb312d8e8a6ee52d3d161000b5d6632f345ff9f9f92c"
         },
         "semantic_form": "conversion",
         "semantic_type": {
@@ -2392,8 +2772,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 59,
-                "end": 60
+                "start": 60,
+                "end": 61
               }
             ]
           }
@@ -2402,16 +2782,32 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "59d1232a455a270fa98fdf1b1a1dae8ab92f87329be54e7f789e851f1a3eea74"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "35a7e5cd4541980536e1967f7f0c97c6ec75c9d3fa482f3243a253f1e395ec3c"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "59d1232a455a270fa98fdf1b1a1dae8ab92f87329be54e7f789e851f1a3eea74"
+            "digest": "35a7e5cd4541980536e1967f7f0c97c6ec75c9d3fa482f3243a253f1e395ec3c"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000005"
@@ -2422,11 +2818,23 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000106"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "59d1232a455a270fa98fdf1b1a1dae8ab92f87329be54e7f789e851f1a3eea74"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "35a7e5cd4541980536e1967f7f0c97c6ec75c9d3fa482f3243a253f1e395ec3c"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -2449,7 +2857,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "ec009e7f725639bcd5a98b902f0c2c50bb6c0702bae7d6e3665eff53aaab9659"
+          "digest": "5ba9e79bfad9aae0a17af0b7ce9f6b0fa62b7bc94e91238b6c2e655bd71c5f3a"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2476,8 +2884,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 60,
-                "end": 61
+                "start": 61,
+                "end": 62
               }
             ]
           }
@@ -2486,19 +2894,39 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "59d1232a455a270fa98fdf1b1a1dae8ab92f87329be54e7f789e851f1a3eea74"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "35a7e5cd4541980536e1967f7f0c97c6ec75c9d3fa482f3243a253f1e395ec3c"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "59d1232a455a270fa98fdf1b1a1dae8ab92f87329be54e7f789e851f1a3eea74"
+            "digest": "35a7e5cd4541980536e1967f7f0c97c6ec75c9d3fa482f3243a253f1e395ec3c"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000005"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -2506,7 +2934,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "59d1232a455a270fa98fdf1b1a1dae8ab92f87329be54e7f789e851f1a3eea74"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "35a7e5cd4541980536e1967f7f0c97c6ec75c9d3fa482f3243a253f1e395ec3c"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -2529,7 +2965,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "da789c4f39ae0604f19259758f02592662de921b6d87db5ad6a4d8ae73899099"
+          "digest": "6d9911860485a8c0386acc2456e2be1b2cee25d1c0e00e9b007f575f7d895804"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2556,8 +2992,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 62,
-                "end": 63
+                "start": 63,
+                "end": 64
               }
             ]
           }
@@ -2566,19 +3002,39 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "35fd1c0fe88b9d7954490a9d77ad630bcc120cabe858d9a8edd59c1df8be780b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "adcf23adc0bfd9b38f15757b3a984da32934202f306c03aead68179686580863"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "35fd1c0fe88b9d7954490a9d77ad630bcc120cabe858d9a8edd59c1df8be780b"
+            "digest": "adcf23adc0bfd9b38f15757b3a984da32934202f306c03aead68179686580863"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000006"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -2586,7 +3042,15 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "35fd1c0fe88b9d7954490a9d77ad630bcc120cabe858d9a8edd59c1df8be780b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "adcf23adc0bfd9b38f15757b3a984da32934202f306c03aead68179686580863"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -2609,7 +3073,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "43841ede1c4a879a3b71474e0bac3c72a8c43146aaae6034a5cdc7c57b64f254"
+          "digest": "b186bc084c9cdf6b3ad120d9dd76fc4043952d4d13f1944cee1b620b7c798388"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2636,8 +3100,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 63,
-                "end": 64
+                "start": 64,
+                "end": 65
               }
             ]
           }
@@ -2679,7 +3143,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "9fb28ad436bc3ccf557e811069d275f6a22d267fc23521b50e2f16fe798d3bf2"
+          "digest": "5abfe28fed11898436d973aa8bf8f99df82e40fe95f4a80d9588aeafe5195827"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2706,8 +3170,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 64,
-                "end": 65
+                "start": 65,
+                "end": 66
               }
             ]
           }
@@ -2749,7 +3213,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "a2ca3832fd809ff20babd470a893b2521ddb66da91bbc467ea3af1b35e7da490"
+          "digest": "14ac5ca77dc5c0f1d7726157f9ed10a7ec7b875f4bf75380f464a804c8947b38"
         },
         "semantic_form": "conversion",
         "semantic_type": {
@@ -2776,8 +3240,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 66,
-                "end": 67
+                "start": 67,
+                "end": 68
               }
             ]
           }
@@ -2786,16 +3250,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "96d5dee614b7c4008ed7594a895e337167046812a77d82683acb64bb3a2aa29c"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "6cbe17acdbef60c309fb6fa8bbdc0ef87e0879a2f00460d94e62371a17aa1ea2"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "96d5dee614b7c4008ed7594a895e337167046812a77d82683acb64bb3a2aa29c"
+            "digest": "6cbe17acdbef60c309fb6fa8bbdc0ef87e0879a2f00460d94e62371a17aa1ea2"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000007"
@@ -2806,7 +3282,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "96d5dee614b7c4008ed7594a895e337167046812a77d82683acb64bb3a2aa29c"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "6cbe17acdbef60c309fb6fa8bbdc0ef87e0879a2f00460d94e62371a17aa1ea2"
           }
         ]
       }
@@ -2829,7 +3309,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "4aa2c9554d772dda055a3b71150e7e4229b663630a6cf43fb8ff7fd819c16f93"
+          "digest": "778506abb110d1d17062c9724d0d67588ff2f033ded2cd8d23836348b2397603"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2866,7 +3346,11 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [],
@@ -2874,6 +3358,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -2885,7 +3373,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -2908,7 +3400,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "c21a91890c18b1858560e19c18d173efca4ed2c9230f337dcd9fe69aaf8c999a"
+          "digest": "e95a31499053598c4249a052e8f15dd35fdccb7db7820934216dced886509ab3"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2978,7 +3470,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "12d09f4212da9a9b2c1a5af25d022d83ef118b958c604f66406bd6d01fb1c872"
+          "digest": "dbb6a35283fba0d2291f781e41a41925269c4d2dde59012febd141048cf70d2b"
         },
         "semantic_form": "conversion",
         "semantic_type": {
@@ -3015,16 +3507,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "afd9220606915c9643e03ae540a78c72e6a84657c8bec3653698a365ded506f7"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "a49fb6bbdbac660e1938f817ea922ccaca3987bbf4b99e54e579a0e9470ef3f6"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "afd9220606915c9643e03ae540a78c72e6a84657c8bec3653698a365ded506f7"
+            "digest": "a49fb6bbdbac660e1938f817ea922ccaca3987bbf4b99e54e579a0e9470ef3f6"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000007"
@@ -3035,7 +3539,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "afd9220606915c9643e03ae540a78c72e6a84657c8bec3653698a365ded506f7"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "a49fb6bbdbac660e1938f817ea922ccaca3987bbf4b99e54e579a0e9470ef3f6"
           }
         ]
       }
@@ -3058,7 +3566,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "bcb4d4b23f125be17a04852dd11308aa5ba94ce5b6565e4d598a2154f32100e4"
+          "digest": "b8eb8c7d116ad185d9e54fe0994fcec10e2f70a7a9f6e94427ea82ff52389058"
         },
         "semantic_form": "conversion",
         "semantic_type": {
@@ -3095,16 +3603,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "7150c6ecadc886a78ceea1b4422bf2cc1e2d745ccce80317649981420555e159"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "526523fed32c0e415c8a4cae670509182e5bd2d325f45b8059140618cb31e430"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "7150c6ecadc886a78ceea1b4422bf2cc1e2d745ccce80317649981420555e159"
+            "digest": "526523fed32c0e415c8a4cae670509182e5bd2d325f45b8059140618cb31e430"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000007"
@@ -3115,7 +3635,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "7150c6ecadc886a78ceea1b4422bf2cc1e2d745ccce80317649981420555e159"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "526523fed32c0e415c8a4cae670509182e5bd2d325f45b8059140618cb31e430"
           }
         ]
       }
@@ -3138,7 +3662,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "d48f957f1db685f333d660e7d15a1c08d18af585b5faa1b5e1486501c8fa10d9"
+          "digest": "7472d01f2ffc7843024dfa5e4ecb2caa128cc31e360afe4f2232b1edc09f8c93"
         },
         "semantic_form": "conversion",
         "semantic_type": {
@@ -3175,16 +3699,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "692a670c294d8aaab1c7ec26b9b1b63709257574a2595d126d9742c4e4bafc7d"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b3b5c401a365e0225b0c2b8ff33f3781ecf482dc6e6aa8c6804493ffda604751"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "692a670c294d8aaab1c7ec26b9b1b63709257574a2595d126d9742c4e4bafc7d"
+            "digest": "b3b5c401a365e0225b0c2b8ff33f3781ecf482dc6e6aa8c6804493ffda604751"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000007"
@@ -3195,7 +3731,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "692a670c294d8aaab1c7ec26b9b1b63709257574a2595d126d9742c4e4bafc7d"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b3b5c401a365e0225b0c2b8ff33f3781ecf482dc6e6aa8c6804493ffda604751"
           }
         ]
       }
@@ -3218,7 +3758,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "7a814757e86621bf1d7e4b7112ceadd9b2a4885665a4cd9ae2a6ce1682af8fa5"
+          "digest": "ef7ee1099cd035c4a62f57fad687b9fe75add69ad06d42cbd9d1d555eae576e3"
         },
         "semantic_form": "conversion",
         "semantic_type": {
@@ -3255,16 +3795,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "462bf2d8aedfa6e433e047220d3e5482200bf7e6575229e7074b61cb3572f9a8"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f34411a115d77edba7c9f0fca22efc46f1591bf9d089befb3f8e6663cf1e3d5c"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "462bf2d8aedfa6e433e047220d3e5482200bf7e6575229e7074b61cb3572f9a8"
+            "digest": "f34411a115d77edba7c9f0fca22efc46f1591bf9d089befb3f8e6663cf1e3d5c"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000007"
@@ -3275,7 +3827,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "462bf2d8aedfa6e433e047220d3e5482200bf7e6575229e7074b61cb3572f9a8"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f34411a115d77edba7c9f0fca22efc46f1591bf9d089befb3f8e6663cf1e3d5c"
           }
         ]
       }
@@ -3298,7 +3854,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "5fbc0efba88450e065702156a22c957eccdfd448f189028175a1f266e34a1bcc"
+          "digest": "0f0d9f74e33b4bc816a455be89470c57772528c53e046c022424431cb94f75a2"
         },
         "semantic_form": "conversion",
         "semantic_type": {
@@ -3335,16 +3891,28 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "891c5ef573be1f7a43947ab7de9a6dc4f3497ff4bbd88f289a63c96b8c90c45d"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "e90dd2f7a73e06bf08ce2dda6dba27d0e60e784c8233f7a40fc050935c722726"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "891c5ef573be1f7a43947ab7de9a6dc4f3497ff4bbd88f289a63c96b8c90c45d"
+            "digest": "e90dd2f7a73e06bf08ce2dda6dba27d0e60e784c8233f7a40fc050935c722726"
           }
         ],
         "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000007"
@@ -3355,7 +3923,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "891c5ef573be1f7a43947ab7de9a6dc4f3497ff4bbd88f289a63c96b8c90c45d"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "e90dd2f7a73e06bf08ce2dda6dba27d0e60e784c8233f7a40fc050935c722726"
           }
         ]
       }
@@ -3378,7 +3950,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "d52c586f3953f485b5f9b3c734dcc584916df2892ea0451e3808640fe7026772"
+          "digest": "501d41214d67b952fd5a999eaadd3c7a3f41f0c0a26365e5db2ee4f39c01c213"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -3412,12 +3984,37 @@
           }
         ],
         "claims": [],
-        "bounds": [],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
+          }
+        ],
         "checked_bounds": [],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3426,6 +4023,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -3448,7 +4049,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "514a8ff0e04352203b44626f29e904b332438d4aef27689bf46dfc77745f3977"
+          "digest": "aa4dfb0eba469c4ea9f420277bead917db42f5db89c4b911a4444527a926cec7"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -3482,12 +4083,37 @@
           }
         ],
         "claims": [],
-        "bounds": [],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
+          }
+        ],
         "checked_bounds": [],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3496,6 +4122,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -3518,7 +4148,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "45d24557945b4ada742e57ff0916e99bded2503c59543ae9b82ef323fd63f36b"
+          "digest": "9095a83766ecd7ce80a6290cd6750ad3d4771f331e56da63693da32a58b143ba"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -3555,14 +4185,26 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "checked_bounds": [],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3574,15 +4216,19 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -3605,7 +4251,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "8dca519aa1491c535951afa816f4ba20cdaa93be342215b0516aaaf196a6c1ea"
+          "digest": "620f4459e29378f930e543e60dca07b1c153e236cd22ff66e67e4248d5ff6fa2"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -3639,7 +4285,16 @@
           }
         ],
         "claims": [],
-        "bounds": [],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
+          }
+        ],
         "checked_bounds": [],
         "dependencies": [
           {
@@ -3648,7 +4303,19 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3657,6 +4324,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -3679,7 +4350,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "9e42b17733c786b055fe0f50b9b90438bf2f1f7d8337da21c08d3791f1a79f19"
+          "digest": "5c6126044b47cdc8c3ea26c512792803e8069dbe9b223ee289da7a67107c06b2"
         },
         "semantic_form": "conversion",
         "semantic_type": {
@@ -3716,19 +4387,47 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "86c39a680a0d8c1b8c50de09205edbbd140a6cf40cebd07619504bb298295250"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "a9e1d3340dac5496e28cdf3633e59a395dad3ec671b22ec8f4bbe0ee7ca78c88"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "86c39a680a0d8c1b8c50de09205edbbd140a6cf40cebd07619504bb298295250"
+            "digest": "a9e1d3340dac5496e28cdf3633e59a395dad3ec671b22ec8f4bbe0ee7ca78c88"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3736,15 +4435,27 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "86c39a680a0d8c1b8c50de09205edbbd140a6cf40cebd07619504bb298295250"
+            "digest": "a9e1d3340dac5496e28cdf3633e59a395dad3ec671b22ec8f4bbe0ee7ca78c88"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -3767,7 +4478,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "5b74386020660c038ac15c001f85b03ab0042763d3f0c13851a03849bde950e7"
+          "digest": "0b65a09c7d21e653f6655e73df4da1d617cbdaf6946690e3ed4ecfe3c4de4f57"
         },
         "semantic_form": "conversion",
         "semantic_type": {
@@ -3804,19 +4515,31 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ],
         "checked_bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           }
         ],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3824,15 +4547,19 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -3855,7 +4582,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "e20d5bb9a69f88aaed2ae97dfeaa3e7e44024689728fdc77a7cce65cde15098b"
+          "digest": "d914ecdf09b97b915863ef6f9b78acb5dceb68a54e3707c6aa7deef2ebcfac29"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -3889,12 +4616,37 @@
           }
         ],
         "claims": [],
-        "bounds": [],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
+          }
+        ],
         "checked_bounds": [],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3903,6 +4655,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -3925,7 +4681,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "f51973c02de66b2174af8f25e0256286403842fd01cf06e3c8465e00a819597e"
+          "digest": "4016bd032719f974924d68b3282a949504393eb9d6559b83ec71b1d0cb50bfb4"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -3959,12 +4715,37 @@
           }
         ],
         "claims": [],
-        "bounds": [],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
+          }
+        ],
         "checked_bounds": [],
         "dependencies": [
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3973,6 +4754,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -3995,7 +4780,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "6fe654ef38b096fd3647407c45d31d77d2eaa01c15e66a62aac6650edd7661e3"
+          "digest": "f0766223032f6c46a5b3c9da80321109db25421d370234702685ae094f297333"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4032,7 +4817,11 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [],
@@ -4040,6 +4829,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -4051,7 +4844,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -4074,7 +4871,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "8ef4c6da4a573654871c55a2caf68cf6e5ca64675c971dbcf37bb0b816e31362"
+          "digest": "c11c6c68151d4b53de9827a5fd4796bf1745f6a28fe086f6f6d31316e25b1591"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4111,7 +4908,11 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [],
@@ -4119,6 +4920,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -4130,7 +4935,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -4153,7 +4962,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "6dbaaf719747266c698d2b3dd6ad4814864b2428d1120ed209b6f75334e5795d"
+          "digest": "e721156d7cc569e293f218ad7cf01eff099abba867d86bb2e8699943651b0ced"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4190,7 +4999,11 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [],
@@ -4198,6 +5011,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -4209,7 +5026,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -4232,7 +5053,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "6e467a9e19731980c34facf1e6a58678c6bf3d5a1200667ac8a19f6347db40fd"
+          "digest": "005b8c4d63a8ae221ca9ed5bd2f8ac93b2c2f19324ebbcf5d73e297dd142cac1"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4269,7 +5090,11 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [],
@@ -4277,6 +5102,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -4288,7 +5117,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -4311,7 +5144,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "c9e7b280f05431ba9ade1f01834080c574708e26402b8de19a240ee24900b478"
+          "digest": "3dac07dfcff3b019b38f15b1d405cd07c6b683852353e9e32159ddc88fd5842e"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4348,7 +5181,11 @@
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ],
         "checked_bounds": [],
@@ -4356,6 +5193,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -4367,7 +5208,11 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "85c313da15843af3ed93d7d11d4bf1be512a8475331c56ae32116bb1a2974e8b"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ed49a48444308813e1c6014b871c95d11cb179dce4aada2212672cd90daa45c1"
           }
         ]
       }
@@ -4390,7 +5235,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "07cda9b338b90e15455019b6cd0c2e3e340183c200290728cd32f5df41f45d5d"
+          "digest": "4a158c372ff2046a7ad4836679f808d9dd757bf056cbbcdfd91bd92dfd0fd034"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4460,7 +5305,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "a4a677887b306deeee1d95f4da06ed595dabae6de816ea843f6e75fdb2d83f69"
+          "digest": "445de3feaf69e05a17fb30e8c95f0d1d7c342248ad4977b42b9cea1eaa7ad859"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4530,7 +5375,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "00aa5e2a60e8f1e0dd6a0975f5e62e76af61a10205214e3d1f93abbf79bf081a"
+          "digest": "a74cfad4f5cf32e821fa4b3afbcda3b04e49ac0c90230a73de40836b2f6a828d"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4600,7 +5445,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "d55d64cca66ce8d2c4a8a2dd766b229cf457f909049fab3289876c7eccd8cd6f"
+          "digest": "f1c6cc96ca19389aac692afe94ad595bdc5233bd920fab1bf6b2599c1535f58e"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4670,7 +5515,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "e636823e1b9df02f379181d7835264e8f3b414db29c6d2100721d95595ef684a"
+          "digest": "d9f96f237ef579105856bb1bb472f70134030edb729e121aaeafe919aee9cbf9"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4740,7 +5585,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "0e227a968e90dbf6ad2736fb7d5b64bb5c7ab20f3bb7bfd4d010dc3c96dca99b"
+          "digest": "484b2a5bb8fb97be0313ebd288b51d9a6cf2e9cb4dac2b7f0ee855c2f93639f3"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4774,7 +5619,16 @@
           }
         ],
         "claims": [],
-        "bounds": [],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
+          }
+        ],
         "checked_bounds": [],
         "dependencies": [
           {
@@ -4783,7 +5637,19 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -4792,6 +5658,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -4814,7 +5684,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "7fef2f9b1f4aa0b59868c161224bd6fe671287563436105e1c595a355085a2ec"
+          "digest": "33dc17b284543485a61ab093dd40142f73c98ef8ee5b5a718502dc6c780741ff"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4848,7 +5718,16 @@
           }
         ],
         "claims": [],
-        "bounds": [],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
+          }
+        ],
         "checked_bounds": [],
         "dependencies": [
           {
@@ -4857,7 +5736,19 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -4866,6 +5757,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -4888,7 +5783,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "4ed55a8c5df9c322996c1c6805e463d576bfedfe6d593aa97b4106a86f60f830"
+          "digest": "bc0f49a49455feb7f41d97c7a34bd306c522ee719e6fdfab9f07ea0624a44ad7"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4922,7 +5817,16 @@
           }
         ],
         "claims": [],
-        "bounds": [],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
+          }
+        ],
         "checked_bounds": [],
         "dependencies": [
           {
@@ -4931,7 +5835,19 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -4940,6 +5856,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -4962,7 +5882,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "92f4e6c1dc3612afd164e43c69b3178362ac8476e514addd74e550d8b05880bb"
+          "digest": "11441a2ca677a886575c0b42f437c754a2c93a5701696d575c80839d0b8325ec"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4996,7 +5916,16 @@
           }
         ],
         "claims": [],
-        "bounds": [],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
+          }
+        ],
         "checked_bounds": [],
         "dependencies": [
           {
@@ -5005,7 +5934,19 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -5014,6 +5955,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -5036,7 +5981,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "265c66ab56b861a9989e463b13d791131c0e14f953c961b7810763147dff2623"
+          "digest": "7f087544784674edb86c50dcebeced3fb15296623b0495f37b2dfc3eb6a67b09"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -5070,7 +6015,16 @@
           }
         ],
         "claims": [],
-        "bounds": [],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
+          }
+        ],
         "checked_bounds": [],
         "dependencies": [
           {
@@ -5079,7 +6033,19 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000108"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -5088,6 +6054,10 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           }
         ]
       }
@@ -5434,7 +6404,7 @@
           "code": "bound_mismatch",
           "bound": {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "9b79fe59487ca469cb8ee1b95ffaa2350d27347aa51b52230b3c75b3ebfb59db"
+            "digest": "0d269aeb51b77077eec59df9593fd212623ebfb209c313a7c101580a42ee07d4"
           },
           "form": "integer_range"
         }
@@ -5506,7 +6476,7 @@
           "code": "unreadable_bound",
           "bound": {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "1ce7375f914c4616b4a67554974d0a9ed1cbd23b503a32676db30085f4ccf054"
+            "digest": "d916cb6d3aecbd0fd1d619df3234ae35ea9902fd43d6d4a237a84c404498aefc"
           }
         }
       }
@@ -5553,7 +6523,7 @@
           "code": "bound_mismatch",
           "bound": {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "cf6ee6d0ed30036107310449397f8dd9827c1532451b9649052e46b103346c53"
+            "digest": "794360f2ebfcac959ac2a1dca7fa834999fa36e94cc1cbdfbf9a11ae07e1d2be"
           },
           "form": "integer_range"
         }
@@ -5577,7 +6547,7 @@
           "code": "bound_mismatch",
           "bound": {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "de14a69d9ca6e6e2af4b71a66dfcec268776f8b2cd08075b7347f1d495eafa34"
+            "digest": "f645cce22a3e3c919f171ea295332d23c6c09fd3926c5caf5c3f2cfa833b76aa"
           },
           "form": "rational_range"
         }

@@ -58,16 +58,76 @@ pub fn reference(digest: &str) -> Value {
     json!({"term": "reference", "target": node_ref(digest)})
 }
 
+/// Contract IR (a606059, FR-208 `DeclarationTagRules`/`DeclarationOccurrenceRule`)
+/// forbids `declaration` on `expression`/`relation`/`state`/`temporal`/
+/// `correspondence` nodes and on `value`/`enum_value` nodes, and otherwise
+/// requires it exactly when the node carries a `declaration`-role occurrence
+/// — which every node built by this module does. The qualified name is not
+/// cross-checked against anything else the reader validates (only that each
+/// segment is a nonempty ASCII identifier), so a name derived from the
+/// node's own digest is sufficient and stays unique by construction.
+fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
+    let forbidden = matches!(
+        tag,
+        "expression" | "relation" | "state" | "temporal" | "correspondence"
+    ) || (tag == "value" && form == "enum_value");
+    if forbidden {
+        None
+    } else {
+        Some(json!({"qualified_name": [format!("n{digest}")]}))
+    }
+}
+
+/// Contract IR (a606059, FR-038-AC-17) requires `application.operation`
+/// and `application.result_type` as members, but admits `operation` opaquely
+/// — present and well-formed is enough, since deep operation-law validation
+/// is not implemented by the reader. Neither member is read by this crate's
+/// own generators (they classify a body by `term`/`operator`/`arguments`
+/// only), so `operation` is a fixed placeholder and `result_type` names the
+/// corpus's own `boolean` scalar type, a node every caller of this helper
+/// has already registered via `corpus_package`.
 pub fn application(operator: &str, arguments: Vec<Value>) -> Value {
-    json!({"term": "application", "operator": operator, "arguments": arguments})
+    json!({
+        "term": "application",
+        "operator": operator,
+        "operation": {"identity": "quire.op.test/placeholder", "laws": [], "mode": null, "member": null, "leaves": []},
+        "result_type": node_ref(&key(T_BOOLEAN)),
+        "arguments": arguments,
+    })
 }
 
 fn aggregate() -> Value {
     json!({"term": "aggregate", "members": []})
 }
 
+/// The corpus's own scalar-type node for a literal `value_kind`. Contract IR
+/// (a606059) requires `literal.type` as a member and validates only that it
+/// resolves to a real node (FR-038-AC-17); it does not require the target to
+/// equal the containing node's own `semantic_type`, but every hand-written
+/// corpus fixture that types itself by kind rather than by a bound follows
+/// that convention, matching the vendored `positive-nominal-identities.json`
+/// pattern (`literal.type` == the node's own `semantic_type`).
+fn literal_type(kind: &str) -> String {
+    match kind {
+        "boolean" => key(T_BOOLEAN),
+        "integer" => key(T_INTEGER),
+        "rational" => key(T_RATIONAL),
+        "decimal" => key(T_DECIMAL),
+        "float32_bits" => key(T_FLOAT32),
+        "float64_bits" => key(T_FLOAT64),
+        "text" => key(T_TEXT),
+        "enum" => ENUM_TYPE.to_owned(),
+        other => panic!("no corpus scalar type registered for literal kind {other}"),
+    }
+}
+
 pub fn literal(kind: &str, value: &str) -> Value {
-    json!({"term": "literal", "value_kind": kind, "value": value})
+    json!({
+        "term": "literal",
+        "type": node_ref(&literal_type(kind)),
+        "value_kind": kind,
+        "value": value,
+    })
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -120,7 +180,7 @@ impl PackageBuilder {
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
-        nodes.push(json!({
+        let mut node = json!({
             "node_id": node_ref(digest),
             "schema_version": "quire.checked-semantic-graph/v2",
             "node_tag": tag,
@@ -129,7 +189,11 @@ impl PackageBuilder {
             "dependencies": dependencies,
             "occurrences": [{"role": "declaration", "ordinal": 0}],
             "body": body,
-        }));
+        });
+        if let Some(declaration) = declaration_for(tag, form, digest) {
+            node["declaration"] = declaration;
+        }
+        nodes.push(node);
         let source = self.value["lock"]["sources"][0].clone();
         let map = self.value["source_map"].as_array_mut().expect("source map");
         let start = map.len();
@@ -174,16 +238,24 @@ impl PackageBuilder {
         self.node_with(&key(code), tag, form, semantic_type, body, &keys)
     }
 
-    /// Add `bound` once, returning its key.
+    /// Add `bound` once, returning its key. Any requires-bound kind foreign
+    /// to `bound`'s own body (see `Bound::foreign`) is added first and wired
+    /// as this node's dependency, so it stays reachable wherever `bound` is.
     pub fn bound(&mut self, bound: &Bound) -> String {
         let digest = bound.key();
         if self.bounds.insert(digest.clone()) {
-            self.node(
+            let foreign = bound
+                .foreign()
+                .iter()
+                .map(|foreign| self.bound(foreign))
+                .collect::<Vec<_>>();
+            self.node_with(
                 &digest,
                 "bounded_domain",
                 bound.form(),
                 &bound.bounded_type(),
                 bound.body(),
+                &foreign,
             );
         }
         digest
@@ -275,6 +347,8 @@ pub enum Bound {
         form: &'static str,
         bounded: &'static str,
         body: Value,
+        /// Bounds this one's body must reach (see `Bound::foreign`).
+        foreign: Vec<Bound>,
     },
 }
 
@@ -307,6 +381,30 @@ impl Bound {
 
     pub fn bounded_type(&self) -> String {
         result_type(self.bounded_form())
+    }
+
+    /// Contract IR (a606059, FR-038-AC-17) requires `literal.type`, so every
+    /// numeric or text literal embedded in a bound's own body — not just the
+    /// value it bounds — is a real graph edge: `CheckedPackageV2::lower`
+    /// walks it and, with `require_bounds`, refuses any reachable
+    /// `integer`/`rational`/`decimal`/`text` scalar type that has no
+    /// `bounded_domain` of its own in the same closure. A bound whose body
+    /// carries interval or rounding parameters of a *different* requires-
+    /// bound kind than the one it bounds must therefore also reach that
+    /// kind's own bound, or the corpus expression that depends on it is
+    /// refused before this crate's own bound-shape checks ever run.
+    fn foreign(&self) -> Vec<Bound> {
+        match self {
+            Self::Integer(..) => vec![],
+            Self::Rational(..) => vec![INT],
+            Self::Decimal(..) => vec![INT, TEXT],
+            Self::Rounding(..) => vec![TEXT],
+            // The embedded profile literal is `text`, the same kind this
+            // bound itself bounds, so only the two integer endpoints are
+            // foreign.
+            Self::Text(..) => vec![INT],
+            Self::Raw { foreign, .. } => foreign.clone(),
+        }
     }
 
     pub fn body(&self) -> Value {
@@ -352,6 +450,7 @@ pub fn unreadable_bound() -> Bound {
             "term": "aggregate",
             "members": [literal("integer", "-5"), literal("integer", "05")],
         }),
+        foreign: vec![],
     }
 }
 
@@ -980,16 +1079,36 @@ pub fn corpus_package() -> PackageBuilder {
         (V_FLOAT32, key(T_FLOAT32), "float32_bits", "0"),
         (V_FLOAT64, key(T_FLOAT64), "float64_bits", "0"),
         (V_TEXT, key(T_TEXT), "text", "a"),
-        (V_QUANTITY, UNIT_TYPE.to_owned(), "rational", "1"),
     ] {
         builder.code(code, "value", "literal", &ty, literal(kind, value));
     }
+    // `V_QUANTITY`'s own magnitude literal is `rational`-typed even though
+    // the node's `semantic_type` is `UNIT_TYPE`; Contract IR's lowering
+    // reaches that `literal.type` edge and, with `require_bounds`, requires
+    // a `rational_range` bound somewhere in the same closure. Every corpus
+    // expression that references this node needs one reachable, so it is
+    // wired as `V_QUANTITY`'s own dependency rather than repeated per call
+    // site.
+    let rational_bound = builder.bound(&RAT);
+    builder.node_with(
+        &key(V_QUANTITY),
+        "value",
+        "literal",
+        UNIT_TYPE,
+        literal("rational", "1"),
+        &[rational_bound],
+    );
     builder.code(
         V_BOOLEAN,
         "value",
         "literal",
         &key(T_BOOLEAN),
-        json!({"term": "literal", "value_kind": "boolean", "value": true}),
+        json!({
+            "term": "literal",
+            "type": node_ref(&key(T_BOOLEAN)),
+            "value_kind": "boolean",
+            "value": true,
+        }),
     );
     let int_bound = builder.bound(&INT);
     builder.code(
@@ -1032,6 +1151,20 @@ pub fn corpus_package() -> PackageBuilder {
                 form: "text_bounds",
                 bounded: "integer",
                 body: Bound::Text(0, 4, "nfc").body(),
+                // The embedded profile literal is `text`, foreign to this
+                // bound's own `integer` type; without a reachable text bound
+                // the corpus expression is refused at IR's lowering stage
+                // before CG's own wrong-form check ever runs. A bare,
+                // integer-free text satisfier is used rather than the
+                // shared `TEXT` constant: `TEXT`'s own body embeds integer
+                // endpoints and would supply a genuine, correctly-formed
+                // `integer_range` bound, defeating this fixture's point.
+                foreign: vec![Bound::Raw {
+                    form: "text_bounds",
+                    bounded: "text",
+                    body: json!({"term": "aggregate", "members": [literal("text", "nfc")]}),
+                    foreign: vec![],
+                }],
             }],
         ),
         (DOMAIN_MISMATCH, vec![INT5]),
