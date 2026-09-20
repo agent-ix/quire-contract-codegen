@@ -571,6 +571,10 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
 }
 
 /// Trace: FR-014-AC-5, TC-024.
+///
+/// Also discharges FR-014-AC-11 over the whole golden corpus, typed and on the wire: every
+/// `Generated` claim's provenance is `IrConfirmed`. The narrower operator-confusion test asserts
+/// `IrConfirmed` for one node; this asserts it for all of them.
 #[test]
 fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     let wire = corpus_package().wire();
@@ -583,9 +587,12 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     let json: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).expect("json");
     assert_eq!(json, serde_json::to_value(map).expect("typed map"));
 
-    // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and only
-    // a Refused claim (this generator never reached its node) still carries the old blocker, on
-    // its own `operation.provenance` rather than at the map level.
+    // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and an
+    // unconfirmed claim -- unreached, refused after lowering, or lowered with a disagreeing
+    // operation -- carries the blocker on its own `operation.provenance` rather than at the map
+    // level. `blocked` has one writer in the crate (`exact_scalar.rs`'s `Vec::new()`), so this
+    // pair is a regression guard against that literal changing, not a criterion an implementation
+    // can violate; the falsifiable contract is the per-item provenance asserted below.
     assert_eq!(map.blocked, []);
     assert_eq!(json["blocked"], serde_json::json!([]));
     for (claim, entry) in map
@@ -828,8 +835,9 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
 ///
 /// Backs AC-12: an `Add` descriptor against node 1004's catalogued `quire.op.integer.mul`, over
 /// the identical `[-1000,1000]` bound and the identical binary `&rt::Integer` shape, is not
-/// confirmed. The same function's first half asserts a node whose descriptor does agree is
-/// `ir_confirmed`, which is AC-11.
+/// confirmed. The mismatched case is asserted first; the agreeing case second, which is AC-11
+/// for that one node. AC-11 over the whole corpus is discharged by
+/// `tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item`.
 #[test]
 fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
     let package = corpus_package().admit();

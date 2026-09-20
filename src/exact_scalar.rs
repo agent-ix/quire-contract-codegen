@@ -743,9 +743,11 @@ pub fn generate_exact_scalar_oracles(
         package_id: lowering.package_id,
         runtime_revision: RUNTIME_REVISION,
         // No blocker applies to every entry any more: a confirmed claim's
-        // provenance is `IrConfirmed`, and only an unreached claim's
-        // `CallerDeclared` provenance still names
-        // `UpstreamBlocker::OperationIdentityNotConsumed`, per-item.
+        // provenance is `IrConfirmed`, and an unconfirmed claim's
+        // `CallerDeclared` provenance names
+        // `UpstreamBlocker::OperationIdentityNotConsumed` per-item -- whether
+        // this generator never reached the node, refused it after lowering, or
+        // lowered it and found the operation disagreed.
         blocked: Vec::new(),
         items: claims,
     };
