@@ -3,11 +3,11 @@
   "package_id": {
     "domain": "quire.package.semantic/v2",
     "algorithm": "sha256",
-    "digest": "6815d7d1a24fee1429771918153a427cfb66e9d95ddb7268f32d7ef9cc1640da"
+    "digest": "c17be1a3f28ee4ac015131cc13e9edd767dfbf9697d99b6e5fb5aca6adf74725"
   },
   "runtime_revision": "4e330525be513fe57c67717dc22b969d36656b85",
   "blocked": [
-    "operation identity not carried by CheckedPackage V2"
+    "operation identity not consumed by codegen's generators"
   ],
   "items": [
     {
@@ -19,7 +19,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -39,7 +39,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -64,7 +64,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -89,7 +89,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -114,7 +114,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -138,7 +138,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -157,7 +157,7 @@
         "identity": "quire.value.integer-division.euclidean/v1 domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -237,7 +237,7 @@
         "identity": "rational.divide domain=[-10,10]/[1,4]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -329,7 +329,7 @@
         "identity": "quantity.convert target=decimal[-100000,100000] scale=[0,2] rounding=nearest-even",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -453,7 +453,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -475,7 +475,7 @@
         "identity": "quantity.compare.greater_or_equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -574,7 +574,7 @@
         "identity": "integer.subtract domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -654,7 +654,7 @@
         "identity": "ordering.less operands=integer",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -733,7 +733,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -757,7 +757,7 @@
         "identity": "ordering.greater_or_equal operands=integer",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -836,7 +836,7 @@
         "identity": "enum.compare.greater_or_equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -902,7 +902,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -926,7 +926,7 @@
         "identity": "quantity.add",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1021,7 +1021,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1045,7 +1045,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1064,7 +1064,7 @@
         "identity": "decimal.round target=[-100,100] scale=[0,0] rounding=nearest-away",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1168,7 +1168,7 @@
         "identity": "ieee.numeric_equal width=binary32",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1238,7 +1238,7 @@
         "identity": "ieee.add width=binary32 rounding=nearest-even",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1342,7 +1342,7 @@
         "identity": "enum.compare.equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1412,7 +1412,7 @@
         "identity": "text.admit length=[0,4] profile=unicode-scalars",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1500,7 +1500,7 @@
         "identity": "text.admit length=[0,4] profile=nfd",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1588,7 +1588,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1611,7 +1611,7 @@
         "identity": "text.admit length=[0,4] profile=nfkc",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1699,7 +1699,7 @@
         "identity": "ieee.convert_width source=binary64 target=binary32 rounding=nearest-even",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1807,7 +1807,7 @@
         "identity": "quantity.power",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -1906,7 +1906,7 @@
         "identity": "quantity.convert target=integer[-1000,1000] rounding=toward-zero",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2006,7 +2006,7 @@
         "identity": "ieee.multiply width=binary64 rounding=toward-positive",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2110,7 +2110,7 @@
         "identity": "decimal.divide target=[-1000,1000] scale=[0,2] rounding=toward-zero",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2214,7 +2214,7 @@
         "identity": "quantity.compare.greater",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2313,7 +2313,7 @@
         "identity": "rational.add domain=[-1000,1000]/[1,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2405,7 +2405,7 @@
         "identity": "decimal.multiply target=[-1000,1000] scale=[0,2] rounding=nearest-even",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2509,7 +2509,7 @@
         "identity": "ieee.bit_identical width=binary64",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2579,7 +2579,7 @@
         "identity": "rational.negate domain=[-1000,1000]/[1,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2671,7 +2671,7 @@
         "identity": "integer.negate domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2692,7 +2692,7 @@
         "identity": "ordering.greater operands=rational",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2783,7 +2783,7 @@
         "identity": "ieee.subtract width=binary32 rounding=nearest-even",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2887,7 +2887,7 @@
         "identity": "quantity.compare.equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -2986,7 +2986,7 @@
         "identity": "quantity.compare.less_or_equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3085,7 +3085,7 @@
         "identity": "text.compare.greater_or_equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3176,7 +3176,7 @@
         "identity": "rational.multiply domain=[-1000,1000]/[1,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3268,7 +3268,7 @@
         "identity": "quire.value.integer-division.floor/v1 domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3348,7 +3348,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3370,7 +3370,7 @@
         "identity": "enum.compare.greater",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3436,7 +3436,7 @@
         "identity": "text.admit length=[0,4] profile=nfkd",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3524,7 +3524,7 @@
         "identity": "text.compare.not_equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3615,7 +3615,7 @@
         "identity": "decimal.negate target=[-1000,1000] scale=[0,2] rounding=nearest-even",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3719,7 +3719,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3743,7 +3743,7 @@
         "identity": "quantity.multiply",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3838,7 +3838,7 @@
         "identity": "decimal.add target=[-1000,1000] scale=[0,2] rounding=nearest-even",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -3942,7 +3942,7 @@
         "identity": "decimal.subtract target=[-1000,1000] scale=[0,2] rounding=nearest-even",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4046,7 +4046,7 @@
         "identity": "text.admit length=[0,4] profile=binary-utf8",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4134,7 +4134,7 @@
         "identity": "enum.compare.less_or_equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4200,7 +4200,7 @@
         "identity": "quantity.add",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4220,7 +4220,7 @@
         "identity": "ieee.total_order width=binary64",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4290,7 +4290,7 @@
         "identity": "enum.compare.less",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4356,7 +4356,7 @@
         "identity": "text.admit length=[0,4] profile=nfc",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4444,7 +4444,7 @@
         "identity": "integer.negate domain=[-8,7]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4524,7 +4524,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4545,7 +4545,7 @@
         "identity": "enum.compare.not_equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4615,7 +4615,7 @@
         "identity": "integer.add domain=mathematical",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4639,7 +4639,7 @@
         "identity": "quantity.convert target=exact",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4663,7 +4663,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4688,7 +4688,7 @@
         "identity": "text.compare.less",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4779,7 +4779,7 @@
         "identity": "quantity.compare.less",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4878,7 +4878,7 @@
         "identity": "quire.value.integer-division.truncating/v1 domain=[-5,5]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -4958,7 +4958,7 @@
         "identity": "text.compare.equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5049,7 +5049,7 @@
         "identity": "ordering.less_or_equal operands=integer",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5128,7 +5128,7 @@
         "identity": "quantity.subtract",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5223,7 +5223,7 @@
         "identity": "integer.modulo domain=[-5,5]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5303,7 +5303,7 @@
         "identity": "text.compare.greater",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5394,7 +5394,7 @@
         "identity": "rational.integer_divide domain=[-1000,1000]/[1,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5486,7 +5486,7 @@
         "identity": "quire.value.integer-division.truncating/v1 domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5566,7 +5566,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5591,7 +5591,7 @@
         "identity": "quantity.divide",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5686,7 +5686,7 @@
         "identity": "text.compare.less_or_equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5777,7 +5777,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5857,7 +5857,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5878,7 +5878,7 @@
         "identity": "quire.value.integer-division.floor/v1 domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5902,7 +5902,7 @@
         "identity": "decimal.add target=[-1,1] scale=[0,0] rounding=nearest-even",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -5923,7 +5923,7 @@
         "identity": "integer.multiply domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -6003,7 +6003,7 @@
         "identity": "ieee.add width=binary32 rounding=nearest-even",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -6021,13 +6021,35 @@
     {
       "node_id": {
         "domain": "quire.checked-semantic-node/v1",
+        "digest": "f1c6e55461bf27ca4d42d2bf9d15b47329a7c4d7166de7ce07ad950c615ed582"
+      },
+      "operation": {
+        "identity": "rational.divide domain=unbounded",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "operand_type_mismatch",
+          "position": 0,
+          "expected": "rational",
+          "found": "integer"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
         "digest": "f2927ffb5f00452e5ec2284106a9acb247d9aefa287c5c4a335225ea98828031"
       },
       "operation": {
         "identity": "quantity.compare.not_equal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -6126,7 +6148,7 @@
         "identity": "rational.subtract domain=[-1000,1000]/[1,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -6218,7 +6240,7 @@
         "identity": "ieee.divide width=binary64 rounding=toward-zero",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -6322,7 +6344,7 @@
         "identity": "integer.add domain=[-1000,1000]",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {
@@ -6345,7 +6367,7 @@
         "identity": "ordering.less_or_equal operands=decimal",
         "provenance": {
           "kind": "caller_declared",
-          "blocked_on": "operation identity not carried by CheckedPackage V2"
+          "blocked_on": "operation identity not consumed by codegen's generators"
         }
       },
       "result": {

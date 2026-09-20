@@ -60,7 +60,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875(
+            generated: |g| crate::generated::oracle_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875( // E_RECORD Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -88,7 +88,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_2887c4ffdef9907f60d23d33da7e0715dacad2f86ba514273bb2c958a9985a80(
+            generated: |g| crate::generated::oracle_2887c4ffdef9907f60d23d33da7e0715dacad2f86ba514273bb2c958a9985a80( // E_TUPLE Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -117,7 +117,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_faa5cbb23e2cf24d67cc09c91884a3ada215c4a24843df16a8ab4a29dba89d85(
+            generated: |g| crate::generated::oracle_faa5cbb23e2cf24d67cc09c91884a3ada215c4a24843df16a8ab4a29dba89d85( // E_OPTION Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -145,7 +145,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_ee2f1302f9301a7a99ab064d3bb472fa29f98b1c365dbb3812e40c7f6af96a1f(
+            generated: |g| crate::generated::oracle_ee2f1302f9301a7a99ab064d3bb472fa29f98b1c365dbb3812e40c7f6af96a1f( // E_COLLECTION Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -171,7 +171,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_f8fb4c57dd095d0a8e9b3423eb04949030fc032b20be737a91acfa39ebdf10f9(
+            generated: |g| crate::generated::oracle_f8fb4c57dd095d0a8e9b3423eb04949030fc032b20be737a91acfa39ebdf10f9( // E_SELF Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -198,7 +198,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_2d51f5686b743ee7fe36a6dc062be74bf416c609bb0bec4c13e1fb9ec096d981(
+            generated: |g| crate::generated::oracle_2d51f5686b743ee7fe36a6dc062be74bf416c609bb0bec4c13e1fb9ec096d981( // E_PAIR_OF_POINTS Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -228,7 +228,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_ea7bec18651985a40e4af127afe04717782b0f719095c6503772c2302b6d08d5(
+            generated: |g| crate::generated::oracle_ea7bec18651985a40e4af127afe04717782b0f719095c6503772c2302b6d08d5( // E_RECORD NotEqual
                 &environment, &left, &right, g,
             ),
         };
@@ -253,7 +253,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_0738454117f186fcce31dedcd1df0a76e2de87235bd8e5f0904ae80a8da04d78(
+            generated: |g| crate::generated::oracle_0738454117f186fcce31dedcd1df0a76e2de87235bd8e5f0904ae80a8da04d78( // E_TEXT Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -280,7 +280,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_c8a0153c51c069e747ab6517fdbf01a6b945368678bc6d28c462ac8bae0e20b3(
+            generated: |g| crate::generated::oracle_c8a0153c51c069e747ab6517fdbf01a6b945368678bc6d28c462ac8bae0e20b3( // E_ENUM Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -331,7 +331,7 @@ fn tc_029_ac2_a_converted_operand_agrees() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_7824d5d57da98145530bfd079c89bb3a81ab93c52c4206592c5fedf59a0eeebb(
+            generated: |g| crate::generated::oracle_7824d5d57da98145530bfd079c89bb3a81ab93c52c4206592c5fedf59a0eeebb( // E_CONV Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -374,7 +374,7 @@ fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_83f5f53cb8c7356be4fbd84ebec17b605fa917f4b4131dc8bd0df19ad7477377(
+            generated: |g| crate::generated::oracle_83f5f53cb8c7356be4fbd84ebec17b605fa917f4b4131dc8bd0df19ad7477377( // E_CONV_CHARGE Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -423,6 +423,7 @@ fn tc_029_ac8_check_type_guards_the_oracle() {
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
         let outcome =
             generated::oracle_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875(
+                // E_RECORD Equal
                 &empty, &left, &right, &mut meter,
             );
         assert_eq!(outcome, rt::Outcome::Refused(rt::Refusal::CheckedInvariant));
@@ -445,6 +446,7 @@ fn tc_029_ac9_a_denied_charge_is_incomplete_never_a_completed_boolean() {
     let right = rt_side::record_point(&environment, 1, 2);
     let denied = rt_side::denials(rt_side::UNLIMITED, |meter| {
         generated::oracle_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875(
+            // E_RECORD Equal
             &environment,
             &left,
             &right,
@@ -486,11 +488,13 @@ fn tc_029_ac11_operator_variants_produce_complementary_outcomes() {
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
         let equal_outcome =
             generated::oracle_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875(
+                // E_RECORD Equal
                 &equal_env, &left, &right, &mut meter,
             );
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
         let not_equal_outcome =
             generated::oracle_ea7bec18651985a40e4af127afe04717782b0f719095c6503772c2302b6d08d5(
+                // E_RECORD NotEqual
                 &not_equal_env,
                 &left,
                 &right,

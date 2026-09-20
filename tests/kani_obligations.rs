@@ -1117,7 +1117,7 @@ fn tc_025_every_caller_declared_operation_is_refused() {
             unsupported(record),
             &UnsupportedObligation::CallerDeclaredOperation {
                 operation_identity: claim.operation.identity.clone(),
-                blocked_on: UpstreamBlocker::OperationIdentityNotCarried,
+                blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
                 derived_domains: match unsupported(record) {
                     UnsupportedObligation::CallerDeclaredOperation {
                         derived_domains, ..

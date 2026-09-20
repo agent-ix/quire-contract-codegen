@@ -10,10 +10,16 @@
 //! descriptor's integer, rational and decimal domains, IEEE rounding and text
 //! bounds must equal the reachable `bounded_domain` node on the node's result
 //! type, and lowering requires every reachable integer, rational, decimal and
-//! text type to be bounded. The operator itself (which division law, add or
-//! multiply, which comparison) is not carried by CheckedPackage V2, so every
-//! claim records its operation as [`OperationProvenance::CallerDeclared`] and
-//! the claim map lists [`UpstreamBlocker::OperationIdentityNotCarried`].
+//! text type to be bounded. CheckedPackage V2 does carry the operation
+//! identity and its laws (`operation.identity`/`operation.laws`, checked at
+//! admission by `validate_operations`), but this generator's classifiers
+//! never read them: they classify a body from its `term`/`operator`/
+//! `arguments` and the request item's own descriptor. So which division law,
+//! add or multiply, which comparison a generated oracle implements is
+//! caller-declared because this generator chooses not to read the operation
+//! the IR carries, not because the IR lacks it. Every claim records its
+//! operation as [`OperationProvenance::CallerDeclared`] and the claim map
+//! lists [`UpstreamBlocker::OperationIdentityNotConsumed`].
 //!
 //! V2 does not define a normative body for `bounded_domain` nodes. This
 //! generator reads exactly one encoding and refuses anything else as
@@ -337,17 +343,21 @@ pub enum UpstreamBlocker {
     /// Model and relation semantics.
     #[serde(rename = "agent-ix/quire-spec-language#120")]
     QuireSpecLanguage120,
-    /// CheckedPackage V2 names an operator class, not the operation law.
-    #[serde(rename = "operation identity not carried by CheckedPackage V2")]
-    OperationIdentityNotCarried,
+    /// CheckedPackage V2 carries the operation identity and its laws, but
+    /// this generator's classifiers never read `operation` -- they classify
+    /// a body from its `term`/`operator`/`arguments` and the request item's
+    /// own descriptor instead.
+    #[serde(rename = "operation identity not consumed by codegen's generators")]
+    OperationIdentityNotConsumed,
 }
 
 /// Where a claim's operation identity comes from.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OperationProvenance {
-    /// The request descriptor declared it and the IR cannot confirm it; a
-    /// consumer must not treat the operation law as checked.
+    /// The request descriptor declared it and this generator never reads the
+    /// operation identity the IR carries to confirm it; a consumer must not
+    /// treat the operation law as checked.
     CallerDeclared {
         /// The missing upstream transport.
         blocked_on: UpstreamBlocker,
@@ -629,7 +639,7 @@ pub fn generate_exact_scalar_oracles(
             operation: OperationClaim {
                 identity,
                 provenance: OperationProvenance::CallerDeclared {
-                    blocked_on: UpstreamBlocker::OperationIdentityNotCarried,
+                    blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
                 },
             },
             result,
@@ -640,7 +650,7 @@ pub fn generate_exact_scalar_oracles(
         version: EXACT_SCALAR_CLAIM_MAP_VERSION,
         package_id: lowering.package_id,
         runtime_revision: RUNTIME_REVISION,
-        blocked: vec![UpstreamBlocker::OperationIdentityNotCarried],
+        blocked: vec![UpstreamBlocker::OperationIdentityNotConsumed],
         items: claims,
     };
     let lib = source.finish(&claim_map.package_id);
@@ -1094,15 +1104,21 @@ impl Shape {
         }
     }
 
-    /// An IEEE comparison's own `semantic_form` is still `"binary"` (it
-    /// takes two operands, one result), but the operation-catalog's three
-    /// IEEE-comparison identities (`quire.op.ieee.numeric_equal`,
-    /// `.total_order`, `.bit_identical`) are all `call`-operator entries --
-    /// quire-contract-ir dfd8bd78's `validate_operations` refuses any
-    /// package whose `body.operator` disagrees with its catalogued
-    /// `operation.identity`'s own `operator`, so a real, admitted IEEE
-    /// comparison node's `body.operator` is always `"call"`, never
-    /// `"binary"`.
+    /// The `body_operator: "call"` half is grounded in the catalog: the
+    /// operation-catalog's three IEEE-comparison identities
+    /// (`quire.op.ieee.numeric_equal`, `.total_order`, `.bit_identical`) are
+    /// all `call`-operator entries, and quire-contract-ir dfd8bd78's
+    /// `validate_operations` refuses any package whose `body.operator`
+    /// disagrees with its catalogued `operation.identity`'s own `operator`,
+    /// so a real, admitted IEEE comparison node's `body.operator` is always
+    /// `"call"`, never `"binary"`.
+    ///
+    /// The `form: "binary"` half is grounded only in this repo's own
+    /// fixtures, not in IR or the catalog: IR does not couple
+    /// `semantic_form` to `body.operator` -- `Expression::forms()` admits
+    /// `"call"` and `"binary"` as independent, unrelated values -- so a real
+    /// producer is free to emit `semantic_form: "call"` for an IEEE
+    /// comparison node, and this shape would then refuse it `FormMismatch`.
     fn binary_call(operands: &'static [ScalarForm; 2], result: ScalarForm) -> Self {
         Self {
             form: "binary",

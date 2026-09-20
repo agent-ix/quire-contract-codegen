@@ -488,6 +488,20 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
                 found: Some("decimal".to_owned()),
             },
         ),
+        // Restores the coverage `WRONG_OPERAND` lost when it moved from a
+        // reference to a literal operand (see its own comment above): a
+        // reference operand that resolves to a concrete but wrong
+        // `ScalarForm`, refused through `check_operand`'s `"reference"` arm
+        // (`reference_form` -> a graph lookup -> `type_form`), not its
+        // `"literal"` arm (`value_kind` -> `ScalarForm::from_literal_kind`).
+        (
+            WRONG_OPERAND_REFERENCE,
+            ExactScalarRefusal::OperandTypeMismatch {
+                position: 0,
+                expected: ScalarForm::Rational,
+                found: Some("integer".to_owned()),
+            },
+        ),
         (
             WRONG_RESULT,
             ExactScalarRefusal::ResultTypeMismatch {
@@ -569,10 +583,10 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     let json: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).expect("json");
     assert_eq!(json, serde_json::to_value(map).expect("typed map"));
 
-    assert_eq!(map.blocked, [UpstreamBlocker::OperationIdentityNotCarried]);
+    assert_eq!(map.blocked, [UpstreamBlocker::OperationIdentityNotConsumed]);
     assert_eq!(
         json["blocked"],
-        serde_json::json!(["operation identity not carried by CheckedPackage V2"])
+        serde_json::json!(["operation identity not consumed by codegen's generators"])
     );
     for (claim, entry) in map
         .items
@@ -582,14 +596,14 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
         assert_eq!(
             claim.operation.provenance,
             OperationProvenance::CallerDeclared {
-                blocked_on: UpstreamBlocker::OperationIdentityNotCarried,
+                blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
             }
         );
         assert_eq!(
             entry["operation"]["provenance"],
             serde_json::json!({
                 "kind": "caller_declared",
-                "blocked_on": "operation identity not carried by CheckedPackage V2",
+                "blocked_on": "operation identity not consumed by codegen's generators",
             })
         );
     }
@@ -767,12 +781,12 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
     assert_eq!(
         claim.operation.provenance,
         OperationProvenance::CallerDeclared {
-            blocked_on: UpstreamBlocker::OperationIdentityNotCarried,
+            blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
         }
     );
     assert_eq!(
         marked.claim_map.blocked,
-        [UpstreamBlocker::OperationIdentityNotCarried]
+        [UpstreamBlocker::OperationIdentityNotConsumed]
     );
 }
 

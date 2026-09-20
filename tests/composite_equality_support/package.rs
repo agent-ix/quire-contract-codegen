@@ -33,17 +33,39 @@ pub const NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
 /// dfd8bd78, crates/quire-contract-model/src/checked_package/v2/operations.rs).
 const APPLICATION_NODE_VERSION: &str = "quire.application-node/v1";
 
-/// Every code this module ever registers as an application-bodied node,
-/// mapped to its real computed `node_id` digest. Populated as a side effect
-/// of [`PackageBuilder::application_code`]; [`code_id`] reads it so a
-/// caller building `golden_items()`/expected node ids without a `&mut
-/// PackageBuilder` in hand still gets the digest IR actually re-derives,
-/// not a placeholder. A code absent from the registry names a
-/// non-application node, whose id stays the readable [`key`] placeholder --
-/// `validate_application_keys` never re-derives those.
+/// Every code this module ever builds a node for, mapped to its real node
+/// id: the computed application digest for an application-bodied node (see
+/// [`PackageBuilder::application_code`]), or the readable placeholder
+/// [`key`] for a plain node built by [`PackageBuilder::code`]/
+/// [`PackageBuilder::code_in_group`] (`validate_application_keys` never
+/// re-derives those, so `key(code)` really is their id). [`code_id`] reads
+/// it so a caller building `golden_items()`/expected node ids without a
+/// `&mut PackageBuilder` in hand still gets the same id IR would.
 fn application_registry() -> &'static Mutex<BTreeMap<u32, String>> {
     static REGISTRY: OnceLock<Mutex<BTreeMap<u32, String>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+/// Registers `code -> digest` once via [`application_registry`]. A second
+/// registration for the same `code` must name the same `digest` -- a
+/// differing one means two distinct fixture nodes accidentally share one
+/// `code`, which silently overwriting would hide: every later [`code_id`]
+/// call for that `code`, and every assertion built on it (including a
+/// negative one like `!lib.contains(code_id(code).digest.as_ref())`), would
+/// then resolve to whichever node happened to register last, without
+/// telling a caller the code it asked for isn't the one it thinks it is.
+fn register_code(code: u32, digest: String) {
+    let mut registry = application_registry().lock().expect("registry lock");
+    match registry.get(&code) {
+        Some(existing) => assert_eq!(
+            *existing, digest,
+            "code {code} is already registered as {existing}, cannot also register it as \
+             {digest} -- two distinct fixture nodes share one code"
+        ),
+        None => {
+            registry.insert(code, digest);
+        }
+    }
 }
 
 /// The vendored fixture's admitted `scalar_type`/`enum` node (`Example.Status`,
@@ -65,13 +87,15 @@ pub fn id(digest: &str) -> CheckedNodeId {
     serde_json::from_value(node_ref(digest)).expect("node id")
 }
 
-/// The node id IR actually assigns for `code`: the registered application
-/// digest when `code` was built by [`PackageBuilder::application_code`],
-/// else the readable placeholder [`key`]. Ensures the registry is
-/// populated by building the corpus once (discarding the builder) if this
-/// is the first call in the process -- `corpus_package` registers every
-/// application code this module defines, so one build is enough for the
-/// whole test binary.
+/// The node id IR actually assigns for `code`, read from [`application_registry`].
+/// Ensures the registry is populated by building the corpus once (discarding
+/// the builder) if this is the first call in the process -- `corpus_package`
+/// registers every code this module defines via `code`/`code_in_group`/
+/// `application_code`, so one build is enough for the whole test binary. No
+/// code this module's tests request is ever deliberately left unbuilt, so an
+/// unregistered code here is always a fixture defect -- silently falling
+/// back to a placeholder would hide it behind whichever assertion the wrong
+/// code happened to still satisfy, so this panics instead.
 pub fn code_id(code: u32) -> CheckedNodeId {
     if !application_registry()
         .lock()
@@ -87,7 +111,10 @@ pub fn code_id(code: u32) -> CheckedNodeId {
         .cloned();
     match digest {
         Some(digest) => id(&digest),
-        None => id(&key(code)),
+        None => panic!(
+            "code {code} is not registered by any PackageBuilder constructor -- build it via \
+             `code`/`code_in_group`/`application_code` before requesting its id"
+        ),
     }
 }
 
@@ -354,10 +381,7 @@ impl PackageBuilder {
             "body": body,
         });
         let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("preimage"));
-        application_registry()
-            .lock()
-            .expect("registry lock")
-            .insert(code, digest.clone());
+        register_code(code, digest.clone());
         self.node_in_group_labeled(&digest, &label, TAG, form, &key(T_BOOLEAN), body, None)
     }
 
@@ -369,6 +393,7 @@ impl PackageBuilder {
         semantic_type: u32,
         body: Value,
     ) -> &mut Self {
+        register_code(code, key(code));
         self.node(&key(code), tag, form, &key(semantic_type), body)
     }
 
@@ -381,6 +406,7 @@ impl PackageBuilder {
         body: Value,
         recursion_group: &str,
     ) -> &mut Self {
+        register_code(code, key(code));
         self.node_in_group(
             &key(code),
             tag,

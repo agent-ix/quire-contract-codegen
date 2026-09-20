@@ -61,26 +61,53 @@ pub fn id(digest: &str) -> CheckedNodeId {
     serde_json::from_value(node_ref(digest)).expect("node id")
 }
 
-/// Every code this module ever registers as an application-bodied node,
-/// mapped to its real computed `node_id` digest. Populated as a side effect
-/// of [`PackageBuilder::application_code`]/[`PackageBuilder::application_bounded`];
-/// [`code_id`] reads it so a caller building `golden_items()`/
-/// `refused_items()` without a `&mut PackageBuilder` in hand still gets the
-/// digest IR actually re-derives, not the readable placeholder. A code
-/// absent from the registry names a non-application node, whose id stays
-/// [`key`] -- `validate_application_keys` never re-derives those.
+/// Every code this module ever builds a node for, mapped to its real node
+/// id: the computed application digest for an application-bodied node (see
+/// [`PackageBuilder::application_code`]/[`PackageBuilder::application_bounded`]),
+/// or the readable placeholder [`key`] for a plain node built by
+/// [`PackageBuilder::code`]/[`PackageBuilder::bounded`] (`validate_application_keys`
+/// never re-derives those, so `key(code)` really is their id). [`code_id`]
+/// reads it so a caller building `golden_items()`/`refused_items()` without
+/// a `&mut PackageBuilder` in hand still gets the same id IR would.
 fn application_registry() -> &'static Mutex<BTreeMap<u32, String>> {
     static REGISTRY: OnceLock<Mutex<BTreeMap<u32, String>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
-/// The node id IR actually assigns for `code`: the registered application
-/// digest when `code` was built by an `application_*` constructor on
-/// [`PackageBuilder`], else the readable placeholder [`key`]. Ensures the
-/// registry is populated by building the corpus once (discarding the
-/// builder) if this is the first call in the process -- `corpus_package`
-/// registers every application code this module defines, so one build
-/// suffices for the whole test binary.
+/// Registers `code -> digest` once via [`application_registry`]. A second
+/// registration for the same `code` must name the same `digest` -- a
+/// differing one means two distinct fixture nodes accidentally share one
+/// `code`, which silently overwriting would hide: every later [`code_id`]
+/// call for that `code`, and every assertion built on it (including a
+/// negative one like `!lib.contains(code_id(code).digest.as_ref())`), would
+/// then resolve to whichever node happened to register last, without
+/// telling a caller the code it asked for isn't the one it thinks it is.
+fn register_code(code: u32, digest: String) {
+    let mut registry = application_registry().lock().expect("registry lock");
+    match registry.get(&code) {
+        Some(existing) => assert_eq!(
+            *existing, digest,
+            "code {code} is already registered as {existing}, cannot also register it as \
+             {digest} -- two distinct fixture nodes share one code"
+        ),
+        None => {
+            registry.insert(code, digest);
+        }
+    }
+}
+
+/// The node id IR actually assigns for `code`, read from [`application_registry`].
+/// Ensures the registry is populated by building the corpus once (discarding
+/// the builder) if this is the first call in the process -- `corpus_package`
+/// registers every code this module defines via `code`/`bounded`/
+/// `application_code`/`application_bounded`, so one build suffices for the
+/// whole test binary. [`MISSING`] is the one deliberately-unregistered
+/// sentinel (used to request a node id guaranteed absent from the graph);
+/// any other code nobody ever registered is a fixture defect, not a
+/// legitimate non-application node, so this panics rather than silently
+/// returning a placeholder no assertion can then tell apart from a real
+/// digest -- exactly the gap a wrong code previously passed through
+/// vacuously.
 pub fn code_id(code: u32) -> CheckedNodeId {
     if !application_registry()
         .lock()
@@ -96,7 +123,13 @@ pub fn code_id(code: u32) -> CheckedNodeId {
         .cloned();
     match digest {
         Some(digest) => id(&digest),
-        None => id(&key(code)),
+        None if code == MISSING => id(&key(code)),
+        None => panic!(
+            "code {code} is not registered by any PackageBuilder constructor and is not the \
+             deliberately-absent MISSING ({MISSING}) sentinel -- if it names a real node, build \
+             it via `code`/`bounded`/`application_code`/`application_bounded`; if it is \
+             deliberately absent, name it next to the MISSING check in `code_id`"
+        ),
     }
 }
 
@@ -394,6 +427,7 @@ impl PackageBuilder {
         semantic_type: &str,
         body: Value,
     ) -> &mut Self {
+        register_code(code, key(code));
         self.node(&key(code), tag, form, semantic_type, body)
     }
 
@@ -407,6 +441,7 @@ impl PackageBuilder {
         body: Value,
         bounds: &[Bound],
     ) -> &mut Self {
+        register_code(code, key(code));
         let keys = bounds
             .iter()
             .map(|bound| self.bound(bound))
@@ -461,10 +496,7 @@ impl PackageBuilder {
             "body": body,
         });
         let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("preimage"));
-        application_registry()
-            .lock()
-            .expect("registry lock")
-            .insert(code, digest.clone());
+        register_code(code, digest.clone());
         self.node_with_label(
             &digest,
             &label,
@@ -846,6 +878,13 @@ pub const EXPRESSION_OPERAND: u32 = 2029;
 pub const LITERAL_QUANTITY: u32 = 2030;
 /// An integer addition whose right operand has no scalar type.
 pub const UNTYPED_OPERAND: u32 = 2031;
+/// A rational division over two integer-typed *reference* operands: IR
+/// admits it (`quire.op.rational.div`'s catalogued operand family,
+/// `rational_promotable`, is `{integer, rational}`), but CG's own
+/// `Shape::of` requires `[Rational, Rational]`, so it is refused through
+/// the `reference` arm of `check_operand`, not the `literal` arm
+/// `WRONG_OPERAND` exercises.
+pub const WRONG_OPERAND_REFERENCE: u32 = 2032;
 pub const MISSING: u32 = 9999;
 
 fn integer(value: i64) -> Integer {
@@ -2054,7 +2093,8 @@ pub fn corpus_package() -> PackageBuilder {
             &integer_type,
             application(
                 // `quire.op.integer.add`'s two operands both require the
-                // `exact_numeric` family; `FUNCTION` resolves to the
+                // `integer` family (the catalog's own entry, not the
+                // broader `exact_numeric` group); `FUNCTION` resolves to the
                 // catalog's own `function` family (its `node_tag` is
                 // `function`, matched directly by `resolve_family`), which
                 // no numeric identity's operand family admits, so that
@@ -2121,6 +2161,41 @@ pub fn corpus_package() -> PackageBuilder {
                 vec![reference(&key(V_INTEGER)), literal("decimal", "1.5")],
             ),
             &[INT, DEC],
+        )
+        .application_bounded(
+            WRONG_OPERAND_REFERENCE,
+            "expression",
+            "binary",
+            &key(T_RATIONAL),
+            application(
+                "binary",
+                op("quire.op.rational.div"),
+                &key(T_RATIONAL),
+                // First operand is `reference(V_INTEGER)`: `quire.op.
+                // rational.div`'s catalogued operand family is
+                // `rational_promotable` (`{integer, rational}`, see the
+                // catalog's own `groups` table), so an integer-typed
+                // reference admits at IR -- unlike `WRONG_OPERAND` above,
+                // this exercises `check_operand`'s `"reference"` arm
+                // (`reference_form` -> a graph lookup -> `type_form`), not
+                // its `"literal"` arm. CG's own `Shape::of` for
+                // `RationalOperator::Divide` still requires
+                // `[Rational, Rational]`, so generation refuses the first
+                // operand with `OperandTypeMismatch { position: 0,
+                // expected: Rational, found: Some("integer") }` before the
+                // second operand is ever reached -- it is a literal only to
+                // keep this node's body distinct from corpus code 1033's
+                // (`rational(1033, ..., RationalOperator::IntegerDivide,
+                // ...)`), which already pairs two `reference(V_INTEGER)`
+                // operands with this same catalogued identity under a
+                // descriptor `Shape::of` accepts. This is the same shape a
+                // real catalog family being coarser than CG's own
+                // `ScalarForm` produces in production: e.g. two
+                // integer-typed reference operands requested against
+                // `quire.op.rational.div` under a `Rational` descriptor.
+                vec![reference(&key(V_INTEGER)), literal("integer", "2032")],
+            ),
+            &[INT, RAT],
         );
     builder
 }
@@ -2210,6 +2285,13 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         LITERAL_QUANTITY,
         ExactScalarOperation::QuantityArithmetic {
             operator: QuantityOperator::Add,
+        },
+    ));
+    items.push(item(
+        WRONG_OPERAND_REFERENCE,
+        ExactScalarOperation::RationalArithmetic {
+            operator: RationalOperator::Divide,
+            domain: None,
         },
     ));
     items
