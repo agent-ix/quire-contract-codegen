@@ -57,6 +57,7 @@ type: TestMatrix
 | FR-017 | FR-017-AC-1, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1 | TC-027 | 🚧 Planned |
 | FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-10 through FR-018-AC-13 | TC-029 | ✅ Covered |
 | FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |
+| FR-019 | FR-019-AC-1 through FR-019-AC-8 | TC-030 | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
@@ -244,6 +245,7 @@ that row false. The slice adds its interface entry when it adds its code.
 | TC-027 | Verify pinned Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-1, FR-017-AC-2, FR-017-AC-3, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-8, FR-017-AC-9, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
 | TC-028 | Verify interface-001's declared API surface and identity envelope match the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-3, interface-001-AC-4, interface-001-AC-5 | ✅ Covered |
 | TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13 | 🚧 Planned |
+| TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8 | 🚧 Planned |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and

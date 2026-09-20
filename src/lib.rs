@@ -15,6 +15,8 @@ mod harness;
 mod kani;
 // Implements: FR-015
 mod kani_obligations;
+// Implements: FR-019
+mod capability;
 // Implements: FR-017
 mod kani_execution;
 // Implements: FR-007
@@ -87,6 +89,12 @@ pub use bound::{
     GeneratedBoundOracles, NoExecutableOracles,
 };
 
+pub use capability::{
+    negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
+    Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
+    ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
+    CAPABILITY_VOCABULARY,
+};
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
 pub use kani::{
     generate_kani_bundle, KaniArtifactBundle, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
@@ -99,6 +107,7 @@ pub use kani_execution::{
     KaniInconclusiveReason, KaniInstallation, KaniPinField, KaniRunOutcome, KaniTool,
     KaniToolError, KaniToolPins, KANI_EXECUTION_SCHEMA,
 };
+
 pub use kani_obligations::{
     negotiate_kani_obligations, DerivedDomain, EmbeddedOracle, InvalidObligationItem,
     KaniObligationError, KaniObligationHarness, KaniObligationIdentity, KaniObligationOutcome,
