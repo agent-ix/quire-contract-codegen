@@ -14,6 +14,9 @@
 
 #![allow(dead_code)] // Each test binary uses a different subset.
 
+use std::collections::BTreeMap;
+use std::sync::{Mutex, OnceLock};
+
 use quire_contract_codegen::{
     CompositeEqualityItem, EqualityOperandDescriptor, EqualityOperatorKind,
 };
@@ -25,6 +28,45 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 pub const NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
+
+/// `validate_application_keys`'s own preimage version tag (quire-contract-ir
+/// dfd8bd78, crates/quire-contract-model/src/checked_package/v2/operations.rs).
+const APPLICATION_NODE_VERSION: &str = "quire.application-node/v1";
+
+/// Every code this module ever builds a node for, mapped to its real node
+/// id: the computed application digest for an application-bodied node (see
+/// [`PackageBuilder::application_code`]), or the readable placeholder
+/// [`key`] for a plain node built by [`PackageBuilder::code`]/
+/// [`PackageBuilder::code_in_group`] (`validate_application_keys` never
+/// re-derives those, so `key(code)` really is their id). [`code_id`] reads
+/// it so a caller building `golden_items()`/expected node ids without a
+/// `&mut PackageBuilder` in hand still gets the same id IR would.
+fn application_registry() -> &'static Mutex<BTreeMap<u32, String>> {
+    static REGISTRY: OnceLock<Mutex<BTreeMap<u32, String>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+/// Registers `code -> digest` once via [`application_registry`]. A second
+/// registration for the same `code` must name the same `digest` -- a
+/// differing one means two distinct fixture nodes accidentally share one
+/// `code`, which silently overwriting would hide: every later [`code_id`]
+/// call for that `code`, and every assertion built on it (including a
+/// negative one like `!lib.contains(code_id(code).digest.as_ref())`), would
+/// then resolve to whichever node happened to register last, without
+/// telling a caller the code it asked for isn't the one it thinks it is.
+fn register_code(code: u32, digest: String) {
+    let mut registry = application_registry().lock().expect("registry lock");
+    match registry.get(&code) {
+        Some(existing) => assert_eq!(
+            *existing, digest,
+            "code {code} is already registered as {existing}, cannot also register it as \
+             {digest} -- two distinct fixture nodes share one code"
+        ),
+        None => {
+            registry.insert(code, digest);
+        }
+    }
+}
 
 /// The vendored fixture's admitted `scalar_type`/`enum` node (`Example.Status`,
 /// members `READY`/`DONE`): reused rather than re-derived, since its nominal
@@ -45,8 +87,35 @@ pub fn id(digest: &str) -> CheckedNodeId {
     serde_json::from_value(node_ref(digest)).expect("node id")
 }
 
+/// The node id IR actually assigns for `code`, read from [`application_registry`].
+/// Ensures the registry is populated by building the corpus once (discarding
+/// the builder) if this is the first call in the process -- `corpus_package`
+/// registers every code this module defines via `code`/`code_in_group`/
+/// `application_code`, so one build is enough for the whole test binary. No
+/// code this module's tests request is ever deliberately left unbuilt, so an
+/// unregistered code here is always a fixture defect -- silently falling
+/// back to a placeholder would hide it behind whichever assertion the wrong
+/// code happened to still satisfy, so this panics instead.
 pub fn code_id(code: u32) -> CheckedNodeId {
-    id(&key(code))
+    if !application_registry()
+        .lock()
+        .expect("registry lock")
+        .contains_key(&code)
+    {
+        corpus_package();
+    }
+    let digest = application_registry()
+        .lock()
+        .expect("registry lock")
+        .get(&code)
+        .cloned();
+    match digest {
+        Some(digest) => id(&digest),
+        None => panic!(
+            "code {code} is not registered by any PackageBuilder constructor -- build it via \
+             `code`/`code_in_group`/`application_code` before requesting its id"
+        ),
+    }
 }
 
 fn node_ref(digest: &str) -> Value {
@@ -93,18 +162,37 @@ pub fn integer_literal(value: i64) -> Value {
 }
 
 /// Contract IR (a606059, FR-038-AC-17) requires `application.operation`
-/// and `application.result_type` as members, admitting `operation` opaquely.
-/// `operation` is not read by this crate's own generators (they classify a
-/// body by `term`/`operator`/`arguments` only), so it is a fixed placeholder;
-/// `result_type` names the caller's own declared node type, a node every
-/// caller of this helper has already registered via `corpus_package`.
-fn application(operator: &str, result_type: u32, arguments: Vec<Value>) -> Value {
+/// and `application.result_type` as members; IR-216's
+/// `validate_operations` (quire-contract-ir dfd8bd78) checks `operation`
+/// against the closed 135-entry `quire.checked-operation-catalog/v1`
+/// (`tests/fixtures/checked-package/checked-package-v2/operation-catalog.json`),
+/// so `operation` must name a real catalogued identity, not an opaque
+/// placeholder. `operation` is still not read by this crate's own
+/// generators (they classify a body by `term`/`operator`/`arguments` and the
+/// request item's own descriptor, never by `operation`), so which
+/// catalogued identity is used is otherwise irrelevant to what this crate
+/// generates; `result_type` names the caller's own declared node type, a
+/// node every caller of this helper has already registered via
+/// `corpus_package`.
+fn application(operator: &str, operation: Value, result_type: u32, arguments: Vec<Value>) -> Value {
     json!({
         "term": "application",
         "operator": operator,
-        "operation": {"identity": "quire.op.test/placeholder", "laws": [], "mode": null, "member": null, "leaves": []},
+        "operation": operation,
         "result_type": node_ref(&key(result_type)),
         "arguments": arguments,
+    })
+}
+
+/// The catalogued `operation` member for `quire.op.boolean.eq`: no laws, no
+/// mode, no member.
+fn boolean_eq() -> Value {
+    json!({
+        "identity": "quire.op.boolean.eq",
+        "laws": [],
+        "mode": null,
+        "member": null,
+        "leaves": [],
     })
 }
 
@@ -114,12 +202,28 @@ fn application(operator: &str, result_type: u32, arguments: Vec<Value>) -> Value
 /// body is a composite-equality oracle, whose result is genuinely Boolean --
 /// unlike `exact_scalar_support`'s `application`, there is only one family
 /// here, so `T_BOOLEAN` is this body's actual result type, not a fixed
-/// placeholder standing in for others.
-pub fn binary_body() -> Value {
+/// placeholder standing in for others. Catalogued as `quire.op.boolean.eq`
+/// (binary, two boolean operands): a real, closed-catalog identity every
+/// caller can share, structurally conformant regardless of what the caller
+/// actually means by the node. The two operands carry `code` as an integer
+/// literal rather than a fixed `true`/`true` pair so every corpus node's
+/// preimage -- otherwise byte-identical across every caller of this
+/// function -- stays unique: `validate_application_keys` re-derives each
+/// application node's own id from its full preimage, and two nodes with the
+/// same content would collide on one digest. Both operands are literal
+/// terms, not references, so IR's operand-family check
+/// (`argument_family`/`check_operands`) never resolves a family for them
+/// and never enforces `boolean.eq`'s own declared `boolean` operand family
+/// against this integer content.
+pub fn binary_body(code: u32) -> Value {
     application(
         "binary",
+        boolean_eq(),
         T_BOOLEAN,
-        vec![literal("boolean", "true"), literal("boolean", "true")],
+        vec![
+            literal("integer", &code.to_string()),
+            literal("integer", &code.to_string()),
+        ],
     )
 }
 
@@ -184,6 +288,34 @@ impl PackageBuilder {
         body: Value,
         recursion_group: Option<&str>,
     ) -> &mut Self {
+        self.node_in_group_labeled(
+            digest,
+            digest,
+            tag,
+            form,
+            semantic_type,
+            body,
+            recursion_group,
+        )
+    }
+
+    /// As [`Self::node_in_group`], but the declaration's qualified name is
+    /// derived from `label` rather than `digest`. Needed for an
+    /// application-bodied node: IR-216's `validate_application_keys`
+    /// re-derives `digest` from a preimage that itself embeds `declaration`,
+    /// so `digest` cannot be known before `declaration` is built from
+    /// something else -- [`Self::application_code`] uses the node's own
+    /// `code` as that something else.
+    fn node_in_group_labeled(
+        &mut self,
+        digest: &str,
+        label: &str,
+        tag: &str,
+        form: &str,
+        semantic_type: &str,
+        body: Value,
+        recursion_group: Option<&str>,
+    ) -> &mut Self {
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
@@ -200,7 +332,7 @@ impl PackageBuilder {
         if let Some(group) = recursion_group {
             node["recursion_group"] = json!(group);
         }
-        if let Some(declaration) = declaration_for(tag, form, digest) {
+        if let Some(declaration) = declaration_for(tag, form, label) {
             node["declaration"] = declaration;
         }
         nodes.push(node);
@@ -220,6 +352,39 @@ impl PackageBuilder {
         self
     }
 
+    /// Registers one application-bodied `expression` node with the real
+    /// `node_id` IR-216's `validate_application_keys` re-derives: the
+    /// SHA-256 digest of `{version, node_tag, semantic_form, semantic_type,
+    /// declaration, recursion, body}` over sorted-key JSON bytes
+    /// (quire-contract-ir dfd8bd78,
+    /// crates/quire-contract-model/src/checked_package/v2/operations.rs).
+    /// `digest` is not known until `declaration` -- itself part of the
+    /// preimage -- is built, so `declaration` is derived from `code` (via
+    /// [`declaration_for`]'s `label` parameter) rather than from the digest
+    /// this call computes. Every node this module builds via this method is
+    /// `expression`-tagged, which `declaration_for` forbids a declaration
+    /// on, so `declaration` is always `None` in practice; the preimage still
+    /// includes the `None` to match IR's own shape exactly. Also records
+    /// `code -> digest` in the module's application registry so
+    /// [`code_id`] can look the same digest up without rebuilding the node.
+    pub fn application_code(&mut self, code: u32, form: &str, body: Value) -> &mut Self {
+        const TAG: &str = "expression";
+        let label = code.to_string();
+        let declaration = declaration_for(TAG, form, &label);
+        let preimage = json!({
+            "version": APPLICATION_NODE_VERSION,
+            "node_tag": TAG,
+            "semantic_form": form,
+            "semantic_type": node_ref(&key(T_BOOLEAN)),
+            "declaration": declaration,
+            "recursion": Value::Null,
+            "body": body,
+        });
+        let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("preimage"));
+        register_code(code, digest.clone());
+        self.node_in_group_labeled(&digest, &label, TAG, form, &key(T_BOOLEAN), body, None)
+    }
+
     pub fn code(
         &mut self,
         code: u32,
@@ -228,6 +393,7 @@ impl PackageBuilder {
         semantic_type: u32,
         body: Value,
     ) -> &mut Self {
+        register_code(code, key(code));
         self.node(&key(code), tag, form, &key(semantic_type), body)
     }
 
@@ -240,6 +406,7 @@ impl PackageBuilder {
         body: Value,
         recursion_group: &str,
     ) -> &mut Self {
+        register_code(code, key(code));
         self.node_in_group(
             &key(code),
             tag,
@@ -560,57 +727,21 @@ pub fn corpus_package() -> PackageBuilder {
         );
 
     builder
-        .code(E_RECORD, "expression", "binary", T_BOOLEAN, binary_body())
-        .code(
-            E_NESTED_IEEE,
-            "expression",
-            "binary",
-            T_BOOLEAN,
-            binary_body(),
-        )
-        .code(E_TUPLE, "expression", "binary", T_BOOLEAN, binary_body())
-        .code(E_OPTION, "expression", "binary", T_BOOLEAN, binary_body())
-        .code(E_TEXT, "expression", "binary", T_BOOLEAN, binary_body())
-        .code(E_ENUM, "expression", "binary", T_BOOLEAN, binary_body())
-        .code(E_DUP, "expression", "binary", T_BOOLEAN, binary_body())
-        .code(
-            E_BAD_CONVERT,
-            "expression",
-            "binary",
-            T_BOOLEAN,
-            binary_body(),
-        )
-        .code(
-            E_REFERENCE,
-            "expression",
-            "binary",
-            T_BOOLEAN,
-            binary_body(),
-        )
-        .code(E_CALL, "expression", "call", T_BOOLEAN, binary_body())
-        .code(E_SELF, "expression", "binary", T_BOOLEAN, binary_body())
-        .code(E_CONV, "expression", "binary", T_BOOLEAN, binary_body())
-        .code(
-            E_COLLECTION,
-            "expression",
-            "binary",
-            T_BOOLEAN,
-            binary_body(),
-        )
-        .code(
-            E_PAIR_OF_POINTS,
-            "expression",
-            "binary",
-            T_BOOLEAN,
-            binary_body(),
-        )
-        .code(
-            E_CONV_CHARGE,
-            "expression",
-            "binary",
-            T_BOOLEAN,
-            binary_body(),
-        );
+        .application_code(E_RECORD, "binary", binary_body(E_RECORD))
+        .application_code(E_NESTED_IEEE, "binary", binary_body(E_NESTED_IEEE))
+        .application_code(E_TUPLE, "binary", binary_body(E_TUPLE))
+        .application_code(E_OPTION, "binary", binary_body(E_OPTION))
+        .application_code(E_TEXT, "binary", binary_body(E_TEXT))
+        .application_code(E_ENUM, "binary", binary_body(E_ENUM))
+        .application_code(E_DUP, "binary", binary_body(E_DUP))
+        .application_code(E_BAD_CONVERT, "binary", binary_body(E_BAD_CONVERT))
+        .application_code(E_REFERENCE, "binary", binary_body(E_REFERENCE))
+        .application_code(E_CALL, "call", binary_body(E_CALL))
+        .application_code(E_SELF, "binary", binary_body(E_SELF))
+        .application_code(E_CONV, "binary", binary_body(E_CONV))
+        .application_code(E_COLLECTION, "binary", binary_body(E_COLLECTION))
+        .application_code(E_PAIR_OF_POINTS, "binary", binary_body(E_PAIR_OF_POINTS))
+        .application_code(E_CONV_CHARGE, "binary", binary_body(E_CONV_CHARGE));
 
     builder
 }

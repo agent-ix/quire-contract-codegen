@@ -16,7 +16,7 @@ use std::{
 };
 
 use package::{
-    application, code_id, corpus_package, golden_items, integer_add, key, reference, Bound,
+    application, code_id, corpus_package, golden_items, integer_add, key, op, reference, Bound,
     MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED, V_INTEGER,
 };
 use quire_contract_codegen::{
@@ -390,15 +390,25 @@ const FRAME: u32 = 3002;
 fn scalar_package() -> (CheckedPackageV2, ExactScalarClaimMap) {
     let mut builder = corpus_package();
     builder
-        .bounded(
+        .application_bounded(
             UNSATISFIABLE,
             "expression",
             "binary",
             &key(T_INTEGER),
             application(
                 "binary",
+                op("quire.op.integer.add"),
                 &key(T_INTEGER),
-                vec![reference(&key(V_INTEGER)), reference(&key(V_INTEGER))],
+                // A `reference(V_INTEGER)` pair here would be byte-identical
+                // to corpus code 1001's own `integer.add` body (same
+                // operator/operation/result_type/arguments), and bounds
+                // aren't part of the node-id preimage, so this node and
+                // 1001 would collide on digest and IR's `validate_graph`
+                // would refuse the whole package as a duplicate node id.
+                vec![
+                    reference(&key(V_INTEGER)),
+                    package::literal("integer", &UNSATISFIABLE.to_string()),
+                ],
             ),
             &[Bound::Integer(5, -5)],
         )
@@ -1107,7 +1117,7 @@ fn tc_025_every_caller_declared_operation_is_refused() {
             unsupported(record),
             &UnsupportedObligation::CallerDeclaredOperation {
                 operation_identity: claim.operation.identity.clone(),
-                blocked_on: UpstreamBlocker::OperationIdentityNotCarried,
+                blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
                 derived_domains: match unsupported(record) {
                     UnsupportedObligation::CallerDeclaredOperation {
                         derived_domains, ..

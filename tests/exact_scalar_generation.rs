@@ -17,7 +17,7 @@ use quire_contract_codegen::{
 };
 use quire_contract_ir::CheckedPackageV2;
 use quire_contract_runtime::exact::{ComparisonOperator, TextProfile};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 #[path = "exact_scalar_support/package.rs"]
 mod package;
@@ -71,14 +71,14 @@ fn dispositions(oracles: &ExactScalarOracles) -> BTreeMap<String, &ExactScalarDi
 }
 
 fn refusal_of(oracles: &ExactScalarOracles, code: u32) -> ExactScalarRefusal {
-    match dispositions(oracles).get(&key(code)) {
+    match dispositions(oracles).get(code_id(code).digest.as_ref()) {
         Some(ExactScalarDisposition::Refused { refusal }) => refusal.clone(),
         other => panic!("node {code} is not refused: {other:?}"),
     }
 }
 
 fn symbol(code: u32) -> String {
-    format!("oracle_{}", key(code))
+    format!("oracle_{}", code_id(code).digest)
 }
 
 /// Trace: FR-014-AC-4, TC-024.
@@ -324,11 +324,12 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         .filter(|(_, result)| matches!(result, ExactScalarDisposition::Generated(_)))
         .map(|(digest, _)| digest)
         .collect::<Vec<_>>();
-    assert_eq!(
-        generated,
-        calls.iter().map(|(code, _)| key(*code)).collect::<Vec<_>>(),
-        "exactly the corpus is generated"
-    );
+    let mut expected = calls
+        .iter()
+        .map(|(code, _)| code_id(*code).digest.to_string())
+        .collect::<Vec<_>>();
+    expected.sort();
+    assert_eq!(generated, expected, "exactly the corpus is generated");
     assert_eq!(corpus().len(), calls.len());
     for (code, call) in &calls {
         let body = function_body(lib, &symbol(*code));
@@ -487,6 +488,20 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
                 found: Some("decimal".to_owned()),
             },
         ),
+        // Restores the coverage `WRONG_OPERAND` lost when it moved from a
+        // reference to a literal operand (see its own comment above): a
+        // reference operand that resolves to a concrete but wrong
+        // `ScalarForm`, refused through `check_operand`'s `"reference"` arm
+        // (`reference_form` -> a graph lookup -> `type_form`), not its
+        // `"literal"` arm (`value_kind` -> `ScalarForm::from_literal_kind`).
+        (
+            WRONG_OPERAND_REFERENCE,
+            ExactScalarRefusal::OperandTypeMismatch {
+                position: 0,
+                expected: ScalarForm::Rational,
+                found: Some("integer".to_owned()),
+            },
+        ),
         (
             WRONG_RESULT,
             ExactScalarRefusal::ResultTypeMismatch {
@@ -505,7 +520,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
     for (code, refusal) in &expected {
         assert_eq!(refusal_of(&oracles, *code), *refusal, "node {code}");
         assert!(
-            !lib.contains(&key(*code)),
+            !lib.contains(code_id(*code).digest.as_ref()),
             "refused node {code} left code behind"
         );
     }
@@ -568,10 +583,10 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     let json: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).expect("json");
     assert_eq!(json, serde_json::to_value(map).expect("typed map"));
 
-    assert_eq!(map.blocked, [UpstreamBlocker::OperationIdentityNotCarried]);
+    assert_eq!(map.blocked, [UpstreamBlocker::OperationIdentityNotConsumed]);
     assert_eq!(
         json["blocked"],
-        serde_json::json!(["operation identity not carried by CheckedPackage V2"])
+        serde_json::json!(["operation identity not consumed by codegen's generators"])
     );
     for (claim, entry) in map
         .items
@@ -581,14 +596,14 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
         assert_eq!(
             claim.operation.provenance,
             OperationProvenance::CallerDeclared {
-                blocked_on: UpstreamBlocker::OperationIdentityNotCarried,
+                blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
             }
         );
         assert_eq!(
             entry["operation"]["provenance"],
             serde_json::json!({
                 "kind": "caller_declared",
-                "blocked_on": "operation identity not carried by CheckedPackage V2",
+                "blocked_on": "operation identity not consumed by codegen's generators",
             })
         );
     }
@@ -650,7 +665,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
             .as_array()
             .expect("source map")
             .iter()
-            .filter(|entry| entry["node_id"]["digest"] == key(expression.code))
+            .filter(|entry| entry["node_id"]["digest"] == *code_id(expression.code).digest)
             .cloned()
             .collect::<Vec<_>>();
         assert_eq!(source_map.len(), 1);
@@ -747,25 +762,13 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
         }
     );
 
-    // Node 1011 is a truncating division whose IR is byte-identical to 1012's
-    // apart from its key, so the law cannot be checked: a floor descriptor
-    // generates, and the claim says the law is caller-declared.
-    let wire = corpus_package().wire();
-    let body = |code: u32| {
-        wire["semantic_graph"]["nodes"]
-            .as_array()
-            .expect("nodes")
-            .iter()
-            .find(|node| node["node_id"]["digest"] == key(code))
-            .map(|node| {
-                let mut node = node.clone();
-                node.as_object_mut().expect("node").remove("node_id");
-                node
-            })
-            .expect("node")
-    };
-    assert_eq!(body(1011), body(1012));
-    assert_eq!(body(1011), body(1013));
+    // Node 1011 is a truncating division; its own `operation.laws` names the
+    // truncating law definition, unlike 1012's (floor) and 1013's
+    // (euclidean). CG's generators never read `operation` (they classify a
+    // body by `term`/`operator`/`arguments` and the request item's own
+    // descriptor -- see `corpus_operation`'s doc comment), so a floor
+    // descriptor still generates against node 1011's truncating body, and
+    // the claim says the law is caller-declared.
     let marked = generate(
         &package,
         &[ExactScalarItem {
@@ -778,12 +781,12 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
     assert_eq!(
         claim.operation.provenance,
         OperationProvenance::CallerDeclared {
-            blocked_on: UpstreamBlocker::OperationIdentityNotCarried,
+            blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
         }
     );
     assert_eq!(
         marked.claim_map.blocked,
-        [UpstreamBlocker::OperationIdentityNotCarried]
+        [UpstreamBlocker::OperationIdentityNotConsumed]
     );
 }
 
@@ -796,12 +799,31 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
         .map(|_| reference(&key(V_INTEGER)))
         .collect::<Vec<_>>();
     let mut builder = corpus_package();
-    builder.bounded(
+    builder.application_bounded(
         3001,
         "expression",
         "binary",
         &key(T_INTEGER),
-        application("binary", &key(T_INTEGER), arguments),
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &key(T_INTEGER),
+            // `quire.op.integer.add` takes exactly 2 operands, so the
+            // 40,000 stress references live nested inside an `aggregate`
+            // wrapper as the second operand rather than as 40,000 direct
+            // operands: IR-216's operand-arity check
+            // (`check_operands`/`entry.rest`) refuses any node whose
+            // `body.arguments.len()` disagrees with its catalogued
+            // identity's own operand count, but IR's *lowering* successor-
+            // edge walk (`CheckedPackageV2::lower`, exercised below, wholly
+            // separate from admission-time operation validation) still
+            // recurses into a nested term tree regardless of catalog
+            // arity, so the stress case is preserved.
+            vec![
+                reference(&key(V_INTEGER)),
+                json!({"term": "aggregate", "members": arguments}),
+            ],
+        ),
         &[INT],
     );
     let limits = quire_contract_ir::CheckedPackageReadLimits {
@@ -823,7 +845,7 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
     };
     assert_eq!(*limit, quire_contract_codegen::SCALAR_LOWERING_WORK_LIMIT);
     assert!(consumed > limit);
-    assert!(!contents(&oracles, "src/lib.rs").contains(&key(3001)));
+    assert!(!contents(&oracles, "src/lib.rs").contains(code_id(3001).digest.as_ref()));
 }
 
 /// Trace: FR-014-AC-9, TC-024.
@@ -832,15 +854,26 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
     let mut builder = corpus_package();
     let codes = 10_000..13_000;
     for code in codes.clone() {
-        builder.code(
+        // Both operands are `code`-keyed literals, not `reference(ENUM_MEMBER)`
+        // twice over: every one of these 3,000 nodes would otherwise share
+        // one preimage (same tag/form/type/body) and collide on a single
+        // `node_id`. A literal operand also bypasses IR's operand-family
+        // check entirely, so `enum.eq`'s `enum_kind` expectation is never
+        // actually exercised here -- this fixture's point is source size,
+        // not enum-family conformance.
+        builder.application_code(
             code,
             "expression",
             "binary",
             &key(T_BOOLEAN),
             application(
                 "binary",
+                op("quire.op.enum.eq"),
                 &key(T_BOOLEAN),
-                vec![reference(ENUM_MEMBER), reference(ENUM_MEMBER)],
+                vec![
+                    literal("enum", &code.to_string()),
+                    literal("enum", &code.to_string()),
+                ],
             ),
         );
     }
@@ -872,7 +905,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     // Node 1003's right operand is an integer literal, so it type-checks as an
     // integer and the subtraction generates like any other.
     assert!(matches!(
-        dispositions(&oracles)[&key(LITERAL_OPERAND)],
+        dispositions(&oracles)[code_id(LITERAL_OPERAND).digest.as_ref()],
         ExactScalarDisposition::Generated(_)
     ));
     let subtract = function_body(lib, &symbol(LITERAL_OPERAND));
@@ -888,13 +921,14 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     // `text` scalar type would refuse the request before this crate's own
     // operand-type check ever ran.
     let mut builder = corpus_package();
-    builder.bounded(
+    builder.application_bounded(
         3002,
         "expression",
         "binary",
         &key(T_INTEGER),
         application(
             "binary",
+            op("quire.op.integer.add"),
             &key(T_INTEGER),
             vec![reference(&key(V_INTEGER)), literal("text", "3")],
         ),
