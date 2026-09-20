@@ -373,7 +373,7 @@ impl ItemSettlement {
 /// The closed set of backend kinds this generator settles for.
 ///
 /// One arm per variant, no catch-all. Adding a variant without an arm is a
-/// compile error at [`negotiate_arm`], which is the whole point of the kind
+/// compile error at the dispatch, which is the whole point of the kind
 /// being closed: an open set of hand-written negotiate functions gives the same
 /// behaviour at run time and none of the enforcement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
