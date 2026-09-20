@@ -1721,8 +1721,13 @@ fn run(
 /// reported timed out rather than left to block or misreported as `NoVerdict`.
 ///
 /// Trace: FR-015-AC-1, FR-015-AC-2, FR-015-AC-4, TC-025, FR-017-AC-1, FR-017-AC-3, FR-017-AC-4,
-/// FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1, FR-017-CON-2, TC-027, FR-007-AC-3,
-/// TC-023
+/// FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1, FR-017-CON-2, TC-027
+///
+/// The timed-out case below carries no trace id. FR-007-AC-3 names a timed-out state on the
+/// corpus path, which `src/bounded_kani_corpus.rs` already backs; the execution run's timed-out
+/// behaviour has no criterion of its own, because FR-017 states none. Stating one is
+/// agent-ix/quire-contract-codegen#55, and until it exists this assertion binds to no criterion
+/// rather than claim one it does not establish.
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect() {
@@ -1802,9 +1807,10 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
     // Bounding the wall time this call itself takes is proof the run was actually killed rather
     // than merely misclassified after being allowed to run to completion. This runs ahead of the
     // `Cargo.lock`-as-directory case below on purpose: that case fails for a reason unrelated to
-    // this change (agent-ix/quire-contract-codegen#58) on current `cargo`, independent of this
+    // this change on current `cargo`, independent of this
     // harness and independent of this branch (reproduced identically on `origin/main`), and a
     // later panic in the same test function must not prevent this assertion from running.
+    // That unrelated failure is agent-ix/quire-contract-codegen#85.
     let harness = &harnesses[0];
     let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
     let started = Instant::now();

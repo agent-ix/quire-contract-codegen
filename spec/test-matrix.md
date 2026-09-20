@@ -111,9 +111,9 @@ AC-9) are all in `tests/kani_obligations.rs` and run without a Kani installation
 CON-1 are `🚧 Planned`: the parts of them that require a real installed backend — an installed-backend
 pin difference, the full pinned-lane evidence shape, the library-containment refusal after a real
 build, and never converting a non-verified outcome into a proof claim — are backed only by the
-`#[ignore]`d `make kani` lane, which needs a real pinned installation and is not a `make ci` gate. No
-timed-out criterion is written, because the run has no wall-clock budget to fail one — that is
-codegen#58, and TC-027 records it as blocked rather than specifying around it.
+`#[ignore]`d `make kani` lane, which needs a real pinned installation and is not a `make ci` gate. The
+run carries a caller-declared wall-clock budget and reports an elapsed budget as a timed-out
+inconclusive result. FR-017 states no timed-out criterion of its own; stating one is codegen#55.
 
 FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-10 through FR-018-AC-13 are `✅ Covered`:
 the composite/structural equality slice of codegen#48 that TC-029 backs with a passing test for every
