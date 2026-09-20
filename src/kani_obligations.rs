@@ -453,7 +453,7 @@ pub struct KaniObligationHarness {
 }
 
 /// One symbolic `i64` argument of a rendered scalar harness, bounded by the IR domain
-/// [`lower_scalar_claim`] read.
+/// `lower_scalar_claim` read.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScalarObligationArgument {
