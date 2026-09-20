@@ -126,7 +126,7 @@ fn claims_for(oracles: &CompositeEqualityOracles, node: u32) -> Vec<&CompositeEq
         .claim_map
         .items
         .iter()
-        .filter(|claim| claim.node_id.digest.as_ref() == key(node))
+        .filter(|claim| claim.node_id.digest.as_ref() == code_id(node).digest.as_ref())
         .collect()
 }
 

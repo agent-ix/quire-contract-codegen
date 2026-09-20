@@ -1094,6 +1094,24 @@ impl Shape {
         }
     }
 
+    /// An IEEE comparison's own `semantic_form` is still `"binary"` (it
+    /// takes two operands, one result), but the operation-catalog's three
+    /// IEEE-comparison identities (`quire.op.ieee.numeric_equal`,
+    /// `.total_order`, `.bit_identical`) are all `call`-operator entries --
+    /// quire-contract-ir dfd8bd78's `validate_operations` refuses any
+    /// package whose `body.operator` disagrees with its catalogued
+    /// `operation.identity`'s own `operator`, so a real, admitted IEEE
+    /// comparison node's `body.operator` is always `"call"`, never
+    /// `"binary"`.
+    fn binary_call(operands: &'static [ScalarForm; 2], result: ScalarForm) -> Self {
+        Self {
+            form: "binary",
+            body_operator: "call",
+            operands,
+            result,
+        }
+    }
+
     fn of(operation: &ExactScalarOperation) -> Self {
         use ScalarForm as F;
         match operation {
@@ -1139,8 +1157,8 @@ impl Shape {
                 IeeeWidth::Binary64 => Self::binary(&[F::Float64, F::Float64], F::Float64),
             },
             ExactScalarOperation::IeeeComparison { width, .. } => match width {
-                IeeeWidth::Binary32 => Self::binary(&[F::Float32, F::Float32], F::Boolean),
-                IeeeWidth::Binary64 => Self::binary(&[F::Float64, F::Float64], F::Boolean),
+                IeeeWidth::Binary32 => Self::binary_call(&[F::Float32, F::Float32], F::Boolean),
+                IeeeWidth::Binary64 => Self::binary_call(&[F::Float64, F::Float64], F::Boolean),
             },
             ExactScalarOperation::IeeeWidthConversion { source, target, .. } => {
                 let operand: &'static [ScalarForm; 1] = match source {

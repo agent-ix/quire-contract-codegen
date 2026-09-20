@@ -24,7 +24,8 @@
 
 #![allow(dead_code)] // Each test binary uses a different subset.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Mutex, OnceLock};
 
 use quire_contract_codegen::{
     DecimalOperator, ExactScalarItem, ExactScalarOperation, IeeeArithmeticOperator,
@@ -47,6 +48,10 @@ pub const ENUM_TYPE: &str = "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f8
 pub const ENUM_MEMBER: &str = "42ba51e7e622d99f292a5e6dcc196bd216efb98b33755910e54af4d65078d032";
 pub const UNIT_TYPE: &str = "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4";
 
+/// `validate_application_keys`'s own preimage version tag (quire-contract-ir
+/// dfd8bd78, crates/quire-contract-model/src/checked_package/v2/operations.rs).
+const APPLICATION_NODE_VERSION: &str = "quire.application-node/v1";
+
 /// A readable node key: the code, zero-padded to a 64-digit digest.
 pub fn key(code: u32) -> String {
     format!("{code:0>64}")
@@ -56,8 +61,43 @@ pub fn id(digest: &str) -> CheckedNodeId {
     serde_json::from_value(node_ref(digest)).expect("node id")
 }
 
+/// Every code this module ever registers as an application-bodied node,
+/// mapped to its real computed `node_id` digest. Populated as a side effect
+/// of [`PackageBuilder::application_code`]/[`PackageBuilder::application_bounded`];
+/// [`code_id`] reads it so a caller building `golden_items()`/
+/// `refused_items()` without a `&mut PackageBuilder` in hand still gets the
+/// digest IR actually re-derives, not the readable placeholder. A code
+/// absent from the registry names a non-application node, whose id stays
+/// [`key`] -- `validate_application_keys` never re-derives those.
+fn application_registry() -> &'static Mutex<BTreeMap<u32, String>> {
+    static REGISTRY: OnceLock<Mutex<BTreeMap<u32, String>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+/// The node id IR actually assigns for `code`: the registered application
+/// digest when `code` was built by an `application_*` constructor on
+/// [`PackageBuilder`], else the readable placeholder [`key`]. Ensures the
+/// registry is populated by building the corpus once (discarding the
+/// builder) if this is the first call in the process -- `corpus_package`
+/// registers every application code this module defines, so one build
+/// suffices for the whole test binary.
 pub fn code_id(code: u32) -> CheckedNodeId {
-    id(&key(code))
+    if !application_registry()
+        .lock()
+        .expect("registry lock")
+        .contains_key(&code)
+    {
+        corpus_package();
+    }
+    let digest = application_registry()
+        .lock()
+        .expect("registry lock")
+        .get(&code)
+        .cloned();
+    match digest {
+        Some(digest) => id(&digest),
+        None => id(&key(code)),
+    }
 }
 
 fn node_ref(digest: &str) -> Value {
@@ -89,21 +129,122 @@ fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
 }
 
 /// Contract IR (a606059, FR-038-AC-17) requires `application.operation`
-/// and `application.result_type` as members, but admits `operation` opaquely
-/// — present and well-formed is enough, since deep operation-law validation
-/// is not implemented by the reader. `operation` is not read by this crate's
-/// own generators (they classify a body by `term`/`operator`/`arguments`
-/// only), so it is a fixed placeholder; `result_type` names the caller's own
-/// declared node type for this expression, a node every caller of this
+/// and `application.result_type` as members; IR-216's `validate_operations`
+/// (quire-contract-ir dfd8bd78) checks `operation` against the closed
+/// 135-entry `quire.checked-operation-catalog/v1`
+/// (`tests/fixtures/checked-package/checked-package-v2/operation-catalog.json`),
+/// so `operation` must name a real catalogued identity with a conformant
+/// `operator`/`laws`/`mode`/`member`, not an opaque placeholder. `operation`
+/// is still not read by this crate's own generators (they classify a body
+/// by `term`/`operator`/`arguments` and the request item's own descriptor,
+/// never by `operation`), so which catalogued identity is used is otherwise
+/// irrelevant to what this crate generates -- see [`corpus_operation`] for
+/// how each corpus expression picks one. `result_type` names the caller's
+/// own declared node type for this expression, a node every caller of this
 /// helper has already registered.
-pub fn application(operator: &str, result_type: &str, arguments: Vec<Value>) -> Value {
+pub fn application(
+    operator: &str,
+    operation: Value,
+    result_type: &str,
+    arguments: Vec<Value>,
+) -> Value {
     json!({
         "term": "application",
         "operator": operator,
-        "operation": {"identity": "quire.op.test/placeholder", "laws": [], "mode": null, "member": null, "leaves": []},
+        "operation": operation,
         "result_type": node_ref(result_type),
         "arguments": arguments,
     })
+}
+
+/// A catalogued `operation` member with no laws, mode or member.
+pub fn op(identity: &str) -> Value {
+    op_full(identity, Vec::new(), None, None)
+}
+
+/// A catalogued `operation` member with explicit laws/mode/member.
+pub fn op_full(
+    identity: &str,
+    laws: Vec<Value>,
+    mode: Option<Value>,
+    member: Option<Value>,
+) -> Value {
+    json!({
+        "identity": identity,
+        "laws": laws,
+        "mode": mode,
+        "member": member,
+        "leaves": [],
+    })
+}
+
+/// One `operation.laws` entry: a law role paired with a catalogued
+/// definition artifact ref.
+pub fn law(role: &str, definition: Value) -> Value {
+    json!({"role": role, "definition": definition})
+}
+
+/// An `operation.mode` member: `{"kind", "value"}`. `value` is never
+/// checked against the catalog's closed `modes` vocabulary by IR (only
+/// `kind` is, and by a type-pin lookup this module's types never carry --
+/// see `check_mode_type` in quire-contract-ir dfd8bd78's
+/// `checked_package/v2/operations.rs`), so any readable string works.
+pub fn mode_kv(kind: &str, value: &str) -> Value {
+    json!({"kind": kind, "value": value})
+}
+
+/// An `operation.member` naming only a `kind`: sufficient for every member
+/// kind this module uses (`type_argument`), which IR checks for presence
+/// and kind only.
+pub fn member_kind(kind: &str) -> Value {
+    json!({"kind": kind})
+}
+
+/// One catalogued law-role definition artifact ref, copied verbatim from
+/// quire-contract-ir dfd8bd78's `tests/fixtures/checked-package/checked-package-v2/
+/// operation-catalog.json` `law_roles` table -- `validate_operations`
+/// requires `operation.laws[].definition` to equal one of these exactly
+/// (quire-contract-ir dfd8bd78 `checked_package/v2/operations.rs`).
+pub fn artifact_ref(identity: &str, digest: &str) -> Value {
+    json!({
+        "authority": "agent-ix",
+        "identity": identity,
+        "revision": {"namespace": "quire-draft", "value": "1-draft.1"},
+        "digest_domain": "quire.definition.bytes/v1",
+        "digest": digest,
+    })
+}
+
+/// The catalogued `integer_division` law definition selecting `profile`.
+pub fn integer_division_definition(profile: DivisionProfile) -> Value {
+    let digest = match profile {
+        DivisionProfile::Truncating => {
+            "9998507608e4885b314d5dcc59a88bb3d04ef3c263d2d8ae5810f92ae1893364"
+        }
+        DivisionProfile::Floor => {
+            "ca8c7a20407eaff7f61074cc997e44ad1ab9a73f675d686c6250997c6ae6192f"
+        }
+        DivisionProfile::Euclidean => {
+            "9f5e59b3bfe1dd3c1efc74065b2e3e7869e21813a0c90b9c5938d82107267a51"
+        }
+    };
+    artifact_ref(profile.definition_identity(), digest)
+}
+
+/// The catalog's one `ieee_profile` law definition.
+pub fn ieee_profile_definition() -> Value {
+    artifact_ref(
+        "quire.value.ieee754-2019-default/v1",
+        "3e9736fb8e1637b554385192de34547bafc073e90b4b85256c824be31e0aa6e5",
+    )
+}
+
+/// The catalog's one `text_profile` law definition.
+pub fn text_profile_definition() -> Value {
+    artifact_ref(
+        "quire.value.text.unicode-17.0.0/v1",
+        "cd4a985a0d7d2f2b3d3625caee3787832c00c5244e805fb49e1c2c7075b9de5e",
+    )
 }
 
 fn aggregate() -> Value {
@@ -186,6 +327,26 @@ impl PackageBuilder {
         body: Value,
         dependencies: &[String],
     ) -> &mut Self {
+        self.node_with_label(digest, digest, tag, form, semantic_type, body, dependencies)
+    }
+
+    /// As [`Self::node_with`], but the declaration's qualified name is
+    /// derived from `label` rather than `digest`. Needed for an
+    /// application-bodied node: IR-216's `validate_application_keys`
+    /// re-derives `digest` from a preimage that itself embeds
+    /// `declaration`, so `digest` cannot be known before `declaration` is
+    /// built from something else -- [`Self::application_code_with`] uses
+    /// the node's own `code` as that something else.
+    fn node_with_label(
+        &mut self,
+        digest: &str,
+        label: &str,
+        tag: &str,
+        form: &str,
+        semantic_type: &str,
+        body: Value,
+        dependencies: &[String],
+    ) -> &mut Self {
         let dependencies = dependencies
             .iter()
             .collect::<BTreeSet<_>>()
@@ -205,7 +366,7 @@ impl PackageBuilder {
             "occurrences": [{"role": "declaration", "ordinal": 0}],
             "body": body,
         });
-        if let Some(declaration) = declaration_for(tag, form, digest) {
+        if let Some(declaration) = declaration_for(tag, form, label) {
             node["declaration"] = declaration;
         }
         nodes.push(node);
@@ -251,6 +412,107 @@ impl PackageBuilder {
             .map(|bound| self.bound(bound))
             .collect::<Vec<_>>();
         self.node_with(&key(code), tag, form, semantic_type, body, &keys)
+    }
+
+    /// Registers one application-bodied node with the real `node_id`
+    /// IR-216's `validate_application_keys` re-derives: the SHA-256 digest
+    /// of `{version, node_tag, semantic_form, semantic_type, declaration,
+    /// recursion, body}` over sorted-key JSON bytes (quire-contract-ir
+    /// dfd8bd78, `crates/quire-contract-model/src/checked_package/v2/
+    /// operations.rs`). `digest` is not known until `declaration` -- itself
+    /// part of the preimage -- is built, so `declaration` is derived from
+    /// `code` (via `declaration_for`'s `label` parameter) rather than from
+    /// the digest this call computes. No node this module builds via this
+    /// method ever sets `recursion_group`, so `recursion` is always `null`
+    /// in the preimage. Also records `code -> digest` in the module's
+    /// application registry so [`code_id`] can look the same digest up
+    /// without rebuilding the node.
+    pub fn application_code(
+        &mut self,
+        code: u32,
+        tag: &str,
+        form: &str,
+        semantic_type: &str,
+        body: Value,
+    ) -> &mut Self {
+        self.application_code_with(code, tag, form, semantic_type, body, &[])
+    }
+
+    /// As [`Self::application_code`], with extra node dependencies (e.g.
+    /// bound keys already resolved by the caller).
+    pub fn application_code_with(
+        &mut self,
+        code: u32,
+        tag: &str,
+        form: &str,
+        semantic_type: &str,
+        body: Value,
+        dependencies: &[String],
+    ) -> &mut Self {
+        let label = code.to_string();
+        let declaration = declaration_for(tag, form, &label);
+        let preimage = json!({
+            "version": APPLICATION_NODE_VERSION,
+            "node_tag": tag,
+            "semantic_form": form,
+            "semantic_type": node_ref(semantic_type),
+            "declaration": declaration,
+            "recursion": Value::Null,
+            "body": body,
+        });
+        let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("preimage"));
+        application_registry()
+            .lock()
+            .expect("registry lock")
+            .insert(code, digest.clone());
+        self.node_with_label(
+            &digest,
+            &label,
+            tag,
+            form,
+            semantic_type,
+            body,
+            dependencies,
+        )
+    }
+
+    /// An application-bodied node that depends on `bounds`, adding each
+    /// bound node once -- the application analogue of [`Self::bounded`].
+    pub fn application_bounded(
+        &mut self,
+        code: u32,
+        tag: &str,
+        form: &str,
+        semantic_type: &str,
+        body: Value,
+        bounds: &[Bound],
+    ) -> &mut Self {
+        let keys = bounds
+            .iter()
+            .map(|bound| self.bound(bound))
+            .collect::<Vec<_>>();
+        self.application_code_with(code, tag, form, semantic_type, body, &keys)
+    }
+
+    /// Registers `definition` in `lock.definition_selections` (deduplicated),
+    /// so `validate_operations`'s law-selection check (quire-contract-ir
+    /// dfd8bd78 `checked_package/v2/operations.rs`) finds it selected for
+    /// any node whose `operation.laws` names it. Mirrors the same push into
+    /// `identity_preimage.definition_selections`: `validate_lock`'s
+    /// `same_non_graph_lock` (quire-contract-ir dfd8bd78
+    /// `checked_package/v2/mod.rs`) refuses `StaleDependency` at `"lock"`
+    /// unless the preimage and the lock agree field-for-field, and this is
+    /// the one field this fixture builder mutates after construction.
+    pub fn select_definition(&mut self, definition: Value) -> &mut Self {
+        for path in ["lock", "identity_preimage"] {
+            let selections = self.value[path]["definition_selections"]
+                .as_array_mut()
+                .expect("definition_selections");
+            if !selections.contains(&definition) {
+                selections.push(definition.clone());
+            }
+        }
+        self
     }
 
     /// Add `bound` once, returning its key. Any requires-bound kind foreign
@@ -1116,11 +1378,336 @@ fn result_type(form: &str) -> String {
 }
 
 fn integer_pair() -> Value {
+    integer_pair_for(0)
+}
+
+/// [`integer_pair`], with `code` folded into the second operand so callers
+/// that register several distinct expression nodes sharing this body's
+/// shape (operator/operation/result_type) still get distinct digests.
+/// `bounds`/`dependencies` are not part of the node-id preimage (only
+/// `body` is -- see `APPLICATION_NODE_VERSION`'s doc comment), so nodes
+/// that differ only by their bound set collide on id unless `body` itself
+/// also varies.
+fn integer_pair_for(code: u32) -> Value {
     application(
         "binary",
+        op("quire.op.integer.add"),
         &key(T_INTEGER),
-        vec![reference(&key(V_INTEGER)), reference(&key(V_INTEGER))],
+        vec![
+            reference(&key(V_INTEGER)),
+            literal("integer", &code.to_string()),
+        ],
     )
+}
+
+/// The catalogued `body.operator`/`operation` pair for one corpus
+/// expression, matched on its own [`ExactScalarOperation`] descriptor
+/// against quire-contract-ir dfd8bd78's 135-entry operation catalog.
+/// `operation` is not read by this crate's own generators -- they classify
+/// a body by `term`/`operator`/`arguments` and the request item's own
+/// descriptor -- so which catalogued identity denotes a given expression is
+/// otherwise free; each arm below picks the catalog entry whose semantics
+/// most directly match the descriptor, wiring its operand family, laws,
+/// mode and member exactly as `validate_operations` checks them:
+///
+/// - Every arithmetic/ordering identity used here has `operator ==
+///   entry.operator` because `corpus()`'s own `BINARY`/`UNARY`/`CONVERSION`
+///   shape tuples already spell the same three catalog operator strings
+///   (`binary`/`unary`/`convert`) -- the one exception is IEEE comparison,
+///   whose only catalogued identities (`ieee.numeric_equal`/`total_order`/
+///   `bit_identical`) are `call`, so that arm alone overrides `expr.operator`.
+/// - `integer.div`/`.rem` and every `ieee.*`/`text.*` identity require a
+///   law (`integer_division`/`ieee_profile`/`text_profile` respectively);
+///   `corpus_package` selects the matching definitions into
+///   `lock.definition_selections` up front so every one of these admits.
+/// - `decimal.add/sub/mul/div`, every `ieee.*` arithmetic op and
+///   `numeric.convert_rounding` are catalogued with a `rounding` mode;
+///   `text.*` with a `text_profile` mode. Both kinds' `value` is unchecked
+///   by IR here (see [`mode_kv`]'s own doc), so any readable string works.
+fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
+    use ExactScalarOperation as Op;
+    match &expr.operation {
+        Op::IntegerArithmetic { operator, .. } => {
+            let identity = match operator {
+                IntegerOperator::Add => "quire.op.integer.add",
+                IntegerOperator::Subtract => "quire.op.integer.sub",
+                IntegerOperator::Multiply => "quire.op.integer.mul",
+                IntegerOperator::Negate => "quire.op.integer.negate",
+            };
+            (expr.operator, op(identity))
+        }
+        Op::IntegerDivision { profile, .. } => (
+            expr.operator,
+            op_full(
+                "quire.op.integer.div",
+                vec![law(
+                    "integer_division",
+                    integer_division_definition(*profile),
+                )],
+                None,
+                None,
+            ),
+        ),
+        Op::IntegerModulo { .. } => (expr.operator, op("quire.op.integer.mod")),
+        Op::RationalArithmetic { operator, .. } => {
+            let identity = match operator {
+                RationalOperator::Add => "quire.op.rational.add",
+                RationalOperator::Subtract => "quire.op.rational.sub",
+                RationalOperator::Multiply => "quire.op.rational.mul",
+                // `rational.div`'s operands are `rational_promotable`
+                // (integer or rational), so it fits an integer/integer
+                // pair too -- there is no separate catalogued "integer
+                // division to a rational result" identity.
+                RationalOperator::Divide | RationalOperator::IntegerDivide => {
+                    "quire.op.rational.div"
+                }
+                RationalOperator::Negate => "quire.op.rational.negate",
+            };
+            (expr.operator, op(identity))
+        }
+        Op::Ordering {
+            operator,
+            operands: kind,
+        } => {
+            let family = match kind {
+                OrderingOperandKind::Integer => "integer",
+                OrderingOperandKind::Rational => "rational",
+                OrderingOperandKind::Decimal => "decimal",
+            };
+            let suffix = ordering_suffix(*operator);
+            let identity: &'static str = match (family, suffix) {
+                ("integer", "lt") => "quire.op.integer.lt",
+                ("integer", "le") => "quire.op.integer.le",
+                ("integer", "gt") => "quire.op.integer.gt",
+                ("integer", "ge") => "quire.op.integer.ge",
+                ("rational", "lt") => "quire.op.rational.lt",
+                ("rational", "le") => "quire.op.rational.le",
+                ("rational", "gt") => "quire.op.rational.gt",
+                ("rational", "ge") => "quire.op.rational.ge",
+                ("decimal", "lt") => "quire.op.decimal.lt",
+                ("decimal", "le") => "quire.op.decimal.le",
+                ("decimal", "gt") => "quire.op.decimal.gt",
+                ("decimal", "ge") => "quire.op.decimal.ge",
+                _ => unreachable!("every (family, suffix) pair is covered above"),
+            };
+            (expr.operator, op(identity))
+        }
+        Op::DecimalArithmetic { operator, .. } => match operator {
+            DecimalOperator::Add => (
+                expr.operator,
+                op_full(
+                    "quire.op.decimal.add",
+                    vec![],
+                    Some(mode_kv("rounding", "nearest-even")),
+                    None,
+                ),
+            ),
+            DecimalOperator::Subtract => (
+                expr.operator,
+                op_full(
+                    "quire.op.decimal.sub",
+                    vec![],
+                    Some(mode_kv("rounding", "nearest-even")),
+                    None,
+                ),
+            ),
+            DecimalOperator::Multiply => (
+                expr.operator,
+                op_full(
+                    "quire.op.decimal.mul",
+                    vec![],
+                    Some(mode_kv("rounding", "nearest-even")),
+                    None,
+                ),
+            ),
+            DecimalOperator::Divide => (
+                expr.operator,
+                op_full(
+                    "quire.op.decimal.div",
+                    vec![],
+                    Some(mode_kv("rounding", "nearest-even")),
+                    None,
+                ),
+            ),
+            DecimalOperator::Negate => (expr.operator, op("quire.op.decimal.negate")),
+            DecimalOperator::Round => (
+                expr.operator,
+                op_full(
+                    "quire.op.numeric.convert_rounding",
+                    vec![],
+                    Some(mode_kv("rounding", "nearest-even")),
+                    Some(member_kind("type_argument")),
+                ),
+            ),
+        },
+        Op::IeeeArithmetic {
+            operator, width, ..
+        } => {
+            let identity = match (width, operator) {
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::Add) => "quire.op.ieee.float32.add",
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::Subtract) => {
+                    "quire.op.ieee.float32.sub"
+                }
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::Multiply) => {
+                    "quire.op.ieee.float32.mul"
+                }
+                (IeeeWidth::Binary32, IeeeArithmeticOperator::Divide) => {
+                    "quire.op.ieee.float32.div"
+                }
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::Add) => "quire.op.ieee.float64.add",
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::Subtract) => {
+                    "quire.op.ieee.float64.sub"
+                }
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::Multiply) => {
+                    "quire.op.ieee.float64.mul"
+                }
+                (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
+                    "quire.op.ieee.float64.div"
+                }
+            };
+            (
+                expr.operator,
+                op_full(
+                    identity,
+                    vec![law("ieee_profile", ieee_profile_definition())],
+                    Some(mode_kv("rounding", "nearest-even")),
+                    None,
+                ),
+            )
+        }
+        Op::IeeeComparison { comparison, .. } => {
+            let identity = match comparison {
+                IeeeComparison::NumericEqual => "quire.op.ieee.numeric_equal",
+                IeeeComparison::TotalOrder => "quire.op.ieee.total_order",
+                IeeeComparison::BitIdentical => "quire.op.ieee.bit_identical",
+            };
+            (
+                // Overrides `expr.operator` ("binary" per `corpus()`'s own
+                // shape tuple): the catalog's only IEEE-comparison
+                // identities are `call`, and `body.operator` must equal
+                // the catalogued entry's own `operator` or IR refuses
+                // `operation-class-mismatch`. `expr.form` (the node's own
+                // `semantic_form`, unrelated to this field) stays "binary".
+                "call",
+                op_full(
+                    identity,
+                    vec![law("ieee_profile", ieee_profile_definition())],
+                    None,
+                    None,
+                ),
+            )
+        }
+        Op::IeeeWidthConversion { source, target, .. } => match (source, target) {
+            (IeeeWidth::Binary64, IeeeWidth::Binary32) => (
+                expr.operator,
+                op_full(
+                    "quire.op.ieee.to_float32",
+                    vec![law("ieee_profile", ieee_profile_definition())],
+                    Some(mode_kv("rounding", "nearest-even")),
+                    Some(member_kind("type_argument")),
+                ),
+            ),
+            (IeeeWidth::Binary32, IeeeWidth::Binary64) => (
+                expr.operator,
+                op_full(
+                    "quire.op.ieee.to_float64",
+                    vec![law("ieee_profile", ieee_profile_definition())],
+                    None,
+                    Some(member_kind("type_argument")),
+                ),
+            ),
+            (source, target) => panic!("no catalog identity for ieee {source:?} -> {target:?}"),
+        },
+        // No catalogued `convert` identity accepts a `text` operand family
+        // (the corpus loop below swaps this expression's own operand for a
+        // literal, so IR's operand-family check never resolves one to
+        // check); `numeric.convert`'s `exact_numeric` operand expectation
+        // is therefore never actually exercised, only its `convert`
+        // operator and `type_argument` member shape.
+        Op::TextAdmission { .. } => (
+            expr.operator,
+            op_full(
+                "quire.op.numeric.convert",
+                vec![],
+                None,
+                Some(member_kind("type_argument")),
+            ),
+        ),
+        Op::TextComparison { operator } => (
+            expr.operator,
+            op_full(
+                text_family_identity("text", *operator),
+                vec![law("text_profile", text_profile_definition())],
+                Some(mode_kv("text_profile", "nfc")),
+                None,
+            ),
+        ),
+        Op::EnumComparison { operator } => {
+            (expr.operator, op(text_family_identity("enum", *operator)))
+        }
+        Op::QuantityArithmetic { operator } => {
+            let identity = match operator {
+                QuantityOperator::Add => "quire.op.quantity.add",
+                QuantityOperator::Subtract => "quire.op.quantity.sub",
+                QuantityOperator::Multiply => "quire.op.quantity.mul",
+                QuantityOperator::Divide => "quire.op.quantity.div",
+                QuantityOperator::Power => "quire.op.quantity.pow",
+            };
+            (expr.operator, op(identity))
+        }
+        Op::QuantityComparison { operator } => (
+            expr.operator,
+            op(text_family_identity("quantity", *operator)),
+        ),
+        Op::QuantityConversion { .. } => (
+            expr.operator,
+            op_full(
+                "quire.op.quantity.convert",
+                vec![],
+                Some(mode_kv("rounding", "nearest-even")),
+                Some(member_kind("type_argument")),
+            ),
+        ),
+    }
+}
+
+/// `lt`/`le`/`gt`/`ge` per [`OrderingOperator`] variant, shared by
+/// [`corpus_operation`]'s integer/rational/decimal `Ordering` arm.
+fn ordering_suffix(operator: OrderingOperator) -> &'static str {
+    match operator {
+        OrderingOperator::Less => "lt",
+        OrderingOperator::LessOrEqual => "le",
+        OrderingOperator::Greater => "gt",
+        OrderingOperator::GreaterOrEqual => "ge",
+    }
+}
+
+/// `quire.op.<family>.<suffix>` for one of the catalog's six comparison
+/// identities per family (`eq`/`ne`/`lt`/`le`/`gt`/`ge`), matching
+/// [`ComparisonOperator`]'s six variants in the same order used by
+/// `TEXT_COMPARISONS`/`ENUM_COMPARISONS`/`QUANTITY_COMPARISONS`.
+fn text_family_identity(family: &str, operator: ComparisonOperator) -> &'static str {
+    match (family, operator) {
+        ("text", ComparisonOperator::Equal) => "quire.op.text.eq",
+        ("text", ComparisonOperator::NotEqual) => "quire.op.text.ne",
+        ("text", ComparisonOperator::Less) => "quire.op.text.lt",
+        ("text", ComparisonOperator::LessOrEqual) => "quire.op.text.le",
+        ("text", ComparisonOperator::Greater) => "quire.op.text.gt",
+        ("text", ComparisonOperator::GreaterOrEqual) => "quire.op.text.ge",
+        ("enum", ComparisonOperator::Equal) => "quire.op.enum.eq",
+        ("enum", ComparisonOperator::NotEqual) => "quire.op.enum.ne",
+        ("enum", ComparisonOperator::Less) => "quire.op.enum.lt",
+        ("enum", ComparisonOperator::LessOrEqual) => "quire.op.enum.le",
+        ("enum", ComparisonOperator::Greater) => "quire.op.enum.gt",
+        ("enum", ComparisonOperator::GreaterOrEqual) => "quire.op.enum.ge",
+        ("quantity", ComparisonOperator::Equal) => "quire.op.quantity.eq",
+        ("quantity", ComparisonOperator::NotEqual) => "quire.op.quantity.ne",
+        ("quantity", ComparisonOperator::Less) => "quire.op.quantity.lt",
+        ("quantity", ComparisonOperator::LessOrEqual) => "quire.op.quantity.le",
+        ("quantity", ComparisonOperator::Greater) => "quire.op.quantity.gt",
+        ("quantity", ComparisonOperator::GreaterOrEqual) => "quire.op.quantity.ge",
+        (family, operator) => panic!("no catalog identity for {family} {operator:?}"),
+    }
 }
 
 /// The complete package: types, values, the corpus, and refused nodes.
@@ -1183,7 +1770,18 @@ pub fn corpus_package() -> PackageBuilder {
         &int_bound,
         literal("integer", "3"),
     );
+    // Every catalogued law-role definition any corpus expression's
+    // `operation.laws` names below (see `corpus_operation`), selected once
+    // up front so `validate_operations`'s law-selection check finds each
+    // one in `lock.definition_selections`.
+    for profile in DivisionProfile::ALL {
+        builder.select_definition(integer_division_definition(profile));
+    }
+    builder
+        .select_definition(ieee_profile_definition())
+        .select_definition(text_profile_definition());
     for expression in corpus() {
+        use ExactScalarOperation as Op;
         let mut arguments = expression
             .operands
             .iter()
@@ -1192,13 +1790,70 @@ pub fn corpus_package() -> PackageBuilder {
         if expression.code == LITERAL_OPERAND {
             arguments[1] = literal("integer", "3");
         }
-        builder.bounded(
+        // Code 1014 is `division(1014, Truncating, -5, 5, INT5)`: same
+        // profile, operands and result as code 1011's
+        // `division(1011, Truncating, -1000, 1000, INT)`. The two exist to
+        // be distinguished only by which bound is reachable (`INT` vs
+        // `INT5`), but bounds aren't part of the node-id preimage, so
+        // without a body difference they'd collide on digest and IR's
+        // `validate_graph` would refuse the whole package as a duplicate
+        // node id. A literal second operand keeps 1014 a genuine, distinct
+        // node without touching the domain-mismatch behavior under test.
+        if expression.code == 1014 {
+            arguments[1] = literal("integer", "1014");
+        }
+        // No catalogued `convert` identity accepts a `text` operand family
+        // (see `corpus_operation`'s `TextAdmission` arm), so this operand
+        // must be a literal -- IR's operand-family check never resolves a
+        // family for a literal argument, so the mismatch is never reached.
+        if matches!(expression.operation, Op::TextAdmission { .. }) {
+            // `corpus_operation`'s `TextAdmission` arm ignores which
+            // `TextProfile` this expression names (see its own comment),
+            // so every `TEXT_ADMISSIONS` code would otherwise get the
+            // identical `operator`/`operation`/`result_type` and, with
+            // this same fixed literal, an identical body -- and thus an
+            // identical node id, which IR's `validate_graph` refuses as a
+            // duplicate. Folding `code` into the literal keeps each one a
+            // distinct node without touching what's actually exercised
+            // (the literal's family/value, not its exact text).
+            arguments = vec![literal("text", &format!("a{}", expression.code))];
+        }
+        // No node this corpus builds has a `resolve_family` path to
+        // `ordered_enum` (the enum type's own `scalar_type` form resolves
+        // only to `enum`; see quire-contract-ir dfd8bd78's `resolve_family`
+        // in `checked_package/v2/operations.rs`), so `enum.lt/le/gt/ge`'s
+        // `ordered_enum` operand family can never be satisfied by a
+        // `reference` argument here. Substituting literals for exactly the
+        // ordering comparisons (never `eq`/`ne`, which accept the
+        // `enum_kind` group `ENUM_MEMBER` already resolves to) bypasses the
+        // family check the same way `TextAdmission` does above.
+        if let Op::EnumComparison { operator } = expression.operation {
+            if !matches!(
+                operator,
+                ComparisonOperator::Equal | ComparisonOperator::NotEqual
+            ) {
+                // As with the `TextAdmission` literal above: a fixed pair
+                // here would give every ordering-comparison code among
+                // `ENUM_COMPARISONS` the same body (the differing
+                // `operation.identity` this expression's own operator
+                // picks still varies below, but folding `code` in too
+                // keeps this resilient to that identity ever coinciding
+                // across two ordering operators).
+                arguments = vec![
+                    literal("enum", "READY"),
+                    literal("enum", &format!("READY{}", expression.code)),
+                ];
+            }
+        }
+        let (catalog_operator, operation) = corpus_operation(&expression);
+        builder.application_bounded(
             expression.code,
             "expression",
             expression.form,
             &result_type(expression.result),
             application(
-                expression.operator,
+                catalog_operator,
+                operation,
                 &result_type(expression.result),
                 arguments,
             ),
@@ -1238,71 +1893,104 @@ pub fn corpus_package() -> PackageBuilder {
         ),
         (DOMAIN_MISMATCH, vec![INT5]),
     ] {
-        builder.bounded(
+        builder.application_bounded(
             code,
             "expression",
             "binary",
             &integer_type,
-            integer_pair(),
+            integer_pair_for(code),
             &bounds,
         );
     }
     builder
-        .bounded(
+        .application_bounded(
             MISSING_ROUNDING,
             "expression",
             "binary",
             &key(T_FLOAT32),
             application(
                 "binary",
+                op_full(
+                    "quire.op.ieee.float32.add",
+                    vec![law("ieee_profile", ieee_profile_definition())],
+                    Some(mode_kv("rounding", "nearest-even")),
+                    None,
+                ),
                 &key(T_FLOAT32),
-                vec![reference(&key(V_FLOAT32)), reference(&key(V_FLOAT32))],
+                // A second operand distinct from corpus code 1061's own
+                // `ieee(1061, F32_2, ..., Add, Binary32, NearestEven)` --
+                // that corpus expression's `operation` (via
+                // `corpus_operation`'s `IeeeArithmetic` arm) is byte-
+                // identical to this fixture's, so a matching pair of
+                // `reference(V_FLOAT32)` arguments here would give this
+                // node the same digest as code 1061's and IR's
+                // `validate_graph` would refuse the whole package as a
+                // duplicate node id.
+                vec![reference(&key(V_FLOAT32)), literal("float32_bits", "1")],
             ),
             &[],
         )
-        .bounded(
+        .application_bounded(
             QUANTITY_EXACT,
             "expression",
             "conversion",
             &key(T_RATIONAL),
             application(
                 "convert",
+                op_full(
+                    "quire.op.quantity.convert",
+                    vec![],
+                    Some(mode_kv("rounding", "nearest-even")),
+                    Some(member_kind("type_argument")),
+                ),
                 &key(T_RATIONAL),
                 vec![reference(&key(V_QUANTITY))],
             ),
             &[RAT],
         )
-        .bounded(
+        .application_bounded(
             EXPRESSION_OPERAND,
             "expression",
             "binary",
             &integer_type,
             application(
                 "binary",
+                op("quire.op.integer.add"),
                 &integer_type,
+                // `integer_pair()` is embedded directly as operand data,
+                // not as a separate registered node: IR-216's
+                // `validate_application_keys`/`validate_operations` only
+                // ever re-derive/check a node whose own top-level `body`
+                // is an application term, never a nested application
+                // inside `body.arguments[*]` (quire-contract-ir dfd8bd78's
+                // module doc, `checked_package/v2/operations.rs`), so this
+                // nested blob's own placeholder-shaped `operation` is never
+                // itself validated.
                 vec![integer_pair(), reference(&key(V_INTEGER))],
             ),
             &[INT],
         )
-        .bounded(
+        .application_bounded(
             LITERAL_QUANTITY,
             "expression",
             "binary",
             UNIT_TYPE,
             application(
                 "binary",
+                op("quire.op.quantity.add"),
                 UNIT_TYPE,
                 vec![reference(&key(V_QUANTITY)), literal("rational", "1")],
             ),
             &[],
         )
-        .bounded(
+        .application_bounded(
             UNTYPED_OPERAND,
             "expression",
             "binary",
             &integer_type,
             application(
                 "binary",
+                op("quire.op.integer.add"),
                 &integer_type,
                 vec![reference(&key(V_INTEGER)), reference(&key(V_UNTYPED))],
             ),
@@ -1311,59 +1999,126 @@ pub fn corpus_package() -> PackageBuilder {
     let boolean = key(T_BOOLEAN);
     builder
         .code(COMPOSITE, "composite_type", "record", &boolean, aggregate())
-        .code(
+        // `FUNCTION`/`TEMPORAL`/`PROTOCOL` are non-`expression`-tagged
+        // nodes CG refuses on tag alone -- see `refused_items` below -- but
+        // each still carries an `application` body, so IR-216 validates it
+        // like any other application node. Their bodies are simplified to
+        // a minimal catalogued `boolean.not` application (unrelated to
+        // what each node tag actually denotes) rather than kept as
+        // 0-argument placeholders: the catalog has no 0-operand identity
+        // for any operator, so a 0-argument application could never be
+        // made catalog-conformant at all.
+        .application_code(
             FUNCTION,
             "function",
             "pure_function",
             &boolean,
-            application("call", &boolean, vec![]),
+            application(
+                "unary",
+                op("quire.op.boolean.not"),
+                &boolean,
+                vec![literal("boolean", "true")],
+            ),
         )
         .code(MODEL, "model", "model_import", &boolean, aggregate())
         .code(RELATION, "relation", "relationship", &boolean, aggregate())
         .code(STATE, "state", "state_clause", &boolean, aggregate())
-        .code(
+        .application_code(
             TEMPORAL,
             "temporal",
             "temporal_clause",
             &boolean,
-            application("temporal", &boolean, vec![]),
+            application(
+                "unary",
+                op("quire.op.boolean.not"),
+                &boolean,
+                vec![literal("boolean", "true")],
+            ),
         )
-        .code(
+        .application_code(
             PROTOCOL,
             "protocol",
             "protocol_clause",
             &boolean,
-            application("protocol_control", &boolean, vec![]),
+            application(
+                "unary",
+                op("quire.op.boolean.not"),
+                &boolean,
+                vec![literal("boolean", "true")],
+            ),
         )
-        .bounded(
+        .application_bounded(
             CALLS_FUNCTION,
             "expression",
             "binary",
             &integer_type,
             application(
-                "binary",
+                // `quire.op.integer.add`'s two operands both require the
+                // `exact_numeric` family; `FUNCTION` resolves to the
+                // catalog's own `function` family (its `node_tag` is
+                // `function`, matched directly by `resolve_family`), which
+                // no numeric identity's operand family admits, so that
+                // pairing refuses `IllTyped`/`OperatorIneligible` at
+                // admission before CG's own upstream-blocked check (which
+                // runs at generation time, over IR's already-lowered
+                // graph) is ever reached. `quire.op.function.call` is the
+                // one catalog identity built for exactly this shape: its
+                // first operand's family is `function` outright and its
+                // `rest` accepts `any_term`, so `FUNCTION` and a plain
+                // integer reference both admit unchanged.
+                "call",
+                op("quire.op.function.call"),
                 &integer_type,
-                vec![reference(&key(FUNCTION)), reference(&key(V_INTEGER))],
+                // `FUNCTION` is itself an application-bodied node built
+                // above in this same chain, so its real digest is already
+                // registered; `key(FUNCTION)` would be the stale
+                // placeholder and leave this reference dangling.
+                vec![
+                    reference(&code_id(FUNCTION).digest),
+                    reference(&key(V_INTEGER)),
+                ],
             ),
             &[INT],
         )
-        .bounded(
+        .application_bounded(
             WRONG_BODY,
             "expression",
             "binary",
             &integer_type,
-            application("unary", &integer_type, vec![reference(&key(V_INTEGER))]),
+            application(
+                "unary",
+                op("quire.op.integer.negate"),
+                &integer_type,
+                vec![reference(&key(V_INTEGER))],
+            ),
             &[INT],
         )
-        .bounded(
+        .application_bounded(
             WRONG_OPERAND,
             "expression",
             "binary",
             &integer_type,
             application(
                 "binary",
+                op("quire.op.integer.add"),
                 &integer_type,
-                vec![reference(&key(V_INTEGER)), reference(&key(V_DECIMAL))],
+                // A `reference(V_DECIMAL)` operand would resolve to the
+                // `decimal` family and `quire.op.integer.add`'s catalog
+                // entry requires `integer` in both positions, so IR would
+                // refuse the whole package `IllTyped`/`OperatorIneligible`
+                // at admission -- this fixture exists to exercise CG's own
+                // operand-type check at generation time, over an already
+                // -admitted package, not IR's. `argument_family` only ever
+                // resolves a family for `reference`/`binding` arguments (a
+                // `literal` always resolves to `None`, per its own match
+                // arms in quire-contract-ir dfd8bd78's
+                // `checked_package/v2/operations.rs`), so a literal operand
+                // bypasses that admission-time check entirely while CG's
+                // `check_operand` still classifies it by its own
+                // `value_kind` and refuses the same
+                // `OperandTypeMismatch { position: 1, expected: Integer,
+                // found: Some("decimal") }`.
+                vec![reference(&key(V_INTEGER)), literal("decimal", "1.5")],
             ),
             &[INT, DEC],
         );
