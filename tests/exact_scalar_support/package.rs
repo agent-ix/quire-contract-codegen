@@ -1197,7 +1197,11 @@ pub fn corpus_package() -> PackageBuilder {
             "expression",
             expression.form,
             &result_type(expression.result),
-            application(expression.operator, &result_type(expression.result), arguments),
+            application(
+                expression.operator,
+                &result_type(expression.result),
+                arguments,
+            ),
             &expression.bounds,
         );
     }
@@ -1261,7 +1265,11 @@ pub fn corpus_package() -> PackageBuilder {
             "expression",
             "conversion",
             &key(T_RATIONAL),
-            application("convert", &key(T_RATIONAL), vec![reference(&key(V_QUANTITY))]),
+            application(
+                "convert",
+                &key(T_RATIONAL),
+                vec![reference(&key(V_QUANTITY))],
+            ),
             &[RAT],
         )
         .bounded(
