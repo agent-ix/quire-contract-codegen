@@ -11,7 +11,7 @@ use std::{
 
 use quire_contract_codegen::{
     generate_exact_scalar_oracles, BoundForm, ExactScalarDisposition, ExactScalarGenerationError,
-    ExactScalarItem, ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal,
+    ExactScalarItem, ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, IntegerOperator,
     OperationProvenance, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CLAIM_MAP_VERSION,
     EXACT_SCALAR_CRATE_NAME, RUNTIME_REVISION,
 };
@@ -755,7 +755,13 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
     );
 }
 
-/// Trace: FR-014-AC-11, TC-024.
+// Deliberately untraced: FR-014-AC-11 as currently written says every claim marks its operation
+// `caller_declared` and the claim map carries the blocked item "operation identity not consumed
+// by codegen's generators". IR-217 (this test's own change) reads a matching node's own
+// catalogued identity instead and marks it `IrConfirmed`, and `blocked` is per-item now (only an
+// unreached claim's own `CallerDeclared` provenance still names it), so `marked.claim_map.blocked`
+// below is `[]`, the direct negation of that AC's middle conjunct. This test asserts the current,
+// intended behavior; AC-11's prose is stale pending a spec update, not this assertion.
 #[test]
 fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise() {
     let package = corpus_package().admit();
@@ -807,6 +813,62 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
         }
     );
     assert_eq!(marked.claim_map.blocked, []);
+}
+
+/// `Shape::of` gives `Add`, `Subtract`, `Multiply`, `IntegerDivision` and `IntegerModulo` the
+/// identical binary `&rt::Integer` shape, so `check_item`'s shape checks alone cannot distinguish
+/// an `Add` descriptor from a `Multiply` one over the same bounds. Node 1004 is
+/// `quire.op.integer.mul` over `[-1000,1000]`; naming `Add` against it, with the identical
+/// `[-1000,1000]` domain, passes every shape and bound check `check_item` makes. Confirming it
+/// anyway -- the defect this ticket exists to close -- would render an oracle that adds where the
+/// catalog says multiply and a harness whose `operation_identity` says `mul`.
+///
+// Deliberately untraced: no FR-014 AC states this invariant. AC-11 is the closest in subject
+// but (like the test above) asserts the opposite of what this generator now does; the other ten
+// are shape/bound/output ACs a within-shape operator swap satisfies unchanged. This test backs
+// the ticket's own defect description, not a written AC.
+#[test]
+fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
+    let package = corpus_package().admit();
+    let mismatched = generate(
+        &package,
+        &[ExactScalarItem {
+            node_id: code_id(1004),
+            operation: ExactScalarOperation::IntegerArithmetic {
+                operator: IntegerOperator::Add,
+                domain: bounded(-1000, 1000),
+            },
+        }],
+    );
+    let claim = &mismatched.claim_map.items[0];
+    assert!(matches!(claim.result, ExactScalarDisposition::Generated(_)));
+    assert_eq!(claim.operation.identity, "integer.add domain=[-1000,1000]");
+    assert_eq!(
+        claim.operation.provenance,
+        OperationProvenance::CallerDeclared {
+            blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+        },
+        "an Add descriptor over a catalogued mul node must not be marked IrConfirmed"
+    );
+
+    // The matching descriptor over the same node does confirm, reading the node's own
+    // catalogued identity rather than re-deriving codegen's own descriptor string.
+    let matched = generate(
+        &package,
+        &[ExactScalarItem {
+            node_id: code_id(1004),
+            operation: ExactScalarOperation::IntegerArithmetic {
+                operator: IntegerOperator::Multiply,
+                domain: bounded(-1000, 1000),
+            },
+        }],
+    );
+    let matched_claim = &matched.claim_map.items[0];
+    assert_eq!(matched_claim.operation.identity, "quire.op.integer.mul");
+    assert_eq!(
+        matched_claim.operation.provenance,
+        OperationProvenance::IrConfirmed
+    );
 }
 
 /// Trace: FR-014-AC-3, TC-024.

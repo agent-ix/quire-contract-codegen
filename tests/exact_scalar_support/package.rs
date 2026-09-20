@@ -167,14 +167,20 @@ fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
 /// 135-entry `quire.checked-operation-catalog/v1`
 /// (`tests/fixtures/checked-package/checked-package-v2/operation-catalog.json`),
 /// so `operation` must name a real catalogued identity with a conformant
-/// `operator`/`laws`/`mode`/`member`, not an opaque placeholder. `operation`
-/// is still not read by this crate's own generators (they classify a body
-/// by `term`/`operator`/`arguments` and the request item's own descriptor,
-/// never by `operation`), so which catalogued identity is used is otherwise
-/// irrelevant to what this crate generates -- see [`corpus_operation`] for
-/// how each corpus expression picks one. `result_type` names the caller's
-/// own declared node type for this expression, a node every caller of this
-/// helper has already registered.
+/// `operator`/`laws`/`mode`/`member`, not an opaque placeholder. This crate's
+/// own generators still classify a body by `term`/`operator`/`arguments`
+/// (never by `operation`), but for an exact-scalar claim the *confirmation*
+/// of the caller's own descriptor now does read `operation.identity` and
+/// `operation.mode` (and, for `IntegerDivision`, `operation.laws`) and
+/// refuses to mark a claim `IrConfirmed` unless they agree with the
+/// descriptor -- see [`corpus_operation`] for how each corpus expression
+/// picks a catalogued `operation` that matches its own descriptor. (A
+/// mismatched descriptor against one of these same catalogued nodes --
+/// e.g. an `IntegerOperator::Add` request item against node 1004's
+/// catalogued `quire.op.integer.mul` -- is exercised directly by the
+/// generation tests, not by a corpus node here.) `result_type` names the
+/// caller's own declared node type for this expression, a node every
+/// caller of this helper has already registered.
 pub fn application(
     operator: &str,
     operation: Value,
@@ -1531,13 +1537,13 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
             };
             (expr.operator, op(identity))
         }
-        Op::DecimalArithmetic { operator, .. } => match operator {
+        Op::DecimalArithmetic { operator, target } => match operator {
             DecimalOperator::Add => (
                 expr.operator,
                 op_full(
                     "quire.op.decimal.add",
                     vec![],
-                    Some(mode_kv("rounding", "nearest-even")),
+                    Some(mode_kv("rounding", target.rounding().as_str())),
                     None,
                 ),
             ),
@@ -1546,7 +1552,7 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 op_full(
                     "quire.op.decimal.sub",
                     vec![],
-                    Some(mode_kv("rounding", "nearest-even")),
+                    Some(mode_kv("rounding", target.rounding().as_str())),
                     None,
                 ),
             ),
@@ -1555,7 +1561,7 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 op_full(
                     "quire.op.decimal.mul",
                     vec![],
-                    Some(mode_kv("rounding", "nearest-even")),
+                    Some(mode_kv("rounding", target.rounding().as_str())),
                     None,
                 ),
             ),
@@ -1564,7 +1570,7 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 op_full(
                     "quire.op.decimal.div",
                     vec![],
-                    Some(mode_kv("rounding", "nearest-even")),
+                    Some(mode_kv("rounding", target.rounding().as_str())),
                     None,
                 ),
             ),
@@ -1574,13 +1580,15 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 op_full(
                     "quire.op.numeric.convert_rounding",
                     vec![],
-                    Some(mode_kv("rounding", "nearest-even")),
+                    Some(mode_kv("rounding", target.rounding().as_str())),
                     Some(member_kind("type_argument")),
                 ),
             ),
         },
         Op::IeeeArithmetic {
-            operator, width, ..
+            operator,
+            width,
+            rounding,
         } => {
             let identity = match (width, operator) {
                 (IeeeWidth::Binary32, IeeeArithmeticOperator::Add) => "quire.op.ieee.float32.add",
@@ -1609,7 +1617,7 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 op_full(
                     identity,
                     vec![law("ieee_profile", ieee_profile_definition())],
-                    Some(mode_kv("rounding", "nearest-even")),
+                    Some(mode_kv("rounding", rounding.as_str())),
                     None,
                 ),
             )
@@ -1636,13 +1644,17 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 ),
             )
         }
-        Op::IeeeWidthConversion { source, target, .. } => match (source, target) {
+        Op::IeeeWidthConversion {
+            source,
+            target,
+            rounding,
+        } => match (source, target) {
             (IeeeWidth::Binary64, IeeeWidth::Binary32) => (
                 expr.operator,
                 op_full(
                     "quire.op.ieee.to_float32",
                     vec![law("ieee_profile", ieee_profile_definition())],
-                    Some(mode_kv("rounding", "nearest-even")),
+                    Some(mode_kv("rounding", rounding.as_str())),
                     Some(member_kind("type_argument")),
                 ),
             ),
@@ -1698,12 +1710,20 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
             expr.operator,
             op(text_family_identity("quantity", *operator)),
         ),
-        Op::QuantityConversion { .. } => (
+        Op::QuantityConversion { target } => (
             expr.operator,
             op_full(
                 "quire.op.quantity.convert",
                 vec![],
-                Some(mode_kv("rounding", "nearest-even")),
+                match target {
+                    QuantityTarget::Exact => None,
+                    QuantityTarget::Decimal(decimal) => {
+                        Some(mode_kv("rounding", decimal.rounding().as_str()))
+                    }
+                    QuantityTarget::Integer { rounding, .. } => {
+                        Some(mode_kv("rounding", rounding.as_str()))
+                    }
+                },
                 Some(member_kind("type_argument")),
             ),
         ),
