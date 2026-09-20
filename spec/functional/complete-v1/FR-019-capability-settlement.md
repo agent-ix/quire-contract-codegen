@@ -114,7 +114,7 @@ nothing says so.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-019-AC-1 | Settlement dispatches one arm per variant of the closed backend kind with no catch-all; every variant of the closed kind has an arm, and a variant added without one does not compile. | Test (TC-030) |
+| FR-019-AC-1 | Settlement dispatches one arm per variant of the closed backend kind, and every variant reaches an arm that settles rather than falling through. | Test (TC-030) |
 | FR-019-AC-2 | Every requested item receives exactly one of `supported`, `requires-bound`, `unsupported` and `invalid-request`, settled from its `candidates` and extent classification, and `candidates` is read from the request rather than computed here. | Test (TC-030) |
 | FR-019-AC-3 | An unbounded extent against a `bounded`-only advertisement settles `requires-bound` when a finite bound is available, rather than `unsupported`; with no finite bound available it settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`; and it never settles `supported`. | Test (TC-030) |
 | FR-019-AC-4 | An item with more than one candidate and no named backend settles `invalid-request` with `invalid_capability`/`ambiguous-backend`, naming every candidate in candidate order, identically under every registration order. | Test (TC-030) |
@@ -122,6 +122,7 @@ nothing says so.
 | FR-019-AC-6 | With the pinned tool absent from `PATH`, and again with a mismatched pin, the item records the FR-331 result `unsupported` with cause `unsupported_projection`/`tool-unavailable` naming the backend, the tool identity and the claim; its disposition stays `supported`; no other candidate runs; and no probe runs before routing. | Test (TC-030) |
 | FR-019-AC-7 | An envelope whose `capability_vocabulary` is not exactly `quire.capability-kind/v1`, or is absent, is refused as `invalid_capability`/`unsupported-version` with none of its kinds read. | Test (TC-030) |
 | FR-019-AC-8 | An item with an absent extent classification settles `invalid-request` with `invalid_capability`/`absent-extent`, and an absent or unknown kind settles before the candidate table is consulted. | Test (TC-030) |
+| FR-019-AC-9 | A backend kind added without a negotiation arm does not compile: the dispatch is an exhaustive `match` over the closed kind with no catch-all arm. | Analysis |
 
 ## Dependencies
 

@@ -6,13 +6,17 @@
 //! rather than prose — the arms settle correctly today either way, and nothing
 //! but the scan says so tomorrow.
 
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::Path,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use quire_contract_codegen::{
-    negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
-    Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
-    ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
-    CAPABILITY_VOCABULARY,
+    negotiate_backend_provider, record_tool_probe, BackendDescriptor, BackendKind,
+    BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause, Disposition,
+    EnvelopeRefusal, ExtentClassification, ItemResult, ItemSettlement, Mode, ProbePhase,
+    RequestItem, RequestedKind, ToolObservation, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
 };
 
 const KANI_DIGEST: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
@@ -527,22 +531,27 @@ fn tc_030_the_settlement_scan_reads_the_settlement_point() {
 ///   `CapabilityDisposition::` all end in the same token. The occurrence counts
 ///   only when the character before it cannot continue an identifier, so those
 ///   three are not this seam and do not report as breaches of it.
-/// - A pattern reads a disposition; an expression builds one. On a line with
-///   `=>`, the pattern is to its left and the built value to its right, so an
-///   occurrence after the last `=>` is a construction and one before it is a
-///   read. This keeps `negotiate_kani`'s own `Mode::Bounded => Disposition::…`
-///   arms inside the gate rather than exempting every match arm in the crate.
+/// - A pattern reads a disposition; an expression builds one, and the two are
+///   separated by where the occurrence sits. On a line with `=>` the pattern is
+///   to its left and the built value to its right, so only an occurrence after
+///   the last `=>` counts; and an occurrence that directly follows `let `,
+///   `if let ` or `while let ` is that binding's pattern, not a value. Anything
+///   else — `let settled = Disposition::…` included — is a construction, so
+///   `negotiate_kani`'s own `Mode::Bounded => Disposition::…` arms stay inside
+///   the gate rather than every match arm in the crate being exempt.
 fn constructs_disposition(line: &str) -> bool {
     let cut = line.rfind("=>").map_or(0, |index| index + 2);
     let Some(tail) = line.get(cut..) else {
         return false;
     };
     tail.match_indices("Disposition::").any(|(index, _)| {
-        index == 0
-            || !tail[..index]
-                .chars()
-                .next_back()
-                .is_some_and(|character| character.is_alphanumeric() || character == '_')
+        let before = &tail[..index];
+        let continues_identifier = before
+            .chars()
+            .next_back()
+            .is_some_and(|character| character.is_alphanumeric() || character == '_');
+        let binds_a_pattern = before.ends_with("let ");
+        !continues_identifier && !binds_a_pattern
     })
 }
 
@@ -576,4 +585,222 @@ fn rust_sources(root: &Path) -> Vec<std::path::PathBuf> {
     found.sort();
     assert!(!found.is_empty(), "no Rust sources found under {root:?}");
     found
+}
+
+// ---------------------------------------------------------------------------
+// FR-019-AC-6: the pinned-tool probe, after routing
+// ---------------------------------------------------------------------------
+
+/// A routed item whose pinned tool is absent, and one whose tool is another
+/// identity, each record `unsupported`/`tool-unavailable` while keeping the
+/// item's `supported` disposition.
+///
+/// The tool identities come from a real `KaniInstallation` measured out of a
+/// scratch directory — one with no launcher at all, one with a launcher that
+/// reports a version other than the pin — rather than from a hand-written
+/// string, so the probe under test is the one the execution lane runs.
+///
+/// Trace: TC-030
+/// Provenance: codegen#86
+#[test]
+fn tc_030_an_absent_or_mismatched_pinned_tool_records_unsupported() {
+    let manifest = vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])];
+    let settlement = settle_one(
+        manifest.clone(),
+        item(
+            RequestedKind::Known(CapabilityKind::ValueValidity),
+            Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
+        ),
+    );
+    let routed = settlement
+        .routed(&manifest)
+        .expect("a supported item routes to its one candidate");
+    assert_eq!(routed.backend, BackendKind::Kani.identity());
+    assert_eq!(routed.pinned_tool, "cargo-kani 0.67.0");
+
+    let absent = record_tool_probe(&routed, ProbePhase::BeforeRun, &observe_launcher(None))
+        .expect("an absent tool is not a passing probe");
+    assert_eq!(
+        absent,
+        ItemResult::Unsupported {
+            cause: Cause::ToolUnavailable {
+                kind: CapabilityKind::ValueValidity,
+                backend: BackendKind::Kani.identity().to_owned(),
+                expected: "cargo-kani 0.67.0".to_owned(),
+                actual: None,
+            }
+        }
+    );
+
+    let mismatched = record_tool_probe(
+        &routed,
+        ProbePhase::BeforeRun,
+        &observe_launcher(Some("0.66.0")),
+    )
+    .expect("a mismatched tool is not a passing probe");
+    assert_eq!(
+        mismatched,
+        ItemResult::Unsupported {
+            cause: Cause::ToolUnavailable {
+                kind: CapabilityKind::ValueValidity,
+                backend: BackendKind::Kani.identity().to_owned(),
+                expected: "cargo-kani 0.67.0".to_owned(),
+                actual: Some("cargo-kani 0.66.0".to_owned()),
+            }
+        },
+        "the record names the expected and the actual identity, not just a failure"
+    );
+
+    // The disposition is not touched by either outcome. FR-290 keeps the two
+    // apart so a consumer can tell a claim no backend discharges from a claim
+    // whose backend was not installed.
+    assert_eq!(
+        settlement.disposition,
+        Disposition::Supported {
+            backend: BackendKind::Kani.identity().to_owned(),
+        }
+    );
+
+    // A matching tool records nothing at all, so the probe is not a second place
+    // a result can be invented.
+    assert_eq!(
+        record_tool_probe(
+            &routed,
+            ProbePhase::BeforeRun,
+            &observe_launcher(Some("0.67.0"))
+        ),
+        None
+    );
+}
+
+/// A tool that changes after a passing probe records `failed`, with the same
+/// cause as absence found at probe time.
+///
+/// Trace: TC-030
+/// Provenance: codegen#86
+#[test]
+fn tc_030_a_tool_that_changes_after_a_passing_probe_records_failed() {
+    let manifest = vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])];
+    let routed = settle_one(
+        manifest.clone(),
+        item(
+            RequestedKind::Known(CapabilityKind::ValueValidity),
+            Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
+        ),
+    )
+    .routed(&manifest)
+    .expect("a supported item routes");
+
+    let during = record_tool_probe(
+        &routed,
+        ProbePhase::DuringRun,
+        &observe_launcher(Some("0.66.0")),
+    )
+    .expect("a changed tool is recorded");
+    let expected_cause = Cause::ToolUnavailable {
+        kind: CapabilityKind::ValueValidity,
+        backend: BackendKind::Kani.identity().to_owned(),
+        expected: "cargo-kani 0.67.0".to_owned(),
+        actual: Some("cargo-kani 0.66.0".to_owned()),
+    };
+    assert_eq!(
+        during,
+        ItemResult::Failed {
+            cause: expected_cause.clone()
+        },
+        "the result, not the cause, separates a change mid-run from absence at probe"
+    );
+    assert_eq!(
+        record_tool_probe(
+            &routed,
+            ProbePhase::BeforeRun,
+            &observe_launcher(Some("0.66.0"))
+        ),
+        Some(ItemResult::Unsupported {
+            cause: expected_cause
+        })
+    );
+}
+
+/// Nothing but a `supported` item routes, so no probe has a tool to run against
+/// before settlement has chosen one.
+///
+/// Trace: TC-030
+/// Provenance: codegen#86
+#[test]
+fn tc_030_no_item_routes_before_it_is_settled_supported() {
+    let manifest = vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])];
+    let unsettled = [
+        // requires-bound
+        RequestItem {
+            extent: unbounded(true),
+            ..item(
+                RequestedKind::Known(CapabilityKind::ValueValidity),
+                Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
+            )
+        },
+        // unsupported
+        item(
+            RequestedKind::Known(CapabilityKind::Realizability),
+            Candidates::Set(Vec::new()),
+        ),
+        // invalid-request
+        item(
+            RequestedKind::Absent,
+            Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
+        ),
+    ];
+    for item in unsettled {
+        let settlement = settle_one(manifest.clone(), item);
+        assert_eq!(
+            settlement.routed(&manifest),
+            None,
+            "{:?} routed a backend to probe",
+            settlement.disposition
+        );
+    }
+}
+
+/// The identity a real `cargo-kani` launcher reports, or `Absent` when the
+/// scratch installation holds no launcher at all.
+///
+/// `KaniInstallation` is constructed directly against a scratch directory rather
+/// than by mutating `PATH`: `env::set_var` races every other thread reading the
+/// environment, including a child process snapshotting it at fork.
+fn observe_launcher(version: Option<&str>) -> ToolObservation {
+    // One directory per call, not per (pid, version): the two probe tests ask
+    // for the same version and run in the same process, and a shared path made
+    // them race for one file. The counter is what keeps them independent.
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let directory = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "codegen-86-probe-{}",
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let launcher = directory.join("cargo-kani");
+    fs::create_dir_all(&directory).expect("the scratch directory is created");
+    let Some(version) = version else {
+        let _ = fs::remove_file(&launcher);
+        return ToolObservation::Absent;
+    };
+    fs::write(
+        &launcher,
+        format!("#!/bin/sh\necho 'cargo-kani {version}'\n"),
+    )
+    .expect("the fake launcher is written");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755))
+            .expect("the fake launcher is executable");
+    }
+    let output = std::process::Command::new(&launcher)
+        .args(["kani", "--version"])
+        .output()
+        .expect("the fake launcher runs");
+    ToolObservation::Identity(
+        String::from_utf8(output.stdout)
+            .expect("the launcher prints UTF-8")
+            .trim()
+            .to_owned(),
+    )
 }
