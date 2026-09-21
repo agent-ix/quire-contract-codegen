@@ -819,25 +819,92 @@ fn tc_010_the_sealed_records_impact_snapshot_is_the_quire_export() {
     );
 }
 
+/// Ask git, not a hand-copied pattern set, whether `path` is ignored.
+///
+/// `git check-ignore` is the authority `.gitignore` itself is written against.
+/// Reimplementing `target/`, `*-target/`, `target-*/` and friends as literals
+/// is exactly the drift this function exists to stop: `target-codex-backends`
+/// was the fifth name added to that literal list by hand, and a build dir
+/// spelled `cg-77-target` -- this repository's own `CARGO_TARGET_DIR`
+/// convention -- matched none of the five and was walked anyway.
+///
+/// `core.excludesFile` is emptied for the query, so the answer is a function of
+/// the committed tree and not of whoever is running the gate. Ambient config is
+/// live otherwise, and not hypothetically: measured on this host, in a scratch
+/// repository carrying no `.gitignore` at all, `.venv` and `.idea` both come
+/// back ignored on git's defaults and both come back not-ignored once
+/// `core.excludesFile` is emptied -- the rules were `~/.gitignore_global`'s.
+/// A census whose reach depends on a developer's personal ignore file is a
+/// gate that passes for the wrong reason on one machine and not another.
+///
+/// `cwd` must be the directory holding `path`. Git discovers its repository
+/// from the working directory and stops at the first `.git` it finds, so the
+/// answer is relative to whichever repository that is; querying from a fixed
+/// root would give a different answer than querying from inside a nested one.
+///
+/// Fails closed like the `read_dir` below it: a `git check-ignore` that cannot
+/// run, or exits with neither "ignored" (0) nor "not ignored" (1), is treated
+/// as a reason to stop rather than a reason to guess.
+fn is_git_ignored(cwd: &Path, path: &Path) -> bool {
+    let status = Command::new("git")
+        .args(["-c", "core.excludesFile=", "check-ignore", "--quiet"])
+        .arg(path)
+        .current_dir(cwd)
+        .status()
+        .unwrap_or_else(|error| {
+            panic!(
+                "git check-ignore could not run for {} ({error}); the census cannot \
+                 tell an ignored directory from a scanned one",
+                path.display()
+            )
+        });
+    match status.code() {
+        Some(0) => true,
+        Some(1) => false,
+        other => panic!(
+            "git check-ignore exited {other:?} for {}; the census cannot tell an \
+             ignored directory from a scanned one",
+            path.display()
+        ),
+    }
+}
+
 /// Collect every readable source file under `directory`, recursively.
+///
+/// A directory git ignores is skipped. That looks like it needs a second guard,
+/// because `.gitignore` rules are inert on paths git already tracks, so a
+/// `git add -f` file under a `*-target/` name would still be repository source
+/// the census must read. It does not: `git check-ignore` consults the index, and
+/// a directory stops reporting ignored the moment anything under it is tracked.
+/// Measured, at three depths, with `*-target/` in `.gitignore`:
+///
+/// | directory                                     | `check-ignore` exit |
+/// |-----------------------------------------------|---------------------|
+/// | `a-target` before `git add -f`                 | 0, ignored          |
+/// | `a-target` with `a-target/sub/deep/x.py` added | 1, not ignored      |
+/// | `a-target/sub` and `a-target/sub/deep`, same   | 1, not ignored      |
+/// | sibling `b-target`, nothing tracked under it   | 0, ignored          |
+///
+/// An explicit `tracked_path_under(...)` guard was written here against exactly
+/// that hole and then deleted: `tracked` comes from `git ls-files`, which reads
+/// the same index `check-ignore` reads, so the two cannot disagree and the guard
+/// could never change an outcome. A control that can never succeed reads as
+/// protection while protecting nothing, which is the defect class this file is
+/// otherwise full of assertions about.
 fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
-    // Excluded, and each for its own reason: `.git` is not source, `target` and the
-    // lane-isolated `target-codex-backends` are build output, and `.venv-assurance`
-    // is the pinned upstream release rather than anything this repository wrote.
-    // `evidence/` used to be excluded here
-    // as retained history that legitimately named the schemas its records were
-    // sealed against; it is deleted, so the exemption it needed is gone with it.
-    // `__pycache__` joins the three: it is generated, it is not authored here,
-    // and its `.pyc` files are binary. They were being read and silently dropped
-    // by the old unreadable-file `continue`, which is how the wide-encoding
-    // assertion below found them.
-    const EXCLUDED: [&str; 5] = [
-        ".git",
-        "target",
-        "target-codex-backends",
-        ".venv-assurance",
-        "__pycache__",
-    ];
+    // `.git` is the one directory excluded by literal name rather than by
+    // asking git: it is not itself subject to `.gitignore` (git does not
+    // ignore its own directory), so a gitignore query would answer "not
+    // ignored" and walk it. Every other directory this file used to exclude
+    // by name -- `target`, the lane-isolated `target-codex-backends`, and
+    // `.venv-assurance` -- is covered by a `.gitignore` pattern (`target/`,
+    // `target-*/`, `.venv-assurance/`), and `__pycache__` by `__pycache__/`.
+    // Measured directly with `git check-ignore -v` against real directories
+    // on disk: all four resolve to a `.gitignore` rule, so none needs to stay
+    // a literal. `evidence/` used to be excluded here as retained history
+    // that legitimately named the schemas its records were sealed against;
+    // it is deleted, so the exemption it needed is gone with it.
+    const EXCLUDED: [&str; 1] = [".git"];
     // Fail closed, exactly as the file arm does. A silent `return` here was the
     // directory half of the same class as the unreadable-file skip: an exclusion
     // no deny-list entry names, which also quietly lowers `inspected` and the
@@ -858,6 +925,9 @@ fn collect_sources(directory: &Path, into: &mut Vec<PathBuf>) {
                 .and_then(|value| value.to_str())
                 .unwrap_or("");
             if EXCLUDED.contains(&name) {
+                continue;
+            }
+            if is_git_ignored(directory, &path) {
                 continue;
             }
             collect_sources(&path, into);
