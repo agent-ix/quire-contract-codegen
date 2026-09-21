@@ -50,7 +50,7 @@ floor is `vacuous`, not `pass` — a corpus can go green by getting smaller, and
 stops that. The corpus covers the oracle, harness and strategy slices and the rejection cases that
 keep `unsupported` and `invalid-input` apart, and a census row reports how many distinct diagnostics
 and terminal states the corpus actually reached.
-The harness source-limit case must observe `ResourceLimitExceeded` and `unsupported`; the corpus
+The harness source-limit case must observe `resource_limit_exceeded` and `unsupported`; the corpus
 has at least ten rows including its census. Campaign outcome controls execute in TC-004's generated
 crate tests; this generation producer does not yet publish native campaign-execution results.
 The library-only public bound-package consumer additionally has seven synthetic-projection tests
