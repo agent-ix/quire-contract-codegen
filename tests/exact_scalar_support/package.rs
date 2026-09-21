@@ -233,8 +233,8 @@ pub fn mode_kv(kind: &str, value: &str) -> Value {
 }
 
 /// An `operation.member` naming only a `kind`: sufficient for every member
-/// kind this module uses (`type_argument`), which IR checks for presence
-/// and kind only.
+/// kind this module uses (`type_argument`, `profile_operator`), which IR
+/// checks for presence and kind only.
 pub fn member_kind(kind: &str) -> Value {
     json!({"kind": kind})
 }
@@ -553,6 +553,53 @@ impl PackageBuilder {
         self
     }
 
+    /// Registers `definition` under `role` in `lock.profile_selections`
+    /// (deduplicated), the clause/profile-role analogue of
+    /// [`Self::select_definition`]: `validate_operations`'s check for a
+    /// `temporal_profile`/`protocol_profile` law (quire-contract-ir dfd8bd78
+    /// `checked_package/v2/operations.rs`) accepts any published definition
+    /// of that role exactly when the lock selected it under this role --
+    /// there is no fixed catalogued list for a profile role the way there is
+    /// for `integer_division`/`ieee_profile`/`text_profile`.
+    pub fn select_profile(&mut self, role: &str, definition: Value) -> &mut Self {
+        let selection = json!({"role": role, "definition": definition});
+        for path in ["lock", "identity_preimage"] {
+            let selections = self.value[path]["profile_selections"]
+                .as_array_mut()
+                .expect("profile_selections");
+            if !selections.contains(&selection) {
+                selections.push(selection.clone());
+            }
+        }
+        self
+    }
+
+    /// Adds `dependency` to the already-registered node `target`'s own
+    /// `dependencies` edge list, without touching `target`'s identity: an
+    /// application-bodied node's digest is derived from a preimage that
+    /// excludes `dependencies` (see [`Self::application_code_with`]), and
+    /// every other node's digest is the caller-supplied `digest` parameter
+    /// to `node`/`node_with` -- in both cases identity is fixed before this
+    /// method ever runs. `wire()` rebuilds
+    /// `identity_preimage.identity_projection` fresh from the current node
+    /// objects on every call, so the appended edge is reflected consistently
+    /// by the next `wire()`/`admit()`.
+    pub fn add_dependency(&mut self, target: &str, dependency: &str) -> &mut Self {
+        let nodes = self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("nodes");
+        let node = nodes
+            .iter_mut()
+            .find(|node| node["node_id"]["digest"].as_str() == Some(target))
+            .unwrap_or_else(|| panic!("no node registered with digest {target}"));
+        let dependencies = node["dependencies"].as_array_mut().expect("dependencies");
+        let reference = node_ref(dependency);
+        if !dependencies.contains(&reference) {
+            dependencies.push(reference);
+        }
+        self
+    }
+
     /// Add `bound` once, returning its key. Any requires-bound kind foreign
     /// to `bound`'s own body (see `Bound::foreign`) is added first and wired
     /// as this node's dependency, so it stays reachable wherever `bound` is.
@@ -629,6 +676,14 @@ fn evidence(package: &Value) -> CheckedPackageEvidence {
             .as_array()
             .cloned()
             .unwrap_or_default(),
+    );
+    artifacts.extend(
+        lock["profile_selections"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|selection| selection["definition"].clone()),
     );
     artifacts.push(package["diagnostics"]["catalog"].clone());
     let mut evidence = CheckedPackageEvidence::new();
@@ -855,6 +910,20 @@ pub const RELATION: u32 = 2004;
 pub const STATE: u32 = 2005;
 pub const TEMPORAL: u32 = 2006;
 pub const PROTOCOL: u32 = 2007;
+/// A `claim`-tagged node wired only as an extra dependency of
+/// `LITERAL_OPERAND` (issue #100 / FR-014-AC-5): it is never itself
+/// requested, so it never gets its own oracle -- its sole purpose is to
+/// sit in one requested item's reachable set so the generator's `claims`
+/// field, structurally empty in every fixture node before this one, is
+/// actually exercised.
+pub const CLAIM: u32 = 2008;
+/// A second, distinct `claim`-tagged node wired to the same item as
+/// `CLAIM` above (issue #100 PR review): a single populated `claims` entry
+/// left the field's ordering and truncation unfalsifiable -- a `.take(1)`
+/// mutation and a `.reverse()` mutation on the generated field both stayed
+/// green against a one-element array. Two entries in a determinate order
+/// close that gap.
+pub const CLAIM_ALT: u32 = 2009;
 pub const CALLS_FUNCTION: u32 = 2011;
 pub const WRONG_BODY: u32 = 2013;
 pub const WRONG_OPERAND: u32 = 2014;
@@ -2217,6 +2286,102 @@ pub fn corpus_package() -> PackageBuilder {
             ),
             &[INT, RAT],
         );
+    // FR-014-AC-5 / issue #100: no fixture node before this one carried the
+    // `claim` tag, so `claim-map.json`'s `claims` field was structurally
+    // always empty and TC-024 never exercised it (measured on origin/main:
+    // zero `"node_tag": "claim"` occurrences anywhere in this file). These
+    // two nodes are genuine `claim` nodes -- `CLAIM`'s `operation`/`body`
+    // shape is adapted from quire-contract-ir dfd8bd78's own admitted
+    // conformance fixture
+    // (`tests/fixtures/checked-package/checked-package-v2/fixtures/
+    // positive-all-families.json`, node index 11), which IR's own `admit()`
+    // path accepts, not invented here. Two fields differ from that fixture
+    // rather than matching it byte-for-byte, and IR admits both: `member`
+    // there is `{"kind": "profile_operator", "operator": "always"}`,
+    // while `member_kind` below emits only `{"kind": "profile_operator"}`
+    // (IR checks presence and `kind` only, per `member_kind`'s own doc);
+    // and `revision.value` there is `1-draft.3`, while `artifact_ref`'s
+    // fixed `1-draft.1` is used here (that field is never checked against
+    // anything, so this stays consistent with every other artifact ref
+    // this module builds). Neither difference is invented to be wrong --
+    // both are IR-admitted shapes, just not the exact fixture bytes.
+    //
+    // Both carry no dependencies of their own: `semantic_type` and
+    // `result_type` all point at the corpus's existing `T_INTEGER` node,
+    // already reachable from `LITERAL_OPERAND`, so neither adds any
+    // *other* new node to that item's closure. Neither is ever itself
+    // requested -- see `CLAIM`/`CLAIM_ALT`'s own doc comments -- and both
+    // are wired below as extra dependencies of `LITERAL_OPERAND`.
+    // Registered last, so their own synthetic source-map positions do not
+    // shift any earlier node's.
+    //
+    // A single populated `claims` entry left the field's ordering and
+    // truncation unfalsifiable against mutation (PR #132 review measured
+    // this: a `.take(1)` truncation and a `.reverse()` both stayed green
+    // over one element -- the same mutation on `bounds`, which has
+    // multi-element arrays in this corpus, already goes red). `CLAIM_ALT`
+    // is a second, distinct claim node -- a different `semantic_form`
+    // (`analysis_claim`, not `verification_claim`) and a different
+    // `temporal_profile` law -- so `LITERAL_OPERAND`'s `claims` array
+    // gets two entries in a determinate (ascending node-id) order.
+    // `CLAIM_ALT`'s law identity/digest is not copied from any upstream
+    // vector: a profile-role law has no closed catalog to select from
+    // (see `select_profile`'s own doc) -- any well-formed artifact ref
+    // the lock selects under that role admits -- so this is a second,
+    // independently chosen well-formed value, distinct from `CLAIM`'s by
+    // construction.
+    let temporal_profile = artifact_ref(
+        "quire.temporal.event-position.false-extension/v1",
+        "78c0a40768d8c2b165699e07ae5c3eed1676ecdca69fb222fa660845a998f8f1",
+    );
+    builder.select_profile("temporal_profile", temporal_profile.clone());
+    builder.application_code(
+        CLAIM,
+        "claim",
+        "verification_claim",
+        &key(T_INTEGER),
+        application(
+            "claim",
+            op_full(
+                "quire.op.claim.clause",
+                vec![law("temporal_profile", temporal_profile)],
+                None,
+                Some(member_kind("profile_operator")),
+            ),
+            &key(T_INTEGER),
+            Vec::new(),
+        ),
+    );
+    let temporal_profile_alt = artifact_ref(
+        "quire.temporal.event-position.true-extension/v1",
+        "1c01ae41ddcc0a645b07020e6e2a2e0c63a8c5f1afc8e9b7789e8b0b16c16939",
+    );
+    builder.select_profile("temporal_profile", temporal_profile_alt.clone());
+    builder.application_code(
+        CLAIM_ALT,
+        "claim",
+        "analysis_claim",
+        &key(T_INTEGER),
+        application(
+            "claim",
+            op_full(
+                "quire.op.claim.clause",
+                vec![law("temporal_profile", temporal_profile_alt)],
+                None,
+                Some(member_kind("profile_operator")),
+            ),
+            &key(T_INTEGER),
+            Vec::new(),
+        ),
+    );
+    builder.add_dependency(
+        code_id(LITERAL_OPERAND).digest.as_ref(),
+        code_id(CLAIM).digest.as_ref(),
+    );
+    builder.add_dependency(
+        code_id(LITERAL_OPERAND).digest.as_ref(),
+        code_id(CLAIM_ALT).digest.as_ref(),
+    );
     builder
 }
 
