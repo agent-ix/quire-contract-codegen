@@ -23,9 +23,10 @@
 //! [`Outcome::LoweredScalar`]/`render_scalar`. Every other confirmed family is honestly refused as
 //! [`UnsupportedObligation::OperationNotRendered`], never silently mis-rendered. A claim that
 //! codegen generated but whose operation it did not confirm reports the request item's own
-//! descriptor-derived identity as `CallerDeclared` and, unless it is refused first on a ground
-//! that does not depend on the operation -- an unsatisfiable bound it names, a mismatched
-//! package, a duplicate item -- is refused here as
+//! descriptor-derived identity as `CallerDeclared` and, unless a ground that does not depend on
+//! the operation displaces that refusal -- an unsatisfiable bound it names or a mismatched
+//! package, each of which precedes it, or a duplicate item, which overwrites it afterwards --
+//! is refused here as
 //! [`UnsupportedObligation::CallerDeclaredOperation`] with the domains the IR does carry. That is
 //! the only case of [`crate::OperationProvenance::CallerDeclared`] this generator refuses under
 //! that name: `CallerDeclaredOperation` is constructed once, inside the `Generated` arm of
