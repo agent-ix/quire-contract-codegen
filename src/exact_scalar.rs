@@ -369,9 +369,9 @@ pub enum OperationProvenance {
     /// oracle the descriptor names; what is withheld there is the
     /// confirmation, not the code.
     ///
-    /// This is the one place these three cases are enumerated. Two further
-    /// copies drifted against each other and against this one before they were
-    /// deleted; do not reintroduce a second.
+    /// Enumerate these cases here and nowhere else. Every copy that existed
+    /// elsewhere in this crate had drifted against this one and against the
+    /// code by the time it was found; a second copy is how that starts again.
     ///
     /// In every case the reported identity is the request item's own
     /// descriptor-derived one, and a consumer must not treat the operation law
@@ -751,9 +751,8 @@ pub fn generate_exact_scalar_oracles(
         // No blocker applies to every entry any more: a confirmed claim's
         // provenance is `IrConfirmed`, and an unconfirmed claim's
         // `CallerDeclared` provenance names
-        // `UpstreamBlocker::OperationIdentityNotConsumed` per-item -- whether
-        // this generator never reached the node, refused it after lowering, or
-        // lowered it and found the operation disagreed.
+        // `UpstreamBlocker::OperationIdentityNotConsumed` per-item, whichever
+        // of the cases on `OperationProvenance::CallerDeclared` applies.
         blocked: Vec::new(),
         items: claims,
     };

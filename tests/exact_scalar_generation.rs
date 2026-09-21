@@ -599,8 +599,8 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     assert_eq!(json, serde_json::to_value(map).expect("typed map"));
 
     // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and an
-    // unconfirmed claim -- unreached, refused after lowering, or lowered with a disagreeing
-    // operation -- carries the blocker on its own `operation.provenance` rather than at the map
+    // unconfirmed claim, in any of the cases `OperationProvenance::CallerDeclared` enumerates,
+    // carries the blocker on its own `operation.provenance` rather than at the map
     // level. `blocked` has one writer in the crate (`exact_scalar.rs`'s `Vec::new()`), so this
     // pair is a regression guard against that literal changing, not a criterion an implementation
     // can violate; the falsifiable contract is the per-item provenance asserted below.
@@ -778,7 +778,7 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
 /// Node 1011 is a truncating division whose own `operation.laws` does not name the floor
 /// definition. A floor descriptor implies the same catalogued identity (`quire.op.integer.div`),
 /// so this is not AC-12's different-operation case, and the item's disposition is `Generated`, so
-/// it is neither half of AC-14's unreached-or-refused case. It is the third state: the item
+/// it is neither half of AC-14's never-inspected-or-refused case. It is the third state: the item
 /// generates the oracle its descriptor
 /// names and is marked `caller_declared` because the law disagrees. Deleting the law check would
 /// leave AC-11, AC-12 and AC-14 satisfied and this one violated.
