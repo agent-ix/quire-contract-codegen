@@ -20,6 +20,15 @@ exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-ir" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-model" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-runtime" },
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-observation" },
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-protocol" },
+    # Two copies are in the graph and they declare different expressions: rev
+    # 21c507e, a direct dependency, is AGPL-3.0-or-later; rev f1700a9, reached
+    # via quire-contract-ir and quire-protocol, is AGPL-3.0-only. cargo-deny
+    # collapses them by name and version and evaluates only one, so naming a
+    # single expression here leaves whichever copy it did not pick unchecked.
+    { allow = ["AGPL-3.0-only", "AGPL-3.0-or-later"], crate = "quire-spec-language" },
+    { allow = ["AGPL-3.0-only"], crate = "agent-ix-baseline-producer" },
 ]
 
 [bans]
@@ -37,7 +46,17 @@ ignore = ["RUSTSEC-2026-0009"]
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+# Every first-party agent-ix repository the resolved graph actually reaches. The
+# list is the whole point of the check: a git source outside it is an unreviewed
+# dependency and fails. Listing only two of the eight made `sources` red on every
+# run, which is the same as not checking at all.
 allow-git = [
+    "https://github.com/agent-ix/filament-core-data",
     "https://github.com/agent-ix/quire-contract-ir",
     "https://github.com/agent-ix/quire-contract-runtime",
+    "https://github.com/agent-ix/quire-observation",
+    "https://github.com/agent-ix/quire-protocol",
+    "https://github.com/agent-ix/quire-spec-language",
+    "https://github.com/agent-ix/tl-mltl",
+    "https://github.com/agent-ix/tl-syntax",
 ]
