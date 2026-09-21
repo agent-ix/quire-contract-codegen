@@ -369,9 +369,12 @@ pub enum OperationProvenance {
     /// oracle the descriptor names; what is withheld there is the
     /// confirmation, not the code.
     ///
-    /// Enumerate these cases here and nowhere else. Every copy that existed
-    /// elsewhere in this crate had drifted against this one and against the
-    /// code by the time it was found; a second copy is how that starts again.
+    /// In this crate's Rust source, enumerate these cases here and nowhere
+    /// else. Every copy that existed elsewhere in the source had drifted
+    /// against this one and against the code by the time it was found; a
+    /// second copy is how that starts again. FR-014 states the same three
+    /// cases normatively, because a requirement has to; when they diverge the
+    /// code is what this doc must match, and FR-014 is the defect.
     ///
     /// In every case the reported identity is the request item's own
     /// descriptor-derived one, and a consumer must not treat the operation law
