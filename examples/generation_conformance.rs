@@ -27,8 +27,22 @@
 //! check it ran but ran fewer than its declared floor is `vacuous`, not `pass`:
 //! a case that simplified away is not a case that held. That distinction is what
 //! stops a corpus from going green by getting smaller.
+//!
+//! The exit code carries that same census: `0` when every row is a `pass`, `1`
+//! when any row is a `fail`, and `2` when no row failed but one is `vacuous`,
+//! which is inconclusive rather than either verdict. The rows themselves are
+//! unchanged and still go to stdout; the failing and vacuous ones are named on
+//! stderr. This judges generation conformance and still nothing else.
+//!
+//! `ci` reaches this producer twice, and only one of them is a judgement. The
+//! `conformance` target runs it standalone, and nothing else looks at that
+//! invocation, so its exit code is the whole gate. `assurance-inputs` runs it
+//! redirected into the chain's intake and deliberately tolerates status 1 and
+//! 2, because the chain classifies the rows itself and cannot report a defect
+//! whose bytes never reached it.
 
 use std::fmt::Write as _;
+use std::process;
 
 use quire_contract_codegen::{
     generate_boolean_oracle, generate_i64_strategy, generate_tristate_harness, AttestationContext,
@@ -1016,5 +1030,56 @@ fn main() {
 
     for row in &rows {
         println!("{}", serde_json::to_string(row).expect("a row serializes"));
+    }
+
+    // `Makefile:233` lists `conformance` in `ci`, so this producer's own rows
+    // have to set its exit code. Printing a `fail` row and returning unit made
+    // that entry structurally incapable of failing: `rejection::unsupported-
+    // expression` sat red inside a green `make conformance`, and because the
+    // assurance chain asserts a zero exit, that one unjudged row suppressed
+    // four `shared_assurance` tests at once (#77).
+    //
+    // The three codes keep the row vocabulary's distinction instead of
+    // collapsing it, and they agree with the chain's `ROW_RESULTS`, which maps
+    // `fail` to `failed` and `vacuous` to `not_computed`, and with its
+    // `RESULT_PRECEDENCE`, where both outrank `passed` because the strongest
+    // thing observed is what the run has to be reported as. `vacuous` is not a
+    // failure and is not a pass either, so it exits 2 as inconclusive.
+    //
+    // Only `make conformance` acts on these codes. `make assurance-inputs`
+    // redirects this producer into the chain's intake and tolerates 1 and 2 on
+    // purpose; see the comment on that target.
+    let failed: Vec<&Row> = rows.iter().filter(|row| row.outcome == "fail").collect();
+    let vacuous: Vec<&Row> = rows.iter().filter(|row| row.outcome == "vacuous").collect();
+
+    for row in failed.iter().chain(vacuous.iter()) {
+        eprintln!(
+            "{}: {} ({} of {} declared checks discharged)",
+            row.outcome, row.symbol, row.checks_discharged, row.floor
+        );
+        for item in row
+            .detail
+            .iter()
+            .filter(|item| item.starts_with("FAILED: "))
+        {
+            eprintln!("  {item}");
+        }
+    }
+
+    if !failed.is_empty() {
+        eprintln!(
+            "generation conformance: {} of {} rows failed",
+            failed.len(),
+            rows.len()
+        );
+        process::exit(1);
+    }
+    if !vacuous.is_empty() {
+        eprintln!(
+            "generation conformance: {} of {} rows are vacuous",
+            vacuous.len(),
+            rows.len()
+        );
+        process::exit(2);
     }
 }
