@@ -16,12 +16,12 @@
 //! successfully lowers and checks against its descriptor now reads that
 //! confirmed identity from `body.operation.identity` and records it as
 //! [`OperationProvenance::IrConfirmed`], rather than re-deriving a string in
-//! this generator's own vocabulary. A claim this generator never reaches a
-//! node for (every refusal before lowering succeeds, and every duplicate
-//! copy) still reports the request item's own descriptor-derived identity as
+//! this generator's own vocabulary. A claim this generator does not confirm --
+//! a node it never reached, a node it reached and refused, or a node that
+//! lowered whose catalogued operation disagreed with the descriptor -- still
+//! reports the request item's own descriptor-derived identity as
 //! [`OperationProvenance::CallerDeclared`], with
-//! [`UpstreamBlocker::OperationIdentityNotConsumed`]: for those items this
-//! generator genuinely never reads the operation the IR carries. This
+//! [`UpstreamBlocker::OperationIdentityNotConsumed`]. This
 //! generator's shape classifiers (`Shape::of`, `application_arguments`)
 //! still classify a body from its `term`/`operator`/`arguments` and the
 //! request item's own descriptor, not from `operation.identity` -- reading
@@ -350,10 +350,12 @@ pub enum UpstreamBlocker {
     /// Model and relation semantics.
     #[serde(rename = "agent-ix/quire-spec-language#120")]
     QuireSpecLanguage120,
-    /// This claim's node was never reached (every refusal before lowering
-    /// succeeds, and every duplicate copy), so this generator never read the
-    /// operation identity the IR carries for it and reports the request
-    /// item's own descriptor-derived identity instead.
+    /// This generator did not confirm the node's own catalogued operation
+    /// against the descriptor, so it reports the request item's own
+    /// descriptor-derived identity instead. It may never have reached the
+    /// node, or reached and refused it, or lowered it and found the operation
+    /// disagreed -- in that last case it did read `operation.identity`, and
+    /// what the blocker records is the disagreement, not the absence.
     #[serde(rename = "operation identity not consumed by codegen's generators")]
     OperationIdentityNotConsumed,
 }
@@ -1314,8 +1316,14 @@ impl Shape {
 // Operation identity
 // ---------------------------------------------------------------------------
 
-/// A claim whose node this generator never reached: the request item's own
+/// A claim this generator did not confirm: the request item's own
 /// descriptor-derived identity, marked [`OperationProvenance::CallerDeclared`].
+///
+/// Reached by three routes: a node this generator never reached (a duplicate
+/// copy), a node it reached and refused with a typed reason (`check_item`'s
+/// `Err` arm, which runs against a lowering record, so `BoundMismatch` and
+/// operand-type refusals arrive here having lowered), and a node that lowered
+/// and generated whose catalogued operation disagreed with the descriptor.
 fn caller_declared_claim(identity: String) -> OperationClaim {
     OperationClaim {
         identity,

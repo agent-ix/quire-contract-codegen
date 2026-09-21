@@ -148,7 +148,7 @@ literals. This encoding is defined by this generator, not by V2:
 | FR-014-AC-11 | A claim whose node lowers and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value marks its operation `ir_confirmed`. | Test (TC-024) |
 | FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound. | Test (TC-024) |
 | FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition or mode value is absent from that node's `operation.laws` or `operation.mode` is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |
-| FR-014-AC-14 | A claim this generator never confirmed marks its operation `caller_declared` with a typed blocked item, whether it never reached the node or reached it and returned that item's typed refusal. | Test (TC-024) |
+| FR-014-AC-14 | A claim whose node this generator never reached, or reached and refused with a typed reason, marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |
 
 ## Dependencies
 

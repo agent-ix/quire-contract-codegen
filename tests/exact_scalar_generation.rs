@@ -572,9 +572,13 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
 
 /// Trace: FR-014-AC-5, TC-024.
 ///
-/// Also discharges FR-014-AC-11 over the whole golden corpus, typed and on the wire: every
-/// `Generated` claim's provenance is `IrConfirmed`. The narrower operator-confusion test asserts
-/// `IrConfirmed` for one node; this asserts it for all of them.
+/// Also discharges FR-014-AC-11 over the whole golden corpus, typed and on the wire. Every
+/// golden item's descriptor agrees with its node, so in THIS corpus every `Generated` claim is
+/// `IrConfirmed`. That is a property of the corpus, not an invariant of the generator: node 1011
+/// under a floor descriptor is `Generated` and `CallerDeclared` (AC-13), asserted in
+/// `tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise`.
+/// Adding a deliberately mislabelled item to `golden_items()` would break the assertion below
+/// for a reason unrelated to AC-5 or AC-11; widen AC-12/AC-13 coverage in their own tests.
 #[test]
 fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     let wire = corpus_package().wire();
