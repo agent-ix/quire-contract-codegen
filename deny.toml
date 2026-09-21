@@ -9,6 +9,9 @@ allow = [
     "ISC",
     "Unicode-3.0",
     "Zlib",
+    # Reached through the operation catalog's home: `borrow-or-share` (MIT-0) via
+    # `fluent-uri`. Permissive and compatible with AGPL-3.0-or-later.
+    "MIT-0",
 ]
 confidence-threshold = 0.9
 # First-party agent-ix crates are AGPL-3.0-or-later (owner decision 2026-09-14,
@@ -22,6 +25,7 @@ exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-runtime" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-observation" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-protocol" },
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-verification-contracts" },
     # Two copies are in the graph and they declare different expressions: rev
     # 21c507e, a direct dependency, is AGPL-3.0-or-later; rev f1700a9, reached
     # via quire-contract-ir and quire-protocol, is AGPL-3.0-only. cargo-deny
@@ -57,6 +61,7 @@ allow-git = [
     "https://github.com/agent-ix/quire-observation",
     "https://github.com/agent-ix/quire-protocol",
     "https://github.com/agent-ix/quire-spec-language",
+    "https://github.com/agent-ix/quire-verification-contracts",
     "https://github.com/agent-ix/tl-mltl",
     "https://github.com/agent-ix/tl-syntax",
 ]
