@@ -474,7 +474,14 @@ fn oracle_generated() -> Case {
         }
         Err(diagnostics) => {
             case.terminal_state = diagnostics.first().map(|item| item.terminal_state);
-            case.diagnostic_code = diagnostics.first().map(|item| format!("{:?}", item.code));
+            // Serialized, not `Debug`, so this field carries one vocabulary in
+            // every arm that publishes it — including this one, which only fires
+            // when a supported clause unexpectedly failed and a reader is going
+            // through the corpus to find out why.
+            case.diagnostic_code = diagnostics
+                .first()
+                .and_then(|item| serde_json::to_value(item.code).ok())
+                .and_then(|value| value.as_str().map(str::to_owned));
             case.check(
                 &format!("a supported clause generated: {diagnostics:?}"),
                 false,
@@ -576,7 +583,14 @@ fn harness_generated() -> Case {
         }
         Err(diagnostics) => {
             case.terminal_state = diagnostics.first().map(|item| item.terminal_state);
-            case.diagnostic_code = diagnostics.first().map(|item| format!("{:?}", item.code));
+            // Serialized, not `Debug`, so this field carries one vocabulary in
+            // every arm that publishes it — including this one, which only fires
+            // when a supported clause unexpectedly failed and a reader is going
+            // through the corpus to find out why.
+            case.diagnostic_code = diagnostics
+                .first()
+                .and_then(|item| serde_json::to_value(item.code).ok())
+                .and_then(|value| value.as_str().map(str::to_owned));
             case.check(
                 &format!("a supported clause pair generated: {diagnostics:?}"),
                 false,
@@ -635,7 +649,11 @@ fn strategy_generated() -> Case {
         }
         Err(diagnostic) => {
             case.terminal_state = Some(diagnostic.terminal_state);
-            case.diagnostic_code = Some(format!("{:?}", diagnostic.code));
+            // Serialized, not `Debug`, so this field carries one vocabulary
+            // whichever arm publishes it.
+            case.diagnostic_code = serde_json::to_value(diagnostic.code)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned));
             case.check(
                 &format!("a bounded range generated: {}", diagnostic.message),
                 false,
@@ -803,14 +821,14 @@ fn harness_rejects_invalid_input(duplicate_clause: bool) -> Case {
     };
     let mut case = Case::new(
         symbol,
-        2,
+        3,
         vec!["FR-002", "FR-002-AC-4", "NFR-002-AC-3", "TC-004"],
     );
     case.expected_terminal_state = Some(expected_state);
     case.expected_diagnostic_code = Some(if duplicate_clause {
-        "DuplicateClauseIdentity"
+        "duplicate_clause_identity"
     } else {
-        "ResourceLimitExceeded"
+        "resource_limit_exceeded"
     });
     let owner = requirement("FR-002", 1);
     let environment = boolean_environment(
@@ -871,10 +889,34 @@ fn harness_rejects_invalid_input(duplicate_clause: bool) -> Case {
         Err(diagnostics) => {
             let first = diagnostics.first();
             case.terminal_state = first.map(|item| item.terminal_state);
-            case.diagnostic_code = first.map(|item| format!("{:?}", item.code));
+            // Serialize rather than `Debug`. `HarnessErrorCode` is
+            // `rename_all = "snake_case"` and its doc calls it the stable
+            // reason, so the wire identity is `resource_limit_exceeded`; a
+            // `Debug` rendering is a different string that Rust does not promise
+            // to keep. Publishing it left this protocol field carrying two
+            // vocabularies at once — snake_case from the oracle rows, PascalCase
+            // from these — and made the check below blind to a `serde(rename)`,
+            // which is exactly the declaration-versus-reality drift it exists to
+            // catch.
+            case.diagnostic_code = first
+                .and_then(|item| serde_json::to_value(item.code).ok())
+                .and_then(|value| value.as_str().map(str::to_owned));
             case.check(
                 "the rejection carries the declared diagnostic code",
                 first.map(|item| item.code) == Some(expected_code),
+            );
+            // The row publishes `expectedDiagnosticCode` for downstream
+            // consumers, and until #122 nothing read it: the check above
+            // compares the typed `expected_code` declared in the same tuple, so
+            // the published string was a second declaration of the same fact
+            // that could drift from it silently. Measured: setting it to
+            // `"NotTheRealCode"` left the row `pass` with that string in its own
+            // output. Assert the published field too, so the row cannot state an
+            // expectation it did not test.
+            case.check(
+                "the published expected diagnostic code is the code produced",
+                case.expected_diagnostic_code.is_some()
+                    && case.diagnostic_code.as_deref() == case.expected_diagnostic_code,
             );
             case.check(
                 "the rejection carries the declared terminal state",
@@ -889,11 +931,11 @@ fn harness_rejects_invalid_input(duplicate_clause: bool) -> Case {
 fn strategy_rejects_invalid_range() -> Case {
     let mut case = Case::new(
         "rejection::invalid-range",
-        2,
+        3,
         vec!["FR-002", "FR-002-AC-4", "NFR-002-AC-3", "TC-004"],
     );
     case.expected_terminal_state = Some(GenerationTerminalState::InvalidInput);
-    case.expected_diagnostic_code = Some("InvalidRange");
+    case.expected_diagnostic_code = Some("invalid_range");
     let owner = requirement("FR-002", 1);
     let request = StrategyRequest {
         requirement: &owner,
@@ -912,10 +954,21 @@ fn strategy_rejects_invalid_range() -> Case {
         }
         Err(diagnostic) => {
             case.terminal_state = Some(diagnostic.terminal_state);
-            case.diagnostic_code = Some(format!("{:?}", diagnostic.code));
+            // Serialized, not `Debug`, for the reason given in the harness path.
+            case.diagnostic_code = serde_json::to_value(diagnostic.code)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned));
             case.check(
                 "the rejection carries the declared diagnostic code",
                 diagnostic.code == StrategyErrorCode::InvalidRange,
+            );
+            // Same defect as the harness path, and the same fix (#122): the
+            // check above names the variant inline, so the published
+            // `expectedDiagnosticCode` was never read.
+            case.check(
+                "the published expected diagnostic code is the code produced",
+                case.expected_diagnostic_code.is_some()
+                    && case.diagnostic_code.as_deref() == case.expected_diagnostic_code,
             );
             case.check(
                 "the rejection carries the declared terminal state",

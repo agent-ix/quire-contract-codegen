@@ -439,7 +439,11 @@ fn tc_009_the_generation_producer_reports_what_the_generator_did() {
     assert!(
         rows.iter().any(|row| {
             row["symbol"] == "rejection::harness-source-limit"
-                && row["diagnosticCode"] == "ResourceLimitExceeded"
+                // The serialized identity `HarnessErrorCode` declares, not its
+                // `Debug` rendering. The corpus published the latter for three
+                // of its rows until #122, so this field carried two vocabularies
+                // at once and this assertion pinned the wrong one.
+                && row["diagnosticCode"] == "resource_limit_exceeded"
                 && row["terminalState"] == "unsupported"
         }),
         "the harness source-limit control disappeared from the corpus"
