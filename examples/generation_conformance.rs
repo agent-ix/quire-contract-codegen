@@ -1081,8 +1081,17 @@ fn main() {
     ];
     rows.push(diagnostic_census(&rows).into_row());
 
-    for row in &rows {
-        println!("{}", serde_json::to_string(row).expect("a row serializes"));
+    // Serialized once, then both published and classified from the same
+    // strings. The exit code is derived from the bytes this producer actually
+    // emitted, not from a `rows` binding that the exit call happens to be
+    // handed -- see `exit_code`.
+    let published: Vec<String> = rows
+        .iter()
+        .map(|row| serde_json::to_string(row).expect("a row serializes"))
+        .collect();
+
+    for line in &published {
+        println!("{line}");
     }
 
     // `Makefile:233` lists `conformance` in `ci`, so this producer's own rows
@@ -1125,7 +1134,6 @@ fn main() {
             failed.len(),
             rows.len()
         );
-        process::exit(1);
     }
     if !vacuous.is_empty() {
         eprintln!(
@@ -1133,6 +1141,332 @@ fn main() {
             vacuous.len(),
             rows.len()
         );
-        process::exit(2);
+    }
+
+    // A single exit path (#125). Three separate `process::exit` calls would
+    // let a unit test of the classification prove nothing about the 1 and 2
+    // arms actually reaching the process's exit status -- only the 0 arm
+    // (falling off the end of `main`) would ever have been end-to-end. With
+    // one call, `exit_code`'s return value *is* the process's exit code, so a
+    // test of `exit_code` is a test of what `main` exits with, and the
+    // separate end-to-end test below (`built_example_binary_...`) exercises
+    // this exact statement by running the compiled binary.
+    process::exit(exit_code(&published));
+}
+
+/// Classify the lines this producer published into its exit code: `0` when
+/// every published row is a `pass`, `1` when any is a `fail`, `2` when none
+/// failed but one is `vacuous`.
+///
+/// It reads the published strings rather than the `Row` values because the
+/// binding handed to the exit call is not necessarily the one that was
+/// printed, and #77 is precisely what that gap costs. Measured during review
+/// of this change, against an earlier version that classified `&[Row]`:
+/// inserting `rows.retain(|row| row.outcome == "pass")` between the print
+/// loop and the exit call left all seven tests in this file green at exit 0
+/// while every failing row still went to stdout -- the producer rendered
+/// structurally incapable of a non-zero exit, which is #77 verbatim, and the
+/// defect this contract exists to prevent. Deriving from the published bytes
+/// closes it: whatever reaches stdout is what is classified, so the two
+/// cannot disagree. A run that drops rows before publishing is a different
+/// defect and is caught elsewhere -- `tests/shared_assurance.rs` requires at
+/// least ten rows in the emitted JSONL.
+///
+/// This is the same discipline `scripts/assurance_chain.py` applies one layer
+/// out, deriving every attested result from the producer's own bytes rather
+/// than from anything the producer says about itself.
+///
+/// Precedence is fail, then vacuous, then pass -- a run with both a failing
+/// and a vacuous row exits 1, not 2, because a fail is the stronger claim and
+/// the row vocabulary is already ordered that way in the comment above (the
+/// chain's `RESULT_PRECEDENCE`, where both outrank `passed`). Checking
+/// vacuous first would silently invert that.
+///
+/// A line that is not an object carrying a string `outcome` is a defect in
+/// this producer rather than a verdict about the corpus, so it panics instead
+/// of falling through to the `0` arm. A silent fall-through there would make
+/// a serialization change read as a clean run.
+fn exit_code(published: &[String]) -> i32 {
+    let outcomes: Vec<String> = published
+        .iter()
+        .map(|line| {
+            serde_json::from_str::<serde_json::Value>(line)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("outcome")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                })
+                .unwrap_or_else(|| panic!("a published row must carry a string `outcome`: {line}"))
+        })
+        .collect();
+
+    if outcomes.iter().any(|outcome| outcome == "fail") {
+        1
+    } else if outcomes.iter().any(|outcome| outcome == "vacuous") {
+        2
+    } else {
+        0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Smallest honest construction of a `Row` for these tests: `exit_code`
+    /// only reads `outcome`, so every other field takes an inert placeholder.
+    /// This helper lives here, in the test module, rather than becoming a
+    /// `Default` impl on `Row` that production code has no other reason to
+    /// carry.
+    fn row(outcome: &'static str) -> Row {
+        Row {
+            protocol: PROTOCOL,
+            symbol: "test-row".to_owned(),
+            outcome,
+            terminal_state: None,
+            expected_terminal_state: None,
+            diagnostic_code: None,
+            expected_diagnostic_code: None,
+            checks_discharged: 0,
+            floor: 0,
+            detail: Vec::new(),
+            trace_ids: Vec::new(),
+        }
+    }
+
+    /// One published line, serialized through the same `serde_json::to_string`
+    /// `main` publishes with, so these tests classify the shape the producer
+    /// actually emits rather than a hand-written approximation of it.
+    fn published(outcome: &'static str) -> String {
+        serde_json::to_string(&row(outcome)).expect("a row serializes")
+    }
+
+    /// A published line whose `outcome` is not a string is a defect in this
+    /// producer, not a verdict about the corpus, so it must be loud. Without
+    /// this, a serialization change that renamed or retyped the field would
+    /// make every row unreadable and the whole run classify as `0`.
+    #[test]
+    #[should_panic(expected = "must carry a string `outcome`")]
+    fn a_line_without_a_string_outcome_panics_rather_than_reading_as_a_pass() {
+        let _ = exit_code(&[r#"{"outcome":7}"#.to_owned()]);
+    }
+
+    /// The source of this file, for the tripwire below. `include_str!`
+    /// resolves relative to this file's own directory, so it embeds these
+    /// bytes at compile time rather than reading a path at run time that a
+    /// different working directory would move.
+    const OWN_SOURCE: &str = include_str!("generation_conformance.rs");
+
+    /// A tripwire and a floor, not a proof -- said plainly because the
+    /// distinction is the whole subject of this file.
+    ///
+    /// Every other test here exercises `exit_code`, and `main` reaching the
+    /// process's exit status through it is what makes those tests mean
+    /// anything. That link is the one thing they cannot check: replacing
+    /// `main`'s single call with `process::exit(0)` leaves every one of them
+    /// green, because the real bounded corpus passes today, so the end-to-end
+    /// test observes 0 either way and the classifier is simply never
+    /// consulted. Measured with this assertion deleted and that mutation in
+    /// place: exit 0, 7 of 7 passing. With it restored, the same tree is exit
+    /// 101 and this is the only test that fails.
+    ///
+    /// Nothing available here closes that by behaviour. A corpus row that
+    /// deliberately fails would, and does not exist; manufacturing one inside
+    /// the producer would be a fault-injection affordance in an evidence
+    /// producer, which costs more than it buys. So this reads the text of
+    /// this file instead and requires the single exit to be the classifier's
+    /// value.
+    ///
+    /// What it catches: a constant substituted for the call, and a second
+    /// exit path added anywhere outside the test module. The second half of
+    /// that needed a correction. An earlier version scanned only from `fn
+    /// main` to the test module, and review showed the obvious bypass --
+    /// `fn bail_out() -> ! { process::exit(0) }` declared *after* `mod
+    /// tests`, called from `main` -- left all seven tests green at exit 0
+    /// while the classifier was never consulted for any non-empty run. The
+    /// scan below therefore covers everything before the test module and
+    /// separately refuses a top-level item after it.
+    ///
+    /// What it does not catch: an early `return` in `main`. A behavioural
+    /// check would be better the moment a failing fixture exists.
+    ///
+    /// The pre-module slice cannot match this test's own expected strings,
+    /// because they live inside the module the slice stops at.
+    #[test]
+    fn main_reaches_the_process_exit_status_only_through_the_classifier() {
+        const MODULE: &str = "\n#[cfg(test)]";
+        let module_at = OWN_SOURCE
+            .find(MODULE)
+            .expect("this file declares a test module at the start of a line");
+        assert!(
+            OWN_SOURCE
+                .find("\nfn main() {")
+                .is_some_and(|at| at < module_at),
+            "fn main must be declared before the test module for the scan below \
+             to cover it"
+        );
+        let before_module = &OWN_SOURCE[..module_at];
+
+        let exits = before_module.matches("process::exit(").count();
+        assert_eq!(
+            exits, 1,
+            "everything outside the test module must reach the process's exit \
+             status exactly once, so that a test of `exit_code` is a test of what \
+             this producer exits with; found {exits} calls"
+        );
+        assert!(
+            before_module.contains("process::exit(exit_code(&published));"),
+            "the single exit must pass the classifier's value. A literal here \
+             would leave every test in this module green while the exit code \
+             stopped depending on the published rows at all"
+        );
+
+        // A top-level item after the test module is outside the slice above,
+        // which is exactly where the bypass review found was planted. Items
+        // inside the module are indented, so a column-zero `fn` here is one
+        // that escaped the scan.
+        let after_module = &OWN_SOURCE[module_at + MODULE.len()..];
+        assert!(
+            !after_module.contains("\nfn "),
+            "a top-level `fn` is declared after the test module, where the exit \
+             census above cannot see it. Move it before the module so it is \
+             scanned"
+        );
+    }
+
+    #[test]
+    fn all_rows_passing_exits_zero() {
+        let rows = vec![published("pass"), published("pass")];
+        assert_eq!(exit_code(&rows), 0);
+    }
+
+    #[test]
+    fn one_failing_row_exits_one() {
+        let rows = vec![published("pass"), published("fail")];
+        assert_eq!(exit_code(&rows), 1);
+    }
+
+    #[test]
+    fn one_vacuous_row_exits_two() {
+        let rows = vec![published("pass"), published("vacuous")];
+        assert_eq!(exit_code(&rows), 2);
+    }
+
+    /// The boundary the ticket (#125) names explicitly: a run carrying both a
+    /// failing row and a vacuous row exits 1, not 2. Checking vacuous before
+    /// fail in `exit_code` would flip this test red while leaving the
+    /// single-outcome tests above green, which is exactly why this case has
+    /// to be asserted on its own rather than assumed from the other two.
+    #[test]
+    fn failing_and_vacuous_together_exits_one_not_two() {
+        let rows = vec![published("pass"), published("fail"), published("vacuous")];
+        assert_eq!(exit_code(&rows), 1);
+    }
+
+    /// An empty row set exits 0 under the same rule as any other run with no
+    /// failing and no vacuous row -- `exit_code` has no special case for "no
+    /// rows" and should not grow one: a corpus that produced zero rows is a
+    /// different defect (the producer not running at all, or every case being
+    /// filtered out upstream) that this function has no information to
+    /// detect.
+    ///
+    /// That is a real gap, and it is closed elsewhere rather than here, so
+    /// this test is not blessing it. `tests/shared_assurance.rs` requires at
+    /// least ten rows in the emitted JSONL, which is what actually refuses a
+    /// corpus that shrank to nothing. The end-to-end test below does not
+    /// close it and an earlier version of this comment wrongly said it did:
+    /// that test asserts exit 0, and an empty corpus produces exit 0 too.
+    #[test]
+    fn no_rows_exits_zero() {
+        let rows: Vec<String> = Vec::new();
+        assert_eq!(exit_code(&rows), 0);
+    }
+
+    /// Proves the wire is real: this executes the compiled example binary --
+    /// not the classifier, not this test harness -- against the real bounded
+    /// corpus and asserts the process's own exit status.
+    ///
+    /// `cargo test` builds this file's `#[cfg(test)] mod tests` into a
+    /// harness binary (`current_exe()` while this test runs), separately from
+    /// the plain runnable example binary `make conformance` and
+    /// `make assurance-inputs` invoke via `cargo run --example
+    /// generation_conformance`. `env!("CARGO_BIN_EXE_<name>")` only resolves
+    /// `[[bin]]` targets, not examples, so there is no compile-time constant
+    /// for the plain binary's path. Both binaries land as siblings in the
+    /// same `<target>/debug/examples/` directory regardless of any
+    /// `CARGO_TARGET_DIR` override, so this walks there from the harness
+    /// binary's own `current_exe()` rather than reconstructing the path from
+    /// `CARGO_MANIFEST_DIR` and an assumed profile name, which would silently
+    /// stop tracking a `CARGO_TARGET_DIR` override or a non-debug profile.
+    ///
+    /// Measured: on a from-scratch `CARGO_TARGET_DIR`, `cargo test --example
+    /// generation_conformance` alone builds only the harness binary above,
+    /// not the plain one -- the plain binary only appears once something
+    /// (`make conformance`, `make assurance-inputs`, or `cargo run --example
+    /// generation_conformance`/`cargo build --example generation_conformance`
+    /// directly) has built it first.
+    ///
+    /// The build below is unconditional, and that is the whole of what makes
+    /// this test mean anything. An earlier version ran it only when the file
+    /// was absent, which let the test execute whatever binary happened to be
+    /// on disk. Measured during review, twice: with the pass arm of
+    /// `exit_code` mutated to return 3, a stale binary left from an earlier
+    /// build reported `ok` while the classifier tests went red around it, and
+    /// deleting that one file turned the same tree red. A third instance
+    /// occurred by accident in a full-suite run, which reported this test
+    /// `ok` in 0.06s against a binary containing a symbol the source on disk
+    /// no longer had. `cargo test` rebuilds this harness when the source
+    /// changes; it does not rebuild the plain binary, so freshness is not
+    /// something this test may assume. The ambient shared `CARGO_TARGET_DIR`
+    /// on a developer machine can also hold another branch's binary
+    /// entirely.
+    ///
+    /// Rebuilding costs nothing when the binary is already current -- cargo
+    /// is incremental, and `make test` and `make ci` have already built it
+    /// via `assurance-inputs` by the time this runs. It is ordinary
+    /// compilation of the same already-reviewed source, not an evidence
+    /// producer manufacturing its own input.
+    #[test]
+    fn built_example_binary_exits_zero_against_the_real_corpus() {
+        let harness = std::env::current_exe().expect("current_exe resolves for a running test");
+        let examples_dir = harness
+            .parent()
+            .expect("a test binary always has a parent directory");
+        let plain_binary_name = if cfg!(windows) {
+            "generation_conformance.exe"
+        } else {
+            "generation_conformance"
+        };
+        let plain_binary = examples_dir.join(plain_binary_name);
+        {
+            let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+            let status = std::process::Command::new(&cargo)
+                .args(["build", "--locked", "--example", "generation_conformance"])
+                .current_dir(env!("CARGO_MANIFEST_DIR"))
+                .status()
+                .unwrap_or_else(|err| {
+                    panic!("failed to run {cargo:?} build --example generation_conformance: {err}")
+                });
+            assert!(
+                status.success(),
+                "building the plain example binary failed: {status}"
+            );
+            assert!(
+                plain_binary.is_file(),
+                "cargo build reported success but {} still does not exist",
+                plain_binary.display()
+            );
+        }
+        let output = std::process::Command::new(&plain_binary)
+            .output()
+            .unwrap_or_else(|err| panic!("failed to execute {}: {err}", plain_binary.display()));
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "expected the real bounded corpus to exit 0 (every row a pass); stderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }
