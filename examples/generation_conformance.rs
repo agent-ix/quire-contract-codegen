@@ -39,10 +39,10 @@ use quire_contract_codegen::{
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
-    ExecutionPoint, Expression, ExpressionKind, IntegerDomain, IntegerType, NumericOperator,
-    OverflowPolicy, PackageId, RequirementId, RequirementRef, RequirementRevision,
-    SourceDocumentId, SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation,
-    SymbolName, TypedExpression, ValueDeclaration, ValueDeclarationKind, ValueType,
+    ExecutionPoint, Expression, ExpressionKind, IntegerDomain, IntegerType, OverflowPolicy,
+    PackageId, RequirementId, RequirementRef, RequirementRevision, SourceDocumentId,
+    SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation, SymbolName,
+    TypedExpression, ValueDeclaration, ValueDeclarationKind, ValueType,
 };
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
@@ -664,9 +664,14 @@ fn oracle_rejects_non_boolean_root() -> Case {
     case
 }
 
-/// TC-003: arithmetic remains outside the obligation-free comparison slice, so
-/// it is `unsupported` — a construct the generator declines to lower rather
-/// than one it rejects as wrong.
+/// TC-003: numeric negation remains outside the obligation-free comparison
+/// slice, so it is `unsupported` — a construct the generator declines to lower
+/// rather than one it rejects as wrong.
+///
+/// Arithmetic used to be named here too, and no longer is: #40 (`583502b`) made
+/// integer arithmetic lowerable. That commit shipped no spec change, so
+/// `FR-001:48`, `interface-001:114` and FR-003-AC-3 still require arithmetic to
+/// refuse. This case follows the code, and the divergence is IR-235's.
 fn oracle_rejects_unsupported_expression() -> Case {
     let mut case = Case::new(
         "rejection::unsupported-expression",
@@ -694,19 +699,23 @@ fn oracle_rejects_unsupported_expression() -> Case {
             span(start, start + 1),
         )
     };
-    let addition = Expression::new(
-        ExpressionKind::Numeric {
-            operator: NumericOperator::Add,
-            left: Box::new(literal(1, 30)),
-            right: Box::new(literal(1, 31)),
+    // An `ExpressionKind::Numeric { operator: NumericOperator::Add, .. }` used
+    // to stand here and no longer refuses: #40 (`583502b`) made integer
+    // arithmetic lowerable and, in that same commit, moved
+    // `tc_003_unsupported_expression_and_root_map_to_declared_terminal_states`'s
+    // expected span off the addition and onto a `NumericNegate`. Negation is
+    // the form still outside the slice, so it is the one this entry names.
+    let negation = Expression::new(
+        ExpressionKind::NumericNegate {
+            operand: Box::new(literal(1, 30)),
         },
         span(30, 32),
     );
     let comparison = Expression::new(
         ExpressionKind::Compare {
             operator: ComparisonOperator::Equal,
-            left: Box::new(addition),
-            right: Box::new(literal(2, 32)),
+            left: Box::new(negation),
+            right: Box::new(literal(-1, 32)),
         },
         span(30, 33),
     );
