@@ -1319,11 +1319,16 @@ impl Shape {
 /// A claim this generator did not confirm: the request item's own
 /// descriptor-derived identity, marked [`OperationProvenance::CallerDeclared`].
 ///
-/// Reached by three routes: a node this generator never reached (a duplicate
-/// copy), a node it reached and refused with a typed reason (`check_item`'s
-/// `Err` arm, which runs against a lowering record, so `BoundMismatch` and
-/// operand-type refusals arrive here having lowered), and a node that lowered
-/// and generated whose catalogued operation disagreed with the descriptor.
+/// Every call site of this function produces a `Refused` disposition, and
+/// those sites are its whole population: a duplicate copy whose node was
+/// never reached, and a node reached and refused with a typed reason --
+/// `MissingOperationIdentity`, or `check_item`'s `Err` arm, which runs
+/// against a lowering record, so a `BoundMismatch` or operand-type refusal
+/// arrives here having lowered.
+///
+/// A lowered node whose catalogued operation disagrees with the descriptor is
+/// `CallerDeclared` too, but does not come through here: it generates, and
+/// builds its provenance inline at the disagreement site.
 fn caller_declared_claim(identity: String) -> OperationClaim {
     OperationClaim {
         identity,

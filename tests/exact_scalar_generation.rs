@@ -770,8 +770,9 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
 ///
 /// Node 1011 is a truncating division whose own `operation.laws` does not name the floor
 /// definition. A floor descriptor implies the same catalogued identity (`quire.op.integer.div`),
-/// so this is not AC-12's different-operation case, and the node does lower, so it is not
-/// AC-14's unreached case. It is the third state: the item generates the oracle its descriptor
+/// so this is not AC-12's different-operation case, and the item's disposition is `Generated`, so
+/// it is neither half of AC-14's unreached-or-refused case. It is the third state: the item
+/// generates the oracle its descriptor
 /// names and is marked `caller_declared` because the law disagrees. Deleting the law check would
 /// leave AC-11, AC-12 and AC-14 satisfied and this one violated.
 #[test]

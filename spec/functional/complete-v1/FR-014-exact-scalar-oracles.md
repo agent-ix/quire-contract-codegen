@@ -51,18 +51,21 @@ A claim whose node lowers and whose descriptor agrees with that identity marks
 its operation `ir_confirmed` and carries no blocked item: quire-contract-ir
 validated the identity against the closed
 `quire.checked-operation-catalog/v1` at package admission, before this
-generator saw the package, so a consumer may treat the operation identity as
-checked. A descriptor naming a different catalogued operation over the same
-bounds is not confirmed, even where the two share one operand shape.
+generator saw the package, so a consumer may treat the operation identity, and
+nothing else about the oracle, as checked. A descriptor naming a different
+catalogued operation over the same bounds is not confirmed, even where the two
+share one operand shape.
 
 A claim this generator never confirms marks its operation `caller_declared` and
 carries the typed blocked item: the identity the claim map reports is the
 request item's own descriptor-derived identity, and downstream obligations must
-not treat it as checked. A claim goes unconfirmed either because this generator
-never reached the node, or because it reached it and the descriptor and the node
-disagreed — a descriptor naming a different catalogued operation, or one whose
-implied identity matches while its law definition or its mode value is absent
-from the node's own `operation.laws` and `operation.mode`. The second case still
+not treat it as checked. A claim goes unconfirmed for one of three reasons:
+this generator never reached the node; it reached the node and refused the item
+with a typed reason; or it lowered the node and the descriptor and the node
+disagreed — a descriptor naming a different catalogued operation, a descriptor
+naming an operation the catalogue has no entry for, or one whose implied
+identity matches while its law definition or its mode value is absent from the
+node's own `operation.laws` and `operation.mode`. Only the third case still
 lowers and still generates an oracle; it is the confirmation that is withheld,
 not the code.
 
@@ -146,7 +149,7 @@ literals. This encoding is defined by this generator, not by V2:
 | FR-014-AC-9 | Generated oracle functions do not panic: an invalid generated constant, including a decimal target, stops as `InvalidConstant`, an operand of the wrong width stops before any charge, and generated source over its ceiling is a typed error with no output. | Test (TC-024) |
 | FR-014-AC-10 | A descriptor parameter whose bound is missing, repeated, unreadable or unequal to the reachable `bounded_domain` node, an operand that is neither a literal nor a reference, and a literal quantity operand, are each refused with a typed reason. | Test (TC-024) |
 | FR-014-AC-11 | A claim whose node lowers and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value marks its operation `ir_confirmed`. | Test (TC-024) |
-| FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound. | Test (TC-024) |
+| FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound; nor is a descriptor naming an operation the catalogue has no entry for. | Test (TC-024) |
 | FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition or mode value is absent from that node's `operation.laws` or `operation.mode` is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |
 | FR-014-AC-14 | A claim whose node this generator never reached, or reached and refused with a typed reason, marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |
 
