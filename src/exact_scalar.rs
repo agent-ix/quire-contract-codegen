@@ -666,9 +666,19 @@ pub fn generate_exact_scalar_oracles(
                     // own string exactly as before this generator ever read
                     // `operation.identity` -- never a silent preference between the
                     // two when they disagree.
-                    let confirmed_identity = operation_confirmed(node, operation)
-                        .then(|| catalogued_operation_identity(node))
-                        .transpose();
+                    // The node's own identity is read before confirmation, not
+                    // behind it. `operation_confirmed` returns false for a node
+                    // missing `operation.identity` just as it does for one whose
+                    // identity simply disagrees, so asking it first collapsed a
+                    // violated upstream invariant into the ordinary
+                    // caller-declared answer -- reporting that codegen had not
+                    // consumed an identity the node does not carry. Reading it
+                    // first keeps the two apart: absent is refused, present and
+                    // disagreeing is caller-declared.
+                    let confirmed_identity =
+                        catalogued_operation_identity(node).map(|catalogued| {
+                            operation_confirmed(node, operation).then_some(catalogued)
+                        });
                     match confirmed_identity {
                         Err(refusal) => (
                             caller_declared_claim(operation_identity(operation)),
@@ -1336,9 +1346,17 @@ impl Shape {
 /// caller_declared_claim` is how to check it.
 ///
 /// One of those sites, the `Err` arm guarding [`catalogued_operation_identity`],
-/// is unreachable: [`operation_confirmed`] has already required that same
-/// member to be present, so `MissingOperationIdentity` is unconstructible
-/// through it. That is IR-224, not a state this function serves.
+/// used to be unreachable: [`operation_confirmed`] was asked first and had
+/// already required that same member, so `MissingOperationIdentity` was
+/// unconstructible through it and a node missing the member was reported here
+/// instead, as though codegen had declined to consume an identity that was not
+/// there. IR-224 reordered the two, so that arm is now reachable: an
+/// identity-absent node reaches it, and this function names that claim
+/// caller-declared while the disposition beside it is `Refused`. Before the
+/// reorder such a node took the inline `CallerDeclared` construction instead
+/// and generated an oracle. Nothing is claimed here about the other sites:
+/// they refuse items `check_item` rejected and duplicate requests, neither of
+/// which turns on the operation member at all.
 ///
 /// A lowered node whose catalogued operation disagrees with the descriptor is
 /// `CallerDeclared` too, but does not come through here: it generates, and
@@ -2363,6 +2381,80 @@ mod tests {
             Some(ExactScalarRefusal::BodyIncomplete {
                 body_node_id: node_id('c')
             })
+        );
+    }
+
+    /// quire-contract-ir's `validate_operations` requires `operation.identity`
+    /// on every application node before admission, so no admitted package can
+    /// carry a node without it and this node is built directly -- the same
+    /// reason the record cases above are.
+    ///
+    /// The guard is still worth compiling. That admission check is recent
+    /// (IR-216) and is itself the kind of thing that can regress; if it did,
+    /// the node would arrive here. Before IR-224 this refusal was unreachable,
+    /// because `operation_confirmed` was consulted first and answers `false`
+    /// for a missing member exactly as it does for a disagreeing one -- so a
+    /// violated upstream invariant was reported as
+    /// `CallerDeclared { OperationIdentityNotConsumed }`, blaming this
+    /// generator for not consuming an identity the node never carried.
+    ///
+    /// What this test covers and what it does not: it calls
+    /// [`catalogued_operation_identity`] directly, so it pins that function's
+    /// refusal and would pass under either call order. The reordering in
+    /// `generate_exact_scalar_oracles` is **not** covered by any test, and
+    /// cannot be: reaching it needs an admitted package containing an
+    /// application node with no `operation.identity`, which is the very thing
+    /// admission refuses to produce. Do not read this test as evidence that the
+    /// generator refuses such a node end to end.
+    ///
+    /// Trace: FR-014-AC-3, TC-024.
+    #[test]
+    fn tc_024_catalogued_operation_identity_refuses_a_node_whose_operation_has_no_identity() {
+        let inner: CheckedSemanticNodeV2 = serde_json::from_value(serde_json::json!({
+            "node_id": {
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": "d".repeat(64),
+            },
+            "schema_version": "quire.checked-semantic-graph/v2",
+            "node_tag": "expression",
+            "semantic_form": "application",
+            "semantic_type": {
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": "e".repeat(64),
+            },
+            "dependencies": [],
+            "occurrences": [],
+            // `operation` present, `operation.identity` absent: the exact shape
+            // admission is supposed to make impossible.
+            "body": {
+                "term": "application",
+                "operation": { "mode": { "kind": "rounding", "value": "truncate" } },
+            },
+        }))
+        .expect("a node whose operation carries no identity");
+        let node = CompleteContractNodeV2 {
+            node: inner,
+            node_tag: CheckedNodeTag::Expression,
+            source_map: vec![],
+            semantic_type: node_id('e'),
+            dependencies: vec![],
+            bounds: vec![],
+            claims: vec![],
+            ir_id: serde_json::from_value(serde_json::json!({
+                "domain": "quire.contract-ir.semantic/v1",
+                "algorithm": "sha-256",
+                "digest": "f".repeat(64),
+            }))
+            .expect("an ir id"),
+        };
+
+        assert_eq!(
+            catalogued_operation_identity(&node),
+            Err(ExactScalarRefusal::MissingOperationIdentity {
+                node_id: node_id('d'),
+            }),
+            "a node missing the member IR admission guarantees must be refused by name, \
+             not reported as an identity this generator declined to consume"
         );
     }
 }
