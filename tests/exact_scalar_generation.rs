@@ -570,7 +570,22 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
     ));
 }
 
-/// Trace: FR-014-AC-5, TC-024.
+/// Trace: FR-014-AC-5, FR-014-AC-11, FR-014-AC-14, TC-024.
+///
+/// AC-14 is bound here for its provenance conjunct only: the loop below asserts that every
+/// `Refused` claim is `CallerDeclared` with a typed blocked item. It asserts nothing about the
+/// identity such a claim reports, so AC-14's identity clause stays unbacked and its row in
+/// `spec/test-matrix.md` says so.
+///
+/// Discharges FR-014-AC-11 over the whole golden corpus, typed and on the wire. Every
+/// golden CORPUS item's descriptor agrees with its node -- `golden_items()` as a whole also
+/// carries deliberate disagreements such as `DOMAIN_MISMATCH`, `WRONG_RESULT` and
+/// `WRONG_ARITY`, which are refused -- so in THIS corpus every `Generated` claim is
+/// `IrConfirmed`. That is a property of the corpus, not an invariant of the generator: node 1011
+/// under a floor descriptor is `Generated` and `CallerDeclared` (AC-13), asserted in
+/// `tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise`.
+/// Adding a deliberately mislabelled item to `golden_items()` would break the assertion below
+/// for a reason unrelated to AC-5 or AC-11; widen AC-12/AC-13 coverage in their own tests.
 #[test]
 fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     let wire = corpus_package().wire();
@@ -583,9 +598,12 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     let json: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).expect("json");
     assert_eq!(json, serde_json::to_value(map).expect("typed map"));
 
-    // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and only
-    // a Refused claim (this generator never reached its node) still carries the old blocker, on
-    // its own `operation.provenance` rather than at the map level.
+    // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and an
+    // unconfirmed claim, in any of the cases `OperationProvenance::CallerDeclared` enumerates,
+    // carries the blocker on its own `operation.provenance` rather than at the map
+    // level. `blocked` has one writer in the crate (`exact_scalar.rs`'s `Vec::new()`), so this
+    // pair is a regression guard against that literal changing, not a criterion an implementation
+    // can violate; the falsifiable contract is the per-item provenance asserted below.
     assert_eq!(map.blocked, []);
     assert_eq!(json["blocked"], serde_json::json!([]));
     for (claim, entry) in map
@@ -755,13 +773,15 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
     );
 }
 
-// Deliberately untraced: FR-014-AC-11 as currently written says every claim marks its operation
-// `caller_declared` and the claim map carries the blocked item "operation identity not consumed
-// by codegen's generators". IR-217 (this test's own change) reads a matching node's own
-// catalogued identity instead and marks it `IrConfirmed`, and `blocked` is per-item now (only an
-// unreached claim's own `CallerDeclared` provenance still names it), so `marked.claim_map.blocked`
-// below is `[]`, the direct negation of that AC's middle conjunct. This test asserts the current,
-// intended behavior; AC-11's prose is stale pending a spec update, not this assertion.
+/// Trace: FR-014-AC-13, TC-024.
+///
+/// Node 1011 is a truncating division whose own `operation.laws` does not name the floor
+/// definition. A floor descriptor implies the same catalogued identity (`quire.op.integer.div`),
+/// so this is not AC-12's different-operation case, and the item's disposition is `Generated`, so
+/// it is neither half of AC-14's never-inspected-or-refused case. It is the third state: the item
+/// generates the oracle its descriptor
+/// names and is marked `caller_declared` because the law disagrees. Deleting the law check would
+/// leave AC-11, AC-12 and AC-14 satisfied and this one violated.
 #[test]
 fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise() {
     let package = corpus_package().admit();
@@ -823,10 +843,13 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
 /// anyway -- the defect this ticket exists to close -- would render an oracle that adds where the
 /// catalog says multiply and a harness whose `operation_identity` says `mul`.
 ///
-// Deliberately untraced: no FR-014 AC states this invariant. AC-11 is the closest in subject
-// but (like the test above) asserts the opposite of what this generator now does; the other ten
-// are shape/bound/output ACs a within-shape operator swap satisfies unchanged. This test backs
-// the ticket's own defect description, not a written AC.
+/// Trace: FR-014-AC-12, TC-024.
+///
+/// Backs AC-12: an `Add` descriptor against node 1004's catalogued `quire.op.integer.mul`, over
+/// the identical `[-1000,1000]` bound and the identical binary `&rt::Integer` shape, is not
+/// confirmed. The mismatched case is asserted first; the agreeing case second, which is AC-11
+/// for that one node. AC-11 over the whole corpus is discharged by
+/// `tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item`.
 #[test]
 fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
     let package = corpus_package().admit();

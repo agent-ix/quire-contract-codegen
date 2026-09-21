@@ -21,11 +21,17 @@
 //! and -- for the `IntegerArithmetic` families this generator has a Kani renderer for
 //! (`quire.op.integer.{add,sub,mul,negate}`) -- reaches a real Kani harness via
 //! [`Outcome::LoweredScalar`]/`render_scalar`. Every other confirmed family is honestly refused as
-//! [`UnsupportedObligation::OperationNotRendered`], never silently mis-rendered. A claim this
-//! generator never reaches a node for (every refusal before lowering succeeds, every duplicate
-//! copy, and a genuine descriptor/node disagreement) still reports the request item's own
-//! descriptor-derived identity as `CallerDeclared` and is refused as
-//! [`UnsupportedObligation::CallerDeclaredOperation`] with the domains the IR does carry. V1 has no
+//! [`UnsupportedObligation::OperationNotRendered`], never silently mis-rendered. A claim that
+//! codegen generated but whose operation it did not confirm reports the request item's own
+//! descriptor-derived identity as `CallerDeclared` and, unless a ground that does not depend on
+//! the operation displaces that refusal -- an unsatisfiable bound it names or a mismatched
+//! package, each of which precedes it, or a duplicate item, which overwrites it afterwards --
+//! is refused here as
+//! [`UnsupportedObligation::CallerDeclaredOperation`] with the domains the IR does carry. That is
+//! the only case of [`crate::OperationProvenance::CallerDeclared`] this generator refuses under
+//! that name: `CallerDeclaredOperation` is constructed once, inside the `Generated` arm of
+//! `classify_claim`, so a claim codegen refused outright is classified through the `Refused` arm
+//! instead and never reaches it. V1 has no
 //! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so no frame
 //! harness is emitted.
 
@@ -452,8 +458,8 @@ pub struct KaniObligationHarness {
     pub record: Artifact,
 }
 
-/// One symbolic `i64` argument of a rendered scalar harness, bounded by the IR domain
-/// [`lower_scalar_claim`] read.
+/// One symbolic `i64` argument of a rendered scalar harness, bounded by the IR domain the
+/// lowered scalar claim carries.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScalarObligationArgument {

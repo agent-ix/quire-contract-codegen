@@ -16,12 +16,11 @@
 //! successfully lowers and checks against its descriptor now reads that
 //! confirmed identity from `body.operation.identity` and records it as
 //! [`OperationProvenance::IrConfirmed`], rather than re-deriving a string in
-//! this generator's own vocabulary. A claim this generator never reaches a
-//! node for (every refusal before lowering succeeds, and every duplicate
-//! copy) still reports the request item's own descriptor-derived identity as
+//! this generator's own vocabulary. A claim this generator does not confirm
+//! still reports the request item's own descriptor-derived identity as
 //! [`OperationProvenance::CallerDeclared`], with
-//! [`UpstreamBlocker::OperationIdentityNotConsumed`]: for those items this
-//! generator genuinely never reads the operation the IR carries. This
+//! [`UpstreamBlocker::OperationIdentityNotConsumed`]; the cases that reach it
+//! are enumerated on that variant. This
 //! generator's shape classifiers (`Shape::of`, `application_arguments`)
 //! still classify a body from its `term`/`operator`/`arguments` and the
 //! request item's own descriptor, not from `operation.identity` -- reading
@@ -350,10 +349,10 @@ pub enum UpstreamBlocker {
     /// Model and relation semantics.
     #[serde(rename = "agent-ix/quire-spec-language#120")]
     QuireSpecLanguage120,
-    /// This claim's node was never reached (every refusal before lowering
-    /// succeeds, and every duplicate copy), so this generator never read the
-    /// operation identity the IR carries for it and reports the request
-    /// item's own descriptor-derived identity instead.
+    /// This generator did not confirm the node's own catalogued operation
+    /// against the descriptor, so it reports the request item's own
+    /// descriptor-derived identity instead. The cases this covers are
+    /// enumerated once, on [`OperationProvenance::CallerDeclared`].
     #[serde(rename = "operation identity not consumed by codegen's generators")]
     OperationIdentityNotConsumed,
 }
@@ -362,9 +361,25 @@ pub enum UpstreamBlocker {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OperationProvenance {
-    /// The request descriptor declared it and this generator never reads the
-    /// operation identity the IR carries to confirm it; a consumer must not
-    /// treat the operation law as checked.
+    /// This generator never confirmed the node's own catalogued operation
+    /// against the descriptor. It did one of three things: never inspected the
+    /// node; inspected it and refused the item with a typed reason; or lowered
+    /// it and found the operation disagreed on the catalogued identity, the
+    /// law definition or the mode value. Only the third still generates the
+    /// oracle the descriptor names; what is withheld there is the
+    /// confirmation, not the code.
+    ///
+    /// In this crate's Rust source, enumerate these cases here and nowhere
+    /// else. Every copy that existed elsewhere in the source had drifted
+    /// against this one and against the code by the time it was found; a
+    /// second copy is how that starts again. FR-014 states the same three
+    /// cases normatively, because a requirement has to; this doc describes the
+    /// code as it is, so a divergence between them is a defect on one side or
+    /// the other and must be resolved, not documented around.
+    ///
+    /// In every case the reported identity is the request item's own
+    /// descriptor-derived one, and a consumer must not treat the operation law
+    /// as checked.
     CallerDeclared {
         /// The missing upstream transport.
         blocked_on: UpstreamBlocker,
@@ -738,9 +753,10 @@ pub fn generate_exact_scalar_oracles(
         package_id: lowering.package_id,
         runtime_revision: RUNTIME_REVISION,
         // No blocker applies to every entry any more: a confirmed claim's
-        // provenance is `IrConfirmed`, and only an unreached claim's
-        // `CallerDeclared` provenance still names
-        // `UpstreamBlocker::OperationIdentityNotConsumed`, per-item.
+        // provenance is `IrConfirmed`, and an unconfirmed claim's
+        // `CallerDeclared` provenance names
+        // `UpstreamBlocker::OperationIdentityNotConsumed` per-item, whichever
+        // of the cases on `OperationProvenance::CallerDeclared` applies.
         blocked: Vec::new(),
         items: claims,
     };
@@ -1307,8 +1323,26 @@ impl Shape {
 // Operation identity
 // ---------------------------------------------------------------------------
 
-/// A claim whose node this generator never reached: the request item's own
+/// A claim this generator did not confirm: the request item's own
 /// descriptor-derived identity, marked [`OperationProvenance::CallerDeclared`].
+///
+/// Every call site of this function produces a `Refused` disposition.
+///
+/// A prose census of those sites stood here and was false in three successive
+/// rounds of review -- it miscounted the sites, then counted populations as
+/// sites. IR-228 replaces the invariant with a constructor that returns the
+/// disposition too, so a call site that did otherwise would not compile.
+/// Until then the sentence above is the claim, and `grep -n
+/// caller_declared_claim` is how to check it.
+///
+/// One of those sites, the `Err` arm guarding [`catalogued_operation_identity`],
+/// is unreachable: [`operation_confirmed`] has already required that same
+/// member to be present, so `MissingOperationIdentity` is unconstructible
+/// through it. That is IR-224, not a state this function serves.
+///
+/// A lowered node whose catalogued operation disagrees with the descriptor is
+/// `CallerDeclared` too, but does not come through here: it generates, and
+/// builds its provenance inline at the disagreement site.
 fn caller_declared_claim(identity: String) -> OperationClaim {
     OperationClaim {
         identity,
