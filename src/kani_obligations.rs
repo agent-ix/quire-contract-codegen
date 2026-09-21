@@ -23,7 +23,7 @@
 //! [`Outcome::LoweredScalar`]/`render_scalar`. Every other confirmed family is honestly refused as
 //! [`UnsupportedObligation::OperationNotRendered`], never silently mis-rendered. A claim codegen
 //! does not confirm -- the cases are enumerated on
-//! [`crate::exact_scalar::OperationProvenance::CallerDeclared`] -- still reports the request
+//! [`crate::OperationProvenance::CallerDeclared`] -- still reports the request
 //! item's own descriptor-derived identity as `CallerDeclared` and is refused as
 //! [`UnsupportedObligation::CallerDeclaredOperation`] with the domains the IR does carry. V1 has no
 //! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so no frame
