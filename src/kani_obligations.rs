@@ -23,12 +23,14 @@
 //! [`Outcome::LoweredScalar`]/`render_scalar`. Every other confirmed family is honestly refused as
 //! [`UnsupportedObligation::OperationNotRendered`], never silently mis-rendered. A claim that
 //! codegen generated but whose operation it did not confirm reports the request item's own
-//! descriptor-derived identity as `CallerDeclared` and is refused here as
+//! descriptor-derived identity as `CallerDeclared` and, unless it is refused first on a ground
+//! that does not depend on the operation -- an unsatisfiable bound it names, a mismatched
+//! package, a duplicate item -- is refused here as
 //! [`UnsupportedObligation::CallerDeclaredOperation`] with the domains the IR does carry. That is
-//! the only case of [`crate::OperationProvenance::CallerDeclared`] this generator sees under that
-//! name: `CallerDeclaredOperation` is constructed once, inside the `Generated` arm of
-//! `classify_claim`, so a claim codegen refused outright carries its own typed refusal through the
-//! `Refused` arm instead. V1 has no
+//! the only case of [`crate::OperationProvenance::CallerDeclared`] this generator refuses under
+//! that name: `CallerDeclaredOperation` is constructed once, inside the `Generated` arm of
+//! `classify_claim`, so a claim codegen refused outright is classified through the `Refused` arm
+//! instead and never reaches it. V1 has no
 //! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so no frame
 //! harness is emitted.
 
