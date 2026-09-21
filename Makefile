@@ -181,10 +181,26 @@ assurance-env: $(ASSURANCE_PYTHON)
 # declared command that is not the executed command is a lie in a sealed
 # attestation, and tests/shared_assurance.rs asks Make rather than taking this
 # comment's word for it.
+#
+# This is intake, not judgement, which is why the conformance line tolerates
+# status 1 and 2. The producer exits 1 on a failing row and 2 on a vacuous one
+# (#77), and both are outcomes the chain exists to classify: `adapt_conformance`
+# never looks at a process's output stream to decide an outcome, so the rows
+# decide, and they are already written by the time the process exits. Letting a
+# non-pass abort this line would stop `assurance-chain`, `assurance` and
+# `assurance-record` from ever reporting a defect the chain had detected —
+# MP-001 records an injected-defect run in which "the upstream producer's rows
+# became `not-computed`, the attestation said so because the bytes said so",
+# which cannot happen if the bytes never arrive. Any other status is a crash and
+# still fails the target, and tests/shared_assurance.rs holds that bound rather
+# than taking this comment's word for it. `make conformance` is the judging
+# invocation. Inside `ci` a non-pass corpus halts at `conformance` before
+# `assurance` is reached either way; the reporting this restores is on the
+# direct invocations, which is the path the attestation comes from.
 .PHONY: assurance-inputs
 assurance-inputs: assurance-env
 	mkdir -p $(ASSURANCE_DIR)
-	$(CARGO) run --quiet --example generation_conformance > $(CONFORMANCE_RESULT)
+	$(CARGO) run --quiet --example generation_conformance > $(CONFORMANCE_RESULT) || [ $$? -le 2 ]
 	$(PYTHON) scripts/check_upstream_pins.py --json > $(UPSTREAM_RESULT)
 	$(QUIRE) coverage --scope . --json > $(QUIRE_EXPORT)
 	rustup run $(MSRV) $(CARGO) check --locked --all-targets \

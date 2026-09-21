@@ -81,6 +81,14 @@ fn sha256_of(path: &Path) -> String {
 /// binary, and every reader sees the same run rather than a different one.
 static CHAIN: OnceLock<Value> = OnceLock::new();
 
+/// The largest exit status a Makefile recipe line may tolerate.
+///
+/// Two, because the conformance producer's whole vocabulary is 0 for a clean
+/// corpus, 1 for a failing row and 2 for a vacuous one, and it writes its rows
+/// before it exits with any of them. Anything above 2 from that producer is a
+/// crash, a build failure or a signal, and must still fail the target.
+const MAX_TOLERATED_RECIPE_STATUS: u32 = 2;
+
 fn chain_report() -> &'static Value {
     CHAIN.get_or_init(|| {
         // The chain runs under the system interpreter: it only shells out to
@@ -1712,6 +1720,33 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
             "Makefile:{} prefixes a recipe line with `-`, which ignores its exit status: {line}",
             number + 1
         );
+
+        // A `-` prefix is not the only way to stop a status being seen. `|| true`
+        // reaches the same end by a spelling the assertion above cannot see, and
+        // it would pass every gate in this repository.
+        //
+        // One recipe line does legitimately tolerate a non-zero status: the
+        // conformance producer exits 1 on a failing row and 2 on a vacuous one
+        // with its rows already written, and the chain rather than the exit code
+        // is what judges that stream (#77). So tolerance is allowed and
+        // unbounded tolerance is not. The only accepted form states the bound,
+        // which means widening it has to be done here, in the open, rather than
+        // by quietly editing a recipe.
+        if let Some((_, tolerated)) = command.split_once("||") {
+            let bounded = tolerated
+                .trim()
+                .strip_prefix("[ $$? -le ")
+                .and_then(|rest| rest.strip_suffix(" ]"))
+                .and_then(|bound| bound.parse::<u32>().ok())
+                .is_some_and(|bound| bound <= MAX_TOLERATED_RECIPE_STATUS);
+            assert!(
+                bounded,
+                "Makefile:{} tolerates a non-zero exit status without bounding it. \
+                 The only accepted form is `|| [ $$? -le N ]` with N <= {}: {line}",
+                number + 1,
+                MAX_TOLERATED_RECIPE_STATUS
+            );
+        }
     }
 
     // And the gates that replaced it are actually reachable from `ci:`.
