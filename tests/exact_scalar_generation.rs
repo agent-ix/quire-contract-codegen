@@ -570,9 +570,14 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
     ));
 }
 
-/// Trace: FR-014-AC-5, TC-024.
+/// Trace: FR-014-AC-5, FR-014-AC-11, FR-014-AC-14, TC-024.
 ///
-/// Also discharges FR-014-AC-11 over the whole golden corpus, typed and on the wire. Every
+/// AC-14 is bound here for its provenance conjunct only: the loop below asserts that every
+/// `Refused` claim is `CallerDeclared` with a typed blocked item. It asserts nothing about the
+/// identity such a claim reports, so AC-14's identity clause stays unbacked and its row in
+/// `spec/test-matrix.md` says so.
+///
+/// Discharges FR-014-AC-11 over the whole golden corpus, typed and on the wire. Every
 /// golden item's descriptor agrees with its node, so in THIS corpus every `Generated` claim is
 /// `IrConfirmed`. That is a property of the corpus, not an invariant of the generator: node 1011
 /// under a floor descriptor is `Generated` and `CallerDeclared` (AC-13), asserted in

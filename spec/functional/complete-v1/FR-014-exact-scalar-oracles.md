@@ -65,9 +65,10 @@ with a typed reason; or it lowered the node and the descriptor and the node
 disagreed — a descriptor naming a different catalogued operation, a descriptor
 naming an operation the catalogue has no entry for, or one whose implied
 identity matches while its law definition or its mode value is absent from the
-node's own `operation.laws` and `operation.mode`. Only the third case still
-lowers and still generates an oracle; it is the confirmation that is withheld,
-not the code.
+node's own `operation.laws` and `operation.mode`. The second case reaches the node only when the node lowered;
+the first covers both a node this generator never requested and a record that
+never lowered. Only the third case still generates an oracle; it is the
+confirmation that is withheld, not the code.
 
 A bound is read from the one reachable `bounded_domain` node on the node's
 result type whose form matches the descriptor. Its body is an `aggregate` of
@@ -148,7 +149,7 @@ literals. This encoding is defined by this generator, not by V2:
 | FR-014-AC-8 | The generated crate declares `publish = false`, pins the runtime revision with the `exact` feature, contains no charge amount (every charge comes from runtime metering), and compiles. | Test (TC-024) |
 | FR-014-AC-9 | Generated oracle functions do not panic: an invalid generated constant, including a decimal target, stops as `InvalidConstant`, an operand of the wrong width stops before any charge, and generated source over its ceiling is a typed error with no output. | Test (TC-024) |
 | FR-014-AC-10 | A descriptor parameter whose bound is missing, repeated, unreadable or unequal to the reachable `bounded_domain` node, an operand that is neither a literal nor a reference, and a literal quantity operand, are each refused with a typed reason. | Test (TC-024) |
-| FR-014-AC-11 | A claim whose node lowers and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value marks its operation `ir_confirmed`. | Test (TC-024) |
+| FR-014-AC-11 | A claim whose node lowers, whose descriptor passes every tag, form, arity, operand and bound check, and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value marks its operation `ir_confirmed`. An item refused by any of those checks is `caller_declared` even where its operation agrees. | Test (TC-024) |
 | FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound; nor is a descriptor naming an operation the catalogue has no entry for. | Test (TC-024) |
 | FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition or mode value is absent from that node's `operation.laws` or `operation.mode` is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |
 | FR-014-AC-14 | A claim whose node this generator never reached, or reached and refused with a typed reason, marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |

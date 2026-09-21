@@ -1319,12 +1319,19 @@ impl Shape {
 /// A claim this generator did not confirm: the request item's own
 /// descriptor-derived identity, marked [`OperationProvenance::CallerDeclared`].
 ///
-/// Every call site of this function produces a `Refused` disposition, and
-/// those sites are its whole population: a duplicate copy whose node was
-/// never reached, and a node reached and refused with a typed reason --
-/// `MissingOperationIdentity`, or `check_item`'s `Err` arm, which runs
-/// against a lowering record, so a `BoundMismatch` or operand-type refusal
+/// Every call site of this function produces a `Refused` disposition. There
+/// are four, and the three reachable ones are its whole population: a
+/// duplicate copy, whose node is never reached; a record that never lowered,
+/// refused by
+/// `check_item`'s opening [`lowered`] call, which also never reaches a node;
+/// and a node reached and refused, every refusal `check_item` raises after
+/// that call -- so a `FormMismatch`, `BoundMismatch` or operand-type refusal
 /// arrives here having lowered.
+///
+/// The `Err` arm guarding [`catalogued_operation_identity`] is a fourth call
+/// site with no population: [`operation_confirmed`] has already required that
+/// same member to be present, so `MissingOperationIdentity` is unconstructible
+/// through it. That is IR-224, not a state this function serves.
 ///
 /// A lowered node whose catalogued operation disagrees with the descriptor is
 /// `CallerDeclared` too, but does not come through here: it generates, and
