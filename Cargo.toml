@@ -25,7 +25,7 @@ path = "examples/generation_conformance.rs"
 test = true
 
 [dependencies]
-quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "dfd8bd7812a571ba1f19505374460efef4a473bc" }
+quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "97f50655c48f48be0bf5ab04dff5aac029c3745c" }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "4e330525be513fe57c67717dc22b969d36656b85", features = ["exact"] }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"

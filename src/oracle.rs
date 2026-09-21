@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 /// Exact reviewed public executable-binding IR revision consumed by this implementation.
-pub const IR_CANDIDATE_REVISION: &str = "dfd8bd7812a571ba1f19505374460efef4a473bc";
+pub const IR_CANDIDATE_REVISION: &str = "97f50655c48f48be0bf5ab04dff5aac029c3745c";
 
 /// Exact merged runtime revision required by generated source.
 pub const RUNTIME_REVISION: &str = "4e330525be513fe57c67717dc22b969d36656b85";
