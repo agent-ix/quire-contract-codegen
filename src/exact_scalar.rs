@@ -16,12 +16,11 @@
 //! successfully lowers and checks against its descriptor now reads that
 //! confirmed identity from `body.operation.identity` and records it as
 //! [`OperationProvenance::IrConfirmed`], rather than re-deriving a string in
-//! this generator's own vocabulary. A claim this generator does not confirm --
-//! a node it never reached, a node it reached and refused, or a node that
-//! lowered whose catalogued operation disagreed with the descriptor -- still
-//! reports the request item's own descriptor-derived identity as
+//! this generator's own vocabulary. A claim this generator does not confirm
+//! still reports the request item's own descriptor-derived identity as
 //! [`OperationProvenance::CallerDeclared`], with
-//! [`UpstreamBlocker::OperationIdentityNotConsumed`]. This
+//! [`UpstreamBlocker::OperationIdentityNotConsumed`]; the cases that reach it
+//! are enumerated on that variant. This
 //! generator's shape classifiers (`Shape::of`, `application_arguments`)
 //! still classify a body from its `term`/`operator`/`arguments` and the
 //! request item's own descriptor, not from `operation.identity` -- reading
@@ -352,10 +351,8 @@ pub enum UpstreamBlocker {
     QuireSpecLanguage120,
     /// This generator did not confirm the node's own catalogued operation
     /// against the descriptor, so it reports the request item's own
-    /// descriptor-derived identity instead. It may never have reached the
-    /// node, or reached and refused it, or lowered it and found the operation
-    /// disagreed -- in that last case it did read `operation.identity`, and
-    /// what the blocker records is the disagreement, not the absence.
+    /// descriptor-derived identity instead. The cases this covers are
+    /// enumerated once, on [`OperationProvenance::CallerDeclared`].
     #[serde(rename = "operation identity not consumed by codegen's generators")]
     OperationIdentityNotConsumed,
 }
@@ -365,13 +362,20 @@ pub enum UpstreamBlocker {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OperationProvenance {
     /// This generator never confirmed the node's own catalogued operation
-    /// against the descriptor -- either it never reached the node, or it
-    /// reached it and the two disagreed on the catalogued identity, the law
-    /// definition or the mode value. A disagreement still lowers and still
-    /// generates the oracle the descriptor names; what is withheld is the
-    /// confirmation. Either way the reported identity is the request item's
-    /// own descriptor-derived one, and a consumer must not treat the
-    /// operation law as checked.
+    /// against the descriptor. It did one of three things: never inspected the
+    /// node; inspected it and refused the item with a typed reason; or lowered
+    /// it and found the operation disagreed on the catalogued identity, the
+    /// law definition or the mode value. Only the third still generates the
+    /// oracle the descriptor names; what is withheld there is the
+    /// confirmation, not the code.
+    ///
+    /// This is the one place these three cases are enumerated. Two further
+    /// copies drifted against each other and against this one before they were
+    /// deleted; do not reintroduce a second.
+    ///
+    /// In every case the reported identity is the request item's own
+    /// descriptor-derived one, and a consumer must not treat the operation law
+    /// as checked.
     CallerDeclared {
         /// The missing upstream transport.
         blocked_on: UpstreamBlocker,
@@ -1319,19 +1323,17 @@ impl Shape {
 /// A claim this generator did not confirm: the request item's own
 /// descriptor-derived identity, marked [`OperationProvenance::CallerDeclared`].
 ///
-/// Every call site of this function produces a `Refused` disposition. There
-/// are three, and two of them carry its whole population.
+/// Every call site of this function produces a `Refused` disposition.
 ///
-/// One is the duplicate arm, whose node is never inspected. The other is
-/// `check_item`'s `Err` arm, which carries two populations because that
-/// function raises one error type from either side of its opening [`lowered`]
-/// call: a record that never lowered, and a node that lowered and was then
-/// refused by every check `check_item` makes after it -- so a `FormMismatch`,
-/// `ResultTypeMismatch`, `BoundMismatch` or operand-type refusal arrives here
-/// having lowered.
+/// A prose census of those sites stood here and was false in three successive
+/// rounds of review -- it miscounted the sites, then counted populations as
+/// sites. IR-228 replaces the invariant with a constructor that returns the
+/// disposition too, so a call site that did otherwise would not compile.
+/// Until then the sentence above is the claim, and `grep -n
+/// caller_declared_claim` is how to check it.
 ///
-/// The third site, the `Err` arm guarding [`catalogued_operation_identity`],
-/// has no population: [`operation_confirmed`] has already required that same
+/// One of those sites, the `Err` arm guarding [`catalogued_operation_identity`],
+/// is unreachable: [`operation_confirmed`] has already required that same
 /// member to be present, so `MissingOperationIdentity` is unconstructible
 /// through it. That is IR-224, not a state this function serves.
 ///

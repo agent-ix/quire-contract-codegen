@@ -60,15 +60,14 @@ A claim this generator never confirms marks its operation `caller_declared` and
 carries the typed blocked item: the identity the claim map reports is the
 request item's own descriptor-derived identity, and downstream obligations must
 not treat it as checked. A claim goes unconfirmed for one of three reasons:
-this generator never reached the node; it reached the node and refused the item
-with a typed reason; or it lowered the node and the descriptor and the node
-disagreed — a descriptor naming a different catalogued operation, a descriptor
-naming an operation the catalogue has no entry for, or one whose implied
-identity matches while its law definition or its mode value is absent from the
-node's own `operation.laws` and `operation.mode`. The second case reaches the node only when the node lowered;
-the first covers both a duplicate copy, whose node this generator never
-inspects, and a record that never lowered. Only the third case still generates an oracle; it is the
-confirmation that is withheld, not the code.
+this generator never inspected the node; it inspected the node and refused the
+item with a typed reason; or it lowered the node and the descriptor and the
+node disagreed — a descriptor naming a different catalogued operation, a
+descriptor naming an operation the catalogue has no entry for, or one whose
+implied identity matches while its law definition or its mode value is absent
+from the node's own `operation.laws` and `operation.mode`. Only the third case
+still generates an oracle; it is the confirmation that is withheld, not the
+code.
 
 A bound is read from the one reachable `bounded_domain` node on the node's
 result type whose form matches the descriptor. Its body is an `aggregate` of
@@ -99,13 +98,15 @@ literals. This encoding is defined by this generator, not by V2:
 - When generation begins, the generator shall lower every requested node
   through Contract IR's complete lowering with a scalar tag profile and select
   exactly one generated or refused disposition per item.
-- When a lowered node is a scalar expression whose tag, form, argument arity
-  and semantic result type agree with its descriptor, the generator shall emit
+- When a lowered node is a scalar expression whose tag, form, body operator,
+  argument arity, semantic result type, operand types and checked parameter
+  bounds agree with its descriptor, the generator shall emit
   an oracle function that calls the runtime operator named by the descriptor
   with a caller-supplied `Meter`.
 - If a node is unlowered, invalid, reaches an integer, rational, decimal or
   text type with no bounding domain, is over its work limit, or disagrees with
-  its descriptor in tag, form, arity, operand type or checked bounds, then the
+  its descriptor in tag, form, body operator, arity, semantic result type,
+  operand type or checked bounds, then the
   generator shall return that item's typed refusal and emit no code for it,
   without changing any other item's output.
 - If a node lowers, then the generator shall compare the node's own
@@ -152,7 +153,7 @@ literals. This encoding is defined by this generator, not by V2:
 | FR-014-AC-11 | A claim whose node lowers, whose descriptor passes every tag, form, body operator, arity, semantic result type, operand and bound check, and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value marks its operation `ir_confirmed`. An item refused by any of those checks is `caller_declared` even where its operation agrees. | Test (TC-024) |
 | FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound; nor is a descriptor naming an operation the catalogue has no entry for. | Test (TC-024) |
 | FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition or mode value is absent from that node's `operation.laws` or `operation.mode` is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |
-| FR-014-AC-14 | A claim whose node this generator never reached, or reached and refused with a typed reason, marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |
+| FR-014-AC-14 | A claim whose node this generator never inspected — a duplicate copy, or a record that never lowered — or inspected and refused with a typed reason, marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |
 
 ## Dependencies
 

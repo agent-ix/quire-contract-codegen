@@ -259,10 +259,11 @@ requirement here claims either one.
 
 ## Test Case Summary
 
-Functional Requirement Coverage above is the authority for how much of any one
-criterion is backed. Where a row here reads `✅ Covered` and a criterion in its
-Traces To column is qualified above, the qualification governs: this row is not
-a second, unqualified coverage claim over that criterion.
+The coverage tables above -- Functional, Interface, Non-Functional and
+Stakeholder -- are the authority for how much of any criterion they list is
+backed. A row here states whether its own test case exists and runs; where it
+reads `✅ Covered` and a criterion in its Traces To column is marked `⚠️` or
+`🚧` in the table that owns it, that table governs.
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
