@@ -648,6 +648,21 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
                 quire_contract_ir::CheckedNodeTag::BoundedDomain,
                 quire_contract_ir::CheckedNodeTag::Value,
                 quire_contract_ir::CheckedNodeTag::Expression,
+                // Admits a subset of `scalar_profile()`'s own
+                // `supported_tags` (`src/exact_scalar.rs`) sufficient for
+                // this corpus, not a mirror of the full set: `LITERAL_OPERAND`
+                // now reaches the `claim` nodes `corpus_package` wires as its
+                // dependencies (issue #100), so this independently-
+                // constructed profile must admit that tag too, or this
+                // cross-check would mark that corpus node `Unsupported`
+                // while the real generator (which already includes `Claim`
+                // here) lowers it -- a divergence between the two, not a
+                // property of either. `scalar_profile()` also admits a sixth
+                // tag, `CheckedNodeTag::Correspondence`, which this list
+                // still omits (PR #132 review): zero corpus nodes carry it,
+                // so nothing here exercises the gap either way, and it is
+                // out of scope for issue #100 -- tracked separately.
+                quire_contract_ir::CheckedNodeTag::Claim,
             ]
             .into(),
             require_bounds: true,
