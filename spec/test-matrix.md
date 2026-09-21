@@ -259,12 +259,10 @@ requirement here claims either one.
 
 ## Test Case Summary
 
-A row's Status is that test case's own state -- whether the test exists and
-runs -- and its Traces To column names every criterion the case bears on. It
-is not a per-criterion coverage claim: where a case discharges only part of a
-criterion, the qualification is carried by that criterion's row in Functional
-Requirement Coverage above, which is the authority for how much of it is
-backed.
+Functional Requirement Coverage above is the authority for how much of any one
+criterion is backed. Where a row here reads `✅ Covered` and a criterion in its
+Traces To column is qualified above, the qualification governs: this row is not
+a second, unqualified coverage claim over that criterion.
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|

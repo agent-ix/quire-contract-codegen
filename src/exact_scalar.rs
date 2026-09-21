@@ -1320,17 +1320,19 @@ impl Shape {
 /// descriptor-derived identity, marked [`OperationProvenance::CallerDeclared`].
 ///
 /// Every call site of this function produces a `Refused` disposition. There
-/// are four, and the three reachable ones are its whole population: a
-/// duplicate copy, whose node is never reached; a record that never lowered,
-/// refused by
-/// `check_item`'s opening [`lowered`] call, which also never reaches a node;
-/// and a node reached and refused, every refusal `check_item` raises after
-/// that call -- so a `FormMismatch`, `BoundMismatch` or operand-type refusal
-/// arrives here having lowered.
+/// are three, and two of them carry its whole population.
 ///
-/// The `Err` arm guarding [`catalogued_operation_identity`] is a fourth call
-/// site with no population: [`operation_confirmed`] has already required that
-/// same member to be present, so `MissingOperationIdentity` is unconstructible
+/// One is the duplicate arm, whose node is never inspected. The other is
+/// `check_item`'s `Err` arm, which carries two populations because that
+/// function raises one error type from either side of its opening [`lowered`]
+/// call: a record that never lowered, and a node that lowered and was then
+/// refused by every check `check_item` makes after it -- so a `FormMismatch`,
+/// `ResultTypeMismatch`, `BoundMismatch` or operand-type refusal arrives here
+/// having lowered.
+///
+/// The third site, the `Err` arm guarding [`catalogued_operation_identity`],
+/// has no population: [`operation_confirmed`] has already required that same
+/// member to be present, so `MissingOperationIdentity` is unconstructible
 /// through it. That is IR-224, not a state this function serves.
 ///
 /// A lowered node whose catalogued operation disagrees with the descriptor is

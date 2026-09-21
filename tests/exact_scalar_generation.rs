@@ -578,7 +578,9 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
 /// `spec/test-matrix.md` says so.
 ///
 /// Discharges FR-014-AC-11 over the whole golden corpus, typed and on the wire. Every
-/// golden item's descriptor agrees with its node, so in THIS corpus every `Generated` claim is
+/// golden CORPUS item's descriptor agrees with its node -- `golden_items()` as a whole also
+/// carries deliberate disagreements such as `DOMAIN_MISMATCH`, `WRONG_RESULT` and
+/// `WRONG_ARITY`, which are refused -- so in THIS corpus every `Generated` claim is
 /// `IrConfirmed`. That is a property of the corpus, not an invariant of the generator: node 1011
 /// under a floor descriptor is `Generated` and `CallerDeclared` (AC-13), asserted in
 /// `tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise`.
