@@ -367,21 +367,22 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
         node_tag: tag,
     };
     let expected = [
+        (COMPOSITE, unsupported(COMPOSITE, "composite_type")),
         (
-            COMPOSITE,
+            FUNCTION,
             blocked(
-                COMPOSITE,
-                "composite_type",
-                UpstreamBlocker::QuireSpecLanguage119,
+                FUNCTION,
+                "function",
+                UpstreamBlocker::QuireContractRuntime34,
             ),
         ),
         (
-            FUNCTION,
-            blocked(FUNCTION, "function", UpstreamBlocker::QuireSpecLanguage119),
-        ),
-        (
             CALLS_FUNCTION,
-            blocked(FUNCTION, "function", UpstreamBlocker::QuireSpecLanguage119),
+            blocked(
+                FUNCTION,
+                "function",
+                UpstreamBlocker::QuireContractRuntime34,
+            ),
         ),
         (
             MODEL,

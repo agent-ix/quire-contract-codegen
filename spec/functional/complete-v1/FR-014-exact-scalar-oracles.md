@@ -125,9 +125,9 @@ literals. This encoding is defined by this generator, not by V2:
 - If an operand is neither a literal nor a reference, or a literal stands where
   a quantity is required, then the generator shall refuse the item with a typed
   reason.
-- If a node belongs to the composite, collection or function families, then
-  the generator shall refuse it as blocked on quire-spec-language#119; model
-  and relation families as blocked on quire-spec-language#120; state, temporal
+- If a node belongs to the function family, then the generator shall refuse
+  it as blocked on quire-contract-runtime#34; model and relation families as
+  blocked on quire-spec-language#120; composite, collection, state, temporal
   and protocol families as unsupported.
 - If a node id appears more than once in the request, then the generator shall
   refuse every copy.

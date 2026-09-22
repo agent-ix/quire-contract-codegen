@@ -43,13 +43,12 @@
       "result": {
         "disposition": "refused",
         "refusal": {
-          "code": "blocked_on_upstream",
+          "code": "unsupported",
           "unsupported_node_id": {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000002001"
           },
-          "node_tag": "composite_type",
-          "issue": "agent-ix/quire-spec-language#119"
+          "node_tag": "composite_type"
         }
       }
     },
@@ -4544,7 +4543,7 @@
             "digest": "b96d8f9d2d5ac52bf4aba7af2db27bda72bb9f10157dc1bfb53cf650276835af"
           },
           "node_tag": "function",
-          "issue": "agent-ix/quire-spec-language#119"
+          "issue": "agent-ix/quire-contract-runtime#34"
         }
       }
     },
@@ -5540,7 +5539,7 @@
             "digest": "b96d8f9d2d5ac52bf4aba7af2db27bda72bb9f10157dc1bfb53cf650276835af"
           },
           "node_tag": "function",
-          "issue": "agent-ix/quire-spec-language#119"
+          "issue": "agent-ix/quire-contract-runtime#34"
         }
       }
     },
