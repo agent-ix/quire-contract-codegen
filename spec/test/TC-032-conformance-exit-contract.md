@@ -25,7 +25,7 @@ classifier's value, and that the compiled binary itself exits 0 against the real
    than return a code.
 3. Scan the producer's own source: require exactly one call reaching the process exit status before
    the test module, require that call's argument to be the classifier's value rather than a literal,
-   and require no top-level item to be declared after the test module, where that scan cannot see it.
+   and require no top-level `fn` to be declared after the test module, where that scan cannot see it.
 4. Build the plain example binary unconditionally, execute it against the real bounded corpus, and
    assert the process's own exit status.
 
