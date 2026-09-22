@@ -3,9 +3,9 @@
   "package_id": {
     "domain": "quire.package.semantic/v2",
     "algorithm": "sha256",
-    "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
+    "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
   },
-  "runtime_revision": "4e330525be513fe57c67717dc22b969d36656b85",
+  "runtime_revision": "9f31169276edb85799d6b7d878020caf49617090",
   "blocked": [
     "operation identity not consumed by codegen's generators"
   ],
@@ -13,7 +13,7 @@
     {
       "node_id": {
         "domain": "quire.checked-semantic-node/v1",
-        "digest": "0807216ac6804ed74b30975d9f7522e05624f951b66c21a6b3232e3d018d9f9a"
+        "digest": "2e4d7e1bcb50f91062cb44ad029937fc2b9fc8259fffbcf4ab2798d94b1dbe22"
       },
       "operation": {
         "identity": "equality.equal",
@@ -24,17 +24,17 @@
       },
       "result": {
         "disposition": "generated",
-        "environment_symbol": "environment_c8a0153c51c069e747ab6517fdbf01a6b945368678bc6d28c462ac8bae0e20b3",
-        "oracle_symbol": "oracle_c8a0153c51c069e747ab6517fdbf01a6b945368678bc6d28c462ac8bae0e20b3",
+        "environment_symbol": "environment_21af7ba1e91d21e90d1981308c350091506c953e7bc3a4dfa6a240083ad1a65b",
+        "oracle_symbol": "oracle_21af7ba1e91d21e90d1981308c350091506c953e7bc3a4dfa6a240083ad1a65b",
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "73c59553d939cad1de19aff2d54947c630e9d15f768bfb67f3278e08940cffc5"
+          "digest": "8a43ad9b03e9cfca0f8ff7c0f082a5fb4e493c46317073943681a9c84da5dfd4"
         },
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",
@@ -44,7 +44,7 @@
           {
             "node_id": {
               "domain": "quire.checked-semantic-node/v1",
-              "digest": "0807216ac6804ed74b30975d9f7522e05624f951b66c21a6b3232e3d018d9f9a"
+              "digest": "2e4d7e1bcb50f91062cb44ad029937fc2b9fc8259fffbcf4ab2798d94b1dbe22"
             },
             "role": "declaration",
             "ordinal": 0,
@@ -60,400 +60,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 34,
-                "end": 35
-              }
-            ]
-          }
-        ],
-        "claims": [],
-        "descriptor": {
-          "operator": "equal",
-          "left_source_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562"
-          },
-          "left_conversion_target": null,
-          "right_source_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562"
-          },
-          "right_conversion_target": null
-        },
-        "declaration_keys": [],
-        "declaration_runtime_keys": [],
-        "schedule": "enum"
-      }
-    },
-    {
-      "node_id": {
-        "domain": "quire.checked-semantic-node/v1",
-        "digest": "32672dede1aff4d734d4fbca54c08201d20c8c068e4f259d21556f70e9b70ae6"
-      },
-      "operation": {
-        "identity": "equality.equal",
-        "provenance": {
-          "kind": "caller_declared",
-          "blocked_on": "operation identity not consumed by codegen's generators"
-        }
-      },
-      "result": {
-        "disposition": "generated",
-        "environment_symbol": "environment_83f5f53cb8c7356be4fbd84ebec17b605fa917f4b4131dc8bd0df19ad7477377",
-        "oracle_symbol": "oracle_83f5f53cb8c7356be4fbd84ebec17b605fa917f4b4131dc8bd0df19ad7477377",
-        "ir_id": {
-          "domain": "quire.contract-ir.semantic/v1",
-          "algorithm": "sha256",
-          "digest": "cef1c0928e11a7adb0b0a4ea62c09144efe6e495ad83a30e6733502d03175e4a"
-        },
-        "package_id": {
-          "domain": "quire.package.semantic/v2",
-          "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
-        },
-        "semantic_type": {
-          "domain": "quire.checked-semantic-node/v1",
-          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
-        },
-        "source_map": [
-          {
-            "node_id": {
-              "domain": "quire.checked-semantic-node/v1",
-              "digest": "32672dede1aff4d734d4fbca54c08201d20c8c068e4f259d21556f70e9b70ae6"
-            },
-            "role": "declaration",
-            "ordinal": 0,
-            "regions": [
-              {
-                "source": {
-                  "authority": "agent-ix",
-                  "identity": "example",
-                  "revision": {
-                    "namespace": "git",
-                    "value": "1"
-                  },
-                  "digest_domain": "quire.source.bytes/v1",
-                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
-                },
-                "start": 43,
-                "end": 44
-              }
-            ]
-          }
-        ],
-        "claims": [],
-        "descriptor": {
-          "operator": "equal",
-          "left_source_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
-          },
-          "left_conversion_target": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000009"
-          },
-          "right_source_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000009"
-          },
-          "right_conversion_target": null
-        },
-        "declaration_keys": [],
-        "declaration_runtime_keys": [],
-        "schedule": "plan"
-      }
-    },
-    {
-      "node_id": {
-        "domain": "quire.checked-semantic-node/v1",
-        "digest": "7ceb653bfada693032dfc0ca711bf3178fb65d0025f43b5828936f324d6b4689"
-      },
-      "operation": {
-        "identity": "equality.equal",
-        "provenance": {
-          "kind": "caller_declared",
-          "blocked_on": "operation identity not consumed by codegen's generators"
-        }
-      },
-      "result": {
-        "disposition": "generated",
-        "environment_symbol": "environment_0738454117f186fcce31dedcd1df0a76e2de87235bd8e5f0904ae80a8da04d78",
-        "oracle_symbol": "oracle_0738454117f186fcce31dedcd1df0a76e2de87235bd8e5f0904ae80a8da04d78",
-        "ir_id": {
-          "domain": "quire.contract-ir.semantic/v1",
-          "algorithm": "sha256",
-          "digest": "38601f42cdf99745fcd0d1bc178e2c74f034f9e0c1cde5e822388737faf48245"
-        },
-        "package_id": {
-          "domain": "quire.package.semantic/v2",
-          "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
-        },
-        "semantic_type": {
-          "domain": "quire.checked-semantic-node/v1",
-          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
-        },
-        "source_map": [
-          {
-            "node_id": {
-              "domain": "quire.checked-semantic-node/v1",
-              "digest": "7ceb653bfada693032dfc0ca711bf3178fb65d0025f43b5828936f324d6b4689"
-            },
-            "role": "declaration",
-            "ordinal": 0,
-            "regions": [
-              {
-                "source": {
-                  "authority": "agent-ix",
-                  "identity": "example",
-                  "revision": {
-                    "namespace": "git",
-                    "value": "1"
-                  },
-                  "digest_domain": "quire.source.bytes/v1",
-                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
-                },
-                "start": 33,
-                "end": 34
-              }
-            ]
-          }
-        ],
-        "claims": [],
-        "descriptor": {
-          "operator": "equal",
-          "left_source_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
-          },
-          "left_conversion_target": null,
-          "right_source_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
-          },
-          "right_conversion_target": null
-        },
-        "declaration_keys": [],
-        "declaration_runtime_keys": [],
-        "schedule": "text"
-      }
-    },
-    {
-      "node_id": {
-        "domain": "quire.checked-semantic-node/v1",
-        "digest": "90cf5779e1df7addbab9c1e31e8a195e33ffb49c9b9bd59d2fdc9b237499ab44"
-      },
-      "operation": {
-        "identity": "equality.equal",
-        "provenance": {
-          "kind": "caller_declared",
-          "blocked_on": "operation identity not consumed by codegen's generators"
-        }
-      },
-      "result": {
-        "disposition": "generated",
-        "environment_symbol": "environment_f8fb4c57dd095d0a8e9b3423eb04949030fc032b20be737a91acfa39ebdf10f9",
-        "oracle_symbol": "oracle_f8fb4c57dd095d0a8e9b3423eb04949030fc032b20be737a91acfa39ebdf10f9",
-        "ir_id": {
-          "domain": "quire.contract-ir.semantic/v1",
-          "algorithm": "sha256",
-          "digest": "be5e1f593556f2e25f9eeeb3ed548fd2d43d2509a460ca5addfee1710bf0e5e1"
-        },
-        "package_id": {
-          "domain": "quire.package.semantic/v2",
-          "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
-        },
-        "semantic_type": {
-          "domain": "quire.checked-semantic-node/v1",
-          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
-        },
-        "source_map": [
-          {
-            "node_id": {
-              "domain": "quire.checked-semantic-node/v1",
-              "digest": "90cf5779e1df7addbab9c1e31e8a195e33ffb49c9b9bd59d2fdc9b237499ab44"
-            },
-            "role": "declaration",
-            "ordinal": 0,
-            "regions": [
-              {
-                "source": {
-                  "authority": "agent-ix",
-                  "identity": "example",
-                  "revision": {
-                    "namespace": "git",
-                    "value": "1"
-                  },
-                  "digest_domain": "quire.source.bytes/v1",
-                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
-                },
-                "start": 39,
-                "end": 40
-              }
-            ]
-          }
-        ],
-        "claims": [],
-        "descriptor": {
-          "operator": "equal",
-          "left_source_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000029"
-          },
-          "left_conversion_target": null,
-          "right_source_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000029"
-          },
-          "right_conversion_target": null
-        },
-        "declaration_keys": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000029"
-          }
-        ],
-        "declaration_runtime_keys": [
-          "0000000000000000000000000000000000000000000000000000000000000029"
-        ],
-        "schedule": "plan"
-      }
-    },
-    {
-      "node_id": {
-        "domain": "quire.checked-semantic-node/v1",
-        "digest": "a230d1686b6276c0cfce1548846bd2bab86dcb092f031885d48f581558dbc73e"
-      },
-      "operation": {
-        "identity": "equality.equal",
-        "provenance": {
-          "kind": "caller_declared",
-          "blocked_on": "operation identity not consumed by codegen's generators"
-        }
-      },
-      "result": {
-        "disposition": "generated",
-        "environment_symbol": "environment_2887c4ffdef9907f60d23d33da7e0715dacad2f86ba514273bb2c958a9985a80",
-        "oracle_symbol": "oracle_2887c4ffdef9907f60d23d33da7e0715dacad2f86ba514273bb2c958a9985a80",
-        "ir_id": {
-          "domain": "quire.contract-ir.semantic/v1",
-          "algorithm": "sha256",
-          "digest": "587bfcadf58184a91b35afc93f8895b65e83db3e03b436c78e34014a986b8aa8"
-        },
-        "package_id": {
-          "domain": "quire.package.semantic/v2",
-          "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
-        },
-        "semantic_type": {
-          "domain": "quire.checked-semantic-node/v1",
-          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
-        },
-        "source_map": [
-          {
-            "node_id": {
-              "domain": "quire.checked-semantic-node/v1",
-              "digest": "a230d1686b6276c0cfce1548846bd2bab86dcb092f031885d48f581558dbc73e"
-            },
-            "role": "declaration",
-            "ordinal": 0,
-            "regions": [
-              {
-                "source": {
-                  "authority": "agent-ix",
-                  "identity": "example",
-                  "revision": {
-                    "namespace": "git",
-                    "value": "1"
-                  },
-                  "digest_domain": "quire.source.bytes/v1",
-                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
-                },
-                "start": 31,
-                "end": 32
-              }
-            ]
-          }
-        ],
-        "claims": [],
-        "descriptor": {
-          "operator": "equal",
-          "left_source_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000024"
-          },
-          "left_conversion_target": null,
-          "right_source_type": {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000024"
-          },
-          "right_conversion_target": null
-        },
-        "declaration_keys": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000024"
-          }
-        ],
-        "declaration_runtime_keys": [
-          "0000000000000000000000000000000000000000000000000000000000000024"
-        ],
-        "schedule": "plan"
-      }
-    },
-    {
-      "node_id": {
-        "domain": "quire.checked-semantic-node/v1",
-        "digest": "cac6b6191bcbc5a7f6ca7829429f974ce3da46c3193dcc3775bee96655e875ea"
-      },
-      "operation": {
-        "identity": "equality.equal",
-        "provenance": {
-          "kind": "caller_declared",
-          "blocked_on": "operation identity not consumed by codegen's generators"
-        }
-      },
-      "result": {
-        "disposition": "generated",
-        "environment_symbol": "environment_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875",
-        "oracle_symbol": "oracle_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875",
-        "ir_id": {
-          "domain": "quire.contract-ir.semantic/v1",
-          "algorithm": "sha256",
-          "digest": "80ff7cae7cff446153d57addc7c5fc81d05a4970df3aef57fe21307869cdb0d9"
-        },
-        "package_id": {
-          "domain": "quire.package.semantic/v2",
-          "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
-        },
-        "semantic_type": {
-          "domain": "quire.checked-semantic-node/v1",
-          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
-        },
-        "source_map": [
-          {
-            "node_id": {
-              "domain": "quire.checked-semantic-node/v1",
-              "digest": "cac6b6191bcbc5a7f6ca7829429f974ce3da46c3193dcc3775bee96655e875ea"
-            },
-            "role": "declaration",
-            "ordinal": 0,
-            "regions": [
-              {
-                "source": {
-                  "authority": "agent-ix",
-                  "identity": "example",
-                  "revision": {
-                    "namespace": "git",
-                    "value": "1"
-                  },
-                  "digest_domain": "quire.source.bytes/v1",
-                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
-                },
-                "start": 29,
-                "end": 30
+                "start": 37,
+                "end": 38
               }
             ]
           }
@@ -487,7 +95,7 @@
     {
       "node_id": {
         "domain": "quire.checked-semantic-node/v1",
-        "digest": "cac6b6191bcbc5a7f6ca7829429f974ce3da46c3193dcc3775bee96655e875ea"
+        "digest": "2e4d7e1bcb50f91062cb44ad029937fc2b9fc8259fffbcf4ab2798d94b1dbe22"
       },
       "operation": {
         "identity": "equality.not_equal",
@@ -498,17 +106,17 @@
       },
       "result": {
         "disposition": "generated",
-        "environment_symbol": "environment_ea7bec18651985a40e4af127afe04717782b0f719095c6503772c2302b6d08d5",
-        "oracle_symbol": "oracle_ea7bec18651985a40e4af127afe04717782b0f719095c6503772c2302b6d08d5",
+        "environment_symbol": "environment_460db43031e0e8349e7b81afaab7700861e42478fa36bed7705e229477212aca",
+        "oracle_symbol": "oracle_460db43031e0e8349e7b81afaab7700861e42478fa36bed7705e229477212aca",
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "80ff7cae7cff446153d57addc7c5fc81d05a4970df3aef57fe21307869cdb0d9"
+          "digest": "8a43ad9b03e9cfca0f8ff7c0f082a5fb4e493c46317073943681a9c84da5dfd4"
         },
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",
@@ -518,7 +126,7 @@
           {
             "node_id": {
               "domain": "quire.checked-semantic-node/v1",
-              "digest": "cac6b6191bcbc5a7f6ca7829429f974ce3da46c3193dcc3775bee96655e875ea"
+              "digest": "2e4d7e1bcb50f91062cb44ad029937fc2b9fc8259fffbcf4ab2798d94b1dbe22"
             },
             "role": "declaration",
             "ordinal": 0,
@@ -534,8 +142,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 29,
-                "end": 30
+                "start": 37,
+                "end": 38
               }
             ]
           }
@@ -569,7 +177,7 @@
     {
       "node_id": {
         "domain": "quire.checked-semantic-node/v1",
-        "digest": "d632e000fc15b8c6889eb9c63a29be9f42576e0dc33ad10d5fcdae8bd4b93686"
+        "digest": "302c48cc9b16946682419d9b7cb6d42e6ef3448d20fb646aa5d53707b7b4aff4"
       },
       "operation": {
         "identity": "equality.equal",
@@ -580,17 +188,17 @@
       },
       "result": {
         "disposition": "generated",
-        "environment_symbol": "environment_ee2f1302f9301a7a99ab064d3bb472fa29f98b1c365dbb3812e40c7f6af96a1f",
-        "oracle_symbol": "oracle_ee2f1302f9301a7a99ab064d3bb472fa29f98b1c365dbb3812e40c7f6af96a1f",
+        "environment_symbol": "environment_a60a24bc6662909a92fcfe0df5b382d0002c9a1f1cfc41b556ae986a27632ec4",
+        "oracle_symbol": "oracle_a60a24bc6662909a92fcfe0df5b382d0002c9a1f1cfc41b556ae986a27632ec4",
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "6366a3b0741df4c225f960b6b6cd9a0933fab4ae6e10bf017e78b75ccc5abfd9"
+          "digest": "22303cee6ccc2d31be9e9fda6e95dc120013132c66e1f0beeedcb5edef17865c"
         },
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",
@@ -600,7 +208,85 @@
           {
             "node_id": {
               "domain": "quire.checked-semantic-node/v1",
-              "digest": "d632e000fc15b8c6889eb9c63a29be9f42576e0dc33ad10d5fcdae8bd4b93686"
+              "digest": "302c48cc9b16946682419d9b7cb6d42e6ef3448d20fb646aa5d53707b7b4aff4"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 57,
+                "end": 58
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000009"
+          },
+          "left_conversion_target": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "32d6a83ddbee95899ceec7d6f6a1a50b281cf345892e6ca77db18545c70af00a"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_76d9cb71c7ab24969e6bb32d337ce648be691bb8172a036fa8344def2c9b7384",
+        "oracle_symbol": "oracle_76d9cb71c7ab24969e6bb32d337ce648be691bb8172a036fa8344def2c9b7384",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "5b95a2c8024e7870249905d38e23a252707f42e70b27a9eb9404f01a73792a28"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "32d6a83ddbee95899ceec7d6f6a1a50b281cf345892e6ca77db18545c70af00a"
             },
             "role": "declaration",
             "ordinal": 0,
@@ -627,24 +313,24 @@
           "operator": "equal",
           "left_source_type": {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000032"
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
           },
           "left_conversion_target": null,
           "right_source_type": {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000032"
+            "digest": "0000000000000000000000000000000000000000000000000000000000000003"
           },
           "right_conversion_target": null
         },
         "declaration_keys": [],
         "declaration_runtime_keys": [],
-        "schedule": "plan"
+        "schedule": "text"
       }
     },
     {
       "node_id": {
         "domain": "quire.checked-semantic-node/v1",
-        "digest": "d6b8253e83da2bf2685d69c3836f0cafc98768a65dd5f6b6e8b52b865ecd539b"
+        "digest": "35b908693c72f4943df973cdd1b3be324598e1071728e95a7552f18db3f7f9ee"
       },
       "operation": {
         "identity": "equality.equal",
@@ -655,17 +341,17 @@
       },
       "result": {
         "disposition": "generated",
-        "environment_symbol": "environment_2d51f5686b743ee7fe36a6dc062be74bf416c609bb0bec4c13e1fb9ec096d981",
-        "oracle_symbol": "oracle_2d51f5686b743ee7fe36a6dc062be74bf416c609bb0bec4c13e1fb9ec096d981",
+        "environment_symbol": "environment_0b3ddf56cea05ad8cd36a18946c412690addf723b7cc414727d10325e5166a94",
+        "oracle_symbol": "oracle_0b3ddf56cea05ad8cd36a18946c412690addf723b7cc414727d10325e5166a94",
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "40d28ce20fa914f4b20c860a472541666fdf1b2bb501c4420781df82cc972211"
+          "digest": "db06d3d5573d1ced03c99c57783e023e226a03ad6a4bf16bbc0754ad13722d6a"
         },
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",
@@ -675,7 +361,7 @@
           {
             "node_id": {
               "domain": "quire.checked-semantic-node/v1",
-              "digest": "d6b8253e83da2bf2685d69c3836f0cafc98768a65dd5f6b6e8b52b865ecd539b"
+              "digest": "35b908693c72f4943df973cdd1b3be324598e1071728e95a7552f18db3f7f9ee"
             },
             "role": "declaration",
             "ordinal": 0,
@@ -691,8 +377,168 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 42,
-                "end": 43
+                "start": 51,
+                "end": 52
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000007"
+          },
+          "left_conversion_target": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000009"
+          },
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000009"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "53dc053b4ce8826c41b0cb959c495cee297c584777d64fd918a02617f94cc548"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_3152c7e10a22a6fda8cb49d358d1baadc2e7fd1c6542192baaee7c8aa8add24a",
+        "oracle_symbol": "oracle_3152c7e10a22a6fda8cb49d358d1baadc2e7fd1c6542192baaee7c8aa8add24a",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "a174268c44b4155e1425c5a58cc82dfeeaa7b944e037d823cfda44248a93ca8f"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "53dc053b4ce8826c41b0cb959c495cee297c584777d64fd918a02617f94cc548"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 47,
+                "end": 48
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000029"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000029"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000029"
+          }
+        ],
+        "declaration_runtime_keys": [
+          "0000000000000000000000000000000000000000000000000000000000000029"
+        ],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "57e405d1da2574e03973f38a6d94e4a02e32299b0f52b93fe89d9223b5f3ea28"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_d5c77d9a6fbf3c0c86bf60c5d285814883b8fa70fa2357e8d411699fae179b7c",
+        "oracle_symbol": "oracle_d5c77d9a6fbf3c0c86bf60c5d285814883b8fa70fa2357e8d411699fae179b7c",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "6d48198a21fc52cfd156aa318713653fee197c4971f35abb34880ba531caf011"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "57e405d1da2574e03973f38a6d94e4a02e32299b0f52b93fe89d9223b5f3ea28"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 50,
+                "end": 51
               }
             ]
           }
@@ -731,7 +577,7 @@
     {
       "node_id": {
         "domain": "quire.checked-semantic-node/v1",
-        "digest": "dc138f619c8a62621245599a165c1f594fe72ff81ed9774f6aff9b4a3edb412d"
+        "digest": "58db07043040fa42b2df62e3bab8d58afc1fbdc5379830ddca1f25ca6eb6450c"
       },
       "operation": {
         "identity": "equality.equal",
@@ -742,17 +588,17 @@
       },
       "result": {
         "disposition": "generated",
-        "environment_symbol": "environment_faa5cbb23e2cf24d67cc09c91884a3ada215c4a24843df16a8ab4a29dba89d85",
-        "oracle_symbol": "oracle_faa5cbb23e2cf24d67cc09c91884a3ada215c4a24843df16a8ab4a29dba89d85",
+        "environment_symbol": "environment_7b17b989a86f0178fda1b973617c3ed5e20afe5a8f6bf99058777d1aa1970ebd",
+        "oracle_symbol": "oracle_7b17b989a86f0178fda1b973617c3ed5e20afe5a8f6bf99058777d1aa1970ebd",
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "e6eec1b5324afb2c3ddc4ebcdeb6bccfc7c4cf22752f8497f1eb2d3242597a00"
+          "digest": "f40a4dc37507dcff316c5f85c9a3bdbfe7ff406bbd0f4cc4d8b4bdf533b25bf9"
         },
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",
@@ -762,7 +608,7 @@
           {
             "node_id": {
               "domain": "quire.checked-semantic-node/v1",
-              "digest": "dc138f619c8a62621245599a165c1f594fe72ff81ed9774f6aff9b4a3edb412d"
+              "digest": "58db07043040fa42b2df62e3bab8d58afc1fbdc5379830ddca1f25ca6eb6450c"
             },
             "role": "declaration",
             "ordinal": 0,
@@ -778,8 +624,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 32,
-                "end": 33
+                "start": 55,
+                "end": 56
               }
             ]
           }
@@ -789,12 +635,15 @@
           "operator": "equal",
           "left_source_type": {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000025"
+            "digest": "0000000000000000000000000000000000000000000000000000000000000009"
           },
-          "left_conversion_target": null,
+          "left_conversion_target": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000014"
+          },
           "right_source_type": {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000025"
+            "digest": "0000000000000000000000000000000000000000000000000000000000000014"
           },
           "right_conversion_target": null
         },
@@ -806,7 +655,7 @@
     {
       "node_id": {
         "domain": "quire.checked-semantic-node/v1",
-        "digest": "ff8ecb5798c4d53d3186124e660a1518e10bdd0603c3da44b4d60f5489c7fdfa"
+        "digest": "6824693d60371c0fd4768aa21f3c6f104d74267d47157350e55591bf780b02db"
       },
       "operation": {
         "identity": "equality.equal",
@@ -817,17 +666,17 @@
       },
       "result": {
         "disposition": "generated",
-        "environment_symbol": "environment_7824d5d57da98145530bfd079c89bb3a81ab93c52c4206592c5fedf59a0eeebb",
-        "oracle_symbol": "oracle_7824d5d57da98145530bfd079c89bb3a81ab93c52c4206592c5fedf59a0eeebb",
+        "environment_symbol": "environment_b5507219bf292f5f3030b453e44db1cec20b0d45d02979b8e5d678d65872dc34",
+        "oracle_symbol": "oracle_b5507219bf292f5f3030b453e44db1cec20b0d45d02979b8e5d678d65872dc34",
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "64c842d5d27c5663d170930ba1af7d4dd498c14ca51675d0c440cd42e8f06d3d"
+          "digest": "2523f7ba013cc8590fa71102bc79fe5a3a809077bedb9ba0de70b36b113fe702"
         },
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "ce8359f09eb83ae2974f0e4db9e9931db1dd87c0a3273edb3e38693bf768b642"
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",
@@ -837,7 +686,239 @@
           {
             "node_id": {
               "domain": "quire.checked-semantic-node/v1",
-              "digest": "ff8ecb5798c4d53d3186124e660a1518e10bdd0603c3da44b4d60f5489c7fdfa"
+              "digest": "6824693d60371c0fd4768aa21f3c6f104d74267d47157350e55591bf780b02db"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 49,
+                "end": 50
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000032"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000032"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "7422d27bd26cec8e311d68494ff94cb68ae9a63c39b8b3503159c3b4d378f16e"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_576f61c653038d5b860825b431f9128ca106118a261f1df432cbbc2a806a634a",
+        "oracle_symbol": "oracle_576f61c653038d5b860825b431f9128ca106118a261f1df432cbbc2a806a634a",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "4b7405b4180c5a34177cbe9fa4935fa082a423adc356bc16f22bf87e638dd2be"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "7422d27bd26cec8e311d68494ff94cb68ae9a63c39b8b3503159c3b4d378f16e"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 39,
+                "end": 40
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000024"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000024"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000024"
+          }
+        ],
+        "declaration_runtime_keys": [
+          "0000000000000000000000000000000000000000000000000000000000000024"
+        ],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "9e480ae45da7a4dd18cc050abd0be4f3d2722a6c6ca28e8c52ed065e4a447c54"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_1605f3edda95d8c8720bd2effad6370ef6aac509862734b5720a75e4836d7328",
+        "oracle_symbol": "oracle_1605f3edda95d8c8720bd2effad6370ef6aac509862734b5720a75e4836d7328",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "ff5f978bd383dcb3fffba73575dfd6c138fe6659cb3372f0b6249750d7348522"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "9e480ae45da7a4dd18cc050abd0be4f3d2722a6c6ca28e8c52ed065e4a447c54"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 42,
+                "end": 43
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "enum"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "9e4e08142e8b284c81fecbd5a511eab1a2cb0e1188eae3828951f28305921cbb"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_89fc354672aa321d79f99516e767b60755c99fb1d86665198d4facbbe42e8009",
+        "oracle_symbol": "oracle_89fc354672aa321d79f99516e767b60755c99fb1d86665198d4facbbe42e8009",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "d2f487f24f088811a6a240c0e787ea9674c1961d9a3a68811a91ee109fd49674"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "9e4e08142e8b284c81fecbd5a511eab1a2cb0e1188eae3828951f28305921cbb"
             },
             "role": "declaration",
             "ordinal": 0,
@@ -864,6 +945,81 @@
           "operator": "equal",
           "left_source_type": {
             "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000025"
+          },
+          "left_conversion_target": null,
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000025"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "a406b496c0fba429bd6183239e99a44fc486a017f5d55e988c7574578249fa26"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_1693eb17de43a7d163afa716008703d09001b2a464938fa1755f11b0225b7a74",
+        "oracle_symbol": "oracle_1693eb17de43a7d163afa716008703d09001b2a464938fa1755f11b0225b7a74",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "75c5ea3282da51afe1fcdce911a415f850a7f23aa86f33f6ccde7293be8287a2"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "a406b496c0fba429bd6183239e99a44fc486a017f5d55e988c7574578249fa26"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 48,
+                "end": 49
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000007"
           },
           "left_conversion_target": {
@@ -873,6 +1029,240 @@
           "right_source_type": {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "f0acda5875c83d324edc5f74d54e9846d960c347f0394bd9f9c5dd509f04b581"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_7f1f4b680dd0e405ecf8900e17a85b0170e5083d634a561c2f3456c097666a8f",
+        "oracle_symbol": "oracle_7f1f4b680dd0e405ecf8900e17a85b0170e5083d634a561c2f3456c097666a8f",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "dc856a1b1d19e15666fd14ab5f089ffc9a76387a478127314d0e528f1f66e624"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "f0acda5875c83d324edc5f74d54e9846d960c347f0394bd9f9c5dd509f04b581"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 53,
+                "end": 54
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000012"
+          },
+          "left_conversion_target": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000014"
+          },
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000014"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "fac4960bc142ba69fa7ea114f9fed6bdce190dfde21e034b4fd06a3ce3d5baeb"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_bd33625ec0cccc3d86ecb0ef526f4daff58640350e42523bd5452b3b1669845d",
+        "oracle_symbol": "oracle_bd33625ec0cccc3d86ecb0ef526f4daff58640350e42523bd5452b3b1669845d",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "b7c2b397c25a003e4259b6e48969bec6f10d2b176c4502bec9f3d0e26879ca20"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "fac4960bc142ba69fa7ea114f9fed6bdce190dfde21e034b4fd06a3ce3d5baeb"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 54,
+                "end": 55
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000016"
+          },
+          "left_conversion_target": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "right_conversion_target": null
+        },
+        "declaration_keys": [],
+        "declaration_runtime_keys": [],
+        "schedule": "plan"
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "fce1a138623aa590d569fac975385385e487d4e3747a87fa2cb63d0ee90ce8e1"
+      },
+      "operation": {
+        "identity": "equality.equal",
+        "provenance": {
+          "kind": "caller_declared",
+          "blocked_on": "operation identity not consumed by codegen's generators"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "environment_symbol": "environment_c1ba86b67ce3b9390a347abd17c61969054dc776695ced70b08fa8e63db1ce73",
+        "oracle_symbol": "oracle_c1ba86b67ce3b9390a347abd17c61969054dc776695ced70b08fa8e63db1ce73",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "7181f1aae834b07dce52bed7697777d824fdb0c10e7ab011d2aa38abd2986fa1"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "d51704639f9d3151c5e2407ac02be8517b5171641c5d41c8e72aa9f8bf2c13ac"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "fce1a138623aa590d569fac975385385e487d4e3747a87fa2cb63d0ee90ce8e1"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 56,
+                "end": 57
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "descriptor": {
+          "operator": "equal",
+          "left_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000009"
+          },
+          "left_conversion_target": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000018"
+          },
+          "right_source_type": {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000018"
           },
           "right_conversion_target": null
         },

@@ -206,6 +206,24 @@ macro_rules! shared_helpers {
             ValueType::Composite(node_key(code))
         }
 
+        /// `Rational[num_lo, num_hi; den_lo, den_hi]` -- codegen#83's
+        /// `admits_equality_conversion` `Rational -> *` rows.
+        pub fn rational_type(num_lo: i64, num_hi: i64, den_lo: i64, den_hi: i64) -> ValueType {
+            ValueType::Rational(
+                RationalDomain::new(
+                    IntegerInterval::new(Integer::from(num_lo), Integer::from(num_hi)).unwrap(),
+                    IntegerInterval::new(Integer::from(den_lo), Integer::from(den_hi)).unwrap(),
+                )
+                .unwrap(),
+            )
+        }
+
+        pub fn rational_value(numerator: i64, denominator: i64) -> Value {
+            Value::Rational(
+                Rational::new(Integer::from(numerator), Integer::from(denominator)).unwrap(),
+            )
+        }
+
         // ---- environments, one per corpus shape --------------------------
         //
         // Declared directly against each side's own `CompositeDeclaration`,

@@ -196,33 +196,69 @@ fn boolean_eq() -> Value {
     })
 }
 
-/// A well-formed two-argument `binary` application body: content is
-/// irrelevant to the generator, which reads the operand types from the
-/// request descriptor, not from the body. Every corpus expression using this
-/// body is a composite-equality oracle, whose result is genuinely Boolean --
-/// unlike `exact_scalar_support`'s `application`, there is only one family
-/// here, so `T_BOOLEAN` is this body's actual result type, not a fixed
-/// placeholder standing in for others. Catalogued as `quire.op.boolean.eq`
+/// One `literal` operand naming its own declared type via `literal.type`,
+/// exactly the member IR-216 already requires and validates only by
+/// resolving it to a real node (see [`literal`]'s own doc comment) -- never
+/// cross-checked against `value_kind`, so `value_kind`/`value` are a fixed,
+/// inert placeholder and `type_ref` alone carries the operand's type.
+///
+/// This must stay a `literal`, not a `reference`: a `reference` operand's
+/// family is resolved and enforced against `boolean.eq`'s own declared
+/// `boolean` operand family by IR's `argument_family`/`check_operands`
+/// admission check, and a scalar/composite *type* node is never in that
+/// family, so a package built from `reference` operands is refused
+/// `OperatorIneligible` at *admission*, before this generator ever runs.
+fn typed_operand(type_ref: Value) -> Value {
+    json!({"term": "literal", "type": type_ref, "value_kind": "integer", "value": "0"})
+}
+
+/// A well-formed two-argument `binary` application body: each operand names
+/// its own declared type ([`typed_operand`]). The generator still builds the
+/// runtime call entirely from the request descriptor, never from a resolved
+/// operand *value*, but since
+/// `quire_contract_codegen::composite_equality::check_operand_types` (FR-018
+/// Behavior: "disagrees with its descriptor's arity or operand types"),
+/// every caller of this function must pass the same two type codes its
+/// descriptor declares as `source_type`, or the item refuses before
+/// generation rather than after. Catalogued as `quire.op.boolean.eq`
 /// (binary, two boolean operands): a real, closed-catalog identity every
 /// caller can share, structurally conformant regardless of what the caller
-/// actually means by the node. The two operands carry `code` as an integer
-/// literal rather than a fixed `true`/`true` pair so every corpus node's
-/// preimage -- otherwise byte-identical across every caller of this
-/// function -- stays unique: `validate_application_keys` re-derives each
-/// application node's own id from its full preimage, and two nodes with the
-/// same content would collide on one digest. Both operands are literal
-/// terms, not references, so IR's operand-family check
-/// (`argument_family`/`check_operands`) never resolves a family for them
-/// and never enforces `boolean.eq`'s own declared `boolean` operand family
-/// against this integer content.
-pub fn binary_body(code: u32) -> Value {
+/// actually means by the node -- IR's operand-family check never resolves a
+/// family for a `literal` operand at all, so it never enforces that
+/// declared `boolean` family against these placeholders. `result_type`
+/// defaults to `T_BOOLEAN`, the body's actual result type;
+/// [`binary_body_with_result`] overrides it only where two callers would
+/// otherwise share one (type, type) pair and collide on one preimage digest.
+pub fn binary_body(left_type: u32, right_type: u32) -> Value {
+    binary_body_with_result(left_type, right_type, T_BOOLEAN)
+}
+
+/// [`binary_body`], with an explicit `result_type` disambiguator. `IR-216`
+/// validates only that `result_type` resolves to a real node (see
+/// [`application`]'s doc comment), so any already-registered code serves.
+pub fn binary_body_with_result(left_type: u32, right_type: u32, result_type: u32) -> Value {
+    application(
+        "binary",
+        boolean_eq(),
+        result_type,
+        vec![
+            typed_operand(node_ref(&key(left_type))),
+            typed_operand(node_ref(&key(right_type))),
+        ],
+    )
+}
+
+/// [`binary_body`] for an operand type not registered through
+/// [`PackageBuilder::code`] -- the vendored `Example.Status` enum node,
+/// named by its own digest rather than a placeholder `key(code)`.
+pub fn binary_body_digest(left_digest: &str, right_digest: &str) -> Value {
     application(
         "binary",
         boolean_eq(),
         T_BOOLEAN,
         vec![
-            literal("integer", &code.to_string()),
-            literal("integer", &code.to_string()),
+            typed_operand(node_ref(left_digest)),
+            typed_operand(node_ref(right_digest)),
         ],
     )
 }
@@ -496,6 +532,24 @@ pub const T_INTEGER_BOUNDED: u32 = 7;
 pub const BD_INTEGER: u32 = 8;
 pub const T_DECIMAL_SMALL: u32 = 9;
 pub const BD_DECIMAL: u32 = 10;
+/// `Rational[-10, 10; 1, 1]`: a `convert<T>` source admitted into
+/// `T_RATIONAL_WIDE` (`admits_equality_conversion`'s `Rational -> Rational`
+/// row).
+pub const T_RATIONAL_NARROW: u32 = 12;
+pub const BD_RATIONAL_NARROW: u32 = 13;
+/// `Rational[-100, 100; 1, 5]`: wide enough to admit `T_RATIONAL_NARROW`
+/// (`Rational -> Rational`) and `T_DECIMAL_SMALL` (`Decimal -> Rational`).
+pub const T_RATIONAL_WIDE: u32 = 14;
+pub const BD_RATIONAL_WIDE: u32 = 15;
+/// `Rational[-50, 50; 1, 1]`: denominator pinned to `1`, so
+/// `admits_equality_conversion`'s `Rational -> Integer/Int/Decimal` row
+/// admits `T_INTEGER`.
+pub const T_RATIONAL_INT: u32 = 16;
+pub const BD_RATIONAL_INT: u32 = 17;
+/// `Decimal[-1000, 1000; 0, 2]`: wide enough to admit `T_DECIMAL_SMALL`
+/// (`Decimal -> Decimal`).
+pub const T_DECIMAL_WIDE: u32 = 18;
+pub const BD_DECIMAL_WIDE: u32 = 19;
 
 pub const R_POINT: u32 = 20;
 pub const R_FLOAT: u32 = 21;
@@ -534,6 +588,23 @@ pub const E_CONV: u32 = 111;
 pub const E_COLLECTION: u32 = 112;
 pub const E_PAIR_OF_POINTS: u32 = 113;
 pub const E_CONV_CHARGE: u32 = 114;
+/// FR-018 Behavior's "disagrees with its descriptor's ... operand types"
+/// (codegen#82): body operands both reference `T_INTEGER`; every request in
+/// this module's tests over this node uses a different descriptor type, so
+/// `check_operand_types` refuses it before generation.
+pub const E_OPERAND_MISMATCH: u32 = 115;
+/// `admits_equality_conversion`'s `Rational -> Rational` row (codegen#83).
+pub const E_CONV_RAT_RAT: u32 = 116;
+/// `admits_equality_conversion`'s `Rational -> Integer/Int/Decimal` row,
+/// exercised against `Integer` (codegen#83).
+pub const E_CONV_RAT_INT: u32 = 117;
+/// `admits_equality_conversion`'s `Decimal -> Rational` row (codegen#83).
+pub const E_CONV_DEC_RAT: u32 = 118;
+/// `admits_equality_conversion`'s `Decimal -> Decimal` row (codegen#83).
+pub const E_CONV_DEC_DEC: u32 = 119;
+/// `admits_equality_conversion`'s `Decimal -> Integer/Int` row, exercised
+/// against `Integer` (codegen#83).
+pub const E_CONV_DEC_INT: u32 = 120;
 
 /// A package carrying the full composite/structural equality corpus.
 pub fn corpus_package() -> PackageBuilder {
@@ -604,6 +675,83 @@ pub fn corpus_package() -> PackageBuilder {
                 integer_literal(100),
                 integer_literal(0),
                 integer_literal(0),
+                literal("text", "nearest-even"),
+            ]),
+        )
+        .code(
+            T_RATIONAL_NARROW,
+            "scalar_type",
+            "rational",
+            T_RATIONAL_NARROW,
+            aggregate(vec![]),
+        )
+        .code(
+            BD_RATIONAL_NARROW,
+            "bounded_domain",
+            "rational_range",
+            T_RATIONAL_NARROW,
+            aggregate(vec![
+                integer_literal(-10),
+                integer_literal(10),
+                integer_literal(1),
+                integer_literal(1),
+            ]),
+        )
+        .code(
+            T_RATIONAL_WIDE,
+            "scalar_type",
+            "rational",
+            T_RATIONAL_WIDE,
+            aggregate(vec![]),
+        )
+        .code(
+            BD_RATIONAL_WIDE,
+            "bounded_domain",
+            "rational_range",
+            T_RATIONAL_WIDE,
+            aggregate(vec![
+                integer_literal(-100),
+                integer_literal(100),
+                integer_literal(1),
+                integer_literal(5),
+            ]),
+        )
+        .code(
+            T_RATIONAL_INT,
+            "scalar_type",
+            "rational",
+            T_RATIONAL_INT,
+            aggregate(vec![]),
+        )
+        .code(
+            BD_RATIONAL_INT,
+            "bounded_domain",
+            "rational_range",
+            T_RATIONAL_INT,
+            aggregate(vec![
+                integer_literal(-50),
+                integer_literal(50),
+                integer_literal(1),
+                integer_literal(1),
+            ]),
+        )
+        .code(
+            T_DECIMAL_WIDE,
+            "scalar_type",
+            "decimal",
+            T_DECIMAL_WIDE,
+            aggregate(vec![]),
+        )
+        .code(
+            BD_DECIMAL_WIDE,
+            "bounded_domain",
+            "decimal_range",
+            T_DECIMAL_WIDE,
+            aggregate(vec![
+                integer_literal(-1000),
+                integer_literal(1000),
+                integer_literal(0),
+                integer_literal(2),
                 literal("text", "nearest-even"),
             ]),
         );
@@ -727,21 +875,78 @@ pub fn corpus_package() -> PackageBuilder {
         );
 
     builder
-        .application_code(E_RECORD, "binary", binary_body(E_RECORD))
-        .application_code(E_NESTED_IEEE, "binary", binary_body(E_NESTED_IEEE))
-        .application_code(E_TUPLE, "binary", binary_body(E_TUPLE))
-        .application_code(E_OPTION, "binary", binary_body(E_OPTION))
-        .application_code(E_TEXT, "binary", binary_body(E_TEXT))
-        .application_code(E_ENUM, "binary", binary_body(E_ENUM))
-        .application_code(E_DUP, "binary", binary_body(E_DUP))
-        .application_code(E_BAD_CONVERT, "binary", binary_body(E_BAD_CONVERT))
-        .application_code(E_REFERENCE, "binary", binary_body(E_REFERENCE))
-        .application_code(E_CALL, "call", binary_body(E_CALL))
-        .application_code(E_SELF, "binary", binary_body(E_SELF))
-        .application_code(E_CONV, "binary", binary_body(E_CONV))
-        .application_code(E_COLLECTION, "binary", binary_body(E_COLLECTION))
-        .application_code(E_PAIR_OF_POINTS, "binary", binary_body(E_PAIR_OF_POINTS))
-        .application_code(E_CONV_CHARGE, "binary", binary_body(E_CONV_CHARGE));
+        .application_code(E_RECORD, "binary", binary_body(R_POINT, R_POINT))
+        .application_code(
+            E_NESTED_IEEE,
+            "binary",
+            binary_body(SEQ_R_FLOAT, SEQ_R_FLOAT),
+        )
+        .application_code(E_TUPLE, "binary", binary_body(TUP_PAIR, TUP_PAIR))
+        .application_code(E_OPTION, "binary", binary_body(OPT_INT, OPT_INT))
+        .application_code(E_TEXT, "binary", binary_body(T_TEXT, T_TEXT))
+        .application_code(
+            E_ENUM,
+            "binary",
+            binary_body_digest(ENUM_TYPE_DIGEST, ENUM_TYPE_DIGEST),
+        )
+        .application_code(E_DUP, "binary", binary_body(R_DUP, R_DUP))
+        // Same (T_TEXT, T_TEXT) operand-reference pair as E_TEXT: a distinct
+        // `result_type` keeps the two application preimages from colliding
+        // (see `binary_body_with_result`'s doc comment).
+        .application_code(
+            E_BAD_CONVERT,
+            "binary",
+            binary_body_with_result(T_TEXT, T_TEXT, T_INTEGER),
+        )
+        .application_code(E_REFERENCE, "binary", binary_body(REF_TYPE, T_INTEGER))
+        .application_code(E_CALL, "call", binary_body(T_INTEGER, T_INTEGER))
+        .application_code(E_SELF, "binary", binary_body(R_SELF, R_SELF))
+        .application_code(E_CONV, "binary", binary_body(T_INTEGER_BOUNDED, T_INTEGER))
+        .application_code(E_COLLECTION, "binary", binary_body(SEQ_INT, SEQ_INT))
+        .application_code(
+            E_PAIR_OF_POINTS,
+            "binary",
+            binary_body(R_PAIR_OF_POINTS, R_PAIR_OF_POINTS),
+        )
+        .application_code(
+            E_CONV_CHARGE,
+            "binary",
+            binary_body(T_INTEGER_BOUNDED, T_DECIMAL_SMALL),
+        )
+        // FR-018 Behavior's operand-type disagreement refusal (codegen#82):
+        // every request over this node in this module's tests declares a
+        // descriptor type other than T_INTEGER, so the body's own
+        // (T_INTEGER, T_INTEGER) reference pair always disagrees.
+        .application_code(
+            E_OPERAND_MISMATCH,
+            "binary",
+            binary_body(T_INTEGER, T_INTEGER),
+        )
+        .application_code(
+            E_CONV_RAT_RAT,
+            "binary",
+            binary_body(T_RATIONAL_NARROW, T_RATIONAL_WIDE),
+        )
+        .application_code(
+            E_CONV_RAT_INT,
+            "binary",
+            binary_body(T_RATIONAL_INT, T_INTEGER),
+        )
+        .application_code(
+            E_CONV_DEC_RAT,
+            "binary",
+            binary_body(T_DECIMAL_SMALL, T_RATIONAL_WIDE),
+        )
+        .application_code(
+            E_CONV_DEC_DEC,
+            "binary",
+            binary_body(T_DECIMAL_SMALL, T_DECIMAL_WIDE),
+        )
+        .application_code(
+            E_CONV_DEC_INT,
+            "binary",
+            binary_body(T_DECIMAL_SMALL, T_INTEGER),
+        );
 
     builder
 }
@@ -843,6 +1048,39 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
             EqualityOperatorKind::Equal,
             converted(T_INTEGER_BOUNDED, T_DECIMAL_SMALL),
             typed(T_DECIMAL_SMALL),
+        ),
+        // codegen#83: one vector per remaining `admits_equality_conversion`
+        // row (`Int -> *` is already exercised above by E_CONV/
+        // E_CONV_CHARGE).
+        item(
+            E_CONV_RAT_RAT,
+            EqualityOperatorKind::Equal,
+            converted(T_RATIONAL_NARROW, T_RATIONAL_WIDE),
+            typed(T_RATIONAL_WIDE),
+        ),
+        item(
+            E_CONV_RAT_INT,
+            EqualityOperatorKind::Equal,
+            converted(T_RATIONAL_INT, T_INTEGER),
+            typed(T_INTEGER),
+        ),
+        item(
+            E_CONV_DEC_RAT,
+            EqualityOperatorKind::Equal,
+            converted(T_DECIMAL_SMALL, T_RATIONAL_WIDE),
+            typed(T_RATIONAL_WIDE),
+        ),
+        item(
+            E_CONV_DEC_DEC,
+            EqualityOperatorKind::Equal,
+            converted(T_DECIMAL_SMALL, T_DECIMAL_WIDE),
+            typed(T_DECIMAL_WIDE),
+        ),
+        item(
+            E_CONV_DEC_INT,
+            EqualityOperatorKind::Equal,
+            converted(T_DECIMAL_SMALL, T_INTEGER),
+            typed(T_INTEGER),
         ),
     ]
 }
