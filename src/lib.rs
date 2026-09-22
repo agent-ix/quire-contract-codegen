@@ -119,9 +119,9 @@ pub use kani::{
     ProofDependencyState, ProofReadiness, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
 };
 pub use kani_execution::{
-    execute_kani_obligation, KaniExecutionEvidence, KaniExecutionRefusal, KaniExecutionRequest,
-    KaniInconclusiveReason, KaniInstallation, KaniPinField, KaniRunOutcome, KaniTool,
-    KaniToolError, KaniToolPins, KANI_EXECUTION_SCHEMA,
+    classify_kani_run, execute_kani_obligation, KaniExecutionEvidence, KaniExecutionRefusal,
+    KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniPinField, KaniRunOutcome,
+    KaniTool, KaniToolError, KaniToolPins, KANI_EXECUTION_SCHEMA,
 };
 
 pub use kani_obligations::{
