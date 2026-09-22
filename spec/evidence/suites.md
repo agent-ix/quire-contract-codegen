@@ -54,8 +54,10 @@ pinned Kani backend. The numeric/state increment adds v2 typed subject bindings,
 IR-owned integer assumptions, exact boundary/outside controls, and successful plus
 falsifying concrete-playback runs without changing the generation-time `not_run`
 classification. Its issue #2 current-head Rust review and gap analysis accept this local evidence;
-the suite still does not classify graph readiness as a completed proof. FR-004 still has no suite
-because its complete implementation does not yet exist.
+the suite still does not classify graph readiness as a completed proof. FR-004 still has no suite:
+`src/vacuity.rs` and `src/bound_coverage.rs` implement primitives and bound observations with focused
+TC-006-tagged tests, but no qualified native-campaign result producer is registered. The bound
+analyzer's observations are constructed with `provenance: "unqualified"` unconditionally.
 
 SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
 failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,
