@@ -343,12 +343,20 @@ impl BoundForm {
 /// Upstream work an item or the whole slice is blocked on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum UpstreamBlocker {
-    /// Composite, collection and function semantics.
-    #[serde(rename = "agent-ix/quire-spec-language#119")]
-    QuireSpecLanguage119,
     /// Model and relation semantics.
     #[serde(rename = "agent-ix/quire-spec-language#120")]
     QuireSpecLanguage120,
+    /// Function application. `agent-ix/quire-spec-language#119` (composite,
+    /// collection and total pure functions) closed and its deliverables
+    /// landed, so a composite-family node is no longer blocked on anything
+    /// here (see `unsupported_family`, which buckets `CompositeType` with
+    /// this generator's ordinary out-of-scope tags rather than citing an
+    /// upstream issue at all). A function-family node's remaining gap is
+    /// that Contract Runtime publishes no function-application operator
+    /// surface to call -- the same gap `composite_equality`'s sibling
+    /// `UpstreamBlocker::QuireContractRuntime34` already names for FR-018.
+    #[serde(rename = "agent-ix/quire-contract-runtime#34")]
+    QuireContractRuntime34,
     /// This generator did not confirm the node's own catalogued operation
     /// against the descriptor, so it reports the request item's own
     /// descriptor-derived identity instead. The cases this covers are
@@ -889,9 +897,7 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> ExactScal
         issue,
     };
     match tag {
-        CheckedNodeTag::CompositeType | CheckedNodeTag::Function => {
-            blocked(UpstreamBlocker::QuireSpecLanguage119)
-        }
+        CheckedNodeTag::Function => blocked(UpstreamBlocker::QuireContractRuntime34),
         CheckedNodeTag::Model | CheckedNodeTag::Relation => {
             blocked(UpstreamBlocker::QuireSpecLanguage120)
         }
@@ -899,6 +905,7 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> ExactScal
         | CheckedNodeTag::Temporal
         | CheckedNodeTag::Protocol
         | CheckedNodeTag::ScalarType
+        | CheckedNodeTag::CompositeType
         | CheckedNodeTag::BoundedDomain
         | CheckedNodeTag::Value
         | CheckedNodeTag::Expression
