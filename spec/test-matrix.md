@@ -108,9 +108,20 @@ by the named tests in `tests/kani_obligations.rs` that already exercised them wi
 bind to. AC-1 and AC-2 stay `🚧 Planned`. Frame
 obligations cannot be generated from the merged IR: V1 `ClauseKind` has no frame kind, FR-014
 refuses V2 `state` nodes as `NoFiniteEncoding`, and the by-value harness arguments cannot express
-`kani::modifies`, so a frame needs a typed IR frame item first. Every V2 scalar obligation carries
-only a caller-declared operation identity and is blocked on agent-ix/quire-specification#76. Model
-and graph bounds are blocked on agent-ix/quire-spec-language#120.
+`kani::modifies`, so a frame needs a typed IR frame item first. Codegen#110 connected CheckedPackage
+V2 claims to this negotiation, so "every V2 scalar obligation is caller-declared" is no longer true:
+an IR-confirmed claim over one of the four `quire.op.integer.{add,sub,mul,negate}` identities is no
+longer refused on operation identity at all, and reaches a real harness unless a ground independent
+of the operation (an i64-unrepresentable endpoint, the source ceiling) displaces it. Every other
+confirmed family (every family but `IntegerArithmetic`) is refused as `OperationNotRendered`, this
+generator's own unbuilt renderer, not an upstream block; a claim this generator lowered but whose
+operation it did not confirm against the node's own catalogued identity, mode or law definition is
+refused as `CallerDeclaredOperation` (see `OperationProvenance::CallerDeclared`, the authoritative
+enumeration of those cases). Model and graph bounds are blocked on agent-ix/quire-spec-language#120.
+
+AC-1 remains planned for the frame harness; AC-2 remains planned for model-domain bounds on the
+model and graph families. The V2 scalar item above is no longer among the reasons either stays
+`🚧 Planned`.
 
 FR-017 is the execution and evidence half of codegen#49, separated from FR-015 under codegen#55
 because `src/kani_execution.rs` — pin measurement, the pre-run drift refusal, the seven-value
@@ -188,9 +199,19 @@ every denial regardless of the charge's real kind, so only one of ten `LimitKind
 play. The property is verified in agent-ix/quire-contract-runtime#38.
 
 `admits_equality_conversion`'s `converted` operand path is exercised at generation time (AC-3, AC-5)
-and, for one `Int`-to-`Integer` vector, inside the three-way execution agreement (AC-2). Full coverage
-of each `admits_equality_conversion` row, which TC-029 step 1 also demands, is not: the corpus has one
-`converted` vector, not one per row of that table.
+and, for one `Int`-to-`Integer` vector, inside the three-way execution agreement (AC-2). The pinned
+Contract Runtime's `admits_equality_conversion` (`src/exact/equality.rs`) has eight arms: identity
+(`source == target`), `Int -> {Integer, Int, Rational, Decimal}`, `Rational -> Rational`,
+`Rational -> {Integer, Int, Decimal}`, `Decimal -> Rational`, `Decimal -> Decimal`,
+`Decimal -> {Integer, Int}`, and `Quantity -> Quantity`. Since codegen#83,
+`tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees` runs one `agree3!` vector per
+remaining arm: `Rational -> Rational`, the `Rational -> {Integer, Int, Decimal}` arm exercised only
+against `Integer`, `Decimal -> Rational`, `Decimal -> Decimal`, and the `Decimal -> {Integer, Int}`
+arm exercised only against `Integer`. The identity arm and `Quantity -> Quantity` remain unexercised
+by any test in this corpus; quantity operands are refused as `Unsupported { node_tag: "quantity" }`
+before `check_equality` runs (FR-018-AC-5, above), so `Quantity -> Quantity` cannot be reached at all
+here. The corpus now has one `converted` vector per exercised arm, not per row of every
+target-type-pair the table names, and not the single `Int`-to-`Integer` vector it had before.
 
 FR-018 does not claim the rest of codegen#48. Function application has no runtime surface to call
 (agent-ix/quire-contract-runtime#34), the model graph awaits agent-ix/quire-spec-language#120, and
