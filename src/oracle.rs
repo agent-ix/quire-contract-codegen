@@ -14,7 +14,7 @@ use sha2::{Digest as _, Sha256};
 pub const IR_CANDIDATE_REVISION: &str = "97f50655c48f48be0bf5ab04dff5aac029c3745c";
 
 /// Exact merged runtime revision required by generated source.
-pub const RUNTIME_REVISION: &str = "4e330525be513fe57c67717dc22b969d36656b85";
+pub const RUNTIME_REVISION: &str = "9f31169276edb85799d6b7d878020caf49617090";
 
 /// Exact codegen Git revision captured by the build.
 pub const GENERATOR_SOURCE_REVISION: &str = env!("QUIRE_CODEGEN_SOURCE_REVISION");
