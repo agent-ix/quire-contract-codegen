@@ -1584,43 +1584,53 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     //
     // Measured with the deny-list above, so both sides are the same filter:
     //
-    //     origin/main, `evidence/` excluded as it was then   45
-    //     this head                                          30
-    //     removed  15 = 1 reader + 11 fixtures + 3 schemas
-    //     added     0
-    //     45 - 15 + 0 = 30, and the census counts 30
+    //     tracked, non-Markdown, filtered through the deny-list above   82
+    //     this is the count `inspected` reaches below
     //
-    // The third schema is the one this change removed. It was counted as live by
-    // the change before this one and is counted as deleted here, so the figure
-    // moved by one and the arithmetic was re-closed rather than left standing.
+    // The previous derivation on this line (`45 - 15 = 30`) described a much
+    // earlier state of the tree, from when the generic evidence-framework
+    // machinery was removed. It was never re-closed as the tree grew afterward,
+    // which is the defect agent-ix/quire-contract-codegen#129 recorded: the
+    // comment kept asserting an arithmetic that stopped describing the tree it
+    // sat above, while the actual count grew to more than 2.7x the floor below
+    // it. There is no earlier-state delta to show here any more — the number
+    // above is a direct count of the current tree, and that is deliberate: a
+    // stale delta is exactly what went wrong last time.
     //
     // `inspected` counts a tracked file once it has been read, before the
     // change-declaration exemption below, so it is the walked tracked count and
-    // not that count minus the exemptions. An earlier form incremented after the
-    // exemption and reported 30 while the comment claimed 31 — a derivation
-    // beside a threshold that its own arithmetic did not support, which is the
-    // exact defect this comment was rewritten to remove.
+    // not that count minus the exemptions.
     //
-    // The old floor was `> 20`, which would have kept passing while a third of
-    // the inspectable surface disappeared.
+    // Headroom policy, chosen deliberately rather than left as a flat margin:
+    // the floor is 80% of the measured count, rounded down (`measured * 4 / 5`
+    // in integer arithmetic). Twenty percent absorbs ordinary single- or
+    // few-file churn — adding a test module, splitting a script — without the
+    // floor tracking the exact count and going red on every legitimate
+    // addition. It still trips on real attrition: losing more than a fifth of
+    // the inspectable tree fails this assertion. 82 * 4 / 5 = 65.
     //
-    // The margin is 3 and it is chosen, not derived — no rule fixes it, and
-    // printing arithmetic that does not close would be worse than printing none.
-    // The floor was not lowered when the count fell from 31 to 30; the margin
-    // absorbed it, which is what a margin is for.
-    // What makes 3 safe is that this floor is not the instrument that catches a
-    // directory disappearing: the set comparison and the per-directory floors
-    // below do that, and they trip on losses far smaller than 4. This number only
-    // has to catch diffuse attrition across the tree.
+    // This floor is diffuse — it catches attrition spread across the whole
+    // tree — and is not, by itself, the instrument that catches one directory
+    // draining out from under a stable total. The per-directory floors below
+    // carry the same 80% policy at their own (smaller) scale, and it is *those*
+    // that now trip on a directory losing more than a fifth of its own files;
+    // the directory-set equality check below them is the only instrument that
+    // catches a directory disappearing entirely.
     assert!(
-        inspected >= 27,
+        inspected >= 65,
         "the executable and configuration census is unexpectedly small ({inspected}, \
-         floor 27, measured 30 at the time it was derived) to make this claim"
+         floor 65 = 80% of 82, measured 82 at the time it was derived) to make this claim"
     );
 
-    // A total-only floor is the wrong instrument on a tree this small. `scripts`
-    // and `tests` are five files each and `src` is four, so an entire directory
-    // could vanish and move the total by less than ordinary churn would.
+    // A total-only floor is the wrong instrument on a tree with directories this
+    // uneven. `examples` is one file, `assurance` two, `.github` three and
+    // `scripts` five, so four of the eight directories could each vanish whole
+    // and move the total by less than the 20% the floor above already tolerates.
+    // (The sentence that stood here said `scripts` and `tests` were five files
+    // each and `src` four. Those were the numbers when it was written; `src` is
+    // 26 and `tests` 29 now. It is restated against the measured tree rather
+    // than repaired, because a count embedded in prose is the thing
+    // agent-ix/quire-contract-codegen#129 was filed about.)
     //
     // The guard below is built by *discovery* — the directories are whatever the
     // walk actually found — and then compared against a declared set. That
@@ -1658,16 +1668,47 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     }
 
     // Declared, and every floor beside it was measured from this walk rather than
-    // read off a document describing the layout.
+    // read off a document describing the layout. The tuple is `(floor,
+    // measured)`: `measured` is the count this walk actually found for that
+    // directory when the floor below was derived, kept purely so the assertion
+    // message can show both numbers without a second walk.
+    //
+    // Headroom policy: the same one used for `inspected` above, applied per
+    // directory rather than to the total — floor = 80% of the measured count,
+    // rounded down, with a floor of at least 1 for any directory that has files
+    // at all. That minimum matters at the small end: `examples` has one file,
+    // and 80% of 1 rounds down to 0 — a floor of 0 is an assertion no tree can
+    // fail, and this file is otherwise full of assertions about exactly that
+    // defect class, so 0 is not written here.
+    //
+    // Be precise about what the minimum then buys, because it is less than it
+    // looks. The set-equality check below runs *before* this floor loop, and a
+    // directory that reaches zero files disappears from `per_directory` and
+    // trips that check first. So for `examples` — and for `assurance` at two
+    // files with a floor of 1 — the floor is never the assertion that fails:
+    // every reachable count for them is at or above it. The floor of 1 is the
+    // honest statement of the invariant (a declared directory holds at least
+    // one inspectable file), not an instrument with its own catch. The
+    // instrument for directories this small is the set-equality check, and that
+    // is intended: a directory of one or two files has no room for partial
+    // attrition to mean anything short of total loss.
+    //
+    // This is what makes the floors load-bearing again: before this change they
+    // carried up to ~6x headroom (`src` and `tests` could each lose all but a
+    // handful of their files and stay green), which is the defect
+    // agent-ix/quire-contract-codegen#129 recorded. At 80%, `src` now trips if
+    // it loses more than 6 of its 26 files, and `tests` trips past 6 of 29 —
+    // proportional to each directory's own size instead of a flat number
+    // inherited from whatever the tree looked like when the floor was written.
     let declared: BTreeMap<&str, (usize, usize)> = BTreeMap::from([
         ("<root>", (7usize, 9usize)),
-        (".github", (1, 2)),
-        ("assurance", (2, 2)),
+        (".github", (2, 3)),
+        ("assurance", (1, 2)),
         ("examples", (1, 1)),
-        ("schemas", (2, 2)),
+        ("schemas", (5, 7)),
         ("scripts", (4, 5)),
-        ("src", (4, 4)),
-        ("tests", (4, 5)),
+        ("src", (20, 26)),
+        ("tests", (23, 29)),
     ]);
     let found: BTreeSet<&str> = per_directory.keys().map(String::as_str).collect();
     let expected: BTreeSet<&str> = declared.keys().copied().collect();
