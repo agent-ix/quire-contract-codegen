@@ -916,6 +916,8 @@ pub fn generate_exact_function_oracles(
             }
         } else {
             match item_disposition(
+                &names,
+                &resolved,
                 &survivors,
                 &function_index,
                 &package_refusal,
@@ -977,6 +979,8 @@ pub fn generate_exact_function_oracles(
 
 #[allow(clippy::too_many_arguments)]
 fn item_disposition(
+    names: &BTreeSet<&str>,
+    resolved: &BTreeMap<&str, Result<(), ExactFunctionRefusal>>,
     survivors: &[&ExactFunctionDeclaration],
     function_index: &BTreeMap<&str, usize>,
     package_refusal: &Option<String>,
@@ -989,6 +993,19 @@ fn item_disposition(
         return Err(ExactFunctionRefusal::FormMismatch {
             found: node.node.semantic_form.to_string(),
         });
+    }
+    // An item naming a function that WAS declared but failed Stage 1
+    // classification carries that function's own typed refusal reason
+    // (AC-10, AC-11, AC-12), never a generic "unknown function" -- that
+    // disposition is reserved for a name absent from the request's own
+    // declarations entirely.
+    if !names.contains(item.function.as_str()) {
+        return Err(ExactFunctionRefusal::UnknownFunction {
+            name: item.function.clone(),
+        });
+    }
+    if let Some(Err(refusal)) = resolved.get(item.function.as_str()) {
+        return Err(refusal.clone());
     }
     let Some(declaration) = survivors
         .iter()

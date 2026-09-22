@@ -1,0 +1,50 @@
+[
+  {
+    "function": "unrelated_fn",
+    "call_point": "scalar_operator",
+    "location": {
+      "origin": {
+        "kind": "body",
+        "function": "unrelated_fn",
+        "index": 0
+      },
+      "path": []
+    }
+  },
+  {
+    "function": "call_fn",
+    "call_point": "nested_call",
+    "location": {
+      "origin": {
+        "kind": "body",
+        "function": "call_fn",
+        "index": 1
+      },
+      "path": []
+    }
+  },
+  {
+    "function": "add_fn",
+    "call_point": "scalar_operator",
+    "location": {
+      "origin": {
+        "kind": "body",
+        "function": "add_fn",
+        "index": 2
+      },
+      "path": []
+    }
+  },
+  {
+    "function": "eq_fn",
+    "call_point": "equality_evaluation",
+    "location": {
+      "origin": {
+        "kind": "body",
+        "function": "eq_fn",
+        "index": 3
+      },
+      "path": []
+    }
+  }
+]
