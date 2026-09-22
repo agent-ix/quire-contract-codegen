@@ -25,16 +25,16 @@ use package::{
     Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED, V_INTEGER,
 };
 use quire_contract_codegen::{
-    execute_kani_obligation, generate_exact_scalar_oracles, negotiate_kani_obligations,
-    AttestationContext, ExactScalarClaimMap, ExactScalarDisposition, ExactScalarItem,
-    ExactScalarOperation, IntegerOperator, InvalidObligationItem, KaniExecutionRefusal,
-    KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniObligationError,
-    KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest, KaniPinField,
-    KaniRunOutcome, KaniScalarObligationHarness, KaniTool, KaniToolError, KaniToolPins,
-    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
-    OperationProvenance, UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION,
-    KANI_BACKEND_VERSION, KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
-    RUNTIME_REVISION,
+    execute_kani_obligation, file_sha256, generate_exact_scalar_oracles, kani_launch_command,
+    launch_evidence, negotiate_kani_obligations, run_launcher_with_timeout, AttestationContext,
+    ExactScalarClaimMap, ExactScalarDisposition, ExactScalarItem, ExactScalarOperation,
+    IntegerOperator, InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest,
+    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
+    KaniObligationOutcome, KaniObligationRequest, KaniPinField, KaniRunOutcome,
+    KaniScalarObligationHarness, KaniTool, KaniToolError, KaniToolPins, ObligationDisposition,
+    ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance,
+    UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION,
+    KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -2017,11 +2017,7 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
     // check turns this same assertion red, because the run then completes for real and
     // verifies. This call's own wall-clock elapsed time is not that proof — a real run that
     // happened to finish quickly would satisfy an elapsed-time bound too — so none is asserted
-    // here. This runs ahead of the `Cargo.lock`-as-directory case below on purpose: that case
-    // fails for a reason unrelated to this change on current `cargo`, independent of this
-    // harness and independent of this branch (reproduced identically on `origin/main`), and a
-    // later panic in the same test function must not prevent this assertion from running.
-    // That unrelated failure is agent-ix/quire-contract-codegen#85.
+    // here.
     let harness = &harnesses[0];
     let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
@@ -2047,23 +2043,44 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
     // A lockfile that cannot be read after the backend has already run is missing evidence
     // about that run, never grounds to discard its own verdict: the outcome below is still
     // this healthy subject's real `Verified` classification, not a pre-run refusal and not
-    // degraded to inconclusive. `Cargo.lock` is occupied by a directory before the run, so the
-    // launcher still runs (a real process starts) but the post-run digest read fails.
+    // degraded to inconclusive.
+    //
+    // Occupying `Cargo.lock` with a directory *before* the run used to be enough to prove this:
+    // the launcher still ran (a real process started) but the post-run digest read failed. On
+    // current `cargo` that premise no longer holds — `cargo kani` now refuses to even start
+    // when `Cargo.lock` is a directory, so the run itself never happens and the case would only
+    // be proving a pre-run refusal, not a post-run digest-read failure
+    // (agent-ix/quire-contract-codegen#85, reproduced identically on `origin/main`).
+    //
+    // `execute_kani_obligation` runs the launcher and reads the digest inside one call, so
+    // "corrupt `Cargo.lock` after the run but before the digest read" cannot be interleaved from
+    // outside it. `kani_launch_command`, `run_launcher_with_timeout` and `launch_evidence` are
+    // exposed from `kani_execution` for exactly this: they are the same two composable steps
+    // `execute_kani_obligation` calls internally, run here directly so the crate directory can
+    // be mutated in between, race-free, against a real `Cargo.lock` that the real launcher wrote.
     let harness = &harnesses[0];
     let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
-    fs::create_dir_all(crate_directory.join("Cargo.lock")).unwrap();
-    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+    let target_directory = crate_directory.join("target");
+    let request = KaniExecutionRequest {
         installation: &installation,
         harness,
         crate_directory: &crate_directory,
-        target_directory: &crate_directory.join("target"),
+        target_directory: &target_directory,
         timeout: REAL_KANI_TIMEOUT,
-    })
-    .unwrap_or_else(|refusal| {
-        panic!("a run that already happened must not surface as a refusal: {refusal}")
+    };
+    let (_arguments, command) = kani_launch_command(&request);
+    let launch = run_launcher_with_timeout(command, REAL_KANI_TIMEOUT)
+        .expect("the launcher process itself must start and be waited on");
+    // The launcher has now exited for real, against a real `Cargo.lock` it wrote. Only now —
+    // after the run, before the digest read below — is the path taken away from it.
+    let _ = fs::remove_file(crate_directory.join("Cargo.lock"));
+    fs::create_dir_all(crate_directory.join("Cargo.lock")).unwrap();
+    let (cargo_lock_sha256, outcome, exit_code) = launch_evidence(launch, || {
+        file_sha256(KaniTool::Lockfile, &crate_directory.join("Cargo.lock"))
     });
-    assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
-    assert_eq!(evidence.cargo_lock_sha256, None);
+    assert_eq!(exit_code, Some(0), "the real run completed successfully");
+    assert_eq!(outcome, KaniRunOutcome::Verified);
+    assert_eq!(cargo_lock_sha256, None);
     let _ = fs::remove_dir_all(crate_directory);
 
     // A harness whose identity names another driver is refused before anything runs.

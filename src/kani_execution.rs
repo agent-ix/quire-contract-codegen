@@ -533,13 +533,7 @@ pub fn execute_kani_obligation(
             harness_path: request.harness.rust.path.clone(),
         });
     }
-    let mut arguments = vec!["kani".to_owned()];
-    arguments.extend(identity.options.iter().cloned());
-    let mut command = Command::new(&request.installation.launcher);
-    command
-        .args(&arguments)
-        .env("CARGO_TARGET_DIR", request.target_directory)
-        .current_dir(request.crate_directory);
+    let (arguments, command) = kani_launch_command(request);
     let launch =
         run_launcher_with_timeout(command, request.timeout).map_err(|error| KaniToolError::Io {
             tool: KaniTool::Launcher,
@@ -571,9 +565,30 @@ pub fn execute_kani_obligation(
     })
 }
 
+/// Builds the exact argument vector and [`Command`] [`execute_kani_obligation`] launches for
+/// `request`, without spawning it. Kept separate from `execute_kani_obligation` and exposed
+/// alongside [`run_launcher_with_timeout`] and [`launch_evidence`] so a caller that needs to
+/// mutate `request.crate_directory` between "the launcher process concluded" and "the post-run
+/// `Cargo.lock` digest is read" — which happen inside one call in `execute_kani_obligation` and
+/// so cannot be interleaved from outside it — can run that exact sequence itself instead of a
+/// hand-copied approximation of it that can drift from what `execute_kani_obligation` actually
+/// invokes.
+pub fn kani_launch_command(request: &KaniExecutionRequest<'_>) -> (Vec<String>, Command) {
+    let identity = &request.harness.identity;
+    let mut arguments = vec!["kani".to_owned()];
+    arguments.extend(identity.options.iter().cloned());
+    let mut command = Command::new(&request.installation.launcher);
+    command
+        .args(&arguments)
+        .env("CARGO_TARGET_DIR", request.target_directory)
+        .current_dir(request.crate_directory);
+    (arguments, command)
+}
+
 /// How the launcher's run within its caller-declared budget ([`KaniExecutionRequest::timeout`])
 /// concluded.
-enum LaunchOutcome {
+#[non_exhaustive]
+pub enum LaunchOutcome {
     /// The process exited on its own within the budget.
     Completed {
         /// `ExitStatus::success()`.
@@ -623,7 +638,10 @@ const LAUNCHER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// way `Command::output()` drains them internally: a full pipe buffer would otherwise stall the
 /// child while this function is only polling `try_wait`, turning a bounded run into a hang of its
 /// own.
-fn run_launcher_with_timeout(mut command: Command, timeout: Duration) -> io::Result<LaunchOutcome> {
+pub fn run_launcher_with_timeout(
+    mut command: Command,
+    timeout: Duration,
+) -> io::Result<LaunchOutcome> {
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn()?;
     let pid = child.id();
@@ -768,8 +786,10 @@ fn run_evidence(
 /// what makes the mapping itself visible under `make ci` regardless.
 ///
 /// `lockfile` is a closure rather than an already-computed `Result` so that a timed-out launch,
-/// which reads no lockfile at all, never has to compute or discard one just to call this.
-fn launch_evidence(
+/// which reads no lockfile at all, never has to compute or discard one just to call this, and so
+/// a caller driving [`run_launcher_with_timeout`] itself can mutate the crate directory after the
+/// launch has concluded but before `lockfile` is ever invoked here.
+pub fn launch_evidence(
     launch: LaunchOutcome,
     lockfile: impl FnOnce() -> Result<String, KaniToolError>,
 ) -> (Option<String>, KaniRunOutcome, Option<i32>) {
@@ -979,7 +999,10 @@ fn read_file(tool: KaniTool, path: &Path) -> Result<Vec<u8>, KaniToolError> {
     })
 }
 
-fn file_sha256(tool: KaniTool, path: &Path) -> Result<String, KaniToolError> {
+/// Exposed alongside [`run_launcher_with_timeout`] and [`launch_evidence`] so a caller building
+/// the digest-read closure it hands to `launch_evidence` from outside this module reads
+/// `Cargo.lock` the identical way `execute_kani_obligation` does.
+pub fn file_sha256(tool: KaniTool, path: &Path) -> Result<String, KaniToolError> {
     read_file(tool, path).map(|bytes| sha256(&bytes))
 }
 
