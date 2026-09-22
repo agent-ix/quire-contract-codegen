@@ -14,9 +14,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_bounded_kani_corpus_case, replay_codegen_counterexample,
-    BoundedCorpusRequest, EmittedCorpusIdentities, KaniRunOutcome,
+    BoundedCorpusRequest, CorpusProofDependencyGraph, EmittedCorpusIdentities, KaniRunOutcome,
+    ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness,
+    CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::{
     kani::{
@@ -159,6 +162,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
             minimum: 0,
             maximum: 2,
         }),
+        &[],
         &mut emitted,
     )
     .unwrap();
@@ -184,6 +188,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
             max_items: 1,
             kind: QueryKind::ForAllNonNegative,
         }),
+        &[],
         &mut emitted,
     )
     .unwrap_err();
@@ -200,6 +205,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
             max_items: 2,
             kind: QueryKind::ExistsEqual(7),
         }),
+        &[],
         &mut emitted,
     )
     .unwrap();
@@ -251,6 +257,7 @@ fn tc_023_kani_executes_the_generated_arithmetic_harness() {
             minimum: 0,
             maximum: 2,
         }),
+        &[],
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
@@ -301,6 +308,7 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
             field_id: "next".to_owned(),
             max_expansions: 2,
         }),
+        &[],
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
@@ -350,6 +358,7 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
             max_items: 2,
             kind: QueryKind::ExistsEqual(7),
         }),
+        &[],
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
@@ -450,4 +459,118 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
             ),
         ])
     );
+}
+
+/// Every supported family's emitted `proof_graph` artifact is a real `CORPUS_PROOF_GRAPH_SCHEMA`
+/// document -- not merely a JSON blob this crate's own `CorpusProofDependencyGraph` type happens
+/// to deserialize -- validated against the published schema file the same way
+/// `tests/it/kani_generation.rs` validates FR-003's `quire.kani-proof-graph/v2` graphs against
+/// `schemas/kani-proof-graph-v2.schema.json`.
+///
+/// Trace: FR-007-AC-2, TC-023.
+#[test]
+fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
+    let (profile, dispatch, input) = fixture();
+    let cases = [
+        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+            source_id: "source",
+            operator: NumericOperator::Add,
+            left: 1,
+            right: 1,
+            minimum: 0,
+            maximum: 2,
+        }),
+        BoundedCorpusRequest::Graph(GraphRequest {
+            source_id: "source".to_owned(),
+            start_id: "a".to_owned(),
+            target_id: "b".to_owned(),
+            field_id: "next".to_owned(),
+            max_expansions: 2,
+        }),
+        BoundedCorpusRequest::Collection(CollectionQuery {
+            source_id: "source".to_owned(),
+            values: vec![2, 2, 7],
+            max_items: 3,
+            kind: QueryKind::ExistsEqual(7),
+        }),
+    ];
+    for request in cases {
+        let generated = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request,
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        let instance: serde_json::Value =
+            serde_json::from_str(&generated.artifacts.proof_graph.contents)
+                .expect("the corpus proof-dependency graph must parse as JSON");
+        validate(
+            include_str!("../../schemas/kani-corpus-proof-graph-v1.schema.json"),
+            &instance,
+        );
+        let graph: CorpusProofDependencyGraph = serde_json::from_str(
+            &generated.artifacts.proof_graph.contents,
+        )
+        .expect("the corpus proof-dependency graph must deserialize as CorpusProofDependencyGraph");
+        assert_eq!(graph.schema_version, CORPUS_PROOF_GRAPH_SCHEMA);
+        assert!(graph.dependencies.is_empty());
+        assert_eq!(graph.readiness, ProofReadiness::Ready);
+    }
+}
+
+/// A declared `Required` dependency's edge must also validate against the published schema, not
+/// only the empty-census shape the test above exercises.
+///
+/// Trace: FR-007-AC-2, FR-007-AC-6, TC-023.
+#[test]
+fn tc_023_proof_graph_with_a_declared_dependency_validates_against_its_published_schema() {
+    let (profile, dispatch, input) = fixture();
+    let dependency = ProofDependencyRequest {
+        proof_id: "upstream-lemma",
+        kind: ProofDependencyKind::Required,
+        state: ProofDependencyState::Passed,
+        original_path: None,
+        replacement_path: None,
+    };
+    let generated = generate_bounded_kani_corpus_case(
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+            source_id: "source",
+            operator: NumericOperator::Add,
+            left: 1,
+            right: 1,
+            minimum: 0,
+            maximum: 2,
+        }),
+        &[dependency],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    let instance: serde_json::Value =
+        serde_json::from_str(&generated.artifacts.proof_graph.contents)
+            .expect("the corpus proof-dependency graph must parse as JSON");
+    validate(
+        include_str!("../../schemas/kani-corpus-proof-graph-v1.schema.json"),
+        &instance,
+    );
+}
+
+fn validate(schema: &str, instance: &serde_json::Value) {
+    let schema: serde_json::Value =
+        serde_json::from_str(schema).expect("repository schema should parse");
+    let validator = JSONSchema::options()
+        .with_draft(Draft::Draft7)
+        .compile(&schema)
+        .expect("repository schema should compile");
+    let errors = validator
+        .validate(instance)
+        .err()
+        .map(|values| values.map(|error| error.to_string()).collect::<Vec<_>>())
+        .unwrap_or_default();
+    assert!(errors.is_empty(), "schema errors: {errors:?}");
 }

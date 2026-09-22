@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-ix.github.io/quire-contract-codegen/schemas/kani-corpus-proof-graph-v1.schema.json",
+  "title": "Quire bounded-Kani corpus proof-dependency graph v1",
+  "description": "A corpus-scoped proof-dependency graph for one bounded-Kani corpus case (FR-007): only the case's own derived facts -- no Contract IR requirement, no cargo-kani CLI option vector, and no normalized subject ABI, none of which the bounded-corpus generator produces for a corpus case. Distinct from quire.kani-proof-graph/v2 (FR-003, schemas/kani-proof-graph-v2.schema.json), which pins the function-contracts Kani adapter and a requirement/options/subject-ABI shape this corpus case has no analogue for. The corpus's generated harnesses are self-contained by construction (no proof-dependency-site marker, no kani::assume, no #[kani::stub]), so every declared dependency edge is Required-kind only; an Assumed or Stubbed edge is refused before generation, not accepted here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "proofId",
+    "family",
+    "construct",
+    "identity",
+    "readiness",
+    "dependencies"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "quire.kani-corpus-proof-graph/v1"},
+    "proofId": {
+      "type": "string",
+      "pattern": "^corpus_case_(arithmetic|graph|collection)_[0-9a-f]{64}$"
+    },
+    "family": {"enum": ["arithmetic", "graph", "collection"]},
+    "construct": {
+      "enum": ["checked-arithmetic", "finite-reference-graph", "bounded-collection-query"]
+    },
+    "identity": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "readiness": {"enum": ["ready", "incomplete"]},
+    "dependencies": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["proofId", "kind", "state", "sourceSite"],
+        "properties": {
+          "proofId": {"type": "string", "minLength": 1},
+          "kind": {"const": "required"},
+          "state": {"enum": ["passed", "missing", "failed"]},
+          "sourceSite": {"type": "null"}
+        }
+      }
+    }
+  }
+}

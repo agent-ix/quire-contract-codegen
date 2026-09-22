@@ -34,4 +34,8 @@ typed non-Boolean result and no partial artifact or proof claim. Every retained
 counterexample either reproduces native false or reports a typed replay
 non-success. The dependency graph keeps Contract IR below codegen. Every
 generated `#[kani::proof]` symbol is derived from, and carries, its corpus
-case's own identity digest, the same identity its artifact paths carry.
+case's own identity digest, the same identity its artifact paths carry. A
+declared proof-dependency census that is empty or duplicate-identity,
+kind/state/path-inconsistent, or names any non-`Required` kind is refused
+with a typed `InvalidInput` `kani_corpus_dependency_invalid` result and
+leaves no artifact and no identity-registry entry.
