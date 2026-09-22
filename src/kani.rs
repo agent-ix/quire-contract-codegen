@@ -78,6 +78,19 @@ pub enum ProofReadiness {
     Incomplete,
 }
 
+impl ProofReadiness {
+    /// Stable machine label for this readiness, written verbatim into generated provenance and
+    /// proof-graph text. Kept next to the enum so a caller that renders the label by hand cannot
+    /// drift from the serde `rename_all = "snake_case"` spelling above (ir#80 review finding F4).
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Conditional => "conditional",
+            Self::Incomplete => "incomplete",
+        }
+    }
+}
+
 /// Position of one primitive dependency in the generated subject ABI.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -627,11 +640,27 @@ fn validate_request(request: &KaniRequest<'_>) -> Result<(), Vec<KaniDiagnostic>
             "the Kani attestation binding is invalid",
         ));
     }
+    validate_dependencies(request.dependencies, request.proof_id)?;
+    Ok(())
+}
+
+/// Validates one caller-declared proof-dependency census: every declared identity is non-empty,
+/// unique within the census, and distinct from `proof_id` (the root proof this census is declared
+/// against), and its kind/state/path combination is one of the three closed shapes (`Required`,
+/// `Assumed`, `Stubbed`).
+///
+/// Shared by [`generate_kani_bundle`]'s FR-003 request validation and the bounded-Kani corpus's
+/// FR-007 declared-census validation (ir#80), so there is exactly one definition of what a valid
+/// proof-dependency census looks like rather than two that can drift apart.
+pub(crate) fn validate_dependencies(
+    dependencies: &[ProofDependencyRequest<'_>],
+    proof_id: &str,
+) -> Result<(), Vec<KaniDiagnostic>> {
     let mut identities = BTreeSet::new();
-    for (index, dependency) in request.dependencies.iter().enumerate() {
+    for (index, dependency) in dependencies.iter().enumerate() {
         let base_path = format!("dependencies[{index}]");
         validate_plain_identity(dependency.proof_id, &format!("{base_path}.proof_id"))?;
-        if dependency.proof_id == request.proof_id || !identities.insert(dependency.proof_id) {
+        if dependency.proof_id == proof_id || !identities.insert(dependency.proof_id) {
             return Err(single_diagnostic(
                 KaniErrorCode::InvalidDependency,
                 &format!("{base_path}.proof_id"),
@@ -1063,7 +1092,9 @@ pub(crate) fn i64_literal(value: i64) -> String {
     }
 }
 
-fn normalize_dependencies(dependencies: &[ProofDependencyRequest<'_>]) -> Vec<ProofDependencyEdge> {
+pub(crate) fn normalize_dependencies(
+    dependencies: &[ProofDependencyRequest<'_>],
+) -> Vec<ProofDependencyEdge> {
     let mut result = dependencies
         .iter()
         .map(|dependency| ProofDependencyEdge {
@@ -1083,7 +1114,7 @@ fn normalize_dependencies(dependencies: &[ProofDependencyRequest<'_>]) -> Vec<Pr
     result
 }
 
-fn dependency_readiness(dependencies: &[ProofDependencyEdge]) -> ProofReadiness {
+pub(crate) fn dependency_readiness(dependencies: &[ProofDependencyEdge]) -> ProofReadiness {
     if dependencies.iter().any(|dependency| {
         dependency.kind == ProofDependencyKind::Required
             && matches!(
@@ -1209,7 +1240,10 @@ fn dependency_site(kind: &str, proof_id: &str) -> String {
     format!("{kind}:{}", sha256(proof_id.as_bytes()))
 }
 
-fn deterministic_json(value: &impl Serialize) -> Result<String, String> {
+// `?Sized` so an unsized `[T]` slice (e.g. `&[ProofDependencyEdge]`) can be passed directly, with
+// no intermediate owned `Vec` allocation at the call site, alongside every already-`Sized` caller
+// (ir#80 review finding F10).
+pub(crate) fn deterministic_json(value: &(impl Serialize + ?Sized)) -> Result<String, String> {
     let mut bytes = serde_json::to_vec(value).map_err(|error| error.to_string())?;
     bytes.push(b'\n');
     String::from_utf8(bytes).map_err(|error| error.to_string())

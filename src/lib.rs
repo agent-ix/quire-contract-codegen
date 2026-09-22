@@ -52,7 +52,8 @@ pub use bound_strategy::{generate_bound_strategy, BoundStrategyPopulation, Bound
 pub use bounded_collections::prepare_bounded_collection_query;
 pub use bounded_kani_corpus::{
     generate_bounded_kani_corpus_case, BoundedCorpusArtifacts, BoundedCorpusCase,
-    BoundedCorpusFamily, BoundedCorpusRequest, EmittedCorpusIdentities,
+    BoundedCorpusFamily, BoundedCorpusRequest, CorpusProofDependencyGraph, EmittedCorpusIdentities,
+    CORPUS_PROOF_GRAPH_SCHEMA,
 };
 pub use bounded_kani_profile::{classify_bounded_kani_profile, BoundedKaniProfile};
 pub use bounded_kani_replay::replay_codegen_counterexample;

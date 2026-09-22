@@ -55,6 +55,21 @@ collection/query construct without giving Contract IR a dependency on codegen.
   retain the selected profile revision, bounds, Kani version, executable
   digest, options, assumptions, and proof dependencies in every artifact
   identity.
+- When a caller declares a proof-dependency census for a corpus case, the
+  generator shall validate it against FR-003's proof-dependency rules and
+  this corpus's Required-only rule and, if any declared dependency has an
+  empty or duplicate proof identity, an inconsistent kind/state/path
+  combination, or a kind other than `Required`, shall return a typed
+  `InvalidInput` `kani_corpus_dependency_invalid` result with no generated
+  artifact and no identity-registry entry.
+- When a supported corpus case's declared proof-dependency census is valid,
+  the generator shall retain the census and emit it as the case's own
+  `quire.kani-corpus-proof-graph/v1` artifact, distinct from the corpus
+  case's oracle, strategy, Kani, and provenance artifacts, with readiness
+  derived by FR-003's dependency-readiness rule.
+- When a supported corpus case declares an empty proof-dependency census,
+  the generator shall emit a proof-dependency graph carrying an empty
+  dependency list and `Ready` readiness.
 - When the generator emits a Kani harness for a supported corpus case, the
   generator shall derive the harness's `#[kani::proof]` symbol from the case's
   own identity digest rather than from its semantic family alone, carrying the
@@ -101,6 +116,7 @@ collection/query construct without giving Contract IR a dependency on codegen.
 | FR-007-AC-4 | Every retained Kani counterexample replays through Contract IR's native runtime boundary with the same false classification, or the replay returns a typed non-Boolean mismatch or unavailable result. | Test (TC-023) |
 | FR-007-AC-5 | The generated corpus preserves the Contract IR to codegen dependency direction and no generated artifact requires a reverse Contract IR dependency. | Inspection (TC-023) |
 | FR-007-AC-6 | The generated `#[kani::proof]` symbol for a supported corpus case is derived from the case's own identity digest and carries the same identity the case's artifact paths carry. | Test (TC-023) |
+| FR-007-AC-7 | A declared census is validated with FR-003's dependency rules plus the Required-only rule; an invalid census (empty or duplicate identity, inconsistent kind/state/paths, or any non-Required kind) returns typed `InvalidInput` `kani_corpus_dependency_invalid` with no artifact and no identity-registry entry; a valid census is retained in the proof-graph artifact and folded into the case identity. | Test (TC-023) |
 
 ## Dependencies
 

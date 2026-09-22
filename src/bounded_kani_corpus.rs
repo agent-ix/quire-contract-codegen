@@ -1,8 +1,10 @@
 //! Integrated bounded-Kani corpus generation over Contract IR's validated finite ABI.
 //!
 //! The Contract IR lowerers remain the semantic authority.  This module owns the codegen-side
-//! vertical slice: once one lowering is admitted, it renders the four corpus roles from the same
-//! profile selection and finite input.  A non-success outcome returns before any role is emitted.
+//! vertical slice: once one lowering is admitted, it renders the five corpus roles (oracle,
+//! strategy, Kani harness, provenance, and proof-dependency graph) from the same profile
+//! selection, finite input, and declared proof-dependency census.  A non-success outcome returns
+//! before any role is emitted.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -13,12 +15,28 @@ use quire_contract_ir::kani::{
     CheckedArithmeticRequest, CollectionQuery, CounterexamplePacket, DispatchIndex, GraphRequest,
     KaniOutcome, KaniOutcomeKind, KaniProfile, ReplaySource, ValidatedFiniteInput, WitnessValue,
 };
+use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 use crate::{
+    kani::{dependency_readiness, deterministic_json, normalize_dependencies},
     prepare_bounded_collection_query, prepare_checked_arithmetic, prepare_finite_graph_reaches,
-    Artifact,
+    Artifact, ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest, ProofReadiness,
 };
+
+/// Stable schema identity for [`CorpusProofDependencyGraph`].
+///
+/// Deliberately distinct from FR-003's `quire.kani-proof-graph/v2`
+/// ([`crate::kani::ProofDependencyGraph`], validated against
+/// `schemas/kani-proof-graph-v2.schema.json`): that schema fixes `adapterProfile`/`backendVersion`
+/// to the function-contracts Kani adapter, requires a Contract-IR `requirementId`/
+/// `requirementRevision` this corpus's finite-ABI input has no analogue for, and requires a
+/// cargo-kani CLI `options` array of at least fifteen entries that this generator never builds
+/// (`corpus`'s harnesses are plain `#[kani::proof]`, not `#[kani::proof_for_contract]`, and no
+/// unwind/solver/harness-filter option vector is ever assembled for them). Reusing FR-003's exact
+/// envelope here would mean fabricating those fields; this schema instead carries only what
+/// [`generate_bounded_kani_corpus_case`] actually derives (ir#80).
+pub const CORPUS_PROOF_GRAPH_SCHEMA: &str = "quire.kani-corpus-proof-graph/v1";
 
 /// One semantic family represented in the bounded corpus.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -87,8 +105,40 @@ pub struct BoundedCorpusArtifacts {
     pub strategy: Artifact,
     /// Kani harness artifact with no input-erasing assumptions.
     pub kani_harness: Artifact,
-    /// Provenance and proof-dependency record for this exact selection.
+    /// Provenance record for this exact selection. The declared proof-dependency census itself is
+    /// retained separately, in full, as [`Self::proof_graph`] -- this field only references it (a
+    /// census digest and readiness/edge-count summary), it does not repeat it.
     pub provenance: Artifact,
+    /// Deterministic corpus-scoped proof-dependency graph for this case
+    /// ([`CORPUS_PROOF_GRAPH_SCHEMA`]).
+    pub proof_graph: Artifact,
+}
+
+/// Deterministic, corpus-scoped proof-dependency graph for one bounded-Kani corpus case.
+///
+/// Carries only what [`generate_bounded_kani_corpus_case`] actually derives: the case's own
+/// `#[kani::proof]` symbol, its semantic family/construct, its own identity digest (the same
+/// identity its sibling artifact paths carry), the derived readiness, and the sorted declared
+/// dependency census. See [`CORPUS_PROOF_GRAPH_SCHEMA`] for why this is a distinct envelope from
+/// FR-003's `quire.kani-proof-graph/v2`.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct CorpusProofDependencyGraph {
+    /// Stable graph schema identity ([`CORPUS_PROOF_GRAPH_SCHEMA`]).
+    pub schema_version: String,
+    /// The corpus case's own `#[kani::proof]` symbol; identical to the suffix-bearing function
+    /// name in [`BoundedCorpusArtifacts::kani_harness`].
+    pub proof_id: String,
+    /// Semantic family label (e.g. `arithmetic`).
+    pub family: String,
+    /// Contract IR construct name this case lowers (e.g. `checked-arithmetic`).
+    pub construct: String,
+    /// The corpus case's own identity digest; the same identity its artifact paths carry.
+    pub identity: String,
+    /// Derived dependency readiness; this generator never executes or classifies a proof.
+    pub readiness: ProofReadiness,
+    /// Sorted complete declared dependency census.
+    pub dependencies: Vec<ProofDependencyEdge>,
 }
 
 /// Corpus case identities already emitted through [`generate_bounded_kani_corpus_case`] within
@@ -96,8 +146,9 @@ pub struct BoundedCorpusArtifacts {
 ///
 /// `identity` is the key for every emitted artifact path (`corpus/{label}-{identity}.*`), so two
 /// cases that resolve to the same identity would silently overwrite one another's oracle,
-/// strategy, harness, and provenance files with no error. This registry lets the generator refuse
-/// that instead of allowing it: every case's identity is checked against, and then recorded into,
+/// strategy, harness, provenance, and proof-graph files with no error. This registry lets the
+/// generator refuse that instead of allowing it: every case's identity is checked against, and
+/// then recorded into,
 /// one shared registry the caller threads across every case it generates into the same output
 /// tree (ir#73).
 ///
@@ -146,6 +197,21 @@ pub struct BoundedCorpusCase {
 /// outcome and this function emits no artifact.  Generated Kani source uses a concrete case and
 /// intentionally contains no `kani::assume` call.
 ///
+/// `dependencies` is the caller-declared proof-dependency census for this exact case (FR-007
+/// Inputs: "declared proof dependency census"). It is validated with the same rules FR-003's
+/// `generate_kani_bundle` applies to its own census (`crate::kani::validate_dependencies`, ir#80),
+/// plus a Required-only rule this corpus adds on top: the corpus's generated harnesses are
+/// self-contained by construction (literal operands/edges baked in at generation time, no external
+/// call, no `// proof-dependency-site:` marker, no `kani::assume`, no `#[kani::stub]`), so any
+/// declared `Assumed` or `Stubbed` edge is refused rather than accepted and fabricated a
+/// `sourceSite` pointing at a marker/assume/stub this generator never renders (ir#80 review finding
+/// F1). A valid census is folded into this case's identity so two cases differing only in declared
+/// dependencies never collapse onto the same identity, and retained in full as the case's own
+/// [`BoundedCorpusArtifacts::proof_graph`] artifact. An empty census is the ordinary case and
+/// yields a `Ready` [`ProofReadiness`]; an invalid census -- an empty or duplicate declared
+/// identity, an inconsistent kind/state/path combination, or any non-`Required` kind -- returns a
+/// typed `InvalidInput` `kani_corpus_dependency_invalid` result before any artifact is emitted.
+///
 /// `emitted` is checked and updated only after every other fallible step in this function has
 /// already succeeded, immediately before the case is known to actually be emitted: a case whose
 /// identity was already recorded in `emitted` is refused with a typed `KaniOutcomeKind::Refused`
@@ -157,6 +223,7 @@ pub fn generate_bounded_kani_corpus_case(
     dispatch: &DispatchIndex,
     input: &ValidatedFiniteInput,
     request: BoundedCorpusRequest,
+    dependencies: &[ProofDependencyRequest<'_>],
     emitted: &mut EmittedCorpusIdentities,
 ) -> Result<BoundedCorpusCase, KaniOutcome> {
     if profile.selection != input.input().profile {
@@ -170,6 +237,50 @@ pub fn generate_bounded_kani_corpus_case(
     let family = request.family();
     let request_source_id = request.source_id().to_owned();
     let revision = profile.selection.revision.clone();
+    // The declared census is validated, and its normalized/sorted form is fixed, before any
+    // lowering begins: an invalid census is refused before the generator does any semantic work,
+    // and the single normalized form computed here is reused for both the identity digest (below)
+    // and the emitted proof-dependency-graph artifact (`render_artifacts`), so they can never
+    // disagree with one another.
+    //
+    // Validation is two layers. First, FR-003's shared rules (`crate::kani::validate_dependencies`)
+    // -- non-empty and unique declared identities, and a closed kind/state/path shape per entry.
+    // Second, this corpus's own Required-only rule (ir#80 review finding F1): the corpus's
+    // generated harnesses are self-contained by construction -- rendering no
+    // `// proof-dependency-site:` marker, no `kani::assume`, and no `#[kani::stub]` -- so an
+    // `Assumed` or `Stubbed` declared edge would fabricate an `assumption:<sha>`/`stub:<sha>`
+    // `sourceSite` digest pointing at a marker this generator never emits. Both layers report the
+    // identical typed refusal below, since a caller cannot act differently on either failure.
+    //
+    // `validate_dependencies`'s second argument is the "root proof id" a dependency must not name
+    // itself; passing `request_source_id` here would spuriously refuse a legitimate dependency
+    // whose declared proof id happens to equal the request's own source id, even though a real
+    // self-dependency cannot occur -- this corpus case's own harness symbol is derived from its
+    // identity digest, which is itself derived from this very census, so the harness cannot name
+    // itself as one of its own inputs before that identity exists. The empty string is passed
+    // instead: `validate_dependencies` requires every declared proof id to be non-empty, so `""`
+    // can never equal a legitimate one and the self-dependency check can never spuriously fire
+    // (ir#80 review finding F5).
+    let declared_dependencies_invalid = dependencies
+        .iter()
+        .any(|dependency| dependency.kind != ProofDependencyKind::Required)
+        || crate::kani::validate_dependencies(dependencies, "").is_err();
+    if declared_dependencies_invalid {
+        // The failing diagnostic's own `path` (which census index) and `message` (which rule) are
+        // not carried into this refusal: `KaniOutcome::non_success`'s `source_id`/`context` fields
+        // already carry `request_source_id`/`revision` -- the request's own identity, not the
+        // census's -- and folding diagnostic detail into either would conflate two different
+        // things this outcome identifies. A caller that needs the failing census index re-runs
+        // `crate::kani::validate_dependencies` directly over the same census for the full
+        // diagnostic list (ir#80 review finding F7).
+        return Err(KaniOutcome::non_success(
+            KaniOutcomeKind::InvalidInput,
+            "kani_corpus_dependency_invalid",
+            request_source_id,
+            revision,
+        ));
+    }
+    let normalized_dependencies = normalize_dependencies(dependencies);
     // Each arm collects only the *raw* (fallible-conversion-free) per-case assignment data here.
     // Converting a raw `i128` into the closed `WitnessValue` wire representation is fallible
     // (`integer_assignment`, below), and a provable case must never be refused over an assignment
@@ -242,12 +353,14 @@ pub fn generate_bounded_kani_corpus_case(
             profile.selection.revision.clone(),
         )
     };
+    let dependency_digest = dependency_census_digest(&normalized_dependencies);
     let identity = digest(&identity_preimage(
         family,
         profile,
         input,
         &request_source_id,
         &request_shape,
+        &dependency_digest,
         &detail,
     ));
     // Fallible conversion to `WitnessValue` runs only here, for a case that actually retains a
@@ -276,6 +389,7 @@ pub fn generate_bounded_kani_corpus_case(
         &oracle_body,
         profile,
         input,
+        &normalized_dependencies,
     );
     let counterexample = counterexample_assignments.map(|assignments| CounterexamplePacket {
         profile_revision: profile.selection.revision.clone(),
@@ -379,7 +493,8 @@ fn render_graph_oracle(
 /// writes into the provenance artifact), the exact request that produced it (`request_source_id`,
 /// debug-quoted so an embedded newline in the source id cannot be mistaken for a field separator,
 /// then `request_shape` -- the real operand/query input, not a summary of the computed outcome),
-/// and finally `detail`, the outcome summary.
+/// the declared proof-dependency census digest (`dependency_digest`, see
+/// [`dependency_census_digest`]), and finally `detail`, the outcome summary.
 ///
 /// `request_source_id` and `request_shape` are what closed the first gap in ir#73: two requests
 /// that differ in source or in operand/query shape but happen to agree on every other field,
@@ -389,16 +504,21 @@ fn render_graph_oracle(
 /// admitted against a different finite input -- for example the same arithmetic request validated
 /// against two inputs differing only in `model_id` or `source_id` -- derived the identical
 /// identity even though they are validated, and provenance-recorded, against different inputs.
+/// `dependency_digest` closes a third gap (ir#80): without it, two otherwise-identical requests
+/// differing only in their declared proof-dependency census -- for example one declaring a
+/// `Required` dependency the other omits -- would derive the identical identity even though their
+/// emitted `proof_graph` artifacts genuinely differ.
 fn identity_preimage(
     family: BoundedCorpusFamily,
     profile: &KaniProfile,
     input: &ValidatedFiniteInput,
     request_source_id: &str,
     request_shape: &str,
+    dependency_digest: &str,
     detail: &str,
 ) -> String {
     format!(
-        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{}\n{}",
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{}\n{}\n{}",
         family.label(),
         family.construct(),
         profile.selection.profile,
@@ -411,8 +531,29 @@ fn identity_preimage(
         input.input().bounds,
         request_source_id,
         request_shape,
+        dependency_digest,
         detail,
     )
+}
+
+/// Digests one caller-declared proof-dependency census (already validated and normalized via
+/// [`normalize_dependencies`]) for folding into [`identity_preimage`].
+///
+/// Reuses [`deterministic_json`] -- the same canonical serialization
+/// [`CorpusProofDependencyGraph`]'s own `dependencies` field is rendered through -- so the digest
+/// is exactly a hash of the canonical bytes of the census this case's `proof_graph` artifact
+/// retains, not a separately invented text format. Serialization of a normalized
+/// `Vec<ProofDependencyEdge>` (plain strings and closed enums, no fallible conversion) cannot fail
+/// in practice; a failure here would mean [`CorpusProofDependencyGraph`] itself could never
+/// serialize either, which every corpus case's `proof_graph` artifact already depends on.
+fn dependency_census_digest(dependencies: &[ProofDependencyEdge]) -> String {
+    // Passed by reference, not `&dependencies.to_vec()`: `deterministic_json` only needs
+    // `&impl Serialize`, and `[ProofDependencyEdge]` itself implements `Serialize`, so the slice
+    // serializes directly with no intermediate owned `Vec` allocation (ir#80 review finding F10).
+    let canonical = deterministic_json(dependencies).expect(
+        "a normalized proof-dependency census is plain finite data with no fallible conversion",
+    );
+    digest(&canonical)
 }
 
 /// The checked-arithmetic family's exact request shape folded into the case identity: the
@@ -451,6 +592,12 @@ fn collection_request_shape(query: &CollectionQuery) -> String {
 /// `EmittedCorpusIdentities` collision check -- before calling this, so a call reaching here always
 /// succeeds (ir#57 review finding F1; identity collision refusal used to live here, see
 /// [`EmittedCorpusIdentities`]'s doc for why it moved).
+///
+/// `dependencies` is the already-validated, already-normalized declared census (see
+/// [`normalize_dependencies`]). Its [`dependency_census_digest`] is recomputed here from
+/// `dependencies` alone (the same pure function the caller already used to fold the digest into
+/// the case identity), so the provenance reference and the identity agree on one digest without
+/// this function taking a tenth argument to carry it in.
 fn render_artifacts(
     family: BoundedCorpusFamily,
     identity: &str,
@@ -459,6 +606,7 @@ fn render_artifacts(
     oracle_body: &str,
     profile: &KaniProfile,
     input: &ValidatedFiniteInput,
+    dependencies: &[ProofDependencyEdge],
 ) -> BoundedCorpusArtifacts {
     let label = family.label();
     let value_literal = if value { "true" } else { "false" };
@@ -471,6 +619,7 @@ fn render_artifacts(
     let mut strategy = String::new();
     let _ = writeln!(strategy, "// Generated finite strategy: {identity}");
     let _ = writeln!(strategy, "pub const CORPUS_CASE: bool = {value_literal};");
+    let proof_id = format!("corpus_case_{label}_{identity}");
     let mut harness = String::new();
     let _ = writeln!(harness, "// Generated Kani harness: {identity}");
     let _ = writeln!(harness, "#[kani::proof]");
@@ -480,12 +629,20 @@ fn render_artifacts(
     // would be indistinguishable proofs in Kani's own output. This binds the symbol to
     // the case's identity; identity uniqueness across distinct cases is the preimage's
     // job (`identity_preimage`) plus the caller's `EmittedCorpusIdentities` registry
-    // check (see `generate_bounded_kani_corpus_case`), both closing ir#73.
-    let _ = writeln!(harness, "fn corpus_case_{label}_{identity}() {{");
+    // check (see `generate_bounded_kani_corpus_case`), both closing ir#73. The identical
+    // string is also `proof_graph.proof_id` below, so the graph names the exact symbol it
+    // describes.
+    let _ = writeln!(harness, "fn {proof_id}() {{");
     let _ = writeln!(harness, "    assert!(corpus_oracle());");
     let _ = writeln!(harness, "}}");
+    let readiness = dependency_readiness(dependencies);
+    // `ProofReadiness::as_str` (`src/kani.rs`), not a hand-written match here: a second,
+    // independently written match can silently drift from the serde `rename_all = "snake_case"`
+    // spelling the enum itself declares (ir#80 review finding F4).
+    let readiness_label = readiness.as_str();
+    let dependency_digest = dependency_census_digest(dependencies);
     let provenance = format!(
-        "family={label}\nconstruct={}\nidentity={identity}\nprofile={}\nrevision={}\nexecutable={}\noptions={}\nabi={}\nmodel={}\nsource={}\nbounds={:?}\ndetail={detail}\nproof_dependencies=none\n",
+        "family={label}\nconstruct={}\nidentity={identity}\nprofile={}\nrevision={}\nexecutable={}\noptions={}\nabi={}\nmodel={}\nsource={}\nbounds={:?}\ndetail={detail}\nproof_dependencies=digest={dependency_digest} readiness={readiness_label} edges={}\n",
         family.construct(),
         profile.selection.profile,
         profile.selection.revision,
@@ -495,12 +652,28 @@ fn render_artifacts(
         input.input().model_id,
         input.input().source_id,
         input.input().bounds,
+        dependencies.len(),
     );
+    let proof_graph_value = CorpusProofDependencyGraph {
+        schema_version: CORPUS_PROOF_GRAPH_SCHEMA.to_owned(),
+        proof_id: proof_id.clone(),
+        family: label.to_owned(),
+        construct: family.construct().to_owned(),
+        identity: identity.to_owned(),
+        readiness,
+        dependencies: dependencies.to_vec(),
+    };
+    let proof_graph_contents = deterministic_json(&proof_graph_value)
+        .expect("a corpus proof-dependency graph is plain finite data with no fallible conversion");
     BoundedCorpusArtifacts {
         oracle: artifact(format!("corpus/{label}-{identity}.oracle.rs"), oracle),
         strategy: artifact(format!("corpus/{label}-{identity}.strategy.rs"), strategy),
         kani_harness: artifact(format!("corpus/{label}-{identity}.kani.rs"), harness),
         provenance: artifact(format!("corpus/{label}-{identity}.provenance"), provenance),
+        proof_graph: artifact(
+            format!("corpus/{label}-{identity}.proof-graph.json"),
+            proof_graph_contents,
+        ),
     }
 }
 
@@ -565,9 +738,11 @@ mod tests {
 
     use super::{
         arithmetic_assignments, arithmetic_request_shape, collection_assignments,
-        generate_bounded_kani_corpus_case, identity_preimage, BoundedCorpusFamily,
-        BoundedCorpusRequest, EmittedCorpusIdentities,
+        dependency_census_digest, generate_bounded_kani_corpus_case, identity_preimage,
+        BoundedCorpusFamily, BoundedCorpusRequest, CorpusProofDependencyGraph,
+        EmittedCorpusIdentities, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
     };
+    use crate::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
     fn fixture() -> (
         KaniProfile,
@@ -696,6 +871,7 @@ mod tests {
                 &dispatch,
                 &input,
                 request.clone(),
+                &[],
                 &mut EmittedCorpusIdentities::new(),
             )
             .unwrap();
@@ -704,6 +880,7 @@ mod tests {
                 &dispatch,
                 &input,
                 request,
+                &[],
                 &mut EmittedCorpusIdentities::new(),
             )
             .unwrap();
@@ -714,17 +891,250 @@ mod tests {
                 .kani_harness
                 .contents
                 .contains("kani::assume"));
+            // An empty declared census (every call here passes `&[]`) references its own real
+            // digest and a `Ready` readiness over zero edges.
             assert!(first
                 .artifacts
                 .provenance
                 .contents
-                .contains("proof_dependencies=none"));
+                .contains("proof_dependencies=digest="));
+            assert!(first
+                .artifacts
+                .provenance
+                .contents
+                .contains("readiness=ready edges=0"));
+            let graph: CorpusProofDependencyGraph =
+                serde_json::from_str(&first.artifacts.proof_graph.contents)
+                    .expect("the corpus proof-dependency graph must deserialize");
+            assert_eq!(graph.schema_version, CORPUS_PROOF_GRAPH_SCHEMA);
+            assert!(graph.dependencies.is_empty());
+            assert_eq!(graph.readiness, ProofReadiness::Ready);
+            assert_eq!(
+                graph.proof_id,
+                proof_symbol(&first.artifacts.kani_harness.contents),
+                "the graph's proof id must equal the harness's own #[kani::proof] symbol"
+            );
             syn::parse_file(&format!(
                 "{}\n{}",
                 first.artifacts.oracle.contents, first.artifacts.kani_harness.contents
             ))
             .expect("the generated oracle and Kani harness must be valid Rust syntax");
         }
+    }
+
+    /// A declared `Required` dependency must actually reach the emitted graph -- not be silently
+    /// dropped -- and must change the case's identity relative to the same request with an empty
+    /// census, since the two cases' `proof_graph` artifacts genuinely differ (ir#80).
+    ///
+    /// Trace: FR-007-AC-2, FR-007-AC-7, TC-023.
+    #[test]
+    fn tc_023_declared_required_dependency_appears_in_the_graph_and_changes_identity() {
+        let (profile, dispatch, input) = fixture();
+        let request = || {
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "with-dependency",
+                operator: NumericOperator::Add,
+                left: 1,
+                right: 1,
+                minimum: 0,
+                maximum: 2,
+            })
+        };
+        let without_dependency = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request(),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        let dependency = ProofDependencyRequest {
+            proof_id: "upstream-lemma",
+            kind: ProofDependencyKind::Required,
+            state: ProofDependencyState::Passed,
+            original_path: None,
+            replacement_path: None,
+        };
+        let with_dependency = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request(),
+            &[dependency],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        let graph: CorpusProofDependencyGraph =
+            serde_json::from_str(&with_dependency.artifacts.proof_graph.contents)
+                .expect("the corpus proof-dependency graph must deserialize");
+        assert_eq!(graph.dependencies.len(), 1);
+        assert_eq!(graph.dependencies[0].proof_id, "upstream-lemma");
+        assert_eq!(graph.dependencies[0].kind, ProofDependencyKind::Required);
+        assert_eq!(graph.dependencies[0].state, ProofDependencyState::Passed);
+        assert_eq!(graph.dependencies[0].source_site, None);
+        assert_eq!(graph.readiness, ProofReadiness::Ready);
+        let empty_graph: CorpusProofDependencyGraph =
+            serde_json::from_str(&without_dependency.artifacts.proof_graph.contents)
+                .expect("the corpus proof-dependency graph must deserialize");
+        assert!(empty_graph.dependencies.is_empty());
+        assert_ne!(
+            with_dependency.artifacts.oracle.path, without_dependency.artifacts.oracle.path,
+            "a case differing only in its declared proof-dependency census must not collapse \
+             onto the same identity as the census-free case"
+        );
+    }
+
+    /// A declared `Required` dependency whose state is not `Passed` must make the case
+    /// `Incomplete`, not `Ready`, in both places readiness is written: the emitted proof-graph
+    /// artifact's own `readiness` field and the provenance artifact's `readiness=` line. Both are
+    /// derived from the identical shared `ProofReadiness`/`readiness_label` (`ProofReadiness::as_str`,
+    /// `src/kani.rs`), so a hardcoded `Ready` or a hand-written label that drifts from it would
+    /// fail this assertion in at least one of the two places (ir#80 review finding F4).
+    ///
+    /// Trace: FR-007-AC-2, FR-007-AC-7, TC-023.
+    #[test]
+    fn tc_023_missing_required_dependency_yields_incomplete_readiness_everywhere() {
+        let (profile, dispatch, input) = fixture();
+        let dependency = ProofDependencyRequest {
+            proof_id: "missing-lemma",
+            kind: ProofDependencyKind::Required,
+            state: ProofDependencyState::Missing,
+            original_path: None,
+            replacement_path: None,
+        };
+        let generated = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "missing-dependency",
+                operator: NumericOperator::Add,
+                left: 1,
+                right: 1,
+                minimum: 0,
+                maximum: 2,
+            }),
+            &[dependency],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        let graph: CorpusProofDependencyGraph =
+            serde_json::from_str(&generated.artifacts.proof_graph.contents)
+                .expect("the corpus proof-dependency graph must deserialize");
+        assert_eq!(graph.readiness, ProofReadiness::Incomplete);
+        assert!(generated
+            .artifacts
+            .provenance
+            .contents
+            .contains("readiness=incomplete"));
+    }
+
+    /// A declared census with a duplicate proof identity is refused by FR-003's shared dependency
+    /// rules, not silently deduplicated, and the refusal must not burn the case's identity in
+    /// `EmittedCorpusIdentities`: a later, valid call for the exact same request must still
+    /// succeed rather than wrongly report `kani_corpus_identity_collision` (ir#80 review finding
+    /// F2).
+    ///
+    /// Trace: FR-007-AC-7, TC-023.
+    #[test]
+    fn tc_023_duplicate_dependency_identity_is_refused_and_does_not_burn_the_registry() {
+        let (profile, dispatch, input) = fixture();
+        let mut emitted = EmittedCorpusIdentities::new();
+        let request = || {
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "duplicate-census",
+                operator: NumericOperator::Add,
+                left: 1,
+                right: 1,
+                minimum: 0,
+                maximum: 2,
+            })
+        };
+        let duplicate = ProofDependencyRequest {
+            proof_id: "upstream-lemma",
+            kind: ProofDependencyKind::Required,
+            state: ProofDependencyState::Passed,
+            original_path: None,
+            replacement_path: None,
+        };
+        let error = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request(),
+            &[duplicate, duplicate],
+            &mut emitted,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
+        assert_eq!(error.code, "kani_corpus_dependency_invalid");
+        let retry = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request(),
+            &[],
+            &mut emitted,
+        )
+        .expect(
+            "a refusal that never reached artifact emission must not burn the request's identity",
+        );
+        assert_eq!(retry.outcome.source_id, "duplicate-census");
+    }
+
+    /// This corpus's generated harnesses render no `// proof-dependency-site:` marker, no
+    /// `kani::assume`, and no `#[kani::stub]`, so a declared `Assumed` dependency -- otherwise a
+    /// perfectly valid FR-003 census entry -- must still be refused: accepting it would fabricate
+    /// an `assumption:<sha>` `sourceSite` digest pointing at an assumption this generator never
+    /// renders (ir#80 review finding F1). The refusal must not burn the identity registry either,
+    /// exactly as for the duplicate-identity case above (ir#80 review finding F2).
+    ///
+    /// Trace: FR-007-AC-7, TC-023.
+    #[test]
+    fn tc_023_assumed_dependency_kind_is_refused_and_does_not_burn_the_registry() {
+        let (profile, dispatch, input) = fixture();
+        let mut emitted = EmittedCorpusIdentities::new();
+        let request = || {
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "assumed-census",
+                operator: NumericOperator::Add,
+                left: 1,
+                right: 1,
+                minimum: 0,
+                maximum: 2,
+            })
+        };
+        let assumed = ProofDependencyRequest {
+            proof_id: "assumed-lemma",
+            kind: ProofDependencyKind::Assumed,
+            state: ProofDependencyState::Assumed,
+            original_path: Some("crate::assumed_predicate"),
+            replacement_path: None,
+        };
+        let error = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request(),
+            &[assumed],
+            &mut emitted,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
+        assert_eq!(error.code, "kani_corpus_dependency_invalid");
+        let retry = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request(),
+            &[],
+            &mut emitted,
+        )
+        .expect(
+            "a refusal that never reached artifact emission must not burn the request's identity",
+        );
+        assert_eq!(retry.outcome.source_id, "assumed-census");
     }
 
     /// Trace: FR-007-AC-3, TC-023.
@@ -741,6 +1151,7 @@ mod tests {
                 max_items: 1,
                 kind: QueryKind::ForAllNonNegative,
             }),
+            &[],
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap_err();
@@ -763,6 +1174,7 @@ mod tests {
                 field_id: "next".to_owned(),
                 max_expansions: 2,
             }),
+            &[],
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
@@ -796,6 +1208,7 @@ mod tests {
                 minimum: 0,
                 maximum: 1,
             }),
+            &[],
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
@@ -829,6 +1242,7 @@ mod tests {
                 minimum: left,
                 maximum: left,
             }),
+            &[],
             &mut EmittedCorpusIdentities::new(),
         )
         .expect(
@@ -853,6 +1267,7 @@ mod tests {
                 max_items: 3,
                 kind: QueryKind::ExistsEqual(7),
             }),
+            &[],
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
@@ -898,6 +1313,7 @@ mod tests {
                 minimum: 0,
                 maximum: 2,
             }),
+            &[],
             &mut emitted,
         )
         .unwrap();
@@ -913,6 +1329,7 @@ mod tests {
                 minimum: 0,
                 maximum: 2,
             }),
+            &[],
             &mut emitted,
         )
         .unwrap();
@@ -1030,12 +1447,23 @@ mod tests {
             maximum: 10,
         };
         let shape = arithmetic_request_shape(&request);
+        // The empty declared census's own digest, pinned independently below rather than
+        // computed here: `dependency_census_digest(&[])` is `digest("[]\n")`, the JSON
+        // serialization `deterministic_json` produces for an empty `Vec<ProofDependencyEdge>`,
+        // and this literal is SHA-256("[]\n"), verified independently of this test.
+        let empty_census_digest = dependency_census_digest(&[]);
+        assert_eq!(
+            empty_census_digest, "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "an empty declared census must digest a fixed, real value -- this pins that value \
+             independently of `dependency_census_digest`'s own implementation"
+        );
         let preimage = identity_preimage(
             BoundedCorpusFamily::DefinednessArithmetic,
             &profile,
             &input,
             "pin-source",
             &shape,
+            &empty_census_digest,
             "value=5",
         );
         assert_eq!(
@@ -1052,12 +1480,14 @@ mod tests {
              ResourceBounds { max_objects: 2, max_references: 1, max_input_bytes: 2 }\n\
              \"pin-source\"\n\
              operator=Add left=2 right=3 minimum=0 maximum=10\n\
+             37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570\n\
              value=5",
             "the identity preimage's exact bytes and field order must be: family label, family \
              construct, profile name, profile revision, executable digest, options digest, ABI \
              revision, validated input model id, source id, resource bounds (debug), \
-             debug-quoted request source id, request shape, then outcome detail -- a mutation \
-             that drops or reorders any field must fail this assertion"
+             debug-quoted request source id, request shape, declared proof-dependency census \
+             digest, then outcome detail -- a mutation that drops or reorders any field must fail \
+             this assertion"
         );
     }
 
@@ -1086,12 +1516,19 @@ mod tests {
             &dispatch,
             &input,
             request.clone(),
+            &[],
             &mut emitted,
         )
         .unwrap();
-        let collision =
-            generate_bounded_kani_corpus_case(&profile, &dispatch, &input, request, &mut emitted)
-                .unwrap_err();
+        let collision = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request,
+            &[],
+            &mut emitted,
+        )
+        .unwrap_err();
         assert_eq!(collision.kind, KaniOutcomeKind::Refused);
         assert_eq!(collision.code, "kani_corpus_identity_collision");
         assert_eq!(collision.source_id, "collide");
@@ -1129,6 +1566,7 @@ mod tests {
                 minimum: 0,
                 maximum: 100,
             }),
+            &[],
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
@@ -1144,6 +1582,7 @@ mod tests {
                 minimum: 0,
                 maximum: 100,
             }),
+            &[],
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
@@ -1194,14 +1633,26 @@ mod tests {
                 kind: QueryKind::ExistsEqual(999),
             })
         };
-        let first =
-            generate_bounded_kani_corpus_case(&profile, &dispatch, &input, request(), &mut emitted)
-                .unwrap_err();
+        let first = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request(),
+            &[],
+            &mut emitted,
+        )
+        .unwrap_err();
         assert_eq!(first.kind, KaniOutcomeKind::InvalidInput);
         assert_eq!(first.code, "kani_corpus_assignment_out_of_range");
-        let retry =
-            generate_bounded_kani_corpus_case(&profile, &dispatch, &input, request(), &mut emitted)
-                .unwrap_err();
+        let retry = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request(),
+            &[],
+            &mut emitted,
+        )
+        .unwrap_err();
         assert_eq!(
             retry.kind,
             KaniOutcomeKind::InvalidInput,
@@ -1242,6 +1693,7 @@ mod tests {
             &dispatch,
             &input_a,
             request(),
+            &[],
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
@@ -1250,6 +1702,7 @@ mod tests {
             &dispatch,
             &input_b,
             request(),
+            &[],
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
