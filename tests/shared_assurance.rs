@@ -1622,9 +1622,15 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
          floor 65 = 80% of 82, measured 82 at the time it was derived) to make this claim"
     );
 
-    // A total-only floor is the wrong instrument on a tree this small. `scripts`
-    // and `tests` are five files each and `src` is four, so an entire directory
-    // could vanish and move the total by less than ordinary churn would.
+    // A total-only floor is the wrong instrument on a tree with directories this
+    // uneven. `examples` is one file, `assurance` two, `.github` three and
+    // `scripts` five, so four of the eight directories could each vanish whole
+    // and move the total by less than the 20% the floor above already tolerates.
+    // (The sentence that stood here said `scripts` and `tests` were five files
+    // each and `src` four. Those were the numbers when it was written; `src` is
+    // 26 and `tests` 29 now. It is restated against the measured tree rather
+    // than repaired, because a count embedded in prose is the thing
+    // agent-ix/quire-contract-codegen#129 was filed about.)
     //
     // The guard below is built by *discovery* — the directories are whatever the
     // walk actually found — and then compared against a declared set. That
@@ -1671,11 +1677,21 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // directory rather than to the total — floor = 80% of the measured count,
     // rounded down, with a floor of at least 1 for any directory that has files
     // at all. That minimum matters at the small end: `examples` has one file,
-    // and 80% of 1 rounds down to 0, which would make its floor trivially true
-    // forever. A floor of 1 instead means `examples` can carry zero headroom
-    // (its only file draining out fails the floor, not just the set check) —
-    // which is correct, because a directory that small has no room for partial
-    // attrition to mean anything less than total loss.
+    // and 80% of 1 rounds down to 0 — a floor of 0 is an assertion no tree can
+    // fail, and this file is otherwise full of assertions about exactly that
+    // defect class, so 0 is not written here.
+    //
+    // Be precise about what the minimum then buys, because it is less than it
+    // looks. The set-equality check below runs *before* this floor loop, and a
+    // directory that reaches zero files disappears from `per_directory` and
+    // trips that check first. So for `examples` — and for `assurance` at two
+    // files with a floor of 1 — the floor is never the assertion that fails:
+    // every reachable count for them is at or above it. The floor of 1 is the
+    // honest statement of the invariant (a declared directory holds at least
+    // one inspectable file), not an instrument with its own catch. The
+    // instrument for directories this small is the set-equality check, and that
+    // is intended: a directory of one or two files has no room for partial
+    // attrition to mean anything short of total loss.
     //
     // This is what makes the floors load-bearing again: before this change they
     // carried up to ~6x headroom (`src` and `tests` could each lose all but a
