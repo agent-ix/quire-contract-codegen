@@ -1,0 +1,315 @@
+{
+  "version": "quire.codegen.exact-function-claim-map/v1",
+  "package_id": {
+    "domain": "quire.package.semantic/v2",
+    "algorithm": "sha256",
+    "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+  },
+  "runtime_revision": "9f31169276edb85799d6b7d878020caf49617090",
+  "blocked": [],
+  "items": [
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "3f8f2f1d7e5549267abab3a7484ee8f8e791fa1dd14466feab3fd62cc00041ce"
+      },
+      "result": {
+        "disposition": "generated",
+        "oracle_symbol": "oracle_call_6141d15f9113111379a033944cc53f96db7ccf41f9d711ab5229fcb700ab34b2",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "29f9a0cba38d1ecc3c096197f95ec09b536d0e6ce523fb0dea135c865aa34488"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "3f8f2f1d7e5549267abab3a7484ee8f8e791fa1dd14466feab3fd62cc00041ce"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 222,
+                "end": 223
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "function": "add_fn",
+        "function_origin": {
+          "kind": "body",
+          "function": "add_fn",
+          "index": 2
+        },
+        "declaration_keys": []
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "3f8f2f1d7e5549267abab3a7484ee8f8e791fa1dd14466feab3fd62cc00041ce"
+      },
+      "result": {
+        "disposition": "generated",
+        "oracle_symbol": "oracle_call_2078cd5c6edc895d4458b505d6b8e2be57153d0835318d2eb5753f043c8569e5",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "29f9a0cba38d1ecc3c096197f95ec09b536d0e6ce523fb0dea135c865aa34488"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "3f8f2f1d7e5549267abab3a7484ee8f8e791fa1dd14466feab3fd62cc00041ce"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 222,
+                "end": 223
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "function": "eq_fn",
+        "function_origin": {
+          "kind": "body",
+          "function": "eq_fn",
+          "index": 3
+        },
+        "declaration_keys": []
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "499176481ed7bb96ceee68d7a9be5f7647aa8244cdb38bbea07410c39ac4984f"
+      },
+      "result": {
+        "disposition": "generated",
+        "oracle_symbol": "oracle_call_3caf643272fc58436ac5fa1922284792462c74d866b0b261101e04cd0b46a05d",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "d8b0a28356928baa6e2c95cd97f0da3a523fea0d58b38c568aa1beed74c4fb83"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "499176481ed7bb96ceee68d7a9be5f7647aa8244cdb38bbea07410c39ac4984f"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 224,
+                "end": 225
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "function": "call_fn",
+        "function_origin": {
+          "kind": "body",
+          "function": "call_fn",
+          "index": 1
+        },
+        "declaration_keys": []
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "6dfedb5fb75eb1beed93c4342f8808f429f059cb79d7e1a4978d2231d863bdf5"
+      },
+      "result": {
+        "disposition": "generated",
+        "oracle_symbol": "oracle_call_0b785af390f267bfde0c1bc2ff92bb5128447fc32879a587d531baa5167501ab",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "9a063f4b6bb527334eeda62919e72e5a203361304b0f09055bab98f25e6d623d"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "6dfedb5fb75eb1beed93c4342f8808f429f059cb79d7e1a4978d2231d863bdf5"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 223,
+                "end": 224
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "function": "eq_fn",
+        "function_origin": {
+          "kind": "body",
+          "function": "eq_fn",
+          "index": 3
+        },
+        "declaration_keys": []
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "90795f9184d47da8b9d5dd191f52175b604e7ac5edc189483e5387d4424fb422"
+      },
+      "result": {
+        "disposition": "refused",
+        "refusal": {
+          "code": "unknown_function",
+          "name": "does_not_exist_anywhere"
+        }
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "b9010ba2bf1e0279c30a9c2fa8c70cab0649f6b1161a2f538067374f55460f3d"
+      },
+      "result": {
+        "disposition": "generated",
+        "oracle_symbol": "oracle_call_6f750f11ff8882248261920f237ff4e983872be03f4556533a734d5ed0a3e6d7",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "87e1ba6281f1cef2838808956a414e43d1d7fdf0dba72b941829abb04aaeab8c"
+        },
+        "package_id": {
+          "domain": "quire.package.semantic/v2",
+          "algorithm": "sha256",
+          "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+        },
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "b9010ba2bf1e0279c30a9c2fa8c70cab0649f6b1161a2f538067374f55460f3d"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 225,
+                "end": 226
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "function": "unrelated_fn",
+        "function_origin": {
+          "kind": "body",
+          "function": "unrelated_fn",
+          "index": 0
+        },
+        "declaration_keys": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+[package]
+name = "quire-exact-function-oracles"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+quire-contract-runtime = { git = "https://github.com/agent-ix/quire-contract-runtime", rev = "9f31169276edb85799d6b7d878020caf49617090", features = ["exact"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[workspace]
