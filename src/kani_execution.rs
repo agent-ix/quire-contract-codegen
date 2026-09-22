@@ -587,6 +587,7 @@ pub fn kani_launch_command(request: &KaniExecutionRequest<'_>) -> (Vec<String>, 
 
 /// How the launcher's run within its caller-declared budget ([`KaniExecutionRequest::timeout`])
 /// concluded.
+#[non_exhaustive]
 pub enum LaunchOutcome {
     /// The process exited on its own within the budget.
     Completed {
