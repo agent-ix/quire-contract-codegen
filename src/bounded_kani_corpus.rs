@@ -4,7 +4,10 @@
 //! vertical slice: once one lowering is admitted, it renders the four corpus roles from the same
 //! profile selection and finite input.  A non-success outcome returns before any role is emitted.
 
-use std::{collections::BTreeMap, fmt::Write as _};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Write as _,
+};
 
 use quire_contract_ir::kani::{
     CheckedArithmeticRequest, CollectionQuery, CounterexamplePacket, DispatchIndex, GraphRequest,
@@ -88,6 +91,31 @@ pub struct BoundedCorpusArtifacts {
     pub provenance: Artifact,
 }
 
+/// Corpus case identities already emitted through [`generate_bounded_kani_corpus_case`] within
+/// one generation run.
+///
+/// `identity` is the key for every emitted artifact path (`corpus/{label}-{identity}.*`), so two
+/// cases that resolve to the same identity would silently overwrite one another's oracle,
+/// strategy, harness, and provenance files with no error. This registry lets the generator refuse
+/// that instead of allowing it: every case's identity is checked against, and then recorded into,
+/// one shared registry the caller threads across every case it generates into the same output
+/// tree (ir#73).
+///
+/// A caller that wants to prove generation is pure -- that calling this function twice with an
+/// identical request yields identical output -- passes a fresh registry to each call, since a
+/// shared registry would (correctly) refuse the second, identical call as a collision rather than
+/// treat it as a rebuild of the same case.
+#[derive(Debug, Default)]
+pub struct EmittedCorpusIdentities(BTreeSet<String>);
+
+impl EmittedCorpusIdentities {
+    /// Starts an empty registry: no identity has been emitted through it yet.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 /// Complete codegen result for one supported corpus case.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BoundedCorpusCase {
@@ -110,11 +138,18 @@ pub struct BoundedCorpusCase {
 /// Consequently a refused, invalid, incomplete, or exhausted case returns its original typed
 /// outcome and this function emits no artifact.  Generated Kani source uses a concrete case and
 /// intentionally contains no `kani::assume` call.
+///
+/// `emitted` is checked and updated at the artifact-emission point: a case whose identity was
+/// already recorded in `emitted` is refused with a typed `KaniOutcomeKind::Refused` outcome
+/// (`kani_corpus_identity_collision`) rather than silently overwriting the earlier case's
+/// artifacts (ir#73). Callers generating more than one case into the same output tree share one
+/// registry across those calls.
 pub fn generate_bounded_kani_corpus_case(
     profile: &KaniProfile,
     dispatch: &DispatchIndex,
     input: &ValidatedFiniteInput,
     request: BoundedCorpusRequest,
+    emitted: &mut EmittedCorpusIdentities,
 ) -> Result<BoundedCorpusCase, KaniOutcome> {
     if profile.selection != input.input().profile {
         return Err(KaniOutcome::non_success(
@@ -132,10 +167,11 @@ pub fn generate_bounded_kani_corpus_case(
     // (`integer_assignment`, below), and a provable case must never be refused over an assignment
     // that no packet will ever carry: conversion happens later, only inside the `!value` branch
     // that actually builds a retained counterexample packet.
-    let (value, detail, oracle_body, raw_assignments) = match request {
+    let (value, detail, oracle_body, raw_assignments, request_shape) = match request {
         BoundedCorpusRequest::Arithmetic(request) => {
             let lowered = prepare_checked_arithmetic(profile, dispatch, input, request)?;
             let raw_assignments = arithmetic_assignments(&lowered.request);
+            let request_shape = arithmetic_request_shape(&lowered.request);
             // Admission establishes the checked arithmetic/definedness property; the numeric
             // result itself is not a Boolean verdict (zero is as valid as any other in-range
             // result).
@@ -144,16 +180,19 @@ pub fn generate_bounded_kani_corpus_case(
                 format!("value={}", lowered.value),
                 render_arithmetic_oracle(&lowered),
                 raw_assignments,
+                request_shape,
             )
         }
         BoundedCorpusRequest::Graph(request) => {
             let lowered = prepare_finite_graph_reaches(profile, dispatch, input, request)?;
             let raw_assignments = graph_assignments(&lowered.request);
+            let request_shape = graph_request_shape(&lowered.request);
             (
                 lowered.reachable,
                 format!("expanded={}", lowered.expanded.join(",")),
                 render_graph_oracle(&lowered, input),
                 raw_assignments,
+                request_shape,
             )
         }
         BoundedCorpusRequest::Collection(request) => {
@@ -174,11 +213,13 @@ pub fn generate_bounded_kani_corpus_case(
                 }
             };
             let raw_assignments = collection_assignments(&lowered.query);
+            let request_shape = collection_request_shape(&lowered.query);
             (
                 lowered.value,
                 format!("examined={}", lowered.examined),
                 format!("{{ let values = [{values}]; {predicate} }}"),
                 raw_assignments,
+                request_shape,
             )
         }
     };
@@ -193,14 +234,12 @@ pub fn generate_bounded_kani_corpus_case(
             profile.selection.revision.clone(),
         )
     };
-    let identity = digest(&format!(
-        "{}\n{}\n{}\n{}\n{}\n{}",
-        family.label(),
-        family.construct(),
-        profile.selection.revision,
-        profile.selection.executable_digest,
-        profile.selection.options_digest,
-        detail,
+    let identity = digest(&identity_preimage(
+        family,
+        profile,
+        &request_source_id,
+        &request_shape,
+        &detail,
     ));
     let artifacts = render_artifacts(
         family,
@@ -210,7 +249,9 @@ pub fn generate_bounded_kani_corpus_case(
         &oracle_body,
         profile,
         input,
-    );
+        &request_source_id,
+        emitted,
+    )?;
     // Fallible conversion to `WitnessValue` runs only here, for a case that actually retains a
     // packet: a provable case's `raw_assignments` are dropped unconverted, so an admitted value
     // outside `i64`'s range can never refuse generation of a case no packet will carry.
@@ -310,6 +351,74 @@ fn render_graph_oracle(
     )
 }
 
+/// Builds the exact byte sequence hashed into one corpus case's identity, field order pinned.
+///
+/// Field order, top to bottom: the family (its short label, then its construct name), the
+/// profile selection that governs this case (revision, executable digest, options digest), the
+/// exact request that produced it (`request_source_id`, then `request_shape` -- the real
+/// operand/query input, not a summary of the computed outcome), and finally `detail`, the
+/// outcome summary. `request_source_id` and `request_shape` are what close ir#73: two requests
+/// that differ in source or in operand/query shape but happen to agree on every other field,
+/// including `detail`, now diverge here instead of silently colliding.
+fn identity_preimage(
+    family: BoundedCorpusFamily,
+    profile: &KaniProfile,
+    request_source_id: &str,
+    request_shape: &str,
+    detail: &str,
+) -> String {
+    format!(
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+        family.label(),
+        family.construct(),
+        profile.selection.revision,
+        profile.selection.executable_digest,
+        profile.selection.options_digest,
+        request_source_id,
+        request_shape,
+        detail,
+    )
+}
+
+/// The checked-arithmetic family's exact request shape folded into the case identity: the
+/// operator and both operands actually asked for, not the computed result value that `detail`
+/// carries. Two requests computing the same result from different operands (e.g. `3 + 4` and
+/// `2 + 5`) must diverge here (ir#73).
+fn arithmetic_request_shape(request: &CheckedArithmeticRequest) -> String {
+    format!(
+        "operator={:?} left={} right={} minimum={} maximum={}",
+        request.operator, request.left, request.right, request.minimum, request.maximum
+    )
+}
+
+/// The finite-reference-graph family's exact request shape folded into the case identity: the
+/// start/target/field identities and the expansion bound actually asked for, not `detail`'s
+/// summary of which identities were expanded while answering it.
+fn graph_request_shape(request: &GraphRequest) -> String {
+    format!(
+        "start={:?} target={:?} field={:?} max_expansions={}",
+        request.start_id, request.target_id, request.field_id, request.max_expansions
+    )
+}
+
+/// The bounded-collection-query family's exact request shape folded into the case identity: the
+/// ordered population, its bound, and the query kind actually asked for, not `detail`'s bare
+/// examined-count summary.
+fn collection_request_shape(query: &CollectionQuery) -> String {
+    format!(
+        "values={:?} max_items={} kind={:?}",
+        query.values, query.max_items, query.kind
+    )
+}
+
+/// Renders and registers one corpus case's artifacts.
+///
+/// Refuses with a typed `KaniOutcomeKind::Refused` outcome
+/// (`kani_corpus_identity_collision`) rather than emitting over an already-occupied identity: two
+/// cases that resolved to the same `identity` would otherwise silently overwrite each other's
+/// oracle, strategy, harness, and provenance files, since `identity` is the key for every emitted
+/// artifact path (ir#73).
+#[allow(clippy::too_many_arguments)]
 fn render_artifacts(
     family: BoundedCorpusFamily,
     identity: &str,
@@ -318,7 +427,17 @@ fn render_artifacts(
     oracle_body: &str,
     profile: &KaniProfile,
     input: &ValidatedFiniteInput,
-) -> BoundedCorpusArtifacts {
+    request_source_id: &str,
+    emitted: &mut EmittedCorpusIdentities,
+) -> Result<BoundedCorpusArtifacts, KaniOutcome> {
+    if !emitted.0.insert(identity.to_owned()) {
+        return Err(KaniOutcome::non_success(
+            KaniOutcomeKind::Refused,
+            "kani_corpus_identity_collision",
+            request_source_id.to_owned(),
+            profile.selection.revision.clone(),
+        ));
+    }
     let label = family.label();
     let value_literal = if value { "true" } else { "false" };
     let mut oracle = String::new();
@@ -337,8 +456,9 @@ fn render_artifacts(
     // same identity the artifact path (`corpus/{label}-{identity}.kani.rs`) carries,
     // rather than only the family label: two files sharing a `#[kani::proof]` symbol
     // would be indistinguishable proofs in Kani's own output. This binds the symbol to
-    // the case's identity; it does not by itself make that identity unique across every
-    // distinct case (tracked separately as #73).
+    // the case's identity; identity uniqueness across distinct cases is now the
+    // preimage's job (`identity_preimage`) plus the `emitted` registry check above,
+    // both closing ir#73.
     let _ = writeln!(harness, "fn corpus_case_{label}_{identity}() {{");
     let _ = writeln!(harness, "    assert!(corpus_oracle());");
     let _ = writeln!(harness, "}}");
@@ -354,12 +474,12 @@ fn render_artifacts(
         input.input().source_id,
         input.input().bounds,
     );
-    BoundedCorpusArtifacts {
+    Ok(BoundedCorpusArtifacts {
         oracle: artifact(format!("corpus/{label}-{identity}.oracle.rs"), oracle),
         strategy: artifact(format!("corpus/{label}-{identity}.strategy.rs"), strategy),
         kani_harness: artifact(format!("corpus/{label}-{identity}.kani.rs"), harness),
         provenance: artifact(format!("corpus/{label}-{identity}.provenance"), provenance),
-    }
+    })
 }
 
 fn artifact(path: String, contents: String) -> Artifact {
@@ -422,8 +542,9 @@ mod tests {
     use quire_contract_ir::NumericOperator;
 
     use super::{
-        arithmetic_assignments, collection_assignments, generate_bounded_kani_corpus_case,
-        BoundedCorpusRequest,
+        arithmetic_assignments, arithmetic_request_shape, collection_assignments,
+        generate_bounded_kani_corpus_case, identity_preimage, BoundedCorpusFamily,
+        BoundedCorpusRequest, EmittedCorpusIdentities,
     };
 
     fn fixture() -> (
@@ -545,11 +666,25 @@ mod tests {
             }),
         ];
         for request in cases {
-            let first =
-                generate_bounded_kani_corpus_case(&profile, &dispatch, &input, request.clone())
-                    .unwrap();
-            let second =
-                generate_bounded_kani_corpus_case(&profile, &dispatch, &input, request).unwrap();
+            // Each call gets its own fresh registry: this test proves generation is pure
+            // (identical request -> identical output), not that emitting the same case twice
+            // into one corpus is allowed -- that is refused, and covered separately below.
+            let first = generate_bounded_kani_corpus_case(
+                &profile,
+                &dispatch,
+                &input,
+                request.clone(),
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap();
+            let second = generate_bounded_kani_corpus_case(
+                &profile,
+                &dispatch,
+                &input,
+                request,
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap();
             assert_eq!(first, second);
             assert_eq!(first.outcome.boolean_claim(), Some(true));
             assert!(!first
@@ -584,6 +719,7 @@ mod tests {
                 max_items: 1,
                 kind: QueryKind::ForAllNonNegative,
             }),
+            &mut EmittedCorpusIdentities::new(),
         )
         .unwrap_err();
         assert_eq!(error.kind, KaniOutcomeKind::ResourceExhausted);
@@ -605,6 +741,7 @@ mod tests {
                 field_id: "next".to_owned(),
                 max_expansions: 2,
             }),
+            &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
         assert_eq!(generated.outcome.boolean_claim(), Some(false));
@@ -637,6 +774,7 @@ mod tests {
                 minimum: 0,
                 maximum: 1,
             }),
+            &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
         assert_eq!(generated.outcome.kind, KaniOutcomeKind::Proved);
@@ -669,6 +807,7 @@ mod tests {
                 minimum: left,
                 maximum: left,
             }),
+            &mut EmittedCorpusIdentities::new(),
         )
         .expect(
             "a provable case must never be refused over an assignment map no packet will carry",
@@ -692,6 +831,7 @@ mod tests {
                 max_items: 3,
                 kind: QueryKind::ExistsEqual(7),
             }),
+            &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
         assert!(generated
@@ -707,9 +847,11 @@ mod tests {
     }
 
     /// Reproduces #61 directly, and pins the fix to derivation rather than to a uniqueness
-    /// guarantee the code does not hold (identity/symbol uniqueness across distinct cases with the
-    /// same result value is tracked separately as #73, and is not claimed by FR-007-AC-6). Before
-    /// the fix, every corpus case of a family declared the identical
+    /// guarantee the code does not hold at this narrower scope: this test asserts that the symbol
+    /// carries the case's own identity, not that identity itself is unique across every distinct
+    /// case with the same result value -- that broader guarantee is `identity_preimage` plus the
+    /// `EmittedCorpusIdentities` collision check (ir#73), covered by their own tests, and is not
+    /// claimed by FR-007-AC-6. Before the fix, every corpus case of a family declared the identical
     /// `#[kani::proof] fn corpus_case_{label}()` symbol regardless of case identity: within one
     /// crate that fails to compile, but the corpus's actual shape is one file per case, and across
     /// separate crates the same symbol name is indistinguishable in Kani's own output. The fix
@@ -721,6 +863,7 @@ mod tests {
     #[test]
     fn tc_023_kani_proof_symbol_is_derived_from_the_case_identity_in_its_artifact_path() {
         let (profile, dispatch, input) = fixture();
+        let mut emitted = EmittedCorpusIdentities::new();
         let first = generate_bounded_kani_corpus_case(
             &profile,
             &dispatch,
@@ -733,6 +876,7 @@ mod tests {
                 minimum: 0,
                 maximum: 2,
             }),
+            &mut emitted,
         )
         .unwrap();
         let second = generate_bounded_kani_corpus_case(
@@ -747,6 +891,7 @@ mod tests {
                 minimum: 0,
                 maximum: 2,
             }),
+            &mut emitted,
         )
         .unwrap();
         for case in [&first, &second] {
@@ -766,8 +911,10 @@ mod tests {
             );
         }
         // These two cases were chosen with different result values (1+1 vs 1+0), so their
-        // identities -- and therefore their symbols -- do differ here. That is a property of this
-        // pair's inputs, not a universal the generator enforces: see #73.
+        // identities -- and therefore their symbols -- do differ here regardless. The universal
+        // guarantee (any two distinct requests get distinct identities, and a genuine collision is
+        // refused rather than silently overwritten) is exercised by the identity-preimage and
+        // collision tests below, not by this pair alone.
         assert_ne!(
             first.artifacts.kani_harness.path, second.artifacts.kani_harness.path,
             "these two cases have distinct result values and must emit distinct files"
@@ -837,6 +984,150 @@ mod tests {
                 ("value_2".to_owned(), 7),
             ],
             "assignments must carry exactly the ordered population, not max_items or expected"
+        );
+    }
+
+    /// Pins the case-identity preimage's exact bytes and field order (ir#57/ir#73), not merely
+    /// that the digest changes under some mutation. A criterion that only asserts two ad hoc
+    /// cases' digests *differ* can stay green even when a refactor silently drops a field from
+    /// the preimage, provided that fixture's other fields still happen to differ. This hardcodes
+    /// the expected preimage independently of `identity_preimage`'s own implementation, so
+    /// dropping or reordering a field fails this assertion even when it produces no visible
+    /// collision in some other, unrelated fixture.
+    ///
+    /// Trace: FR-007-AC-6, TC-023.
+    #[test]
+    fn tc_057_identity_preimage_pins_exact_bytes_and_field_order() {
+        let (profile, _dispatch, _input) = fixture();
+        let request = quire_contract_ir::kani::CheckedArithmeticRequest {
+            source_id: "pin-source",
+            operator: NumericOperator::Add,
+            left: 2,
+            right: 3,
+            minimum: 0,
+            maximum: 10,
+        };
+        let shape = arithmetic_request_shape(&request);
+        let preimage = identity_preimage(
+            BoundedCorpusFamily::DefinednessArithmetic,
+            &profile,
+            "pin-source",
+            &shape,
+            "value=5",
+        );
+        assert_eq!(
+            preimage,
+            "arithmetic\n\
+             checked-arithmetic\n\
+             r1\n\
+             exe\n\
+             opts\n\
+             pin-source\n\
+             operator=Add left=2 right=3 minimum=0 maximum=10\n\
+             value=5",
+            "the identity preimage's exact bytes and field order must be: family label, family \
+             construct, profile revision, executable digest, options digest, request source id, \
+             request shape, then outcome detail -- a mutation that drops or reorders any field \
+             must fail this assertion"
+        );
+    }
+
+    /// Verification standard: a genuine identity collision, however contrived, must refuse rather
+    /// than silently overwrite the earlier case's artifacts. The simplest genuine collision is the
+    /// identical request emitted twice into the same registry: identity is a pure function of the
+    /// request (see the determinism test above), so the second call resolves to the identical
+    /// identity as the first and must be refused, not treated as a second, distinct case.
+    ///
+    /// Trace: FR-007-AC-6, TC-023.
+    #[test]
+    fn tc_057_repeated_identity_refuses_rather_than_silently_overwriting() {
+        let (profile, dispatch, input) = fixture();
+        let mut emitted = EmittedCorpusIdentities::new();
+        let request =
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "collide",
+                operator: NumericOperator::Add,
+                left: 1,
+                right: 1,
+                minimum: 0,
+                maximum: 2,
+            });
+        let first = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            request.clone(),
+            &mut emitted,
+        )
+        .unwrap();
+        let collision =
+            generate_bounded_kani_corpus_case(&profile, &dispatch, &input, request, &mut emitted)
+                .unwrap_err();
+        assert_eq!(collision.kind, KaniOutcomeKind::Refused);
+        assert_eq!(collision.code, "kani_corpus_identity_collision");
+        assert_eq!(collision.source_id, "collide");
+        // The first case's own outcome is untouched by the refused second call.
+        assert_eq!(first.outcome.source_id, "collide");
+    }
+
+    /// Regression for ir#57/ir#73: two structurally different arithmetic requests that compute
+    /// the same result (so under the pre-fix preimage -- family/construct/profile fields plus
+    /// only `detail`'s `value={result}` outcome summary -- both had the identical preimage) must
+    /// now get different identities and different artifact paths, because the preimage also
+    /// includes each request's own source id and its real operand shape.
+    ///
+    /// Trace: FR-007-AC-6, TC-023.
+    #[test]
+    fn tc_057_distinct_operands_computing_the_same_result_get_distinct_identities() {
+        let (profile, dispatch, input) = fixture();
+        let three_plus_four = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "req-a",
+                operator: NumericOperator::Add,
+                left: 3,
+                right: 4,
+                minimum: 0,
+                maximum: 100,
+            }),
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        let two_plus_five = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "req-b",
+                operator: NumericOperator::Add,
+                left: 2,
+                right: 5,
+                minimum: 0,
+                maximum: 100,
+            }),
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        // 3+4 and 2+5 both equal 7, so both cases render the identical `detail` outcome summary
+        // (`value=7`) -- the pre-fix preimage's only per-request field, which is exactly what let
+        // these two structurally different requests collide onto one identity and one set of
+        // artifact paths. Confirm the shared-outcome premise, then confirm they no longer collide.
+        assert!(three_plus_four
+            .artifacts
+            .provenance
+            .contents
+            .contains("detail=value=7"));
+        assert!(two_plus_five
+            .artifacts
+            .provenance
+            .contents
+            .contains("detail=value=7"));
+        assert_ne!(
+            three_plus_four.artifacts.oracle.path, two_plus_five.artifacts.oracle.path,
+            "two structurally different requests that happen to agree on the outcome summary \
+             must not collapse onto the same artifact identity"
         );
     }
 }
