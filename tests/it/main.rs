@@ -40,6 +40,8 @@ mod bounded_kani_corpus;
 mod capability_settlement;
 mod composite_equality_agreement;
 mod composite_equality_generation;
+mod exact_function_agreement;
+mod exact_function_generation;
 mod exact_scalar_agreement;
 mod exact_scalar_generation;
 mod harness_generation;

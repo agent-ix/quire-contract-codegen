@@ -14,7 +14,10 @@ use quire_contract_codegen::{
 };
 use quire_contract_ir::CheckedPackageV2;
 
-#[path = "exact_function_support/package.rs"]
+// Duplicated per consumer (also `exact_function_agreement.rs`), matching this migration's
+// established convention for the exact_scalar/composite_equality families (IR-237).
+#[allow(clippy::duplicate_mod)]
+#[path = "../exact_function_support/package.rs"]
 mod package;
 use package::*;
 
