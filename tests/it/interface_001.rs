@@ -33,14 +33,17 @@ use quire_contract_codegen::{
     KaniToolPins, ProofAttestationBody,
 };
 
+fn crate_source(relative_path: &str) -> String {
+    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path))
+        .unwrap_or_else(|_| panic!("{relative_path} must be readable from the crate root"))
+}
+
 fn lib_source() -> String {
-    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"))
-        .expect("src/lib.rs must be readable from the crate root")
+    crate_source("src/lib.rs")
 }
 
 fn oracle_source() -> String {
-    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/oracle.rs"))
-        .expect("src/oracle.rs must be readable from the crate root")
+    crate_source("src/oracle.rs")
 }
 
 /// Counts the variant identifiers declared between `pub enum <name> {` and its matching closing
@@ -51,9 +54,14 @@ fn oracle_source() -> String {
 /// count.
 ///
 /// Not a general Rust parser: it only counts bare unit variants (`Ident,`), which is the only
-/// shape `GenerationTerminalState` and `AttestationResult` use, and it skips `//`-prefixed lines
-/// entirely (comments and doc comments) before looking for either a variant or a brace, so a
-/// brace mentioned in prose cannot desynchronize its `{`/`}` depth tracking.
+/// shape `GenerationTerminalState` and `AttestationResult` use, and it skips `//`-prefixed and
+/// `#`-prefixed lines (comments, doc comments and attributes) entirely -- before looking for
+/// either a variant or a brace on that line -- so a brace or comma mentioned in a comment or an
+/// attribute cannot desynchronize its `{`/`}` depth tracking or be miscounted as a variant. A
+/// future data-carrying variant (`Foo(String),` or `Foo { x: i32 },`) would be silently skipped
+/// rather than counted -- correct today, since `ALL: [Self; N]` cannot hold a data-carrying
+/// variant either, so both sides would already be wrong the same way -- but is not a shape either
+/// enum uses now.
 fn census_enum_variants(source: &str, name: &str) -> usize {
     let marker = format!("pub enum {name} {{");
     let start = source
@@ -63,7 +71,7 @@ fn census_enum_variants(source: &str, name: &str) -> usize {
     let mut count = 0usize;
     for line in source[start + marker.len()..].lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("//") {
+        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with('#') {
             continue;
         }
         for ch in trimmed.chars() {
@@ -75,9 +83,6 @@ fn census_enum_variants(source: &str, name: &str) -> usize {
         }
         if depth == 0 {
             break;
-        }
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
         }
         let is_unit_variant = trimmed.strip_suffix(',').is_some_and(|ident| {
             !ident.is_empty() && ident.chars().all(|c| c.is_alphanumeric() || c == '_')
@@ -94,10 +99,7 @@ fn census_enum_variants(source: &str, name: &str) -> usize {
 }
 
 fn contract_source() -> String {
-    fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("spec/interface/interface-001-codegen-api.md"),
-    )
-    .expect("spec/interface/interface-001-codegen-api.md must be readable from the crate root")
+    crate_source("spec/interface/interface-001-codegen-api.md")
 }
 
 /// The contract document's one fenced ```yaml block, as text.
