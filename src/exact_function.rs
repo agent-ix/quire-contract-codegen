@@ -170,6 +170,14 @@ pub struct ExactFunctionDeclaration {
     pub result_type: CheckedNodeId,
     /// The body's classified shape.
     pub body: ExactFunctionBody,
+    /// Named capabilities this function's operator requirements demand
+    /// (V2's `IeeeItemRequirement`/`IntegerDivisionConsumer` lists, carried
+    /// by name only in this V1). This generator registers no backend for
+    /// any capability at all, so a non-empty list always negotiates
+    /// `unsupported` (AC-6) -- mirroring FR-273-AC-4's pre-application
+    /// negotiation, decided at generation time, before any item naming the
+    /// function is applied and before any `Meter` is touched.
+    pub capability_requirements: Vec<String>,
 }
 
 /// One requested oracle: a checked `call` expression node applying one
@@ -227,6 +235,14 @@ pub enum ExactFunctionRefusal {
     UnsupportedOperator {
         /// What was requested.
         detail: &'static str,
+    },
+    /// The function's declared operator requirements name a capability no
+    /// registered backend can discharge (AC-6). Decided at generation time,
+    /// before any item naming the function is applied; no `Meter` is
+    /// touched to reach this disposition.
+    UnsupportedCapability {
+        /// The first named, undischargeable capability.
+        capability: String,
     },
     /// A declared parameter or result type is not one of this generator's
     /// supported operand kinds (`Boolean`, unbounded `Integer`).
@@ -707,6 +723,16 @@ pub fn generate_exact_function_oracles(
     let mut own_shape: BTreeMap<&str, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
     for (declaration, record) in ordered_functions.iter().zip(&lowering.records) {
         let result = (|| -> Result<(), ExactFunctionRefusal> {
+            // AC-6: capability negotiation happens first, before lowering
+            // the body and before any item naming this function is
+            // applied. This generator registers no backend for any named
+            // capability, so any non-empty requirement list is
+            // undischargeable by construction.
+            if let Some(capability) = declaration.capability_requirements.first() {
+                return Err(ExactFunctionRefusal::UnsupportedCapability {
+                    capability: capability.clone(),
+                });
+            }
             let node = lowered_binary_body(record)?;
             classify_body_shape(&graph, node, declaration)?;
             for parameter in &declaration.parameters {
