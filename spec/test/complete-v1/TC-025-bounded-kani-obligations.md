@@ -69,8 +69,16 @@ as `cover_unsatisfied`, and refuses a drifted driver digest before running.
   frame kind, FR-014 refuses V2 `state` nodes as `NoFiniteEncoding`, and
   by-value harness arguments cannot express `kani::modifies`. A typed IR frame
   item is required first.
-- Every V2 scalar harness: V2 scalar obligations carry only a caller-declared
-  operation identity, so they are refused until agent-ix/quire-specification#76
-  lands.
+- V2 scalar harnesses outside `IntegerArithmetic`: an IR-confirmed claim over
+  one of the four `quire.op.integer.{add,sub,mul,negate}` identities is no
+  longer refused on operation identity at all, and reaches a real harness
+  unless a ground independent of the operation (an i64-unrepresentable
+  endpoint, the source ceiling) displaces it. Every other confirmed family
+  (every family but `IntegerArithmetic`) is refused as `OperationNotRendered`,
+  an unbuilt renderer in this generator, not an upstream block. A claim this
+  generator lowered but whose operation it did not confirm against the node's
+  own catalogued identity, mode or law definition is refused as
+  `CallerDeclaredOperation` (see `OperationProvenance::CallerDeclared`, the
+  authoritative enumeration of those cases).
 - Model and graph bounds: refused as blocked until
   agent-ix/quire-spec-language#120 lands.
