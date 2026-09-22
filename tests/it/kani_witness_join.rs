@@ -2,11 +2,11 @@
 //! persisted obligation schema (`kani-obligations/{module}.json`), then proves the join actually
 //! depends on that persisted schema by mutating it on disk and showing the decode refuses.
 //!
-//! Like `tests/kani_obligations.rs`'s own pinned lane, this needs the real installed Kani 0.67.0
+//! Like `tests/it/kani_obligations.rs`'s own pinned lane, this needs the real installed Kani 0.67.0
 //! backend and is `#[ignore]`d by default. Run it with:
 //!
 //! ```text
-//! cargo test --locked --test kani_witness_join -- --ignored --test-threads=1
+//! cargo test --locked --test it kani_witness_join -- --ignored --test-threads=1
 //! ```
 //!
 //! `KaniObligationIdentity` and `ObligationBinding` are `Serialize`-only (no `Deserialize`), by
@@ -360,7 +360,7 @@ fn persisted_arguments(record: &Value) -> Vec<ObligationBinding> {
 ///
 /// Trace: IR-211.
 #[test]
-#[ignore = "kani lane: run serially through `cargo test --test kani_witness_join -- --ignored`"]
+#[ignore = "kani lane: run serially through `cargo test --test it kani_witness_join -- --ignored`"]
 fn ir_211_real_falsification_decodes_against_the_persisted_schema_and_mutation_refuses() {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let pins = installation.observe().expect("the backend is measurable");

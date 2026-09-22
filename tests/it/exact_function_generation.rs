@@ -4,7 +4,7 @@
 //! Generation-time coverage only (no execution of generated code):
 //! dispositions, refusal reasons, ordering/determinism, the manifest, and the
 //! static location map. Execution-level criteria (AC-2, AC-4, AC-5, AC-7,
-//! AC-9, AC-17) are covered by `tests/exact_function_agreement.rs`.
+//! AC-9, AC-17) are covered by `tests/it/exact_function_agreement.rs`.
 
 use std::{fs, path::PathBuf};
 
@@ -14,8 +14,10 @@ use quire_contract_codegen::{
 };
 use quire_contract_ir::CheckedPackageV2;
 
-// Duplicated per consumer (also `exact_function_agreement.rs`), matching this migration's
-// established convention for the exact_scalar/composite_equality families (IR-237).
+// Duplicated per consumer (also `exact_function_agreement.rs`) for structural consistency with
+// the exact_scalar/composite_equality families (IR-237). Unlike those two, this package.rs holds
+// no process-global state, so duplication here isn't load-bearing the way it is for them -- it's
+// kept for uniformity across the tests/it/*_support/package.rs pattern, not to avoid a hazard.
 #[allow(clippy::duplicate_mod)]
 #[path = "../exact_function_support/package.rs"]
 mod package;

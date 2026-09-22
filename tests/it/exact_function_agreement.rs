@@ -18,8 +18,10 @@
 //! repository's current pin, `21c507e`). This file's agreement legs are
 //! exactly two: the generated oracle and a direct Contract Runtime call.
 
-// Duplicated per consumer (also `exact_function_generation.rs`), matching this migration's
-// established convention for the exact_scalar/composite_equality families (IR-237).
+// Duplicated per consumer (also `exact_function_generation.rs`) for structural consistency with
+// the exact_scalar/composite_equality families (IR-237). Unlike those two, this package.rs holds
+// no process-global state, so duplication here isn't load-bearing the way it is for them -- it's
+// kept for uniformity across the tests/it/*_support/package.rs pattern, not to avoid a hazard.
 #[allow(clippy::duplicate_mod)]
 #[path = "../exact_function_support/package.rs"]
 mod package;

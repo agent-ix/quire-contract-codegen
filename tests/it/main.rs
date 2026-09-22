@@ -4,8 +4,8 @@
 //! links the crate and its dependencies once per `cargo test` invocation rather than once per
 //! former file.
 //!
-//! `common`, `composite_equality_support`, `exact_scalar_support` and `fixtures` stay at
-//! `tests/`, one level up from here; the modules that use them reach them with `#[path =
+//! `common`, `composite_equality_support`, `exact_scalar_support`, `exact_function_support` and
+//! `fixtures` stay at `tests/`, one level up from here; the modules that use them reach them with `#[path =
 //! "../..."]` or `include!("../...")` rather than moving them, so a file's relative-path literals
 //! changed only by the one extra path segment this directory adds.
 //!
@@ -28,6 +28,10 @@
 //! files pick independently, on the assumption of an isolated registry per binary. Centralizing
 //! them was tried and reverted -- it produced real cross-file code collisions and
 //! Mutex-poisoning cascades once both files' tests shared one process-wide registry.
+//!
+//! `exact_function_support/package.rs` is likewise `mod`-included by two former top-level files
+//! and kept duplicated, but for uniformity with the pattern above, not the same reason: it holds
+//! no process-global state, so nothing forces the duplication here -- it is not load-bearing.
 #[path = "../common/mod.rs"]
 pub(crate) mod common;
 
