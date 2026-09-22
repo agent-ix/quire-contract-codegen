@@ -34,6 +34,12 @@
 //! instead and never reaches it. V1 has no
 //! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so no frame
 //! harness is emitted.
+//!
+//! A render whose generated source would exceed [`crate::MAX_GENERATED_SOURCE_BYTES`] is refused
+//! as [`UnsupportedObligation::ResourceLimitExceeded`], and one that fits that ceiling but fails
+//! `syn::parse_file` is refused as [`UnsupportedObligation::InvalidGeneratedSyntax`]; the two
+//! grounds are checked in that order and are never conflated with the internal-invariant
+//! [`UnsupportedObligation::RenderFailed`] fallback.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -199,6 +205,7 @@ pub enum DerivedDomain {
 }
 
 /// Why a well-formed item has no harness.
+#[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum UnsupportedObligation {
@@ -241,19 +248,39 @@ pub enum UnsupportedObligation {
         /// The precondition.
         precondition: ClauseRef,
     },
-    /// The generated harness could not be assembled from an otherwise-successful render (for
-    /// example, its oracle function symbol could not be located in valid generated source); an
-    /// internal-invariant fallback distinct from either bounded-resource or syntax refusal below.
+    /// No harness could be produced for a reason that is not the bounded-resource or syntax
+    /// ground below. Three distinct causes still collapse to this one code: (1) an
+    /// internal-invariant fallback for an otherwise-successful render -- its oracle function
+    /// symbol could not be located in generated source, or an ABI binding [`abi`] already
+    /// resolved could not be found again when assembling the harness body; (2) the harness
+    /// identity or record struct failing to serialize as JSON; and (3) the
+    /// [`ObligationKind::Frame`] arm, an ordinary "no encoding for this obligation kind" refusal,
+    /// not an invariant violation. Distinct from [`Self::ResourceLimitExceeded`] and
+    /// [`Self::InvalidGeneratedSyntax`] below, which this generator does split out.
     RenderFailed,
     /// The generated harness source exceeds [`MAX_GENERATED_SOURCE_BYTES`], the same
     /// bounded-resource ceiling every other generator in this crate enforces. Distinct from
-    /// [`Self::InvalidGeneratedSyntax`]: a resource ceiling is not a generator defect (interface-001
-    /// `kani_slice.refusal`, FR-001-AC-4).
-    ResourceLimitExceeded,
+    /// [`Self::InvalidGeneratedSyntax`]: a resource ceiling is not a generator defect (FR-001-AC-4).
+    ResourceLimitExceeded {
+        /// The generated source's length in bytes.
+        bytes: usize,
+    },
     /// The generated harness source is within the size ceiling but failed `syn::parse_file` --
     /// invalid Rust rather than a resource ceiling. Distinct from [`Self::ResourceLimitExceeded`]
-    /// for the same reason (interface-001 `kani_slice.refusal`, FR-001-AC-4).
-    InvalidGeneratedSyntax,
+    /// for the same reason (FR-001-AC-4).
+    ///
+    /// Known narrowing: the analogous [`crate::KaniErrorCode::InvalidGeneratedSyntax`] is
+    /// classified `Inconclusive` by its `terminal_state` (a generator defect, not an honest
+    /// refusal), distinct from `ResourceLimitExceeded`'s `Unsupported`. [`ObligationDisposition`]
+    /// has no inconclusive-equivalent arm, so this variant is reported through the same
+    /// `ObligationDisposition::Unsupported` as every genuine refusal -- a real generator defect
+    /// reaching this ground is currently indistinguishable from an honest one. Restructuring
+    /// `ObligationDisposition`'s terminal-state semantics to carry that distinction is out of
+    /// scope for this change.
+    InvalidGeneratedSyntax {
+        /// The `syn::parse_file` error text.
+        error: String,
+    },
     /// An IR bound admits no value.
     UnsatisfiableBound {
         /// The bound node.
@@ -1602,7 +1629,7 @@ fn render(
                 .collect()
         }
     };
-    let abi = abi(&contexts).map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let abi = abi(&contexts)?;
     let exact_harness = format!("{}::{}", lowered.symbols.module, lowered.symbols.harness);
     let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
     let mut embedded = vec![&lowered.oracle];
@@ -1677,10 +1704,14 @@ fn render(
     }
     source.push_str(&body);
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(UnsupportedObligation::ResourceLimitExceeded);
+        return Err(UnsupportedObligation::ResourceLimitExceeded {
+            bytes: source.len(),
+        });
     }
-    if syn::parse_file(&source).is_err() {
-        return Err(UnsupportedObligation::InvalidGeneratedSyntax);
+    if let Err(error) = syn::parse_file(&source) {
+        return Err(UnsupportedObligation::InvalidGeneratedSyntax {
+            error: error.to_string(),
+        });
     }
     let rust = artifact(
         format!("src/generated/{}.rs", lowered.symbols.module),
@@ -1845,10 +1876,14 @@ mod {module} {{\n\
     source.push('\n');
     source.push_str(&body);
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(UnsupportedObligation::ResourceLimitExceeded);
+        return Err(UnsupportedObligation::ResourceLimitExceeded {
+            bytes: source.len(),
+        });
     }
-    if syn::parse_file(&source).is_err() {
-        return Err(UnsupportedObligation::InvalidGeneratedSyntax);
+    if let Err(error) = syn::parse_file(&source) {
+        return Err(UnsupportedObligation::InvalidGeneratedSyntax {
+            error: error.to_string(),
+        });
     }
     let rust = artifact(
         format!("src/generated/{}.rs", lowered.module_symbol),
@@ -2035,10 +2070,11 @@ mod {module} {{\n\
 
 #[cfg(test)]
 mod tests {
-    use serde_json::Value;
+    use serde_json::{json, Value};
 
     use super::*;
     use crate::OperationClaim;
+    use quire_contract_ir::{ClauseId, RequirementRef, EXECUTABLE_PROJECTION_FORMAT};
 
     /// Trace: FR-015-AC-1, TC-025.
     #[test]
@@ -2182,6 +2218,142 @@ mod tests {
                 panic!("quire.op.integer.add has a renderer")
             }
             Ok(_) => panic!("an arbitrary-precision Integer domain outside i64 must not lower"),
+        }
+    }
+
+    // ---- FND-003 regression: the byte-ceiling and syntax refusals split out of `RenderFailed`
+    // ----
+    //
+    // `render`'s two checks are ordered size-then-syntax, so an oversized source never reaches
+    // the syntax check; a legitimate IR fixture large enough to cross `MAX_GENERATED_SOURCE_BYTES`
+    // (1 MiB) would need pathological nesting this crate has no fixture builder for. Instead these
+    // tests run one real, minimal, legitimately-lowered precondition through `classify` -- the
+    // same path `negotiate_kani_obligations` uses -- and then mutate `ClauseOracle.source`, the
+    // exact field `render` concatenates into the generated text it measures and parses, before
+    // calling `render` directly. This exercises the real check, not a reimplementation of it.
+
+    fn render_probe_package() -> BoundPackage {
+        let package_id = "test/kani-obligations-render-probe";
+        let doc = json!({"document": "kani-obligations-render-probe", "revision": 1});
+        let span = |line: u64| {
+            json!({"start":{"source":doc,"line":line,"column":1,"byte_offset":line - 1},
+                "end":{"source":doc,"line":line,"column":2,"byte_offset":line}})
+        };
+        let owner = json!({"package": package_id, "requirement": "FR-200", "revision": 1});
+        let int_type = json!({"kind":"integer","domain":"signed","minimum":0,"maximum":1000,
+            "overflow":"reject"});
+        let read = |name: &str, line: u64| json!({"node":"value_reference","name":name,"observation":"current","source":span(line)});
+        let identity = |kind: &str, name: &str| {
+            json!({"node":"reference","identity":{"requirement":owner,"kind":kind,
+                "observation":"current","path":[name]}})
+        };
+        let amount =
+            json!({"name":"amount","kind":"input","value_type":int_type,"source":span(11)});
+        let balance =
+            json!({"name":"balance","kind":"state","value_type":int_type,"source":span(12)});
+        let expression = json!({"node":"compare","operator":"less_equal",
+            "left":read("amount", 13),"right":read("balance", 14),"source":span(11)});
+        let package_clause = json!({"id":"amount-within-balance","kind":"precondition",
+            "anchor":{"kind":"pre","operation":"withdraw"},"source":span(10),
+            "body":{"node":"composite",
+                "children":[identity("input","amount"),identity("state","balance")]}});
+        let binding = json!({"clause":{"requirement":owner,"clause":"amount-within-balance"},
+            "expression":{"owner":owner,"types":[],"values":[amount,balance],"functions":[],
+                "expression":expression,"expected_type":{"kind":"boolean"},
+                "execution_point":{"kind":"pre","operation":"withdraw"},"clause_root":true}});
+        let projection = json!({
+            "format": EXECUTABLE_PROJECTION_FORMAT,
+            "package": {"id":package_id,"schema_version":{"major":1,"minor":1},
+                "source":doc,"requirements":[{"id":"FR-200","revision":1,"source":span(1),
+                    "clauses":[package_clause]}]},
+            "bindings": [binding],
+        });
+        BoundPackage::from_json_bytes(&serde_json::to_vec(&projection).unwrap())
+            .unwrap_or_else(|diagnostics| panic!("render-probe fixture must bind: {diagnostics:?}"))
+    }
+
+    fn render_probe_clause() -> ClauseRef {
+        ClauseRef::new(
+            RequirementRef::parse("test/kani-obligations-render-probe", "FR-200", 1).unwrap(),
+            ClauseId::new("amount-within-balance").unwrap(),
+        )
+    }
+
+    fn render_probe_request<'a>(
+        items: &'a [ObligationItem<'a>],
+        pins: &'a KaniToolPins,
+    ) -> KaniObligationRequest<'a> {
+        KaniObligationRequest {
+            items,
+            subject_path: "render_probe::subject",
+            pins,
+            unwind: 4,
+            attestation: AttestationContext {
+                record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
+                candidate_revision: IR_CANDIDATE_REVISION,
+            },
+        }
+    }
+
+    /// Real, legitimately-lowered `LoweredClause` for the probe package's one precondition, with
+    /// its embedded oracle source intact for the caller to mutate.
+    fn render_probe_lowered<'a>(
+        request: &KaniObligationRequest<'a>,
+        item: &ObligationItem<'a>,
+    ) -> Box<LoweredClause<'a>> {
+        let Outcome::Lowered(lowered) = classify(request, item).outcome else {
+            panic!("render-probe precondition must lower to a harness");
+        };
+        lowered
+    }
+
+    /// Trace: FR-015-AC-13, TC-025.
+    #[test]
+    fn render_refuses_a_generated_source_over_the_byte_ceiling() {
+        let package = render_probe_package();
+        let clause_ref = render_probe_clause();
+        let items = [ObligationItem::BoundClause {
+            package: &package,
+            clause: &clause_ref,
+        }];
+        let pins = KaniToolPins::pinned();
+        let request = render_probe_request(&items, &pins);
+        let mut lowered = render_probe_lowered(&request, &items[0]);
+        // Oversized before the syntax check ever runs -- `render` checks byte length first, so
+        // garbage content alone is enough to exercise this ground, and it stays garbage on
+        // purpose to prove the length check short-circuits the syntax check.
+        lowered.oracle.source = "x".repeat(MAX_GENERATED_SOURCE_BYTES + 1);
+        match render(&request, &lowered) {
+            Err(UnsupportedObligation::ResourceLimitExceeded { bytes }) => {
+                assert!(bytes > MAX_GENERATED_SOURCE_BYTES);
+            }
+            Err(other) => panic!("expected ResourceLimitExceeded, got {other:?}"),
+            Ok(_) => panic!("an oversized generated source must not render"),
+        }
+    }
+
+    /// Trace: FR-015-AC-13, TC-025.
+    #[test]
+    fn render_refuses_a_generated_source_that_fails_to_parse() {
+        let package = render_probe_package();
+        let clause_ref = render_probe_clause();
+        let items = [ObligationItem::BoundClause {
+            package: &package,
+            clause: &clause_ref,
+        }];
+        let pins = KaniToolPins::pinned();
+        let request = render_probe_request(&items, &pins);
+        let mut lowered = render_probe_lowered(&request, &items[0]);
+        // Well under the byte ceiling, but not valid Rust: an unbalanced brace `syn::parse_file`
+        // rejects.
+        lowered.oracle.source = "fn broken( {".to_owned();
+        assert!(lowered.oracle.source.len() <= MAX_GENERATED_SOURCE_BYTES);
+        match render(&request, &lowered) {
+            Err(UnsupportedObligation::InvalidGeneratedSyntax { error }) => {
+                assert!(!error.is_empty());
+            }
+            Err(other) => panic!("expected InvalidGeneratedSyntax, got {other:?}"),
+            Ok(_) => panic!("a malformed generated source must not render"),
         }
     }
 }

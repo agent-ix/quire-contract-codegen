@@ -56,6 +56,7 @@ type: TestMatrix
 | FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned |
 | FR-015 | FR-015-AC-3 through FR-015-AC-6 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-7 through FR-015-AC-12 | TC-025 | ✅ Covered |
+| FR-015 | FR-015-AC-13 | TC-025 | ✅ Covered |
 | FR-016 | FR-016-AC-1 through FR-016-AC-7 | TC-026 | 🚧 Planned |
 | FR-017 | FR-017-AC-2 through FR-017-AC-5, FR-017-AC-8, FR-017-AC-9, FR-017-CON-2 | TC-027 | ✅ Covered |
 | FR-017 | FR-017-AC-1, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1 | TC-027 | 🚧 Planned |
