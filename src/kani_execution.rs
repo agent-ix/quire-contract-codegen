@@ -43,6 +43,7 @@ use crate::{
     kani::{sha256, KANI_BACKEND_VERSION},
     kani_obligations::{KaniObligationHarness, ObligationKind},
 };
+use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
 /// Execution evidence schema identity.
 pub const KANI_EXECUTION_SCHEMA: &str = "quire.codegen.kani-execution/v1";
@@ -404,6 +405,14 @@ pub enum KaniInconclusiveReason {
     /// Kani reported success without a readable, non-empty cover summary, so non-vacuity was
     /// not observed.
     MissingCoverSummary,
+    /// Kani's own `** <failed> of <total> failed` check summary reports zero SUCCESS checks:
+    /// no check in the obligation actually ran, so a `Proved`-looking run proved nothing. This
+    /// settles [`quire_contract_ir::kani::KaniOutcomeKind::Inconclusive`]'s
+    /// `kani_vacuous_proof` cause for the execution path, using the check count this module
+    /// itself reads from the backend's own printed output — never a generation-time value —
+    /// so it is an execution outcome this module observed, not a generation-time
+    /// classification reported as one (FR-017-CON-2).
+    VacuousProof,
     /// An unwinding assertion failed: the loop bound was exhausted before the property
     /// could be decided, so no failure is a counterexample.
     UnwindBoundExhausted,
@@ -794,8 +803,37 @@ const UNWINDING_ASSERTION: &str = "unwinding assertion";
 /// Classifies one run. Every generated harness, of every kind, carries exactly the covers that
 /// witness its assumptions are satisfiable, so success without every cover satisfied is vacuous
 /// and never `Verified`.
+///
+/// Before consulting the cover summary at all, a `** <failed> of <total> failed` line, when
+/// present, is reduced to a SUCCESS-check count (`total - failed`) and routed through
+/// [`KaniOutcome::proved_from_checks`] — the one implementation of "a proof backed by zero
+/// checks proved nothing" that this module and `quire-contract-ir` both had before this shared
+/// call, disagreeing (agent-ix/quire-contract-codegen#99). A verdict of `Inconclusive` under
+/// [`KaniOutcomeKind::Inconclusive`]'s `kani_vacuous_proof` cause is not reported as-is — that
+/// would violate FR-017-CON-2, which forbids reporting a generation-time classification as an
+/// execution outcome — it is mapped into this module's own [`KaniInconclusiveReason::VacuousProof`].
+/// The count it classifies is read from this run's own transcript, never from generation time, so
+/// the mapped result is still this module's own observation of what the backend printed, not a
+/// borrowed verdict. A transcript with no such line at all (older or differently shaped output)
+/// falls through unchanged to the cover-only classification below.
 fn classify_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
     if exited_successfully && text.contains(SUCCESS) && !text.contains(FAILURE) {
+        if let Some((failed, total_checks)) = checks_summary(text) {
+            let success_checks =
+                usize::try_from(total_checks.saturating_sub(failed)).unwrap_or(usize::MAX);
+            let checks_outcome = KaniOutcome::proved_from_checks(
+                success_checks,
+                "kani_execution::classify_run",
+                "checks_summary",
+            );
+            if checks_outcome.kind == KaniOutcomeKind::Inconclusive
+                && checks_outcome.code == "kani_vacuous_proof"
+            {
+                return KaniRunOutcome::Inconclusive {
+                    reason: KaniInconclusiveReason::VacuousProof,
+                };
+            }
+        }
         return match cover_summary(text) {
             Some((satisfied, total)) if total > 0 && satisfied == total => KaniRunOutcome::Verified,
             Some((satisfied, total)) if total > 0 => {
@@ -829,16 +867,47 @@ fn classify_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
     }
 }
 
-/// Reads Kani's `** <satisfied> of <total> cover properties satisfied[ (<n> unreachable)]` line.
+/// The parenthetical count Kani appends to a summary line, e.g. `(38 undetermined)`. Both known
+/// words are attested in this repository's own fixtures at different times: `unreachable` when
+/// Kani proves a check's location is never hit, `undetermined` when it can't decide (observed
+/// here on a checks line whose run hit an unwinding bound: `** 1 of 39 failed (38 undetermined)`).
+/// Kani's own summary vocabulary is one property of the tool, not of which line it appears on, so
+/// both [`checks_summary`] and [`cover_summary`] accept either rather than only the word each
+/// happened to be written against.
+const SUMMARY_TAIL_WORDS: [&str; 2] = ["unreachable", "undetermined"];
+
+fn summary_tail_count(tail: &str) -> Option<u64> {
+    let inner = tail.strip_prefix(" (")?.strip_suffix(')')?;
+    let (count, word) = inner.split_once(' ')?;
+    if !SUMMARY_TAIL_WORDS.contains(&word) {
+        return None;
+    }
+    count.parse().ok()
+}
+
+/// Reads Kani's `** <failed> of <total> failed[ (<n> unreachable|undetermined)]` check summary
+/// line, giving `(failed, total)`. Distinct from [`cover_summary`]'s line: this one's suffix is
+/// `" failed"`, that one's is `" cover properties satisfied"`, so the two never match the same
+/// line.
+fn checks_summary(text: &str) -> Option<(u64, u64)> {
+    text.lines().find_map(|line| {
+        let rest = line.trim().strip_prefix("** ")?;
+        let (counts, tail) = rest.split_once(" failed")?;
+        let tail_is_summary = tail.is_empty() || summary_tail_count(tail).is_some();
+        if !tail_is_summary {
+            return None;
+        }
+        let (failed, total) = counts.split_once(" of ")?;
+        Some((failed.parse().ok()?, total.parse().ok()?))
+    })
+}
+
+/// Reads Kani's `** <satisfied> of <total> cover properties satisfied[ (<n> unreachable|undetermined)]` line.
 fn cover_summary(text: &str) -> Option<(u64, u64)> {
     text.lines().find_map(|line| {
         let rest = line.trim().strip_prefix("** ")?;
         let (counts, tail) = rest.split_once(" cover properties satisfied")?;
-        let tail_is_summary = tail.is_empty()
-            || tail
-                .strip_prefix(" (")
-                .and_then(|inner| inner.strip_suffix(" unreachable)"))
-                .is_some_and(|count| count.parse::<u64>().is_ok());
+        let tail_is_summary = tail.is_empty() || summary_tail_count(tail).is_some();
         if !tail_is_summary {
             return None;
         }
@@ -992,6 +1061,79 @@ mod tests {
                 "{text}"
             );
         }
+    }
+
+    /// FR-017-AC-4 does not yet name the `** <failed> of <total> failed` checks line, so this
+    /// test binds itself to no criterion rather than claim one it does not establish — mirroring
+    /// `agent-ix/quire-contract-ir`'s own deliberately-untraced
+    /// `a_proved_run_with_zero_success_checks_settles_inconclusive_as_vacuous`, which this test
+    /// is the execution-path counterpart of.
+    ///
+    /// Before this change, `classify_run` read only the cover-properties line, so a transcript
+    /// reporting zero total checks (`** 0 of 0 failed`: no check in the obligation ran at all)
+    /// alongside a satisfied 1-of-1 cover and `VERIFICATION:- SUCCESSFUL` classified `Verified`
+    /// — a proof backed by zero checks, reported as proved. Routed through
+    /// `KaniOutcome::proved_from_checks` (agent-ix/quire-contract-codegen#99), the same
+    /// transcript is `Inconclusive` under the new `VacuousProof` reason instead.
+    #[test]
+    fn a_zero_total_checks_summary_is_inconclusive_not_verified_even_with_every_cover_satisfied() {
+        let vacuous_by_checks = "SUMMARY:\n ** 0 of 0 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
+        assert_eq!(
+            classify_run(true, vacuous_by_checks),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::VacuousProof
+            },
+            "zero total checks must not be Verified merely because covers were satisfied"
+        );
+
+        // A nonzero, fully-successful checks line does not trip the new gate: the existing
+        // cover-based classification still governs, unchanged.
+        let genuinely_verified = "SUMMARY:\n ** 0 of 5 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
+        assert_eq!(
+            classify_run(true, genuinely_verified),
+            KaniRunOutcome::Verified
+        );
+
+        // A transcript with no checks-failed line at all (older or differently shaped output) is
+        // unaffected: the cover-only classification still applies exactly as before.
+        let no_checks_line = " ** 1 of 1 cover properties satisfied\nVERIFICATION:- SUCCESSFUL";
+        assert_eq!(classify_run(true, no_checks_line), KaniRunOutcome::Verified);
+    }
+
+    /// The checks-failed line's parenthetical is not always `unreachable`: this repository's own
+    /// `tc_027_an_exhausted_unwind_bound_is_inconclusive_not_falsified` fixture below carries a
+    /// real `(38 undetermined)` suffix on a *different* (failed) transcript. Before this test,
+    /// `checks_summary` only recognised `unreachable` — a zero-success `SUCCESS` transcript whose
+    /// parenthetical instead said `undetermined` would fail to parse, silently fall through past
+    /// the vacuity gate entirely, and be classified purely from the (here, satisfied) cover line
+    /// as `Verified`, the exact defect agent-ix/quire-contract-codegen#99 exists to close.
+    #[test]
+    fn a_checks_summary_with_an_undetermined_parenthetical_still_routes_through_the_vacuity_gate() {
+        let vacuous_with_undetermined_suffix = "SUMMARY:\n ** 0 of 0 failed (0 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
+        assert_eq!(
+            classify_run(true, vacuous_with_undetermined_suffix),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::VacuousProof
+            },
+            "an `undetermined` parenthetical must not be treated as an unparseable line"
+        );
+
+        // Nonzero success checks with an `undetermined` parenthetical still passes through to
+        // `Verified`, unaffected — the parenthetical is metadata, not itself a check outcome.
+        let genuinely_verified_with_undetermined_suffix = "SUMMARY:\n ** 0 of 5 failed (2 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
+        assert_eq!(
+            classify_run(true, genuinely_verified_with_undetermined_suffix),
+            KaniRunOutcome::Verified
+        );
+
+        // A word this module does not recognise still falls through to the cover-only path,
+        // exactly like having no parenthetical at all — parsing stays fail-closed rather than
+        // guessing at Kani's full vocabulary.
+        let unrecognised_word = "SUMMARY:\n ** 0 of 0 failed (0 somethingelse)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
+        assert_eq!(
+            classify_run(true, unrecognised_word),
+            KaniRunOutcome::Verified
+        );
     }
 
     /// An exhausted unwind bound is inconclusive even when Kani prints a playback. The output
