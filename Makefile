@@ -141,8 +141,18 @@ deny:
 cargo-audit:
 	$(CARGO) audit --ignore RUSTSEC-2026-0009
 
+# Self-test first (#119): scripts/check_unsafe_comments.sh had no coverage of
+# its own, and a prior draft of it silently stopped flagging real unsafe
+# blocks in the exact escape-adjacent shapes this exercises, with
+# `audit-unsafe` staying green throughout (agent-ix/quire-contract-codegen#118).
+# The fixture corpus lives outside every root the scanner scans, so it never
+# makes this target red on the repository's own code.
+.PHONY: audit-unsafe-selftest
+audit-unsafe-selftest:
+	$(BASH) scripts/test_check_unsafe_comments.sh
+
 .PHONY: audit-unsafe
-audit-unsafe:
+audit-unsafe: audit-unsafe-selftest
 	$(BASH) scripts/check_unsafe_comments.sh
 
 .PHONY: rustdoc
