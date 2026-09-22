@@ -241,8 +241,19 @@ pub enum UnsupportedObligation {
         /// The precondition.
         precondition: ClauseRef,
     },
-    /// The generated harness failed its own size or syntax check.
+    /// The generated harness could not be assembled from an otherwise-successful render (for
+    /// example, its oracle function symbol could not be located in valid generated source); an
+    /// internal-invariant fallback distinct from either bounded-resource or syntax refusal below.
     RenderFailed,
+    /// The generated harness source exceeds [`MAX_GENERATED_SOURCE_BYTES`], the same
+    /// bounded-resource ceiling every other generator in this crate enforces. Distinct from
+    /// [`Self::InvalidGeneratedSyntax`]: a resource ceiling is not a generator defect (interface-001
+    /// `kani_slice.refusal`, FR-001-AC-4).
+    ResourceLimitExceeded,
+    /// The generated harness source is within the size ceiling but failed `syn::parse_file` --
+    /// invalid Rust rather than a resource ceiling. Distinct from [`Self::ResourceLimitExceeded`]
+    /// for the same reason (interface-001 `kani_slice.refusal`, FR-001-AC-4).
+    InvalidGeneratedSyntax,
     /// An IR bound admits no value.
     UnsatisfiableBound {
         /// The bound node.
@@ -579,28 +590,24 @@ pub fn negotiate_kani_obligations(
         } else {
             match state.outcome {
                 Outcome::Lowered(lowered) => match render(request, &lowered) {
-                    Some(harness) => {
+                    Ok(harness) => {
                         let symbol = harness.identity.harness_symbol.clone();
                         harnesses.push(harness);
                         ObligationDisposition::Supported {
                             harness_symbol: symbol,
                         }
                     }
-                    None => ObligationDisposition::Unsupported {
-                        reason: UnsupportedObligation::RenderFailed,
-                    },
+                    Err(reason) => ObligationDisposition::Unsupported { reason },
                 },
                 Outcome::LoweredScalar(lowered) => match render_scalar(request, &lowered) {
-                    Some(harness) => {
+                    Ok(harness) => {
                         let symbol = harness.identity.harness_symbol.clone();
                         scalar_harnesses.push(harness);
                         ObligationDisposition::Supported {
                             harness_symbol: symbol,
                         }
                     }
-                    None => ObligationDisposition::Unsupported {
-                        reason: UnsupportedObligation::RenderFailed,
-                    },
+                    Err(reason) => ObligationDisposition::Unsupported { reason },
                 },
                 other => other.disposition_without_harness(),
             }
@@ -1584,7 +1591,7 @@ fn call(oracle: &ClauseOracle, context: SlotContext, abi: &Abi) -> Option<String
 fn render(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredClause<'_>,
-) -> Option<KaniObligationHarness> {
+) -> Result<KaniObligationHarness, UnsupportedObligation> {
     let contexts = match lowered.kind {
         ObligationKind::Precondition => contract_contexts(lowered),
         ObligationKind::Postcondition | ObligationKind::Invariant | ObligationKind::Frame => {
@@ -1595,7 +1602,7 @@ fn render(
                 .collect()
         }
     };
-    let abi = abi(&contexts).ok()?;
+    let abi = abi(&contexts).map_err(|_| UnsupportedObligation::RenderFailed)?;
     let exact_harness = format!("{}::{}", lowered.symbols.module, lowered.symbols.harness);
     let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
     let mut embedded = vec![&lowered.oracle];
@@ -1638,14 +1645,18 @@ fn render(
         options,
         runtime_revision: RUNTIME_REVISION,
     };
-    let identity_json = serde_json::to_string(&identity).ok()?;
+    let identity_json =
+        serde_json::to_string(&identity).map_err(|_| UnsupportedObligation::RenderFailed)?;
     let identity_sha256 = sha256(identity_json.as_bytes());
     let body = match lowered.kind {
-        ObligationKind::Precondition => render_precondition(lowered, &abi)?,
-        ObligationKind::Postcondition | ObligationKind::Invariant => {
-            render_contract(request.subject_path, lowered, &abi)?
+        ObligationKind::Precondition => {
+            render_precondition(lowered, &abi).ok_or(UnsupportedObligation::RenderFailed)?
         }
-        ObligationKind::Frame => return None,
+        ObligationKind::Postcondition | ObligationKind::Invariant => {
+            render_contract(request.subject_path, lowered, &abi)
+                .ok_or(UnsupportedObligation::RenderFailed)?
+        }
+        ObligationKind::Frame => return Err(UnsupportedObligation::RenderFailed),
     };
     let clause = lowered.clause.identity();
     let mut source = format!(
@@ -1665,8 +1676,11 @@ fn render(
         source.push('\n');
     }
     source.push_str(&body);
-    if source.len() > MAX_GENERATED_SOURCE_BYTES || syn::parse_file(&source).is_err() {
-        return None;
+    if source.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(UnsupportedObligation::ResourceLimitExceeded);
+    }
+    if syn::parse_file(&source).is_err() {
+        return Err(UnsupportedObligation::InvalidGeneratedSyntax);
     }
     let rust = artifact(
         format!("src/generated/{}.rs", lowered.symbols.module),
@@ -1678,13 +1692,14 @@ fn render(
         rust_path: &rust.path,
         rust_sha256: &rust.sha256,
     };
-    let mut record_json = serde_json::to_string(&record).ok()?;
+    let mut record_json =
+        serde_json::to_string(&record).map_err(|_| UnsupportedObligation::RenderFailed)?;
     record_json.push('\n');
     let record = artifact(
         format!("kani-obligations/{}.json", lowered.symbols.module),
         record_json,
     );
-    Some(KaniObligationHarness {
+    Ok(KaniObligationHarness {
         identity,
         identity_sha256,
         rust,
@@ -1728,7 +1743,7 @@ struct HarnessRecord<'a> {
 fn render_scalar(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredScalarClaim,
-) -> Option<KaniScalarObligationHarness> {
+) -> Result<KaniScalarObligationHarness, UnsupportedObligation> {
     let exact_harness = format!("{}::{}", lowered.module_symbol, lowered.harness_symbol);
     let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
     let lower = i64_literal(lowered.lower);
@@ -1813,7 +1828,8 @@ mod {module} {{\n\
         options,
         runtime_revision: RUNTIME_REVISION,
     };
-    let identity_json = serde_json::to_string(&identity).ok()?;
+    let identity_json =
+        serde_json::to_string(&identity).map_err(|_| UnsupportedObligation::RenderFailed)?;
     let identity_sha256 = sha256(identity_json.as_bytes());
     let mut source = format!(
         "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
@@ -1828,8 +1844,11 @@ mod {module} {{\n\
     source.push_str(&lowered.oracle_source);
     source.push('\n');
     source.push_str(&body);
-    if source.len() > MAX_GENERATED_SOURCE_BYTES || syn::parse_file(&source).is_err() {
-        return None;
+    if source.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(UnsupportedObligation::ResourceLimitExceeded);
+    }
+    if syn::parse_file(&source).is_err() {
+        return Err(UnsupportedObligation::InvalidGeneratedSyntax);
     }
     let rust = artifact(
         format!("src/generated/{}.rs", lowered.module_symbol),
@@ -1841,13 +1860,14 @@ mod {module} {{\n\
         rust_path: &rust.path,
         rust_sha256: &rust.sha256,
     };
-    let mut record_json = serde_json::to_string(&record).ok()?;
+    let mut record_json =
+        serde_json::to_string(&record).map_err(|_| UnsupportedObligation::RenderFailed)?;
     record_json.push('\n');
     let record = artifact(
         format!("kani-obligations/{}.json", lowered.module_symbol),
         record_json,
     );
-    Some(KaniScalarObligationHarness {
+    Ok(KaniScalarObligationHarness {
         identity,
         identity_sha256,
         rust,
