@@ -15,7 +15,8 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    generate_bounded_kani_corpus_case, replay_codegen_counterexample, BoundedCorpusRequest,
+    classify_run, generate_bounded_kani_corpus_case, replay_codegen_counterexample,
+    BoundedCorpusRequest, KaniRunOutcome,
 };
 use quire_contract_ir::{
     kani::{
@@ -368,8 +369,20 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .expect("generated check-cfg declaration should be writable");
+    // -Z concrete-playback / --concrete-playback print are required for classify_run below to
+    // see a playback block at all: without them Kani never prints one, even for a genuine
+    // falsification, and every run classifies Inconclusive rather than Falsified. Same flags
+    // adapter_options (src/kani.rs) generates for every production harness.
     let output = Command::new("cargo")
-        .args(["kani", "--harness", "corpus_case_collection"])
+        .args([
+            "kani",
+            "-Z",
+            "concrete-playback",
+            "--harness",
+            "corpus_case_collection",
+            "--concrete-playback",
+            "print",
+        ])
         .env("CARGO_TARGET_DIR", directory.0.join("target"))
         .current_dir(&directory.0)
         .output()
@@ -385,12 +398,20 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
     );
     // A nonzero exit alone does not prove the harness ran and was falsified: a harness-filter
     // mismatch ("error: no harnesses matched the harness filter") also exits nonzero under
-    // Kani 0.67.0, and would pass the assertion above vacuously. Require the backend's own
-    // verification-failed banner so this test cannot pass on a filter that matched nothing.
+    // Kani 0.67.0, and would pass a raw-banner check vacuously -- and CBMC prints the identical
+    // "VERIFICATION:- FAILED" banner on its own out-of-memory abort, where zero properties were
+    // ever decided (IR-220). Route through the same classifier production uses so any run that
+    // did not actually decide a property -- OOM, unwind exhaustion, filter mismatch, no verdict
+    // at all -- fails this test instead of passing it.
     assert!(
-        text.contains("VERIFICATION:- FAILED"),
-        "expected a genuine Kani verification failure (VERIFICATION:- FAILED), not merely a \
-         nonzero exit, which a harness-filter mismatch also produces; got:\n{text}"
+        matches!(
+            classify_run(output.status.success(), &text),
+            KaniRunOutcome::Falsified { .. }
+        ),
+        "expected a genuine Kani falsification (KaniRunOutcome::Falsified), not merely a \
+         nonzero exit or a VERIFICATION:- FAILED banner, either of which an inconclusive run \
+         (a harness-filter mismatch, CBMC out-of-memory, or an exhausted unwind bound) also \
+         produces; got:\n{text}"
     );
     let agreement = replay_codegen_counterexample(packet, |native_input| {
         quire_contract_ir::kani::KaniOutcome::counterexample(

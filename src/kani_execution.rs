@@ -816,7 +816,11 @@ const UNWINDING_ASSERTION: &str = "unwinding assertion";
 /// the mapped result is still this module's own observation of what the backend printed, not a
 /// borrowed verdict. A transcript with no such line at all (older or differently shaped output)
 /// falls through unchanged to the cover-only classification below.
-fn classify_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
+///
+/// `pub` so a test asserting "this transcript proves falsification" can route through the same
+/// classifier production uses (IR-220), instead of re-implementing banner parsing that misreads
+/// an inconclusive run — CBMC out-of-memory among them — as a decided failure.
+pub fn classify_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
     if exited_successfully && text.contains(SUCCESS) && !text.contains(FAILURE) {
         if let Some((failed, total_checks)) = checks_summary(text) {
             let success_checks =
@@ -1156,6 +1160,45 @@ mod tests {
             "Check 1: f.unwind.1\n\t - Status: SUCCESS\n\t - Description: \"unwinding assertion loop 0\"\n ** 1 of 1 cover properties satisfied\nVERIFICATION:- SUCCESSFUL\n{COVER_PLAYBACK}"
         );
         assert_eq!(classify_run(true, &listed), KaniRunOutcome::Verified);
+    }
+
+    /// CBMC's own out-of-memory abort prints the identical `VERIFICATION:- FAILED` banner a real
+    /// counterexample does, with zero properties ever decided. This is the exact transcript
+    /// measured running the IR-217 scalar harness for node 1001 under `cargo kani --unwind 16`
+    /// capped at 12 GB (IR-220): before this change, `bounded_kani_corpus.rs`'s own test
+    /// asserted on this banner directly and would have reported success on a run that checked
+    /// nothing. Mutation: this transcript, fed to the old `text.contains("VERIFICATION:-
+    /// FAILED")` assertion, passes; fed to `classify_run`, it must not be `Falsified`.
+    ///
+    /// Trace: IR-220
+    #[test]
+    fn ir_220_a_cbmc_out_of_memory_abort_is_inconclusive_not_falsified() {
+        let out_of_memory = "Runtime Symex: 294.218s\n\
+             size of program expression: 980453 steps\n\
+             Generated 41018 VCC(s), 12121 remaining after simplification\n\
+             Runtime Convert SSA: 15.3149s\n\
+             Running propositional reduction\n\
+             Post-processing\n\
+             Out of memory\n\
+             \n\
+             CBMC failed with status 6\n\
+             VERIFICATION:- FAILED\n\
+             \n\
+             Manual Harness Summary:\n\
+             Verification failed for - kob_n1001::proof\n\
+             Complete - 0 successfully verified harnesses, 1 failures, 1 total.\n";
+        assert!(
+            out_of_memory.contains("VERIFICATION:- FAILED"),
+            "fixture must reproduce the banner the old assertion keyed on"
+        );
+        assert_eq!(
+            classify_run(false, out_of_memory),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::FailedWithoutCounterexample
+            },
+            "an out-of-memory abort prints no concrete playback, so classify_run must not report \
+             Falsified for a run that decided zero properties"
+        );
     }
 
     /// Only the committed pins pass; each field is compared.
