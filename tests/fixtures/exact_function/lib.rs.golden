@@ -108,7 +108,7 @@ pub fn checked_package() -> Result<rt::CheckedPackage, Vec<rt::CheckRefusal>> {
 }
 
 /// Node `3f8f2f1d7e5549267abab3a7484ee8f8e791fa1dd14466feab3fd62cc00041ce`: applies `add_fn`.
-pub fn oracle_call_3f8f2f1d7e5549267abab3a7484ee8f8e791fa1dd14466feab3fd62cc00041ce(
+pub fn oracle_call_6141d15f9113111379a033944cc53f96db7ccf41f9d711ab5229fcb700ab34b2(
     package: &rt::CheckedPackage,
     arguments: Vec<rt::Value>,
     objects: &rt::ObjectEnvironment,
@@ -120,7 +120,7 @@ pub fn oracle_call_3f8f2f1d7e5549267abab3a7484ee8f8e791fa1dd14466feab3fd62cc0004
 }
 
 /// Node `3f8f2f1d7e5549267abab3a7484ee8f8e791fa1dd14466feab3fd62cc00041ce`: applies `eq_fn`.
-pub fn oracle_call_3f8f2f1d7e5549267abab3a7484ee8f8e791fa1dd14466feab3fd62cc00041ce(
+pub fn oracle_call_2078cd5c6edc895d4458b505d6b8e2be57153d0835318d2eb5753f043c8569e5(
     package: &rt::CheckedPackage,
     arguments: Vec<rt::Value>,
     objects: &rt::ObjectEnvironment,
@@ -132,7 +132,7 @@ pub fn oracle_call_3f8f2f1d7e5549267abab3a7484ee8f8e791fa1dd14466feab3fd62cc0004
 }
 
 /// Node `499176481ed7bb96ceee68d7a9be5f7647aa8244cdb38bbea07410c39ac4984f`: applies `call_fn`.
-pub fn oracle_call_499176481ed7bb96ceee68d7a9be5f7647aa8244cdb38bbea07410c39ac4984f(
+pub fn oracle_call_3caf643272fc58436ac5fa1922284792462c74d866b0b261101e04cd0b46a05d(
     package: &rt::CheckedPackage,
     arguments: Vec<rt::Value>,
     objects: &rt::ObjectEnvironment,
@@ -144,7 +144,7 @@ pub fn oracle_call_499176481ed7bb96ceee68d7a9be5f7647aa8244cdb38bbea07410c39ac49
 }
 
 /// Node `6dfedb5fb75eb1beed93c4342f8808f429f059cb79d7e1a4978d2231d863bdf5`: applies `eq_fn`.
-pub fn oracle_call_6dfedb5fb75eb1beed93c4342f8808f429f059cb79d7e1a4978d2231d863bdf5(
+pub fn oracle_call_0b785af390f267bfde0c1bc2ff92bb5128447fc32879a587d531baa5167501ab(
     package: &rt::CheckedPackage,
     arguments: Vec<rt::Value>,
     objects: &rt::ObjectEnvironment,
@@ -156,7 +156,7 @@ pub fn oracle_call_6dfedb5fb75eb1beed93c4342f8808f429f059cb79d7e1a4978d2231d863b
 }
 
 /// Node `b9010ba2bf1e0279c30a9c2fa8c70cab0649f6b1161a2f538067374f55460f3d`: applies `unrelated_fn`.
-pub fn oracle_call_b9010ba2bf1e0279c30a9c2fa8c70cab0649f6b1161a2f538067374f55460f3d(
+pub fn oracle_call_6f750f11ff8882248261920f237ff4e983872be03f4556533a734d5ed0a3e6d7(
     package: &rt::CheckedPackage,
     arguments: Vec<rt::Value>,
     objects: &rt::ObjectEnvironment,

@@ -922,6 +922,7 @@ pub fn generate_exact_function_oracles(
                 &function_index,
                 &package_refusal,
                 &lowering.package_id,
+                &key,
                 item,
                 record,
             ) {
@@ -985,6 +986,7 @@ fn item_disposition(
     function_index: &BTreeMap<&str, usize>,
     package_refusal: &Option<String>,
     package_id: &CheckedSemanticId,
+    key: &ItemKey,
     item: &ExactFunctionItem,
     record: &CompleteLoweringRecordV2,
 ) -> Result<(String, GeneratedExactFunctionClaim), ExactFunctionRefusal> {
@@ -1028,7 +1030,7 @@ fn item_disposition(
             cause: cause.clone(),
         });
     }
-    let symbol = format!("call_{}", node.node.node_id.digest);
+    let symbol = format!("call_{}", key.digest());
     Ok((
         symbol.clone(),
         GeneratedExactFunctionClaim {
@@ -1072,6 +1074,45 @@ impl ItemKey {
                 .get(item.function.as_str())
                 .map(|id| (*id).clone()),
             argument_node_ids: item.argument_node_ids.clone(),
+        }
+    }
+
+    /// A digest over exactly this key -- the call node id, the applied
+    /// function's declaring node id (or its absence), then each argument
+    /// operand's source node id, in key order -- used as the emitted
+    /// symbol's disambiguator. Two items sharing one `call` node id but
+    /// naming different functions (a real, valid request shape: one `call`
+    /// expression's node identity says nothing about which function an
+    /// item declares it applies) therefore always render as two distinct
+    /// Rust functions; deriving the symbol from `call_node_id` alone would
+    /// make them collide into one duplicate `pub fn` definition, which
+    /// would not even compile.
+    fn digest(&self) -> String {
+        let mut hasher = Sha256::new();
+        hash_node_id(&mut hasher, &self.call_node_id);
+        hash_optional_node_id(&mut hasher, self.function_node_id.as_ref());
+        hasher.update((self.argument_node_ids.len() as u64).to_le_bytes());
+        for argument in &self.argument_node_ids {
+            hash_node_id(&mut hasher, argument);
+        }
+        let digest = hasher.finalize();
+        digest.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+}
+
+fn hash_node_id(hasher: &mut Sha256, node_id: &CheckedNodeId) {
+    hasher.update((node_id.domain.len() as u64).to_le_bytes());
+    hasher.update(node_id.domain.as_bytes());
+    hasher.update((node_id.digest.len() as u64).to_le_bytes());
+    hasher.update(node_id.digest.as_bytes());
+}
+
+fn hash_optional_node_id(hasher: &mut Sha256, node_id: Option<&CheckedNodeId>) {
+    match node_id {
+        None => hasher.update([0_u8]),
+        Some(node_id) => {
+            hasher.update([1_u8]);
+            hash_node_id(hasher, node_id);
         }
     }
 }
