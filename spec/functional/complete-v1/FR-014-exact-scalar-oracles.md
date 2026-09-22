@@ -134,6 +134,11 @@ literals. This encoding is defined by this generator, not by V2:
   that equal requests in any order produce identical bytes.
 - If the generated source exceeds its size ceiling, then the generator shall
   return a typed error and no partial output.
+- If lowering a requested node's closure consumes more than 65,536 metered work
+  units, then the generator shall refuse the item as `LoweringWorkExhausted`,
+  naming the ceiling and the counter at the failed charge, contribute no
+  generated function for it, and leave every other item's disposition
+  unaffected.
 
 ## Acceptance Criteria
 
@@ -153,6 +158,7 @@ literals. This encoding is defined by this generator, not by V2:
 | FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound; nor is a descriptor naming an operation the catalogue has no entry for. | Test (TC-024) |
 | FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition is absent from that node's `operation.laws`, or whose mode value disagrees with that node's `operation.mode`, is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |
 | FR-014-AC-14 | A claim whose node this generator never inspected — a duplicate copy, or a record that never lowered — or inspected and refused with a typed reason, marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |
+| FR-014-AC-15 | A requested item whose node closure exceeds the 65,536-unit lowering work ceiling is refused as `LoweringWorkExhausted`, naming the ceiling and the consumed counter, contributes no generated function, and leaves every other item's disposition unaffected. | Test (TC-024) |
 
 ## Dependencies
 

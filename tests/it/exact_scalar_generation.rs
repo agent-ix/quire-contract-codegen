@@ -1018,7 +1018,7 @@ fn work_exhausted_fixture() -> (CheckedPackageV2, ExactScalarItem) {
     )
 }
 
-/// Trace: FR-014-AC-3, TC-024.
+/// Trace: FR-014-AC-3, FR-014-AC-15, TC-024.
 #[test]
 fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
     let (package, item) = work_exhausted_fixture();
