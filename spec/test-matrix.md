@@ -39,6 +39,7 @@ type: TestMatrix
 | FR-006 | FR-006-AC-5 | TC-012 | ✅ Covered |
 | FR-006 | FR-006-AC-6 | TC-013 | ✅ Covered |
 | FR-006 | FR-006-AC-7 | TC-013 | ✅ Covered |
+| FR-006 | FR-006-AC-8 through FR-006-AC-11 | TC-032 | ✅ Covered |
 | FR-008 | FR-008-AC-1 through FR-008-AC-5, FR-008-CON-2 | TC-017 | ✅ Covered |
 | FR-008 | FR-008-CON-1 | Inspection | ✅ Covered |
 | FR-009 | FR-009-AC-1 through FR-009-AC-6 | TC-018 | ✅ Covered |
@@ -321,3 +322,20 @@ local evidence producer for TC-003, TC-005, TC-014, and the FR-003 portion of TC
 local pre-review evidence for the publication portion of TC-002. TC-008 through TC-013 are backed by
 `tests/shared_assurance.rs`, whose `/// Trace:` comments are what Quire's census reads. SR-016 and
 SR-017 record the closing code and gap reviews for TC-017 through TC-022.
+
+FR-006-AC-8 through FR-006-AC-11 are `✅ Covered` by TC-032, backed by the eight tests in
+`examples/generation_conformance.rs`'s own `#[cfg(test)]` module, which `[[example]] test = true`
+makes `cargo test` build and run and which now carry `/// Trace:` comments like every other row in
+this census. Two limits are stated rather than papered over. The census in FR-006-AC-10 is textual,
+so an early `return` in `main` is outside it; closing that behaviourally needs a deliberately failing
+corpus row, which would be a fault-injection affordance in an evidence producer. And the end-to-end
+run in FR-006-AC-11 asserts exit 0 against a passing corpus, which a corpus that produced nothing
+would also yield — the ten-row floor on the emitted JSONL under TC-009 is what refuses that, not
+this row.
+
+`cargo test --locked --no-fail-fast` and `cargo test --example generation_conformance` both reach
+these eight. A stock fail-fast `cargo test` does not, because it aborts at `shared_assurance`
+(agent-ix/quire-contract-codegen#121) or `kani_execution`
+(agent-ix/quire-contract-codegen#128) first, both of which precede the example. That is pre-existing
+drift in those two binaries rather than a gap in this row, and `make test`, `make msrv` and `make ci`
+observe these tests once it clears.

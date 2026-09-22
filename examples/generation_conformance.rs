@@ -1247,6 +1247,8 @@ mod tests {
     /// producer, not a verdict about the corpus, so it must be loud. Without
     /// this, a serialization change that renamed or retyped the field would
     /// make every row unreadable and the whole run classify as `0`.
+    ///
+    /// Trace: TC-032, FR-006-AC-9
     #[test]
     #[should_panic(expected = "must carry a string `outcome`")]
     fn a_line_without_a_string_outcome_panics_rather_than_reading_as_a_pass() {
@@ -1294,6 +1296,8 @@ mod tests {
     ///
     /// The pre-module slice cannot match this test's own expected strings,
     /// because they live inside the module the slice stops at.
+    ///
+    /// Trace: TC-032, FR-006-AC-10
     #[test]
     fn main_reaches_the_process_exit_status_only_through_the_classifier() {
         const MODULE: &str = "\n#[cfg(test)]";
@@ -1336,18 +1340,21 @@ mod tests {
         );
     }
 
+    /// Trace: TC-032, FR-006-AC-8
     #[test]
     fn all_rows_passing_exits_zero() {
         let rows = vec![published("pass"), published("pass")];
         assert_eq!(exit_code(&rows), 0);
     }
 
+    /// Trace: TC-032, FR-006-AC-8
     #[test]
     fn one_failing_row_exits_one() {
         let rows = vec![published("pass"), published("fail")];
         assert_eq!(exit_code(&rows), 1);
     }
 
+    /// Trace: TC-032, FR-006-AC-8
     #[test]
     fn one_vacuous_row_exits_two() {
         let rows = vec![published("pass"), published("vacuous")];
@@ -1359,6 +1366,8 @@ mod tests {
     /// fail in `exit_code` would flip this test red while leaving the
     /// single-outcome tests above green, which is exactly why this case has
     /// to be asserted on its own rather than assumed from the other two.
+    ///
+    /// Trace: TC-032, FR-006-AC-8
     #[test]
     fn failing_and_vacuous_together_exits_one_not_two() {
         let rows = vec![published("pass"), published("fail"), published("vacuous")];
@@ -1378,6 +1387,8 @@ mod tests {
     /// corpus that shrank to nothing. The end-to-end test below does not
     /// close it and an earlier version of this comment wrongly said it did:
     /// that test asserts exit 0, and an empty corpus produces exit 0 too.
+    ///
+    /// Trace: TC-032, FR-006-AC-8
     #[test]
     fn no_rows_exits_zero() {
         let rows: Vec<String> = Vec::new();
@@ -1428,6 +1439,8 @@ mod tests {
     /// via `assurance-inputs` by the time this runs. It is ordinary
     /// compilation of the same already-reviewed source, not an evidence
     /// producer manufacturing its own input.
+    ///
+    /// Trace: TC-032, FR-006-AC-11
     #[test]
     fn built_example_binary_exits_zero_against_the_real_corpus() {
         let harness = std::env::current_exe().expect("current_exe resolves for a running test");

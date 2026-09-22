@@ -46,6 +46,8 @@ retention store, audit store, anchor file, or aggregate verdict of its own.
 - Every consumer of a producer result shall refuse to create that result.
 - Every consumer of an absent producer result shall name the target that makes it.
 - The assurance driver shall read each attested result out of the producer's own bytes.
+- A producer shall derive its own process exit status from the bytes it published.
+- A producer shall reach its process exit status through exactly one exit path.
 - The assurance driver shall treat an unreadable producer result as an environment error.
 - The declared command of a proof obligation shall be the command the producer target runs.
 - The assurance driver shall record an unobservable tool version as unobserved rather than defaulting
@@ -64,6 +66,10 @@ retention store, audit store, anchor file, or aggregate verdict of its own.
 | FR-006-AC-5 | Pass, fail, unavailable, inconclusive, not-computed, partial, stale, suspect, vacuous, and tampered are each demonstrated by a case that produced it, `unsupported` and `malformed` are demonstrated by nothing, and every negative is paired with a positive control. | Test (TC-012) |
 | FR-006-AC-6 | No repository-local generic runner, envelope builder, manifest, verifier, anchor writer, failure-propagation policer, or aggregate verdict remains, and the gates that replaced them are reachable from `ci`. | Test (TC-013) |
 | FR-006-AC-7 | No executable or configuration surface in this repository names the deprecated evidence format: neither its schema version string, in either spelling, nor any of the eleven serde types that stated that shape before its schema was deleted. Markdown and the change declaration are outside the census, and the change declaration therefore does not name the format either. | Test (TC-013) |
+| FR-006-AC-8 | The generation-conformance producer's process exit status is 0 when every published row's outcome is `pass`, 1 when any published row's outcome is `fail`, and 2 when none is `fail` and any is `vacuous`; a run carrying both a failing and a vacuous row exits 1, and a run that published no rows at all exits 0. | Test (TC-032) |
+| FR-006-AC-9 | A published line that does not carry a string `outcome` aborts the run with a message naming that field, rather than classifying as 0. | Test (TC-032) |
+| FR-006-AC-10 | Exactly one call reaches the producer's process exit status outside its test module, and its argument is the classification of the lines the producer published rather than a literal or a row collection held beside them, so what reaches the output and what sets the status cannot disagree; a second exit path before the test module and a top-level `fn` declared after it — where the census cannot see it — each fail. The census population is the exit paths in the producer's own source, so control flow that reaches no exit path, such as an early `return` in `main`, is outside it. | Test (TC-032) |
+| FR-006-AC-11 | The compiled conformance binary — the one `make conformance` and `make assurance-inputs` invoke, not the classifier and not a test harness — exits 0 when run against the real bounded corpus. | Test (TC-032) |
 
 ## Dependencies
 
@@ -121,3 +127,48 @@ FR-003 is implemented and locally reviewed at this revision; FR-004 remains spec
 complete implementation. This requirement covers the generation behaviour that exists; it does not
 create a proof obligation over absent code, because a proof obligation whose subject does not exist
 is the most complete false green available.
+
+FR-006-AC-8 through FR-006-AC-11 own the generation-conformance producer's own
+0/1/2 exit contract, which `agent-ix/quire-contract-codegen#131` found had no
+owning criterion anywhere in this specification while being load-bearing in two
+directions: it is the whole of `make conformance`, and `make assurance-inputs`
+tolerates it up to 2 deliberately. Every `exit` in this tree before these
+criteria belonged to something else — the `make ci`/`.IGNORE:` measurement
+(AA-001, NFR-002, MP-001), the library's own publish path (`interface-001`,
+TC-003), or the Kani process exit (FR-017, TC-027).
+
+They are criteria of this requirement rather than a requirement of their own,
+and the choice was made rather than defaulted to. The exit status is a second
+output of the producer FR-006 already declares, over the same publication: the
+rows are FR-006-AC-2's subject and the status is a classification of those same
+serialized bytes, so splitting them across two requirements would put two claims
+about one publication in two places while the subject stayed identical. The
+contract's justification is also entirely a statement about intake — the codes
+exist because of what the chain downstream does with them, and `assurance-inputs`
+tolerating 1 and 2 is an FR-006 behaviour, not a property of the corpus. And
+FR-006-AC-9 is this requirement's own discipline applied one layer in: "the
+assurance driver shall read each attested result out of the producer's own bytes"
+is exactly what "a producer shall derive its own process exit status from the
+bytes it published" says about the producer itself. A separate FR would have restated
+FR-006's dependencies, declared no new inputs or outputs, and separated a rule
+from the rule it is an instance of.
+
+These four are written to what the tests in `examples/generation_conformance.rs`
+demonstrate, not to the contract's intent. Where a test's reach stops short of
+the contract, the limit is recorded — here and in TC-032 — rather than claimed
+away or left for a reader to discover. FR-006-AC-10's census is textual — it counts exit paths in the
+producer's own source and requires the single one to carry the classifier's
+value — so a constant substituted for that call and a second exit path added
+before or after the test module are caught, and an early `return` in `main` is
+not. A behavioural check would be better and needs a deliberately failing corpus
+row, which does not exist and which would put a fault-injection affordance in an
+evidence producer. FR-006-AC-11's end-to-end run observes exit 0 against a
+corpus that is passing today; a corpus that shrank to nothing exits 0 too, so
+that criterion is not the one that refuses an empty run — the ten-row floor on
+the emitted JSONL in `tests/shared_assurance.rs` is, under FR-006-AC-2.
+FR-006-AC-10's derivation-from-published-bytes clause is what makes the
+`retain`-before-exit mutation inert rather than caught: stdout and the status
+come from the same strings, so the defect cannot be constructed, and that is a
+stronger claim than a test that observes it. That the end-to-end test rebuilds
+the binary before running it is a property of the measurement rather than of the
+system, so it is TC-032's step and not part of the criterion.
