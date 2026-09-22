@@ -201,11 +201,12 @@ fn it_001_planned_operations_are_not_exported() {
 
 /// `identity_envelope.required` names exactly the fields of `ProofAttestationBody`, and
 /// `identity_envelope.results` names exactly the four `AttestationResult` variants: serializing
-/// one full body yields exactly the eleven declared top-level field names, and
-/// `AttestationResult::label` is exhaustive, so a fifth variant would fail the build rather than
-/// pass silently. Both expected lists are parsed from the contract document itself, not
-/// hand-copied; the results side reads `AttestationResult::ALL`, the census declared beside the
-/// enum in `src/oracle.rs`, rather than a second hand-typed list local to this file.
+/// one full body yields exactly the eleven declared top-level field names, and the results side
+/// compares each variant's own serde wire form -- what the envelope actually emits -- against the
+/// contract, not `AttestationResult::label`'s independent hand-maintained string. Both expected
+/// lists are parsed from the contract document itself, not hand-copied; the results side reads
+/// `AttestationResult::ALL`, the census declared beside the enum in `src/oracle.rs`, rather than a
+/// second hand-typed list local to this file.
 ///
 /// Trace: interface-001-AC-3, TC-028
 #[test]
@@ -249,21 +250,43 @@ fn it_001_identity_envelope_matches_the_emitted_attestation_body() {
     let required = sorted(parse_flow_list(&yaml, "required: ["));
     assert_eq!(keys, required);
 
-    // `AttestationResult::label` is exhaustive: a fifth variant fails the build until it is
-    // named there. `AttestationResult::ALL` is the census declared beside the enum, so this test
-    // reads the real vocabulary rather than a second hand-typed copy.
+    // The contract says this names the envelope the generator *emits* -- so this compares the
+    // serde wire form (what `write_bundle_atomic`'s callers actually see on the wire), not
+    // `AttestationResult::label`'s independent hand-maintained string. A `#[serde(rename = ...)]`
+    // on one variant would drift the emitted JSON from the contract; comparing `label()` would
+    // not catch that, since it is a second, unconnected source of the same vocabulary.
+    // `AttestationResult::ALL` is still the census declared beside the enum, so the variant list
+    // itself is read from there rather than hand-copied into this file.
     let labels = AttestationResult::ALL
         .into_iter()
-        .map(AttestationResult::label)
-        .map(str::to_owned)
+        .map(|result| {
+            let wire_form = serde_json::to_value(result)
+                .expect("AttestationResult must serialize")
+                .as_str()
+                .expect("AttestationResult serializes as a bare string")
+                .to_owned();
+            // label() has no other caller once this file compares the wire form instead: without
+            // this, a variant whose label() and #[serde(rename_all)] output silently diverged
+            // would never be caught by anything. Keeping the two in lockstep here is what makes
+            // it safe for label()'s exhaustive match to stay the crate's sole build-time guard
+            // against an unnamed new variant (src/oracle.rs's own doc comment on ALL explains why
+            // that guard still matters).
+            assert_eq!(
+                result.label(),
+                wire_form,
+                "AttestationResult::label() must agree with its own #[serde(rename_all)] output"
+            );
+            wire_form
+        })
         .collect::<Vec<_>>();
     let results = parse_flow_list(&yaml, "results: [");
     assert_eq!(sorted(labels), sorted(results));
 }
 
-/// `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants.
-/// `GenerationTerminalState::label` is exhaustive, so a seventh variant this file does not name
-/// fails the build rather than compiling silently. The Rust side reads
+/// `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants, as the
+/// contract's serde wire form -- what a `GenerationDiagnostic` actually emits -- not
+/// `GenerationTerminalState::label`'s independent hand-maintained string, which a
+/// `#[serde(rename = ...)]` could drift away from silently. The Rust side reads
 /// `GenerationTerminalState::ALL`, the census declared beside the enum in `src/oracle.rs`, rather
 /// than a second hand-typed list local to this file; the expected list is parsed from the contract
 /// document itself, not hand-copied.
@@ -273,8 +296,22 @@ fn it_001_identity_envelope_matches_the_emitted_attestation_body() {
 fn it_001_terminal_states_are_exactly_the_declared_six() {
     let labels = GenerationTerminalState::ALL
         .into_iter()
-        .map(GenerationTerminalState::label)
-        .map(str::to_owned)
+        .map(|state| {
+            let wire_form = serde_json::to_value(state)
+                .expect("GenerationTerminalState must serialize")
+                .as_str()
+                .expect("GenerationTerminalState serializes as a bare string")
+                .to_owned();
+            // See the matching comment in it_001_identity_envelope_matches_the_emitted_attestation_body:
+            // label() has no other caller once this file compares the wire form instead, so this
+            // keeps it from silently drifting unnoticed.
+            assert_eq!(
+                state.label(),
+                wire_form,
+                "GenerationTerminalState::label() must agree with its own #[serde(rename_all)] output"
+            );
+            wire_form
+        })
         .collect::<Vec<_>>();
     let terminal_states = parse_flow_list(&contract_yaml(), "terminal_states: [");
     assert_eq!(sorted(labels), sorted(terminal_states));
