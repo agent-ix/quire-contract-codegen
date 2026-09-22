@@ -61,7 +61,8 @@ pub use exact_scalar::{
     ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, GeneratedScalarClaim,
     IeeeArithmeticOperator, IntegerOperator, OperationClaim, OperationProvenance,
     OrderingOperandKind, QuantityOperator, RationalOperator, ScalarForm, UpstreamBlocker,
-    EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_WORK_LIMIT,
+    EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS,
+    SCALAR_LOWERING_WORK_LIMIT,
 };
 pub use finite_reference_graphs::prepare_finite_graph_reaches;
 

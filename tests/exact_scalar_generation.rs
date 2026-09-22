@@ -2,7 +2,7 @@
 //! CheckedPackage V2 input.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::PathBuf,
     process::Command,
@@ -13,7 +13,7 @@ use quire_contract_codegen::{
     generate_exact_scalar_oracles, BoundForm, ExactScalarDisposition, ExactScalarGenerationError,
     ExactScalarItem, ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, IntegerOperator,
     OperationProvenance, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CLAIM_MAP_VERSION,
-    EXACT_SCALAR_CRATE_NAME, RUNTIME_REVISION,
+    EXACT_SCALAR_CRATE_NAME, RUNTIME_REVISION, SCALAR_LOWERING_SUPPORTED_TAGS,
 };
 use quire_contract_ir::CheckedPackageV2;
 use quire_contract_runtime::exact::{ComparisonOperator, TextProfile};
@@ -638,34 +638,44 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
         }
     }
 
+    // This list is hand-written and independently constructed -- not read from
+    // `scalar_profile()` (`src/exact_scalar.rs`, private) -- so this cross-check calls IR's
+    // `lower` directly rather than the generator's own profile, and stays meaningful rather than
+    // circular. `LITERAL_OPERAND` reaches the `claim` nodes `corpus_package` wires as its
+    // dependencies (issue #100), so this list must admit `Claim` too, or this cross-check would
+    // mark that corpus node `Unsupported` while the real generator (which also admits `Claim`)
+    // lowers it -- a divergence between the two, not a property of either.
+    //
+    // Nothing kept this list in agreement with `scalar_profile()`'s own `supported_tags` (cg#134):
+    // before PR #132 (issue #100) this list had four tags against production's six, and after it,
+    // this list still omitted `Correspondence`, which production still admitted despite zero
+    // corpus nodes ever carrying it (cg#133, now removed from production instead). The assertion
+    // below closes that gap: it compares this list's *content* against
+    // `SCALAR_LOWERING_SUPPORTED_TAGS`, the tag set `scalar_profile()` itself builds from, so
+    // either list changing without the other now fails here, while the lowering profile below
+    // still never calls `scalar_profile()`.
+    let claim_supported_tags: BTreeSet<quire_contract_ir::CheckedNodeTag> = [
+        quire_contract_ir::CheckedNodeTag::ScalarType,
+        quire_contract_ir::CheckedNodeTag::BoundedDomain,
+        quire_contract_ir::CheckedNodeTag::Value,
+        quire_contract_ir::CheckedNodeTag::Expression,
+        quire_contract_ir::CheckedNodeTag::Claim,
+    ]
+    .into();
+    assert_eq!(
+        claim_supported_tags,
+        BTreeSet::from(SCALAR_LOWERING_SUPPORTED_TAGS),
+        "this test's independently-constructed tag list has drifted from scalar_profile()'s own \
+         supported_tags (cg#134) -- update whichever one is stale"
+    );
+
     let lowered = package.lower(
         &corpus()
             .iter()
             .map(|expression| code_id(expression.code))
             .collect::<Vec<_>>(),
         &quire_contract_ir::CompleteLoweringProfileV2 {
-            supported_tags: [
-                quire_contract_ir::CheckedNodeTag::ScalarType,
-                quire_contract_ir::CheckedNodeTag::BoundedDomain,
-                quire_contract_ir::CheckedNodeTag::Value,
-                quire_contract_ir::CheckedNodeTag::Expression,
-                // Admits a subset of `scalar_profile()`'s own
-                // `supported_tags` (`src/exact_scalar.rs`) sufficient for
-                // this corpus, not a mirror of the full set: `LITERAL_OPERAND`
-                // now reaches the `claim` nodes `corpus_package` wires as its
-                // dependencies (issue #100), so this independently-
-                // constructed profile must admit that tag too, or this
-                // cross-check would mark that corpus node `Unsupported`
-                // while the real generator (which already includes `Claim`
-                // here) lowers it -- a divergence between the two, not a
-                // property of either. `scalar_profile()` also admits a sixth
-                // tag, `CheckedNodeTag::Correspondence`, which this list
-                // still omits (PR #132 review): zero corpus nodes carry it,
-                // so nothing here exercises the gap either way, and it is
-                // out of scope for issue #100 -- tracked separately.
-                quire_contract_ir::CheckedNodeTag::Claim,
-            ]
-            .into(),
+            supported_tags: claim_supported_tags,
             require_bounds: true,
             work_limit: u64::MAX,
         },

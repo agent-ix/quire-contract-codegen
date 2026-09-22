@@ -70,6 +70,31 @@ pub const SCALAR_LOWERING_WORK_LIMIT: u64 = 65_536;
 /// Name of the generated crate.
 pub const EXACT_SCALAR_CRATE_NAME: &str = "quire-exact-scalar-oracles";
 
+/// The `CheckedNodeTag` families [`scalar_profile`]'s `CompleteLoweringProfileV2` admits.
+///
+/// `CheckedNodeTag::Correspondence` (cg#133) is deliberately absent: its four closed forms
+/// (`source_locus`, `model_correspondence`, `binding_role`, `profile_correspondence`) are
+/// provenance/binding metadata tying the checked graph back to an external source, model or
+/// profile -- never a scalar expression's operand, bound, or result type -- so no node this
+/// generator's shape checks reach can plausibly carry it. A real census over
+/// `corpus_package().wire()`'s nodes (not a source-text grep, which the same ticket found
+/// inflates unrelated tags) found zero `correspondence` nodes anywhere in the corpus, confirming
+/// nothing exercises the gap either way. Correspondence oracle generation, if ever wanted, is a
+/// different generator's concern -- a scalar-computation module has no natural way to emit a
+/// provenance/binding claim.
+///
+/// Exported (cg#134) so `tests/exact_scalar_generation.rs`'s
+/// `tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item` can assert its own,
+/// independently-constructed lowering profile's tag list against this one without calling
+/// [`scalar_profile`] itself -- which would make that cross-check circular.
+pub const SCALAR_LOWERING_SUPPORTED_TAGS: [CheckedNodeTag; 5] = [
+    CheckedNodeTag::ScalarType,
+    CheckedNodeTag::BoundedDomain,
+    CheckedNodeTag::Value,
+    CheckedNodeTag::Expression,
+    CheckedNodeTag::Claim,
+];
+
 /// One requested oracle: a checked node and the operation it denotes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExactScalarItem {
@@ -799,14 +824,7 @@ pub fn generate_exact_scalar_oracles(
 
 fn scalar_profile() -> CompleteLoweringProfileV2 {
     CompleteLoweringProfileV2 {
-        supported_tags: BTreeSet::from([
-            CheckedNodeTag::ScalarType,
-            CheckedNodeTag::BoundedDomain,
-            CheckedNodeTag::Value,
-            CheckedNodeTag::Expression,
-            CheckedNodeTag::Claim,
-            CheckedNodeTag::Correspondence,
-        ]),
+        supported_tags: BTreeSet::from(SCALAR_LOWERING_SUPPORTED_TAGS),
         require_bounds: true,
         work_limit: SCALAR_LOWERING_WORK_LIMIT,
     }
