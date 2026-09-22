@@ -2157,7 +2157,7 @@ pub fn corpus_package() -> PackageBuilder {
             // "nearest-even"), not "toward-zero": a descriptor matching this
             // bound passes `check_item`, then disagrees with the
             // "toward-zero" `operation.mode` set above.
-            &[Bound::Decimal(-1000, 1000, 0, 2, "nearest-even")],
+            &[DEC],
         );
     let boolean = key(T_BOOLEAN);
     builder
