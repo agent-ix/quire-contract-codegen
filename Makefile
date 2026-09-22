@@ -98,10 +98,19 @@ test: assurance-inputs
 # target directory. The installed Kani version, launcher and driver digests, CBMC,
 # toolchain and target are asserted equal to the committed pins
 # (KaniToolPins::pinned in src/kani_execution.rs) before anything runs.
+#
+# IR-237 merged every `tests/*.rs` file into one `tests/it/main.rs` binary named
+# `it`, so `--test kani_obligations` no longer resolves -- the former
+# `kani_obligations.rs` is now the `kani_obligations` module inside `it`. `cargo
+# test --test it kani_obligations` filters by test-name substring on the merged
+# binary; verified against `cargo test --test it kani_obligations -- --list`
+# that this selects exactly the 20 tests the old `kani_obligations` binary held
+# (19 default-lane plus this one `#[ignore]`d harness) and nothing from any
+# other module, so the `--ignored` run below still exercises only this one test.
 .PHONY: kani
 kani:
 	flock /tmp/agent-e-heavy-build.lock $(CARGO) +$(MSRV) test --locked -j 4 \
-		--test kani_obligations --target-dir target-codex-backends \
+		--test it kani_obligations --target-dir target-codex-backends \
 		-- --ignored --test-threads=1
 
 .PHONY: build

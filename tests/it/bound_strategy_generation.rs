@@ -1,6 +1,6 @@
 //! Synthetic public executable projections for the complete numeric strategy slice.
 
-mod common;
+use crate::common;
 
 use std::{
     fmt::Write as _,

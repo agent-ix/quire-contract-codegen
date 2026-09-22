@@ -16,13 +16,13 @@
 //! runtime-only because this crate has not yet added the `agree3!`
 //! authority leg for them, not because the authority lacks the operator.
 
-#[path = "exact_scalar_support/agreement.rs"]
+#[path = "../exact_scalar_support/agreement.rs"]
 #[macro_use]
 mod support;
 
 #[allow(dead_code)] // `OracleStop` variants are matched only where they can occur.
 mod generated {
-    include!("fixtures/exact_scalar/lib.rs.golden");
+    include!("../fixtures/exact_scalar/lib.rs.golden");
 }
 
 use generated::{

@@ -5,7 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-mod common;
+use crate::common;
 
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
@@ -391,11 +391,11 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
         .any(|pair| pair[0] == "--harness" && pair[1].starts_with("kani_fr_003_4_")));
     assert!(graph.options.iter().any(|option| option == "--exact"));
     validate(
-        include_str!("../schemas/kani-proof-graph-v2.schema.json"),
+        include_str!("../../schemas/kani-proof-graph-v2.schema.json"),
         &serde_json::from_str(&first.proof_graph.contents).expect("graph JSON should parse"),
     );
     validate(
-        include_str!("../schemas/generated-rust-kani-v2.schema.json"),
+        include_str!("../../schemas/generated-rust-kani-v2.schema.json"),
         &serde_json::Value::String(first.rust.contents.clone()),
     );
 
@@ -621,11 +621,11 @@ fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
         .windows(2)
         .any(|pair| pair == ["--concrete-playback", "print"]));
     validate(
-        include_str!("../schemas/kani-proof-graph-v2.schema.json"),
+        include_str!("../../schemas/kani-proof-graph-v2.schema.json"),
         &serde_json::from_str(&first.proof_graph.contents).expect("graph JSON should parse"),
     );
     validate(
-        include_str!("../schemas/generated-rust-kani-v2.schema.json"),
+        include_str!("../../schemas/generated-rust-kani-v2.schema.json"),
         &serde_json::Value::String(first.rust.contents.clone()),
     );
 
@@ -1188,9 +1188,10 @@ fn proof_dependency_graph_derives_readiness_and_preserves_source_sites() {
     assert_eq!(bundle.rust.contents.matches("kani::assume(").count(), 1);
     assert_eq!(bundle.rust.contents.matches("#[kani::stub(").count(), 1);
 
-    let graph_schema: serde_json::Value =
-        serde_json::from_str(include_str!("../schemas/kani-proof-graph-v2.schema.json"))
-            .expect("graph schema should parse");
+    let graph_schema: serde_json::Value = serde_json::from_str(include_str!(
+        "../../schemas/kani-proof-graph-v2.schema.json"
+    ))
+    .expect("graph schema should parse");
     let graph_validator = JSONSchema::options()
         .with_draft(Draft::Draft7)
         .compile(&graph_schema)

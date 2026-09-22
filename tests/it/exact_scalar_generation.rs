@@ -19,7 +19,12 @@ use quire_contract_ir::CheckedPackageV2;
 use quire_contract_runtime::exact::{ComparisonOperator, TextProfile};
 use serde_json::{json, Value};
 
-#[path = "exact_scalar_support/package.rs"]
+// package.rs holds a process-global `application_registry()` static keyed by small integer
+// fixture codes that this file and `kani_obligations.rs` each pick independently, on the
+// assumption of an isolated registry (verified: centralizing this module produced real
+// cross-file code collisions and Mutex-poisoning cascades). Kept duplicated on purpose.
+#[allow(clippy::duplicate_mod)]
+#[path = "../exact_scalar_support/package.rs"]
 mod package;
 
 use package::*;

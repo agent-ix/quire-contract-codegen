@@ -32,7 +32,12 @@ use quire_contract_runtime::exact::{
 };
 use sha2::{Digest, Sha256};
 
-#[path = "composite_equality_support/package.rs"]
+// package.rs holds a process-global `application_registry()` static keyed by small integer
+// fixture codes that this file and `composite_equality_agreement.rs` each pick independently,
+// on the assumption of an isolated registry (verified: centralizing this module produced real
+// cross-file code collisions and Mutex-poisoning cascades). Kept duplicated on purpose.
+#[allow(clippy::duplicate_mod)]
+#[path = "../composite_equality_support/package.rs"]
 mod package;
 
 use package::*;
