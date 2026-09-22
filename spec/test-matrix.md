@@ -51,7 +51,7 @@ type: TestMatrix
 | FR-013 | FR-013-AC-5 | Inspection | ✅ Covered |
 | FR-014 | FR-014-AC-1 through FR-014-AC-11 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-12 | TC-024 | ⚠️ Partially covered; a descriptor naming a different catalogued operation is discharged, but the clause covering a descriptor naming an operation the catalogue has no entry for is a defensive branch no fixture reaches -- the only such state is a same-width IEEE conversion, which the package builder refuses to construct (IR-225) |
-| FR-014 | FR-014-AC-13 | TC-024 | ⚠️ Partially covered; the law-definition conjunct is discharged, but no test constructs a mode-value disagreement (IR-226) |
+| FR-014 | FR-014-AC-13 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-14 | TC-024 | ⚠️ Partially covered; the `caller_declared` provenance is asserted for every refused and every never-inspected claim, but no test asserts that the identity such a claim reports is the request item's own descriptor-derived one |
 | FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned |
 | FR-015 | FR-015-AC-3 through FR-015-AC-6 | TC-025 | ✅ Covered |

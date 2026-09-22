@@ -960,6 +960,19 @@ pub const UNTYPED_OPERAND: u32 = 2031;
 /// the `reference` arm of `check_operand`, not the `literal` arm
 /// `WRONG_OPERAND` exercises.
 pub const WRONG_OPERAND_REFERENCE: u32 = 2032;
+/// A decimal add whose own catalogued `operation.mode` rounding
+/// (`"toward-zero"`) disagrees with its own IR `decimal_range` bound's
+/// rounding (`"nearest-even"`): `corpus_operation`'s mode value and the
+/// node's IR bound aggregate are independently settable (the former comes
+/// from whatever `DecimalType` a fixture's `operation` carries, the latter
+/// from its own separate `Bound::Decimal`), but every entry in `corpus()`
+/// happens to give them the same value. Against any of those, a descriptor
+/// whose rounding matches the IR bound necessarily also matches
+/// `operation.mode`, so `operation_confirmed`'s mode-comparison branch is
+/// never exercised on a genuine disagreement. This node exists so a
+/// descriptor can match the bound (passing `check_item`) while still
+/// disagreeing with `operation.mode` (IR-226).
+pub const MODE_MISMATCH: u32 = 2033;
 pub const MISSING: u32 = 9999;
 
 fn integer(value: i64) -> Integer {
@@ -2123,6 +2136,28 @@ pub fn corpus_package() -> PackageBuilder {
                 vec![reference(&key(V_INTEGER)), reference(&key(V_UNTYPED))],
             ),
             &[INT],
+        )
+        .application_bounded(
+            MODE_MISMATCH,
+            "expression",
+            "binary",
+            &key(T_DECIMAL),
+            application(
+                "binary",
+                op_full(
+                    "quire.op.decimal.add",
+                    vec![],
+                    Some(mode_kv("rounding", "toward-zero")),
+                    None,
+                ),
+                &key(T_DECIMAL),
+                vec![reference(&key(V_DECIMAL)), reference(&key(V_DECIMAL))],
+            ),
+            // Deliberately the node 1051 bound (`DEC`, rounding
+            // "nearest-even"), not "toward-zero": a descriptor matching this
+            // bound passes `check_item`, then disagrees with the
+            // "toward-zero" `operation.mode` set above.
+            &[DEC],
         );
     let boolean = key(T_BOOLEAN);
     builder

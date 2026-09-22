@@ -10,13 +10,14 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    generate_exact_scalar_oracles, BoundForm, ExactScalarDisposition, ExactScalarGenerationError,
-    ExactScalarItem, ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, IntegerOperator,
-    OperationProvenance, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CLAIM_MAP_VERSION,
-    EXACT_SCALAR_CRATE_NAME, RUNTIME_REVISION, SCALAR_LOWERING_SUPPORTED_TAGS,
+    generate_exact_scalar_oracles, BoundForm, DecimalOperator, ExactScalarDisposition,
+    ExactScalarGenerationError, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
+    ExactScalarRefusal, IntegerOperator, OperationProvenance, ScalarForm, UpstreamBlocker,
+    EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME, RUNTIME_REVISION,
+    SCALAR_LOWERING_SUPPORTED_TAGS,
 };
 use quire_contract_ir::CheckedPackageV2;
-use quire_contract_runtime::exact::{ComparisonOperator, TextProfile};
+use quire_contract_runtime::exact::{ComparisonOperator, RoundingMode, TextProfile};
 use serde_json::{json, Value};
 
 // package.rs holds a process-global `application_registry()` static keyed by small integer
@@ -853,6 +854,44 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
         &[ExactScalarItem {
             node_id: code_id(1011),
             operation: floor(-1000, 1000),
+        }],
+    );
+    let claim = &marked.claim_map.items[0];
+    assert!(matches!(claim.result, ExactScalarDisposition::Generated(_)));
+    assert_eq!(
+        claim.operation.provenance,
+        OperationProvenance::CallerDeclared {
+            blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+        }
+    );
+    assert_eq!(marked.claim_map.blocked, []);
+}
+
+/// Trace: FR-014-AC-13, TC-024.
+///
+/// AC-13's other conjunct: a descriptor whose implied identity matches the node's, and whose
+/// rounding matches the node's own IR `decimal_range` bound (so `check_item` passes it), but
+/// whose descriptor disagrees with that same node's separately catalogued `operation.mode`.
+/// `MODE_MISMATCH` (node 2033) exists exactly for this: its `operation.mode` rounding is
+/// `"toward-zero"`, but its IR bound rounding is `"nearest-even"` -- the two are independently
+/// settable, and every other corpus node happens to keep them equal, so this is the only node
+/// this crate can currently exercise the disagreement against. A descriptor whose own rounding is
+/// `"nearest-even"` agrees with the bound (passing `check_item`) and disagrees with
+/// `operation.mode`, so `operation_confirmed`'s `if let Some((kind, value)) = catalogued.mode`
+/// branch runs and returns `false` on a genuine mismatch, not merely an absent member. The item
+/// still generates -- exactly as the law conjunct does above -- and is marked `caller_declared`.
+#[test]
+fn tc_024_a_mismatched_rounding_mode_is_refused_where_the_bound_still_agrees() {
+    let package = corpus_package().admit();
+    let matching_bound = ExactScalarOperation::DecimalArithmetic {
+        operator: DecimalOperator::Add,
+        target: decimal_type(-1000, 1000, 0, 2, RoundingMode::NearestEven),
+    };
+    let marked = generate(
+        &package,
+        &[ExactScalarItem {
+            node_id: code_id(MODE_MISMATCH),
+            operation: matching_bound,
         }],
     );
     let claim = &marked.claim_map.items[0];

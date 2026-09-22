@@ -29,7 +29,9 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    `ir_confirmed` or `caller_declared` provenance, and each refusal; request a
    node under a descriptor naming a different catalogued operation; request a
    node under a
-   descriptor naming a different law; exhaust lowering work; exceed the
+   descriptor naming a different law; request a node under a descriptor whose
+   rounding mode agrees with the node's IR bound but disagrees with its
+   catalogued operation mode; exhaust lowering work; exceed the
    generated source ceiling; construct invalid and incomplete body records.
 4. Compile the golden oracle into the test crate and execute it on vectors
    adapted from QSpec TC-185, TC-186, TC-187, TC-192 and TC-193; compare each
@@ -42,9 +44,10 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
 
 Every family is generated; every refused item is absent from the source and
 carries its typed reason; a descriptor unequal to its IR bound is refused, and
-one naming a different law, or a different catalogued operation, over equal
-bounds is generated only as `caller_declared`, while a descriptor agreeing on
-identity, law and mode over a node that passes every check is `ir_confirmed`;
+one naming a different law, a different mode, or a different catalogued
+operation, over equal bounds is generated only as `caller_declared`, while a
+descriptor agreeing on identity, law and mode over a node that passes every
+check is `ir_confirmed`;
 bytes are identical across runs and orderings; all
 three executions agree on every vector; the generated crate compiles with
 `publish = false` and contains no charge literal.
