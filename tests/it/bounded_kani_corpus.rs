@@ -16,7 +16,7 @@ use std::{
 
 use quire_contract_codegen::{
     classify_kani_run, generate_bounded_kani_corpus_case, replay_codegen_counterexample,
-    BoundedCorpusRequest, KaniRunOutcome,
+    BoundedCorpusRequest, EmittedCorpusIdentities, KaniRunOutcome,
 };
 use quire_contract_ir::{
     kani::{
@@ -146,6 +146,7 @@ impl Drop for TemporaryDirectory {
 #[test]
 fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     let (profile, dispatch, input) = fixture();
+    let mut emitted = EmittedCorpusIdentities::new();
     let arithmetic = generate_bounded_kani_corpus_case(
         &profile,
         &dispatch,
@@ -158,6 +159,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
             minimum: 0,
             maximum: 2,
         }),
+        &mut emitted,
     )
     .unwrap();
     assert_eq!(arithmetic.outcome.boolean_claim(), Some(true));
@@ -182,6 +184,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
             max_items: 1,
             kind: QueryKind::ForAllNonNegative,
         }),
+        &mut emitted,
     )
     .unwrap_err();
     assert_eq!(exhausted.kind, KaniOutcomeKind::ResourceExhausted);
@@ -197,6 +200,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
             max_items: 2,
             kind: QueryKind::ExistsEqual(7),
         }),
+        &mut emitted,
     )
     .unwrap();
     let packet = counterexample
@@ -247,6 +251,7 @@ fn tc_023_kani_executes_the_generated_arithmetic_harness() {
             minimum: 0,
             maximum: 2,
         }),
+        &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
     let directory = TemporaryDirectory::new();
@@ -296,6 +301,7 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
             field_id: "next".to_owned(),
             max_expansions: 2,
         }),
+        &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
     let directory = TemporaryDirectory::new();
@@ -344,6 +350,7 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
             max_items: 2,
             kind: QueryKind::ExistsEqual(7),
         }),
+        &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
     let packet = generated
