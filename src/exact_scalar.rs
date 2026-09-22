@@ -713,10 +713,7 @@ pub fn generate_exact_scalar_oracles(
                             operation_confirmed(node, operation).then_some(catalogued)
                         });
                     match confirmed_identity {
-                        Err(refusal) => (
-                            caller_declared_claim(operation_identity(operation)),
-                            ExactScalarDisposition::Refused { refusal },
-                        ),
+                        Err(refusal) => refused_claim(operation_identity(operation), refusal),
                         Ok(maybe_identity) => {
                             let (identity, provenance, oracle_source) = match maybe_identity {
                                 Some(identity) => {
@@ -764,10 +761,7 @@ pub fn generate_exact_scalar_oracles(
                         }
                     }
                 }
-                Err(refusal) => (
-                    caller_declared_claim(operation_identity(operation)),
-                    ExactScalarDisposition::Refused { refusal },
-                ),
+                Err(refusal) => refused_claim(operation_identity(operation), refusal),
             },
             // Every copy is refused. The entry is named by the least identity
             // so that it does not depend on which copy arrived first.
@@ -775,12 +769,7 @@ pub fn generate_exact_scalar_oracles(
                 let Some(identity) = copies.iter().map(|op| operation_identity(op)).min() else {
                     continue;
                 };
-                (
-                    caller_declared_claim(identity),
-                    ExactScalarDisposition::Refused {
-                        refusal: ExactScalarRefusal::DuplicateRequest,
-                    },
-                )
+                refused_claim(identity, ExactScalarRefusal::DuplicateRequest)
             }
         };
         let (claim_operation, result) = operation_claim;
@@ -1358,41 +1347,43 @@ impl Shape {
 // Operation identity
 // ---------------------------------------------------------------------------
 
-/// A claim this generator did not confirm: the request item's own
-/// descriptor-derived identity, marked [`OperationProvenance::CallerDeclared`].
+/// A refused item's claim and disposition together: the request item's own
+/// descriptor-derived identity, marked
+/// [`OperationProvenance::CallerDeclared`], paired with the
+/// [`ExactScalarDisposition::Refused`] that names why. Returning the pair
+/// keeps them from drifting apart -- a call site that built only the claim
+/// half, or built a different disposition beside it, would not compile.
 ///
-/// Every call site of this function produces a `Refused` disposition.
-///
-/// A prose census of those sites stood here and was false in three successive
-/// rounds of review -- it miscounted the sites, then counted populations as
-/// sites. IR-228 replaces the invariant with a constructor that returns the
-/// disposition too, so a call site that did otherwise would not compile.
-/// Until then the sentence above is the claim, and `grep -n
-/// caller_declared_claim` is how to check it.
-///
-/// One of those sites, the `Err` arm guarding [`catalogued_operation_identity`],
-/// used to be unreachable: [`operation_confirmed`] was asked first and had
-/// already required that same member, so `MissingOperationIdentity` was
-/// unconstructible through it and a node missing the member was reported here
-/// instead, as though codegen had declined to consume an identity that was not
-/// there. IR-224 reordered the two, so that arm is now reachable: an
-/// identity-absent node reaches it, and this function names that claim
-/// caller-declared while the disposition beside it is `Refused`. Before the
-/// reorder such a node took the inline `CallerDeclared` construction instead
-/// and generated an oracle. Nothing is claimed here about the other sites:
-/// they refuse items `check_item` rejected and duplicate requests, neither of
-/// which turns on the operation member at all.
+/// One of the three call sites, the `Err` arm guarding
+/// [`catalogued_operation_identity`], used to be unreachable:
+/// [`operation_confirmed`] was asked first and had already required that same
+/// member, so `MissingOperationIdentity` was unconstructible through it and a
+/// node missing the member was reported here instead, as though codegen had
+/// declined to consume an identity that was not there. IR-224 reordered the
+/// two, so that arm is now reachable: an identity-absent node reaches it, and
+/// this function names that claim caller-declared while the disposition
+/// beside it is `Refused`. Before the reorder such a node took the inline
+/// `CallerDeclared` construction instead and generated an oracle. Nothing is
+/// claimed here about the other sites: they refuse items `check_item`
+/// rejected and duplicate requests, neither of which turns on the operation
+/// member at all.
 ///
 /// A lowered node whose catalogued operation disagrees with the descriptor is
 /// `CallerDeclared` too, but does not come through here: it generates, and
 /// builds its provenance inline at the disagreement site.
-fn caller_declared_claim(identity: String) -> OperationClaim {
-    OperationClaim {
-        identity,
-        provenance: OperationProvenance::CallerDeclared {
-            blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+fn refused_claim(
+    identity: String,
+    refusal: ExactScalarRefusal,
+) -> (OperationClaim, ExactScalarDisposition) {
+    (
+        OperationClaim {
+            identity,
+            provenance: OperationProvenance::CallerDeclared {
+                blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+            },
         },
-    }
+        ExactScalarDisposition::Refused { refusal },
+    )
 }
 
 /// The node's own catalogued operation identity, or a typed refusal when the
