@@ -21,7 +21,7 @@ use crate::{
         RustValueType,
     },
     Artifact, AttestationContext, GenerationErrorCode, GenerationTerminalState, OracleRequest,
-    MAX_GENERATED_SOURCE_BYTES,
+    MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
 };
 
 /// Exact first supported Kani backend version.
@@ -613,11 +613,11 @@ fn validate_request(request: &KaniRequest<'_>) -> Result<(), Vec<KaniDiagnostic>
             "backend executable identity must be lowercase SHA-256",
         ));
     }
-    if request.unwind == 0 || request.unwind > 1024 {
+    if request.unwind == 0 || request.unwind > MAX_OBLIGATION_UNWIND {
         return Err(single_diagnostic(
             KaniErrorCode::InvalidUnwind,
             "unwind",
-            "unwind must be between 1 and 1024",
+            &format!("unwind must be between 1 and {MAX_OBLIGATION_UNWIND}"),
         ));
     }
     if !attestation_context_is_valid(&request.attestation) {

@@ -14,7 +14,7 @@ use quire_contract_codegen::{
     KaniPrimitiveType, KaniRequest, KaniSolver, OracleRequest, ProofAttestationBody,
     ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
     ProofReadiness, IR_CANDIDATE_REVISION, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
-    MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
@@ -1252,6 +1252,11 @@ fn invalid_kani_requests_return_structured_non_generated_states() {
     value.attestation = attestation_context();
     value.unwind = 0;
     let diagnostic = &generate_kani_bundle(&value).expect_err("unwind should be rejected")[0];
+    assert_eq!(diagnostic.code, KaniErrorCode::InvalidUnwind);
+
+    value.unwind = MAX_OBLIGATION_UNWIND + 1;
+    let diagnostic = &generate_kani_bundle(&value)
+        .expect_err("unwind above the declared bound should be rejected")[0];
     assert_eq!(diagnostic.code, KaniErrorCode::InvalidUnwind);
 
     let invalid_dependency = [ProofDependencyRequest {
