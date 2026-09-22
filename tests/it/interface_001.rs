@@ -11,15 +11,18 @@
 //! literal living only in this file. A renamed `KaniToolPins` field or an `operations` entry added
 //! without updating its export/status caveat drifts the parsed contract text away from this file's
 //! own struct-field and string censuses and fails the assertion below. A seventh
-//! `GenerationTerminalState` variant or a fifth `AttestationResult` variant fails the build instead:
+//! `GenerationTerminalState` variant or a fifth `AttestationResult` variant fails the build first:
 //! `label()` beside each enum is an exhaustive match, so the build breaks until the new variant is
-//! named there. Nothing compiler-enforced then carries that variant into `ALL` too — Rust has no
-//! stable way to link an array's contents to an enum's variant set without a proc-macro crate this
+//! named there. That alone never used to carry the new variant into `ALL` too — Rust has no stable
+//! way to link an array's contents to an enum's variant set without a proc-macro crate this
 //! workspace does not depend on — so a variant added and named in `label()` but never added to
-//! `ALL` would still pass the assertion below. `quire coverage` cannot resolve these criteria as
-//! declared rows (see the contract document's Open items), so `interface-001-AC-1` through
-//! `interface-001-AC-5` are traced `Test (TC-028)` and backed by this file rather than by a
-//! `quire coverage`-verified row.
+//! `ALL` used to still pass every assertion below. `census_enum_variants` closes that gap from the
+//! other direction: it counts the variant identifiers `src/oracle.rs`'s own enum declaration
+//! carries between its braces and asserts that count equals `ALL.len()`, so `ALL`, `label()` and
+//! the declaration itself cannot drift out of step with each other while still agreeing among
+//! themselves. `quire coverage` cannot resolve these criteria as declared rows (see the contract
+//! document's Open items), so `interface-001-AC-1` through `interface-001-AC-5` are traced
+//! `Test (TC-028)` and backed by this file rather than by a `quire coverage`-verified row.
 
 use std::{fs, path::Path};
 
@@ -30,16 +33,73 @@ use quire_contract_codegen::{
     KaniToolPins, ProofAttestationBody,
 };
 
+fn crate_source(relative_path: &str) -> String {
+    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path))
+        .unwrap_or_else(|_| panic!("{relative_path} must be readable from the crate root"))
+}
+
 fn lib_source() -> String {
-    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"))
-        .expect("src/lib.rs must be readable from the crate root")
+    crate_source("src/lib.rs")
+}
+
+fn oracle_source() -> String {
+    crate_source("src/oracle.rs")
+}
+
+/// Counts the variant identifiers declared between `pub enum <name> {` and its matching closing
+/// `}` in `source`. `label()`'s own exhaustive match already fails the build on an added variant,
+/// but nothing carries that variant into `ALL` too -- this closes that gap the other direction,
+/// against the enum declaration itself rather than against `label()` or `ALL`, so the three
+/// cannot drift into agreement with each other while all three disagree with the real variant
+/// count.
+///
+/// Not a general Rust parser: it only counts bare unit variants (`Ident,`), which is the only
+/// shape `GenerationTerminalState` and `AttestationResult` use, and it skips `//`-prefixed and
+/// `#`-prefixed lines (comments, doc comments and attributes) entirely -- before looking for
+/// either a variant or a brace on that line -- so a brace or comma mentioned in a comment or an
+/// attribute cannot desynchronize its `{`/`}` depth tracking or be miscounted as a variant. A
+/// future data-carrying variant (`Foo(String),` or `Foo { x: i32 },`) would be silently skipped
+/// rather than counted -- correct today, since `ALL: [Self; N]` cannot hold a data-carrying
+/// variant either, so both sides would already be wrong the same way -- but is not a shape either
+/// enum uses now.
+fn census_enum_variants(source: &str, name: &str) -> usize {
+    let marker = format!("pub enum {name} {{");
+    let start = source
+        .find(&marker)
+        .unwrap_or_else(|| panic!("`pub enum {name} {{` must appear in src/oracle.rs"));
+    let mut depth = 1i32;
+    let mut count = 0usize;
+    for line in source[start + marker.len()..].lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with('#') {
+            continue;
+        }
+        for ch in trimmed.chars() {
+            match ch {
+                '{' => depth += 1,
+                '}' => depth -= 1,
+                _ => {}
+            }
+        }
+        if depth == 0 {
+            break;
+        }
+        let is_unit_variant = trimmed.strip_suffix(',').is_some_and(|ident| {
+            !ident.is_empty() && ident.chars().all(|c| c.is_alphanumeric() || c == '_')
+        });
+        if is_unit_variant {
+            count += 1;
+        }
+    }
+    assert!(
+        count > 0,
+        "census_enum_variants found no variants for {name}; the parser likely desynchronized"
+    );
+    count
 }
 
 fn contract_source() -> String {
-    fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("spec/interface/interface-001-codegen-api.md"),
-    )
-    .expect("spec/interface/interface-001-codegen-api.md must be readable from the crate root")
+    crate_source("spec/interface/interface-001-codegen-api.md")
 }
 
 /// The contract document's one fenced ```yaml block, as text.
@@ -281,6 +341,11 @@ fn it_001_identity_envelope_matches_the_emitted_attestation_body() {
         .collect::<Vec<_>>();
     let results = parse_flow_list(&yaml, "results: [");
     assert_eq!(sorted(labels), sorted(results));
+    assert_eq!(
+        census_enum_variants(&oracle_source(), "AttestationResult"),
+        AttestationResult::ALL.len(),
+        "AttestationResult::ALL must name every variant src/oracle.rs declares"
+    );
 }
 
 /// `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants, as the
@@ -315,6 +380,11 @@ fn it_001_terminal_states_are_exactly_the_declared_six() {
         .collect::<Vec<_>>();
     let terminal_states = parse_flow_list(&contract_yaml(), "terminal_states: [");
     assert_eq!(sorted(labels), sorted(terminal_states));
+    assert_eq!(
+        census_enum_variants(&oracle_source(), "GenerationTerminalState"),
+        GenerationTerminalState::ALL.len(),
+        "GenerationTerminalState::ALL must name every variant src/oracle.rs declares"
+    );
 }
 
 /// `kani_obligation_execution_slice.pins` names exactly the six measured fields of

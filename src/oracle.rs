@@ -107,8 +107,10 @@ impl GenerationTerminalState {
     /// stable way to derive that without a proc-macro crate this workspace does not depend on.
     /// What the compiler does enforce is [`Self::label`] below: its `match` is exhaustive, so an
     /// added variant fails the build until it is named there. Nothing forces the same edit to
-    /// reach this array; that is left to the developer fixing the build, standing right next to
-    /// it.
+    /// reach this array at compile time; that is left to the developer fixing the build, standing
+    /// right next to it. `tests/it/interface_001.rs`'s `census_enum_variants` closes the gap at
+    /// test time instead, by counting this enum's own declared variants and asserting the count
+    /// equals `ALL.len()`.
     pub const ALL: [Self; 6] = [
         Self::Generated,
         Self::Unsupported,
@@ -324,8 +326,10 @@ impl AttestationResult {
     /// stable way to derive that without a proc-macro crate this workspace does not depend on.
     /// What the compiler does enforce is [`Self::label`] below: its `match` is exhaustive, so an
     /// added variant fails the build until it is named there. Nothing forces the same edit to
-    /// reach this array; that is left to the developer fixing the build, standing right next to
-    /// it.
+    /// reach this array at compile time; that is left to the developer fixing the build, standing
+    /// right next to it. `tests/it/interface_001.rs`'s `census_enum_variants` closes the gap at
+    /// test time instead, by counting this enum's own declared variants and asserting the count
+    /// equals `ALL.len()`.
     pub const ALL: [Self; 4] = [
         Self::Passed,
         Self::Failed,
