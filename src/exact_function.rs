@@ -519,12 +519,13 @@ fn resolve_operand_type(
     graph: &Graph<'_>,
     type_node_id: &CheckedNodeId,
 ) -> Result<OperandKind, ExactFunctionRefusal> {
-    let node = graph
-        .get(type_node_id)
-        .copied()
-        .ok_or_else(|| ExactFunctionRefusal::UnknownTypeNode {
-            type_node_id: type_node_id.clone(),
-        })?;
+    let node =
+        graph
+            .get(type_node_id)
+            .copied()
+            .ok_or_else(|| ExactFunctionRefusal::UnknownTypeNode {
+                type_node_id: type_node_id.clone(),
+            })?;
     match CheckedNodeTag::from_wire(&node.node_tag) {
         Some(CheckedNodeTag::ScalarType) => match &*node.semantic_form {
             "boolean" => Ok(OperandKind::Boolean),
@@ -547,13 +548,13 @@ fn resolve_operand_type(
                 issue: UpstreamBlocker::QuireSpecLanguage120,
             })
         }
-        Some(tag @ (CheckedNodeTag::State | CheckedNodeTag::Temporal | CheckedNodeTag::Protocol)) => {
-            Err(ExactFunctionRefusal::BlockedOnUpstream {
-                unsupported_node_id: type_node_id.clone(),
-                node_tag: tag.as_wire(),
-                issue: UpstreamBlocker::QuireSpecLanguage121,
-            })
-        }
+        Some(
+            tag @ (CheckedNodeTag::State | CheckedNodeTag::Temporal | CheckedNodeTag::Protocol),
+        ) => Err(ExactFunctionRefusal::BlockedOnUpstream {
+            unsupported_node_id: type_node_id.clone(),
+            node_tag: tag.as_wire(),
+            issue: UpstreamBlocker::QuireSpecLanguage121,
+        }),
         _ => Err(ExactFunctionRefusal::UnsupportedOperandType {
             type_node_id: type_node_id.clone(),
         }),
@@ -628,8 +629,7 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> ExactFunc
 }
 
 fn application_arguments(body: &serde_json::Value) -> Option<&Vec<serde_json::Value>> {
-    if body.get("term")?.as_str()? != "application" || body.get("operator")?.as_str()? != "binary"
-    {
+    if body.get("term")?.as_str()? != "application" || body.get("operator")?.as_str()? != "binary" {
         return None;
     }
     body.get("arguments")?.as_array()
@@ -902,8 +902,10 @@ pub fn generate_exact_function_oracles(
         by_key.entry(key).or_insert(item);
     }
 
-    let call_requested: Vec<CheckedNodeId> =
-        by_key.values().map(|item| item.call_node_id.clone()).collect();
+    let call_requested: Vec<CheckedNodeId> = by_key
+        .values()
+        .map(|item| item.call_node_id.clone())
+        .collect();
     let call_lowering = package.lower(&call_requested, &lowering_profile());
 
     let mut source = SourceBuilder::default();
@@ -1067,7 +1069,10 @@ struct ItemKey {
 }
 
 impl ItemKey {
-    fn of(item: &ExactFunctionItem, function_node_id_by_name: &BTreeMap<&str, &CheckedNodeId>) -> Self {
+    fn of(
+        item: &ExactFunctionItem,
+        function_node_id_by_name: &BTreeMap<&str, &CheckedNodeId>,
+    ) -> Self {
         Self {
             call_node_id: item.call_node_id.clone(),
             function_node_id: function_node_id_by_name
@@ -1145,7 +1150,12 @@ struct SourceBuilder {
 }
 
 impl SourceBuilder {
-    fn item(&mut self, symbol: &str, item: &ExactFunctionItem, declaration: &ExactFunctionDeclaration) {
+    fn item(
+        &mut self,
+        symbol: &str,
+        item: &ExactFunctionItem,
+        declaration: &ExactFunctionDeclaration,
+    ) {
         self.functions.push_str(&format!(
             "\n/// Node `{}`: applies `{}`.\n\
              pub fn oracle_{symbol}(\n    \
@@ -1164,11 +1174,16 @@ impl SourceBuilder {
     /// Render `checked_package()` from every surviving function's own
     /// classified shape (declaration plus resolved operand kinds), in
     /// assembled order.
-    fn finish(mut self, classified: &[ClassifiedFunction<'_>], package_id: &CheckedSemanticId) -> String {
+    fn finish(
+        mut self,
+        classified: &[ClassifiedFunction<'_>],
+        package_id: &CheckedSemanticId,
+    ) -> String {
         let mut declarations = String::new();
         for function in classified {
             declarations.push_str(&render_function_declaration(function));
-            self.rendered_bodies.insert(function.declaration.name.clone());
+            self.rendered_bodies
+                .insert(function.declaration.name.clone());
         }
         let mut source = format!("// Source package: {}\n", package_id.digest);
         source.push_str(SOURCE_HEADER);

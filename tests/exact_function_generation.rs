@@ -130,7 +130,12 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
     ordered.sort_by(|a, b| a.node_id.cmp(&b.node_id));
     let survivor_names: Vec<&str> = ordered
         .iter()
-        .filter(|f| matches!(f.name.as_str(), "add_fn" | "eq_fn" | "call_fn" | "unrelated_fn"))
+        .filter(|f| {
+            matches!(
+                f.name.as_str(),
+                "add_fn" | "eq_fn" | "call_fn" | "unrelated_fn"
+            )
+        })
         .map(|f| f.name.as_str())
         .collect();
 
@@ -210,8 +215,14 @@ fn tc_031_ac10_reference_parameter_blocked_on_qsl_120() {
 #[test]
 fn tc_031_ac11_model_and_state_are_distinct_blockers() {
     let package = ext_corpus_package().admit();
-    let functions = vec![function_model_param("model_fn"), function_state_param("state_fn")];
-    let items = vec![item(ITEM_CALL_ADD, "model_fn"), item(ITEM_CALL_EQ, "state_fn")];
+    let functions = vec![
+        function_model_param("model_fn"),
+        function_state_param("state_fn"),
+    ];
+    let items = vec![
+        item(ITEM_CALL_ADD, "model_fn"),
+        item(ITEM_CALL_EQ, "state_fn"),
+    ];
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
@@ -239,7 +250,10 @@ fn tc_031_ac11_model_and_state_are_distinct_blockers() {
 #[test]
 fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
     let package = ext_corpus_package().admit();
-    let functions = vec![function_dangling_call("dangling_fn"), function_unrelated("unrelated_fn")];
+    let functions = vec![
+        function_dangling_call("dangling_fn"),
+        function_unrelated("unrelated_fn"),
+    ];
     let items = vec![
         item(ITEM_CALL_ADD, "dangling_fn"),
         item(ITEM_CALL_UNRELATED, "unrelated_fn"),
@@ -264,7 +278,10 @@ fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
 #[test]
 fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
     let package = ext_corpus_package().admit();
-    let functions = vec![function_form_mismatch("bad_fn"), function_unrelated("unrelated_fn")];
+    let functions = vec![
+        function_form_mismatch("bad_fn"),
+        function_unrelated("unrelated_fn"),
+    ];
     let items = vec![
         item(ITEM_CALL_NESTED, "bad_fn"),
         item(ITEM_CALL_UNRELATED, "unrelated_fn"),
@@ -322,7 +339,10 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
 
     let first = generate(&package, &functions, &items);
     let second = generate(&package, &functions, &items);
-    assert_eq!(contents(&first, "src/lib.rs"), contents(&second, "src/lib.rs"));
+    assert_eq!(
+        contents(&first, "src/lib.rs"),
+        contents(&second, "src/lib.rs")
+    );
     assert_eq!(
         contents(&first, "claim-map.json"),
         contents(&second, "claim-map.json")
@@ -333,7 +353,10 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
     let mut permuted_items = items.clone();
     permuted_items.reverse();
     let third = generate(&package, &permuted_functions, &permuted_items);
-    assert_eq!(contents(&first, "src/lib.rs"), contents(&third, "src/lib.rs"));
+    assert_eq!(
+        contents(&first, "src/lib.rs"),
+        contents(&third, "src/lib.rs")
+    );
     assert_eq!(
         contents(&first, "claim-map.json"),
         contents(&third, "claim-map.json")
@@ -358,7 +381,11 @@ fn tc_031_ac13_generation_matches_the_committed_golden_files() {
         }
         let expected = fs::read_to_string(&path)
             .unwrap_or_else(|error| panic!("{}: {error}; set {BLESS}=1", path.display()));
-        assert_eq!(contents(&oracles, artifact), expected, "{artifact} drifted from {golden}");
+        assert_eq!(
+            contents(&oracles, artifact),
+            expected,
+            "{artifact} drifted from {golden}"
+        );
     }
 }
 
@@ -401,7 +428,12 @@ fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
     ordered.sort_by(|a, b| a.node_id.cmp(&b.node_id));
     let survivor_names: Vec<&str> = ordered
         .iter()
-        .filter(|f| matches!(f.name.as_str(), "add_fn" | "eq_fn" | "call_fn" | "unrelated_fn"))
+        .filter(|f| {
+            matches!(
+                f.name.as_str(),
+                "add_fn" | "eq_fn" | "call_fn" | "unrelated_fn"
+            )
+        })
         .map(|f| f.name.as_str())
         .collect();
 
