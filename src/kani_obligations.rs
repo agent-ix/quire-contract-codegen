@@ -33,7 +33,12 @@
 //! `classify_claim`, so a claim codegen refused outright is classified through the `Refused` arm
 //! instead and never reaches it. V1 has no
 //! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so no frame
-//! harness is emitted.
+//! harness is emitted. A V2 scalar claim's graph node that is present but is neither the one
+//! recognized `state`/`frame` pair nor `expression`-tagged (the only family this generator ever
+//! lowers to a `Generated` claim) is refused as [`UnsupportedObligation::UnknownNodeKind`] rather
+//! than accounted with a null contract role and no typed reason; a claim naming a `node_id`
+//! absent from the graph entirely is refused the same way as [`InvalidObligationItem::UnknownNode`]
+//! (see `refuse_unknown_node_kind`).
 //!
 //! A render whose generated source would exceed [`crate::MAX_GENERATED_SOURCE_BYTES`] is refused
 //! as [`UnsupportedObligation::ResourceLimitExceeded`], and one that fits that ceiling but fails
@@ -44,9 +49,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_ir::{
-    BoundClause, BoundPackage, CheckedNodeId, CheckedPackageV2, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, ClauseKind, ClauseRef, DependencyIdentity, DependencyKind,
-    ExecutionPoint, SourceSpan, StateObservation,
+    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
+    CheckedSemanticNodeV2, CheckedSourceMapEntry, ClauseKind, ClauseRef, DependencyIdentity,
+    DependencyKind, ExecutionPoint, SourceSpan, StateObservation,
 };
 use serde::Serialize;
 
@@ -341,6 +346,25 @@ pub enum UnsupportedObligation {
         /// The FR-014 refusal.
         refusal: ExactScalarRefusal,
     },
+    /// A V2 scalar-claim item's graph node carries a tag/form pair this generator does not model
+    /// as a contract role. [`ObligationKind::Frame`] is the only pair `classify_node` recognizes
+    /// (`state`/`frame`); every other node reaching this ground is present in the graph -- a node
+    /// absent from the graph entirely is refused instead as [`InvalidObligationItem::UnknownNode`]
+    /// (see `refuse_unknown_node_kind`), a distinct code from this one -- but would otherwise have
+    /// been accounted with a null `kind` and no typed reason naming what was unrecognized
+    /// (FR-001-AC-4). `generate_exact_scalar_oracles` already refuses every node whose own tag is
+    /// not `expression` before it could reach a successful claim, so this ground is a second,
+    /// independent gate against the same drift: an IR revision that adds a node kind this
+    /// generator has not been taught, or a claim map assembled by another caller, is refused by
+    /// name here too rather than depending on that other gate alone.
+    UnknownNodeKind {
+        /// The unrecognized node.
+        node_id: CheckedNodeId,
+        /// The node's own family.
+        node_tag: String,
+        /// The node's own form within that family.
+        semantic_form: String,
+    },
 }
 
 /// Why an item is not a valid request.
@@ -354,7 +378,10 @@ pub enum InvalidObligationItem {
     },
     /// The clause is not an executable clause of the package.
     UnknownClause,
-    /// The node has no entry in the claim map.
+    /// The node has no entry in the claim map, or (see `refuse_unknown_node_kind`) the claim
+    /// naming it has no entry in the admitted graph -- the same code
+    /// [`ExactScalarRefusal::InvalidInput`] already reports for "the node is not in the admitted
+    /// graph" through `classify_claim`'s `Refused` arm.
     UnknownNode,
     /// V1 items name more than one bound package.
     MixedBoundPackages,
@@ -1039,12 +1066,59 @@ fn classify_node<'a>(
             Some(claim) => classify_claim(package, claim),
         }
     };
+    let outcome = refuse_unknown_node_kind(graph_node, kind, outcome);
     ItemState {
         kind,
         subject,
         identity,
         outcome,
     }
+}
+
+/// Guards [`Outcome::LoweredScalar`] against a node whose graph entry does not match the one
+/// recognized `state`/`frame` role pair, and against a node absent from the graph entirely.
+/// [`ExactScalarClaimMap`]/[`ExactScalarClaim`] are fully `pub`, so nothing enforces that a claim
+/// map assembled by another caller names only node ids [`CheckedPackageV2::graph`] also carries --
+/// that invariant holds only for a claim map this crate's own
+/// [`crate::exact_scalar::generate_exact_scalar_oracles`] produced. A hand-assembled claim map
+/// whose [`GeneratedScalarClaim`] bounds still resolve can therefore reach
+/// [`Outcome::LoweredScalar`] for a `node_id` this crate never checked is in the graph at all, so
+/// that case is refused here too, as [`InvalidObligationItem::UnknownNode`] -- the same code
+/// [`ExactScalarRefusal::InvalidInput`] ("the node is not in the admitted graph") already reports
+/// through `classify_claim`'s `Refused` arm, so a node absent from the graph is refused under one
+/// code regardless of which path notices it first. `expression` is excluded from the tag/form
+/// check because it is the one family [`crate::exact_scalar::generate_exact_scalar_oracles`] ever
+/// lowers to a [`ExactScalarDisposition::Generated`] claim at all -- every real, golden-path
+/// scalar claim this generator supports is an `expression` node, and none of those carry a
+/// contract role, so a null `kind` there is correct, not unmodeled. Scoped to the success arm
+/// rather than every arm: `classify_claim` already refuses every other `state`-tagged node with
+/// its own typed reason (for every fixture reaching it today, always
+/// [`UnsupportedObligation::NoFiniteEncoding`], since `generate_exact_scalar_oracles` accepts only
+/// `expression`-tagged nodes), and that reason is more specific than this one -- this ground
+/// exists for the gap those checks do not cover: a node this generator would otherwise have
+/// accounted as `Supported` with a null `kind`.
+fn refuse_unknown_node_kind<'a>(
+    graph_node: Option<&CheckedSemanticNodeV2>,
+    kind: Option<ObligationKind>,
+    outcome: Outcome<'a>,
+) -> Outcome<'a> {
+    if kind.is_some() {
+        return outcome;
+    }
+    let Outcome::LoweredScalar(_) = &outcome else {
+        return outcome;
+    };
+    let Some(node) = graph_node else {
+        return Outcome::Invalid(InvalidObligationItem::UnknownNode);
+    };
+    if &*node.node_tag == CheckedNodeTag::Expression.as_wire() {
+        return outcome;
+    }
+    Outcome::Unsupported(UnsupportedObligation::UnknownNodeKind {
+        node_id: node.node_id.clone(),
+        node_tag: node.node_tag.to_string(),
+        semantic_form: node.semantic_form.to_string(),
+    })
 }
 
 fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> Outcome<'a> {

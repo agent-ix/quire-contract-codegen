@@ -105,6 +105,12 @@ each pinned to its backend identity and model-domain bounds. This is issue
   error and emit no harness; neither is reported as the internal-invariant
   fallback used for an otherwise-successful render whose harness could not be
   assembled.
+- If a V2 scalar-claim item's graph node carries a tag/form pair the generator
+  does not model as a contract role, then the generator shall refuse it with a
+  typed reason naming that tag and form and emit no harness, rather than
+  accounting it as supported with no contract role recorded; a claim naming a
+  node id absent from the graph entirely is likewise refused, with no harness
+  emitted.
 
 ## Acceptance Criteria
 
@@ -123,6 +129,7 @@ each pinned to its backend identity and model-domain bounds. This is issue
 | FR-015-AC-11 | Every symbolic argument carries an inclusive assumption equal to its IR `bounded_domain`, and a bounded-integer post-state result is required to lie in the same domain; no generated source carries a `#[kani::unwind]`. | Test (TC-025) |
 | FR-015-AC-12 | A request naming no items, more than 256 items, an unparsable subject path, or an unwind bound outside `1..=1024` is refused whole, with no item accounted and no harness exposed. | Test (TC-025) |
 | FR-015-AC-13 | An otherwise-supported obligation whose generated harness source exceeds the bounded-resource ceiling is refused with a distinct resource-limit reason naming the generated size, and one that fits the ceiling but fails to parse as Rust is refused with a distinct syntax reason naming the parse error; neither is reported as the internal-invariant render-assembly fallback. | Test (TC-025) |
+| FR-015-AC-14 | A scalar-claim item whose graph node carries a tag/form pair this generator does not model as a contract role is refused with a typed reason naming that tag and form, and no harness is emitted; a claim naming a node id absent from the graph entirely is refused rather than accounted as supported with no contract role recorded. | Test (TC-025) |
 
 ## Dependencies
 
