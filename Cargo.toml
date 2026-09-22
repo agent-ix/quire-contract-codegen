@@ -26,7 +26,7 @@ test = true
 
 [dependencies]
 quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "97f50655c48f48be0bf5ab04dff5aac029c3745c" }
-quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "4e330525be513fe57c67717dc22b969d36656b85", features = ["exact"] }
+quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "9f31169276edb85799d6b7d878020caf49617090", features = ["exact"] }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"
 sha2 = "=0.10.9"
@@ -35,7 +35,7 @@ syn = { version = "=2.0.119", features = ["full", "visit"] }
 [dev-dependencies]
 jsonschema = { version = "=0.17.1", default-features = false, features = ["draft202012"] }
 proptest = { version = "=1.5.0", default-features = false, features = ["std"] }
-quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "4e330525be513fe57c67717dc22b969d36656b85", features = ["proptest", "exact"] }
+quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "9f31169276edb85799d6b7d878020caf49617090", features = ["proptest", "exact"] }
 quire-spec-language = { version = "=0.2.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "21c507e50cb009497ee9d306e1d18c1919346611" }
 
 [profile.release]
