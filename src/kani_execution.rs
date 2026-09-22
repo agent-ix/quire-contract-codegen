@@ -867,18 +867,33 @@ fn classify_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
     }
 }
 
-/// Reads Kani's `** <failed> of <total> failed[ (<n> unreachable)]` check summary line, giving
-/// `(failed, total)`. Distinct from [`cover_summary`]'s line: this one's suffix is `" failed"`,
-/// that one's is `" cover properties satisfied"`, so the two never match the same line.
+/// The parenthetical count Kani appends to a summary line, e.g. `(38 undetermined)`. Both known
+/// words are attested in this repository's own fixtures at different times: `unreachable` when
+/// Kani proves a check's location is never hit, `undetermined` when it can't decide (observed
+/// here on a checks line whose run hit an unwinding bound: `** 1 of 39 failed (38 undetermined)`).
+/// Kani's own summary vocabulary is one property of the tool, not of which line it appears on, so
+/// both [`checks_summary`] and [`cover_summary`] accept either rather than only the word each
+/// happened to be written against.
+const SUMMARY_TAIL_WORDS: [&str; 2] = ["unreachable", "undetermined"];
+
+fn summary_tail_count(tail: &str) -> Option<u64> {
+    let inner = tail.strip_prefix(" (")?.strip_suffix(')')?;
+    let (count, word) = inner.split_once(' ')?;
+    if !SUMMARY_TAIL_WORDS.contains(&word) {
+        return None;
+    }
+    count.parse().ok()
+}
+
+/// Reads Kani's `** <failed> of <total> failed[ (<n> unreachable|undetermined)]` check summary
+/// line, giving `(failed, total)`. Distinct from [`cover_summary`]'s line: this one's suffix is
+/// `" failed"`, that one's is `" cover properties satisfied"`, so the two never match the same
+/// line.
 fn checks_summary(text: &str) -> Option<(u64, u64)> {
     text.lines().find_map(|line| {
         let rest = line.trim().strip_prefix("** ")?;
         let (counts, tail) = rest.split_once(" failed")?;
-        let tail_is_summary = tail.is_empty()
-            || tail
-                .strip_prefix(" (")
-                .and_then(|inner| inner.strip_suffix(" unreachable)"))
-                .is_some_and(|count| count.parse::<u64>().is_ok());
+        let tail_is_summary = tail.is_empty() || summary_tail_count(tail).is_some();
         if !tail_is_summary {
             return None;
         }
@@ -887,16 +902,12 @@ fn checks_summary(text: &str) -> Option<(u64, u64)> {
     })
 }
 
-/// Reads Kani's `** <satisfied> of <total> cover properties satisfied[ (<n> unreachable)]` line.
+/// Reads Kani's `** <satisfied> of <total> cover properties satisfied[ (<n> unreachable|undetermined)]` line.
 fn cover_summary(text: &str) -> Option<(u64, u64)> {
     text.lines().find_map(|line| {
         let rest = line.trim().strip_prefix("** ")?;
         let (counts, tail) = rest.split_once(" cover properties satisfied")?;
-        let tail_is_summary = tail.is_empty()
-            || tail
-                .strip_prefix(" (")
-                .and_then(|inner| inner.strip_suffix(" unreachable)"))
-                .is_some_and(|count| count.parse::<u64>().is_ok());
+        let tail_is_summary = tail.is_empty() || summary_tail_count(tail).is_some();
         if !tail_is_summary {
             return None;
         }
@@ -1087,6 +1098,42 @@ mod tests {
         // unaffected: the cover-only classification still applies exactly as before.
         let no_checks_line = " ** 1 of 1 cover properties satisfied\nVERIFICATION:- SUCCESSFUL";
         assert_eq!(classify_run(true, no_checks_line), KaniRunOutcome::Verified);
+    }
+
+    /// The checks-failed line's parenthetical is not always `unreachable`: this repository's own
+    /// `tc_027_an_exhausted_unwind_bound_is_inconclusive_not_falsified` fixture below carries a
+    /// real `(38 undetermined)` suffix on a *different* (failed) transcript. Before this test,
+    /// `checks_summary` only recognised `unreachable` — a zero-success `SUCCESS` transcript whose
+    /// parenthetical instead said `undetermined` would fail to parse, silently fall through past
+    /// the vacuity gate entirely, and be classified purely from the (here, satisfied) cover line
+    /// as `Verified`, the exact defect agent-ix/quire-contract-codegen#99 exists to close.
+    #[test]
+    fn a_checks_summary_with_an_undetermined_parenthetical_still_routes_through_the_vacuity_gate() {
+        let vacuous_with_undetermined_suffix = "SUMMARY:\n ** 0 of 0 failed (0 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
+        assert_eq!(
+            classify_run(true, vacuous_with_undetermined_suffix),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::VacuousProof
+            },
+            "an `undetermined` parenthetical must not be treated as an unparseable line"
+        );
+
+        // Nonzero success checks with an `undetermined` parenthetical still passes through to
+        // `Verified`, unaffected — the parenthetical is metadata, not itself a check outcome.
+        let genuinely_verified_with_undetermined_suffix = "SUMMARY:\n ** 0 of 5 failed (2 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
+        assert_eq!(
+            classify_run(true, genuinely_verified_with_undetermined_suffix),
+            KaniRunOutcome::Verified
+        );
+
+        // A word this module does not recognise still falls through to the cover-only path,
+        // exactly like having no parenthetical at all — parsing stays fail-closed rather than
+        // guessing at Kani's full vocabulary.
+        let unrecognised_word = "SUMMARY:\n ** 0 of 0 failed (0 somethingelse)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
+        assert_eq!(
+            classify_run(true, unrecognised_word),
+            KaniRunOutcome::Verified
+        );
     }
 
     /// An exhausted unwind bound is inconclusive even when Kani prints a playback. The output
