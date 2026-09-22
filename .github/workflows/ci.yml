@@ -51,7 +51,13 @@ jobs:
           quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'
 
       - name: Unsafe audit
-        run: bash scripts/check_unsafe_comments.sh
+        # The selftest runs first and in this job, not only under
+        # `make audit-unsafe`: this workflow invokes the scripts directly, so a
+        # selftest wired only into the Makefile would never run here -- exactly
+        # the blind spot #119 exists to close.
+        run: |
+          bash scripts/test_check_unsafe_comments.sh
+          bash scripts/check_unsafe_comments.sh
 
   licenses:
     name: License Check

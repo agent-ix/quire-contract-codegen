@@ -27,6 +27,12 @@ Each file under `src/` demonstrates one case:
   immediately after or alongside an escaped quote, a char literal, a raw
   string, a multi-line string, and (on the same line) a quote-prefixed mention
   of the word `unsafe`. All five must be flagged.
+
+  `mention_then_block.rs` is the only one of the five that a naive
+  string-span-deletion mutant (the #118 shape) still flags correctly, so it can
+  look redundant. It is not: it is the *only* fixture that catches the other
+  obvious weakening -- skipping any line that contains `"unsafe {` at all --
+  which every other fixture here passes. Do not drop it as a duplicate.
 - `trivial_positive.rs` -- an uncommented `unsafe` block with none of the
   above adjacent. Must be flagged; this is the case every escape-adjacent
   fixture is a harder variant of.
