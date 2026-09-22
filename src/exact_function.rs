@@ -97,7 +97,7 @@
 //! map therefore records one entry per function: `Location { origin:
 //! Origin::Body { function, index }, path: vec![] }`. This is a real,
 //! honest limit of this V1, not a bug: FR-021's Outputs describe `path` as
-//! "the child-index path from [the] function's root to the sub-expression"
+//! "the child-index path from \[the\] function's root to the sub-expression"
 //! for a body that may nest sub-expressions below its root, but this
 //! generator's own body vocabulary never has one -- every emitted body's
 //! one call point *is* its root -- so `path` can never be non-empty by

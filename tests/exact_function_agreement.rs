@@ -446,6 +446,14 @@ fn tc_031_ac9_denial_at_function_call_yields_incomplete_with_no_charge_applied()
 /// enforcement, not a hand-built parallel double standing in for them.
 #[test]
 fn tc_031_ac7_nested_call_chain_is_bounded_by_max_call_depth() {
+    // `chain_functions()`'s own node ids resolve through `code_id`, which
+    // needs every extended-corpus code pre-registered (it falls back to the
+    // *base* `composite_equality_support::corpus_package()` on a miss, which
+    // never registers FR-021's own codes) -- building the corpus once has
+    // that side effect, matching every other FR-021 test's own pattern of
+    // building it before touching `chain_functions()`/`code_id`.
+    let _ = ext_corpus_package();
+
     // Sanity on the fixture the golden itself was built from (bugs in
     // `chain_functions()` would otherwise show up only as an opaque
     // compile/behavior difference in `chain_generated`, not here):
