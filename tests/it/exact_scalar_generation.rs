@@ -964,11 +964,14 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
     );
 }
 
-/// Trace: FR-014-AC-3, TC-024.
-#[test]
-fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
-    // Each reference argument costs a body term and a successor edge, so
-    // 40,000 of them exceed the 65,536 units scalar lowering allows.
+/// A package/item pair whose lone node (code 3001) exceeds
+/// `SCALAR_LOWERING_WORK_LIMIT` during lowering. Each reference argument
+/// costs a body term and a successor edge, so 40,000 of them exceed the
+/// 65,536 units scalar lowering allows. Shared by
+/// `tc_024_lowering_work_exhaustion_is_a_typed_refusal` and
+/// `tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively`, which
+/// otherwise would each pay to build and admit this 40,000-node package.
+fn work_exhausted_fixture() -> (CheckedPackageV2, ExactScalarItem) {
     let arguments = (0..40_000)
         .map(|_| reference(&key(V_INTEGER)))
         .collect::<Vec<_>>();
@@ -1004,13 +1007,20 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
         bytes: 16 * 1024 * 1024,
         ..quire_contract_ir::CheckedPackageReadLimits::bounded()
     };
-    let oracles = generate(
-        &builder.admit_with(limits),
-        &[ExactScalarItem {
+    (
+        builder.admit_with(limits),
+        ExactScalarItem {
             node_id: code_id(3001),
             operation: package::integer_add(),
-        }],
-    );
+        },
+    )
+}
+
+/// Trace: FR-014-AC-3, TC-024.
+#[test]
+fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
+    let (package, item) = work_exhausted_fixture();
+    let oracles = generate(&package, &[item]);
     let ExactScalarDisposition::Refused {
         refusal: ExactScalarRefusal::LoweringWorkExhausted { limit, consumed },
     } = &oracles.claim_map.items[0].result
@@ -1020,6 +1030,125 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
     assert_eq!(*limit, quire_contract_codegen::SCALAR_LOWERING_WORK_LIMIT);
     assert!(consumed > limit);
     assert!(!contents(&oracles, "src/lib.rs").contains(code_id(3001).digest.as_ref()));
+}
+
+/// Every `ExactScalarRefusal` variant's name, matched with **no `_` arm**.
+/// This is the guard IR-229 exists for: FR-014-AC-11 and its two Behavior
+/// bullets used to name `check_item`'s checks in prose, three separate
+/// enumerations that PR #113 alone found stale five times over. Prose can go
+/// stale silently; this match cannot -- add a twenty-first `ExactScalarRefusal`
+/// variant and this function (and
+/// `tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively` below,
+/// which calls it once per variant) stop compiling until both a fixture and an
+/// arm exist for it.
+fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
+    match refusal {
+        ExactScalarRefusal::DuplicateRequest => "DuplicateRequest",
+        ExactScalarRefusal::InvalidInput => "InvalidInput",
+        ExactScalarRefusal::Unsupported { .. } => "Unsupported",
+        ExactScalarRefusal::BlockedOnUpstream { .. } => "BlockedOnUpstream",
+        ExactScalarRefusal::RequiresBound { .. } => "RequiresBound",
+        ExactScalarRefusal::MissingBound { .. } => "MissingBound",
+        ExactScalarRefusal::AmbiguousBound { .. } => "AmbiguousBound",
+        ExactScalarRefusal::UnreadableBound { .. } => "UnreadableBound",
+        ExactScalarRefusal::BoundMismatch { .. } => "BoundMismatch",
+        ExactScalarRefusal::OperandUnsupported { .. } => "OperandUnsupported",
+        ExactScalarRefusal::UnitlessLiteralOperand { .. } => "UnitlessLiteralOperand",
+        ExactScalarRefusal::InvalidBody { .. } => "InvalidBody",
+        ExactScalarRefusal::BodyIncomplete { .. } => "BodyIncomplete",
+        ExactScalarRefusal::LoweringWorkExhausted { .. } => "LoweringWorkExhausted",
+        ExactScalarRefusal::NotExpression { .. } => "NotExpression",
+        ExactScalarRefusal::FormMismatch { .. } => "FormMismatch",
+        ExactScalarRefusal::BodyMismatch { .. } => "BodyMismatch",
+        ExactScalarRefusal::ResultTypeMismatch { .. } => "ResultTypeMismatch",
+        ExactScalarRefusal::OperandTypeMismatch { .. } => "OperandTypeMismatch",
+        ExactScalarRefusal::MissingOperationIdentity { .. } => "MissingOperationIdentity",
+    }
+}
+
+/// Trace: FR-014-AC-1, FR-014-AC-3, FR-014-AC-11, FR-014-AC-14, TC-024.
+///
+/// One fixture per `ExactScalarRefusal` variant, each checked against
+/// `refusal_variant_name`'s exhaustive match (see its own doc for the
+/// compile-time guarantee that gives this repeat of PR #113's drift).
+///
+/// Seventeen variants are driven through the real admitted-package generation
+/// pipeline -- sixteen share the golden corpus's one `generate` call (see
+/// `tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged`,
+/// which asserts the full typed reason for each of these same codes; this
+/// test only needs the variant, not the reason's payload), and
+/// `LoweringWorkExhausted` needs `work_exhausted_fixture`'s own package.
+///
+/// Three variants are documented, on both sides of the crate boundary, as
+/// unreachable through any package this crate's public API can admit, so no
+/// admitted-package fixture for them exists to drive:
+/// `MissingOperationIdentity` here (`catalogued_operation_identity`'s own doc:
+/// "this generator should never receive a node for which this member is
+/// absent" -- quire-contract-ir's `validate_operations` guarantees it before
+/// admission) and `InvalidBody`/`BodyIncomplete` in quire-contract-ir's own
+/// `CompleteLoweringRecordV2` doc ("A package the V2 reader admitted never
+/// yields this" / "Like `InvalidBody`, an admitted package never yields
+/// this"). Those three are constructed directly instead -- the same proof
+/// technique `catalogued_operation_identity`'s own unit test
+/// (`src/exact_scalar.rs`) already uses for the first of them.
+#[test]
+fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
+    let package = corpus_package().admit();
+    let oracles = generate(&package, &golden_items());
+
+    let from_the_golden_corpus = [
+        (DUPLICATED, "DuplicateRequest"),
+        (MISSING, "InvalidInput"),
+        (COMPOSITE, "Unsupported"),
+        (FUNCTION, "BlockedOnUpstream"),
+        (UNBOUNDED, "RequiresBound"),
+        (MISSING_ROUNDING, "MissingBound"),
+        (AMBIGUOUS, "AmbiguousBound"),
+        (UNREADABLE, "UnreadableBound"),
+        (MATHEMATICAL, "BoundMismatch"),
+        (EXPRESSION_OPERAND, "OperandUnsupported"),
+        (LITERAL_QUANTITY, "UnitlessLiteralOperand"),
+        (V_BOOLEAN, "NotExpression"),
+        (WRONG_ARITY, "FormMismatch"),
+        (WRONG_BODY, "BodyMismatch"),
+        (WRONG_RESULT, "ResultTypeMismatch"),
+        (WRONG_OPERAND, "OperandTypeMismatch"),
+    ];
+    for (code, expected) in from_the_golden_corpus {
+        assert_eq!(
+            refusal_variant_name(&refusal_of(&oracles, code)),
+            expected,
+            "node {code}"
+        );
+    }
+
+    let (work_exhausted_package, work_exhausted_item) = work_exhausted_fixture();
+    let work_exhausted_oracles = generate(&work_exhausted_package, &[work_exhausted_item]);
+    assert_eq!(
+        refusal_variant_name(&refusal_of(&work_exhausted_oracles, 3001)),
+        "LoweringWorkExhausted"
+    );
+
+    // Unreachable through admission (see this test's own doc): constructed
+    // directly rather than fabricated through a fixture that cannot exist.
+    assert_eq!(
+        refusal_variant_name(&ExactScalarRefusal::MissingOperationIdentity {
+            node_id: code_id(V_BOOLEAN),
+        }),
+        "MissingOperationIdentity"
+    );
+    assert_eq!(
+        refusal_variant_name(&ExactScalarRefusal::InvalidBody {
+            body_node_id: code_id(V_BOOLEAN),
+        }),
+        "InvalidBody"
+    );
+    assert_eq!(
+        refusal_variant_name(&ExactScalarRefusal::BodyIncomplete {
+            body_node_id: code_id(V_BOOLEAN),
+        }),
+        "BodyIncomplete"
+    );
 }
 
 /// Trace: FR-014-AC-9, TC-024.
