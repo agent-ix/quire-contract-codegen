@@ -969,8 +969,10 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
 /// costs a body term and a successor edge, so 40,000 of them exceed the
 /// 65,536 units scalar lowering allows. Shared by
 /// `tc_024_lowering_work_exhaustion_is_a_typed_refusal` and
-/// `tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively`, which
-/// otherwise would each pay to build and admit this 40,000-node package.
+/// `tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively`, each
+/// of which still calls this function -- and so still pays to build and admit
+/// this 40,000-node package -- independently; only the fixture-construction
+/// code is shared here, not the runtime cost of paying for it twice.
 fn work_exhausted_fixture() -> (CheckedPackageV2, ExactScalarItem) {
     let arguments = (0..40_000)
         .map(|_| reference(&key(V_INTEGER)))
@@ -1037,10 +1039,13 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
 /// bullets used to name `check_item`'s checks in prose, three separate
 /// enumerations that PR #113 alone found stale five times over. Prose can go
 /// stale silently; this match cannot -- add a twenty-first `ExactScalarRefusal`
-/// variant and this function (and
-/// `tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively` below,
-/// which calls it once per variant) stop compiling until both a fixture and an
-/// arm exist for it.
+/// variant and this function stops compiling until a matching arm exists for
+/// it. That compile failure is the only part the compiler enforces: it forces
+/// the arm, not a fixture. A correct new arm with no corresponding entry in
+/// `tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively` below
+/// compiles and passes fine -- pairing the new variant with real coverage
+/// there is a human convention this match cannot enforce, and a reviewer must
+/// still check for it.
 fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
     match refusal {
         ExactScalarRefusal::DuplicateRequest => "DuplicateRequest",
@@ -1069,8 +1074,15 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 /// Trace: FR-014-AC-1, FR-014-AC-3, FR-014-AC-11, FR-014-AC-14, TC-024.
 ///
 /// One fixture per `ExactScalarRefusal` variant, each checked against
-/// `refusal_variant_name`'s exhaustive match (see its own doc for the
-/// compile-time guarantee that gives this repeat of PR #113's drift).
+/// `refusal_variant_name`'s exhaustive match (see its own doc). What this
+/// test adds is not novel exhaustiveness protection for `ExactScalarRefusal`
+/// -- `src/kani_obligations.rs` already has its own wildcard-free match over
+/// the same enum in production code, so a twenty-first variant would already
+/// break that build today whether or not this test exists. What this test
+/// adds is the variant<->fixture pairing: proof that every variant names a
+/// real, driven scenario (or, for the three noted below, a scenario
+/// deliberately undrivable), not just a name `refusal_variant_name` happens
+/// to mention.
 ///
 /// Seventeen variants are driven through the real admitted-package generation
 /// pipeline -- sixteen share the golden corpus's one `generate` call (see
@@ -1082,15 +1094,25 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 /// Three variants are documented, on both sides of the crate boundary, as
 /// unreachable through any package this crate's public API can admit, so no
 /// admitted-package fixture for them exists to drive:
-/// `MissingOperationIdentity` here (`catalogued_operation_identity`'s own doc:
+/// `MissingOperationIdentity` (`catalogued_operation_identity`'s own doc:
 /// "this generator should never receive a node for which this member is
 /// absent" -- quire-contract-ir's `validate_operations` guarantees it before
-/// admission) and `InvalidBody`/`BodyIncomplete` in quire-contract-ir's own
-/// `CompleteLoweringRecordV2` doc ("A package the V2 reader admitted never
+/// admission) and `InvalidBody`/`BodyIncomplete` (quire-contract-ir's own
+/// `CompleteLoweringRecordV2` doc: "A package the V2 reader admitted never
 /// yields this" / "Like `InvalidBody`, an admitted package never yields
-/// this"). Those three are constructed directly instead -- the same proof
-/// technique `catalogued_operation_identity`'s own unit test
-/// (`src/exact_scalar.rs`) already uses for the first of them.
+/// this"). Real production-path coverage of these three already exists, as
+/// unit tests inside the crate that call the real private functions this
+/// integration-test crate cannot reach:
+/// `tc_024_invalid_and_incomplete_bodies_are_typed_refusals` drives
+/// `InvalidBody`/`BodyIncomplete` through the real `lowered()`, and
+/// `tc_024_catalogued_operation_identity_refuses_a_node_whose_operation_has_no_identity`
+/// drives `MissingOperationIdentity` through the real
+/// `catalogued_operation_identity` (both in `src/exact_scalar.rs`, both
+/// private to `quire_contract_codegen` and so unreachable from here). The
+/// three assertions below construct each variant directly instead; they only
+/// exercise `refusal_variant_name`'s own match arms for these three variants
+/// -- they are not evidence that production code produces them, which is the
+/// two unit tests' job.
 #[test]
 fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
     let package = corpus_package().admit();
@@ -1131,6 +1153,9 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
 
     // Unreachable through admission (see this test's own doc): constructed
     // directly rather than fabricated through a fixture that cannot exist.
+    // These three assertions exercise `refusal_variant_name`'s own match
+    // arms for these variants; the real production-path coverage is the two
+    // unit tests named in this test's doc comment above, not these lines.
     assert_eq!(
         refusal_variant_name(&ExactScalarRefusal::MissingOperationIdentity {
             node_id: code_id(V_BOOLEAN),
