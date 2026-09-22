@@ -39,6 +39,8 @@ mod strategy;
 mod exact_scalar;
 // Implements: FR-018
 mod composite_equality;
+// Implements: FR-021
+mod exact_function;
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
 mod vacuity;
 // Implements: FR-004 (complete domain observations, always unqualified).
@@ -75,6 +77,16 @@ pub use composite_equality::{
     RecordedSchedule, RecursionEdgesKind, UpstreamBlocker as CompositeEqualityUpstreamBlocker,
     COMPOSITE_EQUALITY_CLAIM_MAP_VERSION, COMPOSITE_EQUALITY_CRATE_NAME,
     COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT,
+};
+
+pub use exact_function::{
+    generate_exact_function_oracles, CallPointKind, ExactFunctionBody, ExactFunctionClaim,
+    ExactFunctionClaimMap, ExactFunctionDeclaration, ExactFunctionDisposition,
+    ExactFunctionGenerationError, ExactFunctionItem, ExactFunctionOracles, ExactFunctionRefusal,
+    FunctionParameter, GeneratedExactFunctionClaim, LocationMapEntry, RecordedLocation,
+    RecordedOrigin, UpstreamBlocker as ExactFunctionUpstreamBlocker,
+    EXACT_FUNCTION_CLAIM_MAP_VERSION, EXACT_FUNCTION_CRATE_NAME,
+    EXACT_FUNCTION_LOWERING_WORK_LIMIT,
 };
 
 pub use bound_coverage::{
