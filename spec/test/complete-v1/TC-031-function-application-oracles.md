@@ -23,11 +23,17 @@ runtime revision never populates either field.
 This test depends on this branch's own re-pin of `quire-contract-runtime` to `9f311692`
 (`agent-ix/quire-contract-codegen` FR-021's own prerequisite): at the previously pinned `4e33052`,
 the function-application surface step 4 calls (`PackageDeclarations`, `CheckedPackage`, `Frame`,
-`Evaluation`) was not visible here at all. It depends on FR-021's own re-pin only — `AC-2`'s agreement
-leg against `quire_spec_language::value` remains blocked on a further, symmetric `quire-spec-language`
-re-pin FR-021's Dependencies section names as an unsatisfied prerequisite of implementation; this
-test records that leg as planned rather than asserting it against a authority surface that is not
-yet visible here.
+`Evaluation`) was not visible here at all.
+
+The authority-agreement leg (FR-021-AC-18) is recorded here as 🚧 Planned, but not because the
+authority surface is missing: `quire_spec_language::value::expression` already publishes
+`PackageDeclarations`, `CheckedPackage::call` and `CheckedPackage::evaluate` at this repository's
+current `21c507e` pin. It is planned because `21c507e` is not `ea39f91`, the revision
+`quire-contract-runtime` FR-273-AC-5 names as its authority, and the 14 commits between them rewrite
+`src/value/expression/` substantially. Asserting agreement against `21c507e` today would look green
+while comparing against the wrong authority revision, which is the one failure this leg exists to
+detect. See FR-021 Dependencies for the measurement and for the ruling that the re-pin is a separate
+change.
 
 ## Test Procedure
 
@@ -47,9 +53,10 @@ yet visible here.
    domain then digest.
 3. Inspect each refusal: its typed cause, that the item's symbols are absent from the generated
    source, that its siblings bound to an admitted package are unchanged, that the reference-typed
-   function (b) is refused as blocked on quire-spec-language#120, that the model/relation and
-   temporal/protocol nodes of (f) are refused with their own distinct blocker (quire-spec-language#120
-   or #121, never collapsed into one reason), that the capability-gated function (c) is marked
+   function (b) is refused as blocked on quire-spec-language#120, that the model and relation nodes of
+   (f) are refused as blocked on quire-spec-language#120 and its state, temporal and protocol nodes
+   as blocked on quire-spec-language#121 — two distinct blockers, never collapsed into one reason —
+   that the capability-gated function (c) is marked
    `unsupported` at generation time naming the capability and emits no oracle for any item naming
    it, and that the unlowerable function (d) refuses every item bound to it without changing an
    unrelated package's items. Assert the generated source contains no `unwrap`, `expect`, panicking
@@ -64,10 +71,10 @@ yet visible here.
    thing an emitter mutation changes, so reading it back out of the generated crate would make this
    leg follow the mutation and the comparison vacuous. Assert each claim-map entry's recorded
    `Origin::Body { function, index }` equals the request's own declared-function ordering.
-   **Agreement against `quire_spec_language::value`** is 🚧 Planned: this repository's own
-   `quire-spec-language` dev-dependency pin (`21c507e`) predates the authority revision (`ea39f91`)
-   `quire-contract-runtime` FR-273 itself ports from, so no such call exists yet to compare against
-   (FR-021 Dependencies).
+   **Agreement against `quire_spec_language::value::expression::CheckedPackage::call`** (FR-021-AC-18)
+   is 🚧 Planned: the call exists at the current `21c507e` pin, but `21c507e` is not the `ea39f91`
+   authority revision FR-273-AC-5 names, so this leg is written and left unasserted until the re-pin
+   lands rather than being run against the wrong authority (FR-021 Dependencies).
 5. Re-execute the corpus with a denial injected at the `function.call` charge point; confirm
    `Outcome::Incomplete` naming that point and that the denied charge was not applied — every
    counter equal to those of the same run stopped immediately before that point.
@@ -80,7 +87,14 @@ yet visible here.
    entry, independently re-derive the `Location{origin, path}` by walking that same function's
    original request expression tree from its root (the function's own `Origin::Body { function,
    index }`) to the sub-expression that reaches the corresponding runtime call point, and assert
-   field-for-field equality — a structural comparison against the request, executing nothing.
+   field-for-field equality — a structural comparison against the request, executing nothing. Then
+   confirm the `origin` half against the runtime itself (FR-021-AC-17): re-submit the same assembled
+   package to `PackageDeclarations::check` with one function's measure left undischarged, read the
+   `Origin::Body { function, index }` off the returned `CheckRefusal`, and assert it equals the
+   `origin` the location map recorded for that function. The `path` half has no such counterpart —
+   the runtime builds every `Location` through `location_at`, which always sets an empty `path` — so
+   step 7's request-side re-derivation is the only check `path` can have, and this test states that
+   rather than implying a runtime cross-check covers both fields.
 8. Grep the generated crate's source and its claim map for any read of, branch on, or non-emptiness
    assertion against `Evaluation.location` or `Evaluation.losses`; confirm none exists, and that
    both fields are simply discarded by the emitted oracle function's return path, since the pinned
@@ -94,8 +108,8 @@ unchanged; the reference-typed, capability-gated, unlowerable, and family-exclud
 each refused with their own distinct typed blocker rather than one collapsed reason; bytes are
 identical across runs and orderings; the native `CheckedPackage::call` leg agrees on outcome,
 charges and counters for every generated item, driven from the request rather than the generated
-crate, while the `quire_spec_language::value` leg stays 🚧 Planned pending FR-021's unsatisfied
-`quire-spec-language` re-pin prerequisite; every injected denial yields `Incomplete` at its point
+crate, while the authority leg stays 🚧 Planned pending the re-pin that moves this repository onto
+the `ea39f91` revision FR-273 names; every injected denial yields `Incomplete` at its point
 without applying that charge; the depth bound refuses `CheckedInvariant` once exceeded and no
 generated oracle ever applies a `CheckMode::Kernel` package; the location map round-trips to the
 request's own expression trees with no execution required; and no generated code reads or depends
