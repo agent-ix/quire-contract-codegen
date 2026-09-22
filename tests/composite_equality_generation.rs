@@ -205,17 +205,21 @@ fn tc_029_ac3_claim_descriptor_matches_the_request() {
     // Left and right carry different source types (a bounded-integer-to-integer
     // conversion on the left only) so a descriptor-recording bug that swaps or
     // drops an operand side is observable, not masked by a symmetric request.
+    // E_CONV's own body agrees with exactly this descriptor (its natural
+    // usage elsewhere in this module and in the agreement test) -- since
+    // codegen#82, an arbitrary node id can no longer stand in for one whose
+    // body disagrees with the requested descriptor.
     let package = corpus_package().admit();
     let left = converted(T_INTEGER_BOUNDED, T_INTEGER);
     let right = typed(T_INTEGER);
     let requested = item(
-        E_TEXT,
+        E_CONV,
         EqualityOperatorKind::Equal,
         left.clone(),
         right.clone(),
     );
     let oracles = generate(&package, std::slice::from_ref(&requested));
-    let claim = generated(only_claim(&oracles, E_TEXT));
+    let claim = generated(only_claim(&oracles, E_CONV));
     assert_eq!(claim.descriptor.operator, EqualityOperatorKind::Equal);
     assert_eq!(claim.descriptor.left_source_type, left.source_type);
     assert_eq!(
@@ -320,6 +324,83 @@ fn tc_029_ac5_a_disallowed_conversion_refuses_at_generation_time() {
     ));
     let lib = contents(&oracles, "src/lib.rs");
     assert_eq!(lib.matches("pub fn oracle_").count(), 0);
+}
+
+/// Trace: FR-018 Behavior ("disagrees with its descriptor's arity or
+/// operand types"), TC-029 step 1 ("a descriptor disagreeing with its
+/// operand types"), codegen#82.
+///
+/// `E_OPERAND_MISMATCH`'s body names both operands `T_INTEGER`
+/// (`package::binary_body(T_INTEGER, T_INTEGER)`). A descriptor naming a
+/// different type for either position must refuse before generation --
+/// checked left, then right, so the two requests below exercise both
+/// positions and each reports the position that actually disagreed.
+#[test]
+fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generation() {
+    let package = corpus_package().admit();
+
+    // Both positions disagree: the refusal names position 0 (left), checked
+    // first.
+    let both_wrong = item(
+        E_OPERAND_MISMATCH,
+        EqualityOperatorKind::Equal,
+        typed(T_TEXT),
+        typed(T_TEXT),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&both_wrong));
+    match refused(only_claim(&oracles, E_OPERAND_MISMATCH)) {
+        CompositeEqualityRefusal::OperandTypeMismatch {
+            position,
+            expected,
+            found,
+        } => {
+            assert_eq!(*position, 0);
+            assert_eq!(*expected, code_id(T_TEXT));
+            assert_eq!(*found, Some(code_id(T_INTEGER)));
+        }
+        other => panic!("expected OperandTypeMismatch, got {other:?}"),
+    }
+    let lib = contents(&oracles, "src/lib.rs");
+    assert_eq!(
+        lib.matches("pub fn oracle_").count(),
+        0,
+        "a body/descriptor disagreement must contribute no oracle function"
+    );
+
+    // Only the right position disagrees: the refusal names position 1, not
+    // position 0 -- proving the check inspects both positions rather than
+    // stopping unconditionally at the first.
+    let right_wrong = item(
+        E_OPERAND_MISMATCH,
+        EqualityOperatorKind::Equal,
+        typed(T_INTEGER),
+        typed(T_TEXT),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&right_wrong));
+    match refused(only_claim(&oracles, E_OPERAND_MISMATCH)) {
+        CompositeEqualityRefusal::OperandTypeMismatch {
+            position,
+            expected,
+            found,
+        } => {
+            assert_eq!(*position, 1);
+            assert_eq!(*expected, code_id(T_TEXT));
+            assert_eq!(*found, Some(code_id(T_INTEGER)));
+        }
+        other => panic!("expected OperandTypeMismatch, got {other:?}"),
+    }
+
+    // A request whose descriptor agrees with the body at both positions
+    // generates: proves the check is a genuine agreement test, not an
+    // unconditional refusal of this node id.
+    let agrees = item(
+        E_OPERAND_MISMATCH,
+        EqualityOperatorKind::Equal,
+        typed(T_INTEGER),
+        typed(T_INTEGER),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&agrees));
+    let _ = generated(only_claim(&oracles, E_OPERAND_MISMATCH));
 }
 
 /// Trace: FR-018-AC-6, TC-029.

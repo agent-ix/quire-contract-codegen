@@ -60,7 +60,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875( // E_RECORD Equal
+            generated: |g| crate::generated::oracle_21af7ba1e91d21e90d1981308c350091506c953e7bc3a4dfa6a240083ad1a65b( // E_RECORD Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -88,7 +88,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_2887c4ffdef9907f60d23d33da7e0715dacad2f86ba514273bb2c958a9985a80( // E_TUPLE Equal
+            generated: |g| crate::generated::oracle_576f61c653038d5b860825b431f9128ca106118a261f1df432cbbc2a806a634a( // E_TUPLE Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -117,7 +117,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_faa5cbb23e2cf24d67cc09c91884a3ada215c4a24843df16a8ab4a29dba89d85( // E_OPTION Equal
+            generated: |g| crate::generated::oracle_89fc354672aa321d79f99516e767b60755c99fb1d86665198d4facbbe42e8009( // E_OPTION Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -145,7 +145,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_ee2f1302f9301a7a99ab064d3bb472fa29f98b1c365dbb3812e40c7f6af96a1f( // E_COLLECTION Equal
+            generated: |g| crate::generated::oracle_b5507219bf292f5f3030b453e44db1cec20b0d45d02979b8e5d678d65872dc34( // E_COLLECTION Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -171,7 +171,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_f8fb4c57dd095d0a8e9b3423eb04949030fc032b20be737a91acfa39ebdf10f9( // E_SELF Equal
+            generated: |g| crate::generated::oracle_3152c7e10a22a6fda8cb49d358d1baadc2e7fd1c6542192baaee7c8aa8add24a( // E_SELF Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -198,7 +198,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_2d51f5686b743ee7fe36a6dc062be74bf416c609bb0bec4c13e1fb9ec096d981( // E_PAIR_OF_POINTS Equal
+            generated: |g| crate::generated::oracle_d5c77d9a6fbf3c0c86bf60c5d285814883b8fa70fa2357e8d411699fae179b7c( // E_PAIR_OF_POINTS Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -228,7 +228,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_ea7bec18651985a40e4af127afe04717782b0f719095c6503772c2302b6d08d5( // E_RECORD NotEqual
+            generated: |g| crate::generated::oracle_460db43031e0e8349e7b81afaab7700861e42478fa36bed7705e229477212aca( // E_RECORD NotEqual
                 &environment, &left, &right, g,
             ),
         };
@@ -253,7 +253,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_0738454117f186fcce31dedcd1df0a76e2de87235bd8e5f0904ae80a8da04d78( // E_TEXT Equal
+            generated: |g| crate::generated::oracle_76d9cb71c7ab24969e6bb32d337ce648be691bb8172a036fa8344def2c9b7384( // E_TEXT Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -280,7 +280,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_c8a0153c51c069e747ab6517fdbf01a6b945368678bc6d28c462ac8bae0e20b3( // E_ENUM Equal
+            generated: |g| crate::generated::oracle_1605f3edda95d8c8720bd2effad6370ef6aac509862734b5720a75e4836d7328( // E_ENUM Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -331,7 +331,7 @@ fn tc_029_ac2_a_converted_operand_agrees() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_7824d5d57da98145530bfd079c89bb3a81ab93c52c4206592c5fedf59a0eeebb( // E_CONV Equal
+            generated: |g| crate::generated::oracle_1693eb17de43a7d163afa716008703d09001b2a464938fa1755f11b0225b7a74( // E_CONV Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -374,7 +374,7 @@ fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_83f5f53cb8c7356be4fbd84ebec17b605fa917f4b4131dc8bd0df19ad7477377( // E_CONV_CHARGE Equal
+            generated: |g| crate::generated::oracle_0b3ddf56cea05ad8cd36a18946c412690addf723b7cc414727d10325e5166a94( // E_CONV_CHARGE Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -422,7 +422,7 @@ fn tc_029_ac8_check_type_guards_the_oracle() {
     ] {
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
         let outcome =
-            generated::oracle_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875(
+            generated::oracle_21af7ba1e91d21e90d1981308c350091506c953e7bc3a4dfa6a240083ad1a65b(
                 // E_RECORD Equal
                 &empty, &left, &right, &mut meter,
             );
@@ -445,7 +445,7 @@ fn tc_029_ac9_a_denied_charge_is_incomplete_never_a_completed_boolean() {
     let left = rt_side::record_point(&environment, 1, 2);
     let right = rt_side::record_point(&environment, 1, 2);
     let denied = rt_side::denials(rt_side::UNLIMITED, |meter| {
-        generated::oracle_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875(
+        generated::oracle_21af7ba1e91d21e90d1981308c350091506c953e7bc3a4dfa6a240083ad1a65b(
             // E_RECORD Equal
             &environment,
             &left,
@@ -476,10 +476,10 @@ fn tc_029_ac9_a_denied_charge_is_incomplete_never_a_completed_boolean() {
 #[test]
 fn tc_029_ac11_operator_variants_produce_complementary_outcomes() {
     let equal_env =
-        generated::environment_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875()
+        generated::environment_21af7ba1e91d21e90d1981308c350091506c953e7bc3a4dfa6a240083ad1a65b()
             .unwrap();
     let not_equal_env =
-        generated::environment_ea7bec18651985a40e4af127afe04717782b0f719095c6503772c2302b6d08d5()
+        generated::environment_460db43031e0e8349e7b81afaab7700861e42478fa36bed7705e229477212aca()
             .unwrap();
 
     for (lx, ly, rx, ry) in [(1, 2, 1, 2), (1, 2, 3, 4)] {
@@ -487,13 +487,13 @@ fn tc_029_ac11_operator_variants_produce_complementary_outcomes() {
         let right = rt_side::record_point(&equal_env, rx, ry);
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
         let equal_outcome =
-            generated::oracle_c796e5e376e39ec3c4c097309b1bd5b8828d9a2c1b6a3f847346cf5e6be6d875(
+            generated::oracle_21af7ba1e91d21e90d1981308c350091506c953e7bc3a4dfa6a240083ad1a65b(
                 // E_RECORD Equal
                 &equal_env, &left, &right, &mut meter,
             );
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
         let not_equal_outcome =
-            generated::oracle_ea7bec18651985a40e4af127afe04717782b0f719095c6503772c2302b6d08d5(
+            generated::oracle_460db43031e0e8349e7b81afaab7700861e42478fa36bed7705e229477212aca(
                 // E_RECORD NotEqual
                 &not_equal_env,
                 &left,

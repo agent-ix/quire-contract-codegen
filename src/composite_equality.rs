@@ -433,6 +433,17 @@ pub enum CompositeEqualityRefusal {
         /// The typed cause.
         cause: IllTypedCauseKind,
     },
+    /// A body operand's declared type disagrees with the descriptor's for
+    /// that position.
+    OperandTypeMismatch {
+        /// Zero-based operand position (0 = left, 1 = right).
+        position: usize,
+        /// Type node id the descriptor declares for that operand.
+        expected: CheckedNodeId,
+        /// Type node id the body operand actually names, when it names one
+        /// at all.
+        found: Option<CheckedNodeId>,
+    },
 }
 
 /// Traceability for one generated oracle.
@@ -814,7 +825,7 @@ fn check_item<'r>(
     let arguments = application_arguments(&node.node.body)
         .filter(|arguments| arguments.len() == 2)
         .ok_or(CompositeEqualityRefusal::BodyMismatch)?;
-    let _ = arguments;
+    check_operand_types(arguments, item)?;
 
     let mut closure = TypeClosure::default();
     let left_source = resolve_type(graph, bounds_by_type, &mut closure, &item.left.source_type)?;
@@ -938,6 +949,48 @@ fn application_arguments(body: &Value) -> Option<&Vec<Value>> {
         return None;
     }
     body.get("arguments")?.as_array()
+}
+
+/// Each `binary` operand names its own static type through `literal.type`
+/// -- IR-216 requires that member on every literal and validates only that
+/// it resolves to a real node, never cross-checking it against `value_kind`,
+/// so it is free for this generator to read on its own terms. A `reference`
+/// operand is deliberately not read here: IR's own admission-time
+/// `argument_family`/`check_operands` check resolves and enforces a
+/// `reference` operand's family against the operation's declared operand
+/// family, so a type node named by `reference` never admits at all, before
+/// this generator would run.
+///
+/// This is the generator's only read of body content (FR-018's Behavior
+/// clause "disagrees with its descriptor's arity or operand types"): the
+/// type used to build the runtime call always comes from the descriptor,
+/// never from this value, so disagreement here is refused before either
+/// operand's type is resolved.
+fn operand_type_id(term: &Value) -> Option<CheckedNodeId> {
+    if term.get("term")?.as_str()? != "literal" {
+        return None;
+    }
+    serde_json::from_value(term.get("type")?.clone()).ok()
+}
+
+/// Compare each body operand's declared type against the descriptor's for
+/// that position, left then right, refusing at the first disagreement.
+fn check_operand_types(
+    arguments: &[Value],
+    item: &CompositeEqualityItem,
+) -> Result<(), CompositeEqualityRefusal> {
+    let expected = [&item.left.source_type, &item.right.source_type];
+    for (position, (argument, expected_type)) in arguments.iter().zip(expected).enumerate() {
+        let found = operand_type_id(argument);
+        if found.as_ref() != Some(expected_type) {
+            return Err(CompositeEqualityRefusal::OperandTypeMismatch {
+                position,
+                expected: expected_type.clone(),
+                found,
+            });
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
