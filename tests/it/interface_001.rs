@@ -260,11 +260,23 @@ fn it_001_identity_envelope_matches_the_emitted_attestation_body() {
     let labels = AttestationResult::ALL
         .into_iter()
         .map(|result| {
-            serde_json::to_value(result)
+            let wire_form = serde_json::to_value(result)
                 .expect("AttestationResult must serialize")
                 .as_str()
                 .expect("AttestationResult serializes as a bare string")
-                .to_owned()
+                .to_owned();
+            // label() has no other caller once this file compares the wire form instead: without
+            // this, a variant whose label() and #[serde(rename_all)] output silently diverged
+            // would never be caught by anything. Keeping the two in lockstep here is what makes
+            // it safe for label()'s exhaustive match to stay the crate's sole build-time guard
+            // against an unnamed new variant (src/oracle.rs's own doc comment on ALL explains why
+            // that guard still matters).
+            assert_eq!(
+                result.label(),
+                wire_form,
+                "AttestationResult::label() must agree with its own #[serde(rename_all)] output"
+            );
+            wire_form
         })
         .collect::<Vec<_>>();
     let results = parse_flow_list(&yaml, "results: [");
@@ -285,11 +297,20 @@ fn it_001_terminal_states_are_exactly_the_declared_six() {
     let labels = GenerationTerminalState::ALL
         .into_iter()
         .map(|state| {
-            serde_json::to_value(state)
+            let wire_form = serde_json::to_value(state)
                 .expect("GenerationTerminalState must serialize")
                 .as_str()
                 .expect("GenerationTerminalState serializes as a bare string")
-                .to_owned()
+                .to_owned();
+            // See the matching comment in it_001_identity_envelope_matches_the_emitted_attestation_body:
+            // label() has no other caller once this file compares the wire form instead, so this
+            // keeps it from silently drifting unnoticed.
+            assert_eq!(
+                state.label(),
+                wire_form,
+                "GenerationTerminalState::label() must agree with its own #[serde(rename_all)] output"
+            );
+            wire_form
         })
         .collect::<Vec<_>>();
     let terminal_states = parse_flow_list(&contract_yaml(), "terminal_states: [");
