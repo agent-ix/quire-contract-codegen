@@ -33,6 +33,10 @@ atomically and shall retain golden, differential, and cross-backend semantic-par
 - The library publisher shall reject noncanonical artifact paths before mutation, distinguish
   missing ownership inputs from I/O inspection failures, and report `unchanged`, `published`, or
   `unknown` destination state according to the observed staging, commit, and rollback result.
+- The library publisher shall refuse to construct an artifact bundle naming more than 4096
+  artifacts, containing one artifact whose contents exceed 16,777,216 bytes, or whose complete
+  artifact bytes exceed 134,217,728 bytes, returning a bounded-resource `InvalidBundle` diagnostic
+  before any staging or destination I/O begins.
 - Supported platforms shall produce reproducible generated files and attestations.
 - Every differential discrepancy shall become a fixture or documented semantic difference.
 - The Assurance Argument shall cite completed conformance evidence without closing the human claim.
@@ -45,6 +49,7 @@ atomically and shall retain golden, differential, and cross-backend semantic-par
 | FR-005-AC-2 | Supported platforms reproduce byte-identical files and attestations. | Test (TC-001) |
 | FR-005-AC-3 | Every differential discrepancy has a retained disposition. | Inspection |
 | FR-005-AC-4 | Executable, proptest, Kani, and coverage semantics agree or retain an explicit difference. | Test (TC-007) |
+| FR-005-AC-5 | A bundle naming more than 4096 artifacts, an artifact whose contents exceed 16,777,216 bytes, or a complete artifact byte total exceeding 134,217,728 bytes is refused at construction as a bounded-resource `InvalidBundle` diagnostic before any staging or destination I/O begins, so no partial bundle is ever published. | Test (TC-002) |
 
 ## Dependencies
 

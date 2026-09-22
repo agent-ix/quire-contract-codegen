@@ -1096,6 +1096,56 @@ mod tests {
         fs::remove_dir_all(parent).unwrap();
     }
 
+    /// Trace: TC-002, FR-005-AC-5
+    #[test]
+    fn bundle_construction_refuses_more_than_the_bounded_artifact_count() {
+        let artifacts: Vec<Artifact> = (0..=MAX_ARTIFACTS)
+            .map(|index| generated(&format!("a/{index}.rs"), "x"))
+            .collect();
+        assert_eq!(artifacts.len(), MAX_ARTIFACTS + 1);
+        let error = ArtifactBundle::new(artifacts).unwrap_err();
+        assert_eq!(error.code, PublicationErrorCode::InvalidBundle);
+        assert_eq!(error.path, "bundle.artifacts");
+        assert!(error.message.contains("4096"));
+    }
+
+    /// Trace: TC-002, FR-005-AC-5
+    #[test]
+    fn bundle_construction_refuses_an_artifact_over_the_bounded_size() {
+        let oversized = "x".repeat(MAX_ARTIFACT_BYTES + 1);
+        let error =
+            ArtifactBundle::new(vec![generated("src/oversized.rs", &oversized)]).unwrap_err();
+        assert_eq!(error.code, PublicationErrorCode::InvalidBundle);
+        assert_eq!(error.path, "bundle.artifacts[0].contents");
+    }
+
+    /// Trace: TC-002, FR-005-AC-5
+    #[test]
+    fn bundle_construction_refuses_a_complete_bundle_over_the_bounded_size() {
+        let large = "x".repeat(MAX_ARTIFACT_BYTES);
+        let digest = sha256(large.as_bytes());
+        let mut artifacts: Vec<Artifact> = (0..(MAX_BUNDLE_BYTES / MAX_ARTIFACT_BYTES))
+            .map(|index| Artifact {
+                path: format!("src/large_{index}.rs"),
+                contents: large.clone(),
+                sha256: digest.clone(),
+            })
+            .collect();
+        artifacts.push(generated("src/extra.rs", "x"));
+        let total: usize = artifacts
+            .iter()
+            .map(|artifact| artifact.contents.len())
+            .sum();
+        assert!(
+            total > MAX_BUNDLE_BYTES,
+            "fixture must exceed the bundle ceiling: {total}"
+        );
+        let error = ArtifactBundle::new(artifacts).unwrap_err();
+        assert_eq!(error.code, PublicationErrorCode::InvalidBundle);
+        assert_eq!(error.path, "bundle.artifacts");
+        assert!(error.message.contains("complete bundle"));
+    }
+
     /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3
     #[cfg(unix)]
     #[test]
