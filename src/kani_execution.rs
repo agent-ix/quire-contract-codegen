@@ -477,7 +477,7 @@ pub struct KaniExecutionEvidence {
     /// concluding ([`KaniInconclusiveReason::TimedOut`]) and no lockfile was ever attempted. For
     /// every outcome but `TimedOut`, a lockfile read failure is missing evidence about a run
     /// that occurred, not grounds to discard the backend's own verdict, so `outcome` there is
-    /// always `classify_run`'s classification of what the backend printed, whether or not the
+    /// always `classify_kani_run`'s classification of what the backend printed, whether or not the
     /// lockfile digest is available.
     pub cargo_lock_sha256: Option<String>,
     /// Digest of the oracle sources the harness embeds.
@@ -580,7 +580,7 @@ enum LaunchOutcome {
         exited_successfully: bool,
         /// `ExitStatus::code()`.
         exit_code: Option<i32>,
-        /// Combined stdout and stderr, newline-joined, matching `classify_run`'s input shape.
+        /// Combined stdout and stderr, newline-joined, matching `classify_kani_run`'s input shape.
         text: String,
     },
     /// The budget elapsed before the process exited. Every descendant this call could still see
@@ -748,14 +748,14 @@ fn parent_pid(pid: u32) -> Option<u32> {
 /// Combines the post-run `Cargo.lock` digest with the backend's own classification of what it
 /// printed. The two are independent: a lockfile that cannot be read once the backend has
 /// already run is missing evidence about that run, never grounds to discard its verdict, so
-/// `outcome` is always `classify_run`'s classification of `text` regardless of whether
+/// `outcome` is always `classify_kani_run`'s classification of `text` regardless of whether
 /// `lockfile` succeeded.
 fn run_evidence(
     exited_successfully: bool,
     text: &str,
     lockfile: Result<String, KaniToolError>,
 ) -> (Option<String>, KaniRunOutcome) {
-    (lockfile.ok(), classify_run(exited_successfully, text))
+    (lockfile.ok(), classify_kani_run(exited_successfully, text))
 }
 
 /// Maps a concluded [`LaunchOutcome`] to the `(cargo_lock_sha256, outcome, exit_code)` triple
@@ -820,14 +820,14 @@ const UNWINDING_ASSERTION: &str = "unwinding assertion";
 /// `pub` so a test asserting "this transcript proves falsification" can route through the same
 /// classifier production uses (IR-220), instead of re-implementing banner parsing that misreads
 /// an inconclusive run — CBMC out-of-memory among them — as a decided failure.
-pub fn classify_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
+pub fn classify_kani_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
     if exited_successfully && text.contains(SUCCESS) && !text.contains(FAILURE) {
         if let Some((failed, total_checks)) = checks_summary(text) {
             let success_checks =
                 usize::try_from(total_checks.saturating_sub(failed)).unwrap_or(usize::MAX);
             let checks_outcome = KaniOutcome::proved_from_checks(
                 success_checks,
-                "kani_execution::classify_run",
+                "kani_execution::classify_kani_run",
                 "checks_summary",
             );
             if checks_outcome.kind == KaniOutcomeKind::Inconclusive
@@ -991,7 +991,13 @@ mod tests {
     const ASSERTION_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `assertion`: \"|post_state: &i64| *post_state <= 5\"\n\n#[test]\nfn kani_concrete_playback_h_2() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![8, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
 
     /// Success is `Verified` only with every cover satisfied, for every obligation kind; a
-    /// vacuous run is `CoverUnsatisfied`. Summaries are Kani 0.67.0's own output.
+    /// vacuous run is `CoverUnsatisfied`. Summaries are Kani 0.67.0's own output. The parametrized
+    /// table's last case is the exact transcript measured running the IR-217 scalar harness for
+    /// node 1001 under `cargo kani --unwind 16` capped at 12 GB (IR-220): CBMC's own
+    /// out-of-memory abort prints the identical `VERIFICATION:- FAILED` banner a real
+    /// counterexample does, so a test asserting on that banner directly -- as
+    /// `bounded_kani_corpus.rs` did before IR-220 -- would report success on a run that decided
+    /// zero properties. Fed to `classify_kani_run` this transcript must not be `Falsified`.
     ///
     /// Trace: FR-017-AC-4, FR-017-AC-5, TC-027
     #[test]
@@ -999,19 +1005,19 @@ mod tests {
         let verified = format!(
             "SUMMARY:\n ** 0 of 43 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n{COVER_PLAYBACK}"
         );
-        assert_eq!(classify_run(true, &verified), KaniRunOutcome::Verified);
+        assert_eq!(classify_kani_run(true, &verified), KaniRunOutcome::Verified);
         // Jointly unsatisfiable requires: every check succeeds, the ensures is unreachable, and
         // the cover after the contract call is unreachable. Reproduced under Kani 0.67.0.
         let vacuous = "SUMMARY:\n ** 0 of 49 failed (1 unreachable)\n\n ** 0 of 1 cover properties satisfied (1 unreachable)\n\n\nVERIFICATION:- SUCCESSFUL\n";
         assert_eq!(
-            classify_run(true, vacuous),
+            classify_kani_run(true, vacuous),
             KaniRunOutcome::CoverUnsatisfied {
                 satisfied: 0,
                 total: 1
             }
         );
         assert_eq!(
-            classify_run(
+            classify_kani_run(
                 true,
                 " ** 1 of 2 cover properties satisfied\nVERIFICATION:- SUCCESSFUL"
             ),
@@ -1025,7 +1031,7 @@ mod tests {
             "SUMMARY:\n ** 1 of 43 failed\nFailed Checks: |post_state: &i64| *post_state <= 5\n\n ** 1 of 1 cover properties satisfied\n\nVERIFICATION:- FAILED\n{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"
         );
         assert!(matches!(
-            classify_run(false, &falsified),
+            classify_kani_run(false, &falsified),
             KaniRunOutcome::Falsified { counterexample }
                 if counterexample.contains("Check for `assertion`") && !counterexample.contains("Check for `cover`")
         ));
@@ -1058,9 +1064,34 @@ mod tests {
                     .to_owned(),
                 KaniInconclusiveReason::MissingCoverSummary,
             ),
+            // CBMC's own out-of-memory abort prints the identical VERIFICATION:- FAILED banner
+            // a real counterexample does, with zero properties ever decided. Exact transcript
+            // measured running the IR-217 scalar harness for node 1001 under `cargo kani
+            // --unwind 16` capped at 12 GB (IR-220): fed to the raw-banner check this repo's
+            // own bounded_kani_corpus.rs test used before this change, this transcript passes;
+            // fed to classify_kani_run it must not be Falsified.
+            (
+                false,
+                "Runtime Symex: 294.218s\n\
+                 size of program expression: 980453 steps\n\
+                 Generated 41018 VCC(s), 12121 remaining after simplification\n\
+                 Runtime Convert SSA: 15.3149s\n\
+                 Running propositional reduction\n\
+                 Post-processing\n\
+                 Out of memory\n\
+                 \n\
+                 CBMC failed with status 6\n\
+                 VERIFICATION:- FAILED\n\
+                 \n\
+                 Manual Harness Summary:\n\
+                 Verification failed for - kob_n1001::proof\n\
+                 Complete - 0 successfully verified harnesses, 1 failures, 1 total.\n"
+                    .to_owned(),
+                KaniInconclusiveReason::FailedWithoutCounterexample,
+            ),
         ] {
             assert_eq!(
-                classify_run(success, &text),
+                classify_kani_run(success, &text),
                 KaniRunOutcome::Inconclusive { reason: expected },
                 "{text}"
             );
@@ -1073,7 +1104,7 @@ mod tests {
     /// `a_proved_run_with_zero_success_checks_settles_inconclusive_as_vacuous`, which this test
     /// is the execution-path counterpart of.
     ///
-    /// Before this change, `classify_run` read only the cover-properties line, so a transcript
+    /// Before this change, `classify_kani_run` read only the cover-properties line, so a transcript
     /// reporting zero total checks (`** 0 of 0 failed`: no check in the obligation ran at all)
     /// alongside a satisfied 1-of-1 cover and `VERIFICATION:- SUCCESSFUL` classified `Verified`
     /// — a proof backed by zero checks, reported as proved. Routed through
@@ -1083,7 +1114,7 @@ mod tests {
     fn a_zero_total_checks_summary_is_inconclusive_not_verified_even_with_every_cover_satisfied() {
         let vacuous_by_checks = "SUMMARY:\n ** 0 of 0 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
         assert_eq!(
-            classify_run(true, vacuous_by_checks),
+            classify_kani_run(true, vacuous_by_checks),
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::VacuousProof
             },
@@ -1094,14 +1125,17 @@ mod tests {
         // cover-based classification still governs, unchanged.
         let genuinely_verified = "SUMMARY:\n ** 0 of 5 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
         assert_eq!(
-            classify_run(true, genuinely_verified),
+            classify_kani_run(true, genuinely_verified),
             KaniRunOutcome::Verified
         );
 
         // A transcript with no checks-failed line at all (older or differently shaped output) is
         // unaffected: the cover-only classification still applies exactly as before.
         let no_checks_line = " ** 1 of 1 cover properties satisfied\nVERIFICATION:- SUCCESSFUL";
-        assert_eq!(classify_run(true, no_checks_line), KaniRunOutcome::Verified);
+        assert_eq!(
+            classify_kani_run(true, no_checks_line),
+            KaniRunOutcome::Verified
+        );
     }
 
     /// The checks-failed line's parenthetical is not always `unreachable`: this repository's own
@@ -1115,7 +1149,7 @@ mod tests {
     fn a_checks_summary_with_an_undetermined_parenthetical_still_routes_through_the_vacuity_gate() {
         let vacuous_with_undetermined_suffix = "SUMMARY:\n ** 0 of 0 failed (0 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
         assert_eq!(
-            classify_run(true, vacuous_with_undetermined_suffix),
+            classify_kani_run(true, vacuous_with_undetermined_suffix),
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::VacuousProof
             },
@@ -1126,7 +1160,7 @@ mod tests {
         // `Verified`, unaffected — the parenthetical is metadata, not itself a check outcome.
         let genuinely_verified_with_undetermined_suffix = "SUMMARY:\n ** 0 of 5 failed (2 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
         assert_eq!(
-            classify_run(true, genuinely_verified_with_undetermined_suffix),
+            classify_kani_run(true, genuinely_verified_with_undetermined_suffix),
             KaniRunOutcome::Verified
         );
 
@@ -1135,7 +1169,7 @@ mod tests {
         // guessing at Kani's full vocabulary.
         let unrecognised_word = "SUMMARY:\n ** 0 of 0 failed (0 somethingelse)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
         assert_eq!(
-            classify_run(true, unrecognised_word),
+            classify_kani_run(true, unrecognised_word),
             KaniRunOutcome::Verified
         );
     }
@@ -1150,7 +1184,7 @@ mod tests {
             "VERIFICATION RESULT:\n ** 1 of 39 failed (38 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\nFailed Checks: unwinding assertion loop 0\n File: \"src/lib.rs\", line 10, in looping\n\nVERIFICATION:- FAILED\n[Kani] info: Verification output shows one or more unwinding failures.\n{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"
         );
         assert_eq!(
-            classify_run(false, &unwound),
+            classify_kani_run(false, &unwound),
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::UnwindBoundExhausted
             }
@@ -1159,46 +1193,7 @@ mod tests {
         let listed = format!(
             "Check 1: f.unwind.1\n\t - Status: SUCCESS\n\t - Description: \"unwinding assertion loop 0\"\n ** 1 of 1 cover properties satisfied\nVERIFICATION:- SUCCESSFUL\n{COVER_PLAYBACK}"
         );
-        assert_eq!(classify_run(true, &listed), KaniRunOutcome::Verified);
-    }
-
-    /// CBMC's own out-of-memory abort prints the identical `VERIFICATION:- FAILED` banner a real
-    /// counterexample does, with zero properties ever decided. This is the exact transcript
-    /// measured running the IR-217 scalar harness for node 1001 under `cargo kani --unwind 16`
-    /// capped at 12 GB (IR-220): before this change, `bounded_kani_corpus.rs`'s own test
-    /// asserted on this banner directly and would have reported success on a run that checked
-    /// nothing. Mutation: this transcript, fed to the old `text.contains("VERIFICATION:-
-    /// FAILED")` assertion, passes; fed to `classify_run`, it must not be `Falsified`.
-    ///
-    /// Trace: IR-220
-    #[test]
-    fn ir_220_a_cbmc_out_of_memory_abort_is_inconclusive_not_falsified() {
-        let out_of_memory = "Runtime Symex: 294.218s\n\
-             size of program expression: 980453 steps\n\
-             Generated 41018 VCC(s), 12121 remaining after simplification\n\
-             Runtime Convert SSA: 15.3149s\n\
-             Running propositional reduction\n\
-             Post-processing\n\
-             Out of memory\n\
-             \n\
-             CBMC failed with status 6\n\
-             VERIFICATION:- FAILED\n\
-             \n\
-             Manual Harness Summary:\n\
-             Verification failed for - kob_n1001::proof\n\
-             Complete - 0 successfully verified harnesses, 1 failures, 1 total.\n";
-        assert!(
-            out_of_memory.contains("VERIFICATION:- FAILED"),
-            "fixture must reproduce the banner the old assertion keyed on"
-        );
-        assert_eq!(
-            classify_run(false, out_of_memory),
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::FailedWithoutCounterexample
-            },
-            "an out-of-memory abort prints no concrete playback, so classify_run must not report \
-             Falsified for a run that decided zero properties"
-        );
+        assert_eq!(classify_kani_run(true, &listed), KaniRunOutcome::Verified);
     }
 
     /// Only the committed pins pass; each field is compared.

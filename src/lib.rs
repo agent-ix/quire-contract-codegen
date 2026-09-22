@@ -119,7 +119,7 @@ pub use kani::{
     ProofDependencyState, ProofReadiness, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
 };
 pub use kani_execution::{
-    classify_run, execute_kani_obligation, KaniExecutionEvidence, KaniExecutionRefusal,
+    classify_kani_run, execute_kani_obligation, KaniExecutionEvidence, KaniExecutionRefusal,
     KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniPinField, KaniRunOutcome,
     KaniTool, KaniToolError, KaniToolPins, KANI_EXECUTION_SCHEMA,
 };

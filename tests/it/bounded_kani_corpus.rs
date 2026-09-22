@@ -15,7 +15,7 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    classify_run, generate_bounded_kani_corpus_case, replay_codegen_counterexample,
+    classify_kani_run, generate_bounded_kani_corpus_case, replay_codegen_counterexample,
     BoundedCorpusRequest, KaniRunOutcome,
 };
 use quire_contract_ir::{
@@ -369,10 +369,14 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .expect("generated check-cfg declaration should be writable");
-    // -Z concrete-playback / --concrete-playback print are required for classify_run below to
+    // -Z concrete-playback / --concrete-playback print are required for classify_kani_run below to
     // see a playback block at all: without them Kani never prints one, even for a genuine
-    // falsification, and every run classifies Inconclusive rather than Falsified. Same flags
-    // adapter_options (src/kani.rs) generates for every production harness.
+    // falsification, and every run classifies Inconclusive rather than Falsified. adapter_options
+    // (src/kani.rs) always includes these two for every production harness, plus --exact,
+    // --unwind, --solver and --output-format regular, which this invocation does not replicate --
+    // classify_kani_run parses `regular`-shaped output regardless, and --harness is already an
+    // effective exact match here (this crate writes exactly one harness), so the omission is
+    // inert today, not load-bearing.
     let output = Command::new("cargo")
         .args([
             "kani",
@@ -405,7 +409,7 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
     // at all -- fails this test instead of passing it.
     assert!(
         matches!(
-            classify_run(output.status.success(), &text),
+            classify_kani_run(output.status.success(), &text),
             KaniRunOutcome::Falsified { .. }
         ),
         "expected a genuine Kani falsification (KaniRunOutcome::Falsified), not merely a \
