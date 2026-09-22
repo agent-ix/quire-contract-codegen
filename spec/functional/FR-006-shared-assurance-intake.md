@@ -46,8 +46,8 @@ retention store, audit store, anchor file, or aggregate verdict of its own.
 - Every consumer of a producer result shall refuse to create that result.
 - Every consumer of an absent producer result shall name the target that makes it.
 - The assurance driver shall read each attested result out of the producer's own bytes.
-- A producer shall derive its own process exit status from the bytes it published, and shall reach
-  that status through exactly one exit path.
+- A producer shall derive its own process exit status from the bytes it published.
+- A producer shall reach its process exit status through exactly one exit path.
 - The assurance driver shall treat an unreadable producer result as an environment error.
 - The declared command of a proof obligation shall be the command the producer target runs.
 - The assurance driver shall record an unobservable tool version as unobserved rather than defaulting
@@ -66,10 +66,10 @@ retention store, audit store, anchor file, or aggregate verdict of its own.
 | FR-006-AC-5 | Pass, fail, unavailable, inconclusive, not-computed, partial, stale, suspect, vacuous, and tampered are each demonstrated by a case that produced it, `unsupported` and `malformed` are demonstrated by nothing, and every negative is paired with a positive control. | Test (TC-012) |
 | FR-006-AC-6 | No repository-local generic runner, envelope builder, manifest, verifier, anchor writer, failure-propagation policer, or aggregate verdict remains, and the gates that replaced them are reachable from `ci`. | Test (TC-013) |
 | FR-006-AC-7 | No executable or configuration surface in this repository names the deprecated evidence format: neither its schema version string, in either spelling, nor any of the eleven serde types that stated that shape before its schema was deleted. Markdown and the change declaration are outside the census, and the change declaration therefore does not name the format either. | Test (TC-013) |
-| FR-006-AC-8 | The generation-conformance producer's process exit status is 0 when every published row's outcome is `pass`, 1 when any published row's outcome is `fail`, and 2 when none is `fail` and any is `vacuous`; a run carrying both a failing and a vacuous row exits 1, and a run that published no rows at all exits 0 under the same rule rather than through a case of its own. | Test (TC-032) |
-| FR-006-AC-9 | That status is classified from the serialized lines the producer wrote to its own output, not from any row collection held beside them, so dropping rows between publication and classification cannot make the two disagree; and a published line that does not carry a string `outcome` aborts the run rather than classifying as 0. | Test (TC-032) |
-| FR-006-AC-10 | Exactly one call reaches the producer's process exit status outside its test module, and that call's argument is the classifier's value, asserted as a gate that reads the producer's own source rather than stated in prose; a second exit path before the test module and a top-level item declared after it — where that census cannot see it — each fail the gate. The census is textual and reaches exit paths only, so an early `return` in `main` is outside it. | Test (TC-032) |
-| FR-006-AC-11 | The compiled conformance binary — rebuilt unconditionally, and neither the classifier nor the test harness — exits 0 when run against the real bounded corpus. That observation does not distinguish a passing corpus from one that produced nothing, because a zero-row run exits 0 as well; the floor on the emitted row count refuses that separately. | Test (TC-032) |
+| FR-006-AC-8 | The generation-conformance producer's process exit status is 0 when every published row's outcome is `pass`, 1 when any published row's outcome is `fail`, and 2 when none is `fail` and any is `vacuous`; a run carrying both a failing and a vacuous row exits 1, and a run that published no rows at all exits 0. | Test (TC-032) |
+| FR-006-AC-9 | A published line that does not carry a string `outcome` aborts the run with a message naming that field, rather than classifying as 0. | Test (TC-032) |
+| FR-006-AC-10 | Exactly one call reaches the producer's process exit status outside its test module, and its argument is the classification of the lines the producer published rather than a literal or a row collection held beside them, so what reaches the output and what sets the status cannot disagree; a second exit path before the test module and a top-level item declared after it — where the census cannot see it — each fail. This is asserted as a gate that reads the producer's own source rather than stated in prose, and it is textual and reaches exit paths only, so an early `return` in `main` is outside it. | Test (TC-032) |
+| FR-006-AC-11 | The compiled conformance binary — the one `make conformance` and `make assurance-inputs` invoke, not the classifier and not a test harness — exits 0 when run against the real bounded corpus. That observation does not distinguish a passing corpus from one that produced nothing, because a zero-row run exits 0 as well; the floor on the emitted row count refuses that separately. | Test (TC-032) |
 
 ## Dependencies
 
@@ -165,7 +165,9 @@ evidence producer. FR-006-AC-11's end-to-end run observes exit 0 against a
 corpus that is passing today; a corpus that shrank to nothing exits 0 too, so
 that criterion is not the one that refuses an empty run — the ten-row floor on
 the emitted JSONL in `tests/shared_assurance.rs` is, under FR-006-AC-2.
-FR-006-AC-9's derivation-from-published-bytes half is what makes the
+FR-006-AC-10's derivation-from-published-bytes clause is what makes the
 `retain`-before-exit mutation inert rather than caught: stdout and the status
 come from the same strings, so the defect cannot be constructed, and that is a
-stronger claim than a test that observes it.
+stronger claim than a test that observes it. That the end-to-end test rebuilds
+the binary before running it is a property of the measurement rather than of the
+system, so it is TC-032's step and not part of the criterion.
