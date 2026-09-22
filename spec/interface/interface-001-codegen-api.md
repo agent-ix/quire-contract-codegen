@@ -204,7 +204,7 @@ compatibility:
   licensing: crate AGPL-3.0-or-later; emitted Rust carries the MIT OR Apache-2.0 SPDX identity required by NFR-002
   publication: disabled through the human v0.1 source-release decision
 open_design_gates:
-  native_campaign_transport: pinned runtime CampaignReport has no validated native-process snapshot decoder; no Display parsing, fake verdict replay, or private counter lookalike may substitute
+  native_campaign_transport: the pinned runtime exposes CampaignSnapshot and an optional snapshot-json decoder; this codegen package does not yet consume that feature, and structural decoding cannot authenticate native execution; no Display parsing, fake verdict replay, or private counter lookalike may substitute
   native_run_authentication: producer result digests establish consistency only; Quoin-owned authorized producer and expected record/candidate/run verification must precede qualification; no caller verified flag
   serialized_package_cli: the pinned public IR derived-projection decoder now supplies BoundPackage; cli_generate remains unimplemented, and normal projection production remains the authoritative frontend/model lane rather than a codegen-owned authored sidecar
 ```
