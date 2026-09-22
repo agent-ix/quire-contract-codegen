@@ -5,7 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-mod common;
+use crate::common;
 
 use quire_contract_codegen::{
     generate_tristate_harness, AttestationContext, AttestationResult, GenerationErrorCode,

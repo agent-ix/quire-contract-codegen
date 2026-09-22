@@ -18,12 +18,17 @@
 //! repository's current pin, `21c507e`). This file's agreement legs are
 //! exactly two: the generated oracle and a direct Contract Runtime call.
 
-#[path = "exact_function_support/package.rs"]
+// Duplicated per consumer (also `exact_function_generation.rs`) for structural consistency with
+// the exact_scalar/composite_equality families (IR-237). Unlike those two, this package.rs holds
+// no process-global state, so duplication here isn't load-bearing the way it is for them -- it's
+// kept for uniformity across the tests/it/*_support/package.rs pattern, not to avoid a hazard.
+#[allow(clippy::duplicate_mod)]
+#[path = "../exact_function_support/package.rs"]
 mod package;
 
 #[allow(dead_code)] // not every generated helper is called by every vector.
 mod generated {
-    include!("fixtures/exact_function/lib.rs.golden");
+    include!("../fixtures/exact_function/lib.rs.golden");
 }
 
 /// The committed golden for the >128-deep nested-call chain corpus
@@ -33,7 +38,7 @@ mod generated {
 /// generated `Call` bodies rather than a hand-built parallel double.
 #[allow(dead_code)]
 mod chain_generated {
-    include!("fixtures/exact_function_chain/lib.rs.golden");
+    include!("../fixtures/exact_function_chain/lib.rs.golden");
 }
 
 use package::*;

@@ -105,11 +105,18 @@ Backported from `agent-ix/ecaz`:
 ```
 src/lib.rs                 # crate root
 examples/                  # the generation conformance producer
-tests/integration.rs       # end-to-end tests
-tests/shared_assurance.rs  # FR-006 gates; /// Trace: comments are Quire's census
+tests/it/main.rs           # the merged integration test binary; each former tests/*.rs file is a mod here
+tests/it/shared_assurance.rs  # FR-006 gates; /// Trace: comments are Quire's census
 schemas/                   # domain output contracts included by their owning library producers
 spec/                      # requirements artifacts, the test matrix, the suite registry
 reviews/                   # quire-validated SpecReview artifacts
 assurance/                 # the change declaration and the adopted pins
 scripts/                   # producers and the assurance chain driver
 ```
+
+New integration tests go under `tests/it/` as a module of the single `it` binary (add the file plus a
+`mod <name>;` line in `tests/it/main.rs`), not as a new top-level `tests/<name>.rs` -- Cargo links and
+starts a whole new process per top-level `tests/*.rs` file, which is exactly what `it` exists to avoid
+(IR-237). A file only stays a separate `[[test]]` target when it genuinely needs its own process
+(racy process-global state, or a subprocess assumption of being the sole executable); none of the
+current files needed that.

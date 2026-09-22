@@ -5,7 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-mod common;
+use crate::common;
 
 use quire_contract_codegen::{
     generate_enum_strategy, generate_i64_strategy, AttestationContext, AttestationResult,

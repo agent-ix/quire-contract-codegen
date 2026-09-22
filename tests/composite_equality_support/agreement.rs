@@ -41,7 +41,7 @@ fn enum_status_member_json(case: &str) -> JsonValue {
         "version": "quire.enum-member-node/v1",
         "declaration_node_id": {
             "domain": authority::NODE_KEY_DOMAIN,
-            "digest": crate::package::ENUM_TYPE_DIGEST,
+            "digest": super::package::ENUM_TYPE_DIGEST,
         },
         "case": case,
     })
@@ -64,7 +64,7 @@ macro_rules! agree3 {
     ) => {{
         let authority = {
             #[allow(unused_imports)]
-            use crate::support::qsl_side::*;
+            use self::support::qsl_side::*;
             $($setup)*
             let limits = $limits;
             format!(
@@ -74,7 +74,7 @@ macro_rules! agree3 {
         };
         let (runtime, generated) = {
             #[allow(unused_imports)]
-            use crate::support::rt_side::*;
+            use self::support::rt_side::*;
             $($setup)*
             let limits = $limits;
             (
@@ -199,7 +199,7 @@ macro_rules! shared_helpers {
         }
 
         pub fn node_key(code: u32) -> NodeKey {
-            NodeKey::from_hex(&crate::package::key(code)).unwrap()
+            NodeKey::from_hex(&super::super::package::key(code)).unwrap()
         }
 
         pub fn composite_type(code: u32) -> ValueType {
@@ -237,7 +237,7 @@ macro_rules! shared_helpers {
         pub fn environment_record() -> TypeEnvironment {
             TypeEnvironment::new(
                 vec![CompositeDeclaration::new(
-                    node_key(crate::package::R_POINT),
+                    node_key(super::super::package::R_POINT),
                     "R_POINT",
                     CompositeShape::Record(vec![
                         FieldDeclaration::new("x", ValueType::Integer, Presence::Required),
@@ -253,7 +253,7 @@ macro_rules! shared_helpers {
         pub fn environment_tuple() -> TypeEnvironment {
             TypeEnvironment::new(
                 vec![CompositeDeclaration::new(
-                    node_key(crate::package::TUP_PAIR),
+                    node_key(super::super::package::TUP_PAIR),
                     "TUP_PAIR",
                     CompositeShape::Tuple(vec![
                         ValueType::Int(
@@ -282,11 +282,11 @@ macro_rules! shared_helpers {
         pub fn environment_self() -> TypeEnvironment {
             TypeEnvironment::new(
                 vec![CompositeDeclaration::new(
-                    node_key(crate::package::R_SELF),
+                    node_key(super::super::package::R_SELF),
                     "R_SELF",
                     CompositeShape::Record(vec![FieldDeclaration::new(
                         "next",
-                        composite_type(crate::package::R_SELF),
+                        composite_type(super::super::package::R_SELF),
                         Presence::Optional,
                     )]),
                 )],
@@ -301,7 +301,7 @@ macro_rules! shared_helpers {
             TypeEnvironment::new(
                 vec![
                     CompositeDeclaration::new(
-                        node_key(crate::package::R_POINT),
+                        node_key(super::super::package::R_POINT),
                         "R_POINT",
                         CompositeShape::Record(vec![
                             FieldDeclaration::new("x", ValueType::Integer, Presence::Required),
@@ -309,17 +309,17 @@ macro_rules! shared_helpers {
                         ]),
                     ),
                     CompositeDeclaration::new(
-                        node_key(crate::package::R_PAIR_OF_POINTS),
+                        node_key(super::super::package::R_PAIR_OF_POINTS),
                         "R_PAIR_OF_POINTS",
                         CompositeShape::Record(vec![
                             FieldDeclaration::new(
                                 "a",
-                                composite_type(crate::package::R_POINT),
+                                composite_type(super::super::package::R_POINT),
                                 Presence::Required,
                             ),
                             FieldDeclaration::new(
                                 "b",
-                                composite_type(crate::package::R_POINT),
+                                composite_type(super::super::package::R_POINT),
                                 Presence::Required,
                             ),
                         ]),
@@ -333,7 +333,7 @@ macro_rules! shared_helpers {
         pub fn record_point(environment: &TypeEnvironment, x: i64, y: i64) -> Value {
             environment
                 .record(
-                    node_key(crate::package::R_POINT),
+                    node_key(super::super::package::R_POINT),
                     vec![
                         ("x", FieldValue::Present(Value::Integer(Integer::from(x)))),
                         ("y", FieldValue::Present(Value::Integer(Integer::from(y)))),
@@ -345,7 +345,7 @@ macro_rules! shared_helpers {
         pub fn record_pair_of_points(environment: &TypeEnvironment, a: Value, b: Value) -> Value {
             environment
                 .record(
-                    node_key(crate::package::R_PAIR_OF_POINTS),
+                    node_key(super::super::package::R_PAIR_OF_POINTS),
                     vec![("a", FieldValue::Present(a)), ("b", FieldValue::Present(b))],
                 )
                 .unwrap()
@@ -353,7 +353,10 @@ macro_rules! shared_helpers {
 
         pub fn record_self(environment: &TypeEnvironment, next: FieldValue) -> Value {
             environment
-                .record(node_key(crate::package::R_SELF), vec![("next", next)])
+                .record(
+                    node_key(super::super::package::R_SELF),
+                    vec![("next", next)],
+                )
                 .unwrap()
         }
 
@@ -370,7 +373,7 @@ macro_rules! shared_helpers {
         pub fn tuple_pair(environment: &TypeEnvironment, n: i64, text: &str) -> Value {
             environment
                 .tuple(
-                    node_key(crate::package::TUP_PAIR),
+                    node_key(super::super::package::TUP_PAIR),
                     vec![Value::Integer(Integer::from(n)), text_value(text)],
                 )
                 .unwrap()
@@ -408,7 +411,9 @@ macro_rules! shared_helpers {
         /// The vendored `Example.Status` enum's `ValueType`, matching
         /// `package::ENUM_TYPE_DIGEST`.
         pub fn enum_status_type() -> ValueType {
-            ValueType::Enum(node_key_from_digest(crate::package::ENUM_TYPE_DIGEST))
+            ValueType::Enum(node_key_from_digest(
+                super::super::package::ENUM_TYPE_DIGEST,
+            ))
         }
 
         fn node_key_from_digest(digest: &str) -> NodeKey {
@@ -481,7 +486,7 @@ pub mod qsl_side {
     shared_helpers!();
 
     /// The vendored `Example.Status` declaration, admitted under its
-    /// verified node id (`crate::package::ENUM_TYPE_DIGEST`).
+    /// verified node id (`super::super::package::ENUM_TYPE_DIGEST`).
     pub struct EnumStatus(EnumDeclaration);
 
     fn owners() -> OwnerSelection {
@@ -493,18 +498,16 @@ pub mod qsl_side {
 
     pub fn enum_status() -> EnumStatus {
         let preimage =
-            EnumDeclarationPreimage::from_json(crate::support::enum_status_declaration_json())
-                .unwrap();
-        let key = NodeKey::from_hex(crate::package::ENUM_TYPE_DIGEST).unwrap();
+            EnumDeclarationPreimage::from_json(super::enum_status_declaration_json()).unwrap();
+        let key = NodeKey::from_hex(super::super::package::ENUM_TYPE_DIGEST).unwrap();
         EnumStatus(EnumDeclaration::admit(preimage, key, &owners()).unwrap())
     }
 
     impl EnumStatus {
         pub fn value(&self, case: &str) -> Value {
-            let key = crate::support::enum_status_member_key(case);
+            let key = super::enum_status_member_key(case);
             let preimage =
-                EnumMemberPreimage::from_json(crate::support::enum_status_member_json(case))
-                    .unwrap();
+                EnumMemberPreimage::from_json(super::enum_status_member_json(case)).unwrap();
             let member = NodeKey::from_hex(&key).unwrap();
             Value::Enum(self.0.admit_member(&preimage, member).unwrap())
         }
@@ -516,18 +519,18 @@ pub mod rt_side {
     shared_helpers!();
 
     /// The vendored `Example.Status` declaration, under its authority-verified
-    /// node id (`crate::package::ENUM_TYPE_DIGEST`) and authority-computed
+    /// node id (`super::super::package::ENUM_TYPE_DIGEST`) and authority-computed
     /// member keys, so the same identities are in play as `qsl_side`'s.
     pub struct EnumStatus(EnumDeclaration);
 
     pub fn enum_status() -> EnumStatus {
-        let key = NodeKey::from_hex(crate::package::ENUM_TYPE_DIGEST).unwrap();
+        let key = NodeKey::from_hex(super::super::package::ENUM_TYPE_DIGEST).unwrap();
         EnumStatus(EnumDeclaration::new(key, true, &["READY", "DONE"]).unwrap())
     }
 
     impl EnumStatus {
         pub fn value(&self, case: &str) -> Value {
-            let key = crate::support::enum_status_member_key(case);
+            let key = super::enum_status_member_key(case);
             let member = NodeKey::from_hex(&key).unwrap();
             Value::Enum(self.0.member(case, member).unwrap())
         }

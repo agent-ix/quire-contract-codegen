@@ -31,7 +31,7 @@
 //!
 //! Trace: IR-213.
 
-mod common;
+use crate::common;
 
 use common::withdraw_fixture::withdraw_harnesses;
 use quire_contract_codegen::{KaniObligationHarness, KaniToolPins};

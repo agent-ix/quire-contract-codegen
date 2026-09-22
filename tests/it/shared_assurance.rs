@@ -1416,7 +1416,7 @@ fn tc_013_no_local_evidence_framework_remains_and_the_deleted_schemas_are_unrefe
     // it, so a live `Command::new` invoking the deleted reader, inserted among
     // them, was exempt. Measured green. Only the arrays that spell
     // the forbidden names need an exemption, and only those get one.
-    let this_file = fs::read_to_string(root.join("tests/shared_assurance.rs")).unwrap();
+    let this_file = fs::read_to_string(root.join("tests/it/shared_assurance.rs")).unwrap();
     let literal_ranges: Vec<(usize, usize)> = [
         ("    for removed in [", "    ] {"),
         ("    let deleted_schemas = [", "    ];"),

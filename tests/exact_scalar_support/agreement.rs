@@ -35,7 +35,7 @@ macro_rules! agree3 {
     ) => {{
         let authority = {
             #[allow(unused_imports)]
-            use crate::support::qsl_side::*;
+            use self::support::qsl_side::*;
             $($setup)*
             let limits = $limits;
             format!(
@@ -45,7 +45,7 @@ macro_rules! agree3 {
         };
         let (runtime, generated) = {
             #[allow(unused_imports)]
-            use crate::support::rt_side::*;
+            use self::support::rt_side::*;
             $($setup)*
             let limits = $limits;
             (
@@ -77,7 +77,7 @@ macro_rules! agree2 {
         generated: |$g:ident| $generated:expr $(,)?
     ) => {{
         #[allow(unused_imports)]
-        use crate::support::rt_side::*;
+        use self::support::rt_side::*;
         $($setup)*
         let limits = $limits;
         let runtime = format!(
@@ -271,7 +271,7 @@ macro_rules! shared_helpers {
         }
 
         pub fn fixture() -> Fixture {
-            admit_graph(&crate::support::GraphSpec::tc187()).unwrap()
+            admit_graph(&super::GraphSpec::tc187()).unwrap()
         }
     };
 }
@@ -552,8 +552,8 @@ pub mod qsl_side {
         OwnerSelection::new([owner("example-model")])
     }
 
-    pub fn admit_graph(spec: &crate::support::GraphSpec) -> Result<Fixture, InvalidSemanticGraph> {
-        use crate::support::GraphSpec;
+    pub fn admit_graph(spec: &super::GraphSpec) -> Result<Fixture, InvalidSemanticGraph> {
+        use super::GraphSpec;
         let hex = spec.keys();
         let key = |digest: &str| NodeKey::from_hex(digest).unwrap();
         let dimensions: Vec<_> = spec
@@ -589,8 +589,8 @@ pub mod qsl_side {
         ordered: bool,
         members: &[&str],
     ) -> Result<Enum, InvalidSemanticGraph> {
-        let key = crate::support::enum_declaration_key(declaration, ordered, members);
-        let json = crate::support::enum_declaration_json(declaration, ordered, members);
+        let key = super::enum_declaration_key(declaration, ordered, members);
+        let json = super::enum_declaration_json(declaration, ordered, members);
         let preimage = EnumDeclarationPreimage::from_json(json)?;
         EnumDeclaration::admit(preimage, NodeKey::from_hex(&key).unwrap(), &owners()).map(Enum)
     }
@@ -598,11 +598,9 @@ pub mod qsl_side {
     impl Enum {
         pub fn value(&self, case: &str) -> Result<EnumValue, InvalidSemanticGraph> {
             let declaration = self.0.key().to_string();
-            let key = crate::support::enum_member_key(&declaration, case);
-            let preimage = EnumMemberPreimage::from_json(crate::support::enum_member_json(
-                &declaration,
-                case,
-            ))?;
+            let key = super::enum_member_key(&declaration, case);
+            let preimage =
+                EnumMemberPreimage::from_json(super::enum_member_json(&declaration, case))?;
             self.0
                 .admit_member(&preimage, NodeKey::from_hex(&key).unwrap())
         }
@@ -644,7 +642,7 @@ pub mod rt_side {
         Rational::new(Integer::from(numerator), Integer::from(denominator)).unwrap()
     }
 
-    pub fn admit_graph(spec: &crate::support::GraphSpec) -> Result<Fixture, InvalidSemanticGraph> {
+    pub fn admit_graph(spec: &super::GraphSpec) -> Result<Fixture, InvalidSemanticGraph> {
         let hex = spec.keys();
         let key = |digest: &str| NodeKey::from_hex(digest).unwrap();
         let dimensions: Vec<_> = spec
@@ -689,14 +687,14 @@ pub mod rt_side {
         ordered: bool,
         members: &[&str],
     ) -> Result<Enum, InvalidSemanticGraph> {
-        let key = crate::support::enum_declaration_key(declaration, ordered, members);
+        let key = super::enum_declaration_key(declaration, ordered, members);
         EnumDeclaration::new(NodeKey::from_hex(&key).unwrap(), ordered, members).map(Enum)
     }
 
     impl Enum {
         pub fn value(&self, case: &str) -> Result<EnumValue, InvalidSemanticGraph> {
             let declaration = self.0.key().to_string();
-            let key = crate::support::enum_member_key(&declaration, case);
+            let key = super::enum_member_key(&declaration, case);
             self.0.member(case, NodeKey::from_hex(&key).unwrap())
         }
     }

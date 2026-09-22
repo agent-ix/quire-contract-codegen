@@ -58,7 +58,7 @@ and a byte-accounting unit control, including actual publication and native exec
 sources. These are not yet rows in this structured generation producer, do not establish the normal
 source frontend, and do not close a native campaign or aggregate coverage obligation.
 
-`cargo test --locked --target-dir target-codex-backends --test kani_generation -- --test-threads=1`
+`cargo test --locked --target-dir target-codex-backends --test it kani_generation -- --test-threads=1`
 is SUITE-008. It requires `cargo-kani 0.67.0`, records the executable digest and
 complete generated option vector, validates the v2 Rust/graph schemas and Quoin attestation bodies,
 compiles the generated `publish = false` crates, and runs exact harnesses. The bounded scalar cases

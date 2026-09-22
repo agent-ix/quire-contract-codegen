@@ -24,10 +24,10 @@ use quire_contract_ir::{
 };
 use sha2::{Digest as _, Sha256};
 
-mod common;
+use crate::common;
 
 mod generated_boolean_oracle {
-    include!("fixtures/generated_boolean_oracle.golden");
+    include!("../fixtures/generated_boolean_oracle.golden");
 }
 
 struct TemporaryDirectory(PathBuf);
@@ -100,17 +100,17 @@ fn sha256(bytes: &[u8]) -> String {
 fn expected_implementation_digest() -> String {
     let mut hasher = Sha256::new();
     for value in [
-        include_bytes!("../src/oracle.rs").as_slice(),
-        include_bytes!("../src/bound.rs").as_slice(),
-        include_bytes!("../src/publication.rs").as_slice(),
-        include_bytes!("../src/harness.rs").as_slice(),
-        include_bytes!("../src/strategy.rs").as_slice(),
-        include_bytes!("../build.rs").as_slice(),
-        include_bytes!("../Cargo.lock").as_slice(),
-        include_bytes!("../schemas/oracle-source-map-v1.schema.json").as_slice(),
-        include_bytes!("../schemas/generated-rust-oracle-v1.schema.json").as_slice(),
-        include_bytes!("../spec/functional/FR-001-deterministic-oracles.md").as_slice(),
-        include_bytes!("../spec/functional/FR-002-tristate-proptest.md").as_slice(),
+        include_bytes!("../../src/oracle.rs").as_slice(),
+        include_bytes!("../../src/bound.rs").as_slice(),
+        include_bytes!("../../src/publication.rs").as_slice(),
+        include_bytes!("../../src/harness.rs").as_slice(),
+        include_bytes!("../../src/strategy.rs").as_slice(),
+        include_bytes!("../../build.rs").as_slice(),
+        include_bytes!("../../Cargo.lock").as_slice(),
+        include_bytes!("../../schemas/oracle-source-map-v1.schema.json").as_slice(),
+        include_bytes!("../../schemas/generated-rust-oracle-v1.schema.json").as_slice(),
+        include_bytes!("../../spec/functional/FR-001-deterministic-oracles.md").as_slice(),
+        include_bytes!("../../spec/functional/FR-002-tristate-proptest.md").as_slice(),
     ] {
         hasher.update(value.len().to_le_bytes());
         hasher.update(value);
@@ -521,7 +521,7 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     assert!(first.rust.contents.contains("implies_short_circuit"));
     assert_eq!(
         first.rust.contents,
-        include_str!("fixtures/generated_boolean_oracle.golden")
+        include_str!("../fixtures/generated_boolean_oracle.golden")
     );
     assert!(!generated_boolean_oracle::oracle_fr_001_7_clause_main_id_15522505943cb96b7492688e45253baa21b4b68c040d8a55eb483976327050b1(true));
     assert!(generated_boolean_oracle::oracle_fr_001_7_clause_main_id_15522505943cb96b7492688e45253baa21b4b68c040d8a55eb483976327050b1(false));
@@ -540,8 +540,10 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
         serde_json::from_str(&first.source_map.contents).unwrap();
     let source_map_value: serde_json::Value =
         serde_json::from_str(&first.source_map.contents).unwrap();
-    let source_map_schema: serde_json::Value =
-        serde_json::from_str(include_str!("../schemas/oracle-source-map-v1.schema.json")).unwrap();
+    let source_map_schema: serde_json::Value = serde_json::from_str(include_str!(
+        "../../schemas/oracle-source-map-v1.schema.json"
+    ))
+    .unwrap();
     let source_map_validator = JSONSchema::options()
         .with_draft(Draft::Draft7)
         .compile(&source_map_schema)
@@ -656,7 +658,7 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     // envelope carried as namespaced extensions.
     assert_eq!(
         attestation.environment.dependencies_digest,
-        sha256(include_bytes!("../Cargo.lock"))
+        sha256(include_bytes!("../../Cargo.lock"))
     );
     assert!(!attestation.environment.source_dirty);
     assert!(!generator_source_is_dirty());
@@ -733,7 +735,7 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     assert_eq!(
         flag("--output-schema-digest"),
         Some(sha256(include_bytes!(
-            "../schemas/generated-rust-oracle-v1.schema.json"
+            "../../schemas/generated-rust-oracle-v1.schema.json"
         )))
     );
     let source_map_argv = &source_map_attestation.command.argv;
@@ -759,7 +761,7 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     assert_eq!(
         source_map_flag("--output-schema-digest"),
         Some(sha256(include_bytes!(
-            "../schemas/oracle-source-map-v1.schema.json"
+            "../../schemas/oracle-source-map-v1.schema.json"
         )))
     );
 
@@ -829,7 +831,7 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
 
     // The generated Rust still validates against its own domain output contract.
     let rust_schema: serde_json::Value = serde_json::from_str(include_str!(
-        "../schemas/generated-rust-oracle-v1.schema.json"
+        "../../schemas/generated-rust-oracle-v1.schema.json"
     ))
     .unwrap();
     let rust_validator = JSONSchema::options()

@@ -6,7 +6,12 @@
 //! verified and seeded-failing harnesses one at a time, and writes execution evidence under
 //! `CARGO_TARGET_TMPDIR/kani-obligation-evidence`.
 
-#[path = "exact_scalar_support/package.rs"]
+// package.rs holds a process-global `application_registry()` static keyed by small integer
+// fixture codes that this file and `exact_scalar_generation.rs` each pick independently, on the
+// assumption of an isolated registry (verified: centralizing this module produced real
+// cross-file code collisions and Mutex-poisoning cascades). Kept duplicated on purpose.
+#[allow(clippy::duplicate_mod)]
+#[path = "../exact_scalar_support/package.rs"]
 mod package;
 
 use std::{

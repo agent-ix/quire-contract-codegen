@@ -13,15 +13,20 @@
 //! `exact_scalar_agreement.rs` does.
 
 #[macro_use]
-#[path = "composite_equality_support/agreement.rs"]
+#[path = "../composite_equality_support/agreement.rs"]
 mod support;
 
-#[path = "composite_equality_support/package.rs"]
+// package.rs holds a process-global `application_registry()` static keyed by small integer
+// fixture codes that this file and `composite_equality_generation.rs` each pick independently,
+// on the assumption of an isolated registry (verified: centralizing this module produced real
+// cross-file code collisions and Mutex-poisoning cascades). Kept duplicated on purpose.
+#[allow(clippy::duplicate_mod)]
+#[path = "../composite_equality_support/package.rs"]
 mod package;
 
 #[allow(dead_code)] // not every generated helper is called by every vector.
 mod generated {
-    include!("fixtures/composite_equality/lib.rs.golden");
+    include!("../fixtures/composite_equality/lib.rs.golden");
 }
 
 use package::*;
@@ -60,7 +65,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_21af7ba1e91d21e90d1981308c350091506c953e7bc3a4dfa6a240083ad1a65b( // E_RECORD Equal
+            generated: |g| generated::oracle_21af7ba1e91d21e90d1981308c350091506c953e7bc3a4dfa6a240083ad1a65b( // E_RECORD Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -88,7 +93,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_576f61c653038d5b860825b431f9128ca106118a261f1df432cbbc2a806a634a( // E_TUPLE Equal
+            generated: |g| generated::oracle_576f61c653038d5b860825b431f9128ca106118a261f1df432cbbc2a806a634a( // E_TUPLE Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -117,7 +122,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_89fc354672aa321d79f99516e767b60755c99fb1d86665198d4facbbe42e8009( // E_OPTION Equal
+            generated: |g| generated::oracle_89fc354672aa321d79f99516e767b60755c99fb1d86665198d4facbbe42e8009( // E_OPTION Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -145,7 +150,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_b5507219bf292f5f3030b453e44db1cec20b0d45d02979b8e5d678d65872dc34( // E_COLLECTION Equal
+            generated: |g| generated::oracle_b5507219bf292f5f3030b453e44db1cec20b0d45d02979b8e5d678d65872dc34( // E_COLLECTION Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -171,7 +176,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_3152c7e10a22a6fda8cb49d358d1baadc2e7fd1c6542192baaee7c8aa8add24a( // E_SELF Equal
+            generated: |g| generated::oracle_3152c7e10a22a6fda8cb49d358d1baadc2e7fd1c6542192baaee7c8aa8add24a( // E_SELF Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -198,7 +203,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_d5c77d9a6fbf3c0c86bf60c5d285814883b8fa70fa2357e8d411699fae179b7c( // E_PAIR_OF_POINTS Equal
+            generated: |g| generated::oracle_d5c77d9a6fbf3c0c86bf60c5d285814883b8fa70fa2357e8d411699fae179b7c( // E_PAIR_OF_POINTS Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -228,7 +233,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_460db43031e0e8349e7b81afaab7700861e42478fa36bed7705e229477212aca( // E_RECORD NotEqual
+            generated: |g| generated::oracle_460db43031e0e8349e7b81afaab7700861e42478fa36bed7705e229477212aca( // E_RECORD NotEqual
                 &environment, &left, &right, g,
             ),
         };
@@ -253,7 +258,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_76d9cb71c7ab24969e6bb32d337ce648be691bb8172a036fa8344def2c9b7384( // E_TEXT Equal
+            generated: |g| generated::oracle_76d9cb71c7ab24969e6bb32d337ce648be691bb8172a036fa8344def2c9b7384( // E_TEXT Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -280,7 +285,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_1605f3edda95d8c8720bd2effad6370ef6aac509862734b5720a75e4836d7328( // E_ENUM Equal
+            generated: |g| generated::oracle_1605f3edda95d8c8720bd2effad6370ef6aac509862734b5720a75e4836d7328( // E_ENUM Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -331,7 +336,7 @@ fn tc_029_ac2_a_converted_operand_agrees() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_1693eb17de43a7d163afa716008703d09001b2a464938fa1755f11b0225b7a74( // E_CONV Equal
+            generated: |g| generated::oracle_1693eb17de43a7d163afa716008703d09001b2a464938fa1755f11b0225b7a74( // E_CONV Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -374,7 +379,7 @@ fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_0b3ddf56cea05ad8cd36a18946c412690addf723b7cc414727d10325e5166a94( // E_CONV_CHARGE Equal
+            generated: |g| generated::oracle_0b3ddf56cea05ad8cd36a18946c412690addf723b7cc414727d10325e5166a94( // E_CONV_CHARGE Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -416,7 +421,7 @@ fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_7f1f4b680dd0e405ecf8900e17a85b0170e5083d634a561c2f3456c097666a8f( // E_CONV_RAT_RAT Equal
+            generated: |g| generated::oracle_7f1f4b680dd0e405ecf8900e17a85b0170e5083d634a561c2f3456c097666a8f( // E_CONV_RAT_RAT Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -440,7 +445,7 @@ fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_bd33625ec0cccc3d86ecb0ef526f4daff58640350e42523bd5452b3b1669845d( // E_CONV_RAT_INT Equal
+            generated: |g| generated::oracle_bd33625ec0cccc3d86ecb0ef526f4daff58640350e42523bd5452b3b1669845d( // E_CONV_RAT_INT Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -472,7 +477,7 @@ fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_7b17b989a86f0178fda1b973617c3ed5e20afe5a8f6bf99058777d1aa1970ebd( // E_CONV_DEC_RAT Equal
+            generated: |g| generated::oracle_7b17b989a86f0178fda1b973617c3ed5e20afe5a8f6bf99058777d1aa1970ebd( // E_CONV_DEC_RAT Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -508,7 +513,7 @@ fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_c1ba86b67ce3b9390a347abd17c61969054dc776695ced70b08fa8e63db1ce73( // E_CONV_DEC_DEC Equal
+            generated: |g| generated::oracle_c1ba86b67ce3b9390a347abd17c61969054dc776695ced70b08fa8e63db1ce73( // E_CONV_DEC_DEC Equal
                 &environment, &left, &right, g,
             ),
         };
@@ -540,7 +545,7 @@ fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
                 &right,
                 m,
             ),
-            generated: |g| crate::generated::oracle_a60a24bc6662909a92fcfe0df5b382d0002c9a1f1cfc41b556ae986a27632ec4( // E_CONV_DEC_INT Equal
+            generated: |g| generated::oracle_a60a24bc6662909a92fcfe0df5b382d0002c9a1f1cfc41b556ae986a27632ec4( // E_CONV_DEC_INT Equal
                 &environment, &left, &right, g,
             ),
         };
