@@ -21,20 +21,22 @@ use std::{
 };
 
 use package::{
-    application, bounded, code_id, corpus_package, golden_items, integer_add, key, op, reference,
-    Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED, V_INTEGER,
+    application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
+    reference, Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
+    V_INTEGER,
 };
 use quire_contract_codegen::{
     execute_kani_obligation, file_sha256, generate_exact_scalar_oracles, kani_launch_command,
     launch_evidence, negotiate_kani_obligations, run_launcher_with_timeout, AttestationContext,
-    ExactScalarClaimMap, ExactScalarDisposition, ExactScalarItem, ExactScalarOperation,
-    IntegerOperator, InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest,
-    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
-    KaniObligationOutcome, KaniObligationRequest, KaniPinField, KaniRunOutcome,
-    KaniScalarObligationHarness, KaniTool, KaniToolError, KaniToolPins, ObligationDisposition,
-    ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance,
-    UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION,
-    KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
+    ExactScalarClaim, ExactScalarClaimMap, ExactScalarDisposition, ExactScalarItem,
+    ExactScalarOperation, IntegerOperator, InvalidObligationItem, KaniExecutionRefusal,
+    KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniObligationError,
+    KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest, KaniPinField,
+    KaniRunOutcome, KaniScalarObligationHarness, KaniTool, KaniToolError, KaniToolPins,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
+    OperationProvenance, UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION,
+    KANI_BACKEND_VERSION, KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -962,6 +964,172 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
         unsupported(&records[1]),
         &UnsupportedObligation::ClauseKindNotObligation {
             kind: ClauseKind::Assertion
+        }
+    );
+}
+
+/// A rendered `Generated` claim, and the [`ExactScalarClaimMap`] it came from, reused by both
+/// `UnknownNodeKind` tests below to hand-assemble a claim map entry `generate_exact_scalar_oracles`
+/// would never itself produce.
+const RENDERED_OPERATIONS: [&str; 4] = [
+    "quire.op.integer.add",
+    "quire.op.integer.sub",
+    "quire.op.integer.mul",
+    "quire.op.integer.negate",
+];
+
+/// IR-81: a V2 scalar-claim item's graph node that is present, but is neither the one recognized
+/// `state`/`frame` role pair nor `expression`-tagged (the only family
+/// `generate_exact_scalar_oracles` ever lowers to a `Generated` claim), must not be silently
+/// accounted with a null `kind` and a `Supported` disposition if it ever reaches one. The real
+/// generator already refuses every other `state`-tagged node before that point -- `STATE` and
+/// `FRAME` above both land on `NoFiniteEncoding` -- so this drives the gap directly: `transition`
+/// is a real, admitted `state` form distinct from `frame` (`quire-contract-ir`'s own
+/// `CheckedNodeTag::State::forms()`), and its claim-map entry is hand-appended as `Generated`,
+/// the shape `generate_exact_scalar_oracles` would never itself produce for a non-`expression`
+/// node, to simulate what a future widening of that gate -- or a claim map assembled by another
+/// caller -- could hand this function.
+///
+/// Trace: FR-015-AC-14, TC-025
+#[test]
+fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silently_supported() {
+    const UNRECOGNIZED_STATE_FORM: u32 = 3003;
+    let mut builder = corpus_package();
+    builder.code(
+        UNRECOGNIZED_STATE_FORM,
+        "state",
+        "transition",
+        &key(T_BOOLEAN),
+        json!({"term": "aggregate", "members": []}),
+    );
+    let package = builder.admit();
+    let node_id = code_id(UNRECOGNIZED_STATE_FORM);
+
+    let oracles = generate_exact_scalar_oracles(&package, &golden_items()).expect("claim map");
+    let (operation, generated) = oracles
+        .claim_map
+        .items
+        .iter()
+        .find_map(|claim| match &claim.result {
+            ExactScalarDisposition::Generated(generated)
+                if RENDERED_OPERATIONS.contains(&claim.operation.identity.as_str()) =>
+            {
+                Some((claim.operation.clone(), generated.clone()))
+            }
+            _ => None,
+        })
+        .expect("the corpus renders at least one integer-arithmetic claim");
+    let mut claim_map = oracles.claim_map;
+    claim_map.items.push(ExactScalarClaim {
+        node_id: node_id.clone(),
+        operation,
+        result: ExactScalarDisposition::Generated(generated),
+    });
+
+    let items = [ObligationItem::ScalarClaim {
+        package: &package,
+        claim_map: &claim_map,
+        node_id: &node_id,
+    }];
+    let pins = pins();
+    let outcome = negotiate_kani_obligations(&request(&items, &pins, "crate::subject")).unwrap();
+    let KaniObligationOutcome::Emitted {
+        records,
+        harnesses,
+        scalar_harnesses,
+    } = outcome
+    else {
+        panic!("unexpected rejection");
+    };
+    assert!(
+        harnesses.is_empty(),
+        "an unrecognized node kind must emit no V1 harness"
+    );
+    assert!(
+        scalar_harnesses.is_empty(),
+        "an unrecognized node kind must emit no harness"
+    );
+    assert_eq!(records[0].kind, None);
+    assert_eq!(
+        unsupported(&records[0]),
+        &UnsupportedObligation::UnknownNodeKind {
+            node_id: node_id.clone(),
+            node_tag: "state".to_owned(),
+            semantic_form: "transition".to_owned(),
+        }
+    );
+}
+
+/// IR-81 follow-up (PR review F2): the module doc's own claim that a node absent from the graph
+/// "never reaches `Outcome::LoweredScalar` at all, since `claim_map.items` cannot name one the
+/// graph does not also carry" is only true for a claim map `generate_exact_scalar_oracles` itself
+/// produced. `ExactScalarClaimMap`/`ExactScalarClaim` are fully `pub`, so a hand-assembled claim
+/// map can name a `node_id` that has an entry in `claim_map.items` (so it does not hit the
+/// pre-existing "no entry in the claim map" `UnknownNode` ground at all) but no entry in
+/// `package.graph()` at all.
+///
+/// `code_id(MISSING)` -- this fixture module's own dedicated guaranteed-absent-from-the-graph
+/// sentinel -- is deliberately *not* reused here: `golden_items()` already chains
+/// `refused_items()`, which names `MISSING` itself as a `Refused { refusal: InvalidInput }` claim
+/// (the pre-existing "node not in the admitted graph" ground fired by
+/// `generate_exact_scalar_oracles` itself), so `code_id(MISSING)` already has a real entry in
+/// `oracles.claim_map.items` before this test would append a second one, and `Iterator::find`
+/// would silently match that pre-existing entry first -- exercising the pre-existing ground rather
+/// than the new one. `NODE_ABSENT_FROM_GRAPH` is instead a code no `PackageBuilder` constructor
+/// or `refused_items()` registers at all, built directly with `id(&key(..))` rather than
+/// `code_id` (which panics for an unregistered, non-`MISSING` code), so its only entry in
+/// `claim_map.items` is the one this test appends: a real rendered arithmetic claim's operation
+/// and bounds, so the claim's own bound lookups still resolve and it would otherwise reach
+/// `Outcome::LoweredScalar` -- proving this is the "node absent from the graph" ground, not the
+/// "no finite encoding" or "unrecognized tag/form" one.
+///
+/// Trace: FR-015-AC-14, TC-025
+#[test]
+fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_supported() {
+    const NODE_ABSENT_FROM_GRAPH: u32 = 8888;
+    let package = corpus_package().admit();
+    let missing_node_id = id(&key(NODE_ABSENT_FROM_GRAPH));
+
+    let oracles = generate_exact_scalar_oracles(&package, &golden_items()).expect("claim map");
+    let (operation, generated) = oracles
+        .claim_map
+        .items
+        .iter()
+        .find_map(|claim| match &claim.result {
+            ExactScalarDisposition::Generated(generated)
+                if RENDERED_OPERATIONS.contains(&claim.operation.identity.as_str()) =>
+            {
+                Some((claim.operation.clone(), generated.clone()))
+            }
+            _ => None,
+        })
+        .expect("the corpus renders at least one integer-arithmetic claim");
+    let mut claim_map = oracles.claim_map;
+    claim_map.items.push(ExactScalarClaim {
+        node_id: missing_node_id.clone(),
+        operation,
+        result: ExactScalarDisposition::Generated(generated),
+    });
+
+    let items = [ObligationItem::ScalarClaim {
+        package: &package,
+        claim_map: &claim_map,
+        node_id: &missing_node_id,
+    }];
+    let pins = pins();
+    let outcome = negotiate_kani_obligations(&request(&items, &pins, "crate::subject")).unwrap();
+    let KaniObligationOutcome::Rejected { records } = &outcome else {
+        panic!(
+            "a claim naming a node absent from the graph must not be silently supported: \
+             {outcome:?}"
+        );
+    };
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].kind, None);
+    assert_eq!(
+        records[0].disposition,
+        ObligationDisposition::InvalidRequest {
+            reason: InvalidObligationItem::UnknownNode
         }
     );
 }
