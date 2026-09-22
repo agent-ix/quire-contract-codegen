@@ -316,6 +316,272 @@ fn tc_031_ac1_duplicate_request_refuses_every_copy() {
     ));
 }
 
+/// Trace: FR-021-AC-12 (signature/body-kind agreement), TC-031. A `Scalar`
+/// body's declared parameter count or result type disagreeing with what the
+/// body kind requires is refused with `SignatureMismatch` at generation
+/// time, instead of assembling into a package whose emitted
+/// `FunctionDeclaration` disagrees with its own rendered `Body` -- the two
+/// measured repros: an `Add` declaration with only one declared parameter,
+/// and an `Add` declaration whose declared result type is `Boolean` instead
+/// of `Integer`.
+#[test]
+fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
+    let package = ext_corpus_package().admit();
+
+    // Arity: FN_ADD's real body needs two operands; declared with one.
+    let arity_mismatch = quire_contract_codegen::ExactFunctionDeclaration {
+        node_id: code_id(FN_ADD),
+        name: "one_param_add".to_owned(),
+        parameters: vec![quire_contract_codegen::FunctionParameter {
+            name: "a".to_owned(),
+            type_node_id: code_id(T_INTEGER),
+        }],
+        result_type: code_id(T_INTEGER),
+        body: quire_contract_codegen::ExactFunctionBody::Scalar {
+            operator: quire_contract_codegen::IntegerOperator::Add,
+        },
+        capability_requirements: Vec::new(),
+    };
+    let items = vec![item(ITEM_CALL_ADD, "one_param_add")];
+    let oracles = generate(&package, &[arity_mismatch], &items);
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_ADD),
+        ExactFunctionDisposition::Refused {
+            refusal: ExactFunctionRefusal::SignatureMismatch { .. }
+        }
+    ));
+
+    // Result type: FN_EQ's node, a Scalar body (Integer-only), declared
+    // with a Boolean result.
+    let result_mismatch = quire_contract_codegen::ExactFunctionDeclaration {
+        node_id: code_id(FN_EQ),
+        name: "boolean_result_add".to_owned(),
+        parameters: vec![
+            quire_contract_codegen::FunctionParameter {
+                name: "a".to_owned(),
+                type_node_id: code_id(T_INTEGER),
+            },
+            quire_contract_codegen::FunctionParameter {
+                name: "b".to_owned(),
+                type_node_id: code_id(T_INTEGER),
+            },
+        ],
+        result_type: code_id(T_BOOLEAN),
+        body: quire_contract_codegen::ExactFunctionBody::Scalar {
+            operator: quire_contract_codegen::IntegerOperator::Add,
+        },
+        capability_requirements: Vec::new(),
+    };
+    let items = vec![item(ITEM_CALL_EQ, "boolean_result_add")];
+    let oracles = generate(&package, &[result_mismatch], &items);
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_EQ),
+        ExactFunctionDisposition::Refused {
+            refusal: ExactFunctionRefusal::SignatureMismatch { .. }
+        }
+    ));
+}
+
+/// Trace: FR-021-AC-15/AC-17 (duplicate declared names), TC-031. Two
+/// declarations sharing one name -- different node ids, same string --
+/// are both refused as `AmbiguousFunctionName` rather than colliding into
+/// one Stage 1 classification, and a third, uniquely-named survivor's
+/// location map index is unaffected: it still equals its own position among
+/// the surviving functions, not a value corrupted by the excluded pair.
+/// This is FR-021-AC-15's own mutation table entry ("record it against the
+/// wrong function's index") reproduced and proven fixed.
+#[test]
+fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
+    let package = ext_corpus_package().admit();
+    let functions = vec![
+        function_add("dup"),       // node FN_ADD
+        function_unrelated("dup"), // node FN_UNRELATED, same name, different node
+        function_eq("solo_eq"),    // node FN_EQ, unique name
+        quire_contract_codegen::ExactFunctionDeclaration {
+            node_id: code_id(FN_CAPABILITY),
+            name: "solo_add".to_owned(),
+            parameters: vec![
+                quire_contract_codegen::FunctionParameter {
+                    name: "a".to_owned(),
+                    type_node_id: code_id(T_INTEGER),
+                },
+                quire_contract_codegen::FunctionParameter {
+                    name: "b".to_owned(),
+                    type_node_id: code_id(T_INTEGER),
+                },
+            ],
+            result_type: code_id(T_INTEGER),
+            body: quire_contract_codegen::ExactFunctionBody::Scalar {
+                operator: quire_contract_codegen::IntegerOperator::Add,
+            },
+            capability_requirements: Vec::new(),
+        },
+    ];
+    let items = vec![
+        item(ITEM_CALL_ADD, "dup"),
+        item(ITEM_CALL_EQ, "solo_eq"),
+        item(ITEM_CALL_UNRELATED, "solo_add"),
+    ];
+    let oracles = generate(&package, &functions, &items);
+
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_ADD),
+        ExactFunctionDisposition::Refused {
+            refusal: ExactFunctionRefusal::AmbiguousFunctionName { name }
+        } if name == "dup"
+    ));
+    // Neither "dup" declaration ever survives to Stage 2, so neither ever
+    // gets a location-map entry at all -- the old, name-keyed maps would
+    // instead have let both survive and collide on one shared index.
+    assert!(oracles
+        .location_map
+        .iter()
+        .all(|entry| entry.function != "dup"));
+
+    // Node ids are content digests, not the numeric placeholder codes
+    // above, so the surviving order (solo_eq, solo_add) is whichever the
+    // generator's own node-id sort gives -- re-derived here exactly as
+    // `generate_exact_function_oracles` computes it, the same pattern
+    // `tc_031_ac3`/`tc_031_ac15` already use, rather than hardcoded.
+    let mut survivor_node_ids = [code_id(FN_EQ), code_id(FN_CAPABILITY)];
+    survivor_node_ids.sort();
+    let expected_index = |node_id: &quire_contract_ir::CheckedNodeId| {
+        survivor_node_ids
+            .iter()
+            .position(|candidate| candidate == node_id)
+            .expect("survivor node id")
+    };
+
+    let solo_eq_entry = oracles
+        .location_map
+        .iter()
+        .find(|entry| entry.function == "solo_eq")
+        .expect("solo_eq has a location map entry");
+    let solo_add_entry = oracles
+        .location_map
+        .iter()
+        .find(|entry| entry.function == "solo_add")
+        .expect("solo_add has a location map entry");
+    assert_eq!(oracles.location_map.len(), 2);
+    match &solo_eq_entry.location.origin {
+        quire_contract_codegen::RecordedOrigin::Body { function, index } => {
+            assert_eq!(function, "solo_eq");
+            assert_eq!(*index, expected_index(&code_id(FN_EQ)));
+        }
+    }
+    match &solo_add_entry.location.origin {
+        quire_contract_codegen::RecordedOrigin::Body { function, index } => {
+            assert_eq!(function, "solo_add");
+            assert_eq!(*index, expected_index(&code_id(FN_CAPABILITY)));
+        }
+    }
+    assert_ne!(
+        expected_index(&code_id(FN_EQ)),
+        expected_index(&code_id(FN_CAPABILITY)),
+        "the two survivors must occupy distinct indices"
+    );
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_EQ),
+        ExactFunctionDisposition::Generated(_)
+    ));
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_UNRELATED),
+        ExactFunctionDisposition::Generated(_)
+    ));
+}
+
+/// Trace: FR-021-AC-1 (item-level arity), TC-031. An item's argument count
+/// disagreeing with the applied function's declared parameter count is
+/// refused as `ArityMismatch`, naming both counts.
+#[test]
+fn tc_031_arity_mismatch_refuses_when_item_argument_count_disagrees() {
+    let package = ext_corpus_package().admit();
+    let functions = vec![function_add("add_fn")];
+    let items = vec![quire_contract_codegen::ExactFunctionItem {
+        call_node_id: code_id(ITEM_CALL_ADD),
+        function: "add_fn".to_owned(),
+        argument_node_ids: vec![code_id(T_INTEGER)],
+    }];
+    let oracles = generate(&package, &functions, &items);
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_ADD),
+        ExactFunctionDisposition::Refused {
+            refusal: ExactFunctionRefusal::ArityMismatch {
+                expected: 2,
+                found: 1
+            }
+        }
+    ));
+}
+
+/// Trace: FR-021 module doc (scalar vocabulary), TC-031.
+/// `IntegerOperator::Negate` is unary and out of this V1's scope (only
+/// binary `Add`/`Subtract`/`Multiply` are supported): a `Scalar` body
+/// declaring it is refused as `UnsupportedOperator`.
+#[test]
+fn tc_031_unsupported_operator_refuses_unary_negate_scalar_body() {
+    let package = ext_corpus_package().admit();
+    let functions = vec![quire_contract_codegen::ExactFunctionDeclaration {
+        node_id: code_id(FN_ADD),
+        name: "negate_fn".to_owned(),
+        parameters: vec![
+            quire_contract_codegen::FunctionParameter {
+                name: "a".to_owned(),
+                type_node_id: code_id(T_INTEGER),
+            },
+            quire_contract_codegen::FunctionParameter {
+                name: "b".to_owned(),
+                type_node_id: code_id(T_INTEGER),
+            },
+        ],
+        result_type: code_id(T_INTEGER),
+        body: quire_contract_codegen::ExactFunctionBody::Scalar {
+            operator: quire_contract_codegen::IntegerOperator::Negate,
+        },
+        capability_requirements: Vec::new(),
+    }];
+    let items = vec![item(ITEM_CALL_ADD, "negate_fn")];
+    let oracles = generate(&package, &functions, &items);
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_ADD),
+        ExactFunctionDisposition::Refused {
+            refusal: ExactFunctionRefusal::UnsupportedOperator { .. }
+        }
+    ));
+}
+
+/// Trace: FR-021-AC-7, TC-031. The committed golden source for the
+/// nested-call chain corpus (deeper than `MAX_CALL_DEPTH`), consumed (via
+/// `include!`) by `exact_function_agreement.rs`'s AC-7 test to execute the
+/// real generated `Call` bodies -- not a hand-built parallel double --
+/// against the runtime's own `MAX_CALL_DEPTH` enforcement.
+#[test]
+fn tc_031_ac7_chain_source_matches_the_committed_golden() {
+    let package = ext_corpus_package().admit();
+    let mut functions = chain_functions();
+    assert_eq!(functions[0].name, "chain_0");
+    assert_eq!(
+        functions[(CHAIN_LENGTH - 1) as usize].name,
+        format!("chain_{}", CHAIN_LENGTH - 1)
+    );
+    functions.push(function_add("add_fn")); // the chain's own last link calls this
+    let items = vec![item(ITEM_CALL_CHAIN, "chain_0")];
+    let oracles = generate(&package, &functions, &items);
+
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/exact_function_chain/lib.rs.golden");
+    if std::env::var_os(BLESS).is_some() {
+        fs::write(&path, contents(&oracles, "src/lib.rs")).expect("write chain golden");
+    }
+    let expected = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("{}: {error}; set {BLESS}=1", path.display()));
+    assert_eq!(
+        contents(&oracles, "src/lib.rs"),
+        expected,
+        "chain src/lib.rs drifted from lib.rs.golden"
+    );
+}
+
 pub fn contents(oracles: &quire_contract_codegen::ExactFunctionOracles, path: &str) -> String {
     oracles
         .artifacts
@@ -407,14 +673,22 @@ fn tc_031_ac14_manifest_and_source_shape() {
     // No literal `Outcome::Completed(...)` construction standing in for a
     // runtime result: every `Outcome::Completed` in this source is a match
     // arm reconstructing a *runtime-computed* value, never a bare constant.
-    assert!(!lib.contains("Outcome::Completed(rt::Value::Integer(rt::Integer::"));
-    assert!(!lib.contains("Outcome::Completed(rt::Value::Boolean(true))"));
-    assert!(!lib.contains("Outcome::Completed(rt::Value::Boolean(false))"));
+    // Asserted positively -- the exact pattern `render_body` emits for each
+    // supported body kind -- rather than as an absence of a hand-picked
+    // literal substring: a mutation that hardcoded a hollow result would
+    // remove one of these patterns, where the equivalent absence-only
+    // checks this replaced could be defeated by any differently-formatted
+    // literal.
+    assert!(lib.contains("Outcome::Completed(rt::Value::Integer(value))"));
+    assert!(lib.contains("Outcome::Completed(rt::Value::Boolean(value))"));
 }
 
-/// Trace: FR-021-AC-15, TC-031. The location map records one entry per
-/// generated function body, each `Location{origin, path}` re-derivable from
-/// the request's own expression tree with no execution: every generated
+/// Trace: FR-021-AC-15 (origin half only -- see module doc "Location
+/// tagging" and `spec/test-matrix.md`'s FR-021 row: the `path`-non-empty
+/// case is not implemented and is unreachable from this V1's scoped body
+/// vocabulary), TC-031. The location map records one entry per generated
+/// function body, each `Location{origin, path}` re-derivable from the
+/// request's own expression tree with no execution: every generated
 /// function in this V1 has a body that is one classified node at its own
 /// root, so `path` is always empty and `origin` always equals the
 /// generator's own function ordering.
@@ -480,8 +754,9 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
     assert!(!lib.contains("evaluation.location"));
     assert!(!lib.contains("evaluation.losses"));
     assert!(lib.contains(".map(|evaluation| evaluation.outcome)"));
-
-    let claim_map = contents(&oracles, "claim-map.json");
-    assert!(!claim_map.contains("\"location\""));
-    assert!(!claim_map.contains("\"losses\""));
+    // The claim map's own `Serialize` types (`ExactFunctionClaimMap`,
+    // `GeneratedExactFunctionClaim`) carry no `location`/`losses` field at
+    // all, so a JSON-key absence check on `claim-map.json` here would only
+    // restate what the type system already guarantees at compile time, not
+    // exercise any behavior of this generator.
 }

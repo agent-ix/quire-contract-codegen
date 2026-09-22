@@ -63,7 +63,11 @@ type: TestMatrix
 | FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |
 | FR-019 | FR-019-AC-1 through FR-019-AC-8, FR-019-AC-10 | TC-030 | ✅ Covered |
 | FR-019 | FR-019-AC-9 | Analysis | ✅ Covered |
-| FR-021 | FR-021-AC-1 through FR-021-AC-18 | TC-031 | 🚧 Planned |
+| FR-021 | FR-021-AC-1 through FR-021-AC-3, FR-021-AC-5 through FR-021-AC-14, FR-021-AC-17 | TC-031 | ✅ Covered |
+| FR-021 | FR-021-AC-4 | TC-031 | ⚠️ Partially covered; only `InputRefusal::WrongValueKind` is asserted -- `::DanglingReference` is structurally unreachable for any oracle this generator can produce, since `validate_arguments` checks `WrongValueKind` before it ever walks a value for a dangling reference, and a reference-typed parameter is refused at generation time (AC-10, blocked on qsl#120) |
+| FR-021 | FR-021-AC-15 | TC-031 | 🚧 Planned; the `origin` half is implemented and tested, but under this V1's scoped one-node body vocabulary `path` can never be non-empty by construction, so the `path`-non-empty case this AC also describes is not implemented |
+| FR-021 | FR-021-AC-16 | TC-031 (Inspection) | ✅ Covered |
+| FR-021 | FR-021-AC-18 | TC-031 | 🚧 Planned, pending the `quire-spec-language` re-pin named in FR-021's own Dependencies section |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository

@@ -26,6 +26,16 @@ mod generated {
     include!("fixtures/exact_function/lib.rs.golden");
 }
 
+/// The committed golden for the >128-deep nested-call chain corpus
+/// (`exact_function_generation.rs`'s `tc_031_ac7_chain_source_matches_the_committed_golden`
+/// proves this is the generator's current output for that corpus), spliced
+/// in the same way `generated` above is, so AC-7 below executes the real
+/// generated `Call` bodies rather than a hand-built parallel double.
+#[allow(dead_code)]
+mod chain_generated {
+    include!("fixtures/exact_function_chain/lib.rs.golden");
+}
+
 use package::*;
 use quire_contract_runtime::exact as rt;
 use std::num::NonZeroU64;
@@ -269,14 +279,23 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
     }
 }
 
-/// Trace: FR-021-AC-4, TC-031. `InputRefusal::Arity`, `::WrongValueKind`
-/// and `::DanglingReference` are returned by the generated oracle
-/// unchanged, before any charge; `Meter::admitted_charges()` is empty on
-/// every one. `::UnknownFunction` has no generated-oracle path at all (an
-/// item naming an undeclared function is refused at generation time and
-/// emits no oracle -- see `exact_function_generation.rs`'s AC-1 test), so
-/// it is driven here directly against `CheckedPackage::call`, the same
-/// entry point every generated oracle itself delegates to unchanged.
+/// Trace: FR-021-AC-4, TC-031. `InputRefusal::Arity` and `::WrongValueKind`
+/// are returned by the generated oracle unchanged, before any charge;
+/// `Meter::admitted_charges()` is empty on both. `::UnknownFunction` has no
+/// generated-oracle path at all (an item naming an undeclared function is
+/// refused at generation time and emits no oracle -- see
+/// `exact_function_generation.rs`'s AC-1 test), so it is driven here
+/// directly against `CheckedPackage::call`, the same entry point every
+/// generated oracle itself delegates to unchanged. `::DanglingReference` is
+/// not exercised: the pinned runtime's `validate_arguments`
+/// (`quire-contract-runtime/src/exact/expression.rs`) checks
+/// `value_type.admits(argument)` -- `WrongValueKind` -- before it ever
+/// walks a value for a dangling reference, and a `Value::Reference`
+/// supplied for this generator's Integer/Boolean-only parameter kinds
+/// always fails that first check. `DanglingReference` is structurally
+/// unreachable for any oracle this generator can produce (a
+/// reference-typed parameter is refused at generation time, AC-10, blocked
+/// on qsl#120), so no test here asserts it.
 #[test]
 fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
     let generated = generated::checked_package().expect("generated package admits");
@@ -319,8 +338,10 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
         assert!(meter.admitted_charges().is_empty());
     }
 
-    // DanglingReference: no admitted reference exists in an empty
-    // ObjectEnvironment, so a Reference value dangles for any parameter.
+    // A Reference value supplied for add_fn's Integer parameter fails
+    // `value_type.admits(argument)` before the runtime ever walks it for a
+    // dangling reference -- see this test's own doc comment for why
+    // `DanglingReference` itself is untested here.
     {
         let mut meter = rt::Meter::new(UNLIMITED);
         let dangling = rt::ObjectReference::new(
@@ -341,7 +362,6 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
         assert!(matches!(
             result,
             Err(rt::InputRefusal::WrongValueKind { parameter: 0 })
-                | Err(rt::InputRefusal::DanglingReference { parameter: 0 })
         ));
         assert!(meter.admitted_charges().is_empty());
     }
@@ -419,113 +439,29 @@ fn tc_031_ac9_denial_at_function_call_yields_incomplete_with_no_charge_applied()
 /// Trace: FR-021-AC-7, TC-031. Re-entry through a chain of nested
 /// `Frame::call`s is bounded by one `CheckingLimits::depth` budget
 /// (`MAX_CALL_DEPTH` = 128) shared across the whole chain, refusing
-/// `Refusal::CheckedInvariant` before any further charge once exceeded.
+/// `Refusal::CheckedInvariant` before any further charge once exceeded --
+/// exercised against the committed golden `chain_generated` module above,
+/// so this drives the *real* generated `Call` bodies (`frame.call(&next,
+/// args)`, rendered by `render_body`) through `Frame::call`'s own depth
+/// enforcement, not a hand-built parallel double standing in for them.
 #[test]
 fn tc_031_ac7_nested_call_chain_is_bounded_by_max_call_depth() {
-    let package = ext_corpus_package().admit();
-    let mut functions = chain_functions();
-    functions.push(function_add("add_fn")); // the chain's own last link calls this
-    let items = vec![item(ITEM_CALL_CHAIN, "chain_0")];
-    let oracles =
-        quire_contract_codegen::generate_exact_function_oracles(&package, &functions, &items)
-            .expect("generation succeeds");
+    // Sanity on the fixture the golden itself was built from (bugs in
+    // `chain_functions()` would otherwise show up only as an opaque
+    // compile/behavior difference in `chain_generated`, not here):
+    let chain = chain_functions();
+    assert_eq!(chain.len(), CHAIN_LENGTH as usize);
+    assert_eq!(chain[0].name, "chain_0");
+    assert_eq!(
+        chain[(CHAIN_LENGTH - 1) as usize].name,
+        format!("chain_{}", CHAIN_LENGTH - 1)
+    );
+    assert_eq!(chain[69].name, "chain_69");
 
-    // Compile the generated source into a real runtime call, the same way
-    // the golden crate is exercised: build an equivalent chain directly,
-    // since embedding a *second* multi-hundred-line `include!` target here
-    // would require its own committed golden. `CHAIN_LENGTH` (140) exceeds
-    // `MAX_CALL_DEPTH` (128) either way the chain is built, so a direct
-    // construction proves the same runtime property AC-7 names: the depth
-    // bound is the runtime's own (`Frame::call`'s `enter()`), not something
-    // this generator re-derives -- this test exists to confirm the
-    // generated `Call` body really reaches that real enforcement path, not
-    // a generator-local counter.
-    // CHAIN_LENGTH chain_i declarations plus the add_fn terminal they call into,
-    // matching exact_function_support/package.rs:105's own `CHAIN_LENGTH + 1`.
-    assert_eq!(functions.len(), CHAIN_LENGTH as usize + 1);
-    assert_eq!(oracles.claim_map.items.len(), 1);
-    assert!(matches!(
-        &oracles.claim_map.items[0].result,
-        quire_contract_codegen::ExactFunctionDisposition::Generated(_)
-    ));
-
-    fn chain_body(next: String) -> rt::Body {
-        Box::new(
-            move |frame: &rt::Frame, args: &[rt::Value]| -> rt::Outcome<rt::Value> {
-                frame.call(&next, args)
-            },
-        )
-    }
-    let mut declarations = Vec::new();
-    for i in 0..CHAIN_LENGTH {
-        let next = if i + 1 < CHAIN_LENGTH {
-            format!("chain_{}", i + 1)
-        } else {
-            "add_fn".to_owned()
-        };
-        declarations.push(rt::FunctionDeclaration {
-            name: format!("chain_{i}"),
-            parameters: vec![
-                ("a".to_owned(), rt::ValueType::Integer),
-                ("b".to_owned(), rt::ValueType::Integer),
-            ],
-            result: rt::ValueType::Integer,
-            ieee_requirements: Vec::new(),
-            integer_division_consumers: Vec::new(),
-            measure_discharged: true,
-            body: chain_body(next),
-        });
-    }
-    declarations.push(rt::FunctionDeclaration {
-        name: "add_fn".to_owned(),
-        parameters: vec![
-            ("a".to_owned(), rt::ValueType::Integer),
-            ("b".to_owned(), rt::ValueType::Integer),
-        ],
-        result: rt::ValueType::Integer,
-        ieee_requirements: Vec::new(),
-        integer_division_consumers: Vec::new(),
-        measure_discharged: true,
-        body: Box::new(
-            |frame: &rt::Frame, args: &[rt::Value]| -> rt::Outcome<rt::Value> {
-                let [rt::Value::Integer(left), rt::Value::Integer(right)] = args else {
-                    return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);
-                };
-                match frame.meter(|meter| {
-                    rt::evaluate_integer_arithmetic(
-                        rt::IntegerArithmetic::Add(left, right),
-                        None,
-                        meter,
-                    )
-                }) {
-                    Ok(rt::Outcome::Completed(value)) => {
-                        rt::Outcome::Completed(rt::Value::Integer(value))
-                    }
-                    Ok(other) => match other {
-                        rt::Outcome::Undefined(u) => rt::Outcome::Undefined(u),
-                        rt::Outcome::Refused(r) => rt::Outcome::Refused(r),
-                        rt::Outcome::Incomplete(i) => rt::Outcome::Incomplete(i),
-                        rt::Outcome::Completed(_) => unreachable!(),
-                    },
-                    Err(refusal) => rt::Outcome::Refused(refusal),
-                }
-            },
-        ),
-    });
-    let chain_package = rt::PackageDeclarations {
-        types: rt::TypeEnvironment::new(
-            Vec::new(),
-            core::iter::empty::<rt::ObjectTypeDeclaration>(),
-        )
-        .expect("empty declaration closure admits"),
-        functions: declarations,
-    }
-    .check(rt::CheckMode::Linked, rt::CheckingLimits::default())
-    .expect("chain package admits");
-
+    let package = chain_generated::checked_package().expect("generated chain package admits");
     let objects = empty_objects();
     let mut meter = rt::Meter::new(UNLIMITED);
-    let result = chain_package.call(
+    let result = package.call(
         "chain_0",
         vec![
             rt::Value::Integer(1i64.into()),

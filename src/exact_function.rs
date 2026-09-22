@@ -34,13 +34,21 @@
 //!
 //! This is a real, working, honestly-scoped generator: every acceptance
 //! criterion's *structural* behavior (refusal typing and ordering, depth
-//! bounding, charge ordering, the claim map, the static location map,
-//! byte-determinism, `CheckMode::Linked`-only admission) is implemented in
-//! full. What is scoped down is the *operator vocabulary* a scalar or
-//! equality function body may use, not the correctness of any behavior this
-//! requirement specifies. A function whose body needs an operator outside
-//! this vocabulary is refused as [`ExactFunctionRefusal::UnsupportedOperator`],
-//! never silently miscompiled.
+//! bounding, charge ordering, the claim map, the origin half of the static
+//! location map, byte-determinism, `CheckMode::Linked`-only admission) is
+//! implemented in full. What is scoped down is the *operator vocabulary* a
+//! scalar or equality function body may use, not the correctness of any
+//! behavior this requirement specifies. A function whose body needs an
+//! operator outside this vocabulary is refused as
+//! [`ExactFunctionRefusal::UnsupportedOperator`], never silently
+//! miscompiled -- and nor is a function whose declared signature (parameter
+//! count, or a parameter/result operand kind) disagrees with what its own
+//! body kind requires: that is refused as
+//! [`ExactFunctionRefusal::SignatureMismatch`], checked once every
+//! parameter and result type is resolved, before the function can ever
+//! reach the assembled package. The location map's `path` half is a
+//! narrower story than "implemented in full" -- see "Location tagging"
+//! below.
 //!
 //! Reused types, not reimplemented: this module imports
 //! [`crate::exact_scalar::IntegerOperator`] and
@@ -53,20 +61,33 @@
 //! Every declared function in one `generate_exact_function_oracles` call is
 //! classified independently first (a fixed-point pass resolves nested `call`
 //! bodies against their callee's own classification). A function-scoped
-//! refusal -- an unlowerable body, an unsupported operator, a `reference`
-//! composite operand ([`UpstreamBlocker::QuireSpecLanguage120`]), a
+//! refusal -- an unlowerable body, an unsupported operator, a signature
+//! (declared parameter count, or a parameter/result operand kind)
+//! disagreeing with its own body kind
+//! ([`ExactFunctionRefusal::SignatureMismatch`]), a name shared with
+//! another declared function in the same request
+//! ([`ExactFunctionRefusal::AmbiguousFunctionName`], caught here, before
+//! admission, rather than left to the runtime's own
+//! `CheckCause::AmbiguousName`), a `reference` composite operand
+//! ([`UpstreamBlocker::QuireSpecLanguage120`]), a
 //! model/relation/state/temporal/protocol node
 //! ([`UpstreamBlocker::QuireSpecLanguage120`]/[`UpstreamBlocker::QuireSpecLanguage121`]),
 //! or a nested `call` naming a callee absent from the request or itself
 //! refused -- refuses only the items naming that function (AC-10, AC-11,
-//! AC-12), never a sibling function's items. Every function that survives
-//! this stage is then assembled into one `PackageDeclarations` and admitted
-//! once through `PackageDeclarations::check(CheckMode::Linked,
+//! AC-12), never a sibling function's items. A duplicate-named function is
+//! never seen by Stage 1's body classification at all, and never reaches
+//! Stage 2: `own_shape`, `resolved` and `function_index` are keyed by each
+//! declaration's own node id, not by name, precisely so two declarations
+//! that happen to share a name cannot collapse into one classification or
+//! one location-map index (see "Location tagging" below). Every function
+//! that survives this stage is then assembled into one `PackageDeclarations`
+//! and admitted once through `PackageDeclarations::check(CheckMode::Linked,
 //! CheckingLimits::default())`; a refusal at *this* stage is reported on
 //! every item naming a surviving function, because they are now one
 //! admitted-or-not package.
 //!
-//! ## Location tagging (AC-15/AC-16/AC-17): static half only
+//! ## Location tagging (AC-15/AC-16/AC-17): static half only, and `path` is
+//! scoped-empty
 //!
 //! Every function body this generator emits reaches exactly one runtime call
 //! point at its own root (its one scalar operator, its one equality
@@ -74,15 +95,25 @@
 //! the scoped body vocabulary above, where a function's body *is* one
 //! classified node, not an arbitrarily deep expression tree. The location
 //! map therefore records one entry per function: `Location { origin:
-//! Origin::Body { function, index }, path: vec![] }`, `path` empty because
-//! the call point is the body's own root. AC-15's structural check (walking
-//! the request to re-derive this location with no execution) and AC-17's
-//! runtime cross-check (reading `Origin::Body` off a real `CheckRefusal`)
-//! are both implemented and tested. The dynamic half --
-//! `Evaluation.location`/`.losses` becoming non-empty at a specific call --
-//! is Out of Scope per FR-021 itself: the pinned runtime's `Body` return type
-//! is `Outcome<Value>`, structurally incapable of carrying one, and this
-//! generator does not attempt it (AC-16: those two fields are simply
+//! Origin::Body { function, index }, path: vec![] }`. This is a real,
+//! honest limit of this V1, not a bug: FR-021's Outputs describe `path` as
+//! "the child-index path from [the] function's root to the sub-expression"
+//! for a body that may nest sub-expressions below its root, but this
+//! generator's own body vocabulary never has one -- every emitted body's
+//! one call point *is* its root -- so `path` can never be non-empty by
+//! construction under this V1's scoped grammar, and would need the body
+//! vocabulary to grow arbitrarily deep expression trees before it ever
+//! could. AC-15's structural check confirms exactly that -- `origin` matches
+//! the request's own function ordering and `path` is always `[]` -- and
+//! AC-17's runtime cross-check (reading `Origin::Body` off a real
+//! `CheckRefusal`) confirms `origin` again, independently. Both are
+//! implemented and tested; the `path`-is-non-empty case is not implemented,
+//! is not reachable from this V1's body vocabulary, and `spec/test-matrix.md`
+//! records AC-15 accordingly rather than as fully covered. The dynamic half
+//! -- `Evaluation.location`/`.losses` becoming non-empty at a specific call
+//! -- is Out of Scope per FR-021 itself: the pinned runtime's `Body` return
+//! type is `Outcome<Value>`, structurally incapable of carrying one, and
+//! this generator does not attempt it (AC-16: those two fields are simply
 //! discarded by every emitted oracle).
 //!
 //! ## AC-18 (three-way authority agreement): not implemented
@@ -177,6 +208,21 @@ pub struct ExactFunctionDeclaration {
     /// `unsupported` (AC-6) -- mirroring FR-273-AC-4's pre-application
     /// negotiation, decided at generation time, before any item naming the
     /// function is applied and before any `Meter` is touched.
+    ///
+    /// Unlike `capability_requirements`, this request type carries no field
+    /// at all for the underlying `IeeeItemRequirement`/`IntegerDivisionConsumer`
+    /// lists themselves: every emitted `rt::FunctionDeclaration`'s own
+    /// `ieee_requirements`/`integer_division_consumers` are hardcoded
+    /// `Vec::new()` placeholders (`generate_exact_function_oracles`'s
+    /// `declared_functions` and `render_function_declaration`), never
+    /// populated from a caller-supplied value. This means AC-6's coverage is
+    /// necessarily narrower than it reads: with capability negotiation
+    /// always refusing by construction (no backend registered) and these
+    /// two lists never non-empty by construction (no field carries them),
+    /// no test in this suite can exercise anything but the
+    /// always-`unsupported`, always-empty-requirements branch. Wiring these
+    /// two lists through from the request is separate, larger scope, not
+    /// attempted here.
     pub capability_requirements: Vec<String>,
 }
 
@@ -213,7 +259,11 @@ pub enum UpstreamBlocker {
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum ExactFunctionRefusal {
     /// The item's `(call node id, function, argument node ids)` triple was
-    /// requested more than once; every copy is refused.
+    /// requested more than once. The claim map records exactly one
+    /// `Refused` entry for that key, not one per copy requested -- every
+    /// copy shares one identity and collapses to it
+    /// (`tc_031_ac1_duplicate_request_refuses_every_copy` asserts
+    /// `items.len() == 1`).
     DuplicateRequest,
     /// The requested node is not in the admitted graph.
     InvalidInput,
@@ -235,6 +285,29 @@ pub enum ExactFunctionRefusal {
     UnsupportedOperator {
         /// What was requested.
         detail: &'static str,
+    },
+    /// The declared parameter count, or a resolved parameter/result operand
+    /// kind, disagrees with what the function's own body kind requires (a
+    /// `Scalar` body needs exactly two `Integer` parameters and an
+    /// `Integer` result; a `CompositeEquality` body needs exactly two
+    /// parameters sharing one operand kind and a `Boolean` result) --
+    /// caught once every parameter and result type is resolved, before the
+    /// function can enter the assembled package with a signature the
+    /// rendered body can never actually satisfy.
+    SignatureMismatch {
+        /// Which part of the signature disagreed, and why.
+        detail: &'static str,
+    },
+    /// The item, or a declared function's own nested `call` body, names a
+    /// function this request declares more than once. `call` could not
+    /// tell which declaration is meant -- the same ambiguity the runtime's
+    /// own `CheckCause::AmbiguousName` refuses at package admission, caught
+    /// here instead, before Stage 1 classification even runs, so two
+    /// declarations sharing one name never both enter the assembled
+    /// package.
+    AmbiguousFunctionName {
+        /// The ambiguous name.
+        name: String,
     },
     /// The function's declared operator requirements name a capability no
     /// registered backend can discharge (AC-6). Decided at generation time,
@@ -638,7 +711,6 @@ fn application_arguments(body: &serde_json::Value) -> Option<&Vec<serde_json::Va
 /// Classify one declared function's own body shape against its lowered
 /// node, independent of any other function (Stage 1, non-`Call` bodies).
 fn classify_body_shape(
-    graph: &Graph<'_>,
     node: &quire_contract_ir::CompleteContractNodeV2,
     declaration: &ExactFunctionDeclaration,
 ) -> Result<(), ExactFunctionRefusal> {
@@ -661,7 +733,6 @@ fn classify_body_shape(
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
             let _ = arguments;
-            let _ = graph;
             Ok(())
         }
         ExactFunctionBody::CompositeEquality { .. } => {
@@ -687,6 +758,66 @@ fn classify_body_shape(
     }
 }
 
+/// Validate that the declared parameter count and the resolved
+/// parameter/result operand kinds actually agree with `declaration`'s own
+/// body kind -- the check `classify_body_shape` never made, since it only
+/// ever read the *lowered node's* own argument count, not the declared
+/// signature. Called once every parameter and result type is resolved
+/// (Stage 1), so a `Scalar`/`CompositeEquality` function whose signature
+/// disagrees with its body is refused before it can ever enter the
+/// assembled package -- rather than assembling with a `FunctionDeclaration`
+/// the rendered `Body` can never actually satisfy, which would only ever
+/// return `Outcome::Refused(CheckedInvariant)` at call time: a silent
+/// miscompile this module's own doc rules out.
+fn validate_signature(
+    declaration: &ExactFunctionDeclaration,
+    parameter_kinds: &[OperandKind],
+    result_kind: OperandKind,
+) -> Result<(), ExactFunctionRefusal> {
+    match &declaration.body {
+        ExactFunctionBody::Scalar { .. } => {
+            if declaration.parameters.len() != 2 {
+                return Err(ExactFunctionRefusal::SignatureMismatch {
+                    detail: "a Scalar body needs exactly two declared parameters",
+                });
+            }
+            if !matches!(
+                parameter_kinds,
+                [OperandKind::Integer, OperandKind::Integer]
+            ) {
+                return Err(ExactFunctionRefusal::SignatureMismatch {
+                    detail: "a Scalar body's two declared parameters must both be Integer",
+                });
+            }
+            if result_kind != OperandKind::Integer {
+                return Err(ExactFunctionRefusal::SignatureMismatch {
+                    detail: "a Scalar body's declared result must be Integer",
+                });
+            }
+            Ok(())
+        }
+        ExactFunctionBody::CompositeEquality { .. } => {
+            if declaration.parameters.len() != 2 {
+                return Err(ExactFunctionRefusal::SignatureMismatch {
+                    detail: "a CompositeEquality body needs exactly two declared parameters",
+                });
+            }
+            if parameter_kinds[0] != parameter_kinds[1] {
+                return Err(ExactFunctionRefusal::SignatureMismatch {
+                    detail: "a CompositeEquality body's two declared parameters must share one operand kind",
+                });
+            }
+            if result_kind != OperandKind::Boolean {
+                return Err(ExactFunctionRefusal::SignatureMismatch {
+                    detail: "a CompositeEquality body's declared result must be Boolean",
+                });
+            }
+            Ok(())
+        }
+        ExactFunctionBody::Call { .. } => Ok(()),
+    }
+}
+
 /// Generate function-application oracles for `items`, over the declared
 /// functions in `functions`, from an admitted package.
 pub fn generate_exact_function_oracles(
@@ -706,9 +837,22 @@ pub fn generate_exact_function_oracles(
     let mut ordered_functions: Vec<&ExactFunctionDeclaration> = functions.iter().collect();
     ordered_functions.sort_by(|a, b| a.node_id.cmp(&b.node_id));
 
-    let names: BTreeSet<&str> = ordered_functions
+    // How many declarations share each name. `own_shape`, `resolved` and
+    // `function_index` below are all keyed by each declaration's own node
+    // id, never by name, so two declarations that happen to share a name
+    // can never collapse into one classification or one location-map
+    // index. A name with more than one declaration is instead refused
+    // outright, before Stage 1 classification even runs (see module doc,
+    // "Package assembly"): `unique_name_node_id` therefore holds only the
+    // names Stage 1 will actually attempt to classify.
+    let mut name_counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for declaration in &ordered_functions {
+        *name_counts.entry(declaration.name.as_str()).or_insert(0) += 1;
+    }
+    let unique_name_node_id: BTreeMap<&str, &CheckedNodeId> = ordered_functions
         .iter()
-        .map(|declaration| declaration.name.as_str())
+        .filter(|declaration| name_counts[declaration.name.as_str()] == 1)
+        .map(|declaration| (declaration.name.as_str(), &declaration.node_id))
         .collect();
 
     let requested: Vec<CheckedNodeId> = ordered_functions
@@ -720,9 +864,14 @@ pub fn generate_exact_function_oracles(
     // Stage 1: per-function classification, with a bounded fixed-point pass
     // for `Call` bodies (a nested call's own validity depends on its
     // callee's classification, per AC-12).
-    let mut own_shape: BTreeMap<&str, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
+    let mut own_shape: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
     for (declaration, record) in ordered_functions.iter().zip(&lowering.records) {
         let result = (|| -> Result<(), ExactFunctionRefusal> {
+            if name_counts[declaration.name.as_str()] > 1 {
+                return Err(ExactFunctionRefusal::AmbiguousFunctionName {
+                    name: declaration.name.clone(),
+                });
+            }
             // AC-6: capability negotiation happens first, before lowering
             // the body and before any item naming this function is
             // applied. This generator registers no backend for any named
@@ -734,45 +883,46 @@ pub fn generate_exact_function_oracles(
                 });
             }
             let node = lowered_binary_body(record)?;
-            classify_body_shape(&graph, node, declaration)?;
+            classify_body_shape(node, declaration)?;
+            let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
-                resolve_operand_type(&graph, &parameter.type_node_id)?;
+                parameter_kinds.push(resolve_operand_type(&graph, &parameter.type_node_id)?);
             }
-            resolve_operand_type(&graph, &declaration.result_type)?;
+            let result_kind = resolve_operand_type(&graph, &declaration.result_type)?;
+            validate_signature(declaration, &parameter_kinds, result_kind)?;
             Ok(())
         })();
-        own_shape.insert(declaration.name.as_str(), result);
+        own_shape.insert(&declaration.node_id, result);
     }
 
-    let mut resolved: BTreeMap<&str, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
+    let mut resolved: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
     for _ in 0..=ordered_functions.len() {
         let mut changed = false;
         for declaration in &ordered_functions {
-            if resolved.contains_key(declaration.name.as_str()) {
+            if resolved.contains_key(&declaration.node_id) {
                 continue;
             }
-            let own = own_shape.get(declaration.name.as_str()).unwrap();
+            let own = own_shape.get(&declaration.node_id).unwrap();
             let outcome = match (&declaration.body, own) {
                 (_, Err(refusal)) => Some(Err(refusal.clone())),
                 (ExactFunctionBody::Call { callee }, Ok(())) => {
-                    if !names.contains(callee.as_str()) {
-                        Some(Err(ExactFunctionRefusal::UnknownCallee {
+                    match unique_name_node_id.get(callee.as_str()) {
+                        None => Some(Err(ExactFunctionRefusal::UnknownCallee {
                             callee: callee.clone(),
-                        }))
-                    } else {
-                        match resolved.get(callee.as_str()) {
+                        })),
+                        Some(&callee_node_id) => match resolved.get(callee_node_id) {
                             Some(Ok(())) => Some(Ok(())),
                             Some(Err(_)) => Some(Err(ExactFunctionRefusal::UnknownCallee {
                                 callee: callee.clone(),
                             })),
                             None => None,
-                        }
+                        },
                     }
                 }
                 (_, Ok(())) => Some(Ok(())),
             };
             if let Some(outcome) = outcome {
-                resolved.insert(declaration.name.as_str(), outcome);
+                resolved.insert(&declaration.node_id, outcome);
                 changed = true;
             }
         }
@@ -783,23 +933,21 @@ pub fn generate_exact_function_oracles(
     // Anything still unresolved is a nested-call dependency this bounded
     // pass could not settle (a cycle among `Call` bodies): refuse.
     for declaration in &ordered_functions {
-        resolved
-            .entry(declaration.name.as_str())
-            .or_insert_with(|| {
-                Err(match &declaration.body {
-                    ExactFunctionBody::Call { callee } => ExactFunctionRefusal::UnknownCallee {
-                        callee: callee.clone(),
-                    },
-                    _ => ExactFunctionRefusal::BodyMismatch,
-                })
-            });
+        resolved.entry(&declaration.node_id).or_insert_with(|| {
+            Err(match &declaration.body {
+                ExactFunctionBody::Call { callee } => ExactFunctionRefusal::UnknownCallee {
+                    callee: callee.clone(),
+                },
+                _ => ExactFunctionRefusal::BodyMismatch,
+            })
+        });
     }
 
     // Stage 2: assemble one package from every surviving function, in
     // order, and admit it once.
     let mut survivors: Vec<&ExactFunctionDeclaration> = Vec::new();
     for declaration in &ordered_functions {
-        if matches!(resolved.get(declaration.name.as_str()), Some(Ok(()))) {
+        if matches!(resolved.get(&declaration.node_id), Some(Ok(()))) {
             survivors.push(declaration);
         }
     }
@@ -840,10 +988,10 @@ pub fn generate_exact_function_oracles(
         })
         .collect();
 
-    let function_index: BTreeMap<&str, usize> = classified
+    let function_index: BTreeMap<&CheckedNodeId, usize> = classified
         .iter()
         .enumerate()
-        .map(|(index, function)| (function.declaration.name.as_str(), index))
+        .map(|(index, function)| (&function.declaration.node_id, index))
         .collect();
 
     let package_check = rt::PackageDeclarations {
@@ -870,7 +1018,7 @@ pub fn generate_exact_function_oracles(
     // about the request, independent of admission (AC-15).
     let mut location_map = Vec::with_capacity(survivors.len());
     for declaration in &survivors {
-        let index = function_index[declaration.name.as_str()];
+        let index = function_index[&declaration.node_id];
         let call_point = match &declaration.body {
             ExactFunctionBody::Scalar { .. } => CallPointKind::ScalarOperator,
             ExactFunctionBody::CompositeEquality { .. } => CallPointKind::EqualityEvaluation,
@@ -892,7 +1040,13 @@ pub fn generate_exact_function_oracles(
     // Stage 3: per requested item.
     let mut counts: BTreeMap<ItemKey, u32> = BTreeMap::new();
     let mut by_key: BTreeMap<ItemKey, &ExactFunctionItem> = BTreeMap::new();
-    let function_node_id_by_name: BTreeMap<&str, &CheckedNodeId> = functions
+    // Built from `ordered_functions` (sorted by node id), not the
+    // caller-supplied `functions` order, so a name shared by more than one
+    // declaration always resolves to the same (highest-sorted) node id
+    // regardless of what order the caller passed its declarations in --
+    // keeping AC-13's determinism-across-permutations guarantee even for an
+    // item naming an ambiguous function.
+    let function_node_id_by_name: BTreeMap<&str, &CheckedNodeId> = ordered_functions
         .iter()
         .map(|declaration| (declaration.name.as_str(), &declaration.node_id))
         .collect();
@@ -918,7 +1072,8 @@ pub fn generate_exact_function_oracles(
             }
         } else {
             match item_disposition(
-                &names,
+                &name_counts,
+                &unique_name_node_id,
                 &resolved,
                 &survivors,
                 &function_index,
@@ -980,12 +1135,18 @@ pub fn generate_exact_function_oracles(
     })
 }
 
+// `#[allow(clippy::too_many_arguments)]`: every parameter here is one of
+// Stage 1/2's own per-generation lookup tables, already computed once by
+// the caller and passed by reference; folding them into a context struct
+// would only move the same nine borrows into a second type to define and
+// keep in sync, not reduce them.
 #[allow(clippy::too_many_arguments)]
 fn item_disposition(
-    names: &BTreeSet<&str>,
-    resolved: &BTreeMap<&str, Result<(), ExactFunctionRefusal>>,
+    name_counts: &BTreeMap<&str, usize>,
+    unique_name_node_id: &BTreeMap<&str, &CheckedNodeId>,
+    resolved: &BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>>,
     survivors: &[&ExactFunctionDeclaration],
-    function_index: &BTreeMap<&str, usize>,
+    function_index: &BTreeMap<&CheckedNodeId, usize>,
     package_refusal: &Option<String>,
     package_id: &CheckedSemanticId,
     key: &ItemKey,
@@ -1002,18 +1163,28 @@ fn item_disposition(
     // classification carries that function's own typed refusal reason
     // (AC-10, AC-11, AC-12), never a generic "unknown function" -- that
     // disposition is reserved for a name absent from the request's own
-    // declarations entirely.
-    if !names.contains(item.function.as_str()) {
-        return Err(ExactFunctionRefusal::UnknownFunction {
-            name: item.function.clone(),
-        });
-    }
-    if let Some(Err(refusal)) = resolved.get(item.function.as_str()) {
+    // declarations entirely. A name declared more than once is a third,
+    // distinct case: it IS declared, just ambiguously, so it is refused as
+    // `AmbiguousFunctionName`, never as `UnknownFunction`.
+    let function_node_id = match name_counts.get(item.function.as_str()) {
+        None => {
+            return Err(ExactFunctionRefusal::UnknownFunction {
+                name: item.function.clone(),
+            })
+        }
+        Some(1) => unique_name_node_id[item.function.as_str()],
+        Some(_) => {
+            return Err(ExactFunctionRefusal::AmbiguousFunctionName {
+                name: item.function.clone(),
+            })
+        }
+    };
+    if let Some(Err(refusal)) = resolved.get(function_node_id) {
         return Err(refusal.clone());
     }
     let Some(declaration) = survivors
         .iter()
-        .find(|declaration| declaration.name == item.function)
+        .find(|declaration| &declaration.node_id == function_node_id)
     else {
         return Err(ExactFunctionRefusal::UnknownFunction {
             name: item.function.clone(),
@@ -1025,7 +1196,7 @@ fn item_disposition(
             found: item.argument_node_ids.len(),
         });
     }
-    let index = function_index[declaration.name.as_str()];
+    let index = function_index[&declaration.node_id];
     if let Some(cause) = package_refusal {
         return Err(ExactFunctionRefusal::PackageRefused {
             function_index: Some(index),
@@ -1146,7 +1317,6 @@ use quire_contract_runtime::exact as rt;
 #[derive(Default)]
 struct SourceBuilder {
     functions: String,
-    rendered_bodies: BTreeSet<String>,
 }
 
 impl SourceBuilder {
@@ -1175,15 +1345,13 @@ impl SourceBuilder {
     /// classified shape (declaration plus resolved operand kinds), in
     /// assembled order.
     fn finish(
-        mut self,
+        self,
         classified: &[ClassifiedFunction<'_>],
         package_id: &CheckedSemanticId,
     ) -> String {
         let mut declarations = String::new();
         for function in classified {
             declarations.push_str(&render_function_declaration(function));
-            self.rendered_bodies
-                .insert(function.declaration.name.clone());
         }
         let mut source = format!("// Source package: {}\n", package_id.digest);
         source.push_str(SOURCE_HEADER);
