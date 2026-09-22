@@ -1377,33 +1377,98 @@ mod tests {
     /// No criterion in this repository names a timed-out state on the execution path today —
     /// adding one is agent-ix/quire-contract-codegen#55 — so this test binds to nothing rather
     /// than claim one it does not establish.
+    ///
+    /// The budget below is not one fixed guess: [`GRANDCHILD_KILL_TIMEOUT_LADDER`] is tried in
+    /// increasing order until the grandchild is confirmed both timed out and killed.
+    /// `kill_process_tree` only ever reaches what its one `/proc` snapshot, taken the instant
+    /// the budget elapses, can still see — the module doc says outright that a straggler which
+    /// has not yet forked by then "is not guaranteed killed by this call". A single fixed short
+    /// budget races that snapshot against however long the OS takes, under whatever load this
+    /// test happens to run under, to actually schedule, fork and exec the grandchild —
+    /// load-dependent, and exactly what made this assertion flake under a parallel test run (a
+    /// real 1-in-3 measured on `origin/main`, agent-ix/quire-contract-codegen IR-214): the
+    /// grandchild forked after the snapshot, so `kill_process_tree` behaved exactly as
+    /// documented and this assertion failed anyway.
+    ///
+    /// A single pre-run measurement was tried and discarded: sampled under the same synthetic
+    /// contention this fix was validated against, one quick probe right before the timed run
+    /// routinely underestimated the margin the real run needed by one to two orders of
+    /// magnitude, because contention under a parallel suite is bursty rather than steady — a
+    /// probe can land on a quiet instant that the timed run's own moment does not share. Rather
+    /// than guess a single budget (calibrated or not) and hope it lands after the grandchild
+    /// becomes observable, this test *waits until it can prove that happened*: it retries the
+    /// whole attempt at successively larger budgets, and only the last, largest attempt's
+    /// result is asserted as a real failure. Any earlier attempt losing the race is exactly the
+    /// "not guaranteed" case the module doc already describes, not a finding about
+    /// `kill_process_tree`; only every budget up to the ladder's top losing it would be.
     #[test]
     fn a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child() {
-        let directory = discover_scratch("launcher-timeout-grandchild");
-        let pidfile = directory.join("pid");
-        let mut command = Command::new("sh");
-        command.arg("-c").arg(format!(
-            "(sh -c 'echo $$ > {} ; exec sleep 5') & wait",
-            pidfile.display()
-        ));
-        let outcome = run_launcher_with_timeout(command, Duration::from_millis(200)).unwrap();
-        assert!(
-            matches!(outcome, LaunchOutcome::TimedOut),
-            "a run past its budget must classify as timed out"
-        );
+        let mut outcome = None;
+        for (attempt, &budget) in GRANDCHILD_KILL_TIMEOUT_LADDER.iter().enumerate() {
+            let is_last_attempt = attempt + 1 == GRANDCHILD_KILL_TIMEOUT_LADDER.len();
+            let directory = discover_scratch("launcher-timeout-grandchild");
+            let pidfile = directory.join("pid");
+            let mut command = Command::new("sh");
+            // `sleep 30` (not the ladder's own scale) so the grandchild is still alive at
+            // every rung's deadline: this test's timeout classification must come from the
+            // budget elapsing, never from the grandchild finishing on its own.
+            command.arg("-c").arg(format!(
+                "(sh -c 'echo $$ > {} ; exec sleep 30') & wait",
+                pidfile.display()
+            ));
+            let launch = run_launcher_with_timeout(command, budget).unwrap();
+            assert!(
+                matches!(launch, LaunchOutcome::TimedOut),
+                "a run past its budget must classify as timed out"
+            );
 
-        let grandchild_pid: i32 = fs::read_to_string(&pidfile)
-            .expect("the grandchild shell writes its own pid before sleeping")
-            .trim()
-            .parse()
-            .expect("a pid is an integer");
-        assert!(
-            !Path::new(&format!("/proc/{grandchild_pid}")).exists(),
-            "the timed-out run's grandchild (pid {grandchild_pid}) must be killed, not merely \
-             its direct child, and not left running past the deadline its ancestor exceeded"
-        );
-        let _ = fs::remove_dir_all(directory);
+            let grandchild_pid: i32 = fs::read_to_string(&pidfile)
+                .expect("the grandchild shell writes its own pid before sleeping")
+                .trim()
+                .parse()
+                .expect("a pid is an integer");
+            let grandchild_survived = Path::new(&format!("/proc/{grandchild_pid}")).exists();
+            let _ = fs::remove_dir_all(directory);
+
+            if !grandchild_survived {
+                outcome = Some(Ok(()));
+                break;
+            }
+            if is_last_attempt {
+                outcome = Some(Err(grandchild_pid));
+            }
+            // Not the last rung and the grandchild survived: indistinguishable, from here,
+            // between "genuinely not killed" and "forked after this rung's snapshot" — retry
+            // at the next, larger budget rather than assert either reading.
+        }
+
+        if let Some(Err(grandchild_pid)) = outcome {
+            panic!(
+                "the timed-out run's grandchild (pid {grandchild_pid}) was still present in \
+                 `/proc` even at the largest budget in GRANDCHILD_KILL_TIMEOUT_LADDER \
+                 ({:?}); kill_process_tree must be reaching every descendant its own `/proc` \
+                 snapshot could see, not merely losing a race against scheduling delay",
+                GRANDCHILD_KILL_TIMEOUT_LADDER
+                    .last()
+                    .expect("the ladder is non-empty")
+            );
+        }
     }
+
+    /// Successive budgets [`a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`]
+    /// tries, smallest first: the common case (an unloaded or lightly loaded run) settles on
+    /// the first, cheap rung, and only a run actually contending for CPU climbs further. The
+    /// top rung is far past anything observed in this fix's own validation (a burst of
+    /// contention that pushed a single probe-based estimate short by orders of magnitude still
+    /// only needed low hundreds of milliseconds in practice) — large enough that exhausting it
+    /// is a real finding about `kill_process_tree`, not an unlucky scheduling instant.
+    const GRANDCHILD_KILL_TIMEOUT_LADDER: [Duration; 5] = [
+        Duration::from_millis(200),
+        Duration::from_millis(500),
+        Duration::from_secs(1),
+        Duration::from_secs(2),
+        Duration::from_secs(5),
+    ];
 
     /// A process the launcher forks (or that reparents to it) in the instant before this call's
     /// `/proc` snapshot-and-kill sweep survives that sweep and keeps its inherited copy of the
