@@ -1049,5 +1049,38 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
             converted(T_INTEGER_BOUNDED, T_DECIMAL_SMALL),
             typed(T_DECIMAL_SMALL),
         ),
+        // codegen#83: one vector per remaining `admits_equality_conversion`
+        // row (`Int -> *` is already exercised above by E_CONV/
+        // E_CONV_CHARGE).
+        item(
+            E_CONV_RAT_RAT,
+            EqualityOperatorKind::Equal,
+            converted(T_RATIONAL_NARROW, T_RATIONAL_WIDE),
+            typed(T_RATIONAL_WIDE),
+        ),
+        item(
+            E_CONV_RAT_INT,
+            EqualityOperatorKind::Equal,
+            converted(T_RATIONAL_INT, T_INTEGER),
+            typed(T_INTEGER),
+        ),
+        item(
+            E_CONV_DEC_RAT,
+            EqualityOperatorKind::Equal,
+            converted(T_DECIMAL_SMALL, T_RATIONAL_WIDE),
+            typed(T_RATIONAL_WIDE),
+        ),
+        item(
+            E_CONV_DEC_DEC,
+            EqualityOperatorKind::Equal,
+            converted(T_DECIMAL_SMALL, T_DECIMAL_WIDE),
+            typed(T_DECIMAL_WIDE),
+        ),
+        item(
+            E_CONV_DEC_INT,
+            EqualityOperatorKind::Equal,
+            converted(T_DECIMAL_SMALL, T_INTEGER),
+            typed(T_INTEGER),
+        ),
     ]
 }

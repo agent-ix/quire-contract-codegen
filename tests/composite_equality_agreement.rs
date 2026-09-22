@@ -381,6 +381,172 @@ fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
     }
 }
 
+/// Trace: FR-018-AC-2, TC-029, codegen#83.
+///
+/// One vector per remaining `admits_equality_conversion` row (`Int -> *` is
+/// already covered above by E_CONV/E_CONV_CHARGE): `Rational -> Rational`,
+/// `Rational -> Integer` (the `Rational -> {Integer, Int, Decimal}` row,
+/// exercised against `Integer`), `Decimal -> Rational`, `Decimal ->
+/// Decimal`, and `Decimal -> Integer` (the `Decimal -> {Integer, Int}` row,
+/// exercised against `Integer`). Each runs through `agree3!`, so the
+/// generated leg, the direct runtime leg and the QSL authority leg all agree
+/// on it -- and each is a distinct oracle node, so AC-2's "apply the right
+/// operand's conversion before the left's" mutation row has a genuine
+/// converted operand to cross-wire on every row, not only E_CONV's.
+#[test]
+fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
+    // Rational[-10, 10; 1, 1] -> Rational[-100, 100; 1, 5].
+    for (l, r) in [(5_i64, 5_i64), (5, 6)] {
+        agree3! {
+            limits: UNLIMITED,
+            setup: {
+                let environment = environment_option();
+                let left = rational_value(l, 1);
+                let right = rational_value(r, 1);
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::Equal,
+                operand_converted(
+                    rational_type(-10, 10, 1, 1),
+                    rational_type(-100, 100, 1, 5),
+                ),
+                operand_typed(rational_type(-100, 100, 1, 5)),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| crate::generated::oracle_7f1f4b680dd0e405ecf8900e17a85b0170e5083d634a561c2f3456c097666a8f( // E_CONV_RAT_RAT Equal
+                &environment, &left, &right, g,
+            ),
+        };
+    }
+
+    // Rational[-50, 50; 1, 1] -> Integer.
+    for (l, r) in [(5_i64, 5_i64), (5, 6)] {
+        agree3! {
+            limits: UNLIMITED,
+            setup: {
+                let environment = environment_option();
+                let left = rational_value(l, 1);
+                let right = Value::Integer(Integer::from(r));
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::Equal,
+                operand_converted(rational_type(-50, 50, 1, 1), ValueType::Integer),
+                operand_typed(ValueType::Integer),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| crate::generated::oracle_bd33625ec0cccc3d86ecb0ef526f4daff58640350e42523bd5452b3b1669845d( // E_CONV_RAT_INT Equal
+                &environment, &left, &right, g,
+            ),
+        };
+    }
+
+    // Decimal[-100, 100; 0, 0] -> Rational[-100, 100; 1, 5].
+    for (l, r) in [(5_i64, 5_i64), (5, 6)] {
+        agree3! {
+            limits: UNLIMITED,
+            setup: {
+                let environment = environment_option();
+                let left = Value::Decimal(Decimal::new(Integer::from(l), 0));
+                let right = rational_value(r, 1);
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::Equal,
+                operand_converted(
+                    ValueType::Decimal(
+                        DecimalType::new(
+                            Integer::from(-100_i64), Integer::from(100_i64), 0, 0,
+                            RoundingMode::NearestEven,
+                        ).unwrap(),
+                    ),
+                    rational_type(-100, 100, 1, 5),
+                ),
+                operand_typed(rational_type(-100, 100, 1, 5)),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| crate::generated::oracle_7b17b989a86f0178fda1b973617c3ed5e20afe5a8f6bf99058777d1aa1970ebd( // E_CONV_DEC_RAT Equal
+                &environment, &left, &right, g,
+            ),
+        };
+    }
+
+    // Decimal[-100, 100; 0, 0] -> Decimal[-1000, 1000; 0, 2].
+    for (l, r) in [(5_i64, 5_i64), (5, 6)] {
+        agree3! {
+            limits: UNLIMITED,
+            setup: {
+                let target = DecimalType::new(
+                    Integer::from(-1000_i64), Integer::from(1000_i64), 0, 2,
+                    RoundingMode::NearestEven,
+                ).unwrap();
+                let environment = environment_option();
+                let left = Value::Decimal(Decimal::new(Integer::from(l), 0));
+                let right = Value::Decimal(Decimal::new(Integer::from(r), 0));
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::Equal,
+                operand_converted(
+                    ValueType::Decimal(
+                        DecimalType::new(
+                            Integer::from(-100_i64), Integer::from(100_i64), 0, 0,
+                            RoundingMode::NearestEven,
+                        ).unwrap(),
+                    ),
+                    ValueType::Decimal(target.clone()),
+                ),
+                operand_typed(ValueType::Decimal(target.clone())),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| crate::generated::oracle_c1ba86b67ce3b9390a347abd17c61969054dc776695ced70b08fa8e63db1ce73( // E_CONV_DEC_DEC Equal
+                &environment, &left, &right, g,
+            ),
+        };
+    }
+
+    // Decimal[-100, 100; 0, 0] -> Integer.
+    for (l, r) in [(5_i64, 5_i64), (5, 6)] {
+        agree3! {
+            limits: UNLIMITED,
+            setup: {
+                let environment = environment_option();
+                let left = Value::Decimal(Decimal::new(Integer::from(l), 0));
+                let right = Value::Integer(Integer::from(r));
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::Equal,
+                operand_converted(
+                    ValueType::Decimal(
+                        DecimalType::new(
+                            Integer::from(-100_i64), Integer::from(100_i64), 0, 0,
+                            RoundingMode::NearestEven,
+                        ).unwrap(),
+                    ),
+                    ValueType::Integer,
+                ),
+                operand_typed(ValueType::Integer),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| crate::generated::oracle_a60a24bc6662909a92fcfe0df5b382d0002c9a1f1cfc41b556ae986a27632ec4( // E_CONV_DEC_INT Equal
+                &environment, &left, &right, g,
+            ),
+        };
+    }
+}
+
 /// Trace: FR-018-AC-8, TC-029.
 ///
 /// The other half of AC-8 (a refused declaration closure carrying its
