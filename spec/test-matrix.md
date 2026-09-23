@@ -221,9 +221,10 @@ FR-018 does not claim the rest of codegen#48. Function application has no runtim
 temporal and protocol await agent-ix/quire-spec-language#121; FR-018 refuses all three with distinct
 typed blockers rather than specifying around them, and FR-020 remains unwritten.
 
-`interface-001` gains no operation for FR-018. Its declared surface is asserted equal to the
-generator's by TC-028, which is `✅ Covered`; declaring an operation that does not exist would make
-that row false. The slice adds its interface entry when it adds its code.
+`interface-001` declares FR-018's `generate_composite_equality_oracles` now that the code exists.
+TC-028 reads every public function from the crate's own source, including root `pub fn`s and
+everything reachable through a `pub mod`, and asserts it equals the declared operations in both
+directions, so a public function without an entry, or an entry without one, fails.
 
 FR-019-AC-1 through FR-019-AC-8 and FR-019-AC-10 are `✅ Covered`: TC-030 walks every row of
 FR-290's ordered rules against the settlement point, and each assertion names the disposition and the

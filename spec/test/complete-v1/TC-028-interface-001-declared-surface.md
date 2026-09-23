@@ -18,11 +18,9 @@ pin vocabulary it declares is complete.
 
 ## Test Procedure
 
-Reference each of `generate_bound_oracles`, `generate_tristate_harness`, `generate_i64_strategy`,
-`generate_enum_strategy`, `generate_bound_strategy`, `generate_kani_bundle` and
-`write_bundle_atomic` by its declared name, and confirm `analyze_bound_coverage` is named in
-`src/lib.rs`. Confirm `src/lib.rs` names none of `generate_bundle`, `analyze_coverage` or
-`cli_generate`. Serialize a complete `ProofAttestationBody` and compare its top-level field names
+Walk `src/lib.rs` and every `pub mod` it reaches and collect each public function under its
+shortest public path. Compare that set with the contract's non-planned `operations` entries in
+both directions, and confirm none of the `status: planned` entries is exposed. Serialize a complete `ProofAttestationBody` and compare its top-level field names
 with `identity_envelope.required`. Match every `AttestationResult` variant against
 `identity_envelope.results`. Match every `GenerationTerminalState` variant against
 `diagnostics.terminal_states`. Serialize a `KaniToolPins` value and compare its field names with
@@ -30,8 +28,10 @@ with `identity_envelope.required`. Match every `AttestationResult` variant again
 
 ## Expected Results
 
-Every implemented operation compiles by its declared name; none of the three planned operations
-appears in `src/lib.rs`; the attestation body's eleven top-level fields are exactly
+The public function set equals the declared non-planned operations exactly, so a new public
+function with no contract entry, whether a root `pub fn`, a root re-export or a function in a
+`pub mod`, and a declared entry the crate no longer exposes each fail; no planned operation is
+exposed; the attestation body's eleven top-level fields are exactly
 `identity_envelope.required`; the four `AttestationResult` variants are exactly
 `identity_envelope.results`; the six `GenerationTerminalState` variants are exactly
 `diagnostics.terminal_states`; and `KaniToolPins`'s six fields are exactly
