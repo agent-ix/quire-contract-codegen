@@ -37,7 +37,10 @@ results respectively.
 
 ## Status
 
-Partial. The schema, decode and harness-identity cases are implemented in
-`src/kani_witness_join.rs`'s unit tests, `tests/it/kani_argument_order.rs` and
-the real-backend Kani lane in `tests/it/kani_witness_join.rs`. Pin binding, the
-decode size limit, domain validation and native replay are planned.
+Partial. The default suite covers the schema cases, a matching decode, the
+arity and width refusals and the harness-identity refusal
+(`src/kani_witness_join.rs` unit tests, `tests/it/kani_argument_order.rs`). The
+real-backend decode, with arity and width refusals against a real Kani
+falsification, runs in the ignored Kani lane (`tests/it/kani_witness_join.rs`).
+Pin binding, the decode size limit, domain validation and native replay are
+planned.

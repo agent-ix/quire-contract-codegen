@@ -361,7 +361,7 @@ fn persisted_arguments(record: &Value) -> Vec<ObligationBinding> {
 /// Trace: FR-016-AC-1, FR-016-AC-8, TC-026.
 #[test]
 #[ignore = "kani lane: run serially through `cargo test --test it kani_witness_join -- --ignored`"]
-fn ir_211_real_falsification_decodes_against_the_persisted_schema_and_mutation_refuses() {
+fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_refuses() {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let pins = installation.observe().expect("the backend is measurable");
     assert_eq!(

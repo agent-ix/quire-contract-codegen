@@ -254,6 +254,36 @@ fn kani_concrete_playback_synthetic() {{\n\
         )
     }
 
+    /// A transcript whose value count or byte width disagrees with the
+    /// persisted schema refuses by name rather than decoding: one `i64`
+    /// value against a two-argument schema is an arity mismatch, and against
+    /// a one-`Boolean` schema is a width mismatch.
+    ///
+    /// Trace: FR-016-AC-1, TC-026
+    #[test]
+    fn decode_falsification_refuses_arity_and_width_mismatches() {
+        let transcript = synthetic_transcript("mod::harness_ok", 42);
+        let arity = decode_falsification(
+            "harness_ok",
+            "mod",
+            &[
+                argument("first", KaniPrimitiveType::I64),
+                argument("second", KaniPrimitiveType::I64),
+            ],
+            &transcript,
+        )
+        .expect_err("one value cannot decode against two arguments");
+        assert_eq!(arity.code, "kani_witness_arity_mismatch", "{arity:?}");
+        let width = decode_falsification(
+            "harness_ok",
+            "mod",
+            &[argument("flag", KaniPrimitiveType::Boolean)],
+            &transcript,
+        )
+        .expect_err("eight bytes cannot decode as a Boolean");
+        assert_eq!(width.code, "kani_witness_width_mismatch", "{width:?}");
+    }
+
     /// `decode_falsification` is a real join, not a signature that merely compiles: given a
     /// transcript whose qualified harness symbol matches the caller's declared identity, it
     /// decodes the same value `witness_schema` + `Witness::parse` + `Witness::decode` would,
