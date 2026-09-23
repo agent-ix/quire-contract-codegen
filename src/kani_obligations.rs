@@ -66,10 +66,9 @@ use crate::{
         attestation_context_is_valid, generate_oracle_with_derivation, length_delimited_identity,
         reference_identifier, typed_dependency_parameters, DependencyParameter, RustValueType,
     },
-    Artifact, AttestationContext, ExactScalarClaim, ExactScalarClaimMap, ExactScalarDisposition,
-    ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode, OperationProvenance,
-    OracleRequest, UpstreamBlocker, IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES,
-    RUNTIME_REVISION,
+    Artifact, AttestationContext, ClaimDisposition, ClaimMap, ExactScalarClaim, ExactScalarRefusal,
+    GeneratedScalarClaim, GenerationErrorCode, OperationProvenance, OracleRequest, UpstreamBlocker,
+    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
 };
 
 /// Schema identity of a generated obligation identity record.
@@ -116,7 +115,7 @@ pub enum ObligationItem<'a> {
         /// The admitted package the claim map was generated from.
         package: &'a CheckedPackageV2,
         /// The claim map.
-        claim_map: &'a ExactScalarClaimMap,
+        claim_map: &'a ClaimMap<ExactScalarClaim>,
         /// The claimed node.
         node_id: &'a CheckedNodeId,
     },
@@ -1029,7 +1028,7 @@ const fn kind_name(kind: ObligationKind) -> &'static str {
 
 fn classify_node<'a>(
     package: &CheckedPackageV2,
-    claim_map: &ExactScalarClaimMap,
+    claim_map: &ClaimMap<ExactScalarClaim>,
     node_id: &CheckedNodeId,
 ) -> ItemState<'a> {
     let graph_node = package
@@ -1077,7 +1076,7 @@ fn classify_node<'a>(
 
 /// Guards [`Outcome::LoweredScalar`] against a node whose graph entry does not match the one
 /// recognized `state`/`frame` role pair, and against a node absent from the graph entirely.
-/// [`ExactScalarClaimMap`]/[`ExactScalarClaim`] are fully `pub`, so nothing enforces that a claim
+/// [`ClaimMap`]/[`ExactScalarClaim`] are fully `pub`, so nothing enforces that a claim
 /// map assembled by another caller names only node ids [`CheckedPackageV2::graph`] also carries --
 /// that invariant holds only for a claim map this crate's own
 /// [`crate::exact_scalar::generate_exact_scalar_oracles`] produced. A hand-assembled claim map
@@ -1088,7 +1087,7 @@ fn classify_node<'a>(
 /// through `classify_claim`'s `Refused` arm, so a node absent from the graph is refused under one
 /// code regardless of which path notices it first. `expression` is excluded from the tag/form
 /// check because it is the one family [`crate::exact_scalar::generate_exact_scalar_oracles`] ever
-/// lowers to a [`ExactScalarDisposition::Generated`] claim at all -- every real, golden-path
+/// lowers to a [`ClaimDisposition::Generated`] claim at all -- every real, golden-path
 /// scalar claim this generator supports is an `expression` node, and none of those carry a
 /// contract role, so a null `kind` there is correct, not unmodeled. Scoped to the success arm
 /// rather than every arm: `classify_claim` already refuses every other `state`-tagged node with
@@ -1130,7 +1129,7 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
             .find(|node| &node.node_id == id)
     };
     match &claim.result {
-        ExactScalarDisposition::Generated(generated) => {
+        ClaimDisposition::Generated(generated) => {
             let mut derived = Vec::new();
             let bound_ids = generated
                 .checked_bounds
@@ -1179,7 +1178,7 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                 }
             }
         }
-        ExactScalarDisposition::Refused { refusal } => match refusal {
+        ClaimDisposition::Refused { refusal } => match refusal {
             ExactScalarRefusal::InvalidInput => {
                 Outcome::Invalid(InvalidObligationItem::UnknownNode)
             }
@@ -2252,7 +2251,7 @@ mod tests {
                 identity: "quire.op.integer.add".to_owned(),
                 provenance: OperationProvenance::IrConfirmed,
             },
-            result: ExactScalarDisposition::Generated(Box::new(GeneratedScalarClaim {
+            result: ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
                 symbol: "oracle_test".to_owned(),
                 ir_id: serde_json::from_value(serde_json::json!({
                     "domain": "quire.checked-semantic-node/v1",
@@ -2270,7 +2269,7 @@ mod tests {
                 oracle_source: String::new(),
             })),
         };
-        let ExactScalarDisposition::Generated(generated) = &claim.result else {
+        let ClaimDisposition::Generated(generated) = &claim.result else {
             unreachable!("built as Generated above");
         };
         let lower = "-99999999999999999999999999".to_owned();
