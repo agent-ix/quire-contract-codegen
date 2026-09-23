@@ -5,16 +5,20 @@ type: MeasurementPlan
 status: proposed
 owner: codegen-maintainers
 metric: codegen_conformance_reproducibility_and_parity
-definition_version: quire-contract-codegen.measurement-v1
+definition_version: quire-contract-codegen.measurement-v2
 stage: gate
+objective:
+  direction: zero
 statistical_design:
   population: every pinned corpus package backend platform profile failure state and artifact kind
   sampling: exhaustive canonical fixtures plus seeded generated order and fault-injection variations
   repetitions: 3
-  estimator: exact digest equality diagnostic counts parity classifications and atomicity outcomes
+  estimator: count
   error_model: platform toolchain backend version fixture provenance and coverage mapping differences
   uncertainty: retain unavailable skipped inconclusive unsupported and differential states
-  decision_rule: escalate any digest drift silent state parity mismatch partial publication or missing identity
+  decision_rule:
+    comparator: eq
+    threshold: 0
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AP-001
     type: measures
