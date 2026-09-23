@@ -10,9 +10,9 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    generate_exact_scalar_oracles, BoundForm, DecimalOperator, ExactScalarDisposition,
-    ExactScalarGenerationError, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
-    ExactScalarRefusal, IntegerOperator, OperationProvenance, ScalarForm, UpstreamBlocker,
+    generate_exact_scalar_oracles, BoundForm, ClaimDisposition, DecimalOperator, ExactScalarItem,
+    ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, GeneratedScalarClaim,
+    IntegerOperator, OperationProvenance, OracleGenerationError, ScalarForm, UpstreamBlocker,
     EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME, RUNTIME_REVISION,
     SCALAR_LOWERING_SUPPORTED_TAGS,
 };
@@ -67,7 +67,9 @@ fn contents<'o>(oracles: &'o ExactScalarOracles, path: &str) -> &'o str {
         .contents
 }
 
-fn dispositions(oracles: &ExactScalarOracles) -> BTreeMap<String, &ExactScalarDisposition> {
+fn dispositions(
+    oracles: &ExactScalarOracles,
+) -> BTreeMap<String, &ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal>> {
     oracles
         .claim_map
         .items
@@ -78,7 +80,7 @@ fn dispositions(oracles: &ExactScalarOracles) -> BTreeMap<String, &ExactScalarDi
 
 fn refusal_of(oracles: &ExactScalarOracles, code: u32) -> ExactScalarRefusal {
     match dispositions(oracles).get(code_id(code).digest.as_ref()) {
-        Some(ExactScalarDisposition::Refused { refusal }) => refusal.clone(),
+        Some(ClaimDisposition::Refused { refusal }) => refusal.clone(),
         other => panic!("node {code} is not refused: {other:?}"),
     }
 }
@@ -327,7 +329,7 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
     calls.sort();
     let generated = dispositions(&oracles)
         .into_iter()
-        .filter(|(_, result)| matches!(result, ExactScalarDisposition::Generated(_)))
+        .filter(|(_, result)| matches!(result, ClaimDisposition::Generated(_)))
         .map(|(digest, _)| digest)
         .collect::<Vec<_>>();
     let mut expected = calls
@@ -552,7 +554,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             .claim_map
             .items
             .iter()
-            .filter(|claim| matches!(claim.result, ExactScalarDisposition::Generated(_)))
+            .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
             .cloned()
             .collect::<Vec<_>>()
     };
@@ -573,7 +575,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
     );
     assert!(matches!(
         single.claim_map.items[0].result,
-        ExactScalarDisposition::Generated(_)
+        ClaimDisposition::Generated(_)
     ));
 }
 
@@ -619,14 +621,14 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
         .zip(json["items"].as_array().expect("items"))
     {
         match &claim.result {
-            ExactScalarDisposition::Generated(_) => {
+            ClaimDisposition::Generated(_) => {
                 assert_eq!(claim.operation.provenance, OperationProvenance::IrConfirmed);
                 assert_eq!(
                     entry["operation"]["provenance"],
                     serde_json::json!({"kind": "ir_confirmed"})
                 );
             }
-            ExactScalarDisposition::Refused { .. } => {
+            ClaimDisposition::Refused { .. } => {
                 assert_eq!(
                     claim.operation.provenance,
                     OperationProvenance::CallerDeclared {
@@ -696,7 +698,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
             .find(|claim| claim.node_id == code_id(expression.code))
             .expect("claim");
         assert!(!claim.operation.identity.is_empty());
-        let ExactScalarDisposition::Generated(generated) = &claim.result else {
+        let ClaimDisposition::Generated(generated) = &claim.result else {
             panic!("corpus node {} generates", expression.code);
         };
         assert_eq!(generated.symbol, symbol(expression.code));
@@ -799,7 +801,7 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
     // Its digest is the greatest requested, so it sorts first only by its domain.
     assert_eq!(
         oracles.claim_map.items[0].result,
-        ExactScalarDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactScalarRefusal::InvalidInput
         }
     );
@@ -831,7 +833,7 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
     );
     assert_eq!(
         refused.claim_map.items[0].result,
-        ExactScalarDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactScalarRefusal::BoundMismatch {
                 bound: id(&INT5.key()),
                 form: BoundForm::IntegerRange,
@@ -857,7 +859,7 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
         }],
     );
     let claim = &marked.claim_map.items[0];
-    assert!(matches!(claim.result, ExactScalarDisposition::Generated(_)));
+    assert!(matches!(claim.result, ClaimDisposition::Generated(_)));
     assert_eq!(
         claim.operation.provenance,
         OperationProvenance::CallerDeclared {
@@ -895,7 +897,7 @@ fn tc_024_a_mismatched_rounding_mode_is_refused_where_the_bound_still_agrees() {
         }],
     );
     let claim = &marked.claim_map.items[0];
-    assert!(matches!(claim.result, ExactScalarDisposition::Generated(_)));
+    assert!(matches!(claim.result, ClaimDisposition::Generated(_)));
     assert_eq!(
         claim.operation.provenance,
         OperationProvenance::CallerDeclared {
@@ -934,7 +936,7 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
         }],
     );
     let claim = &mismatched.claim_map.items[0];
-    assert!(matches!(claim.result, ExactScalarDisposition::Generated(_)));
+    assert!(matches!(claim.result, ClaimDisposition::Generated(_)));
     assert_eq!(claim.operation.identity, "integer.add domain=[-1000,1000]");
     assert_eq!(
         claim.operation.provenance,
@@ -1023,7 +1025,7 @@ fn work_exhausted_fixture() -> (CheckedPackageV2, ExactScalarItem) {
 fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
     let (package, item) = work_exhausted_fixture();
     let oracles = generate(&package, &[item]);
-    let ExactScalarDisposition::Refused {
+    let ClaimDisposition::Refused {
         refusal: ExactScalarRefusal::LoweringWorkExhausted { limit, consumed },
     } = &oracles.claim_map.items[0].result
     else {
@@ -1220,7 +1222,7 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
     let package = builder.admit_with(limits);
     assert!(matches!(
         generate_exact_scalar_oracles(&package, &items),
-        Err(ExactScalarGenerationError::SourceTooLarge { bytes })
+        Err(OracleGenerationError::SourceTooLarge { bytes })
             if bytes > quire_contract_codegen::MAX_GENERATED_SOURCE_BYTES
     ));
 }
@@ -1234,7 +1236,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     // integer and the subtraction generates like any other.
     assert!(matches!(
         dispositions(&oracles)[code_id(LITERAL_OPERAND).digest.as_ref()],
-        ExactScalarDisposition::Generated(_)
+        ClaimDisposition::Generated(_)
     ));
     let subtract = function_body(lib, &symbol(LITERAL_OPERAND));
     assert!(
@@ -1271,7 +1273,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     );
     assert_eq!(
         refused.claim_map.items[0].result,
-        ExactScalarDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactScalarRefusal::OperandTypeMismatch {
                 position: 1,
                 expected: ScalarForm::Integer,

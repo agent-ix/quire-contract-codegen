@@ -72,6 +72,7 @@
 //! requires walking a unit graph this generator does not read.
 
 use crate::exact_scalar::{aggregate_members, literal_count};
+use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{Artifact, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION};
 use quire_contract_ir::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
@@ -175,26 +176,6 @@ pub struct CompositeEqualityItem {
     pub left: EqualityOperandDescriptor,
     /// Right operand descriptor.
     pub right: EqualityOperandDescriptor,
-}
-
-/// Upstream work an item is blocked on.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-pub enum UpstreamBlocker {
-    /// Model, relation and reference-reaching semantics.
-    #[serde(rename = "agent-ix/quire-spec-language#120")]
-    QuireSpecLanguage120,
-    /// State, temporal and protocol semantics.
-    #[serde(rename = "agent-ix/quire-spec-language#121")]
-    QuireSpecLanguage121,
-    /// Function application.
-    #[serde(rename = "agent-ix/quire-contract-runtime#34")]
-    QuireContractRuntime34,
-    /// CheckedPackage V2 carries the operation identity and its laws, but
-    /// this generator's classifiers never read `operation` -- they classify
-    /// a body from its `term`/`operator`/`arguments` and the request item's
-    /// own descriptor instead.
-    #[serde(rename = "operation identity not consumed by codegen's generators")]
-    OperationIdentityNotConsumed,
 }
 
 /// Where a claim's operation identity comes from.
@@ -517,19 +498,6 @@ pub struct RecordedDescriptor {
     pub right_conversion_target: Option<CheckedNodeId>,
 }
 
-/// Generated or refused.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(tag = "disposition", rename_all = "snake_case")]
-pub enum CompositeEqualityDisposition {
-    /// One environment constructor and one oracle function were emitted.
-    Generated(Box<GeneratedCompositeEqualityClaim>),
-    /// Nothing was emitted.
-    Refused {
-        /// The typed reason.
-        refusal: CompositeEqualityRefusal,
-    },
-}
-
 /// One claim-map entry per distinct requested `(node id, descriptor)`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CompositeEqualityClaim {
@@ -538,22 +506,7 @@ pub struct CompositeEqualityClaim {
     /// The declared operation and its provenance.
     pub operation: CompositeOperationClaim,
     /// Outcome.
-    pub result: CompositeEqualityDisposition,
-}
-
-/// The per-item source and claim map of one generation.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct CompositeEqualityClaimMap {
-    /// [`COMPOSITE_EQUALITY_CLAIM_MAP_VERSION`].
-    pub version: &'static str,
-    /// Source package identity.
-    pub package_id: CheckedSemanticId,
-    /// Pinned runtime revision the oracles call.
-    pub runtime_revision: &'static str,
-    /// Upstream gaps every entry is subject to.
-    pub blocked: Vec<UpstreamBlocker>,
-    /// Entries, ordered by the descriptor key.
-    pub items: Vec<CompositeEqualityClaim>,
+    pub result: ClaimDisposition<GeneratedCompositeEqualityClaim, CompositeEqualityRefusal>,
 }
 
 /// Generation output: the crate files and the claim map they are described
@@ -562,27 +515,23 @@ pub struct CompositeEqualityClaimMap {
 pub struct CompositeEqualityOracles {
     /// `Cargo.toml`, `src/lib.rs` and `claim-map.json`, in that order.
     pub artifacts: Vec<Artifact>,
-    /// Typed claim map, identical to `claim-map.json`.
-    pub claim_map: CompositeEqualityClaimMap,
-}
-
-/// Whole-generation failure; per-item problems are refusals, not errors.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CompositeEqualityGenerationError {
-    /// The generated source exceeds [`MAX_GENERATED_SOURCE_BYTES`].
-    SourceTooLarge {
-        /// Generated size.
-        bytes: usize,
-    },
-    /// The claim map could not be serialized.
-    ClaimMapSerialization,
+    /// Typed claim map, identical to `claim-map.json`. Items are ordered by
+    /// the descriptor key. `blocked` lists the upstream gaps every entry is
+    /// subject to. A `Generated` disposition means one environment
+    /// constructor and one oracle function were emitted. The blockers this
+    /// generator records are `QuireSpecLanguage120`, `QuireSpecLanguage121`,
+    /// `QuireContractRuntime34` and `OperationIdentityNotConsumed`.
+    pub claim_map: ClaimMap<CompositeEqualityClaim>,
 }
 
 /// Generate composite equality oracles for `items` from an admitted package.
+///
+/// Fails as a whole only with `SourceTooLarge` or `ClaimMapSerialization`;
+/// every per-item problem is a refusal in the claim map.
 pub fn generate_composite_equality_oracles(
     package: &CheckedPackageV2,
     items: &[CompositeEqualityItem],
-) -> Result<CompositeEqualityOracles, CompositeEqualityGenerationError> {
+) -> Result<CompositeEqualityOracles, OracleGenerationError> {
     let graph: Graph<'_> = package
         .graph()
         .nodes
@@ -620,7 +569,7 @@ pub fn generate_composite_equality_oracles(
     for ((key, item), record) in by_key.into_iter().zip(&lowering.records) {
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
         let result = if duplicate {
-            CompositeEqualityDisposition::Refused {
+            ClaimDisposition::Refused {
                 refusal: CompositeEqualityRefusal::DuplicateRequest,
             }
         } else {
@@ -628,27 +577,25 @@ pub fn generate_composite_equality_oracles(
                 Ok(generated) => {
                     let symbol = key.digest();
                     source.item(&symbol, item, &generated);
-                    CompositeEqualityDisposition::Generated(Box::new(
-                        GeneratedCompositeEqualityClaim {
-                            environment_symbol: format!("environment_{symbol}"),
-                            oracle_symbol: format!("oracle_{symbol}"),
-                            ir_id: generated.node.ir_id.clone(),
-                            package_id: lowering.package_id.clone(),
-                            semantic_type: generated.node.semantic_type.clone(),
-                            source_map: generated.node.source_map.clone(),
-                            claims: generated.node.claims.clone(),
-                            descriptor: recorded_descriptor(item),
-                            declaration_keys: generated.declaration_keys.clone(),
-                            declaration_runtime_keys: generated
-                                .declaration_keys
-                                .iter()
-                                .map(|id| id.digest.to_lowercase())
-                                .collect(),
-                            schedule: generated.checked.schedule().into(),
-                        },
-                    ))
+                    ClaimDisposition::Generated(Box::new(GeneratedCompositeEqualityClaim {
+                        environment_symbol: format!("environment_{symbol}"),
+                        oracle_symbol: format!("oracle_{symbol}"),
+                        ir_id: generated.node.ir_id.clone(),
+                        package_id: lowering.package_id.clone(),
+                        semantic_type: generated.node.semantic_type.clone(),
+                        source_map: generated.node.source_map.clone(),
+                        claims: generated.node.claims.clone(),
+                        descriptor: recorded_descriptor(item),
+                        declaration_keys: generated.declaration_keys.clone(),
+                        declaration_runtime_keys: generated
+                            .declaration_keys
+                            .iter()
+                            .map(|id| id.digest.to_lowercase())
+                            .collect(),
+                        schedule: generated.checked.schedule().into(),
+                    }))
                 }
-                Err(refusal) => CompositeEqualityDisposition::Refused { refusal },
+                Err(refusal) => ClaimDisposition::Refused { refusal },
             }
         };
         claims.push(CompositeEqualityClaim {
@@ -663,7 +610,7 @@ pub fn generate_composite_equality_oracles(
         });
     }
 
-    let claim_map = CompositeEqualityClaimMap {
+    let claim_map = ClaimMap {
         version: COMPOSITE_EQUALITY_CLAIM_MAP_VERSION,
         package_id: lowering.package_id,
         runtime_revision: RUNTIME_REVISION,
@@ -672,13 +619,13 @@ pub fn generate_composite_equality_oracles(
     };
     let lib = source.finish(&claim_map.package_id);
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(CompositeEqualityGenerationError::SourceTooLarge { bytes: lib.len() });
+        return Err(OracleGenerationError::SourceTooLarge { bytes: lib.len() });
     }
     let mut map_bytes = serde_json::to_vec_pretty(&claim_map)
-        .map_err(|_| CompositeEqualityGenerationError::ClaimMapSerialization)?;
+        .map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     map_bytes.push(b'\n');
-    let map_text = String::from_utf8(map_bytes)
-        .map_err(|_| CompositeEqualityGenerationError::ClaimMapSerialization)?;
+    let map_text =
+        String::from_utf8(map_bytes).map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     Ok(CompositeEqualityOracles {
         artifacts: vec![
             artifact("Cargo.toml", manifest()),

@@ -45,6 +45,7 @@
 //! the generated source. An item that fails any check receives a typed
 //! [`ExactScalarRefusal`] and contributes no code; its siblings are unaffected.
 
+use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{Artifact, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION};
 use quire_contract_ir::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
@@ -365,31 +366,6 @@ impl BoundForm {
     }
 }
 
-/// Upstream work an item or the whole slice is blocked on.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-pub enum UpstreamBlocker {
-    /// Model and relation semantics.
-    #[serde(rename = "agent-ix/quire-spec-language#120")]
-    QuireSpecLanguage120,
-    /// Function application. `agent-ix/quire-spec-language#119` (composite,
-    /// collection and total pure functions) closed and its deliverables
-    /// landed, so a composite-family node is no longer blocked on anything
-    /// here (see `unsupported_family`, which buckets `CompositeType` with
-    /// this generator's ordinary out-of-scope tags rather than citing an
-    /// upstream issue at all). A function-family node's remaining gap is
-    /// that Contract Runtime publishes no function-application operator
-    /// surface to call -- the same gap `composite_equality`'s sibling
-    /// `UpstreamBlocker::QuireContractRuntime34` already names for FR-018.
-    #[serde(rename = "agent-ix/quire-contract-runtime#34")]
-    QuireContractRuntime34,
-    /// This generator did not confirm the node's own catalogued operation
-    /// against the descriptor, so it reports the request item's own
-    /// descriptor-derived identity instead. The cases this covers are
-    /// enumerated once, on [`OperationProvenance::CallerDeclared`].
-    #[serde(rename = "operation identity not consumed by codegen's generators")]
-    OperationIdentityNotConsumed,
-}
-
 /// Where a claim's operation identity comes from.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -595,19 +571,6 @@ pub struct GeneratedScalarClaim {
     pub oracle_source: String,
 }
 
-/// Generated or refused.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(tag = "disposition", rename_all = "snake_case")]
-pub enum ExactScalarDisposition {
-    /// One oracle function was emitted.
-    Generated(Box<GeneratedScalarClaim>),
-    /// Nothing was emitted.
-    Refused {
-        /// The typed reason.
-        refusal: ExactScalarRefusal,
-    },
-}
-
 /// One claim-map entry per distinct requested node.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ExactScalarClaim {
@@ -616,22 +579,7 @@ pub struct ExactScalarClaim {
     /// The declared operation and its provenance.
     pub operation: OperationClaim,
     /// Outcome.
-    pub result: ExactScalarDisposition,
-}
-
-/// The per-item source and claim map of one generation.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct ExactScalarClaimMap {
-    /// [`EXACT_SCALAR_CLAIM_MAP_VERSION`].
-    pub version: &'static str,
-    /// Source package identity.
-    pub package_id: CheckedSemanticId,
-    /// Pinned runtime revision the oracles call.
-    pub runtime_revision: &'static str,
-    /// Upstream gaps every entry is subject to.
-    pub blocked: Vec<UpstreamBlocker>,
-    /// Entries ascending by node id: digest domain, then digest.
-    pub items: Vec<ExactScalarClaim>,
+    pub result: ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal>,
 }
 
 /// Generation output: the crate files and the claim map they are described by.
@@ -639,27 +587,23 @@ pub struct ExactScalarClaimMap {
 pub struct ExactScalarOracles {
     /// `Cargo.toml`, `src/lib.rs` and `claim-map.json`, in that order.
     pub artifacts: Vec<Artifact>,
-    /// Typed claim map, identical to `claim-map.json`.
-    pub claim_map: ExactScalarClaimMap,
-}
-
-/// Whole-generation failure; per-item problems are refusals, not errors.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ExactScalarGenerationError {
-    /// The generated source exceeds [`MAX_GENERATED_SOURCE_BYTES`].
-    SourceTooLarge {
-        /// Generated size.
-        bytes: usize,
-    },
-    /// The claim map could not be serialized.
-    ClaimMapSerialization,
+    /// Typed claim map, identical to `claim-map.json`. Items ascend by node
+    /// id: digest domain, then digest. `blocked` lists the upstream gaps every
+    /// entry is subject to. A `Generated` disposition means one oracle
+    /// function was emitted. The blockers this generator records are
+    /// `QuireSpecLanguage120`, `QuireContractRuntime34` and
+    /// `OperationIdentityNotConsumed`.
+    pub claim_map: ClaimMap<ExactScalarClaim>,
 }
 
 /// Generate exact scalar oracles for `items` from an admitted package.
+///
+/// Fails as a whole only with `SourceTooLarge` or `ClaimMapSerialization`;
+/// every per-item problem is a refusal in the claim map.
 pub fn generate_exact_scalar_oracles(
     package: &CheckedPackageV2,
     items: &[ExactScalarItem],
-) -> Result<ExactScalarOracles, ExactScalarGenerationError> {
+) -> Result<ExactScalarOracles, OracleGenerationError> {
     let mut requests: BTreeMap<&CheckedNodeId, Vec<&ExactScalarOperation>> = BTreeMap::new();
     for item in items {
         requests
@@ -745,7 +689,7 @@ pub fn generate_exact_scalar_oracles(
                                     identity,
                                     provenance,
                                 },
-                                ExactScalarDisposition::Generated(Box::new(GeneratedScalarClaim {
+                                ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
                                     symbol,
                                     ir_id: node.ir_id.clone(),
                                     semantic_form: node.node.semantic_form.to_string(),
@@ -780,7 +724,7 @@ pub fn generate_exact_scalar_oracles(
         });
     }
 
-    let claim_map = ExactScalarClaimMap {
+    let claim_map = ClaimMap {
         version: EXACT_SCALAR_CLAIM_MAP_VERSION,
         package_id: lowering.package_id,
         runtime_revision: RUNTIME_REVISION,
@@ -794,13 +738,13 @@ pub fn generate_exact_scalar_oracles(
     };
     let lib = source.finish(&claim_map.package_id);
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(ExactScalarGenerationError::SourceTooLarge { bytes: lib.len() });
+        return Err(OracleGenerationError::SourceTooLarge { bytes: lib.len() });
     }
     let mut map_bytes = serde_json::to_vec_pretty(&claim_map)
-        .map_err(|_| ExactScalarGenerationError::ClaimMapSerialization)?;
+        .map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     map_bytes.push(b'\n');
-    let map_text = String::from_utf8(map_bytes)
-        .map_err(|_| ExactScalarGenerationError::ClaimMapSerialization)?;
+    let map_text =
+        String::from_utf8(map_bytes).map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     Ok(ExactScalarOracles {
         artifacts: vec![
             artifact("Cargo.toml", manifest()),
@@ -1350,7 +1294,7 @@ impl Shape {
 /// A refused item's claim and disposition together: the request item's own
 /// descriptor-derived identity, marked
 /// [`OperationProvenance::CallerDeclared`], paired with the
-/// [`ExactScalarDisposition::Refused`] that names why. Returning the pair
+/// [`ClaimDisposition::Refused`] that names why. Returning the pair
 /// keeps them from drifting apart -- a call site that built only the claim
 /// half, or built a different disposition beside it, would not compile.
 ///
@@ -1374,7 +1318,10 @@ impl Shape {
 fn refused_claim(
     identity: String,
     refusal: ExactScalarRefusal,
-) -> (OperationClaim, ExactScalarDisposition) {
+) -> (
+    OperationClaim,
+    ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal>,
+) {
     (
         OperationClaim {
             identity,
@@ -1382,7 +1329,7 @@ fn refused_claim(
                 blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
             },
         },
-        ExactScalarDisposition::Refused { refusal },
+        ClaimDisposition::Refused { refusal },
     )
 }
 

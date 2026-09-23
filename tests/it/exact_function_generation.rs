@@ -9,8 +9,8 @@
 use std::{fs, path::PathBuf};
 
 use quire_contract_codegen::{
-    generate_exact_function_oracles, CallPointKind, ExactFunctionDisposition, ExactFunctionItem,
-    ExactFunctionRefusal, ExactFunctionUpstreamBlocker,
+    generate_exact_function_oracles, CallPointKind, ClaimDisposition, ExactFunctionItem,
+    ExactFunctionRefusal, GeneratedExactFunctionClaim, UpstreamBlocker,
 };
 use quire_contract_ir::CheckedPackageV2;
 
@@ -67,7 +67,7 @@ fn generate(
 fn disposition_for(
     oracles: &quire_contract_codegen::ExactFunctionOracles,
     call_code: u32,
-) -> &ExactFunctionDisposition {
+) -> &ClaimDisposition<GeneratedExactFunctionClaim, ExactFunctionRefusal> {
     let node_id = code_id(call_code);
     &oracles
         .claim_map
@@ -90,19 +90,19 @@ fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
 
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
-        ExactFunctionDisposition::Generated(_)
+        ClaimDisposition::Generated(_)
     ));
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_EQ),
-        ExactFunctionDisposition::Generated(_)
+        ClaimDisposition::Generated(_)
     ));
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_NESTED),
-        ExactFunctionDisposition::Generated(_)
+        ClaimDisposition::Generated(_)
     ));
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_UNRELATED),
-        ExactFunctionDisposition::Generated(_)
+        ClaimDisposition::Generated(_)
     ));
 
     let unknown = oracles
@@ -114,7 +114,7 @@ fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
     assert_eq!(unknown.len(), 1);
     assert!(matches!(
         &unknown[0].result,
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::UnknownFunction { name }
         } if name == "does_not_exist_anywhere"
     ));
@@ -144,8 +144,7 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
         .map(|f| f.name.as_str())
         .collect();
 
-    let ExactFunctionDisposition::Generated(claim) = disposition_for(&oracles, ITEM_CALL_ADD)
-    else {
+    let ClaimDisposition::Generated(claim) = disposition_for(&oracles, ITEM_CALL_ADD) else {
         panic!("expected generated");
     };
     assert_eq!(claim.function, "add_fn");
@@ -174,7 +173,7 @@ fn tc_031_ac6_undischargeable_capability_refuses_before_any_item() {
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::UnsupportedCapability { capability }
         } if capability == "quire.capability.undischargeable-in-v1"
     ));
@@ -203,9 +202,9 @@ fn tc_031_ac10_reference_parameter_blocked_on_qsl_120() {
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::BlockedOnUpstream {
-                issue: ExactFunctionUpstreamBlocker::QuireSpecLanguage120,
+                issue: UpstreamBlocker::QuireSpecLanguage120,
                 ..
             }
         }
@@ -231,18 +230,18 @@ fn tc_031_ac11_model_and_state_are_distinct_blockers() {
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::BlockedOnUpstream {
-                issue: ExactFunctionUpstreamBlocker::QuireSpecLanguage120,
+                issue: UpstreamBlocker::QuireSpecLanguage120,
                 ..
             }
         }
     ));
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_EQ),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::BlockedOnUpstream {
-                issue: ExactFunctionUpstreamBlocker::QuireSpecLanguage121,
+                issue: UpstreamBlocker::QuireSpecLanguage121,
                 ..
             }
         }
@@ -266,13 +265,13 @@ fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::UnknownCallee { callee }
         } if callee == "not_declared_anywhere"
     ));
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_UNRELATED),
-        ExactFunctionDisposition::Generated(_)
+        ClaimDisposition::Generated(_)
     ));
 }
 
@@ -294,13 +293,13 @@ fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_NESTED),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::FormMismatch { .. }
         }
     ));
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_UNRELATED),
-        ExactFunctionDisposition::Generated(_)
+        ClaimDisposition::Generated(_)
     ));
 }
 
@@ -315,7 +314,7 @@ fn tc_031_ac1_duplicate_request_refuses_every_copy() {
     assert_eq!(oracles.claim_map.items.len(), 1);
     assert!(matches!(
         &oracles.claim_map.items[0].result,
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::DuplicateRequest
         }
     ));
@@ -351,7 +350,7 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
     let oracles = generate(&package, &[arity_mismatch], &items);
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::SignatureMismatch { .. }
         }
     ));
@@ -381,7 +380,7 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
     let oracles = generate(&package, &[result_mismatch], &items);
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_EQ),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::SignatureMismatch { .. }
         }
     ));
@@ -431,7 +430,7 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
 
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::AmbiguousFunctionName { name }
         } if name == "dup"
     ));
@@ -487,11 +486,11 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     );
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_EQ),
-        ExactFunctionDisposition::Generated(_)
+        ClaimDisposition::Generated(_)
     ));
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_UNRELATED),
-        ExactFunctionDisposition::Generated(_)
+        ClaimDisposition::Generated(_)
     ));
 }
 
@@ -510,7 +509,7 @@ fn tc_031_arity_mismatch_refuses_when_item_argument_count_disagrees() {
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::ArityMismatch {
                 expected: 2,
                 found: 1
@@ -549,7 +548,7 @@ fn tc_031_unsupported_operator_refuses_unary_negate_scalar_body() {
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
-        ExactFunctionDisposition::Refused {
+        ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::UnsupportedOperator { .. }
         }
     ));
@@ -759,7 +758,7 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
     assert!(!lib.contains("evaluation.location"));
     assert!(!lib.contains("evaluation.losses"));
     assert!(lib.contains(".map(|evaluation| evaluation.outcome)"));
-    // The claim map's own `Serialize` types (`ExactFunctionClaimMap`,
+    // The claim map's own `Serialize` types (`ClaimMap`,
     // `GeneratedExactFunctionClaim`) carry no `location`/`losses` field at
     // all, so a JSON-key absence check on `claim-map.json` here would only
     // restate what the type system already guarantees at compile time, not

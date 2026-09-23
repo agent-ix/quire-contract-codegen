@@ -100,7 +100,7 @@ operations:
     semantics: replays a Kani counterexample natively; packet and population validation and the requirement for a native false result stay Contract IR-owned, and a disagreement is never repaired into a proof (FR-007)
   - name: generate_exact_scalar_oracles
     inputs: [admitted CheckedPackageV2, ExactScalarItem list]
-    output: ExactScalarOracles | ExactScalarGenerationError
+    output: ExactScalarOracles | OracleGenerationError
     semantics: exact scalar oracles plus a typed claim map identical to claim-map.json; per-item problems are refusals, and only a whole-generation failure is an error (FR-014)
   - name: negotiate_kani_obligations
     inputs: [KaniObligationRequest]
@@ -132,7 +132,7 @@ operations:
     semantics: the transcript classifier execute_kani_obligation uses, so a test asserting falsification routes through production classification and an inconclusive run is never read as a decided failure (FR-017)
   - name: generate_composite_equality_oracles
     inputs: [admitted CheckedPackageV2, CompositeEqualityItem list]
-    output: CompositeEqualityOracles | CompositeEqualityGenerationError
+    output: CompositeEqualityOracles | OracleGenerationError
     semantics: composite equality oracles plus a typed claim map identical to claim-map.json; per-item problems are refusals, and only a whole-generation failure is an error (FR-018)
   - name: negotiate_backend_provider
     inputs: [BackendProviderEnvelope]
@@ -144,7 +144,7 @@ operations:
     semantics: records what a backend tool probe observed for a routed item without changing its negotiated disposition (FR-019)
   - name: generate_exact_function_oracles
     inputs: [admitted CheckedPackageV2, ExactFunctionDeclaration list, ExactFunctionItem list]
-    output: ExactFunctionOracles | ExactFunctionGenerationError
+    output: ExactFunctionOracles | OracleGenerationError
     semantics: function-application oracles over the declared functions, plus a typed claim map; per-item problems are refusals, and only a whole-generation failure is an error (FR-021)
   - name: witness_schema
     inputs: [ObligationBinding list of one harness]

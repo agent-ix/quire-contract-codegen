@@ -130,6 +130,7 @@
 
 use crate::composite_equality::EqualityOperatorKind;
 use crate::exact_scalar::IntegerOperator;
+use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{Artifact, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION};
 use quire_contract_ir::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
@@ -242,17 +243,6 @@ pub struct ExactFunctionItem {
 // ---------------------------------------------------------------------------
 // Upstream blockers and refusals
 // ---------------------------------------------------------------------------
-
-/// Upstream work a function or item is blocked on.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-pub enum UpstreamBlocker {
-    /// `reference` composite operands, and model/relation nodes.
-    #[serde(rename = "agent-ix/quire-spec-language#120")]
-    QuireSpecLanguage120,
-    /// State, temporal and protocol nodes.
-    #[serde(rename = "agent-ix/quire-spec-language#121")]
-    QuireSpecLanguage121,
-}
 
 /// Why one declared function or requested item generated no code.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -464,42 +454,13 @@ pub struct GeneratedExactFunctionClaim {
     pub declaration_keys: Vec<CheckedNodeId>,
 }
 
-/// Generated or refused.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(tag = "disposition", rename_all = "snake_case")]
-pub enum ExactFunctionDisposition {
-    /// One oracle function was emitted.
-    Generated(Box<GeneratedExactFunctionClaim>),
-    /// Nothing was emitted.
-    Refused {
-        /// The typed reason.
-        refusal: ExactFunctionRefusal,
-    },
-}
-
 /// One claim-map entry per distinct requested item.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ExactFunctionClaim {
     /// Requested `call` expression node.
     pub node_id: CheckedNodeId,
     /// Outcome.
-    pub result: ExactFunctionDisposition,
-}
-
-/// The per-item claim map of one generation.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct ExactFunctionClaimMap {
-    /// [`EXACT_FUNCTION_CLAIM_MAP_VERSION`].
-    pub version: &'static str,
-    /// Source package identity.
-    pub package_id: CheckedSemanticId,
-    /// Pinned runtime revision the oracles call.
-    pub runtime_revision: &'static str,
-    /// Upstream gaps every entry is subject to. Always empty: every
-    /// per-entry blocker is recorded on that entry's own refusal.
-    pub blocked: Vec<UpstreamBlocker>,
-    /// Entries, ordered by the item key (AC-13).
-    pub items: Vec<ExactFunctionClaim>,
+    pub result: ClaimDisposition<GeneratedExactFunctionClaim, ExactFunctionRefusal>,
 }
 
 /// Generation output: the crate files, the claim map, and the static
@@ -509,24 +470,14 @@ pub struct ExactFunctionOracles {
     /// `Cargo.toml`, `src/lib.rs`, `claim-map.json` and `location-map.json`,
     /// in that order.
     pub artifacts: Vec<Artifact>,
-    /// Typed claim map, identical to `claim-map.json`.
-    pub claim_map: ExactFunctionClaimMap,
+    /// Typed claim map, identical to `claim-map.json`. Items are ordered by
+    /// the item key (FR-021-AC-13). `blocked` is always empty: every blocker
+    /// is recorded on its own entry's refusal. A `Generated` disposition
+    /// means one oracle function was emitted. The blockers this generator
+    /// records are `QuireSpecLanguage120` and `QuireSpecLanguage121`.
+    pub claim_map: ClaimMap<ExactFunctionClaim>,
     /// Typed location map, identical to `location-map.json`.
     pub location_map: Vec<LocationMapEntry>,
-}
-
-/// Whole-generation failure; per-item problems are refusals, not errors.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ExactFunctionGenerationError {
-    /// The generated source exceeds [`MAX_GENERATED_SOURCE_BYTES`].
-    SourceTooLarge {
-        /// Generated size.
-        bytes: usize,
-    },
-    /// The claim map could not be serialized.
-    ClaimMapSerialization,
-    /// The location map could not be serialized.
-    LocationMapSerialization,
 }
 
 // ---------------------------------------------------------------------------
@@ -820,11 +771,15 @@ fn validate_signature(
 
 /// Generate function-application oracles for `items`, over the declared
 /// functions in `functions`, from an admitted package.
+///
+/// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization` or
+/// `LocationMapSerialization`; every per-item problem is a refusal in the
+/// claim map.
 pub fn generate_exact_function_oracles(
     package: &CheckedPackageV2,
     functions: &[ExactFunctionDeclaration],
     items: &[ExactFunctionItem],
-) -> Result<ExactFunctionOracles, ExactFunctionGenerationError> {
+) -> Result<ExactFunctionOracles, OracleGenerationError> {
     let graph: Graph<'_> = package
         .graph()
         .nodes
@@ -1067,7 +1022,7 @@ pub fn generate_exact_function_oracles(
     for ((key, item), record) in by_key.into_iter().zip(&call_lowering.records) {
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
         let result = if duplicate {
-            ExactFunctionDisposition::Refused {
+            ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::DuplicateRequest,
             }
         } else {
@@ -1089,9 +1044,9 @@ pub fn generate_exact_function_oracles(
                         .find(|declaration| declaration.name == item.function)
                         .expect("item_disposition only returns Ok for a surviving function");
                     source.item(&symbol, item, declaration);
-                    ExactFunctionDisposition::Generated(Box::new(claim))
+                    ClaimDisposition::Generated(Box::new(claim))
                 }
-                Err(refusal) => ExactFunctionDisposition::Refused { refusal },
+                Err(refusal) => ClaimDisposition::Refused { refusal },
             }
         };
         claims.push(ExactFunctionClaim {
@@ -1100,7 +1055,7 @@ pub fn generate_exact_function_oracles(
         });
     }
 
-    let claim_map = ExactFunctionClaimMap {
+    let claim_map = ClaimMap {
         version: EXACT_FUNCTION_CLAIM_MAP_VERSION,
         package_id: lowering.package_id.clone(),
         runtime_revision: RUNTIME_REVISION,
@@ -1109,19 +1064,19 @@ pub fn generate_exact_function_oracles(
     };
     let lib = source.finish(&classified, &lowering.package_id);
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(ExactFunctionGenerationError::SourceTooLarge { bytes: lib.len() });
+        return Err(OracleGenerationError::SourceTooLarge { bytes: lib.len() });
     }
     let mut map_bytes = serde_json::to_vec_pretty(&claim_map)
-        .map_err(|_| ExactFunctionGenerationError::ClaimMapSerialization)?;
+        .map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     map_bytes.push(b'\n');
-    let map_text = String::from_utf8(map_bytes)
-        .map_err(|_| ExactFunctionGenerationError::ClaimMapSerialization)?;
+    let map_text =
+        String::from_utf8(map_bytes).map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
 
     let mut location_bytes = serde_json::to_vec_pretty(&location_map)
-        .map_err(|_| ExactFunctionGenerationError::LocationMapSerialization)?;
+        .map_err(|_| OracleGenerationError::LocationMapSerialization)?;
     location_bytes.push(b'\n');
     let location_text = String::from_utf8(location_bytes)
-        .map_err(|_| ExactFunctionGenerationError::LocationMapSerialization)?;
+        .map_err(|_| OracleGenerationError::LocationMapSerialization)?;
 
     Ok(ExactFunctionOracles {
         artifacts: vec![

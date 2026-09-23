@@ -28,15 +28,14 @@ use package::{
 use quire_contract_codegen::{
     execute_kani_obligation, file_sha256, generate_exact_scalar_oracles, kani_launch_command,
     launch_evidence, negotiate_kani_obligations, run_launcher_with_timeout, AttestationContext,
-    ExactScalarClaim, ExactScalarClaimMap, ExactScalarDisposition, ExactScalarItem,
-    ExactScalarOperation, IntegerOperator, InvalidObligationItem, KaniExecutionRefusal,
-    KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniObligationError,
-    KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest, KaniPinField,
-    KaniRunOutcome, KaniScalarObligationHarness, KaniTool, KaniToolError, KaniToolPins,
-    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
-    OperationProvenance, UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION,
-    KANI_BACKEND_VERSION, KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
-    RUNTIME_REVISION,
+    ClaimDisposition, ClaimMap, ExactScalarClaim, ExactScalarItem, ExactScalarOperation,
+    IntegerOperator, InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest,
+    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
+    KaniObligationOutcome, KaniObligationRequest, KaniPinField, KaniRunOutcome,
+    KaniScalarObligationHarness, KaniTool, KaniToolError, KaniToolPins, ObligationDisposition,
+    ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance,
+    UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION,
+    KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -410,7 +409,7 @@ const UNSATISFIABLE: u32 = 3001;
 /// A frame clause.
 const FRAME: u32 = 3002;
 
-fn scalar_package() -> (CheckedPackageV2, ExactScalarClaimMap) {
+fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>) {
     let mut builder = corpus_package();
     builder
         .application_bounded(
@@ -456,7 +455,7 @@ fn scalar_package() -> (CheckedPackageV2, ExactScalarClaimMap) {
 
 fn scalar_records(
     package: &CheckedPackageV2,
-    claim_map: &ExactScalarClaimMap,
+    claim_map: &ClaimMap<ExactScalarClaim>,
     codes: &[u32],
 ) -> Vec<ObligationRecord> {
     let ids = codes.iter().map(|code| code_id(*code)).collect::<Vec<_>>();
@@ -968,7 +967,7 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
     );
 }
 
-/// A rendered `Generated` claim, and the [`ExactScalarClaimMap`] it came from, reused by both
+/// A rendered `Generated` claim, and the [`ClaimMap`] it came from, reused by both
 /// `UnknownNodeKind` tests below to hand-assemble a claim map entry `generate_exact_scalar_oracles`
 /// would never itself produce.
 const RENDERED_OPERATIONS: [&str; 4] = [
@@ -1011,7 +1010,7 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
         .items
         .iter()
         .find_map(|claim| match &claim.result {
-            ExactScalarDisposition::Generated(generated)
+            ClaimDisposition::Generated(generated)
                 if RENDERED_OPERATIONS.contains(&claim.operation.identity.as_str()) =>
             {
                 Some((claim.operation.clone(), generated.clone()))
@@ -1023,7 +1022,7 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
     claim_map.items.push(ExactScalarClaim {
         node_id: node_id.clone(),
         operation,
-        result: ExactScalarDisposition::Generated(generated),
+        result: ClaimDisposition::Generated(generated),
     });
 
     let items = [ObligationItem::ScalarClaim {
@@ -1063,7 +1062,7 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
 /// IR-81 follow-up (PR review F2): the module doc's own claim that a node absent from the graph
 /// "never reaches `Outcome::LoweredScalar` at all, since `claim_map.items` cannot name one the
 /// graph does not also carry" is only true for a claim map `generate_exact_scalar_oracles` itself
-/// produced. `ExactScalarClaimMap`/`ExactScalarClaim` are fully `pub`, so a hand-assembled claim
+/// produced. `ClaimMap`/`ExactScalarClaim` are fully `pub`, so a hand-assembled claim
 /// map can name a `node_id` that has an entry in `claim_map.items` (so it does not hit the
 /// pre-existing "no entry in the claim map" `UnknownNode` ground at all) but no entry in
 /// `package.graph()` at all.
@@ -1096,7 +1095,7 @@ fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_su
         .items
         .iter()
         .find_map(|claim| match &claim.result {
-            ExactScalarDisposition::Generated(generated)
+            ClaimDisposition::Generated(generated)
                 if RENDERED_OPERATIONS.contains(&claim.operation.identity.as_str()) =>
             {
                 Some((claim.operation.clone(), generated.clone()))
@@ -1108,7 +1107,7 @@ fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_su
     claim_map.items.push(ExactScalarClaim {
         node_id: missing_node_id.clone(),
         operation,
-        result: ExactScalarDisposition::Generated(generated),
+        result: ClaimDisposition::Generated(generated),
     });
 
     let items = [ObligationItem::ScalarClaim {
@@ -1377,7 +1376,7 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
     let generated = claim_map
         .items
         .iter()
-        .filter(|claim| matches!(claim.result, ExactScalarDisposition::Generated(_)))
+        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
         .cloned()
         .collect::<Vec<_>>();
     assert!(generated.len() > 40, "the corpus generates every family");

@@ -16,10 +16,10 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    generate_composite_equality_oracles, CompositeEqualityClaim, CompositeEqualityDisposition,
+    generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
     CompositeEqualityItem, CompositeEqualityOracles, CompositeEqualityRefusal,
-    CompositeEqualityUpstreamBlocker, DeclarationRefusalCause, EqualityOperandDescriptor,
-    EqualityOperatorKind, IllTypedCauseKind, RecordedSchedule, COMPOSITE_EQUALITY_CRATE_NAME,
+    DeclarationRefusalCause, EqualityOperandDescriptor, EqualityOperatorKind, IllTypedCauseKind,
+    RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_ir::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CompleteLoweringProfileV2,
@@ -149,8 +149,8 @@ fn generated(
     claim: &CompositeEqualityClaim,
 ) -> &quire_contract_codegen::GeneratedCompositeEqualityClaim {
     match &claim.result {
-        CompositeEqualityDisposition::Generated(generated) => generated,
-        CompositeEqualityDisposition::Refused { refusal } => {
+        ClaimDisposition::Generated(generated) => generated,
+        ClaimDisposition::Refused { refusal } => {
             panic!("expected generated, got refusal {refusal:?}")
         }
     }
@@ -158,8 +158,8 @@ fn generated(
 
 fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {
     match &claim.result {
-        CompositeEqualityDisposition::Refused { refusal } => refusal,
-        CompositeEqualityDisposition::Generated(_) => panic!("expected refusal, got generated"),
+        ClaimDisposition::Refused { refusal } => refusal,
+        ClaimDisposition::Generated(_) => panic!("expected refusal, got generated"),
     }
 }
 
@@ -536,34 +536,19 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
         CompositeEqualityRefusal::BlockedOnUpstream { issue, .. } => *issue,
         other => panic!("node {node}: expected BlockedOnUpstream, got {other:?}"),
     };
-    assert_eq!(
-        blocker_of(M_BARE),
-        CompositeEqualityUpstreamBlocker::QuireSpecLanguage120
-    );
-    assert_eq!(
-        blocker_of(S_BARE),
-        CompositeEqualityUpstreamBlocker::QuireSpecLanguage121
-    );
-    assert_eq!(
-        blocker_of(T_BARE),
-        CompositeEqualityUpstreamBlocker::QuireSpecLanguage121
-    );
-    assert_eq!(
-        blocker_of(F_BARE),
-        CompositeEqualityUpstreamBlocker::QuireContractRuntime34
-    );
-    assert_eq!(
-        blocker_of(E_CALL),
-        CompositeEqualityUpstreamBlocker::QuireContractRuntime34
-    );
+    assert_eq!(blocker_of(M_BARE), UpstreamBlocker::QuireSpecLanguage120);
+    assert_eq!(blocker_of(S_BARE), UpstreamBlocker::QuireSpecLanguage121);
+    assert_eq!(blocker_of(T_BARE), UpstreamBlocker::QuireSpecLanguage121);
+    assert_eq!(blocker_of(F_BARE), UpstreamBlocker::QuireContractRuntime34);
+    assert_eq!(blocker_of(E_CALL), UpstreamBlocker::QuireContractRuntime34);
     assert_eq!(
         blocker_of(E_REFERENCE),
-        CompositeEqualityUpstreamBlocker::QuireSpecLanguage120
+        UpstreamBlocker::QuireSpecLanguage120
     );
     for node in [M_BARE, F_BARE, S_BARE, T_BARE, E_REFERENCE, E_CALL] {
         assert!(claims_for(&oracles, node)
             .iter()
-            .all(|claim| matches!(claim.result, CompositeEqualityDisposition::Refused { .. })));
+            .all(|claim| matches!(claim.result, ClaimDisposition::Refused { .. })));
     }
 }
 
@@ -626,8 +611,8 @@ fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
         .iter()
         .map(|claim| {
             let operator = match &claim.result {
-                CompositeEqualityDisposition::Generated(g) => g.descriptor.operator as u8,
-                CompositeEqualityDisposition::Refused { .. } => 0,
+                ClaimDisposition::Generated(g) => g.descriptor.operator as u8,
+                ClaimDisposition::Refused { .. } => 0,
             };
             (claim.node_id.digest.to_string(), operator)
         })
@@ -712,14 +697,14 @@ fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_d
         assert_eq!(
             claim.operation.provenance,
             quire_contract_codegen::CompositeOperationProvenance::CallerDeclared {
-                blocked_on: CompositeEqualityUpstreamBlocker::OperationIdentityNotConsumed
+                blocked_on: UpstreamBlocker::OperationIdentityNotConsumed
             }
         );
     }
     assert!(oracles
         .claim_map
         .blocked
-        .contains(&CompositeEqualityUpstreamBlocker::OperationIdentityNotConsumed));
+        .contains(&UpstreamBlocker::OperationIdentityNotConsumed));
 
     let lib = contents(&oracles, "src/lib.rs");
     let mut functions: Vec<&str> = lib
