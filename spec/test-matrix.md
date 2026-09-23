@@ -222,8 +222,9 @@ temporal and protocol await agent-ix/quire-spec-language#121; FR-018 refuses all
 typed blockers rather than specifying around them, and FR-020 remains unwritten.
 
 `interface-001` declares FR-018's `generate_composite_equality_oracles` now that the code exists.
-TC-028 reads the exported function set from `src/lib.rs` and asserts it equals the declared
-operations in both directions, so an export without an entry, or an entry without an export, fails.
+TC-028 reads every public function from the crate's own source, including root `pub fn`s and
+everything reachable through a `pub mod`, and asserts it equals the declared operations in both
+directions, so a public function without an entry, or an entry without one, fails.
 
 FR-019-AC-1 through FR-019-AC-8 and FR-019-AC-10 are `✅ Covered`: TC-030 walks every row of
 FR-290's ordered rules against the settlement point, and each assertion names the disposition and the

@@ -18,9 +18,9 @@ pin vocabulary it declares is complete.
 
 ## Test Procedure
 
-Parse `src/lib.rs` and collect the function names its `pub use` items re-export. Compare that set
-with the contract's non-planned `operations` entries in both directions, and confirm none of the
-`status: planned` entries is exported. Serialize a complete `ProofAttestationBody` and compare its top-level field names
+Walk `src/lib.rs` and every `pub mod` it reaches and collect each public function under its
+shortest public path. Compare that set with the contract's non-planned `operations` entries in
+both directions, and confirm none of the `status: planned` entries is exposed. Serialize a complete `ProofAttestationBody` and compare its top-level field names
 with `identity_envelope.required`. Match every `AttestationResult` variant against
 `identity_envelope.results`. Match every `GenerationTerminalState` variant against
 `diagnostics.terminal_states`. Serialize a `KaniToolPins` value and compare its field names with
@@ -28,9 +28,10 @@ with `identity_envelope.required`. Match every `AttestationResult` variant again
 
 ## Expected Results
 
-The exported function set equals the declared non-planned operations exactly, so a new export
-with no contract entry and a declared entry the crate no longer exports each fail; none of the
-three planned operations is exported; the attestation body's eleven top-level fields are exactly
+The public function set equals the declared non-planned operations exactly, so a new public
+function with no contract entry, whether a root `pub fn`, a root re-export or a function in a
+`pub mod`, and a declared entry the crate no longer exposes each fail; no planned operation is
+exposed; the attestation body's eleven top-level fields are exactly
 `identity_envelope.required`; the four `AttestationResult` variants are exactly
 `identity_envelope.results`; the six `GenerationTerminalState` variants are exactly
 `diagnostics.terminal_states`; and `KaniToolPins`'s six fields are exactly

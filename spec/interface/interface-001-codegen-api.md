@@ -137,7 +137,7 @@ operations:
   - name: negotiate_backend_provider
     inputs: [BackendProviderEnvelope]
     output: ItemSettlement list | EnvelopeRefusal
-    semantics: settles every envelope item against a closed backend kind; a backend nothing here can settle for is refused, never treated as one that can (FR-019)
+    semantics: settles every item of the envelope in request order against a closed backend kind; an item naming a backend nothing here can settle for settles as invalid-request/unknown-backend inside the Ok list, never as one that can; the whole envelope is refused only for an unsupported contract_version or capability_vocabulary (FR-019)
   - name: record_tool_probe
     inputs: [RoutedItem, ProbePhase, ToolObservation]
     output: ItemResult or none
@@ -149,11 +149,31 @@ operations:
   - name: witness_schema
     inputs: [ObligationBinding list of one harness]
     output: WitnessBinding list | WitnessSchemaError
-    semantics: the witness schema for a harness's symbolic arguments, position for position with its kani::any() calls; a binding that is not a symbolic argument refuses; no owning FR yet (added by IR-211)
+    semantics: the witness schema for a harness's symbolic arguments, position for position with its kani::any() calls; a binding that is not a symbolic argument refuses; no owning requirement
   - name: decode_falsification
     inputs: [harness symbol, module symbol, ObligationBinding list, Kani playback transcript]
     output: named WitnessValue list | KaniOutcome
-    semantics: joins one Kani assertion-playback witness to the harness's persisted obligation schema, refusing on schema, transcript, harness-identity or decode mismatch; no owning FR yet (added by IR-211)
+    semantics: joins one Kani assertion-playback witness to the harness's persisted obligation schema, refusing on schema, transcript, harness-identity or decode mismatch; no owning requirement
+  - name: bound_strategy::census::compute_census
+    inputs: [Relation, Domain]
+    output: BoundaryCensus | StrategyDiagnostic
+    semantics: the Boundary census for one relation over its domain, with the untagged out-of-domain and unrepresentable-edge arrays; fails only for a reversed domain, and a single-tagged census is still returned so its refusal is reported by the census (FR-010)
+  - name: bound_strategy::census::render_edge_constants
+    inputs: [BoundaryCensus, CensusNames]
+    output: rendered Rust source | StrategyDiagnostic
+    semantics: renders the untagged out-of-domain and unrepresentable-edge constants that every bundle for a non-refused population request carries (FR-010)
+  - name: bound_strategy::census::render_boundary_constants
+    inputs: [BoundaryCensus, CensusNames]
+    output: rendered Rust source | StrategyDiagnostic
+    semantics: renders the tagged in-domain census with the edge constants; refuses UnsupportedCampaignConstraint when the in-domain census is single-tagged (FR-010)
+  - name: bound_strategy::population::side_values
+    inputs: [Relation, Domain, PopulationSide]
+    output: SideValues | StrategyDiagnostic
+    semantics: the constructive valuations of one side of a relation over its domain; an empty side refuses EmptyPopulation with terminal state unsupported (FR-009, FR-012)
+  - name: bound_strategy::population::render_population
+    inputs: [PopulationRequest]
+    output: RenderedPopulation | StrategyDiagnostic
+    semantics: renders the requested Satisfying, Violating or Broad population; refuses a wrong or non-unique identifier set, the first empty requested side, and source that does not parse or exceeds the attested limit (FR-009, FR-012)
   - name: cli_generate
     status: planned; no executable CLI is provided by this library candidate
     inputs: [serialized package path, destination, backend flags]
@@ -309,7 +329,7 @@ open_design_gates:
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| interface-001-AC-1 | The public functions `src/lib.rs` re-exports, read from the crate's own source, are exactly the `operations` entries this contract declares without a `status: planned` caveat: an export no entry declares, or a declared entry the crate does not export, fails. | Test (TC-028) |
+| interface-001-AC-1 | Every public function the crate exposes — each `pub fn` and `pub use` function at the crate root and everything reachable through a `pub mod`, read from the crate's own source and named by its shortest public path — is exactly the set of `operations` entries this contract declares without a `status: planned` caveat: a public function no entry declares, or a declared entry the crate does not expose, fails. | Test (TC-028) |
 | interface-001-AC-2 | Every `operations` entry this contract marks `status: planned` — `generate_bundle`, `analyze_coverage`, `cli_generate` — is absent from the public API, so an implementation cannot silently outrun the status this contract declares for it. | Test (TC-028) |
 | interface-001-AC-3 | `identity_envelope.required` names exactly the fields of `ProofAttestationBody`, and `identity_envelope.results` names exactly the four `AttestationResult` variants, so the envelope this contract describes is the envelope the generator emits. | Test (TC-028) |
 | interface-001-AC-4 | `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants, and no seventh state exists for `implemented_mapping` to omit. | Test (TC-028) |
@@ -323,9 +343,9 @@ open_design_gates:
   nothing. Criteria for their real semantics belong with the requirement that implements them, once
   one exists.
 - `witness_schema` and `decode_falsification` are exported and declared above, but no functional
-  requirement owns them yet: IR-211 added them without an FR, acceptance criteria or TC row. Their
-  entries describe what the code does; the criteria their behavior should meet belong in a
-  requirement that does not exist yet.
+  requirement owns them: they have no acceptance criteria or TC row. Their entries describe what
+  the code does; the criteria their behavior should meet belong in a requirement that does not
+  exist yet.
 - `tests/interface_001.rs` parses this document's own fenced YAML block — the `operations` status
   census, `identity_envelope.required`/`results`, `diagnostics.terminal_states`, and
   `kani_obligation_execution_slice.pins` — and compares the parsed vocabulary against the crate's

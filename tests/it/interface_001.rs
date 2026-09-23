@@ -177,12 +177,20 @@ fn sorted(mut items: Vec<String>) -> Vec<String> {
     items
 }
 
-/// The public functions `src/lib.rs` re-exports, read from its own `pub use` items with `syn`,
-/// in the style `tests/kani_argument_order.rs` reads a generated surface rather than
-/// substring-matching it. A re-exported name is a function exactly when it is lower snake case:
-/// the crate's types are UpperCamelCase and its constants SCREAMING_SNAKE_CASE, and a `pub mod`
-/// is an item of its own, never a `pub use` leaf. A renamed leaf (`x as y`) is exported as `y`.
-fn exported_functions() -> Vec<String> {
+/// One public function the crate exposes, found by walking its own source with `syn`.
+struct PublicFunction {
+    /// The path a consumer names it by: a bare name at the crate root, or `module::name`.
+    path: String,
+    /// Whether it is a `pub use` re-export rather than a `pub fn` definition.
+    reexport: bool,
+}
+
+/// Walks one module's items: every `pub fn` it defines, every lower-snake-case leaf its `pub use`
+/// items re-export (a renamed leaf under its new name), and, recursively, every `pub mod` it
+/// declares, whether inline or in its own file. The crate's types are UpperCamelCase and its
+/// constants SCREAMING_SNAKE_CASE, so a lowercase re-exported leaf is a function or a module; a
+/// module re-export would be listed too, and fail the census rather than pass it.
+fn walk_module(items: &[syn::Item], prefix: &str, dir: &Path, out: &mut Vec<PublicFunction>) {
     fn leaves(tree: &syn::UseTree, out: &mut Vec<String>) {
         match tree {
             syn::UseTree::Path(path) => leaves(&path.tree, out),
@@ -190,31 +198,83 @@ fn exported_functions() -> Vec<String> {
             syn::UseTree::Rename(rename) => out.push(rename.rename.to_string()),
             syn::UseTree::Group(group) => group.items.iter().for_each(|item| leaves(item, out)),
             syn::UseTree::Glob(_) => {
-                panic!("src/lib.rs must not glob re-export: its surface must be enumerable")
+                panic!("a public glob re-export makes the crate's surface unenumerable")
             }
         }
     }
-    let file = syn::parse_file(&lib_source()).expect("src/lib.rs must parse");
-    let mut names = Vec::new();
-    for item in &file.items {
-        if let syn::Item::Use(item) = item {
-            if matches!(item.vis, syn::Visibility::Public(_)) {
+    let public = |vis: &syn::Visibility| matches!(vis, syn::Visibility::Public(_));
+    for item in items {
+        match item {
+            syn::Item::Fn(function) if public(&function.vis) => out.push(PublicFunction {
+                path: format!("{prefix}{}", function.sig.ident),
+                reexport: false,
+            }),
+            syn::Item::Use(item) if public(&item.vis) => {
+                let mut names = Vec::new();
                 leaves(&item.tree, &mut names);
+                out.extend(
+                    names
+                        .into_iter()
+                        .filter(|name| name.starts_with(|c: char| c.is_ascii_lowercase()))
+                        .map(|name| PublicFunction {
+                            path: format!("{prefix}{name}"),
+                            reexport: true,
+                        }),
+                );
             }
+            syn::Item::Mod(module) if public(&module.vis) => {
+                let name = module.ident.to_string();
+                let child_prefix = format!("{prefix}{name}::");
+                let child_dir = dir.join(&name);
+                if let Some((_, inline)) = &module.content {
+                    walk_module(inline, &child_prefix, &child_dir, out);
+                } else {
+                    let file = [dir.join(format!("{name}.rs")), child_dir.join("mod.rs")]
+                        .into_iter()
+                        .find(|candidate| candidate.is_file())
+                        .unwrap_or_else(|| panic!("`pub mod {name}` must have a source file"));
+                    let source = fs::read_to_string(&file).expect("module source is readable");
+                    let parsed = syn::parse_file(&source).expect("module source parses");
+                    walk_module(&parsed.items, &child_prefix, &child_dir, out);
+                }
+            }
+            _ => {}
         }
     }
+}
+
+/// Every public function the crate exposes, read from its own source rather than retyped: the
+/// crate root's `pub fn`s and `pub use` leaves, and everything reachable through a `pub mod`.
+/// A function is counted once, under its shortest public path, so a submodule re-export of a
+/// name the crate root also exports is the root's entry, not a second one.
+fn exported_functions() -> Vec<String> {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let root = syn::parse_file(&lib_source()).expect("src/lib.rs must parse");
+    let mut found = Vec::new();
+    walk_module(&root.items, "", &src, &mut found);
+    let at_root = found
+        .iter()
+        .filter(|function| !function.path.contains("::"))
+        .map(|function| function.path.clone())
+        .collect::<Vec<_>>();
     sorted(
-        names
+        found
             .into_iter()
-            .filter(|name| name.starts_with(|c: char| c.is_ascii_lowercase()))
+            .filter(|function| {
+                let leaf = function.path.rsplit("::").next().unwrap_or_default();
+                !(function.reexport
+                    && function.path.contains("::")
+                    && at_root.iter().any(|name| name == leaf))
+            })
+            .map(|function| function.path)
             .collect(),
     )
 }
 
-/// The crate's exported function set, read from `src/lib.rs` itself, equals the contract's
-/// non-planned `operations` entries in both directions: a new `pub` re-export no entry declares
-/// fails, and so does a declared entry the crate stops exporting. Neither side is a list typed
-/// into this file.
+/// The crate's public function set, read from its own source, equals the contract's non-planned
+/// `operations` entries in both directions: a new public function no entry declares fails,
+/// whether a root `pub fn`, a root re-export or a function in a `pub mod`, and so does a declared
+/// entry the crate stops exposing. Neither side is a list typed into this file.
 ///
 /// Trace: interface-001-AC-1, TC-028
 #[test]
@@ -240,34 +300,28 @@ fn it_001_implemented_operations_are_exported_under_their_declared_names() {
     );
 }
 
-/// Every `operations` entry interface-001 marks `status: planned` is absent from the public API,
-/// so an implementation cannot silently outrun the status the contract declares for it. The
-/// hardcoded list below is compared against the contract's own parsed `operations` vocabulary, so
-/// a newly planned or newly un-planned operation this list omits fails the assertion.
+/// Every `operations` entry interface-001 marks `status: planned` is absent from the crate's
+/// public functions, so an implementation cannot silently outrun the status the contract declares
+/// for it. The planned set is parsed from the contract, not typed into this file.
 ///
 /// Trace: interface-001-AC-2, TC-028
 #[test]
 fn it_001_planned_operations_are_not_exported() {
     let exported = exported_functions();
-    let planned = ["generate_bundle", "analyze_coverage", "cli_generate"];
-    for name in planned {
+    let declared_planned = parse_operations(&contract_yaml())
+        .into_iter()
+        .filter_map(|(name, is_planned)| is_planned.then_some(name))
+        .collect::<Vec<_>>();
+    assert!(
+        !declared_planned.is_empty(),
+        "the contract declares planned operations"
+    );
+    for name in &declared_planned {
         assert!(
-            !exported.iter().any(|export| export == name),
-            "src/lib.rs must not export {name}: interface-001 declares it status: planned"
+            !exported.contains(name),
+            "the crate must not export {name}: interface-001 declares it status: planned"
         );
     }
-
-    let declared_planned = sorted(
-        parse_operations(&contract_yaml())
-            .into_iter()
-            .filter_map(|(name, is_planned)| is_planned.then_some(name))
-            .collect(),
-    );
-    assert_eq!(
-        sorted(planned.into_iter().map(str::to_owned).collect()),
-        declared_planned,
-        "the census above must name exactly the contract's `status: planned` operations"
-    );
 }
 
 /// `identity_envelope.required` names exactly the fields of `ProofAttestationBody`, and
