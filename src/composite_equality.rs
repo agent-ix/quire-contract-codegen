@@ -515,11 +515,19 @@ pub struct CompositeEqualityClaim {
 pub struct CompositeEqualityOracles {
     /// `Cargo.toml`, `src/lib.rs` and `claim-map.json`, in that order.
     pub artifacts: Vec<Artifact>,
-    /// Typed claim map, identical to `claim-map.json`.
+    /// Typed claim map, identical to `claim-map.json`. Items are ordered by
+    /// the descriptor key. `blocked` lists the upstream gaps every entry is
+    /// subject to. A `Generated` disposition means one environment
+    /// constructor and one oracle function were emitted. The blockers this
+    /// generator records are `QuireSpecLanguage120`, `QuireSpecLanguage121`,
+    /// `QuireContractRuntime34` and `OperationIdentityNotConsumed`.
     pub claim_map: ClaimMap<CompositeEqualityClaim>,
 }
 
 /// Generate composite equality oracles for `items` from an admitted package.
+///
+/// Fails as a whole only with `SourceTooLarge` or `ClaimMapSerialization`;
+/// every per-item problem is a refusal in the claim map.
 pub fn generate_composite_equality_oracles(
     package: &CheckedPackageV2,
     items: &[CompositeEqualityItem],

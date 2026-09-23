@@ -13,7 +13,8 @@ use serde::Serialize;
 /// Upstream work an item, or a whole generation, is blocked on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum UpstreamBlocker {
-    /// Model, relation and reference-reaching semantics.
+    /// Model, relation and reference-reaching semantics, including
+    /// `reference` composite operands.
     #[serde(rename = "agent-ix/quire-spec-language#120")]
     QuireSpecLanguage120,
     /// State, temporal and protocol semantics.
@@ -25,7 +26,8 @@ pub enum UpstreamBlocker {
     QuireContractRuntime34,
     /// The generator classified the item from its body and the request's own
     /// descriptor and did not confirm the node's catalogued operation, so it
-    /// reports the descriptor-derived identity instead.
+    /// reports the descriptor-derived identity instead. The cases are listed
+    /// on [`crate::OperationProvenance::CallerDeclared`].
     #[serde(rename = "operation identity not consumed by codegen's generators")]
     OperationIdentityNotConsumed,
 }
@@ -56,11 +58,15 @@ pub struct ClaimMap<C> {
     pub runtime_revision: &'static str,
     /// Upstream gaps every entry is subject to.
     pub blocked: Vec<UpstreamBlocker>,
-    /// Entries, in the generator's declared order.
+    /// Entries, in the order the producing generator documents on its
+    /// `*Oracles::claim_map`.
     pub items: Vec<C>,
 }
 
 /// Whole-generation failure; per-item problems are refusals, not errors.
+/// Each generator documents which of these it can return:
+/// `LocationMapSerialization` comes only from the function generator, the one
+/// that emits a location map.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OracleGenerationError {
     /// The generated source exceeds [`crate::MAX_GENERATED_SOURCE_BYTES`].

@@ -470,7 +470,11 @@ pub struct ExactFunctionOracles {
     /// `Cargo.toml`, `src/lib.rs`, `claim-map.json` and `location-map.json`,
     /// in that order.
     pub artifacts: Vec<Artifact>,
-    /// Typed claim map, identical to `claim-map.json`.
+    /// Typed claim map, identical to `claim-map.json`. Items are ordered by
+    /// the item key (FR-021-AC-13). `blocked` is always empty: every blocker
+    /// is recorded on its own entry's refusal. A `Generated` disposition
+    /// means one oracle function was emitted. The blockers this generator
+    /// records are `QuireSpecLanguage120` and `QuireSpecLanguage121`.
     pub claim_map: ClaimMap<ExactFunctionClaim>,
     /// Typed location map, identical to `location-map.json`.
     pub location_map: Vec<LocationMapEntry>,
@@ -767,6 +771,10 @@ fn validate_signature(
 
 /// Generate function-application oracles for `items`, over the declared
 /// functions in `functions`, from an admitted package.
+///
+/// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization` or
+/// `LocationMapSerialization`; every per-item problem is a refusal in the
+/// claim map.
 pub fn generate_exact_function_oracles(
     package: &CheckedPackageV2,
     functions: &[ExactFunctionDeclaration],

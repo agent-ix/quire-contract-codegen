@@ -587,11 +587,19 @@ pub struct ExactScalarClaim {
 pub struct ExactScalarOracles {
     /// `Cargo.toml`, `src/lib.rs` and `claim-map.json`, in that order.
     pub artifacts: Vec<Artifact>,
-    /// Typed claim map, identical to `claim-map.json`.
+    /// Typed claim map, identical to `claim-map.json`. Items ascend by node
+    /// id: digest domain, then digest. `blocked` lists the upstream gaps every
+    /// entry is subject to. A `Generated` disposition means one oracle
+    /// function was emitted. The blockers this generator records are
+    /// `QuireSpecLanguage120`, `QuireContractRuntime34` and
+    /// `OperationIdentityNotConsumed`.
     pub claim_map: ClaimMap<ExactScalarClaim>,
 }
 
 /// Generate exact scalar oracles for `items` from an admitted package.
+///
+/// Fails as a whole only with `SourceTooLarge` or `ClaimMapSerialization`;
+/// every per-item problem is a refusal in the claim map.
 pub fn generate_exact_scalar_oracles(
     package: &CheckedPackageV2,
     items: &[ExactScalarItem],
