@@ -27,10 +27,8 @@
 use std::{fs, path::Path};
 
 use quire_contract_codegen::{
-    generate_bound_oracles, generate_bound_strategy, generate_enum_strategy, generate_i64_strategy,
-    generate_kani_bundle, generate_tristate_harness, write_bundle_atomic, AttestationCommand,
-    AttestationEnvironment, AttestationResult, AttestationTool, GenerationTerminalState,
-    KaniToolPins, ProofAttestationBody,
+    AttestationCommand, AttestationEnvironment, AttestationResult, AttestationTool,
+    GenerationTerminalState, KaniToolPins, ProofAttestationBody,
 };
 
 fn crate_source(relative_path: &str) -> String {
@@ -179,53 +177,66 @@ fn sorted(mut items: Vec<String>) -> Vec<String> {
     items
 }
 
-/// Every `operations` entry interface-001 declares without a `status: planned` caveat is a real
-/// exported function under the exact name the contract gives it. The `use` above naming each of
-/// `generate_bound_oracles`, `generate_tristate_harness`, `generate_i64_strategy`,
-/// `generate_enum_strategy`, `generate_bound_strategy`, `generate_kani_bundle` and
-/// `write_bundle_atomic` is itself the census: a renamed or removed export fails this file to
-/// compile at all. `analyze_bound_coverage` is exercised the same way through its own import in
-/// `tests/bound_coverage.rs`, so it is censused here by source text rather than re-imported. The
-/// hardcoded list below is compared against the contract's own parsed `operations` vocabulary, so
-/// a declared operation this list omits — implemented or not censused here — fails the assertion
-/// rather than silently outrunning this file.
+/// The public functions `src/lib.rs` re-exports, read from its own `pub use` items with `syn`,
+/// in the style `tests/kani_argument_order.rs` reads a generated surface rather than
+/// substring-matching it. A re-exported name is a function exactly when it is lower snake case:
+/// the crate's types are UpperCamelCase and its constants SCREAMING_SNAKE_CASE, and a `pub mod`
+/// is an item of its own, never a `pub use` leaf. A renamed leaf (`x as y`) is exported as `y`.
+fn exported_functions() -> Vec<String> {
+    fn leaves(tree: &syn::UseTree, out: &mut Vec<String>) {
+        match tree {
+            syn::UseTree::Path(path) => leaves(&path.tree, out),
+            syn::UseTree::Name(name) => out.push(name.ident.to_string()),
+            syn::UseTree::Rename(rename) => out.push(rename.rename.to_string()),
+            syn::UseTree::Group(group) => group.items.iter().for_each(|item| leaves(item, out)),
+            syn::UseTree::Glob(_) => {
+                panic!("src/lib.rs must not glob re-export: its surface must be enumerable")
+            }
+        }
+    }
+    let file = syn::parse_file(&lib_source()).expect("src/lib.rs must parse");
+    let mut names = Vec::new();
+    for item in &file.items {
+        if let syn::Item::Use(item) = item {
+            if matches!(item.vis, syn::Visibility::Public(_)) {
+                leaves(&item.tree, &mut names);
+            }
+        }
+    }
+    sorted(
+        names
+            .into_iter()
+            .filter(|name| name.starts_with(|c: char| c.is_ascii_lowercase()))
+            .collect(),
+    )
+}
+
+/// The crate's exported function set, read from `src/lib.rs` itself, equals the contract's
+/// non-planned `operations` entries in both directions: a new `pub` re-export no entry declares
+/// fails, and so does a declared entry the crate stops exporting. Neither side is a list typed
+/// into this file.
 ///
 /// Trace: interface-001-AC-1, TC-028
 #[test]
 fn it_001_implemented_operations_are_exported_under_their_declared_names() {
-    let _ = generate_bound_oracles;
-    let _ = generate_tristate_harness;
-    let _ = generate_i64_strategy;
-    let _ = generate_enum_strategy;
-    let _ = generate_bound_strategy;
-    let _ = generate_kani_bundle;
-    let _ = write_bundle_atomic;
-    assert!(lib_source().contains("analyze_bound_coverage"));
-
-    let implemented = sorted(
-        [
-            "generate_bound_oracles",
-            "generate_tristate_harness",
-            "generate_i64_strategy",
-            "generate_enum_strategy",
-            "generate_bound_strategy",
-            "generate_kani_bundle",
-            "write_bundle_atomic",
-            "analyze_bound_coverage",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .collect(),
-    );
     let declared_implemented = sorted(
         parse_operations(&contract_yaml())
             .into_iter()
             .filter_map(|(name, planned)| (!planned).then_some(name))
             .collect(),
     );
-    assert_eq!(
-        implemented, declared_implemented,
-        "the census above must name exactly the contract's non-planned operations"
+    let exported = exported_functions();
+    let undeclared = exported
+        .iter()
+        .filter(|name| !declared_implemented.contains(name))
+        .collect::<Vec<_>>();
+    let unexported = declared_implemented
+        .iter()
+        .filter(|name| !exported.contains(name))
+        .collect::<Vec<_>>();
+    assert!(
+        undeclared.is_empty() && unexported.is_empty(),
+        "exported but undeclared: {undeclared:?}; declared but not exported: {unexported:?}"
     );
 }
 
@@ -237,12 +248,12 @@ fn it_001_implemented_operations_are_exported_under_their_declared_names() {
 /// Trace: interface-001-AC-2, TC-028
 #[test]
 fn it_001_planned_operations_are_not_exported() {
-    let source = lib_source();
+    let exported = exported_functions();
     let planned = ["generate_bundle", "analyze_coverage", "cli_generate"];
     for name in planned {
         assert!(
-            !source.contains(name),
-            "src/lib.rs must not name {name}: interface-001 declares it status: planned"
+            !exported.iter().any(|export| export == name),
+            "src/lib.rs must not export {name}: interface-001 declares it status: planned"
         );
     }
 

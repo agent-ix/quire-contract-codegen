@@ -58,6 +58,102 @@ operations:
     inputs: [public BoundPackage, immutable BoundOracleGeneration, complete artifact bytes, optional LLVM export bytes, source root]
     output: immutable versioned BoundCoverageAnalysis domain observations
     semantics: exact independent clause and implication census; whole-batch artifact/map binding; measured clauses or explicit unavailable states; valid informational-only population is no_executable; provenance remains unqualified even when all clauses are exercised; no runtime transport, producer execution, attestation, or assurance verdict
+  - name: generate_boolean_oracle
+    inputs: [OracleRequest over one typed Boolean clause, attestation context]
+    output: OracleArtifactBundle | GenerationDiagnostic list
+    semantics: one deterministic Boolean oracle and its source map and attestation, or diagnostics with no partial bundle; the single-clause core generate_bound_oracles batches (FR-001)
+  - name: generator_source_is_dirty
+    inputs: []
+    output: bool
+    semantics: whether the generator's build inputs differed from GENERATOR_SOURCE_REVISION, the fact every attestation's source_dirty records (FR-001)
+  - name: classify_clause
+    inputs: [oracle entry probe observation, independently derived expected consequent count, consequent probe observations]
+    output: ClauseCoverage | CoverageDiagnostic
+    semantics: bounded observation primitive classifying one clause's measured probes; never an aggregate coverage verdict, and the expected count must not be derived from source-map rows (FR-004)
+  - name: parse_llvm_coverage
+    inputs: [LLVM coverage JSON bytes, absolute source root]
+    output: LlvmCoverage | CoverageDiagnostic
+    semantics: parses cargo-llvm-cov 0.9.0 / LLVM JSON 3.0.1 exactly without executing any producer; parent traversal and backslashes refuse, with no suffix matching or summary fallback (FR-004)
+  - name: classify_bounded_kani_profile
+    inputs: [KaniProfile, requested constructs, source id]
+    output: CapabilityEntry list | KaniOutcome
+    semantics: classifies one request through the public bounded Kani profile with no reverse Contract IR dependency; a malformed request is a typed refusal, not a disposition (FR-007)
+  - name: prepare_checked_arithmetic
+    inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CheckedArithmeticRequest]
+    output: ArithmeticLowering | KaniOutcome
+    semantics: bounded checked-arithmetic lowering; division by zero, overflow, invalid ranges, profile refusal and dispatch mismatch stay Contract IR typed non-Boolean outcomes, never an assumption or partial artifact (FR-007)
+  - name: prepare_bounded_collection_query
+    inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CollectionQuery]
+    output: CollectionLowering | KaniOutcome
+    semantics: bounded collection-query lowering; bound exhaustion and profile or dispatch refusal stay typed non-Boolean outcomes with no partial artifact (FR-007)
+  - name: prepare_finite_graph_reaches
+    inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, GraphRequest]
+    output: GraphLowering | KaniOutcome
+    semantics: finite reference-graph reachability lowering; identity, snapshot and reference validation stay Contract IR-owned, and malformed or exhausted requests stay typed non-Boolean outcomes (FR-007)
+  - name: generate_bounded_kani_corpus_case
+    inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
+    output: BoundedCorpusCase | KaniOutcome
+    semantics: one bounded Kani corpus case and its proof dependency graph; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts (FR-007)
+  - name: replay_codegen_counterexample
+    inputs: [Contract IR CounterexamplePacket, native executor over the finite input]
+    output: ReplayAgreement | KaniOutcome
+    semantics: replays a Kani counterexample natively; packet and population validation and the requirement for a native false result stay Contract IR-owned, and a disagreement is never repaired into a proof (FR-007)
+  - name: generate_exact_scalar_oracles
+    inputs: [admitted CheckedPackageV2, ExactScalarItem list]
+    output: ExactScalarOracles | ExactScalarGenerationError
+    semantics: exact scalar oracles plus a typed claim map identical to claim-map.json; per-item problems are refusals, and only a whole-generation failure is an error (FR-014)
+  - name: negotiate_kani_obligations
+    inputs: [KaniObligationRequest]
+    output: KaniObligationOutcome | KaniObligationError
+    semantics: settles every item in request order and, only when no item is invalid, emits one harness per supported item; an invalid item returns no harness bytes (FR-015)
+  - name: execute_kani_obligation
+    inputs: [KaniExecutionRequest]
+    output: KaniExecutionEvidence | KaniExecutionRefusal
+    semantics: measures the backend, refuses on any pin drift, runs the harness and reports the backend's own outcome; see kani_obligation_execution_slice (FR-017)
+  - name: kani_launch_command
+    inputs: [KaniExecutionRequest]
+    output: argv and Command
+    semantics: the exact launch command execute_kani_obligation runs, exposed so a caller interleaving its own steps runs that command rather than a copy (FR-017)
+  - name: run_launcher_with_timeout
+    inputs: [Command, timeout]
+    output: LaunchOutcome | io error
+    semantics: the bounded launch execute_kani_obligation performs, draining stdout and stderr on their own threads and killing the process at the timeout (FR-017)
+  - name: launch_evidence
+    inputs: [LaunchOutcome, deferred Cargo.lock digest read]
+    output: lockfile digest, KaniRunOutcome and exit code
+    semantics: the mapping execute_kani_obligation applies from a concluded launch to evidence; a timed-out launch reads no lockfile (FR-017)
+  - name: file_sha256
+    inputs: [KaniTool, path]
+    output: lowercase SHA-256 | KaniToolError
+    semantics: reads a file's digest the identical way execute_kani_obligation reads Cargo.lock, for callers building launch_evidence's digest read (FR-017)
+  - name: classify_kani_run
+    inputs: [process exit success, Kani transcript text]
+    output: KaniRunOutcome
+    semantics: the transcript classifier execute_kani_obligation uses, so a test asserting falsification routes through production classification and an inconclusive run is never read as a decided failure (FR-017)
+  - name: generate_composite_equality_oracles
+    inputs: [admitted CheckedPackageV2, CompositeEqualityItem list]
+    output: CompositeEqualityOracles | CompositeEqualityGenerationError
+    semantics: composite equality oracles plus a typed claim map identical to claim-map.json; per-item problems are refusals, and only a whole-generation failure is an error (FR-018)
+  - name: negotiate_backend_provider
+    inputs: [BackendProviderEnvelope]
+    output: ItemSettlement list | EnvelopeRefusal
+    semantics: settles every envelope item against a closed backend kind; a backend nothing here can settle for is refused, never treated as one that can (FR-019)
+  - name: record_tool_probe
+    inputs: [RoutedItem, ProbePhase, ToolObservation]
+    output: ItemResult or none
+    semantics: records what a backend tool probe observed for a routed item without changing its negotiated disposition (FR-019)
+  - name: generate_exact_function_oracles
+    inputs: [admitted CheckedPackageV2, ExactFunctionDeclaration list, ExactFunctionItem list]
+    output: ExactFunctionOracles | ExactFunctionGenerationError
+    semantics: function-application oracles over the declared functions, plus a typed claim map; per-item problems are refusals, and only a whole-generation failure is an error (FR-021)
+  - name: witness_schema
+    inputs: [ObligationBinding list of one harness]
+    output: WitnessBinding list | WitnessSchemaError
+    semantics: the witness schema for a harness's symbolic arguments, position for position with its kani::any() calls; a binding that is not a symbolic argument refuses; no owning FR yet (added by IR-211)
+  - name: decode_falsification
+    inputs: [harness symbol, module symbol, ObligationBinding list, Kani playback transcript]
+    output: named WitnessValue list | KaniOutcome
+    semantics: joins one Kani assertion-playback witness to the harness's persisted obligation schema, refusing on schema, transcript, harness-identity or decode mismatch; no owning FR yet (added by IR-211)
   - name: cli_generate
     status: planned; no executable CLI is provided by this library candidate
     inputs: [serialized package path, destination, backend flags]
@@ -213,7 +309,7 @@ open_design_gates:
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| interface-001-AC-1 | Every `operations` entry this contract declares without a `status: planned` caveat is exported as a public function of `quire_contract_codegen` under the exact name given here: `generate_bound_oracles`, `generate_tristate_harness`, `generate_i64_strategy`, `generate_enum_strategy`, `generate_bound_strategy`, `generate_kani_bundle`, `write_bundle_atomic`, `analyze_bound_coverage`. | Test (TC-028) |
+| interface-001-AC-1 | The public functions `src/lib.rs` re-exports, read from the crate's own source, are exactly the `operations` entries this contract declares without a `status: planned` caveat: an export no entry declares, or a declared entry the crate does not export, fails. | Test (TC-028) |
 | interface-001-AC-2 | Every `operations` entry this contract marks `status: planned` — `generate_bundle`, `analyze_coverage`, `cli_generate` — is absent from the public API, so an implementation cannot silently outrun the status this contract declares for it. | Test (TC-028) |
 | interface-001-AC-3 | `identity_envelope.required` names exactly the fields of `ProofAttestationBody`, and `identity_envelope.results` names exactly the four `AttestationResult` variants, so the envelope this contract describes is the envelope the generator emits. | Test (TC-028) |
 | interface-001-AC-4 | `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants, and no seventh state exists for `implemented_mapping` to omit. | Test (TC-028) |
@@ -226,6 +322,10 @@ open_design_gates:
   for an operation this contract itself says is not implemented would be written to be satisfied by
   nothing. Criteria for their real semantics belong with the requirement that implements them, once
   one exists.
+- `witness_schema` and `decode_falsification` are exported and declared above, but no functional
+  requirement owns them yet: IR-211 added them without an FR, acceptance criteria or TC row. Their
+  entries describe what the code does; the criteria their behavior should meet belong in a
+  requirement that does not exist yet.
 - `tests/interface_001.rs` parses this document's own fenced YAML block — the `operations` status
   census, `identity_envelope.required`/`results`, `diagnostics.terminal_states`, and
   `kani_obligation_execution_slice.pins` — and compares the parsed vocabulary against the crate's

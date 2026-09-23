@@ -18,11 +18,9 @@ pin vocabulary it declares is complete.
 
 ## Test Procedure
 
-Reference each of `generate_bound_oracles`, `generate_tristate_harness`, `generate_i64_strategy`,
-`generate_enum_strategy`, `generate_bound_strategy`, `generate_kani_bundle` and
-`write_bundle_atomic` by its declared name, and confirm `analyze_bound_coverage` is named in
-`src/lib.rs`. Confirm `src/lib.rs` names none of `generate_bundle`, `analyze_coverage` or
-`cli_generate`. Serialize a complete `ProofAttestationBody` and compare its top-level field names
+Parse `src/lib.rs` and collect the function names its `pub use` items re-export. Compare that set
+with the contract's non-planned `operations` entries in both directions, and confirm none of the
+`status: planned` entries is exported. Serialize a complete `ProofAttestationBody` and compare its top-level field names
 with `identity_envelope.required`. Match every `AttestationResult` variant against
 `identity_envelope.results`. Match every `GenerationTerminalState` variant against
 `diagnostics.terminal_states`. Serialize a `KaniToolPins` value and compare its field names with
@@ -30,8 +28,9 @@ with `identity_envelope.required`. Match every `AttestationResult` variant again
 
 ## Expected Results
 
-Every implemented operation compiles by its declared name; none of the three planned operations
-appears in `src/lib.rs`; the attestation body's eleven top-level fields are exactly
+The exported function set equals the declared non-planned operations exactly, so a new export
+with no contract entry and a declared entry the crate no longer exports each fail; none of the
+three planned operations is exported; the attestation body's eleven top-level fields are exactly
 `identity_envelope.required`; the four `AttestationResult` variants are exactly
 `identity_envelope.results`; the six `GenerationTerminalState` variants are exactly
 `diagnostics.terminal_states`; and `KaniToolPins`'s six fields are exactly
