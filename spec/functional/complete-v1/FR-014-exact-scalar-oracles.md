@@ -62,12 +62,22 @@ request item's own descriptor-derived identity, and downstream obligations must
 not treat it as checked. A claim goes unconfirmed for one of three reasons:
 this generator never inspected the node; it inspected the node and refused the
 item with a typed reason; or it lowered the node and the descriptor and the
-node disagreed — a descriptor naming a different catalogued operation, a
-descriptor naming an operation the catalogue has no entry for, or one whose
-implied identity matches while its law definition or its mode value is absent
-from the node's own `operation.laws` and `operation.mode`. Only the third case
-still generates an oracle; it is the confirmation that is withheld, not the
-code.
+node disagreed — a descriptor naming a different catalogued operation, or one
+whose implied identity matches while its law definition or its mode value is
+absent from the node's own `operation.laws` and `operation.mode`. Only the
+third case still generates an oracle; it is the confirmation that is withheld,
+not the code.
+
+The generator also withholds confirmation, as a defensive guard, from a
+descriptor naming an operation the catalogue has no entry for. No admitted
+package can reach that guard: the only such descriptor is a same-width IEEE
+conversion, and the checked-operation catalogue's conversions are
+`quire.op.ieee.to_float32` over a `float64` operand and
+`quire.op.ieee.to_float64` over a `float32` operand, so quire-contract-ir
+refuses a same-width conversion node as operator-ineligible before this
+generator sees it. The guard is kept so that a catalogue gap never reads as a
+confirmation; it is not an acceptance criterion, because no input can
+exercise it.
 
 A bound is read from the one reachable `bounded_domain` node on the node's
 result type whose form matches the descriptor. Its body is an `aggregate` of
@@ -155,7 +165,7 @@ literals. This encoding is defined by this generator, not by V2:
 | FR-014-AC-9 | Generated oracle functions do not panic: an invalid generated constant, including a decimal target, stops as `InvalidConstant`, an operand of the wrong width stops before any charge, and generated source over its ceiling is a typed error with no output. | Test (TC-024) |
 | FR-014-AC-10 | A descriptor parameter whose bound is missing, repeated, unreadable or unequal to the reachable `bounded_domain` node, an operand that is neither a literal nor a reference, and a literal quantity operand, are each refused with a typed reason. | Test (TC-024) |
 | FR-014-AC-11 | A claim whose descriptor passes every check this requirement states, and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value, marks its operation `ir_confirmed`. An item refused by any of those checks is `caller_declared` even where its operation agrees. | Test (TC-024) |
-| FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound; nor is a descriptor naming an operation the catalogue has no entry for. | Test (TC-024) |
+| FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound. | Test (TC-024) |
 | FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition is absent from that node's `operation.laws`, or whose mode value disagrees with that node's `operation.mode`, is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |
 | FR-014-AC-14 | A claim whose node this generator never inspected — a duplicate copy, or a record that never lowered — or inspected and refused with a typed reason, marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |
 | FR-014-AC-15 | A requested item whose node closure exceeds the 65,536-unit lowering work ceiling is refused as `LoweringWorkExhausted`, naming the ceiling and the consumed counter, contributes no generated function, and leaves every other item's disposition unaffected. | Test (TC-024) |

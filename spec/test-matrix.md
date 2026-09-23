@@ -51,7 +51,7 @@ type: TestMatrix
 | FR-013 | FR-013-AC-1 through FR-013-AC-4 | TC-022 | ✅ Covered |
 | FR-013 | FR-013-AC-5 | Inspection | ✅ Covered |
 | FR-014 | FR-014-AC-1 through FR-014-AC-11 | TC-024 | ✅ Covered |
-| FR-014 | FR-014-AC-12 | TC-024 | ⚠️ Partially covered; a descriptor naming a different catalogued operation is discharged, but the clause covering a descriptor naming an operation the catalogue has no entry for is a defensive branch no fixture reaches -- the only such state is a same-width IEEE conversion, which the package builder refuses to construct (IR-225) |
+| FR-014 | FR-014-AC-12 | TC-024 | ✅ Covered; a descriptor naming a different catalogued operation is not confirmed. The no-catalogue-entry guard is Behavior prose, not a criterion: no admitted package reaches it, because the catalogue has no same-width IEEE conversion and quire-contract-ir refuses one as operator-ineligible |
 | FR-014 | FR-014-AC-13 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-14 | TC-024 | ⚠️ Partially covered; the `caller_declared` provenance is asserted for every refused and every never-inspected claim, but no test asserts that the identity such a claim reports is the request item's own descriptor-derived one |
 | FR-014 | FR-014-AC-15 | TC-024 | ⚠️ Partially covered; the typed refusal and the withheld generated function are asserted, but no fixture requests a work-exhausted item alongside healthy ones, so the per-item isolation clause is unasserted |
