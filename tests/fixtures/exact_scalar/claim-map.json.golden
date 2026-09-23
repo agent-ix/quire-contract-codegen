@@ -3,9 +3,9 @@
   "package_id": {
     "domain": "quire.package.semantic/v2",
     "algorithm": "sha256",
-    "digest": "c719208a1aa02b2446ef237b908c9944829e5c34ca2e3cc8225b4169c0a9ac68"
+    "digest": "1e06d48674fefd3262fc57f35b6093901d099aa30ee075876595d53e9e328f09"
   },
-  "runtime_revision": "4e330525be513fe57c67717dc22b969d36656b85",
+  "runtime_revision": "9f31169276edb85799d6b7d878020caf49617090",
   "blocked": [],
   "items": [
     {
