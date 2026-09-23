@@ -7,6 +7,7 @@ owner: codegen-maintainers
 metric: codegen_conformance_reproducibility_and_parity
 definition_version: quire-contract-codegen.measurement-v2
 stage: gate
+ground_truth_kind: mechanical
 objective:
   direction: zero
 statistical_design:
@@ -19,6 +20,33 @@ statistical_design:
   decision_rule:
     comparator: eq
     threshold: 0
+protected_apparatus:
+  - Makefile
+  - examples/generation_conformance.rs
+  - scripts/check_upstream_pins.py
+  - scripts/assurance_chain.py
+  - assurance/change-assurance.json
+  - tests/it/kani_generation.rs
+  - tests/it/oracle_generation.rs
+  - tests/it/shared_assurance.rs
+  - tests/fixtures/**
+negative_controls:
+  - kind: suppressed-observation
+    description: >-
+      every generation case carries a floor of declared checks and a case that
+      runs fewer is vacuous rather than pass, and the census row counts the
+      diagnostics and terminal states the corpus reached, so a corpus that
+      shrinks or skips cases is visible instead of lowering the count
+  - kind: apparatus-edit
+    description: >-
+      the Makefile recipe that runs the producers, the producers themselves,
+      the chain driver, the declared obligations, the gate tests and the golden
+      fixtures are protected, so editing one alongside a change it grades
+      changes the recorded digests
+  - kind: selective-reporting
+    description: >-
+      the count is taken over all three repetitions together, so a clean
+      repetition cannot be reported in place of one that observed a failure
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AP-001
     type: measures
@@ -29,6 +57,32 @@ relationships:
 
 Measurements inform the human v0.1 source-release decision for one pinned candidate; they do not
 approve release or confer validation, accreditation, or certification.
+
+## Decision Rule
+
+The metric is a `count` of escalations, and the rule `{ comparator: eq, threshold: 0 }` holds only
+when that count is exactly zero, with `objective.direction: zero`: any single occurrence fails it.
+The count is taken over all three repetitions together, so one occurrence in any repetition is
+enough. An escalation is one observed occurrence, in any population item, of any of these five
+classes:
+
+1. **digest drift**: an artifact whose bytes differ from its golden or from another repetition within
+   a declared supported profile;
+2. **silent state**: an unsupported, inconclusive or failed outcome that is not reported explicitly,
+   such as a construct or obligation silently dropped or approximated, an unsupported state reported
+   as success (NFR-002-AC-3, FR-001-AC-4), or a producer row dropped without an error;
+3. **parity mismatch**: generated output and the independently evaluated executable oracle
+   disagreeing on a classification or diagnostic;
+4. **partial publication**: a failed or interrupted publish that leaves the destination other than
+   `unchanged`, complete, or reported `unknown` with both prior and staged bundles preserved;
+5. **missing identity**: an absent or disagreeing identity, such as an upstream revision that
+   differs between the crate constant, the dependency pin and the lockfile, or an attestation, tool
+   executable or source digest that is not recorded.
+
+Unavailable, skipped, inconclusive, unsupported and differential states are retained and reported
+beside the count, as `statistical_design.uncertainty` says. Reported explicitly, they are not
+escalations and are not counted; hidden or reported as success, they are a silent state. A count of zero is therefore not a pass for them: they remain limitations, as the
+Interpretation section states.
 
 ## Population
 
