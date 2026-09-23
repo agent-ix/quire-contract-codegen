@@ -42,6 +42,12 @@ failure is reported. This is issue #50.
   bound to the identity and pins of the harness being replayed, and decode
   each witness value into its declared complete-V1 scalar type within the
   decode size limit.
+- The generator shall decode a witness against the harness's own persisted
+  obligation schema: the obligation's argument bindings, in their persisted
+  order, typed position for position against the harness's symbolic
+  arguments, whose emission order is that same order. A binding that is not
+  an argument has no symbolic position, so the schema refuses it rather than
+  mistype a position; each decoded value is named by its binding.
 - If a witness is bound to a different harness identity or pins, fails to
   decode, or exceeds the decode size limit, then the generator shall report a
   malformed witness and shall not report a failure.
@@ -65,6 +71,7 @@ failure is reported. This is issue #50.
 | FR-016-AC-5 | A witness bound to a different harness identity or pins is reported as malformed and never replayed. | Test (TC-026) |
 | FR-016-AC-6 | A witness over the decode size limit is reported as malformed without decoding past the limit. | Test (TC-026) |
 | FR-016-AC-7 | A native replay that matches the harness value but differs in admitted charges, consumed counters or limits yields a typed mismatch. | Test (TC-026) |
+| FR-016-AC-8 | A witness schema binds the obligation's persisted argument bindings position for position to the harness's symbolic arguments, in their emission order, and refuses a binding that is not an argument; each decoded value is named by the binding at its position. | Test (TC-026) |
 
 ## Dependencies
 

@@ -29,7 +29,7 @@
 //! both Postcondition and Invariant, at `src/kani_obligations.rs:1586`), and a divergence at
 //! either is the same silent misbind in `decode_falsification` this test exists to exclude.
 //!
-//! Trace: IR-213.
+//! Trace: FR-016-AC-8, TC-026.
 
 use crate::common;
 

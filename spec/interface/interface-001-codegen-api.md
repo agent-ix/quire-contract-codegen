@@ -149,11 +149,11 @@ operations:
   - name: witness_schema
     inputs: [ObligationBinding list of one harness]
     output: WitnessBinding list | WitnessSchemaError
-    semantics: the witness schema for a harness's symbolic arguments, position for position with its kani::any() calls; a binding that is not a symbolic argument refuses; no owning requirement
+    semantics: the witness schema for a harness's symbolic arguments, position for position with its kani::any() calls; a binding that is not a symbolic argument refuses (FR-016)
   - name: decode_falsification
     inputs: [harness symbol, module symbol, ObligationBinding list, Kani playback transcript]
     output: named WitnessValue list | KaniOutcome
-    semantics: joins one Kani assertion-playback witness to the harness's persisted obligation schema, refusing on schema, transcript, harness-identity or decode mismatch; no owning requirement
+    semantics: joins one Kani assertion-playback witness to the harness's persisted obligation schema, refusing on schema, transcript, harness-identity or decode mismatch (FR-016)
   - name: bound_strategy::census::compute_census
     inputs: [Relation, Domain]
     output: BoundaryCensus | StrategyDiagnostic
@@ -342,10 +342,6 @@ open_design_gates:
   for an operation this contract itself says is not implemented would be written to be satisfied by
   nothing. Criteria for their real semantics belong with the requirement that implements them, once
   one exists.
-- `witness_schema` and `decode_falsification` are exported and declared above, but no functional
-  requirement owns them: they have no acceptance criteria or TC row. Their entries describe what
-  the code does; the criteria their behavior should meet belong in a requirement that does not
-  exist yet.
 - `tests/interface_001.rs` parses this document's own fenced YAML block — the `operations` status
   census, `identity_envelope.required`/`results`, `diagnostics.terminal_states`, and
   `kani_obligation_execution_slice.pins` — and compares the parsed vocabulary against the crate's

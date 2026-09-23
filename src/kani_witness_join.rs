@@ -182,6 +182,8 @@ mod tests {
     /// The mapping is total and order-preserving: every `KaniPrimitiveType` this crate emits maps
     /// to exactly one `WitnessValueType`, and the schema comes back in the same order as the
     /// generator's own `arguments`.
+    ///
+    /// Trace: FR-016-AC-8, TC-026
     #[test]
     fn witness_schema_preserves_order_and_maps_every_primitive() {
         let arguments = vec![
@@ -212,6 +214,8 @@ mod tests {
     /// A `Result`-role binding refuses rather than being silently included: it does not
     /// correspond to any `kani::any()` call, so typing it would mistype a position that does not
     /// exist in the concrete bytes.
+    ///
+    /// Trace: FR-016-AC-8, TC-026
     #[test]
     fn witness_schema_refuses_a_non_argument_binding() {
         let mut result_binding = argument("post_state", KaniPrimitiveType::I64);
@@ -254,6 +258,8 @@ fn kani_concrete_playback_synthetic() {{\n\
     /// transcript whose qualified harness symbol matches the caller's declared identity, it
     /// decodes the same value `witness_schema` + `Witness::parse` + `Witness::decode` would,
     /// called separately.
+    ///
+    /// Trace: FR-016-AC-1, TC-026
     #[test]
     fn decode_falsification_decodes_a_matching_transcript() {
         let arguments = vec![argument("value", KaniPrimitiveType::I64)];
@@ -271,6 +277,8 @@ fn kani_concrete_playback_synthetic() {{\n\
     /// positional and never compare the harness symbol a caller declares against the one the
     /// transcript actually names (see the module doc) — `decode_falsification` is the join that
     /// adds that comparison, so this is the only place in the crate that can refuse it.
+    ///
+    /// Trace: FR-016-AC-5, TC-026
     #[test]
     fn decode_falsification_refuses_a_transcript_whose_harness_symbol_disagrees() {
         let arguments = vec![argument("value", KaniPrimitiveType::I64)];
