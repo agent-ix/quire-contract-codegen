@@ -58,14 +58,14 @@ const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
 /// consulted, since `execute_kani_obligation` returns before reaching the launcher.
 const UNUSED_TIMEOUT: Duration = Duration::from_secs(60);
 
-fn context() -> AttestationContext<'static> {
+pub(crate) fn context() -> AttestationContext<'static> {
     AttestationContext {
         record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
         candidate_revision: IR_CANDIDATE_REVISION,
     }
 }
 
-fn pins() -> KaniToolPins {
+pub(crate) fn pins() -> KaniToolPins {
     KaniToolPins::pinned()
 }
 
@@ -408,7 +408,7 @@ const UNSATISFIABLE: u32 = 3001;
 /// A frame clause.
 const FRAME: u32 = 3002;
 
-fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>) {
+pub(crate) fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>) {
     let mut builder = corpus_package();
     // IR-280's FR-322 application-node dependency join means this bound must
     // anchor on a node no other expression's differing bound also reaches

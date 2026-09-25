@@ -132,4 +132,5 @@ nothing says so.
 
 - **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md), and the
   `quire-spec-language` registry that computes `candidates`.
-- **Downstream**: [TC-030](../../test/complete-v1/TC-030-capability-settlement.md).
+- **Downstream**: [TC-030](../../test/complete-v1/TC-030-capability-settlement.md);
+  [FR-022](./FR-022-routed-generation.md), the generation arm of the same seam.

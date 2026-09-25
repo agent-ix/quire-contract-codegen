@@ -17,6 +17,8 @@ mod kani;
 mod kani_obligations;
 // Implements: FR-019
 mod capability;
+// Implements: FR-022
+mod routed_generation;
 // Implements: FR-017
 mod kani_execution;
 mod kani_transcript;
@@ -123,6 +125,10 @@ pub use kani_execution::{
     run_launcher_with_timeout, KaniExecutionEvidence, KaniExecutionRefusal, KaniExecutionRequest,
     KaniInconclusiveReason, KaniInstallation, KaniPinField, KaniRunOutcome, KaniTool,
     KaniToolError, KaniToolPins, LaunchOutcome, KANI_EXECUTION_SCHEMA,
+};
+pub use routed_generation::{
+    generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
+    RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
 };
 
 pub use kani_obligations::{

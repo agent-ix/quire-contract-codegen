@@ -83,6 +83,11 @@ and FR-018 refuses them by name: function application has no runtime surface
 (agent-ix/quire-contract-runtime#34), the model graph awaits agent-ix/quire-spec-language#120, and
 temporal and protocol await agent-ix/quire-spec-language#121.
 
+FR-019 settles every capability claim at one `negotiate_*` point over the closed backend kind.
+FR-022 is the generation arm of the same seam: it takes the items the driver routed, each with its
+request index, backend and backend kind, and generates per kind without settling again. TC-030 and
+TC-033 verify them.
+
 FR-008 through FR-013 refine FR-002 for bound numeric and state-scalar clauses
 (agent-ix/quire-contract-codegen#3 under agent-ix/quire-spec-language#83), admit only clauses that the
 FR-001 bounded-integer oracle grammar of agent-ix/quire-contract-codegen#4 admits, and are constrained
