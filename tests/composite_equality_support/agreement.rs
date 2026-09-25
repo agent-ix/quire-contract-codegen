@@ -12,19 +12,21 @@
 //! `quire_spec_language::value` (which re-exported the identical FR-149
 //! equality surface `quire_contract_runtime::exact` pins, so all three legs
 //! were reachable here -- unlike `exact_scalar_support/agreement.rs`'s
-//! runtime-only vectors). That leg was already red (AGE-1989) when this pin
-//! bump landed, and the QSL revision this bumps to withdraws
-//! `quire_spec_language::value` entirely: QSL arch-lint T12-A confines this
-//! crate to `qsl_replay`'s public API, one source-recompiling proof-witness
-//! replay executor (`qsl_replay::replay`, taking a `ReplayRequestWire`
-//! built from digest-addressed compiled QSL source and a witness arm).
-//! None of this file's vectors are shaped as compiled source plus a
-//! witness -- they call `TypeEnvironment::check_equality` and
+//! runtime-only vectors). The RT==QSL authority check lives in RT's
+//! `conformance/qsl-agreement` lane; this crate only checks generated==RT,
+//! so that leg does not belong here. The QSL revision this bumps to also
+//! withdraws `quire_spec_language::value` entirely: QSL arch-lint T12-A
+//! confines this crate to `qsl_replay`'s public API, one source-recompiling
+//! proof-witness replay executor (`qsl_replay::replay`, taking a
+//! `ReplayRequestWire` built from digest-addressed compiled QSL source and
+//! a witness arm). None of this file's vectors are shaped as compiled
+//! source plus a witness -- they call `TypeEnvironment::check_equality` and
 //! `CheckedEquality::evaluate` directly against in-process `Value`s -- so
 //! none can be re-expressed through that facade without building a new
 //! source-level test harness from nothing, which is out of scope for a pin
-//! bump. The authority leg (`qsl_side`, `agree3!`) is deleted outright
-//! rather than ported; every vector below still runs the
+//! bump. (AGE-1989 names only the four `exact_scalar_support` vectors, not
+//! this file.) The authority leg (`qsl_side`, `agree3!`) is deleted
+//! outright rather than ported; every vector below still runs the
 //! direct-runtime-vs-generated-oracle comparison it always did.
 
 #![allow(dead_code, unused_imports)]

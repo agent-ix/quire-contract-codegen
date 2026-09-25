@@ -13,20 +13,24 @@
 //! IR-254: this file used to run a third, authority leg through
 //! `quire_spec_language::value`, comparing the direct runtime call against
 //! QSL's own value-level implementation of the same operators before
-//! comparing either to the generated oracle (`agree3!`, since removed). That
-//! leg was already red (AGE-1989) when this pin bump landed, and the QSL
-//! revision this bumps to withdraws `quire_spec_language::value` entirely:
-//! QSL arch-lint T12-A confines this crate to `qsl_replay`'s public API, one
-//! source-recompiling proof-witness replay executor (`qsl_replay::replay`,
-//! taking a `ReplayRequestWire` built from digest-addressed compiled QSL
-//! source and a witness arm). None of this file's vectors are shaped as
-//! compiled source plus a witness -- they call value-level operators
-//! directly (`Meter`, `Integer`, `IeeeValue`, unit conversion, division
-//! profiles, ...) -- so none can be re-expressed through that facade without
-//! building a new source-level test harness from nothing, which is out of
-//! scope for a pin bump. The authority leg is deleted outright rather than
-//! ported; every vector below still runs the direct-runtime-vs-generated-
-//! oracle comparison it always did.
+//! comparing either to the generated oracle (`agree3!`, since removed). The
+//! RT==QSL authority check lives in RT's `conformance/qsl-agreement` lane;
+//! this crate only checks generated==RT, so that leg does not belong here.
+//! The QSL revision this bumps to also withdraws `quire_spec_language::value`
+//! entirely: QSL arch-lint T12-A confines this crate to `qsl_replay`'s
+//! public API, one source-recompiling proof-witness replay executor
+//! (`qsl_replay::replay`, taking a `ReplayRequestWire` built from
+//! digest-addressed compiled QSL source and a witness arm). None of this
+//! file's vectors are shaped as compiled source plus a witness -- they call
+//! value-level operators directly (`Meter`, `Integer`, `IeeeValue`, unit
+//! conversion, division profiles, ...) -- so none can be re-expressed
+//! through that facade without building a new source-level test harness
+//! from nothing, which is out of scope for a pin bump. Four of this file's
+//! vectors were also already red for an unrelated reason (AGE-1989) when
+//! this pin bump landed; that reproducer is recorded on the ticket. The
+//! authority leg is deleted outright rather than ported; every vector below
+//! still runs the direct-runtime-vs-generated-oracle comparison it always
+//! did.
 //!
 //! Node keys in this file no longer need to be QSL's own honest
 //! preimage-hash values, because nothing here compares them to QSL's
