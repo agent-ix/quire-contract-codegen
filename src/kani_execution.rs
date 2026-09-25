@@ -5,7 +5,8 @@
 //! installed backend are both compared with them: any differing Kani version,
 //! launcher, driver, CBMC, toolchain or target is a typed refusal and no proof is
 //! attempted. For every outcome but one, the run outcome is read from the
-//! backend's own output and is never defaulted: a harness this module did not
+//! backend's own output -- read into a typed transcript by [`crate::kani_transcript`], the only
+//! place Kani's prose is parsed -- and is never defaulted: a harness this module did not
 //! observe verifying is not `verified`. The one exception is
 //! [`KaniInconclusiveReason::TimedOut`], which is never read from output at all —
 //! a timed-out run is killed before it prints one.
@@ -42,6 +43,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     kani::{sha256, KANI_BACKEND_VERSION},
     kani_obligations::{KaniObligationHarness, ObligationKind},
+    kani_transcript::{
+        KaniBanner, KaniCoverSummary, KaniFailedCheck, KaniPlaybackTarget, KaniTranscript,
+    },
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
@@ -413,7 +417,7 @@ pub enum KaniInconclusiveReason {
     /// so it is an execution outcome this module observed, not a generation-time
     /// classification reported as one (FR-017-CON-2).
     VacuousProof,
-    /// An unwinding assertion failed: the loop bound was exhausted before the property
+    /// A loop-unwinding check failed: the loop bound was exhausted before the property
     /// could be decided, so no failure is a counterexample.
     UnwindBoundExhausted,
     /// The run did not conclude within [`KaniExecutionRequest::timeout`]. The launcher and every
@@ -429,7 +433,7 @@ pub enum KaniRunOutcome {
     /// Every property held and every cover was satisfied, so the harness's assumptions,
     /// requires and IR bounds are jointly satisfiable.
     Verified,
-    /// A property other than an unwinding assertion failed and Kani printed a concrete
+    /// A property other than a loop-unwinding check failed and Kani printed a concrete
     /// counterexample for it.
     Falsified {
         /// The concrete-playback test Kani printed for the failed check, verbatim.
@@ -815,11 +819,6 @@ pub fn launch_evidence(
     }
 }
 
-const SUCCESS: &str = "VERIFICATION:- SUCCESSFUL";
-const FAILURE: &str = "VERIFICATION:- FAILED";
-const FAILED_CHECKS: &str = "Failed Checks: ";
-const UNWINDING_ASSERTION: &str = "unwinding assertion";
-
 /// Classifies one run. Every generated harness, of every kind, carries exactly the covers that
 /// witness its assumptions are satisfiable, so success without every cover satisfied is vacuous
 /// and never `Verified`.
@@ -841,10 +840,16 @@ const UNWINDING_ASSERTION: &str = "unwinding assertion";
 /// classifier production uses (IR-220), instead of re-implementing banner parsing that misreads
 /// an inconclusive run — CBMC out-of-memory among them — as a decided failure.
 pub fn classify_kani_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
-    if exited_successfully && text.contains(SUCCESS) && !text.contains(FAILURE) {
-        if let Some((failed, total_checks)) = checks_summary(text) {
+    classify_transcript(exited_successfully, &KaniTranscript::parse(text))
+}
+
+/// The classification rule (codegen#55), over the typed transcript only. Kani's prose is read in
+/// [`crate::kani_transcript`] and nowhere else.
+fn classify_transcript(exited_successfully: bool, transcript: &KaniTranscript) -> KaniRunOutcome {
+    if exited_successfully && transcript.banner == KaniBanner::Successful {
+        if let Some(summary) = transcript.checks_summary {
             let success_checks =
-                usize::try_from(total_checks.saturating_sub(failed)).unwrap_or(usize::MAX);
+                usize::try_from(summary.total.saturating_sub(summary.failed)).unwrap_or(usize::MAX);
             let checks_outcome = KaniOutcome::proved_from_checks(
                 success_checks,
                 "kani_execution::classify_kani_run",
@@ -858,29 +863,37 @@ pub fn classify_kani_run(exited_successfully: bool, text: &str) -> KaniRunOutcom
                 };
             }
         }
-        return match cover_summary(text) {
-            Some((satisfied, total)) if total > 0 && satisfied == total => KaniRunOutcome::Verified,
-            Some((satisfied, total)) if total > 0 => {
-                KaniRunOutcome::CoverUnsatisfied { satisfied, total }
-            }
-            Some(_) | None => KaniRunOutcome::Inconclusive {
+        return match transcript.cover_summary {
+            KaniCoverSummary::Counts {
+                satisfied, total, ..
+            } if total > 0 && satisfied == total => KaniRunOutcome::Verified,
+            KaniCoverSummary::Counts {
+                satisfied, total, ..
+            } if total > 0 => KaniRunOutcome::CoverUnsatisfied { satisfied, total },
+            KaniCoverSummary::Counts { .. }
+            | KaniCoverSummary::Malformed
+            | KaniCoverSummary::Absent => KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::MissingCoverSummary,
             },
         };
     }
-    if text.contains(FAILURE) {
-        let unwound = text.lines().any(|line| {
-            line.trim()
-                .strip_prefix(FAILED_CHECKS)
-                .is_some_and(|check| check.starts_with(UNWINDING_ASSERTION))
-        });
-        if unwound {
+    if matches!(transcript.banner, KaniBanner::Failed | KaniBanner::Both) {
+        if transcript
+            .failed_checks
+            .contains(&KaniFailedCheck::UnwindingAssertion)
+        {
             return KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::UnwindBoundExhausted,
             };
         }
-        return match failure_playback(text) {
-            Some(counterexample) => KaniRunOutcome::Falsified { counterexample },
+        let counterexample = transcript
+            .playbacks
+            .iter()
+            .find(|playback| playback.target == KaniPlaybackTarget::Property);
+        return match counterexample {
+            Some(playback) => KaniRunOutcome::Falsified {
+                counterexample: playback.test.clone(),
+            },
             None => KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::FailedWithoutCounterexample,
             },
@@ -889,76 +902,6 @@ pub fn classify_kani_run(exited_successfully: bool, text: &str) -> KaniRunOutcom
     KaniRunOutcome::Inconclusive {
         reason: KaniInconclusiveReason::NoVerdict,
     }
-}
-
-/// The parenthetical count Kani appends to a summary line, e.g. `(38 undetermined)`. Both known
-/// words are attested in this repository's own fixtures at different times: `unreachable` when
-/// Kani proves a check's location is never hit, `undetermined` when it can't decide (observed
-/// here on a checks line whose run hit an unwinding bound: `** 1 of 39 failed (38 undetermined)`).
-/// Kani's own summary vocabulary is one property of the tool, not of which line it appears on, so
-/// both [`checks_summary`] and [`cover_summary`] accept either rather than only the word each
-/// happened to be written against.
-const SUMMARY_TAIL_WORDS: [&str; 2] = ["unreachable", "undetermined"];
-
-fn summary_tail_count(tail: &str) -> Option<u64> {
-    let inner = tail.strip_prefix(" (")?.strip_suffix(')')?;
-    let (count, word) = inner.split_once(' ')?;
-    if !SUMMARY_TAIL_WORDS.contains(&word) {
-        return None;
-    }
-    count.parse().ok()
-}
-
-/// Reads Kani's `** <failed> of <total> failed[ (<n> unreachable|undetermined)]` check summary
-/// line, giving `(failed, total)`. Distinct from [`cover_summary`]'s line: this one's suffix is
-/// `" failed"`, that one's is `" cover properties satisfied"`, so the two never match the same
-/// line.
-fn checks_summary(text: &str) -> Option<(u64, u64)> {
-    text.lines().find_map(|line| {
-        let rest = line.trim().strip_prefix("** ")?;
-        let (counts, tail) = rest.split_once(" failed")?;
-        let tail_is_summary = tail.is_empty() || summary_tail_count(tail).is_some();
-        if !tail_is_summary {
-            return None;
-        }
-        let (failed, total) = counts.split_once(" of ")?;
-        Some((failed.parse().ok()?, total.parse().ok()?))
-    })
-}
-
-/// Reads Kani's `** <satisfied> of <total> cover properties satisfied[ (<n> unreachable|undetermined)]` line.
-fn cover_summary(text: &str) -> Option<(u64, u64)> {
-    text.lines().find_map(|line| {
-        let rest = line.trim().strip_prefix("** ")?;
-        let (counts, tail) = rest.split_once(" cover properties satisfied")?;
-        let tail_is_summary = tail.is_empty() || summary_tail_count(tail).is_some();
-        if !tail_is_summary {
-            return None;
-        }
-        let (satisfied, total) = counts.split_once(" of ")?;
-        Some((satisfied.parse().ok()?, total.parse().ok()?))
-    })
-}
-
-/// Extracts the fenced concrete-playback unit test Kani prints for a failed check. Kani also
-/// prints playbacks for satisfied covers; those witness reachability and are not counterexamples.
-fn failure_playback(text: &str) -> Option<String> {
-    let mut rest = text;
-    while let Some(start) = rest.find("Concrete playback unit test") {
-        let tail = &rest[start..];
-        let fence = tail.find("```")?;
-        let body = &tail[fence + 3..];
-        let end = body.find("```")?;
-        let test = body[..end].trim();
-        let is_cover = test
-            .lines()
-            .any(|line| line.starts_with("/// Check for `cover`"));
-        if test.contains("kani::concrete_playback_run") && !is_cover {
-            return Some(test.to_owned());
-        }
-        rest = &body[end + 3..];
-    }
-    None
 }
 
 fn run(tool: KaniTool, program: &Path, arguments: &[&str]) -> Result<String, KaniToolError> {

@@ -93,6 +93,13 @@ and it is stated here because `src/kani_execution.rs` had no owning requirement
   outcome. The argument vector after the `kani` subcommand shall be the harness
   identity's option vector unchanged, so the evidence cannot claim an
   invocation the harness did not specify.
+- The generator shall read the backend's printed output to decide a verdict in
+  exactly one module, `src/kani_transcript.rs`, which returns a typed
+  transcript, and shall classify every run from that transcript's fields and
+  never from text. Kani 0.67.0 publishes no machine-readable verdict, so the
+  wording that module matches is Kani 0.67.0's own and not this repository's.
+  A falsifying playback block is passed through verbatim as the counterexample
+  and decoded by the IR crate's witness parser.
 - The generator shall compute no aggregate verdict over runs.
 - The generator shall retain no evidence of its own, because retention, audit
   and attestation are Quoin's.
@@ -117,6 +124,7 @@ and it is stated here because `src/kani_execution.rs` had no owning requirement
 | FR-017-AC-7 | A crate whose library source does not contain the harness source byte for byte is refused, and no backend runs. | Test (TC-027) |
 | FR-017-AC-8 | The generator computes no aggregate verdict over runs: no function in the execution surface accepts more than one run's evidence or outcome to produce a summary. | Test (TC-027) |
 | FR-017-AC-9 | The generator retains no evidence of its own: the execution surface writes no file. The caller receives the returned evidence and owns its retention. | Test (TC-027) |
+| FR-017-AC-10 | Kani's printed output is read to decide a verdict only in `src/kani_transcript.rs`, into a typed transcript of the verdict banners, the failed checks, the check and cover summaries and the playback tests; real Kani 0.67.0 captures of a verified run, a falsified run with a playback, an exhausted unwind bound, an unreachable cover, a partly satisfied cover and a run with no cover summary each parse to the expected transcript and classify to the expected outcome, and no other non-test source file under `src/` contains the wording; the playback block is passed through verbatim and decoded by the IR crate's witness parser. | Test (TC-027) |
 
 ## Dependencies
 

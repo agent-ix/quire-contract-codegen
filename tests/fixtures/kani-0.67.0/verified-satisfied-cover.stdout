@@ -1,0 +1,80 @@
+Kani Rust Verifier 0.67.0 (cargo plugin)
+Checking harness proofs::verified_satisfied_cover...
+CBMC 6.8.0 (cbmc-6.8.0)
+CBMC version 6.8.0 (cbmc-6.8.0) 64-bit x86_64 linux
+Reading GOTO program from file <CAPTURE_DIR>/fx-target/kani/x86_64-unknown-linux-gnu/debug/deps/fx-635ae6ed0e49f2aa__RNvNtCs2ybxu1UmaZ3_2fx6proofs24verified_satisfied_cover.out
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+Runtime Symex: 0.00149504s
+size of program expression: 134 steps
+simple slicing removed 4 assignments
+Generated 4 VCC(s), 4 remaining after simplification
+Runtime Postprocess Equation: 1.8144e-05s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.000270166s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 6.293e-06s
+Solving with CaDiCaL 2.0.0
+102 variables, 43 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 9.2608e-05s
+Runtime decision procedure: 0.000516945s
+Running propositional reduction
+Solving with CaDiCaL 2.0.0
+103 variables, 44 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 2.4227e-05s
+Runtime decision procedure: 6.0095e-05s
+Running propositional reduction
+Solving with CaDiCaL 2.0.0
+104 variables, 45 clauses
+SAT checker: instance is UNSATISFIABLE
+Runtime Solver: 1.8144e-05s
+Runtime decision procedure: 4.9817e-05s
+
+RESULTS:
+Check 1: proofs::verified_satisfied_cover.cover.1
+	 - Status: SATISFIED
+	 - Description: "x can be three"
+	 - Location: src/lib.rs:7:9 in function proofs::verified_satisfied_cover
+
+Check 2: proofs::verified_satisfied_cover.assertion.1
+	 - Status: SUCCESS
+	 - Description: "assertion failed: x < 10"
+	 - Location: src/lib.rs:8:9 in function proofs::verified_satisfied_cover
+
+
+SUMMARY:
+ ** 0 of 1 failed
+
+ ** 1 of 1 cover properties satisfied
+
+
+VERIFICATION:- SUCCESSFUL
+Verification Time: 0.026755769s
+
+Concrete playback unit test for `proofs::verified_satisfied_cover`:
+```
+/// Test generated for harness `proofs::verified_satisfied_cover` 
+///
+/// Check for `cover`: "x can be three"
+
+#[test]
+fn kani_concrete_playback_verified_satisfied_cover_5434948523632880908() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 3
+        vec![3],
+    ];
+    kani::concrete_playback_run(concrete_vals, verified_satisfied_cover);
+}
+```
+INFO: To automatically add the concrete playback unit test(s) to the src code, run Kani with `--concrete-playback=inplace`.
+INFO: The concrete playback feature never generated unit tests because there were no failing harnesses.
+Manual Harness Summary:
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.
