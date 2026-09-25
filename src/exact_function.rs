@@ -1371,7 +1371,7 @@ fn render_body(declaration: &ExactFunctionDeclaration) -> String {
                  Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),\n            \
                  Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),\n            \
                  Err(refusal) => rt::Outcome::Refused(refusal),\n            \
-                 Ok(_) => unreachable!(\"rt::Outcome gained a variant this generator does not know\"),\n        \
+                 Ok(_) => unreachable!(\"rt::Outcome gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then (Completed, Undefined, Refused, Incomplete) is matched above\"),\n        \
                  }}\n    }}"
             )
         }
@@ -1403,7 +1403,7 @@ fn render_body(declaration: &ExactFunctionDeclaration) -> String {
                  Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),\n            \
                  Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),\n            \
                  Err(refusal) => rt::Outcome::Refused(refusal),\n            \
-                 Ok(_) => unreachable!(\"rt::Outcome gained a variant this generator does not know\"),\n        \
+                 Ok(_) => unreachable!(\"rt::Outcome gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then (Completed, Undefined, Refused, Incomplete) is matched above\"),\n        \
                  }}\n    }}"
             )
         }

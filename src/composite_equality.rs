@@ -1499,7 +1499,7 @@ fn render_composite_declaration(declaration: &CompositeDeclaration) -> String {
                 .collect();
             format!("rt::CompositeShape::Tuple(vec![{rendered}])")
         },
-        &_ => unreachable!("CompositeShape gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
+        &_ => unreachable!("CompositeShape gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     };
     format!(
         "rt::CompositeDeclaration::new({key}, {:?}, {shape})",
@@ -1562,7 +1562,7 @@ fn render_value_type(value_type: &ValueType) -> String {
         ValueType::Reference(_) => {
             unreachable!("reference operands are refused at generation time")
         },
-        &_ => unreachable!("ValueType gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
+        &_ => unreachable!("ValueType gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 

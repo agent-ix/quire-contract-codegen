@@ -599,8 +599,10 @@ pub struct ExactScalarOracles {
 
 /// Generate exact scalar oracles for `items` from an admitted package.
 ///
-/// Fails as a whole only with `SourceTooLarge` or `ClaimMapSerialization`;
-/// every per-item problem is a refusal in the claim map.
+/// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization`, or
+/// `UnknownRuntimeVariant` (`check_parameters` matching an RT
+/// `#[non_exhaustive]` enum against a variant its own exhaustive match does
+/// not know); every per-item problem is a refusal in the claim map.
 pub fn generate_exact_scalar_oracles(
     package: &CheckedPackageV2,
     items: &[ExactScalarItem],
@@ -706,7 +708,15 @@ pub fn generate_exact_scalar_oracles(
                         }
                     }
                 }
-                Err(refusal) => refused_claim(operation_identity(operation), refusal),
+                Err(ItemCheckError::Refusal(refusal)) => {
+                    refused_claim(operation_identity(operation), refusal)
+                }
+                // An RT `#[non_exhaustive]` enum yielded a variant
+                // `check_parameters`'s own exhaustive match does not know:
+                // this is not this one item's business refusal, so it aborts
+                // the whole generation instead (see
+                // `OracleGenerationError::UnknownRuntimeVariant`'s own doc).
+                Err(ItemCheckError::Generation(error)) => return Err(error),
             },
             // Every copy is refused. The entry is named by the least identity
             // so that it does not depend on which copy arrived first.
@@ -769,23 +779,41 @@ type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
 /// The lowered node and the bounds its descriptor was checked against.
 type CheckedItem<'r> = (&'r CompleteContractNodeV2, Vec<CheckedNodeId>);
 
+/// Either [`ExactScalarRefusal`] (a per-item business refusal, folded into
+/// the claim map) or [`OracleGenerationError`] (an RT `#[non_exhaustive]`
+/// enum yielding a variant `check_parameters`'s own exhaustive match does not
+/// know -- see [`OracleGenerationError::UnknownRuntimeVariant`]'s own doc for
+/// why that aborts the whole generation instead of refusing one item).
+enum ItemCheckError {
+    Refusal(ExactScalarRefusal),
+    Generation(OracleGenerationError),
+}
+
+impl From<ExactScalarRefusal> for ItemCheckError {
+    fn from(refusal: ExactScalarRefusal) -> Self {
+        Self::Refusal(refusal)
+    }
+}
+
 fn check_item<'r>(
     graph: &Graph<'_>,
     record: &'r CompleteLoweringRecordV2,
     operation: &ExactScalarOperation,
-) -> Result<CheckedItem<'r>, ExactScalarRefusal> {
+) -> Result<CheckedItem<'r>, ItemCheckError> {
     let node = lowered(record)?;
     if node.node_tag != CheckedNodeTag::Expression {
         return Err(ExactScalarRefusal::NotExpression {
             node_tag: node.node_tag.as_wire(),
-        });
+        }
+        .into());
     }
     let shape = Shape::of(operation);
     if &*node.node.semantic_form != shape.form {
         return Err(ExactScalarRefusal::FormMismatch {
             expected: shape.form,
             found: node.node.semantic_form.to_string(),
-        });
+        }
+        .into());
     }
     let arguments = application_arguments(&node.node.body, shape.body_operator)
         .filter(|arguments| arguments.len() == shape.operands.len())
@@ -798,7 +826,8 @@ fn check_item<'r>(
         return Err(ExactScalarRefusal::ResultTypeMismatch {
             expected: shape.result,
             found: result,
-        });
+        }
+        .into());
     }
     for (position, (argument, expected)) in arguments.iter().zip(shape.operands).enumerate() {
         check_operand(graph, position, argument, *expected)?;
@@ -935,7 +964,7 @@ fn check_parameters(
     graph: &Graph<'_>,
     node: &CompleteContractNodeV2,
     operation: &ExactScalarOperation,
-) -> Result<Vec<CheckedNodeId>, ExactScalarRefusal> {
+) -> Result<Vec<CheckedNodeId>, ItemCheckError> {
     let bounds = Bounds { graph, node };
     let checked = match operation {
         ExactScalarOperation::IntegerArithmetic { domain, .. }
@@ -944,7 +973,13 @@ fn check_parameters(
             let declared = match domain {
                 IntegerDomain::Bounded(interval) => Some(interval),
                 IntegerDomain::Mathematical => None,
-                &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                &_ => {
+                    return Err(ItemCheckError::Generation(
+                        OracleGenerationError::UnknownRuntimeVariant {
+                            enum_name: "IntegerDomain",
+                        },
+                    ))
+                }
             };
             bounds.equal(BoundForm::IntegerRange, read_integer_range, declared)?
         }
@@ -978,8 +1013,14 @@ fn check_parameters(
             // caller-declared with the operation.
             QuantityTarget::Integer { domain, .. } => {
                 bounds.equal(BoundForm::IntegerRange, read_integer_range, Some(domain))?
-            },
-            &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
+            }
+            &_ => {
+                return Err(ItemCheckError::Generation(
+                    OracleGenerationError::UnknownRuntimeVariant {
+                        enum_name: "QuantityTarget",
+                    },
+                ))
+            }
         },
         ExactScalarOperation::Ordering { .. }
         | ExactScalarOperation::IeeeComparison { .. }
@@ -1472,7 +1513,7 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
                 (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
                     "quire.op.ieee.float64.div"
                 },
-                (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
+                (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             };
             with_rounding(identity, *rounding)
         }
@@ -1910,7 +1951,7 @@ impl SourceBuilder {
             IntegerDomain::Bounded(interval) => {
                 format!("rt::IntegerDomain::Bounded({})", self.interval(interval))
             },
-            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
+            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 
