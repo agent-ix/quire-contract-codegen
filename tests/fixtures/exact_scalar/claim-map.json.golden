@@ -3,7 +3,7 @@
   "package_id": {
     "domain": "quire.package.semantic/v2",
     "algorithm": "sha256",
-    "digest": "603d5c70bab3a37e0087c35a0180056a0e907007c78b411693863ee9e9b2f432"
+    "digest": "5735c4dd3a199a3f71a58fc2b78659bd539ae8dba877c88d5c5430c7bb1fb65d"
   },
   "runtime_revision": "c52442a56a879cb5ce02a63bcbe430b85bf74a6d",
   "blocked": [],
@@ -213,8 +213,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 105,
-                "end": 106
+                "start": 106,
+                "end": 107
               }
             ]
           }
@@ -336,8 +336,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 60,
-                "end": 61
+                "start": 61,
+                "end": 62
               }
             ]
           }
@@ -439,8 +439,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 123,
-                "end": 124
+                "start": 124,
+                "end": 125
               }
             ]
           }
@@ -561,8 +561,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 76,
-                "end": 77
+                "start": 77,
+                "end": 78
               }
             ]
           }
@@ -664,8 +664,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 118,
-                "end": 119
+                "start": 119,
+                "end": 120
               }
             ]
           }
@@ -753,8 +753,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 43,
-                "end": 44
+                "start": 44,
+                "end": 45
               }
             ]
           }
@@ -844,8 +844,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 100,
-                "end": 101
+                "start": 101,
+                "end": 102
               }
             ]
           }
@@ -935,7 +935,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "52590134e613cefda747c3bf103ffcaf7e762724bbb1224ebfef6cdbbf03967d"
+          "digest": "12cfffd5702fa36a7ab94d08c3b7a893aeed009926b96adf16efc06921bba243"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -962,22 +962,13 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 30,
-                "end": 31
+                "start": 31,
+                "end": 32
               }
             ]
           }
         ],
-        "claims": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
-          }
-        ],
+        "claims": [],
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -997,15 +988,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
             "digest": "426381b187171e9231aa3f1a8d84d98b1bf722cf8c15027e0fcce70f3ae6855b"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1101,8 +1084,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 77,
-                "end": 78
+                "start": 78,
+                "end": 79
               }
             ]
           }
@@ -1170,8 +1153,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 35,
-                "end": 36
+                "start": 36,
+                "end": 37
               }
             ]
           }
@@ -1249,8 +1232,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 114,
-                "end": 115
+                "start": 115,
+                "end": 116
               }
             ]
           }
@@ -1318,8 +1301,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 50,
-                "end": 51
+                "start": 51,
+                "end": 52
               }
             ]
           }
@@ -1420,8 +1403,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 109,
-                "end": 110
+                "start": 110,
+                "end": 111
               }
             ]
           }
@@ -1510,8 +1493,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 42,
-                "end": 43
+                "start": 43,
+                "end": 44
               }
             ]
           }
@@ -1601,8 +1584,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 62,
-                "end": 63
+                "start": 63,
+                "end": 64
               }
             ]
           }
@@ -1700,7 +1683,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "44ae5b6ee59611c792fbda9e2643b8b359dfe8610346d56e0c47bebcbec6ef85"
+          "digest": "812dafcac94ffd5116ac4e7589d089c449b2ac36b4deefdd9bbf6e16061f2807"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1727,22 +1710,13 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 52,
-                "end": 53
+                "start": 53,
+                "end": 54
               }
             ]
           }
         ],
-        "claims": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
-          }
-        ],
+        "claims": [],
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1761,15 +1735,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
             "digest": "426381b187171e9231aa3f1a8d84d98b1bf722cf8c15027e0fcce70f3ae6855b"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1795,7 +1761,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "cf24c30e37eb3971766d36f58b9f10eeffa076e8a2ded65853d54a03d991df3b"
+          "digest": "22355ea10b7313976f1b3e523dd126fb158f9f03ab59a7a0446a419ca7cbb317"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -1822,22 +1788,13 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 102,
-                "end": 103
+                "start": 103,
+                "end": 104
               }
             ]
           }
         ],
-        "claims": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
-          }
-        ],
+        "claims": [],
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1880,10 +1837,6 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
             "digest": "426381b187171e9231aa3f1a8d84d98b1bf722cf8c15027e0fcce70f3ae6855b"
           },
           {
@@ -1901,10 +1854,6 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -1961,8 +1910,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 122,
-                "end": 123
+                "start": 123,
+                "end": 124
               }
             ]
           }
@@ -2083,8 +2032,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 51,
-                "end": 52
+                "start": 52,
+                "end": 53
               }
             ]
           }
@@ -2173,8 +2122,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 73,
-                "end": 74
+                "start": 74,
+                "end": 75
               }
             ]
           }
@@ -2276,8 +2225,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 83,
-                "end": 84
+                "start": 84,
+                "end": 85
               }
             ]
           }
@@ -2366,8 +2315,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 40,
-                "end": 41
+                "start": 41,
+                "end": 42
               }
             ]
           }
@@ -2457,8 +2406,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 78,
-                "end": 79
+                "start": 79,
+                "end": 80
               }
             ]
           }
@@ -2526,8 +2475,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 119,
-                "end": 120
+                "start": 120,
+                "end": 121
               }
             ]
           }
@@ -2648,8 +2597,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 121,
-                "end": 122
+                "start": 122,
+                "end": 123
               }
             ]
           }
@@ -2743,7 +2692,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "6be13db7885c763af532f309c083ecfb364bc3bfc538dba6c2a6bc71b41f1b46"
+          "digest": "95017a2e4d1daa1c624cc0d0a4e12e784d52d9831d8a5252146750b89d93cab3"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2770,22 +2719,13 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 29,
-                "end": 30
+                "start": 30,
+                "end": 31
               }
             ]
           }
         ],
-        "claims": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
-          }
-        ],
+        "claims": [],
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -2805,15 +2745,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
             "digest": "426381b187171e9231aa3f1a8d84d98b1bf722cf8c15027e0fcce70f3ae6855b"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -2866,8 +2798,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 61,
-                "end": 62
+                "start": 62,
+                "end": 63
               }
             ]
           }
@@ -2942,7 +2874,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "3d8e37a4cd1a479f13af25fe8d6aac005edc3229943ad1904125bf915f17f926"
+          "digest": "aaaadfea21a916dd0d00bebd08feacb4b7cd97aaa9d60cb997084c0d503ad0a7"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -2969,22 +2901,13 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 53,
-                "end": 54
+                "start": 54,
+                "end": 55
               }
             ]
           }
         ],
-        "claims": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
-          }
-        ],
+        "claims": [],
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3003,15 +2926,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
             "digest": "426381b187171e9231aa3f1a8d84d98b1bf722cf8c15027e0fcce70f3ae6855b"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3037,7 +2952,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "30d5ea52267ee045a9109332bc6816a909196b1e76ee7859a670d372f72b2684"
+          "digest": "72a0aebf4133f8c4654834ffcd37d67e6bfeed2e2028cfac770a0493ce688047"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -3064,22 +2979,13 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 46,
-                "end": 47
+                "start": 47,
+                "end": 48
               }
             ]
           }
         ],
-        "claims": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
-          }
-        ],
+        "claims": [],
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3098,15 +3004,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
             "digest": "426381b187171e9231aa3f1a8d84d98b1bf722cf8c15027e0fcce70f3ae6855b"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3159,8 +3057,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 117,
-                "end": 118
+                "start": 118,
+                "end": 119
               }
             ]
           }
@@ -3245,8 +3143,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 45,
-                "end": 46
+                "start": 46,
+                "end": 47
               }
             ]
           }
@@ -3284,102 +3182,6 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "afbb3477e670530355d6bf8d4b00df5a17a7024bc88822fcc7ffb610c93ae17e"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "df6b5c19eb70bde319ff2252ceb81a5ccf03b60fe3f6a80bc1fa5f2fbab832bd"
-          }
-        ]
-      }
-    },
-    {
-      "node_id": {
-        "domain": "quire.checked-semantic-node/v1",
-        "digest": "6d2d74cb2fd12eac568cc46765d5dbeb1cca952e9c2e0f5198df351d7e78c86b"
-      },
-      "operation": {
-        "identity": "quire.op.integer.sub",
-        "provenance": {
-          "kind": "ir_confirmed"
-        }
-      },
-      "result": {
-        "disposition": "generated",
-        "symbol": "oracle_6d2d74cb2fd12eac568cc46765d5dbeb1cca952e9c2e0f5198df351d7e78c86b",
-        "ir_id": {
-          "domain": "quire.contract-ir.semantic/v1",
-          "algorithm": "sha256",
-          "digest": "2d9fe2ceaf510851484de2c35cf4d583acd2ed8551995465169b136eeee50017"
-        },
-        "semantic_form": "binary",
-        "semantic_type": {
-          "domain": "quire.checked-semantic-node/v1",
-          "digest": "0000000000000000000000000000000000000000000000000000000000000002"
-        },
-        "source_map": [
-          {
-            "node_id": {
-              "domain": "quire.checked-semantic-node/v1",
-              "digest": "6d2d74cb2fd12eac568cc46765d5dbeb1cca952e9c2e0f5198df351d7e78c86b"
-            },
-            "role": "declaration",
-            "ordinal": 0,
-            "regions": [
-              {
-                "source": {
-                  "authority": "agent-ix",
-                  "identity": "example",
-                  "revision": {
-                    "namespace": "git",
-                    "value": "1"
-                  },
-                  "digest_domain": "quire.source.bytes/v1",
-                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
-                },
-                "start": 27,
-                "end": 28
-              }
-            ]
-          }
-        ],
-        "claims": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
-          }
-        ],
-        "bounds": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "df6b5c19eb70bde319ff2252ceb81a5ccf03b60fe3f6a80bc1fa5f2fbab832bd"
-          }
-        ],
-        "checked_bounds": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "df6b5c19eb70bde319ff2252ceb81a5ccf03b60fe3f6a80bc1fa5f2fbab832bd"
-          }
-        ],
-        "dependencies": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "426381b187171e9231aa3f1a8d84d98b1bf722cf8c15027e0fcce70f3ae6855b"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -3432,8 +3234,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 37,
-                "end": 38
+                "start": 38,
+                "end": 39
               }
             ]
           }
@@ -3546,8 +3348,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 112,
-                "end": 113
+                "start": 113,
+                "end": 114
               }
             ]
           }
@@ -3636,8 +3438,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 66,
-                "end": 67
+                "start": 67,
+                "end": 68
               }
             ]
           }
@@ -3691,6 +3493,102 @@
           {
             "domain": "quire.checked-semantic-node/v1",
             "digest": "fb564e9755c5e1109a81edb55b5c4c50868cbd7fc3b789e0230ad7ef287146c6"
+          }
+        ]
+      }
+    },
+    {
+      "node_id": {
+        "domain": "quire.checked-semantic-node/v1",
+        "digest": "866cc8dd35af91e6f71645410137ecdb848c6d89c607ad1c74ba6f641ad54e51"
+      },
+      "operation": {
+        "identity": "quire.op.integer.sub",
+        "provenance": {
+          "kind": "ir_confirmed"
+        }
+      },
+      "result": {
+        "disposition": "generated",
+        "symbol": "oracle_866cc8dd35af91e6f71645410137ecdb848c6d89c607ad1c74ba6f641ad54e51",
+        "ir_id": {
+          "domain": "quire.contract-ir.semantic/v1",
+          "algorithm": "sha256",
+          "digest": "43435fa0fc63c3bd4a430b323528c0cd3d3ab426748549dc793f6fbe63616cc9"
+        },
+        "semantic_form": "binary",
+        "semantic_type": {
+          "domain": "quire.checked-semantic-node/v1",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "source_map": [
+          {
+            "node_id": {
+              "domain": "quire.checked-semantic-node/v1",
+              "digest": "866cc8dd35af91e6f71645410137ecdb848c6d89c607ad1c74ba6f641ad54e51"
+            },
+            "role": "declaration",
+            "ordinal": 0,
+            "regions": [
+              {
+                "source": {
+                  "authority": "agent-ix",
+                  "identity": "example",
+                  "revision": {
+                    "namespace": "git",
+                    "value": "1"
+                  },
+                  "digest_domain": "quire.source.bytes/v1",
+                  "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "start": 28,
+                "end": 29
+              }
+            ]
+          }
+        ],
+        "claims": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
+          }
+        ],
+        "bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "df6b5c19eb70bde319ff2252ceb81a5ccf03b60fe3f6a80bc1fa5f2fbab832bd"
+          }
+        ],
+        "checked_bounds": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "df6b5c19eb70bde319ff2252ceb81a5ccf03b60fe3f6a80bc1fa5f2fbab832bd"
+          }
+        ],
+        "dependencies": [
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "c2c8640e729863399299ad897c6bd16a0ac43502f8ab093572c9c735b5e20651"
+          },
+          {
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "df6b5c19eb70bde319ff2252ceb81a5ccf03b60fe3f6a80bc1fa5f2fbab832bd"
           }
         ]
       }
@@ -3787,8 +3685,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 101,
-                "end": 102
+                "start": 102,
+                "end": 103
               }
             ]
           }
@@ -3905,8 +3803,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 69,
-                "end": 70
+                "start": 70,
+                "end": 71
               }
             ]
           }
@@ -4030,8 +3928,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 57,
-                "end": 58
+                "start": 58,
+                "end": 59
               }
             ]
           }
@@ -4133,8 +4031,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 72,
-                "end": 73
+                "start": 73,
+                "end": 74
               }
             ]
           }
@@ -4240,8 +4138,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 113,
-                "end": 114
+                "start": 114,
+                "end": 115
               }
             ]
           }
@@ -4330,8 +4228,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 116,
-                "end": 117
+                "start": 117,
+                "end": 118
               }
             ]
           }
@@ -4415,8 +4313,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 70,
-                "end": 71
+                "start": 71,
+                "end": 72
               }
             ]
           }
@@ -4484,8 +4382,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 84,
-                "end": 85
+                "start": 85,
+                "end": 86
               }
             ]
           }
@@ -4598,8 +4496,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 115,
-                "end": 116
+                "start": 116,
+                "end": 117
               }
             ]
           }
@@ -4667,8 +4565,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 111,
-                "end": 112
+                "start": 112,
+                "end": 113
               }
             ]
           }
@@ -4730,7 +4628,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "c42f6122566af3a250681c5ab17118519eb0e617d6f32ad52bfebb03e3e0724f"
+          "digest": "f7dec4cfca273befa2ad3645337fa7edb466cd4b7192b423de9fe0a219d07636"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -4757,22 +4655,13 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 31,
-                "end": 32
+                "start": 32,
+                "end": 33
               }
             ]
           }
         ],
-        "claims": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
-          }
-        ],
+        "claims": [],
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -4792,15 +4681,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
             "digest": "426381b187171e9231aa3f1a8d84d98b1bf722cf8c15027e0fcce70f3ae6855b"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -4924,8 +4805,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 103,
-                "end": 104
+                "start": 104,
+                "end": 105
               }
             ]
           }
@@ -5046,8 +4927,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 107,
-                "end": 108
+                "start": 108,
+                "end": 109
               }
             ]
           }
@@ -5164,8 +5045,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 96,
-                "end": 97
+                "start": 97,
+                "end": 98
               }
             ]
           }
@@ -5251,8 +5132,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 34,
-                "end": 35
+                "start": 35,
+                "end": 36
               }
             ]
           }
@@ -5349,8 +5230,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 87,
-                "end": 88
+                "start": 88,
+                "end": 89
               }
             ]
           }
@@ -5436,8 +5317,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 108,
-                "end": 109
+                "start": 109,
+                "end": 110
               }
             ]
           }
@@ -5554,8 +5435,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 106,
-                "end": 107
+                "start": 107,
+                "end": 108
               }
             ]
           }
@@ -5650,7 +5531,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "7db0e9f726410bc3422a62ea851c5b97aa3639ddd1347102b23263b7d719fad9"
+          "digest": "d181829c93a491e3dde725acc37b497dc34a16130b9474ab6c50a9cb749f4044"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -5683,16 +5564,7 @@
             ]
           }
         ],
-        "claims": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
-          }
-        ],
+        "claims": [],
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -5712,15 +5584,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
             "digest": "426381b187171e9231aa3f1a8d84d98b1bf722cf8c15027e0fcce70f3ae6855b"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
           },
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -5773,8 +5637,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 63,
-                "end": 64
+                "start": 64,
+                "end": 65
               }
             ]
           }
@@ -5876,8 +5740,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 93,
-                "end": 94
+                "start": 94,
+                "end": 95
               }
             ]
           }
@@ -5987,8 +5851,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 54,
-                "end": 55
+                "start": 55,
+                "end": 56
               }
             ]
           }
@@ -6090,8 +5954,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 90,
-                "end": 91
+                "start": 91,
+                "end": 92
               }
             ]
           }
@@ -6256,8 +6120,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 81,
-                "end": 82
+                "start": 82,
+                "end": 83
               }
             ]
           }
@@ -6343,8 +6207,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 120,
-                "end": 121
+                "start": 121,
+                "end": 122
               }
             ]
           }
@@ -6465,8 +6329,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 110,
-                "end": 111
+                "start": 111,
+                "end": 112
               }
             ]
           }
@@ -6555,8 +6419,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 44,
-                "end": 45
+                "start": 45,
+                "end": 46
               }
             ]
           }
@@ -6667,8 +6531,8 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 99,
-                "end": 100
+                "start": 100,
+                "end": 101
               }
             ]
           }
@@ -6748,7 +6612,7 @@
         "ir_id": {
           "domain": "quire.contract-ir.semantic/v1",
           "algorithm": "sha256",
-          "digest": "44ed366c1bbddd775b6c6dfa43bae6143812eec4dd74a3447cb16721fabda462"
+          "digest": "9e083df24538490c25cc9cd8700428d1fa26ed886609a3bcf94e91d6d40dbbc4"
         },
         "semantic_form": "binary",
         "semantic_type": {
@@ -6775,22 +6639,13 @@
                   "digest_domain": "quire.source.bytes/v1",
                   "digest": "2222222222222222222222222222222222222222222222222222222222222222"
                 },
-                "start": 28,
-                "end": 29
+                "start": 29,
+                "end": 30
               }
             ]
           }
         ],
-        "claims": [
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
-          }
-        ],
+        "claims": [],
         "bounds": [
           {
             "domain": "quire.checked-semantic-node/v1",
@@ -6810,15 +6665,7 @@
           },
           {
             "domain": "quire.checked-semantic-node/v1",
-            "digest": "385b837313b4ac7a613348e504ac2e43d6deff1a20b6508b32ac2aad741d6698"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
             "digest": "426381b187171e9231aa3f1a8d84d98b1bf722cf8c15027e0fcce70f3ae6855b"
-          },
-          {
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "ba3c0c50b3e89cc4e0fd9fd3a587b139f88e507bf166bd0146d341126ce6441c"
           },
           {
             "domain": "quire.checked-semantic-node/v1",

@@ -597,12 +597,46 @@ impl PackageBuilder {
     /// keyed by `(form, bound_keys)` so expressions sharing the identical
     /// bound set still safely share one anchor, exactly as before.
     pub fn dedicated_operand(&mut self, form: &str, bound_keys: &[String]) -> String {
+        self.dedicated_operand_impl(form, bound_keys, None)
+    }
+
+    /// As [`Self::dedicated_operand`], but salted with `tag` so a caller that
+    /// needs an anchor nothing else in the corpus can ever share -- not even
+    /// another expression with the identical `(form, bound_keys)` pair --
+    /// can force a distinct digest without inventing a new bound. Used by
+    /// `LITERAL_OPERAND`'s own anchor (see its call site's doc): without a
+    /// salt, `LITERAL_OPERAND`'s `dedicated_operand("integer", [INT])` call
+    /// collides with every other corpus expression that shares the identical
+    /// `INT` bound set, so `CLAIM`/`CLAIM_ALT` -- wired as dependencies of
+    /// that one anchor -- became reachable from all of them too.
+    pub fn dedicated_operand_tagged(
+        &mut self,
+        form: &str,
+        bound_keys: &[String],
+        tag: &str,
+    ) -> String {
+        self.dedicated_operand_impl(form, bound_keys, Some(tag))
+    }
+
+    /// Shared implementation of [`Self::dedicated_operand`] and
+    /// [`Self::dedicated_operand_tagged`]. `tag: None` reproduces the
+    /// original untagged digest preimage exactly (a 3-element array), so
+    /// every pre-existing call site keeps its original node id; only a
+    /// caller that opts into `dedicated_operand_tagged` gets the salted,
+    /// 4-element preimage and thus a new, distinct digest.
+    fn dedicated_operand_impl(
+        &mut self,
+        form: &str,
+        bound_keys: &[String],
+        tag: Option<&str>,
+    ) -> String {
         let mut sorted_keys = bound_keys.to_vec();
         sorted_keys.sort();
-        let digest = sha256_hex(
-            &serde_json::to_vec(&json!(["dedicated-operand", form, sorted_keys]))
-                .expect("dedicated operand key"),
-        );
+        let preimage = match tag {
+            Some(tag) => json!(["dedicated-operand", form, sorted_keys, tag]),
+            None => json!(["dedicated-operand", form, sorted_keys]),
+        };
+        let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("dedicated operand key"));
         if self.dedicated_operands.insert(digest.clone()) {
             let (kind, value, ty) = match form {
                 "integer" => ("integer", "3", key(T_INTEGER)),
@@ -2222,6 +2256,22 @@ pub fn corpus_package() -> PackageBuilder {
             .map(|form| {
                 let node = if bound_keys.is_empty() || matches!(*form, "enum" | "unit") {
                     operand(form)
+                } else if expression.code == LITERAL_OPERAND {
+                    // `LITERAL_OPERAND` needs an anchor nothing else in the
+                    // corpus can ever share, because `CLAIM`/`CLAIM_ALT` are
+                    // wired as dependencies of this exact node further below.
+                    // The plain `dedicated_operand` call is keyed only by
+                    // `(form, bound_keys)`, and nine other bounded-integer
+                    // corpus expressions (add, mul, lt, le, ge, the three
+                    // division profiles, and `quantity.pow`) share the
+                    // identical `("integer", [INT])` pair, so without this
+                    // salt `CLAIM`/`CLAIM_ALT` would be reachable from all of
+                    // them too, not just from `LITERAL_OPERAND`.
+                    builder.dedicated_operand_tagged(
+                        form,
+                        &bound_keys,
+                        "literal-operand-claim-anchor",
+                    )
                 } else {
                     builder.dedicated_operand(form, &bound_keys)
                 };
@@ -2805,12 +2855,21 @@ pub fn corpus_package() -> PackageBuilder {
     // above already gave it a bound-dedicated operand instead, to keep other
     // expressions' bounds from unioning onto `V_INTEGER`'s closure) -- so
     // this recomputes that same dedicated node rather than naming `V_INTEGER`
-    // directly. Either way the anchor is a `value`/`literal` node the join
-    // constraint does not cover, so both claims stay reachable from
-    // `LITERAL_OPERAND`'s own closure: `LITERAL_OPERAND -> dedicated -> CLAIM`.
+    // directly. It must not, however, be the *same* `dedicated_operand`
+    // digest the main corpus loop already gave `LITERAL_OPERAND`: that call
+    // is keyed only by `(form, bound_keys)`, and every other corpus
+    // expression that also carries the plain `INT` bound (integer add, mul,
+    // lt, le, ge, the three division profiles, and `quantity.pow` -- nine
+    // items) hashes to the identical digest, so `CLAIM`/`CLAIM_ALT` -- wired
+    // below as dependencies of this one anchor -- were reachable from all of
+    // them too, not just from `LITERAL_OPERAND`. `dedicated_operand_tagged`
+    // salts this specific anchor so it cannot collide with the shared one.
+    // Either way the anchor is a `value`/`literal` node the join constraint
+    // does not cover, so both claims stay reachable from `LITERAL_OPERAND`'s
+    // own closure: `LITERAL_OPERAND -> dedicated -> CLAIM`.
     let literal_operand_anchor = {
         let bound_key = builder.bound(&INT);
-        builder.dedicated_operand("integer", &[bound_key])
+        builder.dedicated_operand_tagged("integer", &[bound_key], "literal-operand-claim-anchor")
     };
     builder.add_dependency(&literal_operand_anchor, code_id(CLAIM).digest.as_ref());
     builder.add_dependency(&literal_operand_anchor, code_id(CLAIM_ALT).digest.as_ref());

@@ -54,10 +54,10 @@ use generated::{
     oracle_6b628cd4c20ad67f0c7921d53d18aa61bf40f9ed94cb40f686ef6bf59d54cb3b as integer_less, // code 1041
     oracle_6bf6f9dec50f69449bb65eee6a7aee2280985580471bd1e3e01bae3076dd4f90 as enum_greater, // code 1124
     oracle_6cc0e720ead1fff602d6cc9b92ecc0c34b80baf07563239645e83655872dc750 as rational_negate, // code 1036
-    oracle_6d2d74cb2fd12eac568cc46765d5dbeb1cca952e9c2e0f5198df351d7e78c86b as integer_subtract, // code 1003
     oracle_6d59babb09369322f471a07dafb1134b6175f9311392e7fc5883dfc5b7b10719 as rational_add, // code 1031
     oracle_6fa221ce7a3bd000c7c135e11fe32a4a3edefeff9802c9ffc9f7a3e726c51beb as text_greater, // code 1114
     oracle_7c4473ce8ba46c649cf546783a46291e1a9eccce3a8bf3735b19012e9c97aacd as binary32_add, // code 1061
+    oracle_866cc8dd35af91e6f71645410137ecdb848c6d89c607ad1c74ba6f641ad54e51 as integer_subtract, // code 1003
     oracle_908706f2cdab4b62bc1d0265da8c292e3c383482a4944634f7998c7038207a33 as quantity_multiply, // code 1082
     oracle_983f74537b7d2dc7c879fecf913212294b55c86ba7ba7d32ed74f06c957c6ba4 as binary64_divide, // code 1062
     oracle_9dd795abc2b4ae969fcfc06143ff1dbb2b72a7ff5f30cbfa6f6b80340c8877e9 as decimal_divide, // code 1052
