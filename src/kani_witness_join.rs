@@ -254,12 +254,38 @@ fn kani_concrete_playback_synthetic() {{\n\
         )
     }
 
+    /// Like [`synthetic_transcript`], with a second concrete value: an `i64` followed by a
+    /// `Boolean`, each preceded by Kani's own decoded-value comment.
+    fn two_value_transcript(qualified_harness_symbol: &str, first: i64, second: bool) -> String {
+        let bytes = first
+            .to_le_bytes()
+            .iter()
+            .map(u8::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "/// Test generated for harness `{qualified_harness_symbol}`\n\
+/// Check for `assertion`: \"synthetic assertion\"\n\
+#[test]\n\
+fn kani_concrete_playback_synthetic() {{\n\
+    let concrete_vals: Vec<Vec<u8>> = vec![\n\
+        // {first}\n\
+        vec![{bytes}],\n\
+        // {second}\n\
+        vec![{flag}],\n\
+    ];\n\
+    kani::concrete_playback_run(concrete_vals, synthetic);\n\
+}}\n",
+            flag = u8::from(second),
+        )
+    }
+
     /// A transcript whose value count or byte width disagrees with the
     /// persisted schema refuses by name rather than decoding: one `i64`
     /// value against a two-argument schema is an arity mismatch, and against
     /// a one-`Boolean` schema is a width mismatch.
     ///
-    /// Trace: FR-016-AC-1, TC-026
+    /// Trace: TC-026
     #[test]
     fn decode_falsification_refuses_arity_and_width_mismatches() {
         let transcript = synthetic_transcript("mod::harness_ok", 42);
@@ -289,7 +315,7 @@ fn kani_concrete_playback_synthetic() {{\n\
     /// decodes the same value `witness_schema` + `Witness::parse` + `Witness::decode` would,
     /// called separately.
     ///
-    /// Trace: FR-016-AC-1, TC-026
+    /// Trace: TC-026
     #[test]
     fn decode_falsification_decodes_a_matching_transcript() {
         let arguments = vec![argument("value", KaniPrimitiveType::I64)];
@@ -308,7 +334,7 @@ fn kani_concrete_playback_synthetic() {{\n\
     /// transcript actually names (see the module doc) — `decode_falsification` is the join that
     /// adds that comparison, so this is the only place in the crate that can refuse it.
     ///
-    /// Trace: FR-016-AC-5, TC-026
+    /// Trace: TC-026
     #[test]
     fn decode_falsification_refuses_a_transcript_whose_harness_symbol_disagrees() {
         let arguments = vec![argument("value", KaniPrimitiveType::I64)];
@@ -329,5 +355,29 @@ fn kani_concrete_playback_synthetic() {{\n\
         );
         assert_eq!(error.source_id, "mod::sibling_harness");
         assert_eq!(error.context, "mod::harness_ok");
+    }
+
+    /// Naming is by position with two or more values: the first decoded value takes the first
+    /// binding's identifier and the second takes the second's, so a swapped or shifted pairing
+    /// changes the result. A `Boolean` is placed after an `i64` so the two positions also differ
+    /// in width and cannot be confused by value alone.
+    ///
+    /// Trace: FR-016-AC-8, TC-026
+    #[test]
+    fn decode_falsification_names_each_value_by_its_binding_position() {
+        let arguments = vec![
+            argument("amount", KaniPrimitiveType::I64),
+            argument("flag", KaniPrimitiveType::Boolean),
+        ];
+        let transcript = two_value_transcript("mod::harness_ok", 42, true);
+        let decoded = decode_falsification("harness_ok", "mod", &arguments, &transcript)
+            .expect("a two-value transcript decodes against a two-binding schema");
+        assert_eq!(
+            decoded,
+            vec![
+                ("amount".to_owned(), WitnessValue::Integer(42)),
+                ("flag".to_owned(), WitnessValue::Boolean(true)),
+            ]
+        );
     }
 }

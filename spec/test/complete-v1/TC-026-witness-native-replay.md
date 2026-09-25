@@ -29,18 +29,29 @@ disagree with the harness, and a witness whose native replay is unavailable.
 ## Expected Results
 
 The schema follows the persisted argument order, which is the emission
-order, and refuses the non-argument binding. The real transcript decodes to
-values named by their bindings, and the dropped and retyped schemas refuse by
-arity and width. Only the reproducing witness is reported as a failure; the
-others yield malformed (three cases), out-of-domain, mismatch and unavailable
-results respectively.
+order the harness uses, and refuses the non-argument binding with a typed
+schema refusal (`InvalidInput`, code `cg_witness_schema_non_argument_binding`) that
+reports no failure and is none of the five replay results.
+The real transcript decodes to values named by their bindings, and the dropped
+and retyped schemas refuse by arity and width. Only the reproducing witness is
+reported as a failure; the others yield malformed (three cases), out-of-domain,
+mismatch and unavailable results respectively.
 
 ## Status
 
-Partial. The default suite covers the schema cases, a matching decode, the
-arity and width refusals and the harness-identity refusal
-(`src/kani_witness_join.rs` unit tests, `tests/it/kani_argument_order.rs`). The
-real-backend decode, with arity and width refusals against a real Kani
-falsification, runs in the ignored Kani lane (`tests/it/kani_witness_join.rs`).
-Pin binding, the decode size limit, domain validation and native replay are
-planned.
+Partial. FR-016-AC-8 is implemented and tested in the default suite: schema
+order and naming by position (`src/kani_witness_join.rs` unit tests) and the
+harness emission order (`tests/it/kani_argument_order.rs`); the real-backend
+decode runs in the ignored Kani lane (`tests/it/kani_witness_join.rs`).
+
+FR-016-AC-1 and FR-016-AC-5 are planned. The witness join reports every one of
+its refusals as a `KaniOutcome` refusal code rather than as FR-016's
+malformed-witness replay result, which does not exist yet. That covers the
+harness-identity refusal (`cg_witness_harness_identity_mismatch`, kind
+`Refused`), the arity and width refusals, the schema refusal, and the
+Boolean-byte and comment refusals (kind `InvalidInput`); the arity and width
+refusals are tested in the default suite and against a real falsification in
+the ignored lane, and the others are tested only by quire-contract-ir's own
+`Witness::decode` tests. Binding to the harness pins (AC-5), the decode size
+limit (AC-6), domain validation (AC-2) and native replay (AC-3, AC-4, AC-7)
+are also planned.
