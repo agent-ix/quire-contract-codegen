@@ -358,10 +358,10 @@ fn persisted_arguments(record: &Value) -> Vec<ObligationBinding> {
 /// and separately changes a declared primitive type (hence byte width) — and shows the decode
 /// refuses by name both times, against the very same transcript that decoded cleanly.
 ///
-/// Trace: IR-211.
+/// Trace: FR-016-AC-8, TC-026.
 #[test]
 #[ignore = "kani lane: run serially through `cargo test --test it kani_witness_join -- --ignored`"]
-fn ir_211_real_falsification_decodes_against_the_persisted_schema_and_mutation_refuses() {
+fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_refuses() {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let pins = installation.observe().expect("the backend is measurable");
     assert_eq!(

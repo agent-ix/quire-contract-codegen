@@ -42,6 +42,18 @@ failure is reported. This is issue #50.
   bound to the identity and pins of the harness being replayed, and decode
   each witness value into its declared complete-V1 scalar type within the
   decode size limit.
+- The generator shall decode a witness against the harness's own persisted
+  obligation schema: the obligation's argument bindings, in the order the
+  obligation persists them, typed position for position against the
+  harness's symbolic arguments, and shall name each decoded value by the
+  binding at its position. The harness emits its symbolic arguments in that
+  same persisted order (FR-015).
+- If an obligation binding is not an argument, then the generator shall refuse
+  the witness schema with a typed schema refusal that reports no failure. The
+  refusal is a fault in the schema, not in the witness, so it is not one of
+  the five replay results. A binding that is not an argument has no symbolic
+  position, and typing it would mistype a position that does not exist in the
+  witness bytes.
 - If a witness is bound to a different harness identity or pins, fails to
   decode, or exceeds the decode size limit, then the generator shall report a
   malformed witness and shall not report a failure.
@@ -65,6 +77,7 @@ failure is reported. This is issue #50.
 | FR-016-AC-5 | A witness bound to a different harness identity or pins is reported as malformed and never replayed. | Test (TC-026) |
 | FR-016-AC-6 | A witness over the decode size limit is reported as malformed without decoding past the limit. | Test (TC-026) |
 | FR-016-AC-7 | A native replay that matches the harness value but differs in admitted charges, consumed counters or limits yields a typed mismatch. | Test (TC-026) |
+| FR-016-AC-8 | A witness schema binds the obligation's persisted argument bindings, in the order the obligation persists them, position for position to the harness's symbolic arguments, and each decoded value is named by the binding at its position; a binding that is not an argument is refused with a typed schema refusal that reports no failure and is none of the five replay results. | Test (TC-026) |
 
 ## Dependencies
 
