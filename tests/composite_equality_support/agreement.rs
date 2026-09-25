@@ -143,26 +143,6 @@ macro_rules! shared_helpers {
             (outcome, meter.admitted_charges().to_vec(), consumed)
         }
 
-        /// The Contract Runtime's `InjectedDenial::occurrence` is a
-        /// `NonZeroU64` (deliberately, so a malformed 0-based request cannot
-        /// compile). Only the `NonZeroU64` impl is exercised now that
-        /// `shared_helpers!` expands into `rt_side` alone (see the module
-        /// doc), but the trait stays generic so [`denials`] still builds the
-        /// field's value the same way it did with two expansions.
-        trait DenialOccurrence {
-            fn denial_occurrence(n: u64) -> Self;
-        }
-        impl DenialOccurrence for u64 {
-            fn denial_occurrence(n: u64) -> Self {
-                n
-            }
-        }
-        impl DenialOccurrence for core::num::NonZeroU64 {
-            fn denial_occurrence(n: u64) -> Self {
-                core::num::NonZeroU64::new(n).unwrap()
-            }
-        }
-
         /// Deny each admitted charge occurrence in turn, discovered
         /// dynamically from a full run: `(point, occurrence, outcome, every
         /// counter of the run stopped immediately before that occurrence —
@@ -187,7 +167,12 @@ macro_rules! shared_helpers {
                     let occurrence = seen.iter().filter(|p| **p == point).count() as u64;
                     let mut denied = Meter::new(limits).with_injected_denial(InjectedDenial {
                         point,
-                        occurrence: DenialOccurrence::denial_occurrence(occurrence),
+                        // `InjectedDenial::occurrence` is a `NonZeroU64`
+                        // (deliberately, so a malformed 0-based request
+                        // cannot compile); `occurrence` here is always at
+                        // least 1 since `seen.push(point)` above runs before
+                        // this count.
+                        occurrence: core::num::NonZeroU64::new(occurrence).unwrap(),
                     });
                     let outcome = run(&mut denied);
                     let counters: Vec<u64> = LimitKind::ALL

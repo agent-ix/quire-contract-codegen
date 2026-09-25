@@ -788,7 +788,7 @@ fn tc_024_operand_width_mismatch_is_a_typed_stop_before_any_charge() {
 
 /// Trace: FR-014-AC-6, TC-024.
 #[test]
-fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
+fn tc_024_no_vector_here_has_an_authority_leg_and_all_agree_with_direct_runtime() {
     let mut vectors = 0_usize;
     for a in -20_i128..=20 {
         agree2! {
