@@ -85,7 +85,9 @@ already does for the FR-331 envelope.
 
 ## Inputs
 
-- The admitted IR `CheckedPackageV2`, by reference. It is the IR reader's
+- The admitted IR `CheckedPackageV2`, by reference. This crate does not
+  re-export `CheckedPackageV2` or `CheckedNodeId`, so a caller depends on
+  `quire-contract-ir` directly to name them. It is the IR reader's
   output for the E4 bytes (QSL ADR-011 E5). This generator does not re-check
   the package identity the driver expected; that is the IR reader's.
 - The routed items, each a `RoutedGenerationItem`:
@@ -104,9 +106,9 @@ already does for the FR-331 envelope.
   - `subject_path`, `pins` (`KaniToolPins`), `unwind` and `attestation`
     (`AttestationContext`), with FR-015's meanings.
 
-  The caller supplies every context. A field is a struct member rather than a
-  map entry, so adding a `BackendKind` variant without its context field does
-  not compile.
+  The caller supplies every context. Adding a `BackendKind` variant without an
+  arm in the generation dispatch and in `GenerationContexts::has` does not
+  compile; the variant's context field is added beside those arms.
 
 ## Outputs
 
@@ -144,7 +146,8 @@ already does for the FR-331 envelope.
   then the generator shall refuse the whole call with `MissingKindContext`,
   naming that kind, with nothing generated.
 - The generator shall check the three refusals above in that order and report
-  the first failing check, naming the lowest offending request index.
+  the first failing check. The first two name the lowest offending request
+  index; `MissingKindContext` names a kind and no request index.
 - The generator shall ignore a context whose kind has no routed item.
 - When no item is routed, the generator shall return an empty
   `RoutedGeneration`.
@@ -177,7 +180,7 @@ already does for the FR-331 envelope.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-022-AC-1 | Generation dispatches one arm per variant of the closed `BackendKind` through an exhaustive `match` with no catch-all, and `GenerationContexts` has one field per variant, so a variant added without a generation arm or a context field does not compile. | Analysis |
+| FR-022-AC-1 | Generation dispatches one arm per variant of the closed `BackendKind` through an exhaustive `match` with no catch-all, and `GenerationContexts` has one field per variant, so a variant added without an arm in the dispatch or in `GenerationContexts::has` does not compile. | Analysis |
 | FR-022-AC-2 | For a set of routed Kani items, each record and harness in the output equals what `negotiate_kani_obligations` returns for the same items in ascending request-index order with the same context. The one difference is that every index inside a record is the driver's request index, and each harness is paired with the record whose `harness_symbol` names it. | Test (TC-033) |
 | FR-022-AC-3 | The entry point accepts no manifest, candidate set, extent or capability kind, and constructs no FR-019 `Disposition`. The FR-019-AC-5 source scan reads its module and stays green. | Test (TC-033) |
 | FR-022-AC-4 | A routed item whose backend identity has no CG kind, or converts to a kind other than the routed one, refuses the whole call as `BackendKindDisagrees`, naming the request index, backend, routed kind and converted kind or its absence, and no artifact is returned. | Test (TC-033) |
@@ -241,3 +244,7 @@ already does for the FR-331 envelope.
    pins, attestation). *Recommendation:* they are driver or command inputs
    (AGE-394 renders the command), with `KaniToolPins::pinned()` as the pins.
    *Blocks:* the QSL-1 step 7 wiring, not this crate.
+5. **Follow-up tickets.** Linear IR-294 tracks deriving the claim map from the
+   node's IR-confirmed operation and bound (open item 1; related to QSL-1).
+   Linear IR-295 tracks FR-019's Kani settlement reading the IR form (open
+   item 2; QSL ADR-012 §7.2 step 3). *Blocks:* nothing here.

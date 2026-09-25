@@ -263,7 +263,10 @@ row is therefore reachable only through a candidate set the registry supplies, w
 exercises it through `candidates` rather than by registering a second arm.
 
 FR-022 (Linear IR-293) is the generation arm of the seam FR-019 settles, and it takes the routed
-backend and kind as given. AC-2 through AC-9 are backed by TC-033's tests. AC-1 stays `🚧 Planned`
+backend and kind as given. AC-2 through AC-9 are backed by TC-033's tests. AC-4's "converts to a kind other than the routed one" branch needs a second `BackendKind` variant
+to be reachable, since with one variant the only disagreement is a backend with no kind
+(`converted: None`); TC-033 exercises only that `converted: None` case, so the other branch is untested until a second kind exists.
+AC-1 stays `🚧 Planned`
 because no test backs it: its evidence is the compiler's exhaustiveness check over
 `BackendKind` and the one field per kind in `GenerationContexts`, not a test, the same ground as FR-019-AC-9.
 

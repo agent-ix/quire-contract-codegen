@@ -88,4 +88,5 @@ the FR-015 generator returns for the same items.
    request indexes and both manifest digests. Only the output's
    `request_index` and `backend` differ.
 9. The dispatch is an exhaustive `match` over `BackendKind` with no `_` arm.
-   `GenerationContexts` has exactly one field per `BackendKind::ALL` member.
+   `GenerationContexts::has` is an exhaustive `match` too, and `GenerationContexts`
+   has exactly one field per `BackendKind::ALL` member.

@@ -54,7 +54,8 @@ pub struct KaniGenerationContext<'a> {
 
 /// One optional generation context per [`BackendKind`] variant.
 ///
-/// A struct member rather than a map entry, so a kind added without its context does not compile.
+/// A kind added without an arm in the generation dispatch and in `has` does not compile; its
+/// context field is added beside those arms.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GenerationContexts<'a> {
     /// The Kani context.
@@ -132,7 +133,7 @@ pub enum RoutedGenerationError {
 
 /// What one kind's arm produced.
 struct ArmOutput {
-    outputs: Vec<(usize, KindOutput)>,
+    outputs: Vec<RoutedItemOutput>,
     rejected: bool,
 }
 
@@ -175,16 +176,7 @@ pub fn generate_routed(
         if arm.rejected {
             rejected.push(kind);
         }
-        for (position, (request_index, output)) in arm.outputs.into_iter().enumerate() {
-            // `arm.outputs` is in `group` order, so `position` indexes `group`.
-            if let Some(item) = group.get(position) {
-                items.push(RoutedItemOutput {
-                    request_index,
-                    backend: item.backend.clone(),
-                    output,
-                });
-            }
-        }
+        items.extend(arm.outputs);
     }
     items.sort_by_key(|item| item.request_index);
     Ok(RoutedGeneration { items, rejected })
@@ -248,10 +240,13 @@ fn generate_kani(
     })
     .map_err(RoutedGenerationError::Kani)?;
 
-    // FR-015 numbers records by position in `group`; every position maps back to a driver index.
-    // A position outside `group` cannot occur, since FR-015 reports only positions of its input;
-    // it is left as reported rather than invented.
-    let driver_index = |position: usize| group.get(position).map_or(position, |i| i.request_index);
+    // FR-015 reports exactly one record per item, numbered by position in `group` (the loop index
+    // in `negotiate_kani_obligations`), and a `DuplicateItem`'s `first_index` is an earlier
+    // position. So `records` and `group` pair one to one, and every position is in `driver`.
+    let driver = group
+        .iter()
+        .map(|item| item.request_index)
+        .collect::<Vec<_>>();
     let (records, mut harnesses, rejected) = match outcome {
         KaniObligationOutcome::Emitted {
             records,
@@ -267,16 +262,25 @@ fn generate_kani(
         ),
         KaniObligationOutcome::Rejected { records } => (records, BTreeMap::new(), true),
     };
+    debug_assert_eq!(
+        records.len(),
+        group.len(),
+        "FR-015 reports one record per item"
+    );
     let outputs = records
         .into_iter()
-        .map(|mut record| {
-            let request_index = driver_index(record.request_index);
-            record.request_index = request_index;
+        .zip(group)
+        .map(|(mut record, item)| {
+            record.request_index = item.request_index;
             if let ObligationDisposition::InvalidRequest {
                 reason: InvalidObligationItem::DuplicateItem { first_index },
             } = &mut record.disposition
             {
-                *first_index = driver_index(*first_index);
+                let first = driver.get(*first_index).copied();
+                debug_assert!(first.is_some(), "FR-015 names an earlier position");
+                if let Some(first) = first {
+                    *first_index = first;
+                }
             }
             let harness = match &record.disposition {
                 ObligationDisposition::Supported { harness_symbol } => {
@@ -286,7 +290,11 @@ fn generate_kani(
                 | ObligationDisposition::Unsupported { .. }
                 | ObligationDisposition::InvalidRequest { .. } => None,
             };
-            (request_index, KindOutput::Kani { record, harness })
+            RoutedItemOutput {
+                request_index: item.request_index,
+                backend: item.backend.clone(),
+                output: KindOutput::Kani { record, harness },
+            }
         })
         .collect();
     Ok(ArmOutput { outputs, rejected })
