@@ -23,7 +23,6 @@ mod generated {
 }
 
 use generated::{
-    oracle_0588c927fc1e3cd76ad4936610a80aa865b40a993815a34e3c0637db077ee8fa as convert_decimal, // code 1086
     oracle_08eb5d516b05b48856734299c7ff832ad4f68b2c9c5c8e28d5ae2725452a0851 as decimal_round, // code 1053
     oracle_0979b4cf4ab9a40079cb667ef5d273dc280a9e317b4cb875af62a17a098fe8a8 as quantity_at_least, // code 1135
     oracle_09800d0aad009e874e8f5dae4d53b631d09f50c9568a4aa4b71403487ef829ae as binary64_multiply, // code 1066
@@ -39,7 +38,6 @@ use generated::{
     oracle_34e3167760b6256b159435437213ef99bb3008d3fcbaa3a62abeb06f2c232b38 as integer_divide, // code 1033
     oracle_3aeecc969a5cbe3efb7ca137ea0e94f98e19d97caa8eac550a2a22612409f099 as decimal_multiply, // code 1055
     oracle_40a2924f27a1a06be61c63fa7fc9fddfd1ef2caf34d829a80d22b6c64ccaa552 as integer_at_most, // code 1044
-    oracle_4176d5611eeb1bc2de4d29f3c0041f463d319d3dc6997239f742db492c713760 as quantity_power, // code 1083
     oracle_47a3a2b2588b2df95bf54c2378e48b5cd9b08a5de8b49bfba2e57c01b4b653f8 as quantity_greater, // code 1134
     oracle_4881d33db12712b60c7fb95642827b1a5b0d3482383cc6c27b45dbc3a3ff8766 as rational_greater, // code 1043
     oracle_4bf5e05de79f7575a55fdff2704455a792bbaeba0b53f45b1e8d58d4fe741a02 as binary32_subtract, // code 1065
@@ -66,6 +64,8 @@ use generated::{
     oracle_a0de80d9f4f37ad7a773d1ff7c6c65b88a7e4e394728821c909276d18c57756e as enum_at_most, // code 1123
     oracle_a2ba447bad58ca0b042a0b34e40d3a5b99ba5f2a3c213a900f9a1169309284e2 as binary64_total_order, // code 1063
     oracle_a377c02012a91a9f94843b4cc2166c44076bf22086cd71aa978bc2ae696f1b19 as enum_less, // code 1073
+    oracle_ad54d638775c911ae73fa3a4d6c871ab96325153a2c7f75ec72db8ffa8afa545 as convert_decimal, // code 1086
+    oracle_af3396f6babe7dfa143642de6ceb9de302088a253bf81bd6ae868a283b153880 as convert_integer, // code 1087
     oracle_b16cf657ba381db0997d24f7a5153a0497a237c532cc5c912a4388ff645ff3fd as enum_not_equal, // code 1122
     oracle_b1b9eb4b75c17615c3049e44e9d9ba411a76357d0f215ca61c0f6069c780e1e1 as text_at_most, // code 1113
     oracle_b6c4c488a6f6c69eb9547374c413f80f45d4d00f59d1a8e1446193f2fe82d437 as divide_euclidean, // code 1013
@@ -75,7 +75,6 @@ use generated::{
     oracle_cf05b13221bfc345b7c21c1995216a7ba6e5412bf12c193299b515e33781a5c6 as divide_bounded, // code 1014
     oracle_d463873f2d88e48f673860f11c3c06ef42aeb671de1ba58e5623de6ccb66db18 as admit_unicode_scalars, // code 1074
     oracle_d5bc5fbdaa1150e0cdaf5fd959392416c0b06ebcc671cffd721264de8c411047 as quantity_divide, // code 1089
-    oracle_d62afb79208475a4cb4154dea2d2589032ddee90ff48e423fcfa735cac0b8381 as convert_integer, // code 1087
     oracle_d9453619e02988b753e317579363a0d57f74a36953f18353fd4f0b28a9852014 as integer_add, // code 1001
     oracle_db0f20a30ed0a6687e6816b82404f5fbbe39ff543c406e55273faf73430d077a as decimal_negate, // code 1056
     oracle_e58152cf037217e004390e7ede00ed8ad29444867e10dedb11df9ac5351b81d4 as admit_nfkc, // code 1076
@@ -83,6 +82,7 @@ use generated::{
     oracle_f11b7564500eb53d15b9ad310072266f100c53e0b452b665a4e25b304c2cd733 as admit_nfd, // code 1075
     oracle_f15287a740a285b180f83439d376a02972c44b417d164525076ae16bb146f4d9 as integer_negate, // code 1002
     oracle_f17752077cc598d1c29c1a24b80d9b7ca486ae389c56442514f27569308e8c51 as admit_nfc, // code 1071
+    oracle_f1a09b02673ec9c1854843075872e6c71c557e59020825786c4f8fb9f4ab0ad7 as quantity_power, // code 1083
     oracle_f2927ffb5f00452e5ec2284106a9acb247d9aefa287c5c4a335225ea98828031 as quantity_not_equal, // code 1132
     oracle_f34d0bf1630a2cc21187d7cc591c0756fc4f1b1e5d8e4fbe82643f78b7f5c678 as text_not_equal, // code 1112
     oracle_f478e79124757f838c70dee68eaca3429710af7cdd631054585e8a089c499b29 as rational_multiply, // code 1035

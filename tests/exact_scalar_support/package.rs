@@ -652,6 +652,38 @@ impl PackageBuilder {
         digest
     }
 
+    /// As [`Self::dedicated_operand`], for the "unit" form it does not
+    /// cover: "unit" has no fixed literal kind that method's `form` match
+    /// can name, because a unit operand is `V_QUANTITY`'s own shape (a
+    /// `rational`-typed magnitude under [`UNIT_TYPE`], not a scalar literal
+    /// keyed by one of `T_INTEGER`/`T_RATIONAL`/etc.). This builds a node
+    /// dedicated to `bound_keys` with that same shape, including
+    /// `V_QUANTITY`'s own inherent `rational_range` bound (Contract IR's
+    /// lowering reaches `literal.type` regardless of the containing node's
+    /// declared type, so this needs one reachable the same way `V_QUANTITY`
+    /// itself does, in addition to `bound_keys`, which the caller wires on
+    /// separately).
+    pub fn dedicated_unit_operand(&mut self, bound_keys: &[String]) -> String {
+        let mut sorted_keys = bound_keys.to_vec();
+        sorted_keys.sort();
+        let digest = sha256_hex(
+            &serde_json::to_vec(&json!(["dedicated-unit-operand", sorted_keys]))
+                .expect("dedicated unit operand key"),
+        );
+        if self.dedicated_operands.insert(digest.clone()) {
+            let rational_bound = self.bound(&RAT);
+            self.node_with(
+                &digest,
+                "value",
+                "literal",
+                UNIT_TYPE,
+                literal("rational", "1"),
+                &[rational_bound],
+            );
+        }
+        digest
+    }
+
     /// A per-`bound` scalar type node, isolated the same way
     /// [`Self::dedicated_operand`] isolates a shared literal, for a node
     /// whose body has *no* `reference` term at all to anchor on --
@@ -786,6 +818,32 @@ impl PackageBuilder {
         body: Value,
         bounds: &[Bound],
     ) -> &mut Self {
+        self.application_bounded_anchored(code, tag, form, semantic_type, body, bounds, None)
+    }
+
+    /// As [`Self::application_bounded`], but the caller may pin the anchor
+    /// explicitly instead of leaving it to this method's own inference.
+    /// Needed whenever a body's `reference_targets` contains more than one
+    /// digest and the caller already knows which one is the dedicated
+    /// argument the bound belongs to: [`reference_targets`] returns them in
+    /// ascending digest order (a `BTreeSet`, for IR-280's own join
+    /// requirement), so falling back to `.first()` there picks whichever
+    /// reference happens to sort first, not "the first argument" in any
+    /// positional sense -- correct only when a body has at most one distinct
+    /// reference target. `quantity.pow`'s body has two (a dedicated "unit"
+    /// node and a dedicated "integer" node) and needs the "unit" one
+    /// specifically, so its caller passes `anchor` rather than relying on
+    /// digest order.
+    pub fn application_bounded_anchored(
+        &mut self,
+        code: u32,
+        tag: &str,
+        form: &str,
+        semantic_type: &str,
+        body: Value,
+        bounds: &[Bound],
+        anchor: Option<&str>,
+    ) -> &mut Self {
         let keys = bounds
             .iter()
             .map(|bound| self.bound(bound))
@@ -798,14 +856,16 @@ impl PackageBuilder {
         // `value_for_type` recognizes, and must not panic over an anchor
         // nothing here will use.
         if !keys.is_empty() {
-            let anchor = dependencies.first().cloned().unwrap_or_else(|| {
-                value_for_type(semantic_type).unwrap_or_else(|| {
-                    panic!(
-                        "application_bounded({code}): {} bound(s) requested, the body has no \
-                         `reference` target to anchor them on, and semantic_type {semantic_type} \
-                         names no known value node",
-                        bounds.len()
-                    )
+            let anchor = anchor.map(str::to_owned).unwrap_or_else(|| {
+                dependencies.first().cloned().unwrap_or_else(|| {
+                    value_for_type(semantic_type).unwrap_or_else(|| {
+                        panic!(
+                            "application_bounded({code}): {} bound(s) requested, the body has no \
+                             `reference` target to anchor them on, and semantic_type \
+                             {semantic_type} names no known value node",
+                            bounds.len()
+                        )
+                    })
                 })
             });
             for key in &keys {
@@ -2229,11 +2289,15 @@ pub fn corpus_package() -> PackageBuilder {
         // own match) gets a bound-set-dedicated node instead of the plain
         // shared one whenever this expression declares a bound: see
         // `dedicated_operand`'s own doc for why sharing would otherwise union
-        // unrelated expressions' bounds onto one reachable closure. "enum" and
-        // "unit" operands are never paired with a varying bound in this
-        // corpus (every `EnumComparison`/`QuantityComparison`/`QuantityOperation`
-        // vector below declares `Vec::new()`), so they keep the plain shared
-        // node unconditionally.
+        // unrelated expressions' bounds onto one reachable closure. "enum"
+        // operands are never paired with a varying bound in this corpus
+        // (every `EnumComparison` vector below declares `Vec::new()`), so
+        // they keep the plain shared node unconditionally. "unit" operands
+        // *do* get bounds here (`quantity.pow`'s `INT` domain, and the two
+        // `QuantityConversion` codes' `Decimal`/`INT` targets), so they are
+        // dedicated the same way via [`PackageBuilder::dedicated_unit_operand`]
+        // whenever `bound_keys` is non-empty, rather than kept on the shared
+        // `V_QUANTITY` node.
         // `TextAdmission` never uses `bound_keys` below -- its one argument is
         // always overridden to a fixed literal further down, and its own
         // bound is registered by `dedicated_text_admission_type` instead
@@ -2250,12 +2314,22 @@ pub fn corpus_package() -> PackageBuilder {
                 .map(|bound| builder.bound(bound))
                 .collect()
         };
+        let mut unit_anchor: Option<String> = None;
         let mut arguments = expression
             .operands
             .iter()
             .map(|form| {
-                let node = if bound_keys.is_empty() || matches!(*form, "enum" | "unit") {
+                let node = if bound_keys.is_empty() || *form == "enum" {
                     operand(form)
+                } else if *form == "unit" {
+                    // Dedicated rather than the plain shared `V_QUANTITY`
+                    // (see the loop's own comment above): `V_QUANTITY` is
+                    // shared by all 13 quantity-typed corpus items, so a
+                    // bound wired onto it would be reachable from every one
+                    // of them, not just the item that declared it.
+                    let anchor = builder.dedicated_unit_operand(&bound_keys);
+                    unit_anchor = Some(anchor.clone());
+                    anchor
                 } else if expression.code == LITERAL_OPERAND {
                     // `LITERAL_OPERAND` needs an anchor nothing else in the
                     // corpus can ever share, because `CLAIM`/`CLAIM_ALT` are
@@ -2371,13 +2445,22 @@ pub fn corpus_package() -> PackageBuilder {
             } else {
                 (result_type(expression.result), &expression.bounds[..])
             };
-        builder.application_bounded(
+        // `unit_anchor` (set above only when this expression's "unit" operand
+        // was dedicated) is passed explicitly rather than left for
+        // `application_bounded` to infer: `quantity.pow`'s body references
+        // both a dedicated "unit" node and a dedicated "integer" node, and
+        // `application_bounded`'s own inference picks whichever of the two
+        // sorts first by digest -- not necessarily the dedicated "unit" node
+        // -- which is exactly the bug this anchor makes explicit instead of
+        // leaving to chance.
+        builder.application_bounded_anchored(
             expression.code,
             "expression",
             expression.form,
             &node_semantic_type,
             application(catalog_operator, operation, &node_semantic_type, arguments),
             node_bounds,
+            unit_anchor.as_deref(),
         );
     }
     let integer_type = key(T_INTEGER);
