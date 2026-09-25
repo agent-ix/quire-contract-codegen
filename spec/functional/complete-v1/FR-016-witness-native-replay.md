@@ -45,7 +45,7 @@ failure is reported. This is issue #50.
 - The generator shall decode a witness against the harness's own persisted
   obligation schema: the obligation's argument bindings, in the order the
   obligation persists them, typed position for position against the
-  harness's symbolic arguments, and each decoded value shall be named by the
+  harness's symbolic arguments, and shall name each decoded value by the
   binding at its position. The harness emits its symbolic arguments in that
   same persisted order (FR-015).
 - If an obligation binding is not an argument, then the generator shall refuse
