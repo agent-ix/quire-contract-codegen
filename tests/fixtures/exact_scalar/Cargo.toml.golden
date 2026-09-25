@@ -8,7 +8,7 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-quire-contract-runtime = { git = "https://github.com/agent-ix/quire-contract-runtime", rev = "9f31169276edb85799d6b7d878020caf49617090", features = ["exact"] }
+quire-contract-runtime = { git = "https://github.com/agent-ix/quire-contract-runtime", rev = "c52442a56a879cb5ce02a63bcbe430b85bf74a6d", features = ["exact"] }
 
 [lints.rust]
 unsafe_code = "forbid"

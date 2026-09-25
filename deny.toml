@@ -12,6 +12,9 @@ allow = [
     # Reached through the operation catalog's home: `borrow-or-share` (MIT-0) via
     # `fluent-uri`. Permissive and compatible with AGPL-3.0-or-later.
     "MIT-0",
+    # `ar_archive_writer` (a build dependency of `stacker`, reached through the IR
+    # and QSL pins). Apache-2.0 plus LLVM's standard exception; still permissive.
+    "Apache-2.0 WITH LLVM-exception",
 ]
 confidence-threshold = 0.9
 # First-party agent-ix crates are AGPL-3.0-or-later (owner decision 2026-09-14,
@@ -33,6 +36,21 @@ exceptions = [
     # single expression here leaves whichever copy it did not pick unchecked.
     { allow = ["AGPL-3.0-only", "AGPL-3.0-or-later"], crate = "quire-spec-language" },
     { allow = ["AGPL-3.0-only"], crate = "agent-ix-baseline-producer" },
+    # IR-254: qsl-replay (the only QSL crate this repository may depend on, per
+    # QSL arch-lint T12-A) and its own transitive closure -- all first-party
+    # agent-ix crates under the same AGPL-3.0-or-later decision above.
+    { allow = ["AGPL-3.0-or-later"], crate = "qsl-cst" },
+    { allow = ["AGPL-3.0-or-later"], crate = "qsl-eval" },
+    { allow = ["AGPL-3.0-or-later"], crate = "qsl-forms" },
+    { allow = ["AGPL-3.0-or-later"], crate = "qsl-foundation" },
+    { allow = ["AGPL-3.0-or-later"], crate = "qsl-package" },
+    { allow = ["AGPL-3.0-or-later"], crate = "qsl-replay" },
+    { allow = ["AGPL-3.0-or-later"], crate = "qsl-semantics" },
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-canonical" },
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-exact" },
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-rs" },
+    { allow = ["AGPL-3.0-or-later"], crate = "agent-ix-extraction-frontend" },
+    { allow = ["AGPL-3.0-or-later"], crate = "agent-ix-semantic-ir" },
 ]
 
 [bans]
@@ -56,10 +74,12 @@ unknown-git = "deny"
 # run, which is the same as not checking at all.
 allow-git = [
     "https://github.com/agent-ix/filament-core-data",
+    "https://github.com/agent-ix/quire-canonical",
     "https://github.com/agent-ix/quire-contract-ir",
     "https://github.com/agent-ix/quire-contract-runtime",
     "https://github.com/agent-ix/quire-observation",
     "https://github.com/agent-ix/quire-protocol",
+    "https://github.com/agent-ix/quire-rs",
     "https://github.com/agent-ix/quire-spec-language",
     "https://github.com/agent-ix/quire-verification-contracts",
     "https://github.com/agent-ix/tl-mltl",

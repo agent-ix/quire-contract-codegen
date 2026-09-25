@@ -334,6 +334,7 @@ impl ScalarForm {
         match width {
             IeeeWidth::Binary32 => Self::Float32,
             IeeeWidth::Binary64 => Self::Float64,
+            _ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 }
@@ -598,8 +599,10 @@ pub struct ExactScalarOracles {
 
 /// Generate exact scalar oracles for `items` from an admitted package.
 ///
-/// Fails as a whole only with `SourceTooLarge` or `ClaimMapSerialization`;
-/// every per-item problem is a refusal in the claim map.
+/// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization`, or
+/// `UnknownRuntimeVariant` (`check_parameters` matching an RT
+/// `#[non_exhaustive]` enum against a variant its own exhaustive match does
+/// not know); every per-item problem is a refusal in the claim map.
 pub fn generate_exact_scalar_oracles(
     package: &CheckedPackageV2,
     items: &[ExactScalarItem],
@@ -663,7 +666,7 @@ pub fn generate_exact_scalar_oracles(
                                 Some(identity) => {
                                     source.oracle(&symbol, node_id, &identity, operation);
                                     let oracle_source = standalone_oracle_source(
-                                        &lowering.package_id,
+                                        lowering.package.source_package_id(),
                                         &symbol,
                                         node_id,
                                         &identity,
@@ -705,7 +708,15 @@ pub fn generate_exact_scalar_oracles(
                         }
                     }
                 }
-                Err(refusal) => refused_claim(operation_identity(operation), refusal),
+                Err(ItemCheckError::Refusal(refusal)) => {
+                    refused_claim(operation_identity(operation), refusal)
+                }
+                // An RT `#[non_exhaustive]` enum yielded a variant
+                // `check_parameters`'s own exhaustive match does not know:
+                // this is not this one item's business refusal, so it aborts
+                // the whole generation instead (see
+                // `OracleGenerationError::UnknownRuntimeVariant`'s own doc).
+                Err(ItemCheckError::Generation(error)) => return Err(error),
             },
             // Every copy is refused. The entry is named by the least identity
             // so that it does not depend on which copy arrived first.
@@ -726,7 +737,7 @@ pub fn generate_exact_scalar_oracles(
 
     let claim_map = ClaimMap {
         version: EXACT_SCALAR_CLAIM_MAP_VERSION,
-        package_id: lowering.package_id,
+        package_id: lowering.package.source_package_id().clone(),
         runtime_revision: RUNTIME_REVISION,
         // No blocker applies to every entry any more: a confirmed claim's
         // provenance is `IrConfirmed`, and an unconfirmed claim's
@@ -768,23 +779,41 @@ type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
 /// The lowered node and the bounds its descriptor was checked against.
 type CheckedItem<'r> = (&'r CompleteContractNodeV2, Vec<CheckedNodeId>);
 
+/// Either [`ExactScalarRefusal`] (a per-item business refusal, folded into
+/// the claim map) or [`OracleGenerationError`] (an RT `#[non_exhaustive]`
+/// enum yielding a variant `check_parameters`'s own exhaustive match does not
+/// know -- see [`OracleGenerationError::UnknownRuntimeVariant`]'s own doc for
+/// why that aborts the whole generation instead of refusing one item).
+enum ItemCheckError {
+    Refusal(ExactScalarRefusal),
+    Generation(OracleGenerationError),
+}
+
+impl From<ExactScalarRefusal> for ItemCheckError {
+    fn from(refusal: ExactScalarRefusal) -> Self {
+        Self::Refusal(refusal)
+    }
+}
+
 fn check_item<'r>(
     graph: &Graph<'_>,
     record: &'r CompleteLoweringRecordV2,
     operation: &ExactScalarOperation,
-) -> Result<CheckedItem<'r>, ExactScalarRefusal> {
+) -> Result<CheckedItem<'r>, ItemCheckError> {
     let node = lowered(record)?;
     if node.node_tag != CheckedNodeTag::Expression {
         return Err(ExactScalarRefusal::NotExpression {
             node_tag: node.node_tag.as_wire(),
-        });
+        }
+        .into());
     }
     let shape = Shape::of(operation);
     if &*node.node.semantic_form != shape.form {
         return Err(ExactScalarRefusal::FormMismatch {
             expected: shape.form,
             found: node.node.semantic_form.to_string(),
-        });
+        }
+        .into());
     }
     let arguments = application_arguments(&node.node.body, shape.body_operator)
         .filter(|arguments| arguments.len() == shape.operands.len())
@@ -797,7 +826,8 @@ fn check_item<'r>(
         return Err(ExactScalarRefusal::ResultTypeMismatch {
             expected: shape.result,
             found: result,
-        });
+        }
+        .into());
     }
     for (position, (argument, expected)) in arguments.iter().zip(shape.operands).enumerate() {
         check_operand(graph, position, argument, *expected)?;
@@ -934,7 +964,7 @@ fn check_parameters(
     graph: &Graph<'_>,
     node: &CompleteContractNodeV2,
     operation: &ExactScalarOperation,
-) -> Result<Vec<CheckedNodeId>, ExactScalarRefusal> {
+) -> Result<Vec<CheckedNodeId>, ItemCheckError> {
     let bounds = Bounds { graph, node };
     let checked = match operation {
         ExactScalarOperation::IntegerArithmetic { domain, .. }
@@ -943,6 +973,13 @@ fn check_parameters(
             let declared = match domain {
                 IntegerDomain::Bounded(interval) => Some(interval),
                 IntegerDomain::Mathematical => None,
+                &_ => {
+                    return Err(ItemCheckError::Generation(
+                        OracleGenerationError::UnknownRuntimeVariant {
+                            enum_name: "IntegerDomain",
+                        },
+                    ))
+                }
             };
             bounds.equal(BoundForm::IntegerRange, read_integer_range, declared)?
         }
@@ -976,6 +1013,13 @@ fn check_parameters(
             // caller-declared with the operation.
             QuantityTarget::Integer { domain, .. } => {
                 bounds.equal(BoundForm::IntegerRange, read_integer_range, Some(domain))?
+            }
+            &_ => {
+                return Err(ItemCheckError::Generation(
+                    OracleGenerationError::UnknownRuntimeVariant {
+                        enum_name: "QuantityTarget",
+                    },
+                ))
             }
         },
         ExactScalarOperation::Ordering { .. }
@@ -1246,15 +1290,18 @@ impl Shape {
             ExactScalarOperation::IeeeArithmetic { width, .. } => match width {
                 IeeeWidth::Binary32 => Self::binary(&[F::Float32, F::Float32], F::Float32),
                 IeeeWidth::Binary64 => Self::binary(&[F::Float64, F::Float64], F::Float64),
+                &_ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             },
             ExactScalarOperation::IeeeComparison { width, .. } => match width {
                 IeeeWidth::Binary32 => Self::binary_call(&[F::Float32, F::Float32], F::Boolean),
                 IeeeWidth::Binary64 => Self::binary_call(&[F::Float64, F::Float64], F::Boolean),
+                &_ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             },
             ExactScalarOperation::IeeeWidthConversion { source, target, .. } => {
                 let operand: &'static [ScalarForm; 1] = match source {
                     IeeeWidth::Binary32 => &[F::Float32],
                     IeeeWidth::Binary64 => &[F::Float64],
+                    &_ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 Self::conversion(operand, F::of_width(*target))
             }
@@ -1280,6 +1327,7 @@ impl Shape {
                     QuantityTarget::Exact => F::Rational,
                     QuantityTarget::Decimal(_) => F::Decimal,
                     QuantityTarget::Integer { .. } => F::Integer,
+                    &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 Self::conversion(&[F::Unit], result)
             }
@@ -1464,7 +1512,8 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
                 }
                 (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
                     "quire.op.ieee.float64.div"
-                }
+                },
+                (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             };
             with_rounding(identity, *rounding)
         }
@@ -1472,6 +1521,7 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
             IeeeComparison::NumericEqual => "quire.op.ieee.numeric_equal",
             IeeeComparison::TotalOrder => "quire.op.ieee.total_order",
             IeeeComparison::BitIdentical => "quire.op.ieee.bit_identical",
+            &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }),
         Op::IeeeWidthConversion {
             source,
@@ -1486,6 +1536,7 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
             // descriptor naming one can never be confirmed.
             (IeeeWidth::Binary32, IeeeWidth::Binary32)
             | (IeeeWidth::Binary64, IeeeWidth::Binary64) => None,
+            (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         },
         Op::TextAdmission { .. } => plain("quire.op.numeric.convert"),
         // `text.*`/`enum.*` comparisons carry a catalogued `text_profile` mode
@@ -1511,6 +1562,7 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
                 QuantityTarget::Exact => plain(identity),
                 QuantityTarget::Decimal(decimal) => with_rounding(identity, decimal.rounding()),
                 QuantityTarget::Integer { rounding, .. } => with_rounding(identity, *rounding),
+                &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             }
         }
     }
@@ -1524,6 +1576,7 @@ fn ordering_suffix(operator: OrderingOperator) -> &'static str {
         OrderingOperator::LessOrEqual => "le",
         OrderingOperator::Greater => "gt",
         OrderingOperator::GreaterOrEqual => "ge",
+        _ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -1537,6 +1590,7 @@ fn text_family_identity(family: &'static str, operator: ComparisonOperator) -> &
         ComparisonOperator::LessOrEqual => "le",
         ComparisonOperator::Greater => "gt",
         ComparisonOperator::GreaterOrEqual => "ge",
+        _ => unreachable!("ComparisonOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     };
     match (family, suffix) {
         ("text", "eq") => "quire.op.text.eq",
@@ -1669,6 +1723,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
                 OrderingOperator::LessOrEqual => "less_or_equal",
                 OrderingOperator::Greater => "greater",
                 OrderingOperator::GreaterOrEqual => "greater_or_equal",
+                &_ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             };
             let kind = match operands {
                 OrderingOperandKind::Integer => "integer",
@@ -1717,6 +1772,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
                 IeeeComparison::NumericEqual => "numeric_equal",
                 IeeeComparison::TotalOrder => "total_order",
                 IeeeComparison::BitIdentical => "bit_identical",
+                &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             };
             format!("ieee.{name} width={}", width.as_str())
         }
@@ -1770,6 +1826,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
                 interval_identity(domain),
                 rounding.as_str()
             ),
+            &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         },
     }
 }
@@ -1782,6 +1839,7 @@ fn comparison_name(operator: ComparisonOperator) -> &'static str {
         ComparisonOperator::LessOrEqual => "less_or_equal",
         ComparisonOperator::Greater => "greater",
         ComparisonOperator::GreaterOrEqual => "greater_or_equal",
+        _ => unreachable!("ComparisonOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -1789,6 +1847,7 @@ fn integer_domain_identity(domain: &IntegerDomain) -> String {
     match domain {
         IntegerDomain::Mathematical => "mathematical".to_owned(),
         IntegerDomain::Bounded(interval) => interval_identity(interval),
+        &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -1891,7 +1950,8 @@ impl SourceBuilder {
             IntegerDomain::Mathematical => "rt::IntegerDomain::Mathematical".to_owned(),
             IntegerDomain::Bounded(interval) => {
                 format!("rt::IntegerDomain::Bounded({})", self.interval(interval))
-            }
+            },
+            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 
@@ -1908,6 +1968,7 @@ impl SourceBuilder {
                 vec![format!("let domain = {};", self.interval(interval))],
                 "Some(&domain)".to_owned(),
             ),
+            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 
@@ -1957,6 +2018,7 @@ impl SourceBuilder {
                     DivisionProfile::Truncating => "Truncating",
                     DivisionProfile::Floor => "Floor",
                     DivisionProfile::Euclidean => "Euclidean",
+                    &_ => unreachable!("DivisionProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 Body {
                     parameters: binary("&rt::Integer"),
@@ -2039,6 +2101,7 @@ impl SourceBuilder {
                     OrderingOperator::LessOrEqual => "LessOrEqual",
                     OrderingOperator::Greater => "Greater",
                     OrderingOperator::GreaterOrEqual => "GreaterOrEqual",
+                    &_ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 let (ty, kind) = match operands {
                     OrderingOperandKind::Integer => ("&rt::Integer", "Integers"),
@@ -2105,6 +2168,7 @@ impl SourceBuilder {
                     IeeeComparison::NumericEqual => "NumericEqual",
                     IeeeComparison::TotalOrder => "TotalOrder",
                     IeeeComparison::BitIdentical => "BitIdentical",
+                    &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 let width = width_path(*width);
                 Body {
@@ -2200,6 +2264,7 @@ impl SourceBuilder {
                         self.interval(domain),
                         rounding_path(*rounding)
                     ),
+                    &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 Body {
                     parameters: vec![("operand", "&rt::Quantity"), ("unit", "&rt::QuantityUnit")],
@@ -2236,6 +2301,7 @@ fn comparison_body(ty: &'static str, function: &str, operator: ComparisonOperato
         ComparisonOperator::LessOrEqual => "LessOrEqual",
         ComparisonOperator::Greater => "Greater",
         ComparisonOperator::GreaterOrEqual => "GreaterOrEqual",
+        _ => unreachable!("ComparisonOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     };
     Body {
         parameters: binary(ty),
@@ -2255,6 +2321,7 @@ fn rounding_path(rounding: RoundingMode) -> &'static str {
         RoundingMode::TowardNegative => "rt::RoundingMode::TowardNegative",
         RoundingMode::NearestEven => "rt::RoundingMode::NearestEven",
         RoundingMode::NearestAway => "rt::RoundingMode::NearestAway",
+        _ => unreachable!("RoundingMode gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -2262,6 +2329,7 @@ fn width_path(width: IeeeWidth) -> &'static str {
     match width {
         IeeeWidth::Binary32 => "rt::IeeeWidth::Binary32",
         IeeeWidth::Binary64 => "rt::IeeeWidth::Binary64",
+        _ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -2273,6 +2341,7 @@ fn profile_path(profile: TextProfile) -> &'static str {
         TextProfile::Nfkc => "rt::TextProfile::Nfkc",
         TextProfile::Nfkd => "rt::TextProfile::Nfkd",
         TextProfile::BinaryUtf8 => "rt::TextProfile::BinaryUtf8",
+        _ => unreachable!("TextProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -2319,9 +2388,10 @@ mod tests {
             body_node_id: node_id('b'),
             refusal: CheckedPackageRefusal {
                 code: CheckedPackageRefusalCode::InvalidSemanticGraph,
-                path: "semantic_graph.nodes.body".into(),
+                path: None,
                 cause: None,
                 locus: None,
+                contract_version: None,
             },
         };
         assert_eq!(
@@ -2337,6 +2407,7 @@ mod tests {
                 limit_kind: CheckedPackageLimit::Depth,
                 limit: 128,
                 consumed: 129,
+                path: None,
             },
         };
         assert_eq!(

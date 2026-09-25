@@ -317,7 +317,7 @@ fn write_generated_crate(
     fs::write(
         directory.0.join("Cargo.toml"),
         format!(
-            "[package]\nname = \"generated-kani-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
+            "[package]\nname = \"generated-kani-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n# `exact` is required here because RT's own `#[cfg(kani)] mod verification` unconditionally\n# imports `crate::exact` (verification/kani.rs), independent of whether this fixture's subject\n# uses exact-scalar types. Building this generated crate under `cargo kani` without the feature\n# fails with E0432 on RT's own module, not on anything this generator emitted.\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[workspace]\n"
         ),
     )
     .expect("generated manifest should be writable");

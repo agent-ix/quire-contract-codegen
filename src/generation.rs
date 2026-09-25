@@ -66,7 +66,13 @@ pub struct ClaimMap<C> {
 /// Whole-generation failure; per-item problems are refusals, not errors.
 /// Each generator documents which of these it can return:
 /// `LocationMapSerialization` comes only from the function generator, the one
-/// that emits a location map.
+/// that emits a location map. `UnknownRuntimeVariant` comes only from a
+/// generator that checks parameters against one of Contract Runtime's
+/// `#[non_exhaustive]` enums (`exact_scalar`'s `check_parameters`): unlike an
+/// ordinary per-item refusal, RT returning a variant this generator's own
+/// closed match was not written to expect means the generator's
+/// understanding of that type has gone stale, which puts every item's
+/// result in doubt, not just the one that surfaced it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OracleGenerationError {
     /// The generated source exceeds [`crate::MAX_GENERATED_SOURCE_BYTES`].
@@ -78,4 +84,10 @@ pub enum OracleGenerationError {
     ClaimMapSerialization,
     /// The location map could not be serialized.
     LocationMapSerialization,
+    /// A Contract Runtime `#[non_exhaustive]` enum yielded a variant this
+    /// generator's own exhaustive match does not know.
+    UnknownRuntimeVariant {
+        /// The RT enum's name, e.g. `"IntegerDomain"`.
+        enum_name: &'static str,
+    },
 }

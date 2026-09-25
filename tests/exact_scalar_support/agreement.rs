@@ -1,74 +1,63 @@
-//! Three-way agreement support: the QSL value authority, direct Contract
-//! Runtime execution, and generated oracles.
+//! Agreement support: direct Contract Runtime execution and generated
+//! oracles.
 //!
 //! Adapted from Contract Runtime 4e33052
 //! `conformance/qsl-agreement/tests/support/mod.rs`.
-//! A vector body is written once. [`agree3!`] evaluates the direct call with
-//! `quire_spec_language::value` in scope and again with
-//! `quire_contract_runtime::exact` in scope, and evaluates the generated
+//! A vector body is written once. [`agree2!`] evaluates the direct call with
+//! `quire_contract_runtime::exact` in scope and evaluates the generated
 //! oracle with the runtime in scope. Every evaluation is run under the same
-//! limits and then re-run with each admitted charge denied in turn. The three
+//! limits and then re-run with each admitted charge denied in turn. The two
 //! `Debug` renderings, which include every value, typed refusal, incomplete
 //! record, admitted charge and consumed counter, must be identical.
 //!
-//! Compiler-owned work (definition-lock admission, node-key hashing, owner
-//! selection) is done once, by the authority: node keys come from the
-//! authority's preimage hashing and both sides consume the same keys.
+//! IR-254: this file used to run a third, authority leg through
+//! `quire_spec_language::value`, comparing the direct runtime call against
+//! QSL's own value-level implementation of the same operators before
+//! comparing either to the generated oracle (`agree3!`, since removed). The
+//! RT==QSL authority check lives in RT's `conformance/qsl-agreement` lane;
+//! this crate only checks generated==RT, so that leg does not belong here.
+//! The QSL revision this bumps to also withdraws `quire_spec_language::value`
+//! entirely: QSL arch-lint T12-A confines this crate to `qsl_replay`'s
+//! public API, one source-recompiling proof-witness replay executor
+//! (`qsl_replay::replay`, taking a `ReplayRequestWire` built from
+//! digest-addressed compiled QSL source and a witness arm). None of this
+//! file's vectors are shaped as compiled source plus a witness -- they call
+//! value-level operators directly (`Meter`, `Integer`, `IeeeValue`, unit
+//! conversion, division profiles, ...) -- so none can be re-expressed
+//! through that facade without building a new source-level test harness
+//! from nothing, which is out of scope for a pin bump. Four of this file's
+//! vectors were also already red for an unrelated reason (AGE-1989) when
+//! this pin bump landed; that reproducer is recorded on the ticket. The
+//! authority leg is deleted outright rather than ported; every vector below
+//! still runs the direct-runtime-vs-generated-oracle comparison it always
+//! did.
+//!
+//! Node keys in this file no longer need to be QSL's own honest
+//! preimage-hash values, because nothing here compares them to QSL's
+//! computation anymore: [`GraphSpec::keys`] only has to be internally
+//! self-consistent within one process (the direct call and the generated
+//! oracle call always share one constructed [`Fixture`]), so it now hashes
+//! its own JSON directly with `sha2` instead of calling into QSL.
 
-// Each helper is used by some vectors on one side only, and the side modules
-// glob-import both value APIs for the vector bodies.
+// Each helper is used by some vectors on one side only.
 #![allow(dead_code, unused_imports)]
 
 use std::collections::BTreeMap;
 
-use quire_spec_language::value as authority;
+use quire_contract_runtime::exact::NODE_KEY_DOMAIN;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
-/// Authority, direct runtime and generated oracle agree, including every
-/// charge and every single-charge denial.
-macro_rules! agree3 {
-    (
-        limits: $limits:expr,
-        setup: { $($setup:tt)* },
-        direct: |$m:ident| $direct:expr,
-        generated: |$g:ident| $generated:expr $(,)?
-    ) => {{
-        let authority = {
-            #[allow(unused_imports)]
-            use self::support::qsl_side::*;
-            $($setup)*
-            let limits = $limits;
-            format!(
-                "{:?}",
-                (metered(limits, |$m: &mut Meter| $direct), denials(limits, |$m: &mut Meter| $direct))
-            )
-        };
-        let (runtime, generated) = {
-            #[allow(unused_imports)]
-            use self::support::rt_side::*;
-            $($setup)*
-            let limits = $limits;
-            (
-                format!(
-                    "{:?}",
-                    (metered(limits, |$m: &mut Meter| $direct), denials(limits, |$m: &mut Meter| $direct))
-                ),
-                format!(
-                    "{:?}",
-                    (
-                        metered(limits, |$g: &mut Meter| $generated),
-                        denials(limits, |$g: &mut Meter| $generated),
-                    )
-                ),
-            )
-        };
-        assert_eq!(runtime, authority, "direct runtime disagrees with the QSL authority");
-        assert_eq!(generated, runtime, "generated oracle disagrees with direct runtime");
-    }};
+/// A stable, process-internal digest for a fixture node's JSON. Not QSL's
+/// preimage hash (see the module doc): nothing here compares against QSL's
+/// computation anymore, so any deterministic function that gives every
+/// distinct fixture node a distinct key is sufficient.
+fn preimage_digest(document: &Value) -> String {
+    format!("{:x}", Sha256::digest(document.to_string().as_bytes()))
 }
 
 /// Direct runtime and generated oracle agree, including every charge and every
-/// single-charge denial, for operators the pinned authority does not expose.
+/// single-charge denial.
 macro_rules! agree2 {
     (
         limits: $limits:expr,
@@ -249,6 +238,7 @@ macro_rules! shared_helpers {
             match IeeeWidth::ALL[width] {
                 IeeeWidth::Binary32 => IeeeValue::binary32(u32::try_from(bits).unwrap()),
                 IeeeWidth::Binary64 => IeeeValue::binary64(bits),
+                _ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             }
         }
 
@@ -362,7 +352,7 @@ impl GraphSpec {
     }
 
     fn node_id(key: &str) -> Value {
-        json!({"domain": authority::NODE_KEY_DOMAIN, "digest": key})
+        json!({"domain": NODE_KEY_DOMAIN, "digest": key})
     }
 
     fn owner(identity: &str) -> Value {
@@ -404,21 +394,18 @@ impl GraphSpec {
         })
     }
 
-    /// Honest keys, computed by the authority in declaration order.
+    /// Keys, self-consistently hashed within this process (see the module
+    /// doc: nothing compares these to QSL's own computation anymore).
     pub fn keys(&self) -> BTreeMap<&'static str, String> {
         let mut keys = BTreeMap::new();
         for dimension in &self.dimensions {
-            let preimage =
-                authority::DimensionPreimage::from_json(Self::dimension_json(dimension, &keys))
-                    .unwrap();
-            keys.insert(dimension.name, preimage.node_key().unwrap().to_string());
+            let digest = preimage_digest(&Self::dimension_json(dimension, &keys));
+            keys.insert(dimension.name, digest);
         }
         for unit in &self.units {
-            let preimage =
-                authority::UnitPreimage::from_json(Self::unit_json(unit, &keys)).unwrap();
+            let digest = preimage_digest(&Self::unit_json(unit, &keys));
             assert!(
-                keys.insert(unit.name, preimage.node_key().unwrap().to_string())
-                    .is_none(),
+                keys.insert(unit.name, digest).is_none(),
                 "duplicate fixture name {}",
                 unit.name
             );
@@ -440,171 +427,19 @@ pub fn enum_declaration_json(declaration: &str, ordered: bool, members: &[&str])
 pub fn enum_member_json(declaration_key: &str, case: &str) -> Value {
     json!({
         "version": "quire.enum-member-node/v1",
-        "declaration_node_id": {"domain": authority::NODE_KEY_DOMAIN, "digest": declaration_key},
+        "declaration_node_id": {"domain": NODE_KEY_DOMAIN, "digest": declaration_key},
         "case": case,
     })
 }
 
-/// Authority-computed enum declaration key.
+/// Enum declaration key (see the module doc: self-consistent within this
+/// process, not QSL's own computation).
 pub fn enum_declaration_key(declaration: &str, ordered: bool, members: &[&str]) -> String {
-    let json = enum_declaration_json(declaration, ordered, members);
-    let preimage = authority::EnumDeclarationPreimage::from_json(json).unwrap();
-    preimage.node_key().unwrap().to_string()
+    preimage_digest(&enum_declaration_json(declaration, ordered, members))
 }
 
 pub fn enum_member_key(declaration_key: &str, case: &str) -> String {
-    let preimage =
-        authority::EnumMemberPreimage::from_json(enum_member_json(declaration_key, case)).unwrap();
-    preimage.node_key().unwrap().to_string()
-}
-
-// ---- the authority side ------------------------------------------------------
-
-pub mod qsl_side {
-    use std::collections::BTreeMap;
-    use std::sync::OnceLock;
-
-    use quire_spec_language::value as authority;
-    pub use quire_spec_language::value::*;
-
-    /// The authority's `InjectedDenial::occurrence` is a plain `u64`; only the runtime side makes
-    /// it `NonZeroU64` (`agent-ix/quire-contract-runtime#20`), so `shared_helpers!`'s `denials`,
-    /// and any `agree!` vector that injects a denial directly, call this per-side conversion
-    /// rather than hard-coding either type.
-    pub fn to_occurrence(n: u64) -> u64 {
-        n
-    }
-
-    shared_helpers!();
-
-    fn lock() -> &'static DefinitionLock {
-        DefinitionLock::pinned().unwrap()
-    }
-
-    /// The pinned lock's admitted division law, then the authority operator.
-    pub fn divide(
-        profile: DivisionProfile,
-        a: &Integer,
-        b: &Integer,
-        domain: &IntegerDomain,
-        meter: &mut Meter,
-    ) -> Outcome<QuotientRemainder> {
-        let role = match profile {
-            DivisionProfile::Truncating => CatalogRole::IntegerDivisionTruncating,
-            DivisionProfile::Floor => CatalogRole::IntegerDivisionFloor,
-            DivisionProfile::Euclidean => CatalogRole::IntegerDivisionEuclidean,
-        };
-        let reference = lock().entry(role).unwrap().definition.clone();
-        let admitted = lock().admit_integer_division(&[reference], None).unwrap();
-        authority::divide(&admitted, a, b, domain, meter)
-    }
-
-    fn profile() -> &'static AdmittedIeeeProfile {
-        static PROFILE: OnceLock<AdmittedIeeeProfile> = OnceLock::new();
-        PROFILE.get_or_init(|| {
-            let reference = lock()
-                .entry(CatalogRole::IeeeProfile)
-                .unwrap()
-                .definition
-                .clone();
-            lock().admit_ieee_profile(&[reference], &[]).unwrap()
-        })
-    }
-
-    pub fn evaluate_ieee<'a, O: Into<IeeeOperand<'a>>>(
-        operation: IeeeOperation<O>,
-        rounding: RoundingMode,
-        meter: &mut Meter,
-    ) -> Result<Outcome<IeeeResult>, IllTyped> {
-        authority::evaluate_ieee(profile(), operation, rounding, meter)
-    }
-
-    pub fn compare_ieee<'a>(
-        comparison: IeeeComparison,
-        left: impl Into<IeeeOperand<'a>>,
-        right: impl Into<IeeeOperand<'a>>,
-        meter: &mut Meter,
-    ) -> Result<Outcome<bool>, IllTyped> {
-        authority::compare_ieee(profile(), comparison, left, right, meter)
-    }
-
-    pub fn convert_ieee_width(
-        value: IeeeValue,
-        target: IeeeWidth,
-        rounding: RoundingMode,
-        meter: &mut Meter,
-    ) -> Outcome<IeeeResult> {
-        authority::convert_ieee_width(profile(), value, target, rounding, meter)
-    }
-
-    pub struct Fixture {
-        pub graph: UnitGraph,
-        keys: BTreeMap<&'static str, NodeKey>,
-    }
-
-    fn owners() -> OwnerSelection {
-        let owner = |identity: &str| {
-            NodeOwner::Definition(OwnerSubject {
-                authority: "agent-ix".into(),
-                identity: identity.into(),
-            })
-        };
-        OwnerSelection::new([owner("example-model")])
-    }
-
-    pub fn admit_graph(spec: &super::GraphSpec) -> Result<Fixture, InvalidSemanticGraph> {
-        use super::GraphSpec;
-        let hex = spec.keys();
-        let key = |digest: &str| NodeKey::from_hex(digest).unwrap();
-        let dimensions: Vec<_> = spec
-            .dimensions
-            .iter()
-            .map(|d| {
-                let preimage =
-                    DimensionPreimage::from_json(GraphSpec::dimension_json(d, &hex)).unwrap();
-                (preimage, key(&hex[d.name]))
-            })
-            .collect();
-        let units: Vec<_> = spec
-            .units
-            .iter()
-            .map(|u| {
-                let preimage = UnitPreimage::from_json(GraphSpec::unit_json(u, &hex)).unwrap();
-                (preimage, key(&hex[u.name]))
-            })
-            .collect();
-        let graph = UnitGraph::admit(dimensions, units, &owners())?;
-        let keys = hex
-            .iter()
-            .map(|(name, digest)| (*name, key(digest)))
-            .collect();
-        Ok(Fixture { graph, keys })
-    }
-
-    /// An admitted enum declaration under its honest key.
-    pub struct Enum(EnumDeclaration);
-
-    pub fn enum_declaration(
-        declaration: &str,
-        ordered: bool,
-        members: &[&str],
-    ) -> Result<Enum, InvalidSemanticGraph> {
-        let key = super::enum_declaration_key(declaration, ordered, members);
-        let json = super::enum_declaration_json(declaration, ordered, members);
-        let preimage = EnumDeclarationPreimage::from_json(json)?;
-        EnumDeclaration::admit(preimage, NodeKey::from_hex(&key).unwrap(), &owners()).map(Enum)
-    }
-
-    impl Enum {
-        pub fn value(&self, case: &str) -> Result<EnumValue, InvalidSemanticGraph> {
-            let declaration = self.0.key().to_string();
-            let key = super::enum_member_key(&declaration, case);
-            let preimage =
-                EnumMemberPreimage::from_json(super::enum_member_json(&declaration, case))?;
-            self.0
-                .admit_member(&preimage, NodeKey::from_hex(&key).unwrap())
-        }
-    }
+    preimage_digest(&enum_member_json(declaration_key, case))
 }
 
 // ---- the runtime side --------------------------------------------------------
@@ -614,9 +449,10 @@ pub mod rt_side {
 
     pub use quire_contract_runtime::exact::*;
 
-    /// See the `qsl_side` twin of this function: the runtime's `InjectedDenial::occurrence` is
-    /// `NonZeroU64` (`agent-ix/quire-contract-runtime#20`). Every caller in this crate passes a
-    /// literal or a derived count that is always at least one, so this never panics.
+    /// The runtime's `InjectedDenial::occurrence` is `NonZeroU64`
+    /// (`agent-ix/quire-contract-runtime#20`). Every caller in this crate
+    /// passes a literal or a derived count that is always at least one, so
+    /// this never panics.
     pub fn to_occurrence(n: u64) -> std::num::NonZeroU64 {
         std::num::NonZeroU64::new(n).unwrap()
     }
@@ -628,6 +464,7 @@ pub mod rt_side {
         match domain {
             IntegerDomain::Mathematical => None,
             IntegerDomain::Bounded(interval) => Some(interval),
+            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 
@@ -679,7 +516,8 @@ pub mod rt_side {
         Ok(Fixture { graph, keys })
     }
 
-    /// A compiler-admitted enum declaration under its authority-computed key.
+    /// A compiler-admitted enum declaration under its self-consistently
+    /// hashed key (see the module doc).
     pub struct Enum(EnumDeclaration);
 
     pub fn enum_declaration(

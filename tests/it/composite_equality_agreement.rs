@@ -1,16 +1,21 @@
 //! FR-018-AC-2, AC-8 (the `check_type` guard half), AC-9 and AC-11 (the
 //! complementary-outcomes half): generated composite-equality oracles agree
-//! with an independently assembled direct Contract Runtime call, and with
-//! the pinned QSL authority, across record, tuple, option, collection and
-//! recursive shapes; a malformed environment is refused with no charge; a
-//! denied charge surfaces as `Outcome::Incomplete`, never a completed
-//! Boolean; and the two operator variants over one expression node produce
-//! complementary outcomes.
+//! with an independently assembled direct Contract Runtime call, across
+//! record, tuple, option, collection and recursive shapes; a malformed
+//! environment is refused with no charge; a denied charge surfaces as
+//! `Outcome::Incomplete`, never a completed Boolean; and the two operator
+//! variants over one expression node produce complementary outcomes.
 //!
 //! The oracles under test are the committed golden `lib.rs`, which
 //! `composite_equality_generation`'s AC-10 test proves is the generator's
 //! current output, spliced in with `include!` exactly as
 //! `exact_scalar_agreement.rs` does.
+//!
+//! IR-254: every vector here runs `agree2!` (direct runtime vs. generated
+//! oracle). A third, QSL value-authority leg (`agree3!`) used to run
+//! alongside it; `../composite_equality_support/agreement.rs`'s module doc
+//! records why it was deleted rather than ported to the QSL revision this
+//! bumps to.
 
 #[macro_use]
 #[path = "../composite_equality_support/agreement.rs"]
@@ -35,11 +40,11 @@ use support::rt_side;
 
 /// Trace: FR-018-AC-2, FR-018-AC-9, FR-018-AC-10, TC-029.
 ///
-/// Every vector below is run under `UNLIMITED` limits, which lets `agree3!`
-/// exercise a full, uncontested run against both the direct Contract Runtime
-/// and the pinned QSL authority (AC-2) and, from the charges that run
-/// actually admits, a denial of each one in turn (AC-9) in the same call:
-/// `denials` discovers admitted charges dynamically rather than naming them.
+/// Every vector below is run under `UNLIMITED` limits, which lets `agree2!`
+/// exercise a full, uncontested run against the direct Contract Runtime call
+/// (AC-2) and, from the charges that run actually admits, a denial of each
+/// one in turn (AC-9) in the same call: `denials` discovers admitted charges
+/// dynamically rather than naming them.
 ///
 /// Every one of the golden's 9 oracles is executed here (the `not_equal`
 /// record, text and enum vectors close the gap AC-10's own defence had: a
@@ -49,7 +54,7 @@ use support::rt_side;
 fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree() {
     // Record (E_RECORD, `equal`): equal and unequal points.
     for (lx, ly, rx, ry) in [(1, 2, 1, 2), (1, 2, 3, 4)] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_record();
@@ -77,7 +82,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
         (1, "abc", 2, "abc"),
         (1, "abc", 1, "xyz"),
     ] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_tuple();
@@ -106,7 +111,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
         (Some(5), None),
         (None, None),
     ] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_option();
@@ -134,7 +139,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
         (vec![1, 2, 3], vec![1, 2]),
         (vec![1, 2, 3], vec![3, 2, 1]),
     ] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_collection();
@@ -158,7 +163,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
 
     // Recursive (E_SELF): both leaves, and one leaf vs. one nested one level.
     for nested_right in [false, true] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_self();
@@ -187,7 +192,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
         ((1, 2), (3, 4), (1, 2), (3, 4)),
         ((1, 2), (3, 4), (1, 2), (5, 6)),
     ] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_pair_of_points();
@@ -217,7 +222,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
     // never executed under AC-2, only referenced by AC-11's complementary
     // check.
     for (lx, ly, rx, ry) in [(1, 2, 1, 2), (1, 2, 3, 4)] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_record();
@@ -242,7 +247,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
     // Text (E_TEXT, `equal`): equal and unequal short strings within
     // BD_TEXT's bound. Previously referenced by nothing (module doc gap).
     for (lt, rt_) in [("abc", "abc"), ("abc", "xyz")] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_option();
@@ -268,7 +273,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
     // `Example.Status` declaration. Previously referenced by nothing (module
     // doc gap).
     for (l, r) in [("READY", "READY"), ("READY", "DONE")] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_option();
@@ -302,8 +307,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
 /// generator mutation that cross-wires which operand's conversion target
 /// lands on which operand — FR-018-AC-2's "apply the right operand's
 /// conversion before the left's" mutation row — makes the generated leg
-/// disagree with the direct and authority legs rather than passing by
-/// construction.
+/// disagree with the direct leg rather than passing by construction.
 ///
 /// Full coverage of every `admits_equality_conversion` row (TC-029 step 1)
 /// is out of scope for this vector; it demonstrates the harness can express
@@ -317,7 +321,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
 #[test]
 fn tc_029_ac2_a_converted_operand_agrees() {
     for (l, r) in [(5_i64, 5_i64), (5, 6)] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_option();
@@ -349,7 +353,7 @@ fn tc_029_ac2_a_converted_operand_agrees() {
 /// above admits none, so this one converts `Int[-100, 100]` to
 /// `Decimal[-100, 100; 0, 0]`, which charges `DecimalOperands`,
 /// `DecimalScaleExpansion`, `DecimalArithmetic` and `DecimalResultRetain`
-/// (`operand_value`'s `Decimal` target arm). `agree3!` denies each of those
+/// (`operand_value`'s `Decimal` target arm). `agree2!` denies each of those
 /// in turn, alongside the plan charges, across all three legs, comparing
 /// every `LimitKind` counter of the run each denial stops — not only
 /// `ResultUnits` — so a counter two of the three implementations get wrong
@@ -357,7 +361,7 @@ fn tc_029_ac2_a_converted_operand_agrees() {
 #[test]
 fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
     for (l, r) in [(5_i64, 5_i64), (5, 6)] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let target = DecimalType::new(
@@ -393,16 +397,16 @@ fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
 /// `Rational -> Integer` (the `Rational -> {Integer, Int, Decimal}` row,
 /// exercised against `Integer`), `Decimal -> Rational`, `Decimal ->
 /// Decimal`, and `Decimal -> Integer` (the `Decimal -> {Integer, Int}` row,
-/// exercised against `Integer`). Each runs through `agree3!`, so the
-/// generated leg, the direct runtime leg and the QSL authority leg all agree
-/// on it -- and each is a distinct oracle node, so AC-2's "apply the right
+/// exercised against `Integer`). Each runs through `agree2!`, so the
+/// generated leg and the direct runtime leg agree on it -- and each is a
+/// distinct oracle node, so AC-2's "apply the right
 /// operand's conversion before the left's" mutation row has a genuine
 /// converted operand to cross-wire on every row, not only E_CONV's.
 #[test]
 fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
     // Rational[-10, 10; 1, 1] -> Rational[-100, 100; 1, 5].
     for (l, r) in [(5_i64, 5_i64), (5, 6)] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_option();
@@ -429,7 +433,7 @@ fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
 
     // Rational[-50, 50; 1, 1] -> Integer.
     for (l, r) in [(5_i64, 5_i64), (5, 6)] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_option();
@@ -453,7 +457,7 @@ fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
 
     // Decimal[-100, 100; 0, 0] -> Rational[-100, 100; 1, 5].
     for (l, r) in [(5_i64, 5_i64), (5, 6)] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_option();
@@ -485,7 +489,7 @@ fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
 
     // Decimal[-100, 100; 0, 0] -> Decimal[-1000, 1000; 0, 2].
     for (l, r) in [(5_i64, 5_i64), (5, 6)] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let target = DecimalType::new(
@@ -521,7 +525,7 @@ fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
 
     // Decimal[-100, 100; 0, 0] -> Integer.
     for (l, r) in [(5_i64, 5_i64), (5, 6)] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: {
                 let environment = environment_option();
@@ -607,7 +611,7 @@ fn tc_029_ac8_check_type_guards_the_oracle() {
 
 /// Trace: FR-018-AC-9, TC-029.
 ///
-/// A direct, explicit check (independent of `agree3!`'s Debug-equality
+/// A direct, explicit check (independent of `agree2!`'s Debug-equality
 /// comparison above) that a denied charge surfaces as `Outcome::Incomplete`
 /// and never as a completed Boolean.
 #[test]
