@@ -196,6 +196,66 @@ pub fn application(
     })
 }
 
+/// IR-280's FR-322 application-node dependency join: every `reference`
+/// term's `target` digest reachable anywhere inside `body`, deduplicated and
+/// digest-ascending. `result_type` and a `literal`'s own `type` are bare
+/// node ids, not `reference` terms, so this walk never picks them up --
+/// exactly the exclusion FR-322 states.
+fn reference_targets(body: &Value) -> Vec<String> {
+    fn walk(value: &Value, targets: &mut BTreeSet<String>) {
+        match value {
+            Value::Object(map) => {
+                if map.get("term").and_then(Value::as_str) == Some("reference") {
+                    if let Some(digest) = map.get("target").and_then(|t| t.get("digest")) {
+                        if let Some(digest) = digest.as_str() {
+                            targets.insert(digest.to_owned());
+                        }
+                    }
+                }
+                for member in map.values() {
+                    walk(member, targets);
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    walk(item, targets);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut targets = BTreeSet::new();
+    walk(body, &mut targets);
+    targets.into_iter().collect()
+}
+
+/// The `value`/`literal` node this corpus pairs with a scalar `semantic_type`
+/// digest, e.g. `T_TEXT` -> `V_TEXT`: a safe [`PackageBuilder::application_bounded`]
+/// fallback anchor when a body has no `reference` argument to anchor a bound
+/// on, since (unlike a nominal `scalar_type` node) a `value` node is already
+/// established to tolerate an extra dependency (`V_QUANTITY`'s own
+/// `rational_range` bound, wired at construction in `corpus_package`).
+fn value_for_type(semantic_type: &str) -> Option<String> {
+    let pairs = [
+        (T_BOOLEAN, V_BOOLEAN),
+        (T_INTEGER, V_INTEGER),
+        (T_RATIONAL, V_RATIONAL),
+        (T_DECIMAL, V_DECIMAL),
+        (T_FLOAT32, V_FLOAT32),
+        (T_FLOAT64, V_FLOAT64),
+        (T_TEXT, V_TEXT),
+    ];
+    for (ty, value) in pairs {
+        if semantic_type == key(ty) {
+            return Some(key(value));
+        }
+    }
+    if semantic_type == UNIT_TYPE {
+        return Some(key(V_QUANTITY));
+    }
+    None
+}
+
 /// A catalogued `operation` member with no laws, mode or member.
 pub fn op(identity: &str) -> Value {
     op_full(identity, Vec::new(), None, None)
@@ -265,7 +325,8 @@ pub fn integer_division_definition(profile: DivisionProfile) -> Value {
         }
         DivisionProfile::Euclidean => {
             "9f5e59b3bfe1dd3c1efc74065b2e3e7869e21813a0c90b9c5938d82107267a51"
-        }
+        },
+        _ => unreachable!("DivisionProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
     };
     artifact_ref(profile.definition_identity(), digest)
 }
@@ -333,6 +394,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 pub struct PackageBuilder {
     value: Value,
     bounds: BTreeSet<String>,
+    dedicated_operands: BTreeSet<String>,
 }
 
 impl Default for PackageBuilder {
@@ -341,6 +403,7 @@ impl Default for PackageBuilder {
         Self {
             value: serde_json::from_str(text).expect("vendored fixture is JSON"),
             bounds: BTreeSet::new(),
+            dedicated_operands: BTreeSet::new(),
         }
     }
 }
@@ -514,8 +577,166 @@ impl PackageBuilder {
         )
     }
 
-    /// An application-bodied node that depends on `bounds`, adding each
-    /// bound node once -- the application analogue of [`Self::bounded`].
+    /// A `value`/`literal` node with `operand(form)`'s own content, at a
+    /// digest dedicated to `bound_keys` rather than `operand(form)`'s own
+    /// shared one.
+    ///
+    /// IR-280's own reachable-bound search (`CompleteLoweringRecordV2::
+    /// RequiresBound`/`AmbiguousBound`) walks the *whole* transitive
+    /// dependency closure a requested node reaches, not just its own direct
+    /// dependencies. Before IR-280, every corpus expression needing a bound
+    /// carried it as its own extra dependency, so sharing one operand node
+    /// (`V_INTEGER` and friends) across many expressions never mixed their
+    /// bounds up. Now that a bound can only reach a node through some other
+    /// node's dependency edge (`application_bounded`'s doc), routing every
+    /// bound through the one shared operand would union them all onto every
+    /// expression that references it -- `AmbiguousBound` where only one
+    /// expression (`AMBIGUOUS`, deliberately) should ever see more than one.
+    /// A distinct corpus expression needing a distinct bound set (or set of
+    /// bounds, for `AMBIGUOUS` itself) therefore gets its own operand node,
+    /// keyed by `(form, bound_keys)` so expressions sharing the identical
+    /// bound set still safely share one anchor, exactly as before.
+    pub fn dedicated_operand(&mut self, form: &str, bound_keys: &[String]) -> String {
+        let mut sorted_keys = bound_keys.to_vec();
+        sorted_keys.sort();
+        let digest = sha256_hex(
+            &serde_json::to_vec(&json!(["dedicated-operand", form, sorted_keys]))
+                .expect("dedicated operand key"),
+        );
+        if self.dedicated_operands.insert(digest.clone()) {
+            let (kind, value, ty) = match form {
+                "integer" => ("integer", "3", key(T_INTEGER)),
+                "rational" => ("rational", "1/2", key(T_RATIONAL)),
+                "decimal" => ("decimal", "1.5", key(T_DECIMAL)),
+                "float32" => ("float32_bits", "0", key(T_FLOAT32)),
+                "float64" => ("float64_bits", "0", key(T_FLOAT64)),
+                "text" => ("text", "a", key(T_TEXT)),
+                other => panic!("dedicated_operand: no literal form known for {other}"),
+            };
+            self.node(&digest, "value", "literal", &ty, literal(kind, value));
+        }
+        digest
+    }
+
+    /// A per-`bound` scalar type node, isolated the same way
+    /// [`Self::dedicated_operand`] isolates a shared literal, for a node
+    /// whose body has *no* `reference` term at all to anchor on --
+    /// `TextAdmission`'s six corpus codes, whose one argument must stay a
+    /// fixed literal so IR's operand-family check never resolves it (see
+    /// the corpus loop's own comment). `application_bounded`'s fallback
+    /// anchor (`value_for_type(semantic_type)`) is a shared value node nothing
+    /// in such a body ever references, so a bound attached there is
+    /// unreachable from the application node's own closure; anchoring
+    /// instead on `T_TEXT` itself would make it reachable, but `T_TEXT` is
+    /// one shared node; every `TextAdmission` code needs a *different*
+    /// `text_bounds` value, and attaching all six to the one shared type
+    /// would make every one of them reachable from every code -- the same
+    /// `AmbiguousBound` collision `dedicated_operand` exists to prevent.
+    ///
+    /// The bound itself, not just the type, must be dedicated: IR's
+    /// `require_bounds` walk only accepts a `bounded_domain` node whose own
+    /// `semantic_type` field equals the exact unbounded type node it is
+    /// judging (`lower.rs`'s `domain.semantic_type == node.node_id`), so
+    /// [`Self::bound`] -- which always points a `Bound::Text`'s node at the
+    /// shared `T_TEXT` via [`Bound::bounded_type`] -- cannot satisfy a
+    /// dedicated type; this builds the `bounded_domain` node directly,
+    /// pointed at the dedicated type instead.
+    ///
+    /// This returns a fresh nominal `scalar_type` node (shaped exactly like
+    /// `T_TEXT`'s own: self-typed, an empty `aggregate` body) with `bound`
+    /// wired as its only dependency. Nothing else ever references it, so
+    /// pass it as the application node's own `semantic_type` (with `bounds:
+    /// &[]`, since the bound is already wired here) and it is the only
+    /// `text_bounds` node reachable from that one code.
+    pub fn dedicated_text_admission_type(&mut self, bound: &Bound) -> String {
+        let Bound::Text(min, max, profile) = bound else {
+            panic!("dedicated_text_admission_type: only Bound::Text is supported, got {bound:?}");
+        };
+        let type_digest = sha256_hex(
+            &serde_json::to_vec(&json!(["dedicated-text-admission-type", bound.key()]))
+                .expect("dedicated text admission type key"),
+        );
+        if self.dedicated_operands.insert(type_digest.clone()) {
+            self.node(&type_digest, "scalar_type", "text", &type_digest, aggregate());
+            let foreign = bound
+                .foreign()
+                .iter()
+                .map(|foreign| self.bound(foreign))
+                .collect::<Vec<_>>();
+            // `bound.key()` itself, not a further-derived digest: the
+            // generation test's own `declared` list (`exact_scalar_
+            // generation.rs`) checks `generated.checked_bounds` against
+            // `id(&bound.key())`, so the *node* IR actually reaches must
+            // carry that same id. No collision risk: each `TEXT_ADMISSIONS`
+            // profile is distinct content, and nothing else in this corpus
+            // separately registers a node at this content's own key.
+            let bound_digest = bound.key();
+            // Not `bound.body()`: its own `text`-kind member (the profile)
+            // is built by the shared `literal()` helper, whose `literal.type`
+            // always names the shared `T_TEXT` -- reachable regardless of
+            // this bound's own `semantic_type` (`Bound::bounded_type`'s own
+            // doc), which would put `T_TEXT` right back in this code's
+            // closure with no bound of its own to satisfy it. This mirrors
+            // `Bound::Text`'s own body shape, with that one member's type
+            // pointed at the dedicated type instead.
+            let body = json!({
+                "term": "aggregate",
+                "members": [
+                    integer_literal(min),
+                    integer_literal(max),
+                    {
+                        "term": "literal",
+                        "type": node_ref(&type_digest),
+                        "value_kind": "text",
+                        "value": profile,
+                    },
+                ],
+            });
+            self.node_with(
+                &bound_digest,
+                "bounded_domain",
+                bound.form(),
+                &type_digest,
+                body,
+                &foreign,
+            );
+            self.add_dependency(&type_digest, &bound_digest);
+            // The dedicated type depends on its own bound, and the bound's
+            // `semantic_type` points straight back at the dedicated type (so
+            // `Bounds::equal`, src/exact_scalar.rs, finds it) -- a genuine
+            // two-node cycle IR's own recursion check (`validate_recursion`,
+            // `checked_package/v2/mod.rs`) refuses unless every member of
+            // the cycle shares one explicit, non-empty `recursion_group`.
+            // `type_digest` is already unique per (isolated) dedicated type,
+            // so reusing it as the group id needs nothing further.
+            self.set_recursion_group(&type_digest, &type_digest);
+            self.set_recursion_group(&bound_digest, &type_digest);
+        }
+        type_digest
+    }
+
+    /// An application-bodied node that needs `bounds` reachable.
+    ///
+    /// IR-280's FR-322 application-node dependency join requires this node's
+    /// own `dependencies` to be *exactly* the unique, digest-ascending
+    /// `reference` targets of its body -- `bounds` cannot be listed there
+    /// directly, unlike before this pin bump. Each bound is still registered
+    /// once (as [`Self::bounded`] does) and wired reachable, but as an extra
+    /// dependency of a node the join constraint does not cover: the body's
+    /// own first `reference` target, or, when every argument is a literal
+    /// (no `reference` term at all -- e.g. `TextAdmission`'s fixed literal
+    /// argument), the `value`/`literal` node of `semantic_type`'s own family
+    /// (e.g. `T_TEXT` -> `V_TEXT`, via [`value_for_type`]) -- never
+    /// `semantic_type` itself, a nominal `scalar_type` node IR-280 also
+    /// refuses an unrelated extra dependency on. Either way the anchor is a
+    /// non-application node, so it can carry an extra dependency IR-280
+    /// would refuse on this node itself.
+    ///
+    /// The reference argument this anchors on is expected to already be
+    /// [`Self::dedicated_operand`]'s (or, when no bound can collide, the
+    /// plain shared `operand(form)`) -- this method only anchors on
+    /// whatever `body` already names; it does not choose between them. See
+    /// [`Self::dedicated_operand`]'s own doc for why that choice matters.
     pub fn application_bounded(
         &mut self,
         code: u32,
@@ -529,7 +750,30 @@ impl PackageBuilder {
             .iter()
             .map(|bound| self.bound(bound))
             .collect::<Vec<_>>();
-        self.application_code_with(code, tag, form, semantic_type, body, &keys)
+        let dependencies = reference_targets(&body);
+        // Only computed when there is a bound to anchor: a caller passing no
+        // `bounds` (e.g. `TextAdmission`'s dedicated-type path below, which
+        // wires its one bound directly onto a per-code type instead) may
+        // legitimately have neither a `reference` target nor a `semantic_type`
+        // `value_for_type` recognizes, and must not panic over an anchor
+        // nothing here will use.
+        if !keys.is_empty() {
+            let anchor = dependencies.first().cloned().unwrap_or_else(|| {
+                value_for_type(semantic_type).unwrap_or_else(|| {
+                    panic!(
+                        "application_bounded({code}): {} bound(s) requested, the body has no \
+                         `reference` target to anchor them on, and semantic_type {semantic_type} \
+                         names no known value node",
+                        bounds.len()
+                    )
+                })
+            });
+            for key in &keys {
+                self.add_dependency(&anchor, key);
+            }
+        }
+        self.application_code_with(code, tag, form, semantic_type, body, &dependencies);
+        self
     }
 
     /// Registers `definition` in `lock.definition_selections` (deduplicated),
@@ -597,6 +841,21 @@ impl PackageBuilder {
         if !dependencies.contains(&reference) {
             dependencies.push(reference);
         }
+        self
+    }
+
+    /// Sets a node's `recursion_group` (a plain wire string, not a node
+    /// reference). Only [`Self::dedicated_text_admission_type`] needs this:
+    /// every other node this builder creates is acyclic.
+    fn set_recursion_group(&mut self, digest: &str, group: &str) -> &mut Self {
+        let nodes = self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("nodes");
+        let node = nodes
+            .iter_mut()
+            .find(|node| node["node_id"]["digest"].as_str() == Some(digest))
+            .unwrap_or_else(|| panic!("no node registered with digest {digest}"));
+        node["recursion_group"] = json!(group);
         self
     }
 
@@ -1504,26 +1763,22 @@ fn result_type(form: &str) -> String {
     }
 }
 
-fn integer_pair() -> Value {
-    integer_pair_for(0)
-}
-
-/// [`integer_pair`], with `code` folded into the second operand so callers
-/// that register several distinct expression nodes sharing this body's
-/// shape (operator/operation/result_type) still get distinct digests.
+/// `code` is folded into the second operand so callers that register
+/// several distinct expression nodes sharing this body's shape
+/// (operator/operation/result_type) still get distinct digests.
 /// `bounds`/`dependencies` are not part of the node-id preimage (only
 /// `body` is -- see `APPLICATION_NODE_VERSION`'s doc comment), so nodes
 /// that differ only by their bound set collide on id unless `body` itself
-/// also varies.
-fn integer_pair_for(code: u32) -> Value {
+/// also varies. `operand_ref` is a caller-chosen node, never the plain
+/// shared `V_INTEGER`, so a caller pairing this body with a bound gets a
+/// reference [`PackageBuilder::dedicated_operand`] can safely anchor it on
+/// (see that method's own doc for why the shared node cannot).
+fn integer_pair_for_operand(code: u32, operand_ref: &str) -> Value {
     application(
         "binary",
         op("quire.op.integer.add"),
         &key(T_INTEGER),
-        vec![
-            reference(&key(V_INTEGER)),
-            literal("integer", &code.to_string()),
-        ],
+        vec![reference(operand_ref), literal("integer", &code.to_string())],
     )
 }
 
@@ -1692,7 +1947,8 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 }
                 (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
                     "quire.op.ieee.float64.div"
-                }
+                },
+                (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
             };
             (
                 expr.operator,
@@ -1709,6 +1965,7 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 IeeeComparison::NumericEqual => "quire.op.ieee.numeric_equal",
                 IeeeComparison::TotalOrder => "quire.op.ieee.total_order",
                 IeeeComparison::BitIdentical => "quire.op.ieee.bit_identical",
+                &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             };
             (
                 // Overrides `expr.operator` ("binary" per `corpus()`'s own
@@ -1804,7 +2061,8 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                     }
                     QuantityTarget::Integer { rounding, .. } => {
                         Some(mode_kv("rounding", rounding.as_str()))
-                    }
+                    },
+                    &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
                 },
                 Some(member_kind("type_argument")),
             ),
@@ -1820,6 +2078,7 @@ fn ordering_suffix(operator: OrderingOperator) -> &'static str {
         OrderingOperator::LessOrEqual => "le",
         OrderingOperator::Greater => "gt",
         OrderingOperator::GreaterOrEqual => "ge",
+        _ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -1923,10 +2182,42 @@ pub fn corpus_package() -> PackageBuilder {
         .select_definition(text_profile_definition());
     for expression in corpus() {
         use ExactScalarOperation as Op;
+        // A form whose operand value is a fixed literal (`dedicated_operand`'s
+        // own match) gets a bound-set-dedicated node instead of the plain
+        // shared one whenever this expression declares a bound: see
+        // `dedicated_operand`'s own doc for why sharing would otherwise union
+        // unrelated expressions' bounds onto one reachable closure. "enum" and
+        // "unit" operands are never paired with a varying bound in this
+        // corpus (every `EnumComparison`/`QuantityComparison`/`QuantityOperation`
+        // vector below declares `Vec::new()`), so they keep the plain shared
+        // node unconditionally.
+        // `TextAdmission` never uses `bound_keys` below -- its one argument is
+        // always overridden to a fixed literal further down, and its own
+        // bound is registered by `dedicated_text_admission_type` instead
+        // (`application_bounded`'s doc explains why: a plain `builder.bound`
+        // call here would register the *same* `Bound::key()` digest with the
+        // shared `T_TEXT` as its `semantic_type`, a second, colliding node at
+        // the same node id `dedicated_text_admission_type` also builds).
+        let bound_keys: Vec<String> = if matches!(expression.operation, Op::TextAdmission { .. }) {
+            Vec::new()
+        } else {
+            expression
+                .bounds
+                .iter()
+                .map(|bound| builder.bound(bound))
+                .collect()
+        };
         let mut arguments = expression
             .operands
             .iter()
-            .map(|form| reference(&operand(form)))
+            .map(|form| {
+                let node = if bound_keys.is_empty() || matches!(*form, "enum" | "unit") {
+                    operand(form)
+                } else {
+                    builder.dedicated_operand(form, &bound_keys)
+                };
+                reference(&node)
+            })
             .collect::<Vec<_>>();
         if expression.code == LITERAL_OPERAND {
             arguments[1] = literal("integer", "3");
@@ -1947,7 +2238,12 @@ pub fn corpus_package() -> PackageBuilder {
         // (see `corpus_operation`'s `TextAdmission` arm), so this operand
         // must be a literal -- IR's operand-family check never resolves a
         // family for a literal argument, so the mismatch is never reached.
-        if matches!(expression.operation, Op::TextAdmission { .. }) {
+        let text_admission_type = if matches!(expression.operation, Op::TextAdmission { .. }) {
+            Some(builder.dedicated_text_admission_type(&expression.bounds[0]))
+        } else {
+            None
+        };
+        if let Some(type_key) = &text_admission_type {
             // `corpus_operation`'s `TextAdmission` arm ignores which
             // `TextProfile` this expression names (see its own comment),
             // so every `TEXT_ADMISSIONS` code would otherwise get the
@@ -1957,7 +2253,21 @@ pub fn corpus_package() -> PackageBuilder {
             // duplicate. Folding `code` into the literal keeps each one a
             // distinct node without touching what's actually exercised
             // (the literal's family/value, not its exact text).
-            arguments = vec![literal("text", &format!("a{}", expression.code))];
+            //
+            // The literal's own `type` must be *this* code's dedicated type,
+            // not the shared `T_TEXT` the `literal()` helper always names:
+            // IR's lowering reaches a `literal.type` regardless of the join
+            // (`application_bounded`'s doc, and `V_QUANTITY`'s own comment
+            // above), so a plain `literal("text", ..)` here would still put
+            // `T_TEXT` in this code's closure and `require_bounds` would ask
+            // for a `T_TEXT`-typed bound this dedicated corpus item never
+            // registers.
+            arguments = vec![json!({
+                "term": "literal",
+                "type": node_ref(type_key),
+                "value_kind": "text",
+                "value": format!("a{}", expression.code),
+            })];
         }
         // No node this corpus builds has a `resolve_family` path to
         // `ordered_enum` (the enum type's own `scalar_type` form resolves
@@ -1987,18 +2297,28 @@ pub fn corpus_package() -> PackageBuilder {
             }
         }
         let (catalog_operator, operation) = corpus_operation(&expression);
+        // `TextAdmission` gets a dedicated `semantic_type` (see
+        // `dedicated_text_admission_type`'s own doc) instead of the shared
+        // `result_type(expression.result)` (== `T_TEXT`): its one argument is
+        // a fixed literal, so `application_bounded` has no `reference` target
+        // to anchor the expression's own `text_bounds` bound on, and `T_TEXT`
+        // is one node shared by every text-typed corpus expression -- six
+        // different bounds attached there would each be reachable from every
+        // one of them. The bound is wired onto the dedicated type directly,
+        // so `bounds` passed to `application_bounded` is empty here.
+        let (node_semantic_type, node_bounds): (String, &[Bound]) =
+            if let Some(type_key) = text_admission_type {
+                (type_key, &[])
+            } else {
+                (result_type(expression.result), &expression.bounds[..])
+            };
         builder.application_bounded(
             expression.code,
             "expression",
             expression.form,
-            &result_type(expression.result),
-            application(
-                catalog_operator,
-                operation,
-                &result_type(expression.result),
-                arguments,
-            ),
-            &expression.bounds,
+            &node_semantic_type,
+            application(catalog_operator, operation, &node_semantic_type, arguments),
+            node_bounds,
         );
     }
     let integer_type = key(T_INTEGER);
@@ -2034,12 +2354,18 @@ pub fn corpus_package() -> PackageBuilder {
         ),
         (DOMAIN_MISMATCH, vec![INT5]),
     ] {
+        let bound_keys: Vec<String> = bounds.iter().map(|bound| builder.bound(bound)).collect();
+        let operand_ref = if bound_keys.is_empty() {
+            key(V_INTEGER)
+        } else {
+            builder.dedicated_operand("integer", &bound_keys)
+        };
         builder.application_bounded(
             code,
             "expression",
             "binary",
             &integer_type,
-            integer_pair_for(code),
+            integer_pair_for_operand(code, &operand_ref),
             &bounds,
         );
     }
@@ -2090,28 +2416,6 @@ pub fn corpus_package() -> PackageBuilder {
             &[RAT],
         )
         .application_bounded(
-            EXPRESSION_OPERAND,
-            "expression",
-            "binary",
-            &integer_type,
-            application(
-                "binary",
-                op("quire.op.integer.add"),
-                &integer_type,
-                // `integer_pair()` is embedded directly as operand data,
-                // not as a separate registered node: IR-216's
-                // `validate_application_keys`/`validate_operations` only
-                // ever re-derive/check a node whose own top-level `body`
-                // is an application term, never a nested application
-                // inside `body.arguments[*]` (quire-contract-ir dfd8bd78's
-                // module doc, `checked_package/v2/operations.rs`), so this
-                // nested blob's own placeholder-shaped `operation` is never
-                // itself validated.
-                vec![integer_pair(), reference(&key(V_INTEGER))],
-            ),
-            &[INT],
-        )
-        .application_bounded(
             LITERAL_QUANTITY,
             "expression",
             "binary",
@@ -2123,42 +2427,98 @@ pub fn corpus_package() -> PackageBuilder {
                 vec![reference(&key(V_QUANTITY)), literal("rational", "1")],
             ),
             &[],
-        )
-        .application_bounded(
-            UNTYPED_OPERAND,
-            "expression",
-            "binary",
-            &integer_type,
-            application(
-                "binary",
-                op("quire.op.integer.add"),
-                &integer_type,
-                vec![reference(&key(V_INTEGER)), reference(&key(V_UNTYPED))],
-            ),
-            &[INT],
-        )
-        .application_bounded(
-            MODE_MISMATCH,
-            "expression",
-            "binary",
-            &key(T_DECIMAL),
-            application(
-                "binary",
-                op_full(
-                    "quire.op.decimal.add",
-                    vec![],
-                    Some(mode_kv("rounding", "toward-zero")),
-                    None,
-                ),
-                &key(T_DECIMAL),
-                vec![reference(&key(V_DECIMAL)), reference(&key(V_DECIMAL))],
-            ),
-            // Deliberately the node 1051 bound (`DEC`, rounding
-            // "nearest-even"), not "toward-zero": a descriptor matching this
-            // bound passes `check_item`, then disagrees with the
-            // "toward-zero" `operation.mode` set above.
-            &[DEC],
         );
+    // IR-280's FR-322 join means each of these must anchor its own bound on
+    // a node no other expression's differing bound also reaches (see
+    // `dedicated_operand`'s doc): sharing `V_INTEGER`/`V_DECIMAL` directly,
+    // as before this pin bump, would union every one of these bounds onto
+    // whatever else references the same shared node -- exactly the
+    // `AmbiguousBound` IR-280 itself now catches (measured: `UNBOUNDED`
+    // sharing `V_INTEGER` with these saw 3 reachable bounds and refused
+    // ambiguous instead of requiring one, before this fix).
+    let expression_operand_anchor = {
+        let int_key = builder.bound(&INT);
+        builder.dedicated_operand("integer", &[int_key])
+    };
+    builder.application_bounded(
+        EXPRESSION_OPERAND,
+        "expression",
+        "binary",
+        &integer_type,
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &integer_type,
+            // `integer_pair_for_operand` is embedded directly as operand
+            // data, not as a separate registered node: IR-216's
+            // `validate_application_keys`/`validate_operations` only ever
+            // re-derive/check a node whose own top-level `body` is an
+            // application term, never a nested application inside
+            // `body.arguments[*]` (quire-contract-ir dfd8bd78's module doc,
+            // `checked_package/v2/operations.rs`), so this nested blob's own
+            // placeholder-shaped `operation` is never itself validated. Its
+            // own embedded `reference` is still picked up by
+            // `reference_targets`'s recursive walk (FR-322 says "anywhere"),
+            // so it must name `expression_operand_anchor` too, not the
+            // plain shared `V_INTEGER` -- otherwise this node's exact join
+            // would still include `V_INTEGER`, right back to the
+            // `AmbiguousBound` `dedicated_operand` exists to avoid.
+            vec![
+                integer_pair_for_operand(0, &expression_operand_anchor),
+                reference(&expression_operand_anchor),
+            ],
+        ),
+        &[INT],
+    );
+    let untyped_operand_anchor = {
+        let int_key = builder.bound(&INT);
+        builder.dedicated_operand("integer", &[int_key])
+    };
+    builder.application_bounded(
+        UNTYPED_OPERAND,
+        "expression",
+        "binary",
+        &integer_type,
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &integer_type,
+            vec![
+                reference(&untyped_operand_anchor),
+                reference(&key(V_UNTYPED)),
+            ],
+        ),
+        &[INT],
+    );
+    let mode_mismatch_anchor = {
+        let dec_key = builder.bound(&DEC);
+        builder.dedicated_operand("decimal", &[dec_key])
+    };
+    builder.application_bounded(
+        MODE_MISMATCH,
+        "expression",
+        "binary",
+        &key(T_DECIMAL),
+        application(
+            "binary",
+            op_full(
+                "quire.op.decimal.add",
+                vec![],
+                Some(mode_kv("rounding", "toward-zero")),
+                None,
+            ),
+            &key(T_DECIMAL),
+            vec![
+                reference(&mode_mismatch_anchor),
+                reference(&mode_mismatch_anchor),
+            ],
+        ),
+        // Deliberately the node 1051 bound (`DEC`, rounding
+        // "nearest-even"), not "toward-zero": a descriptor matching this
+        // bound passes `check_item`, then disagrees with the
+        // "toward-zero" `operation.mode` set above.
+        &[DEC],
+    );
     let boolean = key(T_BOOLEAN);
     builder
         .code(COMPOSITE, "composite_type", "record", &boolean, aggregate())
@@ -2209,118 +2569,139 @@ pub fn corpus_package() -> PackageBuilder {
                 &boolean,
                 vec![literal("boolean", "true")],
             ),
-        )
-        .application_bounded(
-            CALLS_FUNCTION,
-            "expression",
-            "binary",
-            &integer_type,
-            application(
-                // `quire.op.integer.add`'s two operands both require the
-                // `integer` family (the catalog's own entry, not the
-                // broader `exact_numeric` group); `FUNCTION` resolves to the
-                // catalog's own `function` family (its `node_tag` is
-                // `function`, matched directly by `resolve_family`), which
-                // no numeric identity's operand family admits, so that
-                // pairing refuses `IllTyped`/`OperatorIneligible` at
-                // admission before CG's own upstream-blocked check (which
-                // runs at generation time, over IR's already-lowered
-                // graph) is ever reached. `quire.op.function.call` is the
-                // one catalog identity built for exactly this shape: its
-                // first operand's family is `function` outright and its
-                // `rest` accepts `any_term`, so `FUNCTION` and a plain
-                // integer reference both admit unchanged.
-                "call",
-                op("quire.op.function.call"),
-                &integer_type,
-                // `FUNCTION` is itself an application-bodied node built
-                // above in this same chain, so its real digest is already
-                // registered; `key(FUNCTION)` would be the stale
-                // placeholder and leave this reference dangling.
-                vec![
-                    reference(&code_id(FUNCTION).digest),
-                    reference(&key(V_INTEGER)),
-                ],
-            ),
-            &[INT],
-        )
-        .application_bounded(
-            WRONG_BODY,
-            "expression",
-            "binary",
-            &integer_type,
-            application(
-                "unary",
-                op("quire.op.integer.negate"),
-                &integer_type,
-                vec![reference(&key(V_INTEGER))],
-            ),
-            &[INT],
-        )
-        .application_bounded(
-            WRONG_OPERAND,
-            "expression",
-            "binary",
-            &integer_type,
-            application(
-                "binary",
-                op("quire.op.integer.add"),
-                &integer_type,
-                // A `reference(V_DECIMAL)` operand would resolve to the
-                // `decimal` family and `quire.op.integer.add`'s catalog
-                // entry requires `integer` in both positions, so IR would
-                // refuse the whole package `IllTyped`/`OperatorIneligible`
-                // at admission -- this fixture exists to exercise CG's own
-                // operand-type check at generation time, over an already
-                // -admitted package, not IR's. `argument_family` only ever
-                // resolves a family for `reference`/`binding` arguments (a
-                // `literal` always resolves to `None`, per its own match
-                // arms in quire-contract-ir dfd8bd78's
-                // `checked_package/v2/operations.rs`), so a literal operand
-                // bypasses that admission-time check entirely while CG's
-                // `check_operand` still classifies it by its own
-                // `value_kind` and refuses the same
-                // `OperandTypeMismatch { position: 1, expected: Integer,
-                // found: Some("decimal") }`.
-                vec![reference(&key(V_INTEGER)), literal("decimal", "1.5")],
-            ),
-            &[INT, DEC],
-        )
-        .application_bounded(
-            WRONG_OPERAND_REFERENCE,
-            "expression",
-            "binary",
-            &key(T_RATIONAL),
-            application(
-                "binary",
-                op("quire.op.rational.div"),
-                &key(T_RATIONAL),
-                // First operand is `reference(V_INTEGER)`: `quire.op.
-                // rational.div`'s catalogued operand family is
-                // `rational_promotable` (`{integer, rational}`, see the
-                // catalog's own `groups` table), so an integer-typed
-                // reference admits at IR -- unlike `WRONG_OPERAND` above,
-                // this exercises `check_operand`'s `"reference"` arm
-                // (`reference_form` -> a graph lookup -> `type_form`), not
-                // its `"literal"` arm. CG's own `Shape::of` for
-                // `RationalOperator::Divide` still requires
-                // `[Rational, Rational]`, so generation refuses the first
-                // operand with `OperandTypeMismatch { position: 0,
-                // expected: Rational, found: Some("integer") }` before the
-                // second operand is ever reached -- it is a literal only to
-                // keep this node's body distinct from corpus code 1033's
-                // (`rational(1033, ..., RationalOperator::IntegerDivide,
-                // ...)`), which already pairs two `reference(V_INTEGER)`
-                // operands with this same catalogued identity under a
-                // descriptor `Shape::of` accepts. This is the same shape a
-                // real catalog family being coarser than CG's own
-                // `ScalarForm` produces in production: e.g. two
-                // integer-typed reference operands requested against
-                // `quire.op.rational.div` under a `Rational` descriptor.
-                vec![reference(&key(V_INTEGER)), literal("integer", "2032")],
-            ),
-            &[INT, RAT],
         );
+    // Each anchor is dedicated to its own fixture's exact bound set (see
+    // `dedicated_operand`'s doc): `key(V_INTEGER)` directly, as before this
+    // pin bump, would union these bounds onto every other expression that
+    // still references the shared node too.
+    let calls_function_anchor = {
+        let int_key = builder.bound(&INT);
+        builder.dedicated_operand("integer", &[int_key])
+    };
+    builder.application_bounded(
+        CALLS_FUNCTION,
+        "expression",
+        "binary",
+        &integer_type,
+        application(
+            // `quire.op.integer.add`'s two operands both require the
+            // `integer` family (the catalog's own entry, not the broader
+            // `exact_numeric` group); `FUNCTION` resolves to the catalog's
+            // own `function` family (its `node_tag` is `function`, matched
+            // directly by `resolve_family`), which no numeric identity's
+            // operand family admits, so that pairing refuses
+            // `IllTyped`/`OperatorIneligible` at admission before CG's own
+            // upstream-blocked check (which runs at generation time, over
+            // IR's already-lowered graph) is ever reached.
+            // `quire.op.function.call` is the one catalog identity built for
+            // exactly this shape: its first operand's family is `function`
+            // outright and its `rest` accepts `any_term`, so `FUNCTION` and
+            // a plain integer reference both admit unchanged.
+            "call",
+            op("quire.op.function.call"),
+            &integer_type,
+            // `FUNCTION` is itself an application-bodied node built above in
+            // this same chain, so its real digest is already registered;
+            // `key(FUNCTION)` would be the stale placeholder and leave this
+            // reference dangling.
+            vec![
+                reference(&code_id(FUNCTION).digest),
+                reference(&calls_function_anchor),
+            ],
+        ),
+        &[INT],
+    );
+    let wrong_body_anchor = {
+        let int_key = builder.bound(&INT);
+        builder.dedicated_operand("integer", &[int_key])
+    };
+    builder.application_bounded(
+        WRONG_BODY,
+        "expression",
+        "binary",
+        &integer_type,
+        application(
+            "unary",
+            op("quire.op.integer.negate"),
+            &integer_type,
+            vec![reference(&wrong_body_anchor)],
+        ),
+        &[INT],
+    );
+    let wrong_operand_anchor = {
+        let keys = [builder.bound(&INT), builder.bound(&DEC)];
+        builder.dedicated_operand("integer", &keys)
+    };
+    builder.application_bounded(
+        WRONG_OPERAND,
+        "expression",
+        "binary",
+        &integer_type,
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &integer_type,
+            // A `reference(V_DECIMAL)` operand would resolve to the
+            // `decimal` family and `quire.op.integer.add`'s catalog entry
+            // requires `integer` in both positions, so IR would refuse the
+            // whole package `IllTyped`/`OperatorIneligible` at admission --
+            // this fixture exists to exercise CG's own operand-type check
+            // at generation time, over an already-admitted package, not
+            // IR's. `argument_family` only ever resolves a family for
+            // `reference`/`binding` arguments (a `literal` always resolves
+            // to `None`, per its own match arms in quire-contract-ir
+            // dfd8bd78's `checked_package/v2/operations.rs`), so a literal
+            // operand bypasses that admission-time check entirely while
+            // CG's `check_operand` still classifies it by its own
+            // `value_kind` and refuses the same `OperandTypeMismatch
+            // { position: 1, expected: Integer, found: Some("decimal") }`.
+            vec![
+                reference(&wrong_operand_anchor),
+                literal("decimal", "1.5"),
+            ],
+        ),
+        &[INT, DEC],
+    );
+    let wrong_operand_reference_anchor = {
+        let keys = [builder.bound(&INT), builder.bound(&RAT)];
+        builder.dedicated_operand("integer", &keys)
+    };
+    builder.application_bounded(
+        WRONG_OPERAND_REFERENCE,
+        "expression",
+        "binary",
+        &key(T_RATIONAL),
+        application(
+            "binary",
+            op("quire.op.rational.div"),
+            &key(T_RATIONAL),
+            // First operand is a `reference` to an integer-family node:
+            // `quire.op.rational.div`'s catalogued operand family is
+            // `rational_promotable` (`{integer, rational}`, see the
+            // catalog's own `groups` table), so an integer-typed reference
+            // admits at IR -- unlike `WRONG_OPERAND` above, this exercises
+            // `check_operand`'s `"reference"` arm (`reference_form` -> a
+            // graph lookup -> `type_form`), not its `"literal"` arm. CG's
+            // own `Shape::of` for `RationalOperator::Divide` still requires
+            // `[Rational, Rational]`, so generation refuses the first
+            // operand with `OperandTypeMismatch { position: 0, expected:
+            // Rational, found: Some("integer") }` before the second operand
+            // is ever reached -- it is a literal only to keep this node's
+            // body distinct from corpus code 1033's (`rational(1033, ...,
+            // RationalOperator::IntegerDivide, ...)`), which already pairs
+            // two integer-family reference operands with this same
+            // catalogued identity under a descriptor `Shape::of` accepts.
+            // This is the same shape a real catalog family being coarser
+            // than CG's own `ScalarForm` produces in production: e.g. two
+            // integer-typed reference operands requested against
+            // `quire.op.rational.div` under a `Rational` descriptor.
+            vec![
+                reference(&wrong_operand_reference_anchor),
+                literal("integer", "2032"),
+            ],
+        ),
+        &[INT, RAT],
+    );
     // FR-014-AC-5 / issue #100: no fixture node before this one carried the
     // `claim` tag, so `claim-map.json`'s `claims` field was structurally
     // always empty and TC-024 never exercised it (measured on origin/main:
@@ -2409,14 +2790,24 @@ pub fn corpus_package() -> PackageBuilder {
             Vec::new(),
         ),
     );
-    builder.add_dependency(
-        code_id(LITERAL_OPERAND).digest.as_ref(),
-        code_id(CLAIM).digest.as_ref(),
-    );
-    builder.add_dependency(
-        code_id(LITERAL_OPERAND).digest.as_ref(),
-        code_id(CLAIM_ALT).digest.as_ref(),
-    );
+    // IR-280's FR-322 application-node dependency join forbids `LITERAL_OPERAND`
+    // (an application node) from carrying any dependency beyond its own body's
+    // exact `reference` join, so `CLAIM`/`CLAIM_ALT` anchor instead on the one
+    // node that join already names: `LITERAL_OPERAND`'s own first argument.
+    // That is no longer the shared `V_INTEGER` (see `dedicated_operand`'s doc:
+    // `LITERAL_OPERAND` declares the `INT` bound, so the main corpus loop
+    // above already gave it a bound-dedicated operand instead, to keep other
+    // expressions' bounds from unioning onto `V_INTEGER`'s closure) -- so
+    // this recomputes that same dedicated node rather than naming `V_INTEGER`
+    // directly. Either way the anchor is a `value`/`literal` node the join
+    // constraint does not cover, so both claims stay reachable from
+    // `LITERAL_OPERAND`'s own closure: `LITERAL_OPERAND -> dedicated -> CLAIM`.
+    let literal_operand_anchor = {
+        let bound_key = builder.bound(&INT);
+        builder.dedicated_operand("integer", &[bound_key])
+    };
+    builder.add_dependency(&literal_operand_anchor, code_id(CLAIM).digest.as_ref());
+    builder.add_dependency(&literal_operand_anchor, code_id(CLAIM_ALT).digest.as_ref());
     builder
 }
 

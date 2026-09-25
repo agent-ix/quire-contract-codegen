@@ -23,7 +23,6 @@ use std::{
 use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
     reference, Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
-    V_INTEGER,
 };
 use quire_contract_codegen::{
     execute_kani_obligation, file_sha256, generate_exact_scalar_oracles, kani_launch_command,
@@ -411,6 +410,17 @@ const FRAME: u32 = 3002;
 
 fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>) {
     let mut builder = corpus_package();
+    // IR-280's FR-322 application-node dependency join means this bound must
+    // anchor on a node no other expression's differing bound also reaches
+    // (see `PackageBuilder::dedicated_operand`'s doc): the plain shared
+    // `V_INTEGER`, as before this pin bump, would union this unsatisfiable
+    // `[5, -5]` bound onto every other expression that still references it
+    // (`UNBOUNDED` among them), turning its own `RequiresBound` into
+    // `AmbiguousBound`/`UnsatisfiableBound` depending on load order.
+    let unsatisfiable_anchor = {
+        let bound_key = builder.bound(&Bound::Integer(5, -5));
+        builder.dedicated_operand("integer", &[bound_key])
+    };
     builder
         .application_bounded(
             UNSATISFIABLE,
@@ -428,7 +438,7 @@ fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>) {
                 // 1001 would collide on digest and IR's `validate_graph`
                 // would refuse the whole package as a duplicate node id.
                 vec![
-                    reference(&key(V_INTEGER)),
+                    reference(&unsatisfiable_anchor),
                     package::literal("integer", &UNSATISFIABLE.to_string()),
                 ],
             ),

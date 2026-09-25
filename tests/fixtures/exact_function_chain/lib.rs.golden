@@ -1487,6 +1487,7 @@ pub fn checked_package() -> Result<rt::CheckedPackage, Vec<rt::CheckRefusal>> {
             Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),
             Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),
             Err(refusal) => rt::Outcome::Refused(refusal),
+            Ok(_) => unreachable!("rt::Outcome gained a variant this generator does not know"),
         }
     }),
     },

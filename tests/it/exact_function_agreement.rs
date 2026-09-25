@@ -11,12 +11,13 @@
 //! current output, spliced in with `include!` exactly as
 //! `composite_equality_agreement.rs` does.
 //!
-//! FR-021-AC-18 (three-way agreement with the pinned `quire-spec-language`
-//! authority) is not implemented here: the spec records it "🚧 Planned,
-//! pending the quire-spec-language re-pin named in Dependencies" (the
-//! authority revision FR-273-AC-5 names, `ea39f91`, is not this
-//! repository's current pin, `21c507e`). This file's agreement legs are
-//! exactly two: the generated oracle and a direct Contract Runtime call.
+//! FR-021-AC-18 (three-way agreement with the QSL authority) is not
+//! implemented here: the spec records it "🚧 Planned, pending the
+//! quire-spec-language re-pin named in Dependencies". IR-254 repointed this
+//! repository's QSL pin, but onto `qsl-replay`'s public API rather than the
+//! `quire_spec_language::value::expression` API AC-18 was written against
+//! (see `src/exact_function.rs`'s module doc). This file's agreement legs
+//! are exactly two: the generated oracle and a direct Contract Runtime call.
 
 // Duplicated per consumer (also `exact_function_generation.rs`) for structural consistency with
 // the exact_scalar/composite_equality families (IR-237). Unlike those two, this package.rs holds
@@ -93,6 +94,7 @@ fn direct_package() -> rt::CheckedPackage {
                     Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),
                     Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),
                     Err(refusal) => rt::Outcome::Refused(refusal),
+                    Ok(_) => unreachable!("Outcome gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 }
             },
         )
@@ -160,6 +162,7 @@ fn direct_package() -> rt::CheckedPackage {
                             rt::Outcome::Incomplete(incomplete)
                         }
                         Err(refusal) => rt::Outcome::Refused(refusal),
+                        Ok(_) => unreachable!("Outcome gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                     }
                 },
             ),

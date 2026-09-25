@@ -1,20 +1,17 @@
-//! FR-014-AC-6: generated exact scalar oracles, direct Contract Runtime
-//! execution and the QSL value authority agree on the QSpec TC-185, TC-186,
-//! TC-187, TC-192 and TC-193 vectors, in outcome, every admitted charge, every
-//! consumed counter, and the outcome of denying each admitted charge.
+//! FR-014-AC-6: generated exact scalar oracles and direct Contract Runtime
+//! execution agree on the QSpec TC-185, TC-186, TC-187, TC-192 and TC-193
+//! vectors, in outcome, every admitted charge, every consumed counter, and
+//! the outcome of denying each admitted charge.
 //!
 //! The oracles are the committed golden `lib.rs`, which
 //! `exact_scalar_generation` proves is the generator's current output. Each
 //! oracle has a fixed operator and type, so a vector is an operand tuple and a
 //! limit tuple taken from the TC's tabled or generated vectors.
 //!
-//! Integer arithmetic, rational arithmetic and ordering are checked against
-//! direct runtime execution only (`agree2!`), and are counted separately.
-//! The pinned authority is QSL 21c507e, which does now export these
-//! operators (`order_numbers`, `evaluate_integer_arithmetic`,
-//! `evaluate_rational_arithmetic`, QSL #119); these vectors stay
-//! runtime-only because this crate has not yet added the `agree3!`
-//! authority leg for them, not because the authority lacks the operator.
+//! IR-254: every vector here runs `agree2!` (direct runtime vs. generated
+//! oracle). A third, QSL value-authority leg (`agree3!`) used to run
+//! alongside it; `../exact_scalar_support/agreement.rs`'s module doc records
+//! why it was deleted rather than ported to the QSL revision this bumps to.
 
 #[path = "../exact_scalar_support/agreement.rs"]
 #[macro_use]
@@ -26,71 +23,71 @@ mod generated {
 }
 
 use generated::{
-    oracle_039f121e76c968abdb029639896a532c898fc1652be1e4ccad6b07e0a2ff13ec as divide_euclidean, // code 1013
-    oracle_03dfa554855dad3f941fe32721b324ce40c5c0d49d18da2fb788d213f0a7297e as rational_divide, // code 1032
     oracle_0588c927fc1e3cd76ad4936610a80aa865b40a993815a34e3c0637db077ee8fa as convert_decimal, // code 1086
+    oracle_08eb5d516b05b48856734299c7ff832ad4f68b2c9c5c8e28d5ae2725452a0851 as decimal_round, // code 1053
     oracle_0979b4cf4ab9a40079cb667ef5d273dc280a9e317b4cb875af62a17a098fe8a8 as quantity_at_least, // code 1135
-    oracle_0aa253cfbd1497e0597a14acc421fbef316a49ef47b4b2865da61392b128deb9 as integer_subtract, // code 1003
-    oracle_0b285623dfb8c23cf8bce67a6c0288a986f49d1aa17d4f4be4e69bb5d573a88b as integer_less, // code 1041
-    oracle_0c6911ff6e061c6e594476c169dd2badf9375d73b15064548fccd1b6c4d44047 as binary64_divide, // code 1062
-    oracle_1416d80c94e64ba3e99b788fcb4e6e2cb3a4f68e2494859fc1d39bcd1106d5df as integer_at_least, // code 1045
+    oracle_09800d0aad009e874e8f5dae4d53b631d09f50c9568a4aa4b71403487ef829ae as binary64_multiply, // code 1066
     oracle_19c4db98ef4e75a17e4911d2c10ffe15b213119d79da54e9da0382ecbba581db as enum_at_least, // code 1125
+    oracle_1a528e2a6cbff097f4ebea8481b1b373906500144177935193b4cac8243367e8 as rational_subtract, // code 1034
     oracle_1d22a331e4928f0d5d8c67edbabbb308a39cd042c44b4020da97fbb1d8b4e937 as quantity_add, // code 1081
+    oracle_1f3517af8733e49a567a9e074adb452949eb4c76f3f0d8118dcb3bd42d92ce4c as divide_floor, // code 1012
     oracle_2ae81bb9f99bc4020cb60eac561f0c6b51b0ecaa83269d7ac701dd2609d0b353 as binary32_numeric_equal, // code 1067
-    oracle_2f1a2419ef0d6681996df514cb5542498596e232ad8bcccd8844d22b932b7867 as binary32_add, // code 1061
+    oracle_2de8b4e02fef75d9ca9652abee57e420ff8150a6bd535a39c7aa07a4c0ef50c4 as modulo_bounded, // code 1021
     oracle_31ba8be5c3bdf1f42d890b944c5e77537aa9514d08bc582ea21f4248dc5aa545 as enum_equal, // code 1121
-    oracle_39b33a7e73ba0a00de7ff05c2179d87a8a585b9c8abca5bd379bf7e28836184e as admit_unicode_scalars, // code 1074
-    oracle_3efc56a077e1cba5cb6242c15c9a3a3c15ffb1641ea1e2929731fb5155691a31 as admit_nfd, // code 1075
-    oracle_42db23b4bcccb9302f9942237b74a3f08b9e876b055ef8de8e70f31e1826a3ca as admit_nfkc, // code 1076
-    oracle_42dd93eff86aa8cfccaa5168679e1f116044cc14953959605133e851a3bc7ed8 as narrow_to_binary32, // code 1064
-    oracle_4326980bf1f5e4329073989b87f08cd905c45b93baa74d0fc9c848abbefd7d65 as quantity_power, // code 1083
+    oracle_3314c57c2dbf19fa312914ebb69732afc466912ff0a536da1d236350848046c1 as decimal_at_most, // code 1042
+    oracle_339dad0b104be725d1554aaab15084d3ee7f9e392a202eff5094e81af29c3a86 as text_equal, // code 1111
+    oracle_34e3167760b6256b159435437213ef99bb3008d3fcbaa3a62abeb06f2c232b38 as integer_divide, // code 1033
+    oracle_3aeecc969a5cbe3efb7ca137ea0e94f98e19d97caa8eac550a2a22612409f099 as decimal_multiply, // code 1055
+    oracle_40a2924f27a1a06be61c63fa7fc9fddfd1ef2caf34d829a80d22b6c64ccaa552 as integer_at_most, // code 1044
+    oracle_4176d5611eeb1bc2de4d29f3c0041f463d319d3dc6997239f742db492c713760 as quantity_power, // code 1083
     oracle_47a3a2b2588b2df95bf54c2378e48b5cd9b08a5de8b49bfba2e57c01b4b653f8 as quantity_greater, // code 1134
-    oracle_47b376074fc662359f371f2d293bda19f0d12deced9395c06ea8497ba29d2b5f as rational_add, // code 1031
-    oracle_4ed07981c04dfb0373fcbef2ebe130f0bdb401bf65095add0438e0b93d9cd9cd as decimal_multiply, // code 1055
+    oracle_4881d33db12712b60c7fb95642827b1a5b0d3482383cc6c27b45dbc3a3ff8766 as rational_greater, // code 1043
+    oracle_4bf5e05de79f7575a55fdff2704455a792bbaeba0b53f45b1e8d58d4fe741a02 as binary32_subtract, // code 1065
+    oracle_4e52c120a34212736cec407ad35ebd053d45bb7bb01719d4eb23443998718218 as text_less, // code 1072
+    oracle_4fd7d9c846f419fe3e571b8c5b3fbeaac7b2ecd1371c647579fd56c144f31564 as rational_divide, // code 1032
     oracle_52244a384ed3bbff2a449749cb5a4365b6e2302737adbedfdb531fd992d5f77d as binary64_bit_identical, // code 1068
-    oracle_5352c057e3511ef4f051a97c7ae28502c07428fbfcbf9c07e70cb915fb02b452 as rational_negate, // code 1036
-    oracle_571e5fabe2814590ee9404dbe9dc0649d5431e385ee08491f1dd58681d87b200 as rational_greater, // code 1043
-    oracle_58a51a57ee8881d0a138b773828ed59a41034cbf1dabda6d3dbef4f7006d3b96 as binary32_subtract, // code 1065
     oracle_58e0beddd2a160e69f0107eeb47f336c57a6b85494717b5766c8ea3d08942b2b as quantity_equal, // code 1131
     oracle_58e715478854ee9d2aa1224cd7474d5df597245cc2d0928cdc8f7e6a7548f2c6 as quantity_at_most, // code 1133
-    oracle_5b2826b130b1ca7b051ecf949158e4affdddc1cd9662966830fbcc1c49a4f6d4 as text_at_least, // code 1115
-    oracle_5cdb8c024674c1df54ec48032898678b8060b35ebd7afa0b921a2e1305a0519d as rational_multiply, // code 1035
-    oracle_5f61d8d0aa46097c2e48a1371659eb05f6c06d8cd236d41a59f59835d999cbe5 as divide_floor, // code 1012
+    oracle_5937c7c8d41fb99522583d7f7713b7127de1025d18cb90427ffb470738658d5b as divide_truncating, // code 1011
+    oracle_5d5501e82bc9abb8232c644c8dc6417e284df4de4905a366c5e3c335f644abe4 as decimal_subtract, // code 1054
+    oracle_61934b838541031d77b98fca4f8ab58806ece25038715be3c65355b5c8aadfd3 as integer_at_least, // code 1045
+    oracle_6b628cd4c20ad67f0c7921d53d18aa61bf40f9ed94cb40f686ef6bf59d54cb3b as integer_less, // code 1041
     oracle_6bf6f9dec50f69449bb65eee6a7aee2280985580471bd1e3e01bae3076dd4f90 as enum_greater, // code 1124
-    oracle_7116975042026662f32053f132326f99ac77c9f19fc821f643d399946a95b7ba as admit_nfkd, // code 1077
-    oracle_743448b1d946d62a4dd71ba9a207108a5bd0c1c0296d73d89fdf2e6b4f7364a5 as text_not_equal, // code 1112
-    oracle_8bb2ae8f3616df1355d6413dbaeb50a432eb8381dd0592a587247b3c4e819e33 as decimal_negate, // code 1056
+    oracle_6cc0e720ead1fff602d6cc9b92ecc0c34b80baf07563239645e83655872dc750 as rational_negate, // code 1036
+    oracle_6d2d74cb2fd12eac568cc46765d5dbeb1cca952e9c2e0f5198df351d7e78c86b as integer_subtract, // code 1003
+    oracle_6d59babb09369322f471a07dafb1134b6175f9311392e7fc5883dfc5b7b10719 as rational_add, // code 1031
+    oracle_6fa221ce7a3bd000c7c135e11fe32a4a3edefeff9802c9ffc9f7a3e726c51beb as text_greater, // code 1114
+    oracle_7c4473ce8ba46c649cf546783a46291e1a9eccce3a8bf3735b19012e9c97aacd as binary32_add, // code 1061
     oracle_908706f2cdab4b62bc1d0265da8c292e3c383482a4944634f7998c7038207a33 as quantity_multiply, // code 1082
-    oracle_9ab21858d0370ca58d201ca99820a62d763edf0759fe450266793539fadff7e1 as decimal_add, // code 1051
-    oracle_9fdf3985c0b43f785cfefbbf6165e5f4ea1b352ace1255945312ba5c425cf3eb as decimal_subtract, // code 1054
-    oracle_9ff019124f48ce642629f0407397e7105b21a789f3f7640bfe0a4574c5493088 as admit_binary_utf8, // code 1078
+    oracle_983f74537b7d2dc7c879fecf913212294b55c86ba7ba7d32ed74f06c957c6ba4 as binary64_divide, // code 1062
+    oracle_9dd795abc2b4ae969fcfc06143ff1dbb2b72a7ff5f30cbfa6f6b80340c8877e9 as decimal_divide, // code 1052
+    oracle_9df4315fba041fb0207be64e79bd454f6dc0879caec000e28e5563d2c81b1bc7 as narrow_to_binary32, // code 1064
+    oracle_a01d141e6af4478279c2d33de49bf6de559664401675d86ee667a9d5d6c25ca3 as text_at_least, // code 1115
     oracle_a0de80d9f4f37ad7a773d1ff7c6c65b88a7e4e394728821c909276d18c57756e as enum_at_most, // code 1123
     oracle_a2ba447bad58ca0b042a0b34e40d3a5b99ba5f2a3c213a900f9a1169309284e2 as binary64_total_order, // code 1063
-    oracle_a329df781d5237142015bd701f97883d5ed63c0611159e02a6926c370cc764b9 as binary64_multiply, // code 1066
-    oracle_a330d3174b8007d333a6b6ef9ffb64fb1d1ca661e68bfa16bc4a97a22f02a4fd as decimal_divide, // code 1052
     oracle_a377c02012a91a9f94843b4cc2166c44076bf22086cd71aa978bc2ae696f1b19 as enum_less, // code 1073
-    oracle_a4a9fc633e99b26af80e9a3ebd57b2466cb2b129b91e2d7a0a52b1a354aa9537 as admit_nfc, // code 1071
-    oracle_a7c07e21cdd73648144d3aa814141edd22701b3d30945d960b12f43b34701e6b as integer_negate, // code 1002
     oracle_b16cf657ba381db0997d24f7a5153a0497a237c532cc5c912a4388ff645ff3fd as enum_not_equal, // code 1122
-    oracle_ba0be80c1454160f54fdca2e457d511c63a7c90be68e62af06e0a47c0a94ae09 as text_less, // code 1072
+    oracle_b1b9eb4b75c17615c3049e44e9d9ba411a76357d0f215ca61c0f6069c780e1e1 as text_at_most, // code 1113
+    oracle_b6c4c488a6f6c69eb9547374c413f80f45d4d00f59d1a8e1446193f2fe82d437 as divide_euclidean, // code 1013
     oracle_bceb553b994a11bb19607a0934084b740a5d2b0a24635863fbe9a4e0160b0dd1 as quantity_less, // code 1084
-    oracle_bf1fba69e7bd5e8333c01e86706e924f267bd71b430acc8c7a76acff55486c37 as divide_bounded, // code 1014
-    oracle_c0b9bb76f7c9fd1dbe32548b62594463029a344683d3e6d80d6ff81d46559521 as text_equal, // code 1111
-    oracle_c79672f55bb623b60c68120b04ef09c3a9620c2a07a79906cce1ccd4cb6f861c as integer_at_most, // code 1044
-    oracle_c9c225d70e630e9f1608f025e9a477aea350b69be50a071c4071e8de184575f4 as decimal_round, // code 1053
     oracle_c9cd0b5a50b22e6782495be9100904d87d0c0aaf9436d85746a3440c2dfe3406 as quantity_subtract, // code 1088
-    oracle_c9f548caf1fa9f246ae373328eef7076c7057b32b3c29d1a510aecfa40e15870 as modulo_bounded, // code 1021
-    oracle_cb6d89d9ccaeb994f56e9d6449948829dbc9aebc38dd9affaee93322016f6b78 as text_greater, // code 1114
-    oracle_ccc188803f119d4957f6f77b6cd39518a78cf7598eec9ed711fc89f3960a83b1 as integer_divide, // code 1033
-    oracle_d374553fd79167cd2c2c86a5dcf9517ea9546c82df0919477ef0e0de0cbf5b4b as divide_truncating, // code 1011
+    oracle_cae4029ee597fd4a07bd3b4b04e05d13c7e999d843db8ad0cdd16540dbbee76b as admit_nfkd, // code 1077
+    oracle_cf05b13221bfc345b7c21c1995216a7ba6e5412bf12c193299b515e33781a5c6 as divide_bounded, // code 1014
+    oracle_d463873f2d88e48f673860f11c3c06ef42aeb671de1ba58e5623de6ccb66db18 as admit_unicode_scalars, // code 1074
     oracle_d5bc5fbdaa1150e0cdaf5fd959392416c0b06ebcc671cffd721264de8c411047 as quantity_divide, // code 1089
     oracle_d62afb79208475a4cb4154dea2d2589032ddee90ff48e423fcfa735cac0b8381 as convert_integer, // code 1087
-    oracle_dccfeaa6b01d129207d9720a411676ac18d973bd5dc5836b5214905651b14bd1 as text_at_most, // code 1113
-    oracle_dead56fc7f2b2e0997fb0fec90105766fcd758d284f45e28a77ee6d98b2f8315 as integer_add, // code 1001
-    oracle_ea7af6c97225cce45d8a07f5d97bf0ee2b894ae1c353ea9b53975bea93d3d15a as integer_multiply, // code 1004
+    oracle_d9453619e02988b753e317579363a0d57f74a36953f18353fd4f0b28a9852014 as integer_add, // code 1001
+    oracle_db0f20a30ed0a6687e6816b82404f5fbbe39ff543c406e55273faf73430d077a as decimal_negate, // code 1056
+    oracle_e58152cf037217e004390e7ede00ed8ad29444867e10dedb11df9ac5351b81d4 as admit_nfkc, // code 1076
+    oracle_edeb49d2e1ed26c7d0540389ad03c5e20049f11aaffd0a6752aed4e0ac4285e4 as decimal_add, // code 1051
+    oracle_f11b7564500eb53d15b9ad310072266f100c53e0b452b665a4e25b304c2cd733 as admit_nfd, // code 1075
+    oracle_f15287a740a285b180f83439d376a02972c44b417d164525076ae16bb146f4d9 as integer_negate, // code 1002
+    oracle_f17752077cc598d1c29c1a24b80d9b7ca486ae389c56442514f27569308e8c51 as admit_nfc, // code 1071
     oracle_f2927ffb5f00452e5ec2284106a9acb247d9aefa287c5c4a335225ea98828031 as quantity_not_equal, // code 1132
-    oracle_f66b4082cd53c8a163da6918dd73b6c8126ab4662cb8fa989b0902604aea13fb as rational_subtract, // code 1034
-    oracle_fe900e8ad5d452ab6468556b17ca5077619df0bf2ee450c26d51b55c1602d5f2 as decimal_at_most, // code 1042
+    oracle_f34d0bf1630a2cc21187d7cc591c0756fc4f1b1e5d8e4fbe82643f78b7f5c678 as text_not_equal, // code 1112
+    oracle_f478e79124757f838c70dee68eaca3429710af7cdd631054585e8a089c499b29 as rational_multiply, // code 1035
+    oracle_f637004aa7fbdfbd0a45002a43d541e0cf07321f98a58c22401a4d5284c0bb38 as admit_binary_utf8, // code 1078
+    oracle_fa5c1e6a5ba44e1f69c8443c340badbe17dcccee1588d1db5494e0d55001236c as integer_multiply, // code 1004
     OracleStop,
 };
 use quire_contract_runtime::exact::{
@@ -199,7 +196,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
     let mut vectors = 0_usize;
     for a in -20_i128..=20 {
         for b in -20_i128..=20 {
-            agree3! {
+            agree2! {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); },
                 direct: |m| (
@@ -213,13 +210,13 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
                     done(divide_euclidean(&a, &b, m)),
                 ),
             };
-            agree3! {
+            agree2! {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); let bounded = IntegerDomain::Bounded(IntegerInterval::new(int(-5), int(5)).unwrap()); },
                 direct: |m| divide(DivisionProfile::Truncating, &a, &b, &bounded, m),
                 generated: |m| done(divide_bounded(&a, &b, m)),
             };
-            agree3! {
+            agree2! {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); let bounded = IntegerDomain::Bounded(IntegerInterval::new(int(-5), int(5)).unwrap()); },
                 direct: |m| modulo(&a, &b, &bounded, m),
@@ -240,7 +237,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
         (7, 0, with(DIV_08, 8, 1)),
         (7, 0, with(DIV_08, 8, 0)),
     ] {
-        agree3! {
+        agree2! {
             limits: limits(tuple),
             setup: { let (a, b) = (int(a), int(b)); },
             direct: |m| divide(DivisionProfile::Truncating, &a, &b, &wide(), m),
@@ -256,7 +253,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
         (-7, 3, with(DIV_10, 9, 0)),
         (-9, 1, with(with(DIV_10, 9, 0), 8, 2)),
     ] {
-        agree3! {
+        agree2! {
             limits: limits(tuple),
             setup: { let (a, b) = (int(a), int(b)); let bounded = IntegerDomain::Bounded(IntegerInterval::new(int(-5), int(5)).unwrap()); },
             direct: |m| modulo(&a, &b, &bounded, m),
@@ -280,13 +277,13 @@ fn tc_024_tc185_decimal_oracles_agree() {
         .collect::<Vec<_>>();
     let mut vectors = 0_usize;
     for (ca, sa) in &operands {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: { let a = dec(*ca, *sa); let target = decimal_type(-100, 100, 0, 0, RoundingMode::NearestAway); },
             direct: |m| evaluate_decimal(DecimalOperation::Round(&a), &target, m),
             generated: |m| done(decimal_round(&a, m)),
         };
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: { let a = dec(*ca, *sa); let target = decimal_type(-1000, 1000, 0, 2, RoundingMode::NearestEven); },
             direct: |m| evaluate_decimal(DecimalOperation::Negate(&a), &target, m),
@@ -294,7 +291,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
         };
         vectors += 2;
         for (cb, sb) in &operands {
-            agree3! {
+            agree2! {
                 limits: UNLIMITED,
                 setup: {
                     let (a, b) = (dec(*ca, *sa), dec(*cb, *sb));
@@ -322,7 +319,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
     // D03 (both signed halves), D05, D06, D09 exact and short, D15.
     let mut named = 0_usize;
     for coefficient in [25_i64, -25] {
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: { let a = dec(coefficient, 1); let target = decimal_type(-100, 100, 0, 0, RoundingMode::NearestAway); },
             direct: |m| evaluate_decimal(DecimalOperation::Round(&a), &target, m),
@@ -344,7 +341,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
         ((1, 0), (0, 3), with_work(1)),
         ((1, 0), (0, 3), with_work(0)),
     ] {
-        agree3! {
+        agree2! {
             limits: limits(tuple),
             setup: { let (a, b) = (dec(ca, sa), dec(cb, sb)); let target = decimal_type(-1000, 1000, 0, 2, RoundingMode::TowardZero); },
             direct: |m| evaluate_decimal(DecimalOperation::Divide(&a, &b), &target, m),
@@ -354,10 +351,8 @@ fn tc_024_tc185_decimal_oracles_agree() {
     }
     assert_eq!(named, 9);
 
-    // Decimal ordering: the pinned authority (QSL 21c507e) now exports
-    // `OrderedOperands::Decimals` (QSL #119), so this is no longer a case of
-    // no authority operator existing. It stays runtime-only (`agree2!`)
-    // because this crate has not yet added the `agree3!` authority leg.
+    // Decimal ordering: runtime vs. generated oracle only (`agree2!`); see
+    // this file's module doc for why the QSL authority leg is gone.
     let mut ordering = 0_usize;
     for (ca, sa) in &operands {
         for (cb, sb) in &operands {
@@ -415,7 +410,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
     for (p, admit) in ADMISSIONS.into_iter().enumerate() {
         for input in SEQUENCES {
             for tuple in [[u64::MAX; 10], T11, T14, T16] {
-                agree3! {
+                agree2! {
                     limits: limits(tuple),
                     setup: { let input = payload(input); let target = text_type(0, 4, TextProfile::ALL[p]); },
                     direct: |m| admit_text(&input, &target, m),
@@ -432,7 +427,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
         for p in 0..6_usize {
             for left in SEQUENCES {
                 for right in SEQUENCES {
-                    agree3! {
+                    agree2! {
                         limits: UNLIMITED,
                         setup: { let (l, r) = (text(left, TextProfile::ALL[p]), text(right, TextProfile::ALL[p])); },
                         direct: |m| compare_text(ComparisonOperator::ALL[o], &l, &r, m),
@@ -450,7 +445,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
         (E_ACUTE, 0, E_COMBINING, 0, T14),
         (E_ACUTE, 5, E_COMBINING, 5, T14),
     ] {
-        agree3! {
+        agree2! {
             limits: limits(tuple),
             setup: { let (l, r) = (text(left, TextProfile::ALL[lp]), text(right, TextProfile::ALL[rp])); },
             direct: |m| compare_text(ComparisonOperator::Less, &l, &r, m),
@@ -474,7 +469,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
                 for rc in rm {
                     for (o, compare) in ENUM_COMPARISONS.into_iter().enumerate() {
                         for tuple in [[u64::MAX; 10], [0; 10]] {
-                            agree3! {
+                            agree2! {
                                 limits: limits(tuple),
                                 setup: {
                                     let left = enum_declaration(ln, lo, lm).unwrap().value(lc).unwrap();
@@ -507,7 +502,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         for from in family {
             for to in family {
                 for (n, d) in values {
-                    agree3! {
+                    agree2! {
                         limits: UNLIMITED,
                         setup: {
                             let f = fixture();
@@ -535,7 +530,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
     for name in ["m", "cm", "in", "rev", "u2"] {
         for (ln, ld) in values {
             for (rn, rd) in values {
-                agree3! {
+                agree2! {
                     limits: UNLIMITED,
                     setup: { let f = fixture(); let (a, b) = (f.q(ratio(ln, ld), name), f.q(ratio(rn, rd), name)); },
                     direct: |m| (
@@ -553,7 +548,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
                 };
                 operations += 4;
                 for (o, compare) in QUANTITY_COMPARISONS.into_iter().enumerate() {
-                    agree3! {
+                    agree2! {
                         limits: UNLIMITED,
                         setup: { let f = fixture(); let (a, b) = (f.q(ratio(ln, ld), name), f.q(ratio(rn, rd), name)); },
                         direct: |m| compare_quantity(ComparisonOperator::ALL[o], &a, &b, m),
@@ -563,7 +558,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
                 }
             }
             for exponent in ["-2", "-1", "0", "1", "2", "3"] {
-                agree3! {
+                agree2! {
                     limits: UNLIMITED,
                     setup: { let f = fixture(); let (a, n) = (f.q(ratio(ln, ld), name), big(exponent)); },
                     direct: |m| evaluate_quantity(QuantityOperation::Power(&a, &n), m),
@@ -584,7 +579,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         ((1, "cm"), (2, "cm"), [2, 0, 0, 2, 5, 1]),
         ((1, "m"), (1, "s"), [0; 6]),
     ] {
-        agree3! {
+        agree2! {
             limits: unit_tuple(tuple),
             setup: { let f = fixture(); let (a, b) = (f.qi(a.0, a.1), f.qi(b.0, b.1)); },
             direct: |m| evaluate_quantity(QuantityOperation::Add(&a, &b), m),
@@ -597,7 +592,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         [12, 0, 2, 2, 11, 1],
         [18, 0, 2, 2, 11, 1],
     ] {
-        agree3! {
+        agree2! {
             limits: unit_tuple(tuple),
             setup: { let f = fixture(); let (a, b) = (f.qi(1, "cm"), f.qi(1, "in")); },
             direct: |m| evaluate_quantity(QuantityOperation::Multiply(&a, &b), m),
@@ -611,7 +606,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         (0, "-1", [1, 0, 0, 1, 1, 0]),
         (0, "-1", [1, 0, 0, 1, 0, 0]),
     ] {
-        agree3! {
+        agree2! {
             limits: unit_tuple(tuple),
             setup: { let f = fixture(); let (a, n) = (f.qi(value, "m"), big(exponent)); },
             direct: |m| evaluate_quantity(QuantityOperation::Power(&a, &n), m),
@@ -624,7 +619,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         ((1, "degC"), (2, "degC"), [13, 0, 2, 2, 8, 1]),
         ((0, "degC"), (32, "degF"), [0; 6]),
     ] {
-        agree3! {
+        agree2! {
             limits: unit_tuple(tuple),
             setup: { let f = fixture(); let (a, b) = (f.qi(a.0, a.1), f.qi(b.0, b.1)); },
             direct: |m| compare_quantity(ComparisonOperator::Less, &a, &b, m),
@@ -674,7 +669,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
     let mut vectors = 0_usize;
     for a in &narrow {
         for b in &narrow {
-            agree3! {
+            agree2! {
                 limits: UNLIMITED,
                 setup: { let (x, y) = (ieee(0, *a), ieee(0, *b)); },
                 direct: |m| (
@@ -693,7 +688,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
     }
     for a in &wide {
         for b in &wide {
-            agree3! {
+            agree2! {
                 limits: UNLIMITED,
                 setup: { let (x, y) = (ieee(1, *a), ieee(1, *b)); },
                 direct: |m| (
@@ -711,7 +706,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
             };
             vectors += 4;
         }
-        agree3! {
+        agree2! {
             limits: UNLIMITED,
             setup: { let x = ieee(1, *a); },
             direct: |m| convert_ieee_width(x, IeeeWidth::Binary32, RoundingMode::NearestEven, m),
@@ -729,7 +724,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
         (0x3f80_0000, 0x3380_0000, (32, 2, 3, 1)),
         (0x3f80_0000, 0x3380_0000, (31, 2, 4, 1)),
     ] {
-        agree3! {
+        agree2! {
             limits: ieee_limits(i, o, w, r),
             setup: { let (x, y) = (f32v(a), f32v(b)); },
             direct: |m| evaluate_ieee(IeeeOperation::Add(x, y), RoundingMode::NearestEven, m),
@@ -747,7 +742,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
         (1, 4),
         (1, 3),
     ] {
-        agree3! {
+        agree2! {
             limits: ieee_limits(64, 1, work, 1),
             setup: { let x = f64v(bits); },
             direct: |m| convert_ieee_width(x, IeeeWidth::Binary32, RoundingMode::NearestEven, m),
@@ -877,5 +872,5 @@ fn tc_024_operators_without_an_authority_agree_with_direct_runtime() {
         }
     }
     assert_eq!(vectors, 41 + 7 * 41 * 41 + 39 + 5 * 39 * 39);
-    println!("runtime-only agreement (no agree3! authority leg yet): {vectors} vectors");
+    println!("runtime-only agreement (no authority leg): {vectors} vectors");
 }

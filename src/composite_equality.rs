@@ -246,6 +246,7 @@ impl From<IllTypedCause> for IllTypedCauseKind {
             IllTypedCause::TypeMismatch => Self::TypeMismatch,
             IllTypedCause::OperatorIneligible => Self::OperatorIneligible,
             IllTypedCause::AmbiguousLiteral => Self::AmbiguousLiteral,
+            _ => unreachable!("IllTypedCause gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 }
@@ -265,6 +266,7 @@ impl From<rt::RecursionEdges> for RecursionEdgesKind {
         match edges {
             rt::RecursionEdges::Unnamed => Self::Unnamed,
             rt::RecursionEdges::NonEscaping => Self::NonEscaping,
+            _ => unreachable!("RecursionEdges gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 }
@@ -314,6 +316,7 @@ impl From<rt::DeclarationCause> for DeclarationRefusalCause {
                 edges: edges.into(),
                 cycle,
             },
+            _ => unreachable!("DeclarationCause gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 }
@@ -479,6 +482,7 @@ impl From<EqualitySchedule> for RecordedSchedule {
             EqualitySchedule::Enum => Self::Enum,
             EqualitySchedule::Quantity => Self::Quantity,
             EqualitySchedule::Plan => Self::Plan,
+            _ => unreachable!("EqualitySchedule gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 }
@@ -581,7 +585,7 @@ pub fn generate_composite_equality_oracles(
                         environment_symbol: format!("environment_{symbol}"),
                         oracle_symbol: format!("oracle_{symbol}"),
                         ir_id: generated.node.ir_id.clone(),
-                        package_id: lowering.package_id.clone(),
+                        package_id: lowering.package.source_package_id().clone(),
                         semantic_type: generated.node.semantic_type.clone(),
                         source_map: generated.node.source_map.clone(),
                         claims: generated.node.claims.clone(),
@@ -612,7 +616,7 @@ pub fn generate_composite_equality_oracles(
 
     let claim_map = ClaimMap {
         version: COMPOSITE_EQUALITY_CLAIM_MAP_VERSION,
-        package_id: lowering.package_id,
+        package_id: lowering.package.source_package_id().clone(),
         runtime_revision: RUNTIME_REVISION,
         blocked: vec![UpstreamBlocker::OperationIdentityNotConsumed],
         items: claims,
@@ -1494,7 +1498,8 @@ fn render_composite_declaration(declaration: &CompositeDeclaration) -> String {
                 .map(|value_type| format!("{}, ", render_value_type(value_type)))
                 .collect();
             format!("rt::CompositeShape::Tuple(vec![{rendered}])")
-        }
+        },
+        &_ => unreachable!("CompositeShape gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
     };
     format!(
         "rt::CompositeDeclaration::new({key}, {:?}, {shape})",
@@ -1556,7 +1561,8 @@ fn render_value_type(value_type: &ValueType) -> String {
         ),
         ValueType::Reference(_) => {
             unreachable!("reference operands are refused at generation time")
-        }
+        },
+        &_ => unreachable!("ValueType gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
     }
 }
 
@@ -1595,6 +1601,7 @@ fn collection_kind_path(kind: CollectionKind) -> &'static str {
         CollectionKind::Set => "rt::CollectionKind::Set",
         CollectionKind::Bag => "rt::CollectionKind::Bag",
         CollectionKind::OrderedSet => "rt::CollectionKind::OrderedSet",
+        _ => unreachable!("CollectionKind gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -1606,6 +1613,7 @@ fn rounding_path(rounding: RoundingMode) -> &'static str {
         RoundingMode::TowardNegative => "rt::RoundingMode::TowardNegative",
         RoundingMode::NearestEven => "rt::RoundingMode::NearestEven",
         RoundingMode::NearestAway => "rt::RoundingMode::NearestAway",
+        _ => unreachable!("RoundingMode gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -1617,6 +1625,7 @@ fn profile_path(profile: TextProfile) -> &'static str {
         TextProfile::Nfkc => "rt::TextProfile::Nfkc",
         TextProfile::Nfkd => "rt::TextProfile::Nfkd",
         TextProfile::BinaryUtf8 => "rt::TextProfile::BinaryUtf8",
+        _ => unreachable!("TextProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 

@@ -25,8 +25,12 @@ path = "examples/generation_conformance.rs"
 test = true
 
 [dependencies]
-quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "97f50655c48f48be0bf5ab04dff5aac029c3745c" }
-quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "9f31169276edb85799d6b7d878020caf49617090", features = ["exact"] }
+quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "b52c26380cb312e6005474d70ba2b88a37246ffe" }
+quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "c52442a56a879cb5ce02a63bcbe430b85bf74a6d", features = ["exact"] }
+# IR-254: qsl-replay is the only QSL crate this repository may depend on (QSL arch-lint
+# T12-A). A normal dependency, not a dev-dependency, per IR-254 -- nothing in src/ calls it
+# yet, but the three-way agreement authority leg (FR-014-AC-6, FR-018-AC-2) is planned to.
+qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "daa0178b0ab82b6e1dc4a7868044d2596ec51374" }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"
 sha2 = "=0.10.9"
@@ -35,8 +39,7 @@ syn = { version = "=2.0.119", features = ["full", "visit"] }
 [dev-dependencies]
 jsonschema = { version = "=0.17.1", default-features = false, features = ["draft202012"] }
 proptest = { version = "=1.5.0", default-features = false, features = ["std"] }
-quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "9f31169276edb85799d6b7d878020caf49617090", features = ["proptest", "exact"] }
-quire-spec-language = { version = "=0.2.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "21c507e50cb009497ee9d306e1d18c1919346611" }
+quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "c52442a56a879cb5ce02a63bcbe430b85bf74a6d", features = ["proptest", "exact"] }
 
 [profile.release]
 lto = "thin"

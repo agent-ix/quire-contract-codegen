@@ -873,7 +873,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
     // content (`LOWERED_NODE_PREIMAGE`), so it, `claims` and `source_map`
     // must agree regardless of which permissive profile computed them.
     let profile = CompleteLoweringProfileV2 {
-        supported_tags: CheckedNodeTag::ALL.into_iter().collect::<BTreeSet<_>>(),
+        supported_tags: CheckedNodeTag::ALL.iter().copied().collect::<BTreeSet<_>>(),
         require_bounds: false,
         work_limit: 10_000,
     };
@@ -888,7 +888,12 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
     assert_eq!(nested.package_id, *package.package_id());
 
     let single_lowering = package.lower(&[code_id(E_RECORD)], &profile);
-    assert_eq!(single_lowering.package_id, *package.package_id());
+    assert_eq!(
+        *single_lowering.package.source_package_id(),
+        *package.package_id(),
+        "source_package_id is the admitted SOURCE package's identity; package_id() is a \
+         different digest, over the lowered closure"
+    );
     match &single_lowering.records[..] {
         [CompleteLoweringRecordV2::Lowered { node }] => {
             assert_eq!(

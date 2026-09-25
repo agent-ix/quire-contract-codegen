@@ -120,13 +120,15 @@
 //!
 //! FR-021-AC-18 is recorded in `spec/functional/complete-v1/FR-021-function-application-oracles.md`
 //! as "🚧 Planned, pending the `quire-spec-language` re-pin named in
-//! Dependencies" -- the authority revision FR-273-AC-5 names (`ea39f91`) is
-//! not this repository's current `quire-spec-language` pin (`21c507e`), and
-//! FR-021's own Dependencies section rules that repointing the pin is a
-//! separate change, not part of this requirement. No test in this module's
-//! suite asserts agreement against `quire_spec_language::value::expression`;
-//! AC-2's two legs (generated oracle, direct runtime call) are implemented
-//! and tested in full.
+//! Dependencies". IR-254 repointed this repository's QSL pin, but not onto
+//! `quire_spec_language::value::expression`: that value-level API is gone
+//! from the revision this repository now pins, and QSL arch-lint T12-A
+//! confines this repository to `qsl-replay`'s public API (one
+//! source-recompiling proof-witness replay executor) instead, which AC-18's
+//! direct-expression-call shape cannot reach without a new source-level test
+//! harness. No test in this module's suite asserts agreement against a QSL
+//! authority; AC-2's two legs (generated oracle, direct runtime call) are
+//! implemented and tested in full.
 
 use crate::composite_equality::EqualityOperatorKind;
 use crate::exact_scalar::IntegerOperator;
@@ -1033,7 +1035,7 @@ pub fn generate_exact_function_oracles(
                 &survivors,
                 &function_index,
                 &package_refusal,
-                &lowering.package_id,
+                lowering.package.source_package_id(),
                 &key,
                 item,
                 record,
@@ -1057,12 +1059,12 @@ pub fn generate_exact_function_oracles(
 
     let claim_map = ClaimMap {
         version: EXACT_FUNCTION_CLAIM_MAP_VERSION,
-        package_id: lowering.package_id.clone(),
+        package_id: lowering.package.source_package_id().clone(),
         runtime_revision: RUNTIME_REVISION,
         blocked: Vec::new(),
         items: claims,
     };
-    let lib = source.finish(&classified, &lowering.package_id);
+    let lib = source.finish(&classified, lowering.package.source_package_id());
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(OracleGenerationError::SourceTooLarge { bytes: lib.len() });
     }
@@ -1368,7 +1370,8 @@ fn render_body(declaration: &ExactFunctionDeclaration) -> String {
                  Ok(rt::Outcome::Undefined(undefined)) => rt::Outcome::Undefined(undefined),\n            \
                  Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),\n            \
                  Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),\n            \
-                 Err(refusal) => rt::Outcome::Refused(refusal),\n        \
+                 Err(refusal) => rt::Outcome::Refused(refusal),\n            \
+                 Ok(_) => unreachable!(\"rt::Outcome gained a variant this generator does not know\"),\n        \
                  }}\n    }}"
             )
         }
@@ -1399,7 +1402,8 @@ fn render_body(declaration: &ExactFunctionDeclaration) -> String {
                  Ok(rt::Outcome::Undefined(undefined)) => rt::Outcome::Undefined(undefined),\n            \
                  Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),\n            \
                  Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),\n            \
-                 Err(refusal) => rt::Outcome::Refused(refusal),\n        \
+                 Err(refusal) => rt::Outcome::Refused(refusal),\n            \
+                 Ok(_) => unreachable!(\"rt::Outcome gained a variant this generator does not know\"),\n        \
                  }}\n    }}"
             )
         }

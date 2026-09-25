@@ -334,6 +334,7 @@ impl ScalarForm {
         match width {
             IeeeWidth::Binary32 => Self::Float32,
             IeeeWidth::Binary64 => Self::Float64,
+            _ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 }
@@ -663,7 +664,7 @@ pub fn generate_exact_scalar_oracles(
                                 Some(identity) => {
                                     source.oracle(&symbol, node_id, &identity, operation);
                                     let oracle_source = standalone_oracle_source(
-                                        &lowering.package_id,
+                                        lowering.package.source_package_id(),
                                         &symbol,
                                         node_id,
                                         &identity,
@@ -726,7 +727,7 @@ pub fn generate_exact_scalar_oracles(
 
     let claim_map = ClaimMap {
         version: EXACT_SCALAR_CLAIM_MAP_VERSION,
-        package_id: lowering.package_id,
+        package_id: lowering.package.source_package_id().clone(),
         runtime_revision: RUNTIME_REVISION,
         // No blocker applies to every entry any more: a confirmed claim's
         // provenance is `IrConfirmed`, and an unconfirmed claim's
@@ -943,6 +944,7 @@ fn check_parameters(
             let declared = match domain {
                 IntegerDomain::Bounded(interval) => Some(interval),
                 IntegerDomain::Mathematical => None,
+                &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             };
             bounds.equal(BoundForm::IntegerRange, read_integer_range, declared)?
         }
@@ -976,7 +978,8 @@ fn check_parameters(
             // caller-declared with the operation.
             QuantityTarget::Integer { domain, .. } => {
                 bounds.equal(BoundForm::IntegerRange, read_integer_range, Some(domain))?
-            }
+            },
+            &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
         },
         ExactScalarOperation::Ordering { .. }
         | ExactScalarOperation::IeeeComparison { .. }
@@ -1246,15 +1249,18 @@ impl Shape {
             ExactScalarOperation::IeeeArithmetic { width, .. } => match width {
                 IeeeWidth::Binary32 => Self::binary(&[F::Float32, F::Float32], F::Float32),
                 IeeeWidth::Binary64 => Self::binary(&[F::Float64, F::Float64], F::Float64),
+                &_ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             },
             ExactScalarOperation::IeeeComparison { width, .. } => match width {
                 IeeeWidth::Binary32 => Self::binary_call(&[F::Float32, F::Float32], F::Boolean),
                 IeeeWidth::Binary64 => Self::binary_call(&[F::Float64, F::Float64], F::Boolean),
+                &_ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             },
             ExactScalarOperation::IeeeWidthConversion { source, target, .. } => {
                 let operand: &'static [ScalarForm; 1] = match source {
                     IeeeWidth::Binary32 => &[F::Float32],
                     IeeeWidth::Binary64 => &[F::Float64],
+                    &_ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 Self::conversion(operand, F::of_width(*target))
             }
@@ -1280,6 +1286,7 @@ impl Shape {
                     QuantityTarget::Exact => F::Rational,
                     QuantityTarget::Decimal(_) => F::Decimal,
                     QuantityTarget::Integer { .. } => F::Integer,
+                    &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 Self::conversion(&[F::Unit], result)
             }
@@ -1464,7 +1471,8 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
                 }
                 (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
                     "quire.op.ieee.float64.div"
-                }
+                },
+                (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
             };
             with_rounding(identity, *rounding)
         }
@@ -1472,6 +1480,7 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
             IeeeComparison::NumericEqual => "quire.op.ieee.numeric_equal",
             IeeeComparison::TotalOrder => "quire.op.ieee.total_order",
             IeeeComparison::BitIdentical => "quire.op.ieee.bit_identical",
+            &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }),
         Op::IeeeWidthConversion {
             source,
@@ -1486,6 +1495,7 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
             // descriptor naming one can never be confirmed.
             (IeeeWidth::Binary32, IeeeWidth::Binary32)
             | (IeeeWidth::Binary64, IeeeWidth::Binary64) => None,
+            (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         },
         Op::TextAdmission { .. } => plain("quire.op.numeric.convert"),
         // `text.*`/`enum.*` comparisons carry a catalogued `text_profile` mode
@@ -1511,6 +1521,7 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
                 QuantityTarget::Exact => plain(identity),
                 QuantityTarget::Decimal(decimal) => with_rounding(identity, decimal.rounding()),
                 QuantityTarget::Integer { rounding, .. } => with_rounding(identity, *rounding),
+                &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             }
         }
     }
@@ -1524,6 +1535,7 @@ fn ordering_suffix(operator: OrderingOperator) -> &'static str {
         OrderingOperator::LessOrEqual => "le",
         OrderingOperator::Greater => "gt",
         OrderingOperator::GreaterOrEqual => "ge",
+        _ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -1537,6 +1549,7 @@ fn text_family_identity(family: &'static str, operator: ComparisonOperator) -> &
         ComparisonOperator::LessOrEqual => "le",
         ComparisonOperator::Greater => "gt",
         ComparisonOperator::GreaterOrEqual => "ge",
+        _ => unreachable!("ComparisonOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     };
     match (family, suffix) {
         ("text", "eq") => "quire.op.text.eq",
@@ -1669,6 +1682,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
                 OrderingOperator::LessOrEqual => "less_or_equal",
                 OrderingOperator::Greater => "greater",
                 OrderingOperator::GreaterOrEqual => "greater_or_equal",
+                &_ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             };
             let kind = match operands {
                 OrderingOperandKind::Integer => "integer",
@@ -1717,6 +1731,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
                 IeeeComparison::NumericEqual => "numeric_equal",
                 IeeeComparison::TotalOrder => "total_order",
                 IeeeComparison::BitIdentical => "bit_identical",
+                &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             };
             format!("ieee.{name} width={}", width.as_str())
         }
@@ -1770,6 +1785,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
                 interval_identity(domain),
                 rounding.as_str()
             ),
+            &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         },
     }
 }
@@ -1782,6 +1798,7 @@ fn comparison_name(operator: ComparisonOperator) -> &'static str {
         ComparisonOperator::LessOrEqual => "less_or_equal",
         ComparisonOperator::Greater => "greater",
         ComparisonOperator::GreaterOrEqual => "greater_or_equal",
+        _ => unreachable!("ComparisonOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -1789,6 +1806,7 @@ fn integer_domain_identity(domain: &IntegerDomain) -> String {
     match domain {
         IntegerDomain::Mathematical => "mathematical".to_owned(),
         IntegerDomain::Bounded(interval) => interval_identity(interval),
+        &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -1891,7 +1909,8 @@ impl SourceBuilder {
             IntegerDomain::Mathematical => "rt::IntegerDomain::Mathematical".to_owned(),
             IntegerDomain::Bounded(interval) => {
                 format!("rt::IntegerDomain::Bounded({})", self.interval(interval))
-            }
+            },
+            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
         }
     }
 
@@ -1908,6 +1927,7 @@ impl SourceBuilder {
                 vec![format!("let domain = {};", self.interval(interval))],
                 "Some(&domain)".to_owned(),
             ),
+            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 
@@ -1957,6 +1977,7 @@ impl SourceBuilder {
                     DivisionProfile::Truncating => "Truncating",
                     DivisionProfile::Floor => "Floor",
                     DivisionProfile::Euclidean => "Euclidean",
+                    &_ => unreachable!("DivisionProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 Body {
                     parameters: binary("&rt::Integer"),
@@ -2039,6 +2060,7 @@ impl SourceBuilder {
                     OrderingOperator::LessOrEqual => "LessOrEqual",
                     OrderingOperator::Greater => "Greater",
                     OrderingOperator::GreaterOrEqual => "GreaterOrEqual",
+                    &_ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 let (ty, kind) = match operands {
                     OrderingOperandKind::Integer => ("&rt::Integer", "Integers"),
@@ -2105,6 +2127,7 @@ impl SourceBuilder {
                     IeeeComparison::NumericEqual => "NumericEqual",
                     IeeeComparison::TotalOrder => "TotalOrder",
                     IeeeComparison::BitIdentical => "BitIdentical",
+                    &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 let width = width_path(*width);
                 Body {
@@ -2200,6 +2223,7 @@ impl SourceBuilder {
                         self.interval(domain),
                         rounding_path(*rounding)
                     ),
+                    &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
                 };
                 Body {
                     parameters: vec![("operand", "&rt::Quantity"), ("unit", "&rt::QuantityUnit")],
@@ -2236,6 +2260,7 @@ fn comparison_body(ty: &'static str, function: &str, operator: ComparisonOperato
         ComparisonOperator::LessOrEqual => "LessOrEqual",
         ComparisonOperator::Greater => "Greater",
         ComparisonOperator::GreaterOrEqual => "GreaterOrEqual",
+        _ => unreachable!("ComparisonOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     };
     Body {
         parameters: binary(ty),
@@ -2255,6 +2280,7 @@ fn rounding_path(rounding: RoundingMode) -> &'static str {
         RoundingMode::TowardNegative => "rt::RoundingMode::TowardNegative",
         RoundingMode::NearestEven => "rt::RoundingMode::NearestEven",
         RoundingMode::NearestAway => "rt::RoundingMode::NearestAway",
+        _ => unreachable!("RoundingMode gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -2262,6 +2288,7 @@ fn width_path(width: IeeeWidth) -> &'static str {
     match width {
         IeeeWidth::Binary32 => "rt::IeeeWidth::Binary32",
         IeeeWidth::Binary64 => "rt::IeeeWidth::Binary64",
+        _ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -2273,6 +2300,7 @@ fn profile_path(profile: TextProfile) -> &'static str {
         TextProfile::Nfkc => "rt::TextProfile::Nfkc",
         TextProfile::Nfkd => "rt::TextProfile::Nfkd",
         TextProfile::BinaryUtf8 => "rt::TextProfile::BinaryUtf8",
+        _ => unreachable!("TextProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 
@@ -2319,9 +2347,10 @@ mod tests {
             body_node_id: node_id('b'),
             refusal: CheckedPackageRefusal {
                 code: CheckedPackageRefusalCode::InvalidSemanticGraph,
-                path: "semantic_graph.nodes.body".into(),
+                path: None,
                 cause: None,
                 locus: None,
+                contract_version: None,
             },
         };
         assert_eq!(
@@ -2337,6 +2366,7 @@ mod tests {
                 limit_kind: CheckedPackageLimit::Depth,
                 limit: 128,
                 consumed: 129,
+                path: None,
             },
         };
         assert_eq!(

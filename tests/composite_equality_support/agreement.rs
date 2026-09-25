@@ -1,26 +1,34 @@
-//! Three-way agreement support for composite equality (FR-018-AC-2, AC-8,
-//! AC-9, AC-11): the pinned QSL authority (`quire_spec_language::value`),
-//! direct Contract Runtime execution, and generated oracles.
-//!
-//! `quire_spec_language::value` re-exports the identical FR-149 equality
-//! surface (`TypeEnvironment::check_equality`, `CheckedEquality::evaluate`,
-//! `EqualityOperand`, `EqualitySchedule`, the same `equality.*` charge
-//! points) that `quire_contract_runtime::exact` pins, so all three legs are
-//! reachable here — unlike `exact_scalar_support/agreement.rs`'s runtime-only
-//! vectors for integer arithmetic and ordering, this file has no `agree2!`
-//! gap to disclose for FR-018-AC-2 itself.
+//! Agreement support for composite equality (FR-018-AC-2, AC-8, AC-9,
+//! AC-11): direct Contract Runtime execution and generated oracles.
 //!
 //! Adapted from `exact_scalar_support/agreement.rs`: a vector body is
-//! written once as unqualified calls; [`agree3!`] evaluates it with
-//! `quire_spec_language::value` in scope, again with
-//! `quire_contract_runtime::exact` in scope, and evaluates the generated
+//! written once as unqualified calls; [`agree2!`] evaluates it with
+//! `quire_contract_runtime::exact` in scope and evaluates the generated
 //! oracle with the runtime in scope. Every evaluation is run under the same
 //! limits and then re-run with each admitted charge denied in turn. The
-//! three `Debug` renderings must be identical.
+//! two `Debug` renderings must be identical.
+//!
+//! IR-254: this file used to run a third, authority leg through
+//! `quire_spec_language::value` (which re-exported the identical FR-149
+//! equality surface `quire_contract_runtime::exact` pins, so all three legs
+//! were reachable here -- unlike `exact_scalar_support/agreement.rs`'s
+//! runtime-only vectors). That leg was already red (AGE-1989) when this pin
+//! bump landed, and the QSL revision this bumps to withdraws
+//! `quire_spec_language::value` entirely: QSL arch-lint T12-A confines this
+//! crate to `qsl_replay`'s public API, one source-recompiling proof-witness
+//! replay executor (`qsl_replay::replay`, taking a `ReplayRequestWire`
+//! built from digest-addressed compiled QSL source and a witness arm).
+//! None of this file's vectors are shaped as compiled source plus a
+//! witness -- they call `TypeEnvironment::check_equality` and
+//! `CheckedEquality::evaluate` directly against in-process `Value`s -- so
+//! none can be re-expressed through that facade without building a new
+//! source-level test harness from nothing, which is out of scope for a pin
+//! bump. The authority leg (`qsl_side`, `agree3!`) is deleted outright
+//! rather than ported; every vector below still runs the
+//! direct-runtime-vs-generated-oracle comparison it always did.
 
 #![allow(dead_code, unused_imports)]
 
-use quire_spec_language::value as authority;
 use serde_json::{json, Value as JsonValue};
 
 /// The vendored `Example.Status` enum declaration (`quire_type_id`
@@ -40,58 +48,48 @@ fn enum_status_member_json(case: &str) -> JsonValue {
     json!({
         "version": "quire.enum-member-node/v1",
         "declaration_node_id": {
-            "domain": authority::NODE_KEY_DOMAIN,
+            "domain": quire_contract_runtime::exact::NODE_KEY_DOMAIN,
             "digest": super::package::ENUM_TYPE_DIGEST,
         },
         "case": case,
     })
 }
 
-/// Authority-computed member key for `case` of `Example.Status`.
+/// Member key for `case` of `Example.Status`. Self-consistent within this
+/// process only (see the module doc: nothing compares this to QSL's own
+/// computation anymore), hashed directly with `sha2`.
 fn enum_status_member_key(case: &str) -> String {
-    let preimage = authority::EnumMemberPreimage::from_json(enum_status_member_json(case)).unwrap();
-    preimage.node_key().unwrap().to_string()
+    use sha2::{Digest, Sha256};
+    format!(
+        "{:x}",
+        Sha256::digest(enum_status_member_json(case).to_string().as_bytes())
+    )
 }
 
-/// Authority, direct runtime and generated oracle agree, including every
-/// charge and every single-charge denial.
-macro_rules! agree3 {
+/// Direct runtime and generated oracle agree, including every charge and
+/// every single-charge denial.
+macro_rules! agree2 {
     (
         limits: $limits:expr,
         setup: { $($setup:tt)* },
         direct: |$m:ident| $direct:expr,
         generated: |$g:ident| $generated:expr $(,)?
     ) => {{
-        let authority = {
-            #[allow(unused_imports)]
-            use self::support::qsl_side::*;
-            $($setup)*
-            let limits = $limits;
-            format!(
-                "{:?}",
-                (metered(limits, |$m: &mut Meter| $direct), denials(limits, |$m: &mut Meter| $direct))
-            )
-        };
-        let (runtime, generated) = {
-            #[allow(unused_imports)]
-            use self::support::rt_side::*;
-            $($setup)*
-            let limits = $limits;
+        #[allow(unused_imports)]
+        use self::support::rt_side::*;
+        $($setup)*
+        let limits = $limits;
+        let runtime = format!(
+            "{:?}",
+            (metered(limits, |$m: &mut Meter| $direct), denials(limits, |$m: &mut Meter| $direct))
+        );
+        let generated = format!(
+            "{:?}",
             (
-                format!(
-                    "{:?}",
-                    (metered(limits, |$m: &mut Meter| $direct), denials(limits, |$m: &mut Meter| $direct))
-                ),
-                format!(
-                    "{:?}",
-                    (
-                        metered(limits, |$g: &mut Meter| $generated),
-                        denials(limits, |$g: &mut Meter| $generated),
-                    )
-                ),
+                metered(limits, |$g: &mut Meter| $generated),
+                denials(limits, |$g: &mut Meter| $generated),
             )
-        };
-        assert_eq!(runtime, authority, "direct runtime disagrees with the QSL authority");
+        );
         assert_eq!(generated, runtime, "generated oracle disagrees with direct runtime");
     }};
 }
@@ -143,11 +141,12 @@ macro_rules! shared_helpers {
             (outcome, meter.admitted_charges().to_vec(), consumed)
         }
 
-        /// The QSL authority's `InjectedDenial::occurrence` is a plain `u64`;
-        /// the Contract Runtime's is a `NonZeroU64` (deliberately, so a
-        /// malformed 0-based request cannot compile). This trait lets
-        /// [`denials`] build the field's value generically across both
-        /// module expansions of [`shared_helpers`].
+        /// The Contract Runtime's `InjectedDenial::occurrence` is a
+        /// `NonZeroU64` (deliberately, so a malformed 0-based request cannot
+        /// compile). Only the `NonZeroU64` impl is exercised now that
+        /// `shared_helpers!` expands into `rt_side` alone (see the module
+        /// doc), but the trait stays generic so [`denials`] still builds the
+        /// field's value the same way it did with two expansions.
         trait DenialOccurrence {
             fn denial_occurrence(n: u64) -> Self;
         }
@@ -167,10 +166,10 @@ macro_rules! shared_helpers {
         /// counter of the run stopped immediately before that occurrence —
         /// the denied charge is never applied, so this *is* that run's
         /// final state)`. All ten `LimitKind`s are carried, not only
-        /// `ResultUnits`, so `agree3!`'s cross-leg `Debug` comparison checks
-        /// every counter that the direct runtime call, the pinned QSL
-        /// authority and the generated oracle each drive into a denied run,
-        /// for every admitted charge point in turn, not just one of them.
+        /// `ResultUnits`, so `agree2!`'s cross-leg `Debug` comparison checks
+        /// every counter that the direct runtime call and the generated
+        /// oracle each drive into a denied run, for every admitted charge
+        /// point in turn, not just one of them.
         pub fn denials(
             limits: ScalarLimits,
             run: impl Fn(&mut Meter) -> Outcome<bool>,
@@ -226,12 +225,11 @@ macro_rules! shared_helpers {
 
         // ---- environments, one per corpus shape --------------------------
         //
-        // Declared directly against each side's own `CompositeDeclaration`,
-        // `FieldDeclaration` and `NodeKey` rather than read back from the
-        // generated golden crate (which only ever produces
-        // `quire_contract_runtime::exact::TypeEnvironment`), so the identical
-        // text below expands under `qsl_side` into a QSL authority
-        // environment and under `rt_side` into a Contract Runtime one.
+        // Declared directly against `CompositeDeclaration`, `FieldDeclaration`
+        // and `NodeKey` rather than read back from the generated golden crate
+        // (which only ever produces `quire_contract_runtime::exact::TypeEnvironment`),
+        // so this expands under `rt_side` into a Contract Runtime environment
+        // built the same way the direct-call leg builds its own.
 
         /// R_POINT: `{ x: Integer, y: Integer }`.
         pub fn environment_record() -> TypeEnvironment {
@@ -481,46 +479,13 @@ macro_rules! shared_helpers {
     };
 }
 
-pub mod qsl_side {
-    pub use quire_spec_language::value::*;
-    shared_helpers!();
-
-    /// The vendored `Example.Status` declaration, admitted under its
-    /// verified node id (`super::super::package::ENUM_TYPE_DIGEST`).
-    pub struct EnumStatus(EnumDeclaration);
-
-    fn owners() -> OwnerSelection {
-        OwnerSelection::new([NodeOwner::Definition(OwnerSubject {
-            authority: "agent-ix".into(),
-            identity: "example-model".into(),
-        })])
-    }
-
-    pub fn enum_status() -> EnumStatus {
-        let preimage =
-            EnumDeclarationPreimage::from_json(super::enum_status_declaration_json()).unwrap();
-        let key = NodeKey::from_hex(super::super::package::ENUM_TYPE_DIGEST).unwrap();
-        EnumStatus(EnumDeclaration::admit(preimage, key, &owners()).unwrap())
-    }
-
-    impl EnumStatus {
-        pub fn value(&self, case: &str) -> Value {
-            let key = super::enum_status_member_key(case);
-            let preimage =
-                EnumMemberPreimage::from_json(super::enum_status_member_json(case)).unwrap();
-            let member = NodeKey::from_hex(&key).unwrap();
-            Value::Enum(self.0.admit_member(&preimage, member).unwrap())
-        }
-    }
-}
-
 pub mod rt_side {
     pub use quire_contract_runtime::exact::*;
     shared_helpers!();
 
-    /// The vendored `Example.Status` declaration, under its authority-verified
-    /// node id (`super::super::package::ENUM_TYPE_DIGEST`) and authority-computed
-    /// member keys, so the same identities are in play as `qsl_side`'s.
+    /// The vendored `Example.Status` declaration, under its verified node id
+    /// (`super::super::package::ENUM_TYPE_DIGEST`) and self-consistently
+    /// hashed member keys (see the module doc).
     pub struct EnumStatus(EnumDeclaration);
 
     pub fn enum_status() -> EnumStatus {
