@@ -1,0 +1,53 @@
+#[cfg(kani)]
+mod proofs {
+    #[kani::proof]
+    fn verified_satisfied_cover() {
+        let x: u8 = kani::any();
+        kani::assume(x < 10);
+        kani::cover!(x == 3, "x can be three");
+        assert!(x < 10);
+    }
+
+    #[kani::proof]
+    fn falsified_with_playback() {
+        let x: u8 = kani::any();
+        kani::assume(x < 10);
+        kani::cover!(x == 3, "x can be three");
+        assert!(x < 5);
+    }
+
+    #[kani::proof]
+    fn unwind_exhausted() {
+        let n: u8 = kani::any();
+        let mut i: u8 = 0;
+        kani::cover!(n == 100, "n can be large");
+        while i < n {
+            i += 1;
+        }
+        assert!(i == n);
+    }
+
+    #[kani::proof]
+    fn vacuous_cover() {
+        let x: u8 = kani::any();
+        kani::assume(x > 5 && x < 3);
+        kani::cover!(true, "unreachable cover");
+        assert!(x < 10);
+    }
+
+    #[kani::proof]
+    fn partial_cover() {
+        let x: u8 = kani::any();
+        kani::assume(x < 10);
+        kani::cover!(x == 3, "x can be three");
+        kani::cover!(x == 200, "x can be two hundred");
+        assert!(x < 10);
+    }
+
+    #[kani::proof]
+    fn no_cover() {
+        let x: u8 = kani::any();
+        kani::assume(x < 10);
+        assert!(x < 10);
+    }
+}

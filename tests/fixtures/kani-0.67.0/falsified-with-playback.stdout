@@ -1,0 +1,97 @@
+Kani Rust Verifier 0.67.0 (cargo plugin)
+Checking harness proofs::falsified_with_playback...
+CBMC 6.8.0 (cbmc-6.8.0)
+CBMC version 6.8.0 (cbmc-6.8.0) 64-bit x86_64 linux
+Reading GOTO program from file <CAPTURE_DIR>/fx-target/kani/x86_64-unknown-linux-gnu/debug/deps/fx-3a07f7e01c7ea3f7__RNvNtCs2ybxu1UmaZ3_2fx6proofs23falsified_with_playback.out
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+Runtime Symex: 0.00150227s
+size of program expression: 132 steps
+simple slicing removed 4 assignments
+Generated 4 VCC(s), 4 remaining after simplification
+Runtime Postprocess Equation: 1.8459e-05s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.000256113s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 5.768e-06s
+Solving with CaDiCaL 2.0.0
+110 variables, 59 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 9.5125e-05s
+Runtime decision procedure: 0.000459261s
+Running propositional reduction
+Solving with CaDiCaL 2.0.0
+111 variables, 60 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 4.0064e-05s
+Runtime decision procedure: 8.1176e-05s
+Running propositional reduction
+Solving with CaDiCaL 2.0.0
+112 variables, 61 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 2.2968e-05s
+Runtime decision procedure: 5.8418e-05s
+
+RESULTS:
+Check 1: proofs::falsified_with_playback.cover.1
+	 - Status: SATISFIED
+	 - Description: "x can be three"
+	 - Location: src/lib.rs:15:9 in function proofs::falsified_with_playback
+
+Check 2: proofs::falsified_with_playback.assertion.1
+	 - Status: FAILURE
+	 - Description: "assertion failed: x < 5"
+	 - Location: src/lib.rs:16:9 in function proofs::falsified_with_playback
+
+
+SUMMARY:
+ ** 1 of 1 failed
+
+ ** 1 of 1 cover properties satisfied
+
+Failed Checks: assertion failed: x < 5
+ File: "src/lib.rs", line 16, in proofs::falsified_with_playback
+
+VERIFICATION:- FAILED
+Verification Time: 0.029280394s
+
+Concrete playback unit test for `proofs::falsified_with_playback`:
+```
+/// Test generated for harness `proofs::falsified_with_playback` 
+///
+/// Check for `cover`: "x can be three"
+
+#[test]
+fn kani_concrete_playback_falsified_with_playback_7370429488619616892() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 3
+        vec![3],
+    ];
+    kani::concrete_playback_run(concrete_vals, falsified_with_playback);
+}
+```
+Concrete playback unit test for `proofs::falsified_with_playback`:
+```
+/// Test generated for harness `proofs::falsified_with_playback` 
+///
+/// Check for `assertion`: "assertion failed: x < 5"
+
+#[test]
+fn kani_concrete_playback_falsified_with_playback_43961980917998124() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 9
+        vec![9],
+    ];
+    kani::concrete_playback_run(concrete_vals, falsified_with_playback);
+}
+```
+INFO: To automatically add the concrete playback unit test(s) to the src code, run Kani with `--concrete-playback=inplace`.
+Manual Harness Summary:
+Verification failed for - proofs::falsified_with_playback
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.

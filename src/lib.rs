@@ -19,6 +19,7 @@ mod kani_obligations;
 mod capability;
 // Implements: FR-017
 mod kani_execution;
+mod kani_transcript;
 // IR-211: joins a real Kani witness to the generator's own persisted obligation schema.
 mod kani_witness_join;
 // Implements: FR-007

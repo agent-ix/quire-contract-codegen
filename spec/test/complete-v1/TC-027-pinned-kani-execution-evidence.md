@@ -26,6 +26,12 @@ summary, with a zero-total summary, and with an unreadable summary; a failed
 unwinding assertion with playbacks present; and a results listing in which an
 unwinding check succeeded.
 
+Edge module: parse real Kani 0.67.0 captures (`tests/fixtures/kani-0.67.0/`, with the exact
+command of each in `MANIFEST.tsv`) of a verified run, a falsified run with a playback, an
+exhausted unwind bound, an unreachable cover, a partly satisfied cover and a run with no cover
+summary, and classify each; then scan every non-test file under `src/`, recursively, other than
+`src/kani_transcript.rs` for Kani's wording.
+
 Pins: compare the committed pins with themselves, and with a copy differing in
 each of the six fields in turn.
 
@@ -64,6 +70,10 @@ inconclusive with their own reasons. The failed unwinding assertion is
 inconclusive as an exhausted bound and not falsified, and the succeeded
 unwinding check in a listing is verified.
 
+Each capture parses to the expected typed transcript and classifies to verified, falsified with
+the assertion playback, exhausted bound, cover-unsatisfied 0 of 1, cover-unsatisfied 1 of 2 and
+missing cover summary respectively; the scan finds none of the wording outside the edge module.
+
 Equal pins report no difference; each of the six altered fields is reported as
 that field with its expected and observed values. The absent launcher is a
 typed tool refusal naming the launcher and its path. A harness identity pin
@@ -95,7 +105,8 @@ with no run.
 
 ## Implementation
 
-`src/kani_execution.rs` unit tests for classification and pin comparison, and
+`src/kani_execution.rs` unit tests for classification and pin comparison, `src/kani_transcript.rs`
+unit tests for the typed transcript, the fixture captures and the prose scan, and
 `tests/kani_obligations.rs` for the refusals, the generation/execution
 boundary, the aggregate-verdict/retained-evidence census, and the pinned lane.
 The lane is `#[ignore]`d and runs through `make kani` under a host-wide lock,
