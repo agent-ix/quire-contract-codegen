@@ -74,6 +74,8 @@ type: TestMatrix
 | FR-021 | FR-021-AC-15 | TC-031 | 🚧 Planned; the `origin` half is implemented and tested, but under this V1's scoped one-node body vocabulary `path` can never be non-empty by construction, so the `path`-non-empty case this AC also describes is not implemented |
 | FR-021 | FR-021-AC-16 | TC-031 (Inspection) | ✅ Covered |
 | FR-021 | FR-021-AC-18 | TC-031 | 🚧 Planned, pending the `quire-spec-language` re-pin named in FR-021's own Dependencies section |
+| FR-022 | FR-022-AC-2 through FR-022-AC-9 | TC-033 | 🚧 Planned |
+| FR-022 | FR-022-AC-1 | Analysis | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
@@ -260,6 +262,11 @@ placeholder: Kani is the one backend descriptor registered under this contract. 
 row is therefore reachable only through a candidate set the registry supplies, which is why TC-030
 exercises it through `candidates` rather than by registering a second arm.
 
+FR-022 is `🚧 Planned` throughout: it is specified ahead of its implementation (Linear IR-293) and
+no test backs it yet. It is the generation arm of the seam FR-019 settles, and it takes the routed
+backend and kind as given. AC-1 will be `✅ Covered` by analysis on the same ground as FR-019-AC-9:
+the evidence is the compiler's exhaustiveness check over `BackendKind`, not a test.
+
 Two of codegen#86's eight asks are not in FR-019, and are deferred rather than dropped: the S6 enum
 matches over Contract IR's decoded tag and form enums wait on agent-ix/quire-contract-ir#141, and the
 `string-edge` scan waits on agent-ix/quire-spec-language#214, which ADR-012 §14.1 makes the owner of
@@ -327,6 +334,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-028 | Verify interface-001's declared API surface and identity envelope match the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-3, interface-001-AC-4, interface-001-AC-5 | ✅ Covered |
 | TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13 | 🚧 Planned |
 | TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
+| TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9 | 🚧 Planned |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and

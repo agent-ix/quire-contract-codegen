@@ -135,4 +135,5 @@ each pinned to its backend identity and model-domain bounds. This is issue
 
 - **Upstream**: [FR-014](./FR-014-exact-scalar-oracles.md), [FR-003](../FR-003-kani-lowering.md).
 - **Downstream**: [TC-025](../../test/complete-v1/TC-025-bounded-kani-obligations.md),
-  [FR-016](./FR-016-witness-native-replay.md).
+  [FR-016](./FR-016-witness-native-replay.md),
+  [FR-022](./FR-022-routed-generation.md), whose Kani generation arm calls this generator.
