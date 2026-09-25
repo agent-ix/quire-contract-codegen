@@ -139,7 +139,6 @@ operations:
     output: ItemSettlement list | EnvelopeRefusal
     semantics: settles every item of the envelope in request order against a closed backend kind; an item naming a backend nothing here can settle for settles as invalid-request/unknown-backend inside the Ok list, never as one that can; the whole envelope is refused only for an unsupported contract_version or capability_vocabulary (FR-019)
   - name: generate_routed
-    status: planned; specified by FR-022 (Linear IR-293), not yet implemented
     inputs: [admitted CheckedPackageV2 reference, RoutedGenerationItem list (request_index usize, node_id CheckedNodeId, backend Candidate, kind BackendKind), GenerationContexts (one Option field per BackendKind; kani is KaniGenerationContext of claim_map ClaimMap<ExactScalarClaim>, subject_path, pins KaniToolPins, unwind u32, attestation AttestationContext)]
     output: RoutedGeneration (items, one RoutedItemOutput of request_index, backend and KindOutput per routed item in ascending request_index; rejected BackendKind list) | RoutedGenerationError (DuplicateRequestIndex{request_index} | BackendKindDisagrees{request_index, backend, routed, converted Option<BackendKind>} | MissingKindContext{kind} | Kani(KaniObligationError))
     semantics: runs each routed item's backend-kind generation arm over an exhaustive BackendKind match without re-settling, re-selecting or re-routing a backend; the Kani arm is negotiate_kani_obligations over the routed Kani items in ascending request_index, with every record index rewritten to the driver's request index and harnesses joined by harness_symbol; no FR-019 Disposition is constructed (FR-022)
@@ -335,16 +334,13 @@ open_design_gates:
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | interface-001-AC-1 | Every public function the crate exposes — each `pub fn` and `pub use` function at the crate root and everything reachable through a `pub mod`, read from the crate's own source and named by its shortest public path — is exactly the set of `operations` entries this contract declares without a `status: planned` caveat: a public function no entry declares, or a declared entry the crate does not expose, fails. | Test (TC-028) |
-| interface-001-AC-2 | Every `operations` entry this contract marks `status: planned` — `generate_bundle`, `analyze_coverage`, `cli_generate`, `generate_routed` — is absent from the public API, so an implementation cannot silently outrun the status this contract declares for it. | Test (TC-028) |
+| interface-001-AC-2 | Every `operations` entry this contract marks `status: planned` — `generate_bundle`, `analyze_coverage`, `cli_generate` — is absent from the public API, so an implementation cannot silently outrun the status this contract declares for it. | Test (TC-028) |
 | interface-001-AC-3 | `identity_envelope.required` names exactly the fields of `ProofAttestationBody`, and `identity_envelope.results` names exactly the four `AttestationResult` variants, so the envelope this contract describes is the envelope the generator emits. | Test (TC-028) |
 | interface-001-AC-4 | `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants, and no seventh state exists for `implemented_mapping` to omit. | Test (TC-028) |
 | interface-001-AC-5 | `kani_obligation_execution_slice.pins` names exactly the six measured fields of `KaniToolPins`. | Test (TC-028) |
 
 ## Open items
 
-- `generate_routed` is declared `status: planned` until FR-022 is built; its behaviour is FR-022's
-  acceptance criteria, verified by TC-033, and the entry drops its `status` when the function is
-  exported.
 - `generate_bundle`, `analyze_coverage` and `cli_generate` are declared `status: planned` and have
   no acceptance criteria beyond interface-001-AC-2's absence check: a criterion asserting behavior
   for an operation this contract itself says is not implemented would be written to be satisfied by
