@@ -657,7 +657,13 @@ impl PackageBuilder {
                 .expect("dedicated text admission type key"),
         );
         if self.dedicated_operands.insert(type_digest.clone()) {
-            self.node(&type_digest, "scalar_type", "text", &type_digest, aggregate());
+            self.node(
+                &type_digest,
+                "scalar_type",
+                "text",
+                &type_digest,
+                aggregate(),
+            );
             let foreign = bound
                 .foreign()
                 .iter()
@@ -1778,7 +1784,10 @@ fn integer_pair_for_operand(code: u32, operand_ref: &str) -> Value {
         "binary",
         op("quire.op.integer.add"),
         &key(T_INTEGER),
-        vec![reference(operand_ref), literal("integer", &code.to_string())],
+        vec![
+            reference(operand_ref),
+            literal("integer", &code.to_string()),
+        ],
     )
 }
 
@@ -2655,10 +2664,7 @@ pub fn corpus_package() -> PackageBuilder {
             // CG's `check_operand` still classifies it by its own
             // `value_kind` and refuses the same `OperandTypeMismatch
             // { position: 1, expected: Integer, found: Some("decimal") }`.
-            vec![
-                reference(&wrong_operand_anchor),
-                literal("decimal", "1.5"),
-            ],
+            vec![reference(&wrong_operand_anchor), literal("decimal", "1.5")],
         ),
         &[INT, DEC],
     );
