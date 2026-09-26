@@ -198,18 +198,19 @@ otherwise.
   typed reason.
 - Where an integer node's result is typed by a `bounded_domain`, or its
   operands are typed by distinct `integer_range` `bounded_domain` nodes, the
-  generator shall compare the descriptor's domain with the result bound only,
-  shall require each operand's own bound to lie within that domain, and shall
-  record the result bound first among the claim's checked bounds, then each
-  operand's own bound.
+  generator shall compare the descriptor's domain with the result bound only.
+- Where an integer operand is typed by an `integer_range` `bounded_domain`, the
+  generator shall record that bound among the claim's checked bounds after the
+  result bound.
 - If the result of an integer node is typed by a `bounded_domain` of a form
   other than the descriptor's, or an operand is typed by one, then the
   generator shall refuse the item as `MissingBound`.
 - If an operand's own bound is not contained in the descriptor's domain, then
   the generator shall refuse the item as `BoundMismatch` naming that operand's
-  bound. If a node with a scalar-typed result reaches two or more bounds of
-  the form and not exactly one of them is outside the operands' own bounds,
-  then the generator shall refuse the item as `AmbiguousBound`.
+  bound.
+- If a node with a scalar-typed result reaches two or more bounds of the form
+  and not exactly one of them is outside the operands' own bounds, then the
+  generator shall refuse the item as `AmbiguousBound`.
 - Where a `reference` operand's target is typed by a `bounded_domain` node, the
   generator shall classify the operand by that domain's own `semantic_type`, its
   base scalar type; QSL emits a bounded domain directly over its scalar base.
