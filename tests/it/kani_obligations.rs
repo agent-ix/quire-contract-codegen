@@ -12,7 +12,7 @@
 // cross-file code collisions and Mutex-poisoning cascades). Kept duplicated on purpose.
 #[allow(clippy::duplicate_mod)]
 #[path = "../exact_scalar_support/package.rs"]
-mod package;
+pub(crate) mod package;
 
 use std::{
     env, fs,

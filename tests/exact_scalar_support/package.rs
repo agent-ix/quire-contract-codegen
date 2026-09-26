@@ -1270,8 +1270,9 @@ pub const V_FLOAT32: u32 = 105;
 pub const V_FLOAT64: u32 = 106;
 pub const V_TEXT: u32 = 107;
 pub const V_QUANTITY: u32 = 108;
-/// A value whose semantic type is an `integer_range` `bounded_domain` over the integer scalar
-/// type: a parameter typed `Int[0, 9]` in QSL. It is an Integer operand (IR-297).
+/// A value/literal node whose semantic type is an `integer_range` `bounded_domain` over the
+/// integer scalar type: what a QSL parameter typed `Int[0, 9]` references. It is an Integer
+/// operand (IR-297).
 pub const V_BOUNDED_PARAM: u32 = 109;
 /// A value whose semantic type is another value node, so neither a scalar type nor a
 /// `bounded_domain` over one.
@@ -3006,6 +3007,49 @@ pub fn corpus_package() -> PackageBuilder {
     builder.add_dependency(&literal_operand_anchor, code_id(CLAIM).digest.as_ref());
     builder.add_dependency(&literal_operand_anchor, code_id(CLAIM_ALT).digest.as_ref());
     builder
+}
+
+/// The QSL parameter `x: Int[0, 9]` of [`bounded_increment_package`].
+pub const V_PARAM_X: u32 = 111;
+/// `x + 1` over `Int[0, 9]`, with `x` typed by a `bounded_domain` and `[0, 9]` the one
+/// `integer_range` over Integer.
+pub const BOUNDED_INCREMENT: u32 = 2035;
+
+/// A package holding only `x + 1` over `Int[0, 9]` in QSL's shape: `x` is typed by an
+/// `integer_range` `bounded_domain` over Integer whose members are `min`/`max` bindings.
+pub fn bounded_increment_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    let bound = Bound::Integer(0, 9);
+    let bound_key = builder.bound(&bound);
+    builder.code(
+        V_PARAM_X,
+        "value",
+        "literal",
+        &bound_key,
+        literal("integer", "3"),
+    );
+    builder.application_bounded(
+        BOUNDED_INCREMENT,
+        "expression",
+        "binary",
+        &key(T_INTEGER),
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &key(T_INTEGER),
+            vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
+        ),
+        &[bound],
+    );
+    builder
+}
+
+/// Integer addition over the `Int[0, 9]` domain of [`bounded_increment_package`].
+pub fn integer_add_0_9() -> ExactScalarOperation {
+    ExactScalarOperation::IntegerArithmetic {
+        operator: IntegerOperator::Add,
+        domain: bounded(0, 9),
+    }
 }
 
 pub fn integer_add() -> ExactScalarOperation {

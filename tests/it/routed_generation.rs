@@ -14,7 +14,7 @@ use quire_contract_codegen::{
 };
 use quire_contract_ir::{CheckedNodeId, CheckedPackageV2};
 
-use crate::kani_obligations::{context, pins, scalar_package};
+use crate::kani_obligations::{context, package, pins, scalar_package};
 
 const RENDERED: [&str; 3] = [
     "quire.op.integer.add",
@@ -467,4 +467,55 @@ fn tc_033_output_is_deterministic_and_independent_of_index_and_digest() {
     );
     assert_eq!(low.items[0].backend, kani_backend("A"));
     assert_eq!(high.items[0].backend, kani_backend("B"));
+}
+
+/// `x + 1` over `Int[0, 9]`, QSL's shape (a parameter typed by an `integer_range`
+/// `bounded_domain` with binding-shaped `min`/`max` members), routes to Kani and is Supported
+/// with a scalar harness carrying the inclusive `[0, 9]` domain (IR-297 with IR-296).
+///
+/// Trace: FR-014-AC-16, FR-022-AC-2, TC-024, TC-033
+#[test]
+fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_harness() {
+    let package = package::bounded_increment_package().admit();
+    let node_id = package::code_id(package::BOUNDED_INCREMENT);
+    let oracles = quire_contract_codegen::generate_exact_scalar_oracles(
+        &package,
+        &[quire_contract_codegen::ExactScalarItem {
+            node_id: node_id.clone(),
+            operation: package::integer_add_0_9(),
+        }],
+    )
+    .expect("generation succeeds");
+    let fixture = Fixture {
+        package,
+        claim_map: oracles.claim_map,
+        rendered: vec![node_id.clone()],
+        unrendered: node_id.clone(),
+    };
+    let pins = pins();
+    let generation = generate_routed(
+        &fixture.package,
+        &[route(0, &node_id, "A")],
+        &kani_context(&fixture, &pins, "crate::subject", 1),
+    )
+    .expect("routed generation succeeds");
+    let [item] = generation.items.as_slice() else {
+        panic!("one routed item, got {:?}", generation.items);
+    };
+    let (record, harness) = kani_parts(&item.output);
+    assert!(
+        matches!(record.disposition, ObligationDisposition::Supported { .. }),
+        "{record:#?}"
+    );
+    let harness = harness.expect("a supported item carries its harness");
+    assert_eq!(harness.identity.operation_identity, "quire.op.integer.add");
+    assert_eq!(
+        harness
+            .identity
+            .arguments
+            .iter()
+            .map(|argument| (argument.minimum, argument.maximum))
+            .collect::<Vec<_>>(),
+        [(0, 9), (0, 9)]
+    );
 }
