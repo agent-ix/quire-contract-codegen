@@ -102,6 +102,10 @@ operations:
     inputs: [admitted CheckedPackageV2, ExactScalarItem list]
     output: ExactScalarOracles | OracleGenerationError
     semantics: exact scalar oracles plus a typed claim map identical to claim-map.json; per-item problems are refusals, and only a whole-generation failure is an error (FR-014)
+  - name: derive_exact_scalar_items
+    inputs: [admitted CheckedPackageV2, CheckedNodeId list]
+    output: one ExactScalarItem | ClaimDerivationRefusal per node id, in input order
+    semantics: builds each item's descriptor from the node's operation identity, laws, mode, operand forms and the one bound of the needed form on its result type; a node with no derivable descriptor is a typed refusal, never a guess (FR-014)
   - name: negotiate_kani_obligations
     inputs: [KaniObligationRequest]
     output: KaniObligationOutcome | KaniObligationError
@@ -139,9 +143,9 @@ operations:
     output: ItemSettlement list | EnvelopeRefusal
     semantics: settles every item of the envelope in request order against a closed backend kind; an item naming a backend nothing here can settle for settles as invalid-request/unknown-backend inside the Ok list, never as one that can; the whole envelope is refused only for an unsupported contract_version or capability_vocabulary (FR-019)
   - name: generate_routed
-    inputs: [admitted CheckedPackageV2 reference, RoutedGenerationItem list (request_index usize, node_id CheckedNodeId, backend Candidate, kind BackendKind), GenerationContexts (one Option field per BackendKind; kani is KaniGenerationContext of claim_map ClaimMap<ExactScalarClaim>, subject_path, pins KaniToolPins, unwind u32, attestation AttestationContext)]
-    output: RoutedGeneration (items, one RoutedItemOutput of request_index, backend and KindOutput per routed item in ascending request_index; rejected BackendKind list) | RoutedGenerationError (DuplicateRequestIndex{request_index} | BackendKindDisagrees{request_index, backend, routed, converted Option<BackendKind>} | MissingKindContext{kind} | Kani(KaniObligationError))
-    semantics: runs each routed item's backend-kind generation arm over an exhaustive BackendKind match without re-settling, re-selecting or re-routing a backend; the Kani arm is negotiate_kani_obligations over the routed Kani items in ascending request_index, with every record index rewritten to the driver's request index and harnesses joined by harness_symbol; no FR-019 Disposition is constructed (FR-022)
+    inputs: [admitted CheckedPackageV2 reference, RoutedGenerationItem list (request_index usize, node_id CheckedNodeId, backend Candidate, kind BackendKind), GenerationContexts (one Option field per BackendKind; kani is KaniGenerationContext of subject_path, pins KaniToolPins, unwind u32, attestation AttestationContext)]
+    output: RoutedGeneration (items, one RoutedItemOutput of request_index, backend and KindOutput per routed item in ascending request_index; rejected BackendKind list; claim_map Option<ClaimMap<ExactScalarClaim>>, Some after a Kani group) | RoutedGenerationError (DuplicateRequestIndex{request_index} | BackendKindDisagrees{request_index, backend, routed, converted Option<BackendKind>} | MissingKindContext{kind} | Kani(KaniObligationError) | Oracle(OracleGenerationError))
+    semantics: runs each routed item's backend-kind generation arm over an exhaustive BackendKind match without re-settling, re-selecting or re-routing a backend; the Kani arm derives each node's claim with derive_exact_scalar_items and generate_exact_scalar_oracles, then runs negotiate_kani_obligations over the routed Kani items in ascending request_index, with every record index rewritten to the driver's request index and harnesses joined by harness_symbol; no FR-019 Disposition is constructed (FR-022)
   - name: record_tool_probe
     inputs: [RoutedItem, ProbePhase, ToolObservation]
     output: ItemResult or none

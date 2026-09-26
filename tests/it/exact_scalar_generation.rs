@@ -10,14 +10,17 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    generate_exact_scalar_oracles, BoundForm, ClaimDisposition, DecimalOperator, ExactScalarItem,
-    ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, GeneratedScalarClaim,
-    IntegerOperator, OperationProvenance, OracleGenerationError, ScalarForm, UpstreamBlocker,
+    derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
+    ClaimDisposition, DecimalOperator, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
+    ExactScalarRefusal, GeneratedScalarClaim, IntegerOperator, OperationProvenance,
+    OracleGenerationError, RationalOperator, ScalarForm, UpstreamBlocker,
     EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME, RUNTIME_REVISION,
     SCALAR_LOWERING_SUPPORTED_TAGS,
 };
 use quire_contract_ir::CheckedPackageV2;
-use quire_contract_runtime::exact::{ComparisonOperator, RoundingMode, TextProfile};
+use quire_contract_runtime::exact::{
+    ComparisonOperator, DivisionProfile, QuantityTarget, RoundingMode, TextProfile,
+};
 use serde_json::{json, Value};
 
 // package.rs holds a process-global `application_registry()` static keyed by small integer
@@ -1070,6 +1073,7 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
         ExactScalarRefusal::ResultTypeMismatch { .. } => "ResultTypeMismatch",
         ExactScalarRefusal::OperandTypeMismatch { .. } => "OperandTypeMismatch",
         ExactScalarRefusal::MissingOperationIdentity { .. } => "MissingOperationIdentity",
+        ExactScalarRefusal::NoDerivableClaim { .. } => "NoDerivableClaim",
     }
 }
 
@@ -1163,6 +1167,14 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
             node_id: code_id(V_BOOLEAN),
         }),
         "MissingOperationIdentity"
+    );
+    // `NoDerivableClaim` is recorded by the routed generation arm and never by
+    // `generate_exact_scalar_oracles`; TC-033 drives it through `generate_routed`.
+    assert_eq!(
+        refusal_variant_name(&ExactScalarRefusal::NoDerivableClaim {
+            reason: ClaimDerivationRefusal::MissingOperationIdentity,
+        }),
+        "NoDerivableClaim"
     );
     assert_eq!(
         refusal_variant_name(&ExactScalarRefusal::InvalidBody {
@@ -1376,5 +1388,202 @@ fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
     assert!(matches!(
         dispositions(&oracles).get(code_id(BOUNDED_OPERAND).digest.as_ref()),
         Some(ClaimDisposition::Generated(_))
+    ));
+}
+
+fn derive_one(
+    package: &CheckedPackageV2,
+    code: u32,
+) -> Result<ExactScalarItem, ClaimDerivationRefusal> {
+    derive_exact_scalar_items(package, &[code_id(code)])
+        .pop()
+        .expect("one result per node id")
+}
+
+/// Deriving from the package alone yields, for every golden-corpus node, the descriptor the
+/// fixture declares, and generating from the derived items gives the same claim map as
+/// generating from the declared ones, every claim `ir_confirmed`.
+///
+/// Trace: FR-014-AC-18, FR-014-AC-19, TC-024
+#[test]
+fn tc_024_derivation_equals_every_golden_corpus_descriptor() {
+    let package = corpus_package().admit();
+    let corpus = corpus();
+    assert!(corpus.len() > 60, "the corpus is the whole golden set");
+    let ids = corpus
+        .iter()
+        .map(|expression| code_id(expression.code))
+        .collect::<Vec<_>>();
+    let derived = derive_exact_scalar_items(&package, &ids);
+    assert_eq!(
+        derived.len(),
+        ids.len(),
+        "one result per node id, in input order"
+    );
+    let mut items = Vec::new();
+    for (expression, derived) in corpus.iter().zip(derived) {
+        let item = derived.unwrap_or_else(|refusal| {
+            panic!(
+                "corpus node {} does not derive: {refusal:?}",
+                expression.code
+            )
+        });
+        assert_eq!(item.node_id, code_id(expression.code));
+        assert_eq!(
+            item.operation, expression.operation,
+            "node {} derives to its declared descriptor",
+            expression.code
+        );
+        items.push(item);
+    }
+    let from_derived = generate(&package, &items).claim_map;
+    let declared = corpus
+        .iter()
+        .map(|expression| ExactScalarItem {
+            node_id: code_id(expression.code),
+            operation: expression.operation.clone(),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(from_derived, generate(&package, &declared).claim_map);
+    assert!(from_derived.items.iter().all(|claim| {
+        matches!(claim.result, ClaimDisposition::Generated(_))
+            && claim.operation.provenance == OperationProvenance::IrConfirmed
+    }));
+}
+
+/// The operations with more than one descriptor for one identity are told apart by what the node
+/// carries: the operand forms (`rational.div`), the result form (`numeric.convert`,
+/// `numeric.convert_rounding`, `quantity.convert`) and the laws (`integer.div`).
+///
+/// Trace: FR-014-AC-18, TC-024
+#[test]
+fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
+    let package = derivation_package().admit();
+    let operation = |code| derive_one(&package, code).map(|item| item.operation);
+    // rational.div: both rationals divide, both integers integer-divide, a mix is neither.
+    assert!(matches!(
+        operation(1032),
+        Ok(ExactScalarOperation::RationalArithmetic {
+            operator: RationalOperator::Divide,
+            ..
+        })
+    ));
+    assert!(matches!(
+        operation(1033),
+        Ok(ExactScalarOperation::RationalArithmetic {
+            operator: RationalOperator::IntegerDivide,
+            ..
+        })
+    ));
+    assert_eq!(
+        operation(DERIVE_MIXED_DIV),
+        Err(ClaimDerivationRefusal::OperandFormsNotDerivable {
+            operation_identity: "quire.op.rational.div".to_owned()
+        })
+    );
+    // numeric.convert_rounding to a decimal is a rounding conversion.
+    assert!(matches!(
+        operation(1053),
+        Ok(ExactScalarOperation::DecimalArithmetic {
+            operator: DecimalOperator::Round,
+            ..
+        })
+    ));
+    // numeric.convert to a text type is an admission; to an integer it is neither.
+    assert!(matches!(
+        operation(TEXT_ADMISSIONS[0]),
+        Ok(ExactScalarOperation::TextAdmission { .. })
+    ));
+    assert_eq!(
+        operation(DERIVE_CONVERT_TO_INTEGER),
+        Err(ClaimDerivationRefusal::OperandFormsNotDerivable {
+            operation_identity: "quire.op.numeric.convert".to_owned()
+        })
+    );
+    // quantity.convert takes its target from the result form; an integer target takes its
+    // rounding from the node's mode, a rational result is an exact conversion.
+    assert!(matches!(
+        operation(1086),
+        Ok(ExactScalarOperation::QuantityConversion {
+            target: QuantityTarget::Decimal(_)
+        })
+    ));
+    assert!(matches!(
+        operation(1087),
+        Ok(ExactScalarOperation::QuantityConversion {
+            target: QuantityTarget::Integer {
+                rounding: RoundingMode::TowardZero,
+                ..
+            }
+        })
+    ));
+    assert!(matches!(
+        operation(QUANTITY_EXACT),
+        Ok(ExactScalarOperation::QuantityConversion {
+            target: QuantityTarget::Exact
+        })
+    ));
+    // integer.div takes its profile from the laws: the three corpus nodes differ only by it.
+    let profiles = [1011, 1012, 1013].map(|code| match operation(code) {
+        Ok(ExactScalarOperation::IntegerDivision { profile, .. }) => profile,
+        other => panic!("node {code} does not derive a division: {other:?}"),
+    });
+    assert_eq!(
+        profiles,
+        [
+            DivisionProfile::Truncating,
+            DivisionProfile::Floor,
+            DivisionProfile::Euclidean
+        ]
+    );
+}
+
+/// The refused set: identities outside the derivable set, nodes that are not applications, and
+/// refused bounds each return their own typed refusal and no descriptor.
+///
+/// Trace: FR-014-AC-18, TC-024
+#[test]
+fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
+    let package = derivation_package().admit();
+    for (code, identity) in [
+        (DERIVE_REM, "quire.op.integer.rem"),
+        (DERIVE_INTEGER_EQ, "quire.op.integer.eq"),
+    ] {
+        assert_eq!(
+            derive_one(&package, code),
+            Err(ClaimDerivationRefusal::OperationNotDerivable {
+                operation_identity: identity.to_owned()
+            })
+        );
+    }
+    assert_eq!(
+        derive_one(&package, V_BOOLEAN),
+        Err(ClaimDerivationRefusal::NotApplication {
+            node_tag: "value".to_owned()
+        })
+    );
+    let bound = |code| match derive_one(&package, code) {
+        Err(ClaimDerivationRefusal::Bound { refusal }) => *refusal,
+        other => panic!("node {code}: expected a bound refusal, got {other:?}"),
+    };
+    assert_eq!(bound(MISSING), ExactScalarRefusal::InvalidInput);
+    assert!(matches!(
+        bound(UNBOUNDED),
+        ExactScalarRefusal::RequiresBound { .. }
+    ));
+    assert!(matches!(
+        bound(MISSING_ROUNDING),
+        ExactScalarRefusal::MissingBound { .. }
+    ));
+    assert!(matches!(
+        bound(UNREADABLE),
+        ExactScalarRefusal::UnreadableBound { .. }
+    ));
+    // A node whose closure carries two bounds of one form on its result type is ambiguous, so it
+    // derives no domain. Until IR-298 gives an operation the parameter it is bounded by, a
+    // two-parameter node lands here; when IR-298 lands this expectation changes with it.
+    assert!(matches!(
+        bound(AMBIGUOUS),
+        ExactScalarRefusal::AmbiguousBound { .. }
     ));
 }

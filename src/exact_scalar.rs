@@ -538,6 +538,13 @@ pub enum ExactScalarRefusal {
         /// The affected node.
         node_id: CheckedNodeId,
     },
+    /// The node carries no derivable claim, so no descriptor was built for it
+    /// ([`derive_exact_scalar_items`]). It is recorded by the routed generation arm,
+    /// never by [`generate_exact_scalar_oracles`] itself.
+    NoDerivableClaim {
+        /// Why derivation refused.
+        reason: ClaimDerivationRefusal,
+    },
 }
 
 /// Traceability for one generated oracle.
@@ -925,11 +932,7 @@ fn check_operand(
         "literal" if expected == ScalarForm::Unit => {
             return Err(ExactScalarRefusal::UnitlessLiteralOperand { position });
         }
-        "literal" => term
-            .get("value_kind")
-            .and_then(Value::as_str)
-            .and_then(ScalarForm::from_literal_kind)
-            .map(|form| form.wire().to_owned()),
+        "literal" => literal_form(term),
         "reference" => reference_form(graph, term),
         other => {
             return Err(ExactScalarRefusal::OperandUnsupported {
@@ -946,6 +949,22 @@ fn check_operand(
             expected,
             found,
         })
+    }
+}
+
+fn literal_form(term: &Value) -> Option<String> {
+    term.get("value_kind")
+        .and_then(Value::as_str)
+        .and_then(ScalarForm::from_literal_kind)
+        .map(|form| form.wire().to_owned())
+}
+
+/// The scalar form of an operand that is a literal or a reference, as [`check_operand`] reads it.
+fn operand_form(graph: &Graph<'_>, term: &Value) -> Option<String> {
+    match term.get("term").and_then(Value::as_str)? {
+        "literal" => literal_form(term),
+        "reference" => reference_form(graph, term),
+        _ => None,
     }
 }
 
@@ -1046,15 +1065,14 @@ struct Bounds<'g, 'n> {
 }
 
 impl Bounds<'_, '_> {
-    /// Read the single bound of `form` on the result type and require the
-    /// declared parameter to equal it. An absent declaration (an unbounded
-    /// descriptor) never equals an IR bound.
-    fn equal<T: PartialEq>(
+    /// Read the single bound of `form` on the node's result type: the one selector both
+    /// [`Self::equal`] and [`derive_exact_scalar_items`] use. Returns the bound's node and the
+    /// value it reads as.
+    fn read<T>(
         &self,
         form: BoundForm,
         read: fn(&[Value]) -> Option<T>,
-        declared: Option<&T>,
-    ) -> Result<CheckedNodeId, ExactScalarRefusal> {
+    ) -> Result<(CheckedNodeId, T), ExactScalarRefusal> {
         let bounded_type = &self.node.semantic_type;
         let candidates = self
             .node
@@ -1085,13 +1103,23 @@ impl Bounds<'_, '_> {
             .ok_or_else(|| ExactScalarRefusal::UnreadableBound {
                 bound: bound.node_id.clone(),
             })?;
+        Ok((bound.node_id.clone(), value))
+    }
+
+    /// Read the single bound of `form` on the result type and require the
+    /// declared parameter to equal it. An absent declaration (an unbounded
+    /// descriptor) never equals an IR bound.
+    fn equal<T: PartialEq>(
+        &self,
+        form: BoundForm,
+        read: fn(&[Value]) -> Option<T>,
+        declared: Option<&T>,
+    ) -> Result<CheckedNodeId, ExactScalarRefusal> {
+        let (bound, value) = self.read(form, read)?;
         if declared == Some(&value) {
-            Ok(bound.node_id.clone())
+            Ok(bound)
         } else {
-            Err(ExactScalarRefusal::BoundMismatch {
-                bound: bound.node_id.clone(),
-                form,
-            })
+            Err(ExactScalarRefusal::BoundMismatch { bound, form })
         }
     }
 }
@@ -2416,6 +2444,499 @@ fn artifact(path: &str, contents: String) -> Artifact {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Deriving the descriptor from the node
+// ---------------------------------------------------------------------------
+
+/// Why a node has no derivable [`ExactScalarItem`].
+///
+/// Trace: TC-024
+// Implements: FR-014
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "code", rename_all = "snake_case")]
+pub enum ClaimDerivationRefusal {
+    /// The node is not an `application` term, so it has no operation to read.
+    NotApplication {
+        /// The node's family.
+        node_tag: String,
+    },
+    /// The application carries no `operation.identity`, which IR admission requires.
+    MissingOperationIdentity,
+    /// The identity is outside the set this generator derives.
+    OperationNotDerivable {
+        /// The node's `operation.identity`.
+        operation_identity: String,
+    },
+    /// The operand or result scalar forms select no operator for the identity.
+    OperandFormsNotDerivable {
+        /// The node's `operation.identity`.
+        operation_identity: String,
+    },
+    /// `operation.laws` selects no single division profile.
+    LawNotDerivable {
+        /// The node's `operation.identity`.
+        operation_identity: String,
+    },
+    /// `operation.mode` is absent, or its value selects no rounding that agrees with the bound.
+    ModeNotDerivable {
+        /// The node's `operation.identity`.
+        operation_identity: String,
+    },
+    /// The bound the operation is read against was refused.
+    Bound {
+        /// Why the bound could not be read.
+        refusal: Box<ExactScalarRefusal>,
+    },
+}
+
+impl ClaimDerivationRefusal {
+    /// The node's identity, when the refusal was reached after reading it.
+    fn operation_identity(&self) -> Option<&str> {
+        match self {
+            Self::OperationNotDerivable { operation_identity }
+            | Self::OperandFormsNotDerivable { operation_identity }
+            | Self::LawNotDerivable { operation_identity }
+            | Self::ModeNotDerivable { operation_identity } => Some(operation_identity),
+            Self::NotApplication { .. } | Self::MissingOperationIdentity | Self::Bound { .. } => {
+                None
+            }
+        }
+    }
+}
+
+impl ExactScalarClaim {
+    /// The claim for a node with no derivable descriptor.
+    pub(crate) fn no_derivable_claim(
+        node_id: CheckedNodeId,
+        reason: ClaimDerivationRefusal,
+    ) -> Self {
+        let (operation, result) = refused_claim(
+            reason.operation_identity().unwrap_or_default().to_owned(),
+            ExactScalarRefusal::NoDerivableClaim { reason },
+        );
+        Self {
+            node_id,
+            operation,
+            result,
+        }
+    }
+}
+
+/// An operation identity with the parameters that are not read from the node's bounds, laws,
+/// mode or operand forms already resolved. It is the inverse of [`catalogued_operation`]:
+/// `family_of_identity` is the one match over identity strings, and a round-trip test walks
+/// every descriptor through both.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Family {
+    IntegerArithmetic(IntegerOperator),
+    IntegerDivision,
+    IntegerModulo,
+    RationalArithmetic(RationalOperator),
+    /// `rational.div`: `IntegerDivide` or `Divide` by the operand forms.
+    RationalDivision,
+    Ordering(OrderingOperator, OrderingOperandKind),
+    DecimalArithmetic(DecimalOperator),
+    IeeeArithmetic(IeeeArithmeticOperator, IeeeWidth),
+    /// `ieee.numeric_equal`, `total_order` and `bit_identical`: the width comes from the operands.
+    IeeeComparison(IeeeComparison),
+    IeeeToFloat32,
+    IeeeToFloat64,
+    /// `numeric.convert`: text admission when the result is text.
+    NumericConvert,
+    TextComparison(ComparisonOperator),
+    EnumComparison(ComparisonOperator),
+    QuantityArithmetic(QuantityOperator),
+    QuantityComparison(ComparisonOperator),
+    QuantityConversion,
+}
+
+/// The inverse of [`catalogued_operation`] over identities. Identities outside the derivable set,
+/// which is every identity this match does not name, are `None`.
+fn family_of_identity(identity: &str) -> Option<Family> {
+    use ComparisonOperator as C;
+    use OrderingOperandKind as K;
+    use OrderingOperator as O;
+    Some(match identity {
+        "quire.op.integer.add" => Family::IntegerArithmetic(IntegerOperator::Add),
+        "quire.op.integer.sub" => Family::IntegerArithmetic(IntegerOperator::Subtract),
+        "quire.op.integer.mul" => Family::IntegerArithmetic(IntegerOperator::Multiply),
+        "quire.op.integer.negate" => Family::IntegerArithmetic(IntegerOperator::Negate),
+        "quire.op.integer.div" => Family::IntegerDivision,
+        "quire.op.integer.mod" => Family::IntegerModulo,
+        "quire.op.rational.add" => Family::RationalArithmetic(RationalOperator::Add),
+        "quire.op.rational.sub" => Family::RationalArithmetic(RationalOperator::Subtract),
+        "quire.op.rational.mul" => Family::RationalArithmetic(RationalOperator::Multiply),
+        "quire.op.rational.negate" => Family::RationalArithmetic(RationalOperator::Negate),
+        "quire.op.rational.div" => Family::RationalDivision,
+        "quire.op.integer.lt" => Family::Ordering(O::Less, K::Integer),
+        "quire.op.integer.le" => Family::Ordering(O::LessOrEqual, K::Integer),
+        "quire.op.integer.gt" => Family::Ordering(O::Greater, K::Integer),
+        "quire.op.integer.ge" => Family::Ordering(O::GreaterOrEqual, K::Integer),
+        "quire.op.rational.lt" => Family::Ordering(O::Less, K::Rational),
+        "quire.op.rational.le" => Family::Ordering(O::LessOrEqual, K::Rational),
+        "quire.op.rational.gt" => Family::Ordering(O::Greater, K::Rational),
+        "quire.op.rational.ge" => Family::Ordering(O::GreaterOrEqual, K::Rational),
+        "quire.op.decimal.lt" => Family::Ordering(O::Less, K::Decimal),
+        "quire.op.decimal.le" => Family::Ordering(O::LessOrEqual, K::Decimal),
+        "quire.op.decimal.gt" => Family::Ordering(O::Greater, K::Decimal),
+        "quire.op.decimal.ge" => Family::Ordering(O::GreaterOrEqual, K::Decimal),
+        "quire.op.decimal.add" => Family::DecimalArithmetic(DecimalOperator::Add),
+        "quire.op.decimal.sub" => Family::DecimalArithmetic(DecimalOperator::Subtract),
+        "quire.op.decimal.mul" => Family::DecimalArithmetic(DecimalOperator::Multiply),
+        "quire.op.decimal.div" => Family::DecimalArithmetic(DecimalOperator::Divide),
+        "quire.op.decimal.negate" => Family::DecimalArithmetic(DecimalOperator::Negate),
+        "quire.op.numeric.convert_rounding" => Family::DecimalArithmetic(DecimalOperator::Round),
+        "quire.op.ieee.float32.add" => {
+            Family::IeeeArithmetic(IeeeArithmeticOperator::Add, IeeeWidth::Binary32)
+        }
+        "quire.op.ieee.float32.sub" => {
+            Family::IeeeArithmetic(IeeeArithmeticOperator::Subtract, IeeeWidth::Binary32)
+        }
+        "quire.op.ieee.float32.mul" => {
+            Family::IeeeArithmetic(IeeeArithmeticOperator::Multiply, IeeeWidth::Binary32)
+        }
+        "quire.op.ieee.float32.div" => {
+            Family::IeeeArithmetic(IeeeArithmeticOperator::Divide, IeeeWidth::Binary32)
+        }
+        "quire.op.ieee.float64.add" => {
+            Family::IeeeArithmetic(IeeeArithmeticOperator::Add, IeeeWidth::Binary64)
+        }
+        "quire.op.ieee.float64.sub" => {
+            Family::IeeeArithmetic(IeeeArithmeticOperator::Subtract, IeeeWidth::Binary64)
+        }
+        "quire.op.ieee.float64.mul" => {
+            Family::IeeeArithmetic(IeeeArithmeticOperator::Multiply, IeeeWidth::Binary64)
+        }
+        "quire.op.ieee.float64.div" => {
+            Family::IeeeArithmetic(IeeeArithmeticOperator::Divide, IeeeWidth::Binary64)
+        }
+        "quire.op.ieee.numeric_equal" => Family::IeeeComparison(IeeeComparison::NumericEqual),
+        "quire.op.ieee.total_order" => Family::IeeeComparison(IeeeComparison::TotalOrder),
+        "quire.op.ieee.bit_identical" => Family::IeeeComparison(IeeeComparison::BitIdentical),
+        "quire.op.ieee.to_float32" => Family::IeeeToFloat32,
+        "quire.op.ieee.to_float64" => Family::IeeeToFloat64,
+        "quire.op.numeric.convert" => Family::NumericConvert,
+        "quire.op.text.eq" => Family::TextComparison(C::Equal),
+        "quire.op.text.ne" => Family::TextComparison(C::NotEqual),
+        "quire.op.text.lt" => Family::TextComparison(C::Less),
+        "quire.op.text.le" => Family::TextComparison(C::LessOrEqual),
+        "quire.op.text.gt" => Family::TextComparison(C::Greater),
+        "quire.op.text.ge" => Family::TextComparison(C::GreaterOrEqual),
+        "quire.op.enum.eq" => Family::EnumComparison(C::Equal),
+        "quire.op.enum.ne" => Family::EnumComparison(C::NotEqual),
+        "quire.op.enum.lt" => Family::EnumComparison(C::Less),
+        "quire.op.enum.le" => Family::EnumComparison(C::LessOrEqual),
+        "quire.op.enum.gt" => Family::EnumComparison(C::Greater),
+        "quire.op.enum.ge" => Family::EnumComparison(C::GreaterOrEqual),
+        "quire.op.quantity.add" => Family::QuantityArithmetic(QuantityOperator::Add),
+        "quire.op.quantity.sub" => Family::QuantityArithmetic(QuantityOperator::Subtract),
+        "quire.op.quantity.mul" => Family::QuantityArithmetic(QuantityOperator::Multiply),
+        "quire.op.quantity.div" => Family::QuantityArithmetic(QuantityOperator::Divide),
+        "quire.op.quantity.pow" => Family::QuantityArithmetic(QuantityOperator::Power),
+        "quire.op.quantity.eq" => Family::QuantityComparison(C::Equal),
+        "quire.op.quantity.ne" => Family::QuantityComparison(C::NotEqual),
+        "quire.op.quantity.lt" => Family::QuantityComparison(C::Less),
+        "quire.op.quantity.le" => Family::QuantityComparison(C::LessOrEqual),
+        "quire.op.quantity.gt" => Family::QuantityComparison(C::Greater),
+        "quire.op.quantity.ge" => Family::QuantityComparison(C::GreaterOrEqual),
+        "quire.op.quantity.convert" => Family::QuantityConversion,
+        _ => return None,
+    })
+}
+
+/// Derives one [`ExactScalarItem`] per node id, in input order, from the package alone.
+///
+/// Each descriptor is read from the node's `operation.identity`, `operation.laws`,
+/// `operation.mode`, its operand scalar forms and the one bound of the needed form on its result
+/// type (the selector [`generate_exact_scalar_oracles`] checks the descriptor against). A node
+/// that yields no descriptor is a typed [`ClaimDerivationRefusal`].
+///
+/// Trace: TC-024
+// Implements: FR-014
+pub fn derive_exact_scalar_items(
+    package: &CheckedPackageV2,
+    node_ids: &[CheckedNodeId],
+) -> Vec<Result<ExactScalarItem, ClaimDerivationRefusal>> {
+    let lowering = package.lower(node_ids, &scalar_profile());
+    let graph = package
+        .graph()
+        .nodes
+        .iter()
+        .map(|node| (&node.node_id, node))
+        .collect::<BTreeMap<_, _>>();
+    node_ids
+        .iter()
+        .zip(&lowering.records)
+        .map(|(node_id, record)| {
+            derive_operation(&graph, node_id, record).map(|operation| ExactScalarItem {
+                node_id: node_id.clone(),
+                operation,
+            })
+        })
+        .collect()
+}
+
+/// What the derivation reads about one node.
+struct Derivation<'a, 'g> {
+    graph: &'a Graph<'g>,
+    node: &'g CheckedSemanticNodeV2,
+    record: &'a CompleteLoweringRecordV2,
+    identity: &'a str,
+}
+
+impl Derivation<'_, '_> {
+    fn operand_forms_not_derivable(&self) -> ClaimDerivationRefusal {
+        ClaimDerivationRefusal::OperandFormsNotDerivable {
+            operation_identity: self.identity.to_owned(),
+        }
+    }
+
+    fn mode_not_derivable(&self) -> ClaimDerivationRefusal {
+        ClaimDerivationRefusal::ModeNotDerivable {
+            operation_identity: self.identity.to_owned(),
+        }
+    }
+
+    /// The one bound of `form` on the node's result type.
+    fn read<T>(
+        &self,
+        form: BoundForm,
+        read: fn(&[Value]) -> Option<T>,
+    ) -> Result<T, ClaimDerivationRefusal> {
+        let wrap = |refusal| ClaimDerivationRefusal::Bound {
+            refusal: Box::new(refusal),
+        };
+        let node = lowered(self.record).map_err(wrap)?;
+        let bounds = Bounds {
+            graph: self.graph,
+            node,
+        };
+        bounds
+            .read(form, read)
+            .map(|(_, value)| value)
+            .map_err(wrap)
+    }
+
+    /// The scalar forms of the application's arguments.
+    fn operand_forms(&self) -> Vec<Option<String>> {
+        self.node
+            .body
+            .get("arguments")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|argument| operand_form(self.graph, argument))
+            .collect()
+    }
+
+    /// The scalar form of the node's result type.
+    fn result_form(&self) -> Option<String> {
+        type_form(self.graph, &self.node.semantic_type)
+    }
+
+    /// The `operation.mode` value when its kind is `rounding`.
+    fn mode_value(&self) -> Option<&str> {
+        let mode = &self.node.body["operation"]["mode"];
+        (mode["kind"].as_str() == Some("rounding"))
+            .then(|| mode["value"].as_str())
+            .flatten()
+    }
+
+    /// Requires `operation.mode` to carry `rounding`.
+    fn require_mode(&self, rounding: RoundingMode) -> Result<(), ClaimDerivationRefusal> {
+        if self.mode_value() == Some(rounding.as_str()) {
+            Ok(())
+        } else {
+            Err(self.mode_not_derivable())
+        }
+    }
+
+    /// The one division profile `operation.laws` names.
+    fn division_profile(&self) -> Result<DivisionProfile, ClaimDerivationRefusal> {
+        let named = DivisionProfile::ALL
+            .into_iter()
+            .filter(|profile| {
+                self.node.body["operation"]["laws"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|law| {
+                        law["definition"]["identity"].as_str()
+                            == Some(profile.definition_identity())
+                    })
+            })
+            .collect::<Vec<_>>();
+        match named.as_slice() {
+            [profile] => Ok(*profile),
+            _ => Err(ClaimDerivationRefusal::LawNotDerivable {
+                operation_identity: self.identity.to_owned(),
+            }),
+        }
+    }
+
+    fn integer_domain(&self) -> Result<IntegerDomain, ClaimDerivationRefusal> {
+        self.read(BoundForm::IntegerRange, read_integer_range)
+            .map(IntegerDomain::Bounded)
+    }
+
+    fn decimal_target(&self) -> Result<DecimalType, ClaimDerivationRefusal> {
+        self.read(BoundForm::DecimalRange, read_decimal_range)
+    }
+
+    fn float_rounding(&self) -> Result<RoundingMode, ClaimDerivationRefusal> {
+        self.read(BoundForm::FloatRounding, read_float_rounding)
+    }
+
+    /// Both operands share one scalar form, of the `candidates`.
+    fn shared_operand_form<T: Copy>(
+        &self,
+        candidates: &[(&str, T)],
+    ) -> Result<T, ClaimDerivationRefusal> {
+        let forms = self.operand_forms();
+        let [Some(first), Some(second)] = forms.as_slice() else {
+            return Err(self.operand_forms_not_derivable());
+        };
+        candidates
+            .iter()
+            .find(|(form, _)| first == form && second == form)
+            .map(|(_, value)| *value)
+            .ok_or_else(|| self.operand_forms_not_derivable())
+    }
+}
+
+fn derive_operation(
+    graph: &Graph<'_>,
+    node_id: &CheckedNodeId,
+    record: &CompleteLoweringRecordV2,
+) -> Result<ExactScalarOperation, ClaimDerivationRefusal> {
+    use ExactScalarOperation as Op;
+    let node = graph
+        .get(node_id)
+        .copied()
+        .ok_or_else(|| ClaimDerivationRefusal::Bound {
+            refusal: Box::new(ExactScalarRefusal::InvalidInput),
+        })?;
+    if &*node.node_tag != CheckedNodeTag::Expression.as_wire()
+        || node.body.get("term").and_then(Value::as_str) != Some("application")
+    {
+        return Err(ClaimDerivationRefusal::NotApplication {
+            node_tag: node.node_tag.to_string(),
+        });
+    }
+    let identity = node.body["operation"]["identity"]
+        .as_str()
+        .ok_or(ClaimDerivationRefusal::MissingOperationIdentity)?;
+    let derivation = Derivation {
+        graph,
+        node,
+        record,
+        identity,
+    };
+    let family = family_of_identity(identity).ok_or_else(|| {
+        ClaimDerivationRefusal::OperationNotDerivable {
+            operation_identity: identity.to_owned(),
+        }
+    })?;
+    Ok(match family {
+        Family::IntegerArithmetic(operator) => Op::IntegerArithmetic {
+            operator,
+            domain: derivation.integer_domain()?,
+        },
+        Family::IntegerDivision => Op::IntegerDivision {
+            profile: derivation.division_profile()?,
+            domain: derivation.integer_domain()?,
+        },
+        Family::IntegerModulo => Op::IntegerModulo {
+            domain: derivation.integer_domain()?,
+        },
+        Family::RationalArithmetic(operator) => Op::RationalArithmetic {
+            operator,
+            domain: Some(derivation.read(BoundForm::RationalRange, read_rational_range)?),
+        },
+        Family::RationalDivision => Op::RationalArithmetic {
+            operator: derivation.shared_operand_form(&[
+                ("integer", RationalOperator::IntegerDivide),
+                ("rational", RationalOperator::Divide),
+            ])?,
+            domain: Some(derivation.read(BoundForm::RationalRange, read_rational_range)?),
+        },
+        Family::Ordering(operator, operands) => Op::Ordering { operator, operands },
+        Family::DecimalArithmetic(operator) => {
+            if operator == DecimalOperator::Round
+                && derivation.result_form().as_deref() != Some(ScalarForm::Decimal.wire())
+            {
+                return Err(derivation.operand_forms_not_derivable());
+            }
+            let target = derivation.decimal_target()?;
+            if operator != DecimalOperator::Negate {
+                derivation.require_mode(target.rounding())?;
+            }
+            Op::DecimalArithmetic { operator, target }
+        }
+        Family::IeeeArithmetic(operator, width) => {
+            let rounding = derivation.float_rounding()?;
+            derivation.require_mode(rounding)?;
+            Op::IeeeArithmetic {
+                operator,
+                width,
+                rounding,
+            }
+        }
+        Family::IeeeComparison(comparison) => Op::IeeeComparison {
+            comparison,
+            width: derivation.shared_operand_form(&[
+                ("float32", IeeeWidth::Binary32),
+                ("float64", IeeeWidth::Binary64),
+            ])?,
+        },
+        Family::IeeeToFloat32 => {
+            let rounding = derivation.float_rounding()?;
+            derivation.require_mode(rounding)?;
+            Op::IeeeWidthConversion {
+                source: IeeeWidth::Binary64,
+                target: IeeeWidth::Binary32,
+                rounding,
+            }
+        }
+        Family::IeeeToFloat64 => Op::IeeeWidthConversion {
+            source: IeeeWidth::Binary32,
+            target: IeeeWidth::Binary64,
+            rounding: derivation.float_rounding()?,
+        },
+        Family::NumericConvert => {
+            if derivation.result_form().as_deref() != Some(ScalarForm::Text.wire()) {
+                return Err(derivation.operand_forms_not_derivable());
+            }
+            Op::TextAdmission {
+                text_type: derivation.read(BoundForm::TextBounds, read_text_bounds)?,
+            }
+        }
+        Family::TextComparison(operator) => Op::TextComparison { operator },
+        Family::EnumComparison(operator) => Op::EnumComparison { operator },
+        Family::QuantityArithmetic(operator) => Op::QuantityArithmetic { operator },
+        Family::QuantityComparison(operator) => Op::QuantityComparison { operator },
+        Family::QuantityConversion => {
+            let target = match derivation.result_form().as_deref() {
+                Some("rational") => QuantityTarget::Exact,
+                Some("decimal") => {
+                    let target = derivation.decimal_target()?;
+                    derivation.require_mode(target.rounding())?;
+                    QuantityTarget::Decimal(target)
+                }
+                Some("integer") => QuantityTarget::Integer {
+                    domain: derivation.read(BoundForm::IntegerRange, read_integer_range)?,
+                    rounding: derivation
+                        .mode_value()
+                        .and_then(RoundingMode::from_code)
+                        .ok_or_else(|| derivation.mode_not_derivable())?,
+                },
+                _ => return Err(derivation.operand_forms_not_derivable()),
+            };
+            Op::QuantityConversion { target }
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2799,6 +3320,346 @@ mod tests {
                 binding_member("max", "2"),
             ]),
             None
+        );
+    }
+    // -- Derivation (IR-294) ---------------------------------------------------------------
+
+    /// One descriptor per catalogued identity the forward map can name, with its expected family.
+    fn every_descriptor() -> Vec<(ExactScalarOperation, Family)> {
+        use ExactScalarOperation as Op;
+        let domain = IntegerDomain::Mathematical;
+        let decimal = DecimalType::new(0_i64.into(), 9_i64.into(), 0, 0, RoundingMode::NearestEven)
+            .expect("type");
+        let text = TextType::new(0, 4, TextProfile::Nfc).expect("text");
+        let mut all = Vec::new();
+        for operator in [
+            IntegerOperator::Add,
+            IntegerOperator::Subtract,
+            IntegerOperator::Multiply,
+            IntegerOperator::Negate,
+        ] {
+            all.push((
+                Op::IntegerArithmetic {
+                    operator,
+                    domain: domain.clone(),
+                },
+                Family::IntegerArithmetic(operator),
+            ));
+        }
+        for profile in DivisionProfile::ALL {
+            all.push((
+                Op::IntegerDivision {
+                    profile,
+                    domain: domain.clone(),
+                },
+                Family::IntegerDivision,
+            ));
+        }
+        all.push((Op::IntegerModulo { domain }, Family::IntegerModulo));
+        for operator in [
+            RationalOperator::Add,
+            RationalOperator::Subtract,
+            RationalOperator::Multiply,
+            RationalOperator::Negate,
+        ] {
+            all.push((
+                Op::RationalArithmetic {
+                    operator,
+                    domain: None,
+                },
+                Family::RationalArithmetic(operator),
+            ));
+        }
+        for operator in [RationalOperator::Divide, RationalOperator::IntegerDivide] {
+            all.push((
+                Op::RationalArithmetic {
+                    operator,
+                    domain: None,
+                },
+                Family::RationalDivision,
+            ));
+        }
+        for operator in [
+            OrderingOperator::Less,
+            OrderingOperator::LessOrEqual,
+            OrderingOperator::Greater,
+            OrderingOperator::GreaterOrEqual,
+        ] {
+            for operands in [
+                OrderingOperandKind::Integer,
+                OrderingOperandKind::Rational,
+                OrderingOperandKind::Decimal,
+            ] {
+                all.push((
+                    Op::Ordering { operator, operands },
+                    Family::Ordering(operator, operands),
+                ));
+            }
+        }
+        for operator in [
+            DecimalOperator::Add,
+            DecimalOperator::Subtract,
+            DecimalOperator::Multiply,
+            DecimalOperator::Negate,
+            DecimalOperator::Divide,
+            DecimalOperator::Round,
+        ] {
+            all.push((
+                Op::DecimalArithmetic {
+                    operator,
+                    target: decimal.clone(),
+                },
+                Family::DecimalArithmetic(operator),
+            ));
+        }
+        for width in [IeeeWidth::Binary32, IeeeWidth::Binary64] {
+            for operator in [
+                IeeeArithmeticOperator::Add,
+                IeeeArithmeticOperator::Subtract,
+                IeeeArithmeticOperator::Multiply,
+                IeeeArithmeticOperator::Divide,
+            ] {
+                all.push((
+                    Op::IeeeArithmetic {
+                        operator,
+                        width,
+                        rounding: RoundingMode::NearestEven,
+                    },
+                    Family::IeeeArithmetic(operator, width),
+                ));
+            }
+            for comparison in [
+                IeeeComparison::NumericEqual,
+                IeeeComparison::TotalOrder,
+                IeeeComparison::BitIdentical,
+            ] {
+                all.push((
+                    Op::IeeeComparison { comparison, width },
+                    Family::IeeeComparison(comparison),
+                ));
+            }
+        }
+        all.push((
+            Op::IeeeWidthConversion {
+                source: IeeeWidth::Binary64,
+                target: IeeeWidth::Binary32,
+                rounding: RoundingMode::NearestEven,
+            },
+            Family::IeeeToFloat32,
+        ));
+        all.push((
+            Op::IeeeWidthConversion {
+                source: IeeeWidth::Binary32,
+                target: IeeeWidth::Binary64,
+                rounding: RoundingMode::NearestEven,
+            },
+            Family::IeeeToFloat64,
+        ));
+        all.push((
+            Op::TextAdmission { text_type: text },
+            Family::NumericConvert,
+        ));
+        for operator in ComparisonOperator::ALL {
+            all.push((
+                Op::TextComparison { operator },
+                Family::TextComparison(operator),
+            ));
+            all.push((
+                Op::EnumComparison { operator },
+                Family::EnumComparison(operator),
+            ));
+            all.push((
+                Op::QuantityComparison { operator },
+                Family::QuantityComparison(operator),
+            ));
+        }
+        for operator in [
+            QuantityOperator::Add,
+            QuantityOperator::Subtract,
+            QuantityOperator::Multiply,
+            QuantityOperator::Divide,
+            QuantityOperator::Power,
+        ] {
+            all.push((
+                Op::QuantityArithmetic { operator },
+                Family::QuantityArithmetic(operator),
+            ));
+        }
+        for target in [
+            QuantityTarget::Exact,
+            QuantityTarget::Decimal(decimal),
+            QuantityTarget::Integer {
+                domain: interval_of("0", "9"),
+                rounding: RoundingMode::TowardZero,
+            },
+        ] {
+            all.push((
+                Op::QuantityConversion { target },
+                Family::QuantityConversion,
+            ));
+        }
+        all
+    }
+
+    /// The inverse identity match and the forward `catalogued_operation` share one vocabulary:
+    /// every descriptor's forward identity inverts to the family that descriptor belongs to, and
+    /// no two distinct families share an identity. A catalogued identity added to one map and not
+    /// the other fails here.
+    ///
+    /// Trace: FR-014-AC-18, FR-014-AC-19, TC-024.
+    #[test]
+    fn tc_024_the_identity_inverse_matches_the_forward_catalogue_for_every_descriptor() {
+        let mut seen = BTreeMap::new();
+        for (operation, family) in every_descriptor() {
+            let identity = catalogued_operation(&operation)
+                .expect("every descriptor here has a catalogued identity")
+                .identity;
+            assert_eq!(
+                family_of_identity(identity),
+                Some(family),
+                "{identity} inverts to the family of {operation:?}"
+            );
+            if let Some(previous) = seen.insert(identity, family) {
+                assert_eq!(previous, family, "{identity} names two families");
+            }
+        }
+        // The one identity the forward map does not name, and is never derived.
+        assert_eq!(family_of_identity("quire.op.integer.rem"), None);
+        assert_eq!(family_of_identity("quire.op.integer.eq"), None);
+        assert_eq!(family_of_identity("quire.op.ieee.float32.sqrt"), None);
+    }
+
+    fn application_node(body: Value) -> (CheckedNodeId, CheckedSemanticNodeV2) {
+        let node = v2_node('a', "expression", "binary", '1', body);
+        (node.node_id.clone(), node)
+    }
+
+    fn derive_hand_built(body: Value) -> Result<ExactScalarOperation, ClaimDerivationRefusal> {
+        let (id, node) = application_node(body);
+        let graph = BTreeMap::from([(&id, &node)]);
+        let record = CompleteLoweringRecordV2::InvalidInput {
+            node_id: id.clone(),
+        };
+        derive_operation(&graph, &id, &record)
+    }
+
+    /// A node with no `operation.identity` (which admission forbids), a node that is not an
+    /// application, and one naming an identity outside the derivable set each get their own
+    /// typed refusal.
+    ///
+    /// Trace: FR-014-AC-18, TC-024.
+    #[test]
+    fn tc_024_derivation_refuses_a_missing_identity_a_non_application_and_a_foreign_identity() {
+        assert_eq!(
+            derive_hand_built(serde_json::json!({"term": "application", "operation": {}})),
+            Err(ClaimDerivationRefusal::MissingOperationIdentity)
+        );
+        assert_eq!(
+            derive_hand_built(serde_json::json!({"term": "literal"})),
+            Err(ClaimDerivationRefusal::NotApplication {
+                node_tag: "expression".to_owned()
+            })
+        );
+        assert_eq!(
+            derive_hand_built(serde_json::json!({
+                "term": "application", "operation": {"identity": "quire.op.boolean.and"}
+            })),
+            Err(ClaimDerivationRefusal::OperationNotDerivable {
+                operation_identity: "quire.op.boolean.and".to_owned()
+            })
+        );
+    }
+
+    /// `integer.div` names its profile only through `operation.laws`: none, or two different
+    /// profiles, select no profile; a foreign definition selects none either.
+    ///
+    /// Trace: FR-014-AC-18, TC-024.
+    #[test]
+    fn tc_024_derivation_reads_the_division_profile_from_the_laws_and_nowhere_else() {
+        let laws = |identities: &[&str]| {
+            serde_json::json!({"term": "application", "operation": {
+                "identity": "quire.op.integer.div",
+                "laws": identities
+                    .iter()
+                    .map(|identity| serde_json::json!({
+                        "role": "integer_division", "definition": {"identity": identity}
+                    }))
+                    .collect::<Vec<_>>(),
+            }})
+        };
+        let (id, node) = application_node(laws(&[]));
+        let graph = BTreeMap::from([(&id, &node)]);
+        let record = CompleteLoweringRecordV2::InvalidInput {
+            node_id: id.clone(),
+        };
+        let profile_of = |body: Value| {
+            let (_, node) = application_node(body);
+            Derivation {
+                graph: &graph,
+                node: &node,
+                record: &record,
+                identity: "quire.op.integer.div",
+            }
+            .division_profile()
+        };
+        let law_refusal = Err(ClaimDerivationRefusal::LawNotDerivable {
+            operation_identity: "quire.op.integer.div".to_owned(),
+        });
+        assert_eq!(profile_of(laws(&[])), law_refusal);
+        assert_eq!(profile_of(laws(&["quire.value.other/v1"])), law_refusal);
+        assert_eq!(
+            profile_of(laws(&[
+                DivisionProfile::Floor.definition_identity(),
+                DivisionProfile::Euclidean.definition_identity(),
+            ])),
+            law_refusal
+        );
+        for profile in DivisionProfile::ALL {
+            assert_eq!(
+                profile_of(laws(&[profile.definition_identity()])),
+                Ok(profile)
+            );
+        }
+    }
+
+    /// `operation.mode` must carry the rounding of the bound it is read against: absent, of
+    /// another kind or another value is `ModeNotDerivable`.
+    ///
+    /// Trace: FR-014-AC-18, TC-024.
+    #[test]
+    fn tc_024_derivation_requires_the_mode_to_agree_with_the_bound_rounding() {
+        let derivation_of = |mode: Value| {
+            let (id, node) = application_node(serde_json::json!({
+                "term": "application",
+                "operation": {"identity": "quire.op.decimal.add", "mode": mode},
+            }));
+            let graph = BTreeMap::from([(&id, &node)]);
+            let record = CompleteLoweringRecordV2::InvalidInput {
+                node_id: id.clone(),
+            };
+            Derivation {
+                graph: &graph,
+                node: &node,
+                record: &record,
+                identity: "quire.op.decimal.add",
+            }
+            .require_mode(RoundingMode::NearestEven)
+        };
+        let refusal = Err(ClaimDerivationRefusal::ModeNotDerivable {
+            operation_identity: "quire.op.decimal.add".to_owned(),
+        });
+        assert_eq!(derivation_of(Value::Null), refusal);
+        assert_eq!(
+            derivation_of(serde_json::json!({"kind": "text_profile", "value": "nearest-even"})),
+            refusal
+        );
+        assert_eq!(
+            derivation_of(serde_json::json!({"kind": "rounding", "value": "toward-zero"})),
+            refusal
+        );
+        assert_eq!(
+            derivation_of(serde_json::json!({"kind": "rounding", "value": "nearest-even"})),
+            Ok(())
         );
     }
 }

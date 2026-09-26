@@ -64,12 +64,12 @@ pub use bounded_kani_profile::{classify_bounded_kani_profile, BoundedKaniProfile
 pub use bounded_kani_replay::replay_codegen_counterexample;
 pub use definedness_arithmetic::prepare_checked_arithmetic;
 pub use exact_scalar::{
-    generate_exact_scalar_oracles, BoundForm, DecimalOperator, ExactScalarClaim, ExactScalarItem,
-    ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, GeneratedScalarClaim,
-    IeeeArithmeticOperator, IntegerOperator, OperationClaim, OperationProvenance,
-    OrderingOperandKind, QuantityOperator, RationalOperator, ScalarForm,
-    EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS,
-    SCALAR_LOWERING_WORK_LIMIT,
+    derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
+    DecimalOperator, ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
+    ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator, IntegerOperator,
+    OperationClaim, OperationProvenance, OrderingOperandKind, QuantityOperator, RationalOperator,
+    ScalarForm, EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME,
+    SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 pub use finite_reference_graphs::prepare_finite_graph_reaches;
 pub use generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};

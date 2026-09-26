@@ -3044,6 +3044,97 @@ pub fn bounded_increment_package() -> PackageBuilder {
     builder
 }
 
+/// `x rem 2` over `Int[-5, 5]`: `integer.rem` has no derivable descriptor.
+pub const DERIVE_REM: u32 = 2040;
+/// `x == 2` over integers: `integer.eq` has no derivable descriptor.
+pub const DERIVE_INTEGER_EQ: u32 = 2041;
+/// `rational.div` over one integer and one rational operand: neither overload applies.
+pub const DERIVE_MIXED_DIV: u32 = 2042;
+/// `numeric.convert` to an integer result: only a text result is derivable.
+pub const DERIVE_CONVERT_TO_INTEGER: u32 = 2043;
+
+/// [`corpus_package`] plus the nodes IR-294's derivation refuses: `integer.rem`, `integer.eq`,
+/// a mixed-operand `rational.div` and a `numeric.convert` to an integer.
+pub fn derivation_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    let int5 = builder.bound(&INT5);
+    let int = builder.bound(&INT);
+    let rat = builder.bound(&RAT);
+    let rem_operand = builder.dedicated_operand_tagged("integer", &[int5.clone()], "derive-rem");
+    builder.application_bounded(
+        DERIVE_REM,
+        "expression",
+        "binary",
+        &key(T_INTEGER),
+        application(
+            "binary",
+            op_full(
+                "quire.op.integer.rem",
+                vec![law(
+                    "integer_division",
+                    integer_division_definition(DivisionProfile::Truncating),
+                )],
+                None,
+                None,
+            ),
+            &key(T_INTEGER),
+            vec![reference(&rem_operand), literal("integer", "2")],
+        ),
+        &[INT5],
+    );
+    let eq_operand = builder.dedicated_operand_tagged("integer", &[int.clone()], "derive-eq");
+    builder.application_bounded(
+        DERIVE_INTEGER_EQ,
+        "expression",
+        "binary",
+        &key(T_BOOLEAN),
+        application(
+            "binary",
+            op("quire.op.integer.eq"),
+            &key(T_BOOLEAN),
+            vec![reference(&eq_operand), literal("integer", "2")],
+        ),
+        &[INT],
+    );
+    let mixed_keys = [int.clone(), rat];
+    let integer_operand = builder.dedicated_operand_tagged("integer", &mixed_keys, "derive-mixed");
+    let rational_operand =
+        builder.dedicated_operand_tagged("rational", &mixed_keys, "derive-mixed");
+    builder.application_bounded(
+        DERIVE_MIXED_DIV,
+        "expression",
+        "binary",
+        &key(T_RATIONAL),
+        application(
+            "binary",
+            op("quire.op.rational.div"),
+            &key(T_RATIONAL),
+            vec![reference(&integer_operand), reference(&rational_operand)],
+        ),
+        &[INT, RAT],
+    );
+    let convert_operand = builder.dedicated_operand_tagged("integer", &[int], "derive-convert");
+    builder.application_bounded(
+        DERIVE_CONVERT_TO_INTEGER,
+        "expression",
+        "conversion",
+        &key(T_INTEGER),
+        application(
+            "convert",
+            op_full(
+                "quire.op.numeric.convert",
+                vec![],
+                None,
+                Some(member_kind("type_argument")),
+            ),
+            &key(T_INTEGER),
+            vec![reference(&convert_operand)],
+        ),
+        &[INT],
+    );
+    builder
+}
+
 /// Integer addition over the `Int[0, 9]` domain of [`bounded_increment_package`].
 pub fn integer_add_0_9() -> ExactScalarOperation {
     ExactScalarOperation::IntegerArithmetic {

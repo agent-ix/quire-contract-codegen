@@ -69,9 +69,10 @@ use crate::{
         attestation_context_is_valid, generate_oracle_with_derivation, length_delimited_identity,
         reference_identifier, typed_dependency_parameters, DependencyParameter, RustValueType,
     },
-    Artifact, AttestationContext, ClaimDisposition, ClaimMap, ExactScalarClaim, ExactScalarRefusal,
-    GeneratedScalarClaim, GenerationErrorCode, OperationProvenance, OracleRequest, UpstreamBlocker,
-    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    Artifact, AttestationContext, ClaimDerivationRefusal, ClaimDisposition, ClaimMap,
+    ExactScalarClaim, ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode,
+    OperationProvenance, OracleRequest, UpstreamBlocker, IR_CANDIDATE_REVISION,
+    MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
 };
 
 /// Schema identity of a generated obligation identity record.
@@ -342,6 +343,13 @@ pub enum UnsupportedObligation {
         node_tag: &'static str,
         /// The upstream issue.
         issue: UpstreamBlocker,
+    },
+    /// The node carries no derivable FR-014 descriptor (FR-022), so no oracle was built for it.
+    NoDerivableClaim {
+        /// The node.
+        node_id: CheckedNodeId,
+        /// Why derivation refused.
+        reason: ClaimDerivationRefusal,
     },
     /// The FR-014 oracle refused for another reason.
     OracleRefused {
@@ -1221,6 +1229,12 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                         refusal: refusal.clone(),
                     }),
                 }
+            }
+            ExactScalarRefusal::NoDerivableClaim { reason } => {
+                Outcome::Unsupported(UnsupportedObligation::NoDerivableClaim {
+                    node_id: claim.node_id.clone(),
+                    reason: reason.clone(),
+                })
             }
             ExactScalarRefusal::DuplicateRequest
             | ExactScalarRefusal::AmbiguousBound { .. }
