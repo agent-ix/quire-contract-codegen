@@ -473,7 +473,7 @@ fn tc_033_output_is_deterministic_and_independent_of_index_and_digest() {
 /// `bounded_domain` with binding-shaped `min`/`max` members), routes to Kani and is Supported
 /// with a scalar harness carrying the inclusive `[0, 9]` domain (IR-297 with IR-296).
 ///
-/// Trace: FR-014-AC-16, FR-022-AC-2, TC-024, TC-033
+/// Trace: FR-014-AC-16, FR-014-AC-17, FR-022-AC-2, TC-024, TC-033
 #[test]
 fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_harness() {
     let package = package::bounded_increment_package().admit();

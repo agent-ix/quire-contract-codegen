@@ -71,19 +71,23 @@ code.
 
 A bound is read from the one reachable `bounded_domain` node on the node's
 result type whose form matches the descriptor. Its body is an `aggregate` of
-`binding` members, the checked-package v2 shape (QSpec FR-322): each member is
-`{term: binding, name, value: <literal>}`, and this generator reads the member's
-`value` in the order below (integers as canonical decimal `integer` literals,
-spellings as `text` literals). A bare literal member is not a bound member and
-is unreadable.
+`binding` members, `{term: binding, name, value: <literal>}` (QSpec
+`proposals/checked-package-v2/fixtures/positive-operation-identities.json`),
+each carrying a canonical decimal `integer` literal or, for a spelling, a `text`
+literal. A member is looked up by its `name`, in any order; the body holds
+exactly the names of its form, once each:
 
-| Form | Members |
-|------|---------|
-| `integer_range` | lower, upper |
-| `rational_range` | numerator lower, numerator upper, denominator lower, denominator upper |
-| `decimal_range` | lower, upper, minimum scale, maximum scale, rounding |
-| `float_rounding` | rounding |
-| `text_bounds` | minimum scalars, maximum scalars, profile |
+| Form | Member names |
+|------|--------------|
+| `integer_range` | `min`, `max` |
+| `rational_range` | `numerator_min`, `numerator_max`, `denominator_min`, `denominator_max` |
+| `decimal_range` | `coefficient_min`, `coefficient_max`, `scale_min`, `scale_max`, `rounding` (text) |
+| `float_rounding` | `rounding` (text) |
+| `text_bounds` | `min`, `max`, `text_profile` (text) |
+| `collection_bounds` | `min`, `max` |
+
+A bare literal member, a missing or duplicate name and an unlisted name are each
+an unreadable bound.
 
 ## Outputs
 
@@ -124,6 +128,9 @@ is unreadable.
 - If the bound a descriptor parameter needs is missing, repeated, unreadable or
   unequal to the parameter, then the generator shall refuse the item with a
   typed reason.
+- Where a `reference` operand's target is typed by a `bounded_domain` node, the
+  generator shall classify the operand by that domain's own `semantic_type`, its
+  base scalar type; QSL emits a bounded domain directly over its scalar base.
 - If an operand is neither a literal nor a reference, or a literal stands where
   a quantity is required, then the generator shall refuse the item with a typed
   reason.
@@ -162,7 +169,8 @@ is unreadable.
 | FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition is absent from that node's `operation.laws`, or whose mode value disagrees with that node's `operation.mode`, is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |
 | FR-014-AC-14 | A claim whose node this generator never inspected — a duplicate copy, or a record that never lowered — or inspected and refused with a typed reason, marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |
 | FR-014-AC-15 | A requested item whose node closure exceeds the 65,536-unit lowering work ceiling is refused as `LoweringWorkExhausted`, naming the ceiling and the consumed counter, contributes no generated function, and leaves every other item's disposition unaffected. | Test (TC-024) |
-| FR-014-AC-16 | A descriptor parameter is read from `binding`-shaped bound members, and a bare literal member is refused as an unreadable bound; a `reference` operand whose target is typed by a `bounded_domain` node is classified by that domain's base scalar type. | Test (TC-024) |
+| FR-014-AC-16 | A bound is read from `binding` members looked up by name in any order (`min`/`max`, `numerator_min` through `denominator_max`, `coefficient_min` through `rounding`, `rounding`, `min`/`max`/`text_profile`); a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-024) |
+| FR-014-AC-17 | A `reference` operand whose target is typed by a `bounded_domain` node is classified by that domain's base scalar type, so `x + 1` over a parameter `x` of type `Int[0, 9]` generates, and a bounded text parameter is still a text operand. | Test (TC-024) |
 
 ## Dependencies
 

@@ -1363,9 +1363,9 @@ fn sha256_hex(bytes: &[u8]) -> String {
 /// parameter) is an Integer operand and generates; before IR-297 it was refused as
 /// `OperandTypeMismatch { found: None }`.
 ///
-/// Trace: FR-014-AC-16, TC-024.
+/// Trace: FR-014-AC-17, TC-024.
 #[test]
-fn tc_024_ac16_an_operand_typed_by_a_bounded_domain_generates() {
+fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
     let oracles = generate(
         &corpus_package().admit(),
         &[ExactScalarItem {
