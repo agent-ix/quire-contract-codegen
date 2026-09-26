@@ -1270,8 +1270,12 @@ pub const V_FLOAT32: u32 = 105;
 pub const V_FLOAT64: u32 = 106;
 pub const V_TEXT: u32 = 107;
 pub const V_QUANTITY: u32 = 108;
-/// A value whose semantic type is a bound, not a scalar type.
-pub const V_UNTYPED: u32 = 109;
+/// A value whose semantic type is an `integer_range` `bounded_domain` over the integer scalar
+/// type: a parameter typed `Int[0, 9]` in QSL. It is an Integer operand (IR-297).
+pub const V_BOUNDED_PARAM: u32 = 109;
+/// A value whose semantic type is another value node, so neither a scalar type nor a
+/// `bounded_domain` over one.
+pub const V_UNTYPED: u32 = 110;
 
 /// The corpus integer subtraction, whose right operand is an inline literal.
 pub const LITERAL_OPERAND: u32 = 1003;
@@ -1327,6 +1331,9 @@ pub const EXPRESSION_OPERAND: u32 = 2029;
 pub const LITERAL_QUANTITY: u32 = 2030;
 /// An integer addition whose right operand has no scalar type.
 pub const UNTYPED_OPERAND: u32 = 2031;
+/// An integer addition whose right operand is typed by an `integer_range` `bounded_domain`. It is
+/// generated (IR-297), so it is requested by its own test and is in no golden item list.
+pub const BOUNDED_OPERAND: u32 = 2034;
 /// A rational division over two integer-typed *reference* operands: IR
 /// admits it (`quire.op.rational.div`'s catalogued operand family,
 /// `rational_promotable`, is `{integer, rational}`), but CG's own
@@ -2282,10 +2289,17 @@ pub fn corpus_package() -> PackageBuilder {
     );
     let int_bound = builder.bound(&INT);
     builder.code(
-        V_UNTYPED,
+        V_BOUNDED_PARAM,
         "value",
         "literal",
         &int_bound,
+        literal("integer", "3"),
+    );
+    builder.code(
+        V_UNTYPED,
+        "value",
+        "literal",
+        &key(V_BOOLEAN),
         literal("integer", "3"),
     );
     // Every catalogued law-role definition any corpus expression's
@@ -2643,6 +2657,26 @@ pub fn corpus_package() -> PackageBuilder {
             vec![
                 reference(&untyped_operand_anchor),
                 reference(&key(V_UNTYPED)),
+            ],
+        ),
+        &[INT],
+    );
+    let bounded_operand_anchor = {
+        let int_key = builder.bound(&INT);
+        builder.dedicated_operand("integer", &[int_key])
+    };
+    builder.application_bounded(
+        BOUNDED_OPERAND,
+        "expression",
+        "binary",
+        &integer_type,
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &integer_type,
+            vec![
+                reference(&bounded_operand_anchor),
+                reference(&key(V_BOUNDED_PARAM)),
             ],
         ),
         &[INT],

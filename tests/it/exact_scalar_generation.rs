@@ -1358,3 +1358,23 @@ fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::Digest as _;
     format!("{:x}", sha2::Sha256::digest(bytes))
 }
+
+/// A `reference` operand typed by an `integer_range` `bounded_domain` (QSL's `Int[0, 9]`
+/// parameter) is an Integer operand and generates; before IR-297 it was refused as
+/// `OperandTypeMismatch { found: None }`.
+///
+/// Trace: FR-014-AC-16, TC-024.
+#[test]
+fn tc_024_ac16_an_operand_typed_by_a_bounded_domain_generates() {
+    let oracles = generate(
+        &corpus_package().admit(),
+        &[ExactScalarItem {
+            node_id: code_id(BOUNDED_OPERAND),
+            operation: integer_add(),
+        }],
+    );
+    assert!(matches!(
+        dispositions(&oracles).get(code_id(BOUNDED_OPERAND).digest.as_ref()),
+        Some(ClaimDisposition::Generated(_))
+    ));
+}
