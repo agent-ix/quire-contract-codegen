@@ -3060,7 +3060,8 @@ pub fn derivation_package() -> PackageBuilder {
     let int5 = builder.bound(&INT5);
     let int = builder.bound(&INT);
     let rat = builder.bound(&RAT);
-    let rem_operand = builder.dedicated_operand_tagged("integer", &[int5.clone()], "derive-rem");
+    let rem_operand =
+        builder.dedicated_operand_tagged("integer", std::slice::from_ref(&int5), "derive-rem");
     builder.application_bounded(
         DERIVE_REM,
         "expression",
@@ -3082,7 +3083,8 @@ pub fn derivation_package() -> PackageBuilder {
         ),
         &[INT5],
     );
-    let eq_operand = builder.dedicated_operand_tagged("integer", &[int.clone()], "derive-eq");
+    let eq_operand =
+        builder.dedicated_operand_tagged("integer", std::slice::from_ref(&int), "derive-eq");
     builder.application_bounded(
         DERIVE_INTEGER_EQ,
         "expression",

@@ -360,6 +360,7 @@ The interface's features in declaration order: every operation the contract abov
 | generate_bounded_kani_corpus_case | operation |
 | replay_codegen_counterexample | operation |
 | generate_exact_scalar_oracles | operation |
+| derive_exact_scalar_items | operation |
 | negotiate_kani_obligations | operation |
 | execute_kani_obligation | operation |
 | kani_launch_command | operation |
