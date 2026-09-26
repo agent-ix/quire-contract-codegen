@@ -74,8 +74,11 @@ the FR-015 generator returns for the same items.
 13. **Returned claim map (FR-022-AC-12).** Compare `RoutedGeneration.claim_map`
     with `generate_exact_scalar_oracles` over `derive_exact_scalar_items` for
     the same nodes, and with `None` when nothing is routed.
-14. **Two bounded parameters (FR-022-AC-13).** Route alone the integer add over
-    parameters `Int[0, 9]` and `Int[10, 20]` whose result is typed `[0, 29]`.
+14. **Bounded parameters (FR-022-AC-13).** Route alone the integer add over
+    parameters `Int[0, 9]` and `Int[10, 20]` whose result is typed `[0, 29]`, the
+    negation of `Int[1, 9]` with result `[-9, -1]`, the product of `Int[1, 9]` and
+    `Int[100, 200]` with result `[100, 1800]`, and the additions `a + p`, `p + p`
+    with `p` a plain-Integer reference.
 
 ## Expected Results
 
@@ -122,6 +125,7 @@ the FR-015 generator returns for the same items.
 13. The claim map is `Some`, holds the FR-014 entries for the derivable nodes
     and a `NoDerivableClaim` entry for the others, ordered by node id; it is
     `None` for an empty routed set.
-14. The record is `Supported`; its harness names `quire.op.integer.add` with
-    arguments `[0, 9]` and `[10, 20]`, and its generated source asserts the
-    result against `[0, 29]`.
+14. The first three records are `Supported`; each harness has one range per
+    operand (`[0, 9]` and `[10, 20]`; `[1, 9]`; `[1, 9]` and `[100, 200]`) and its
+    generated source asserts the result against the result bound. The `p`
+    additions settle `requires_bound` and carry no harness.

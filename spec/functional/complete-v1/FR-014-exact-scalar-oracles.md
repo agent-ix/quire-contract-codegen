@@ -76,8 +76,12 @@ typed by a `bounded_domain` has that domain as its own bound. The result bound
 is the domain typing the node's result when the node's `semantic_type` is a
 `bounded_domain`; when it is a scalar type, the result bound is the one reachable
 bound of the form over that type, and where several are reachable, the one that
-is not the own bound of an operand. Bounds that no operand and no result names
-never make the node ambiguous. Its body is an `aggregate` of
+is not the own bound of an operand. The descriptor is compared with the result
+bound only; each operand's own bound is recorded after it and ranges that
+operand in a Kani harness, and need not lie inside the result bound. A
+`reference` operand typed by a plain scalar type owns no bound: where another
+operand owns one, or the result is typed by one, it is `RequiresBound` naming
+its type, and a literal operand, being a constant, is never refused. Its body is an `aggregate` of
 `binding` members, `{term: binding, name, value: <literal>}` (QSpec
 `proposals/checked-package-v2/fixtures/positive-operation-identities.json`),
 each carrying a canonical decimal `integer` literal or, for a spelling, a `text`
@@ -201,16 +205,16 @@ otherwise.
   generator shall compare the descriptor's domain with the result bound only.
 - Where an integer operand is typed by an `integer_range` `bounded_domain`, the
   generator shall record that bound among the claim's checked bounds after the
-  result bound.
+  result bound, whether or not it lies inside the result bound.
 - If the result of an integer node is typed by a `bounded_domain` of a form
   other than the descriptor's, or an operand is typed by one, then the
   generator shall refuse the item as `MissingBound`.
-- If an operand's own bound is not contained in the descriptor's domain, then
-  the generator shall refuse the item as `BoundMismatch` naming that operand's
-  bound.
 - If a node with a scalar-typed result reaches two or more bounds of the form
   and not exactly one of them is outside the operands' own bounds, then the
   generator shall refuse the item as `AmbiguousBound`.
+- If an integer operand is a `reference` typed by a plain scalar type and
+  another operand owns a bound or the result is typed by one, then the
+  generator shall refuse the item as `RequiresBound` naming the operand's type.
 - Where a `reference` operand's target is typed by a `bounded_domain` node, the
   generator shall classify the operand by that domain's own `semantic_type`, its
   base scalar type; QSL emits a bounded domain directly over its scalar base.
@@ -269,7 +273,11 @@ otherwise.
 | FR-014-AC-18 | `derive_exact_scalar_items` returns, per node id in input order, the descriptor determined by the node's `operation.identity`, `operation.mode`, `operation.laws`, operand forms and the one bound of the needed form on its result type; a node that is not an application, has no identity, names an identity outside the derivable set, has operand forms, a law or a mode that select no parameter, is refused with the matching `ClaimDerivationRefusal` and no descriptor; a node that is absent, does not lower or has a refused bound (missing, repeated or unreadable) is refused with the `ExactScalarRefusal` generation gives it. | Test (TC-024) |
 | FR-014-AC-19 | A derived item generates an oracle whose operation is `ir_confirmed`, and for every item of the golden corpus the derived descriptor equals the descriptor the fixture declares. | Test (TC-024) |
 | FR-014-AC-20 | An integer node over two distinct bounded parameters, `Int[0, 9]` and `Int[10, 20]`, each typed by its own `integer_range` `bounded_domain`, with its result typed by a third `integer_range` `[0, 29]`, generates an `ir_confirmed` oracle whose descriptor is compared with the result bound only; the claim's checked bounds are the result bound, then each operand's own bound; derivation returns the descriptor over `[0, 29]`. | Test (TC-024) |
-| FR-014-AC-21 | An operand bound not contained in the descriptor's domain is refused as `BoundMismatch` naming the operand's bound; an operand or result typed by a `bounded_domain` of another form is refused as `MissingBound`; a scalar-typed result reaching two bounds of the form that no operand types is `AmbiguousBound`, as is one whose two reachable bounds are both operand bounds. | Test (TC-024) |
+| FR-014-AC-21 | A node whose result is typed by a scalar type and whose reachable bounds are its operands' own and exactly one other takes that other as its result bound. | Test (TC-024) |
+| FR-014-AC-22 | A node whose result is typed by a scalar type and whose two or more reachable bounds of the form are not exactly one outside the operands' own bounds is refused as `AmbiguousBound`, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-23 | An operand, or the result, typed by a `bounded_domain` of a form other than the descriptor's is refused as `MissingBound`. | Test (TC-024) |
+| FR-014-AC-24 | An operand's own bound need not lie inside the result bound: `a + wide` over `[0, 9]` and `[0, 50]` with a `[0, 29]` result, `-e` over `[1, 9]` with a `[-9, -1]` result and `e * f` over `[1, 9]` and `[100, 200]` with a `[100, 1800]` result each generate, derive the same descriptor, and record each operand's own bound. | Test (TC-024) |
+| FR-014-AC-25 | A `reference` operand typed by a plain scalar type is refused as `RequiresBound` naming its type, in generation and in derivation, where another operand owns a bound or the result is typed by one (`x + y`, `y + y`, and `x + y` over a scalar-typed result); a literal operand is never refused. | Test (TC-024) |
 
 ## Dependencies
 

@@ -3073,6 +3073,22 @@ pub const V_PARAM_WRONG_FORM: u32 = 117;
 /// `a + 1` with the result typed `[0, 29]`: the literal operand has no bound of its own.
 pub const TWO_PARAMETER_LITERAL: u32 = 2056;
 
+/// `p`, a parameter typed by the plain Integer scalar type: it owns no bound.
+pub const V_PARAM_PLAIN: u32 = 118;
+/// `e: Int[1, 9]` and `f: Int[100, 200]`.
+pub const V_PARAM_E: u32 = 119;
+pub const V_PARAM_F: u32 = 120;
+/// `a + p` with the result typed `[0, 29]`: `p` has no bound of its own.
+pub const TWO_PARAMETER_UNBOUNDED_OPERAND: u32 = 2057;
+/// `p + p` with the result typed `[0, 29]`.
+pub const TWO_PARAMETER_PLAIN_PAIR: u32 = 2058;
+/// `a + p` with a scalar-typed result and nothing attached.
+pub const TWO_PARAMETER_PLAIN_SCALAR_RESULT: u32 = 2059;
+/// `-e` over `Int[1, 9]` with the result typed `[-9, -1]`.
+pub const BOUNDED_NEGATE: u32 = 2060;
+/// `e * f` over `Int[1, 9]` and `Int[100, 200]` with the result typed `[100, 1800]`.
+pub const BOUNDED_PRODUCT: u32 = 2061;
+
 /// [`corpus_package`] plus integer additions over parameters typed by distinct bounds: the
 /// two-parameter shapes of IR-298.
 pub fn two_parameter_package() -> PackageBuilder {
@@ -3085,7 +3101,20 @@ pub fn two_parameter_package() -> PackageBuilder {
     let d = builder.bound(&Bound::Integer(11, 19));
     let result = builder.bound(&Bound::Integer(0, 29));
     let wrong = builder.bound(&wrong_form_bound());
+    let e = builder.bound(&Bound::Integer(1, 9));
+    let f = builder.bound(&Bound::Integer(100, 200));
+    let negated = builder.bound(&Bound::Integer(-9, -1));
+    let product = builder.bound(&Bound::Integer(100, 1800));
+    builder.code(
+        V_PARAM_PLAIN,
+        "value",
+        "literal",
+        &integer_type,
+        literal("integer", "3"),
+    );
     for (code, bound) in [
+        (V_PARAM_E, &e),
+        (V_PARAM_F, &f),
         (V_PARAM_A, &a),
         (V_PARAM_B, &b),
         (V_PARAM_WIDE, &wide),
@@ -3136,6 +3165,26 @@ pub fn two_parameter_package() -> PackageBuilder {
             vec![param(V_PARAM_A), literal("integer", "1")],
             &result,
         ),
+        (
+            TWO_PARAMETER_UNBOUNDED_OPERAND,
+            vec![param(V_PARAM_A), param(V_PARAM_PLAIN)],
+            &result,
+        ),
+        (
+            TWO_PARAMETER_PLAIN_PAIR,
+            vec![param(V_PARAM_PLAIN), param(V_PARAM_PLAIN)],
+            &result,
+        ),
+        (
+            TWO_PARAMETER_PLAIN_SCALAR_RESULT,
+            vec![param(V_PARAM_A), param(V_PARAM_PLAIN)],
+            &integer_type,
+        ),
+        (
+            BOUNDED_PRODUCT,
+            vec![param(V_PARAM_E), param(V_PARAM_F)],
+            &product,
+        ),
     ] {
         // No bound is attached: each node reaches what its operands and its result type name.
         builder.application_bounded(
@@ -3143,10 +3192,28 @@ pub fn two_parameter_package() -> PackageBuilder {
             "expression",
             "binary",
             result_type,
-            sum(operands, result_type),
+            match code {
+                BOUNDED_PRODUCT => {
+                    application("binary", op("quire.op.integer.mul"), result_type, operands)
+                }
+                _ => sum(operands, result_type),
+            },
             &[],
         );
     }
+    builder.application_bounded(
+        BOUNDED_NEGATE,
+        "expression",
+        "unary",
+        &negated,
+        application(
+            "unary",
+            op("quire.op.integer.negate"),
+            &negated,
+            vec![param(V_PARAM_E)],
+        ),
+        &[],
+    );
     // `[0, 29]` reaches this node through `c`, so it is the one reachable bound no operand types.
     builder.application_bounded_anchored(
         TWO_PARAMETER_ATTACHED,
