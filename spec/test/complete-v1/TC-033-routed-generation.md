@@ -79,6 +79,12 @@ the FR-015 generator returns for the same items.
     negation of `Int[1, 9]` with result `[-9, -1]`, the product of `Int[1, 9]` and
     `Int[100, 200]` with result `[100, 1800]`, and the additions `a + p`, `p + p`
     with `p` a plain-Integer reference.
+15. **Returned oracle crate (FR-022-AC-14).** Route the bounded-increment node.
+    Compare `RoutedGeneration.oracle_artifacts` with the artifacts of
+    `generate_exact_scalar_oracles` over `derive_exact_scalar_items` for that node,
+    and look up each `Generated` claim's `oracle_<digest>` symbol in the returned
+    `src/lib.rs` and in the harness's Rust source. Route alone the `integer.rem`
+    node, and route nothing.
 
 ## Expected Results
 
@@ -129,3 +135,7 @@ the FR-015 generator returns for the same items.
     operand (`[0, 9]` and `[10, 20]`; `[1, 9]`; `[1, 9]` and `[100, 200]`) and its
     generated source asserts the result against the result bound. The `p`
     additions settle `requires_bound` and carry no harness.
+15. `oracle_artifacts` is `Some` and equals FR-014's artifacts byte for byte. Each
+    `Generated` claim's symbol is defined in `src/lib.rs` and appears in the harness
+    source. The `integer.rem` node returns the artifacts FR-014 gives an empty item
+    set. Nothing routed gives `None`.
