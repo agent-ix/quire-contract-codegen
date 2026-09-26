@@ -71,7 +71,7 @@ pub const SCALAR_LOWERING_WORK_LIMIT: u64 = 65_536;
 /// Name of the generated crate.
 pub const EXACT_SCALAR_CRATE_NAME: &str = "quire-exact-scalar-oracles";
 
-/// The `CheckedNodeTag` families [`scalar_profile`]'s `CompleteLoweringProfileV2` admits.
+/// The `CheckedNodeTag` families `scalar_profile`'s `CompleteLoweringProfileV2` admits.
 ///
 /// `CheckedNodeTag::Correspondence` (cg#133) is deliberately absent: its four closed forms
 /// (`source_locus`, `model_correspondence`, `binding_role`, `profile_correspondence`) are
@@ -87,7 +87,7 @@ pub const EXACT_SCALAR_CRATE_NAME: &str = "quire-exact-scalar-oracles";
 /// Exported (cg#134) so `tests/exact_scalar_generation.rs`'s
 /// `tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item` can assert its own,
 /// independently-constructed lowering profile's tag list against this one without calling
-/// [`scalar_profile`] itself -- which would make that cross-check circular.
+/// `scalar_profile` itself -- which would make that cross-check circular.
 pub const SCALAR_LOWERING_SUPPORTED_TAGS: [CheckedNodeTag; 5] = [
     CheckedNodeTag::ScalarType,
     CheckedNodeTag::BoundedDomain,

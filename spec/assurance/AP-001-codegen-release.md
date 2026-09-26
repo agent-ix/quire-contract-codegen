@@ -4,7 +4,7 @@ title: Contract codegen v0.1 decision profile
 type: AssuranceProfile
 status: proposed
 owner: human-release-owner
-profile_version: 0.2
+schema_version: 0.2
 profile_kind: general
 scope: one identified quire-contract-codegen v0.1 source candidate and pinned dependency set
 impact_assessments:

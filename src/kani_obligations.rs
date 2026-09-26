@@ -255,7 +255,7 @@ pub enum UnsupportedObligation {
     /// No harness could be produced for a reason that is not the bounded-resource or syntax
     /// ground below. Three distinct causes still collapse to this one code: (1) an
     /// internal-invariant fallback for an otherwise-successful render -- its oracle function
-    /// symbol could not be located in generated source, or an ABI binding [`abi`] already
+    /// symbol could not be located in generated source, or an ABI binding `abi` already
     /// resolved could not be found again when assembling the harness body; (2) the harness
     /// identity or record struct failing to serialize as JSON; and (3) the
     /// [`ObligationKind::Frame`] arm, an ordinary "no encoding for this obligation kind" refusal,

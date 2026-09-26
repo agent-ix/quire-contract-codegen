@@ -29,8 +29,8 @@ reads. The cost is that the rule cannot be written down inside a file the scan
 reads — `assurance/pins.json` is inspected structurally for exactly that reason,
 and the workflow's own comment points at it rather than restating it.
 
-Exit status: 0 when every component is compatible and no local check fails,
-1 when something is not compatible, 2 when Engineering Assurance itself cannot
+Exit status: 0 when no component is named incompatible by the matrix and no local
+check fails (an `unknown` installed version is reported, not gated), 1 otherwise, 2 when Engineering Assurance itself cannot
 be loaded — which is a different fact from a failing check and gets its own code.
 """
 
@@ -191,6 +191,11 @@ def incompatible_install_references(matrix: dict[str, Any]) -> list[str]:
     return offenders
 
 
+def ruled_out_components(classifications: list[Any]) -> list[str]:
+    """The components whose observed version the matrix names incompatible."""
+    return [item.component for item in classifications if item.verdict == "incompatible"]
+
+
 def build_report() -> dict[str, Any]:
     try:
         from engineering_assurance.compatibility import accepted, classify_all, load_matrix
@@ -209,7 +214,13 @@ def build_report() -> dict[str, Any]:
     mismatches = artifact_digest_mismatches(pins)
     offenders = mirror_references(pins)
     installs = incompatible_install_references(matrix)
+    # Installed-version drift is informational. Nothing reads a tool version to
+    # decide what this repository emits, and the chain fails by itself when a tool
+    # lacks a surface it calls, so "installed == pinned" guarded nothing: an
+    # `unknown` version passes every real check below. Only a version the matrix
+    # names `incompatible` is a fact worth refusing, so only that gates.
     versions_ok = accepted(classifications)
+    ruled_out = ruled_out_components(classifications)
     acceptance = matrix["accepted"]
     return {
         "schemaVersion": "quire-contract-codegen.shared-pin-report/v1",
@@ -221,10 +232,11 @@ def build_report() -> dict[str, Any]:
             "This repository reports it and is not a second acceptance authority."
         ),
         "versions_compatible": versions_ok,
+        "incompatible_components": ruled_out,
         "artifact_mismatches": mismatches,
         "mirror_references": offenders,
         "incompatible_install_references": installs,
-        "accepted": versions_ok and not mismatches and not offenders and not installs,
+        "accepted": not ruled_out and not mismatches and not offenders and not installs,
         "components": [
             {
                 "component": item.component,

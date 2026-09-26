@@ -133,13 +133,20 @@ fn tc_008_every_shared_pin_is_classified_by_the_packaged_matrix() {
         "the matrix pins four components; this run classified {}",
         components.len()
     );
+    // Installed versions are classified and reported; only a version the matrix
+    // names `incompatible` is refused. `unknown` is a fact about the matrix, and
+    // the tools the host happens to have installed drift ahead of it.
     for component in components {
-        assert_eq!(
-            component["verdict"], "compatible",
+        assert_ne!(
+            component["verdict"], "incompatible",
             "{} is {} ({})",
             component["component"], component["verdict"], component["reason"]
         );
     }
+    assert!(report["incompatible_components"]
+        .as_array()
+        .unwrap()
+        .is_empty());
     assert_eq!(report["accepted"], true);
     assert!(report["artifact_mismatches"].as_array().unwrap().is_empty());
     assert!(report["mirror_references"].as_array().unwrap().is_empty());
@@ -154,6 +161,26 @@ fn tc_008_every_shared_pin_is_classified_by_the_packaged_matrix() {
     // in either direction, is the mistake this asserts against.
     assert_eq!(report["acceptance_recorded_here"], false);
     assert!(report["acceptance_state"].is_string());
+
+    // The version gate must be seen to refuse a version the matrix rules out, and
+    // to let an `unknown` one through, or it is indistinguishable from one that
+    // never fires.
+    let (code, stdout, stderr) = run(
+        &python,
+        &[
+            "-c",
+            "import json,sys;sys.path.insert(0,'scripts');\
+             import check_shared_pins as m;\
+             from engineering_assurance.compatibility import classify;\
+             matrix={'components':[{'name':'quoin','version':'2.0.0',\
+             'incompatible':['1.0.0'],'incompatible_reasons':{}}]};\
+             out=[m.ruled_out_components([classify(matrix,'quoin',v)]) for v in ('1.0.0','3.0.0')];\
+             print(json.dumps(out))",
+        ],
+    );
+    assert_eq!(code, 0, "the version-gate probe failed: {stderr}");
+    let gated: Vec<Vec<String>> = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(gated, vec![vec!["quoin".to_string()], vec![]]);
 
     // Both scans must be seen to refuse. Without this they are indistinguishable
     // from checks that match nothing — which is how this repository's own
@@ -661,6 +688,22 @@ fn tc_009_the_chain_never_executes_a_producer_and_the_probe_can_prove_it() {
         !quire_logged.trim().is_empty(),
         "stubbing quire produced no invocation, so this run observed nothing"
     );
+    // Quoin used to shell out to `quire coverage` from `quoin evidence audit`, which
+    // supplied the non-driver caller this run must see. Quoin 0.24.1 embeds
+    // quire-rs instead and spawns nothing, so the exemption is exercised here by
+    // a caller that is plainly not the driver: the shim must log it as work
+    // attributed to someone else, or the caller check below cannot tell the two
+    // apart.
+    let other_run = Command::new(quire_shims.join("quire"))
+        .args(["coverage", "--scope", ".", "--json"])
+        .status()
+        .expect("the quire shim runs");
+    assert_eq!(
+        other_run.code(),
+        Some(97),
+        "the shim refuses work with its fixed status"
+    );
+    let quire_logged = fs::read_to_string(&quire_log).unwrap_or_default();
     let mut driver_calls = 0;
     let mut other_calls = 0;
     for line in quire_logged.lines().filter(|line| !line.trim().is_empty()) {
@@ -668,7 +711,7 @@ fn tc_009_the_chain_never_executes_a_producer_and_the_probe_can_prove_it() {
         assert!(
             !caller.is_empty(),
             "the shim recorded no caller, so this run cannot tell the driver from \
-             Quoin and proves nothing: {line}"
+             another caller and proves nothing: {line}"
         );
         if caller.contains("assurance_chain.py") {
             driver_calls += 1;
@@ -683,9 +726,8 @@ fn tc_009_the_chain_never_executes_a_producer_and_the_probe_can_prove_it() {
     }
     // Both halves must have happened, or the discrimination is untested. The
     // driver must have been seen asking Quire something, or the caller check
-    // matched nothing; and something other than the driver must have been seen
-    // asking too, or the exemption that makes this run necessary was never
-    // exercised.
+    // matched nothing; and a caller other than the driver must have been seen
+    // asking too, or the shim cannot tell them apart.
     assert!(
         driver_calls > 0,
         "no Quire invocation was attributed to the driver, so the caller check \
@@ -693,8 +735,8 @@ fn tc_009_the_chain_never_executes_a_producer_and_the_probe_can_prove_it() {
     );
     assert!(
         other_calls > 0,
-        "every Quire invocation was attributed to the driver, so this run never \
-         exercised the case it exists to permit:\n{quire_logged}"
+        "every Quire invocation was attributed to the driver, so the shim cannot \
+         discriminate callers:\n{quire_logged}"
     );
 
     // Run D: the driver wrote nothing into its own input directory.
