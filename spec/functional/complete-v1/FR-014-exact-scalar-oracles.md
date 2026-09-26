@@ -74,14 +74,27 @@ and each role a node uses is identified by what the node itself names, not by a
 package-wide "the one bound of this form". A `reference` operand whose target is
 typed by a `bounded_domain` has that domain as its own bound. The result bound
 is the domain typing the node's result when the node's `semantic_type` is a
-`bounded_domain`; when it is a scalar type, the result bound is the one reachable
-bound of the form over that type, and where several are reachable, the one that
-is not the own bound of an operand. The descriptor is compared with the result
+`bounded_domain`; when it is a scalar type and only narrowing conversions consume
+the node, the result bound is the one `bounded_domain` they narrow it to, and a
+node that a narrowing conversion and any other node both consume has no result
+bound, since the narrow's bound does not bound the other use. QSL emits an
+expression in a bounded context this way: the arithmetic node's own type is the
+plain scalar type, and the declared bound types a `conversion` node whose body
+is a `convert` application with identity `quire.op.numeric.narrow` and exactly
+one argument, a `reference` to the node. Otherwise the result bound is the one
+reachable bound of the form over that type, and where several are reachable,
+the one that is not the own bound of an operand. The descriptor is compared with the result
 bound only; each operand's own bound is recorded after it and ranges that
 operand in a Kani harness, and need not lie inside the result bound. A
 `reference` operand typed by a plain scalar type owns no bound: where another
 operand owns one, or the result is typed by one, it is `RequiresBound` naming
-its type, and a literal operand, being a constant, is never refused. Its body is an `aggregate` of
+its type, and a literal operand, being a constant, is never `RequiresBound`. A
+`reference` to a `value` node whose body is a literal is a literal operand: QSL
+emits a literal operand that way, typed by the plain scalar type, and it is the
+referenced node's body that decides it, not its type or form. A literal operand
+owns no bound: a Kani harness constrains it to exactly its own value (FR-015),
+and one that is not a canonical `integer` literal is refused for an integer
+operation whatever the referenced node's type. A bound's body is an `aggregate` of
 `binding` members, `{term: binding, name, value: <literal>}` (QSpec
 `proposals/checked-package-v2/fixtures/positive-operation-identities.json`),
 each carrying a canonical decimal `integer` literal or, for a spelling, a `text`
@@ -215,6 +228,20 @@ otherwise.
 - If an integer operand is a `reference` typed by a plain scalar type and
   another operand owns a bound or the result is typed by one, then the
   generator shall refuse the item as `RequiresBound` naming the operand's type.
+- Where a `reference` operand's target is a `value` node whose body is a
+  literal, the generator shall treat the operand as a literal.
+- If a literal operand of an integer operation, inline or referenced, is not a
+  canonical `integer` literal, then the generator shall refuse the item as
+  `OperandTypeMismatch` naming the operand's position and its literal kind.
+- Where a node's result is typed by a scalar type and narrowing conversions
+  consume the node, the generator shall take the one bound they narrow it to as
+  the result bound, record it first among the checked bounds, and compare the
+  descriptor with it.
+- If the narrowing conversions consuming a node narrow it to two or more
+  distinct bounds, or a narrowing conversion and a node that is not one both
+  consume it, then the generator shall refuse the item as `AmbiguousBound`; if
+  they narrow it to one bound of another form, or of the form over another
+  scalar type, then as `MissingBound`.
 - Where a `reference` operand's target is typed by a `bounded_domain` node, the
   generator shall classify the operand by that domain's own `semantic_type`, its
   base scalar type; QSL emits a bounded domain directly over its scalar base.
@@ -277,7 +304,16 @@ otherwise.
 | FR-014-AC-22 | A node whose result is typed by a scalar type and whose two or more reachable bounds of the form are not exactly one outside the operands' own bounds is refused as `AmbiguousBound`, in generation and in derivation. | Test (TC-024) |
 | FR-014-AC-23 | An operand, or the result, typed by a `bounded_domain` of a form other than the descriptor's is refused as `MissingBound`. | Test (TC-024) |
 | FR-014-AC-24 | An operand's own bound need not lie inside the result bound: `a + wide` over `[0, 9]` and `[0, 50]` with a `[0, 29]` result, `-e` over `[1, 9]` with a `[-9, -1]` result and `e * f` over `[1, 9]` and `[100, 200]` with a `[100, 1800]` result each generate, derive the same descriptor, and record each operand's own bound. | Test (TC-024) |
-| FR-014-AC-25 | A `reference` operand typed by a plain scalar type is refused as `RequiresBound` naming its type, in generation and in derivation, where another operand owns a bound or the result is typed by one (`x + y`, `y + y`, and `x + y` over a scalar-typed result); a literal operand is never refused. | Test (TC-024) |
+| FR-014-AC-25 | A `reference` operand typed by a plain scalar type is refused as `RequiresBound` naming its type, in generation and in derivation, where another operand owns a bound or the result is typed by one (`x + y`, `y + y`, and `x + y` over a scalar-typed result); a literal operand is never refused as `RequiresBound`. | Test (TC-024) |
+| FR-014-AC-26 | A `reference` operand whose target is a `value` node with a literal body is a literal operand: `x + 1` over `x: Int[0, 9]` narrowed to `Int[0, 10]`, with the literal as a reference to its own plain-Integer-typed `value` node, generates with checked bounds `[0, 10]` then `[0, 9]` and derives the descriptor over `[0, 10]`. | Test (TC-024) |
+| FR-014-AC-27 | A node whose result is typed by a scalar type and that only narrowing conversions (`quire.op.numeric.narrow`, exactly one argument referencing the node) consume takes the bound they narrow it to as its result bound: `x + y` over `Int[0, 9]` and `Int[10, 20]` narrowed to `Int[10, 29]` generates with checked bounds `[10, 29]`, `[0, 9]`, `[10, 20]` and derives the descriptor over `[10, 29]`, a descriptor over `[0, 9]` is `BoundMismatch` against `[10, 29]`, and `-z` over `Int[0, 9]` narrowed to `Int[-9, 0]` checks `[-9, 0]` then `[0, 9]`. | Test (TC-024) |
+| FR-014-AC-28 | The referenced node's body, not its form or type, makes an operand a literal: `x + n`, where `n` is a plain-Integer-typed `value` node of form `literal` whose body is not a literal, is refused as `RequiresBound` naming Integer, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-29 | `x + p` narrowed to `Int[0, 29]`, where `p` is a parameter typed by the plain Integer type, is refused as `RequiresBound` naming Integer, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-30 | `q + q` narrowed to `Int[0, 29]`, where no operand owns a bound and `q`'s node reaches `[0, 29]`, is refused as `RequiresBound` naming Integer, in generation and in derivation: the narrowing bounds the result as a `bounded_domain` result type does. | Test (TC-024) |
+| FR-014-AC-31 | A literal operand of an integer operation that is not a canonical `integer` literal is refused as `OperandTypeMismatch` naming its position and literal kind, whatever the referenced node's type: `x + "a"` with the text literal in a plain-Integer-typed `value` node is refused at position 1 with kind `text`, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-32 | A node that narrowing conversions narrow to two distinct bounds (`[10, 29]` and `[0, 40]`) is refused as `AmbiguousBound`, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-33 | A node narrowed to a `text_bounds` bound over Integer, or to an `integer_range` over Rational, is refused as `MissingBound` naming Integer and `integer_range`, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-34 | A node that a narrowing conversion and a node that is not a narrowing conversion both consume (`x + 2` narrowed to `Int[0, 11]` and an operand of `(x + 2) + x`) is refused as `AmbiguousBound`, in generation and in derivation, while `x + 1`, consumed only by its narrowing, generates. | Test (TC-024) |
 
 ## Dependencies
 

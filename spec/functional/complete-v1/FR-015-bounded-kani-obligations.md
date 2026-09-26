@@ -116,6 +116,17 @@ each pinned to its backend identity and model-domain bounds. This is issue
   generator shall account it `unsupported` with the `no_derivable_claim`
   reason naming the node and the derivation refusal, emit no harness, and not
   reject the request.
+- Where an operand of a V2 scalar claim is a literal, inline or a reference to a
+  `value` node whose body is a literal, the generator shall constrain that
+  symbolic argument to exactly the literal's own value.
+- If a literal operand's value does not fit `i64`, then the generator shall
+  refuse the item as `domain_not_representable_in_i64` naming the value as both
+  endpoints and emit no harness.
+- If the exact results of the operation over every operand range lie outside
+  the result range, then the generator shall refuse the item as
+  `result_bound_unreachable` naming the result range and the reachable result
+  range, and emit no harness, since no assumed input could meet its
+  non-vacuity cover.
 
 ## Acceptance Criteria
 
@@ -131,11 +142,14 @@ each pinned to its backend identity and model-domain bounds. This is issue
 | FR-015-AC-8 | A postcondition or invariant harness emits every package precondition sharing its anchor operation as a `requires` on its generated contract and records each in its identity's embedded oracles; it embeds no other obligation's oracle; and an obligation whose sibling precondition is not a supported item of the same request is refused with a typed reason naming that precondition and no harness. | Test (TC-025) |
 | FR-015-AC-9 | Every harness identity records solver `cadical` and the complete ordered option vector — function contracts, concrete playback, the exact fully qualified harness, `--exact`, the explicit unwind, the explicit solver, `--output-format regular`, and `--concrete-playback print` — and no option enabling stubbing is emitted. | Test (TC-025) |
 | FR-015-AC-10 | Regeneration from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes the harness identity digest. | Test (TC-025) |
-| FR-015-AC-11 | Every symbolic argument carries an inclusive assumption equal to its IR `bounded_domain`, and a bounded-integer post-state result is required to lie in the same domain; no generated source carries a `#[kani::unwind]`. | Test (TC-025) |
+| FR-015-AC-11 | Every symbolic argument carries an inclusive assumption equal to its IR `bounded_domain` (a literal operand's, to its own value: FR-015-AC-16), and a bounded-integer post-state result is required to lie in the same domain; no generated source carries a `#[kani::unwind]`. | Test (TC-025) |
 | FR-015-AC-12 | A request naming no items, more than 256 items, an unparsable subject path, or an unwind bound outside `1..=1024` is refused whole, with no item accounted and no harness exposed. | Test (TC-025) |
 | FR-015-AC-13 | An otherwise-supported obligation whose generated harness source exceeds the bounded-resource ceiling is refused with a distinct resource-limit reason naming the generated size, and one that fits the ceiling but fails to parse as Rust is refused with a distinct syntax reason naming the parse error; neither is reported as the internal-invariant render-assembly fallback. | Test (TC-025) |
 | FR-015-AC-14 | A scalar-claim item whose graph node carries a tag/form pair this generator does not model as a contract role is refused with a typed reason naming that tag and form, and no harness is emitted; a claim naming a node id absent from the graph entirely is refused rather than accounted as supported with no contract role recorded. | Test (TC-025) |
 | FR-015-AC-15 | A scalar-claim item whose claim is a `NoDerivableClaim` refusal yields `unsupported` with the `no_derivable_claim` reason naming the node and the derivation refusal, emits no harness, and does not reject the group. | Test (TC-033) |
+| FR-015-AC-16 | A scalar harness constrains a literal operand, inline or a reference to a `value` node whose body is a literal, to exactly its own value: `x + 1` over `x: Int[0, 9]` into `Int[0, 10]` has arguments `[0, 9]` and `[1, 1]`. | Test (TC-033) |
+| FR-015-AC-17 | A scalar claim whose literal operand does not fit `i64` (`x + 10^23`) is `unsupported` as `domain_not_representable_in_i64` naming the literal as both endpoints, with no harness. | Test (TC-033) |
+| FR-015-AC-18 | A scalar claim whose operation over its operand ranges yields no result inside the result range (`x + 100` over `x: Int[0, 9]` into `Int[0, 10]`, reachable `[100, 109]`) is `unsupported` as `result_bound_unreachable` naming both ranges, with no harness. | Test (TC-033) |
 
 ## Dependencies
 

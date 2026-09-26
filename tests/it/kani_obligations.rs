@@ -796,8 +796,10 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity() {
     );
 
     // A V2 claim's domain is read from its IR bound, inclusive at both ends. Node 1001 is
-    // `quire.op.integer.add`, IR-confirmed and renderable, so it reaches a real Kani harness
-    // whose symbolic arguments carry that same inclusive domain -- not a typed refusal.
+    // `quire.op.integer.add`, IR-confirmed and renderable, so it reaches a real Kani harness --
+    // not a typed refusal. Both its operands are references to the corpus's `value` node whose
+    // body is the literal `3`, so each is a constant and ranged at its own value (IR-302); the
+    // per-operand bounded ranges are TC-033's.
     let (scalar, claim_map) = scalar_package();
     let node_1001 = code_id(1001);
     let items = [ObligationItem::ScalarClaim {
@@ -821,7 +823,7 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity() {
             .iter()
             .map(|argument| (argument.minimum, argument.maximum))
             .collect::<Vec<_>>(),
-        [(-1000, 1000), (-1000, 1000)]
+        [(3, 3), (3, 3)]
     );
 }
 
@@ -890,11 +892,12 @@ fn tc_025_scalar_harness_asserts_soundness_not_totality() {
         !source.contains("kani::cover!(outcome.is_ok(), "),
         "regression to the vacuous Result::is_ok() check: {source}"
     );
-    // The assumption is scoped by the same IR-derived bounds
+    // The assumption is scoped by the same ranges
     // `tc_025_symbolic_bounds_equal_ir_domains_and_every_pin_is_identity` checks via
-    // `identity.arguments` above: this is the corresponding source-level check.
-    assert!(source.contains("kani::assume(left >= -1000_i64 && left <= 1000_i64);"));
-    assert!(source.contains("kani::assume(right >= -1000_i64 && right <= 1000_i64);"));
+    // `identity.arguments` above (each operand a literal `3`, pinned at its value): this is the
+    // corresponding source-level check.
+    assert!(source.contains("kani::assume(left >= 3_i64 && left <= 3_i64);"));
+    assert!(source.contains("kani::assume(right >= 3_i64 && right <= 3_i64);"));
 }
 
 /// Unbounded, non-finite, model-dependent, frame and definedness-bearing items are typed

@@ -997,22 +997,116 @@ fn is_bounded_domain(node: &CheckedSemanticNodeV2) -> bool {
 /// The `bounded_domain` node that types a `reference` operand's target: the operand's own bound.
 /// A literal, a reference typed by a scalar type, or any other term has none.
 fn operand_own_bound<'g>(graph: &Graph<'g>, term: &Value) -> Option<&'g CheckedSemanticNodeV2> {
-    if term.get("term")?.as_str()? != "reference" {
-        return None;
-    }
-    let target: CheckedNodeId = serde_json::from_value(term.get("target")?.clone()).ok()?;
+    let target = reference_target(term)?;
     let typing = graph.get(&graph.get(&target)?.semantic_type)?;
     is_bounded_domain(typing).then_some(*typing)
 }
 
-/// The type of a `reference` operand that no `bounded_domain` types; `None` for a literal or an
-/// operand with an own bound.
+/// The type of a `reference` operand that no `bounded_domain` types; `None` for a literal, a
+/// reference to a literal value node, or an operand with an own bound.
+///
+/// QSL emits a literal operand as a `reference` to its own `value` node, whose body is the
+/// literal and whose type is the plain scalar type. That is a constant, like an inline literal,
+/// and is decided by the referenced node's body, never by its type: a `value` node with any other
+/// body (a parameter) and a plain type is an unbounded operand.
 fn plain_reference_type(graph: &Graph<'_>, term: &Value) -> Option<CheckedNodeId> {
-    if term.get("term")?.as_str()? != "reference" || operand_own_bound(graph, term).is_some() {
+    if operand_own_bound(graph, term).is_some() {
         return None;
     }
-    let target: CheckedNodeId = serde_json::from_value(term.get("target")?.clone()).ok()?;
-    Some(graph.get(&target)?.semantic_type.clone())
+    let node = graph.get(&reference_target(term)?)?;
+    (!is_literal_value(node)).then(|| node.semantic_type.clone())
+}
+
+/// A `value` node whose body is a literal: the node QSL emits for a literal operand.
+fn is_literal_value(node: &CheckedSemanticNodeV2) -> bool {
+    &*node.node_tag == CheckedNodeTag::Value.as_wire()
+        && node.body.get("term").and_then(Value::as_str) == Some("literal")
+}
+
+/// The catalogued identity of the narrowing conversion QSL wraps a bounded-context expression in.
+const NARROW_IDENTITY: &str = "quire.op.numeric.narrow";
+
+/// How the nodes that consume a scalar-typed node bound its result.
+enum Narrowing<'g> {
+    /// No narrowing conversion consumes the node.
+    Unnarrowed,
+    /// Only narrowing conversions consume the node: the `bounded_domain` nodes they are typed by,
+    /// ascending and deduplicated (empty where none is typed by a `bounded_domain`).
+    To(Vec<&'g CheckedSemanticNodeV2>),
+    /// A narrowing conversion consumes the node and so does a node that is not one: the narrow's
+    /// bound does not bound every use of the node's result.
+    Mixed,
+}
+
+impl Narrowing<'_> {
+    /// Whether a consuming conversion narrows the node's result, so the package bounds it.
+    fn narrowed(&self) -> bool {
+        match self {
+            Self::Unnarrowed => false,
+            Self::To(bounds) => !bounds.is_empty(),
+            Self::Mixed => true,
+        }
+    }
+}
+
+/// Whether `consumer` is a narrowing conversion of the node `id`: an `expression` of form
+/// `conversion` whose body is a `convert` application with the catalogued identity
+/// `quire.op.numeric.narrow` and exactly one argument, a `reference` to `id`.
+fn narrows(consumer: &CheckedSemanticNodeV2, id: &CheckedNodeId) -> bool {
+    &*consumer.node_tag == CheckedNodeTag::Expression.as_wire()
+        && &*consumer.semantic_form == "conversion"
+        && consumer.body["operation"]["identity"].as_str() == Some(NARROW_IDENTITY)
+        && application_arguments(&consumer.body, "convert").is_some_and(|arguments| {
+            matches!(arguments.as_slice(), [only] if reference_target(only).as_ref() == Some(id))
+        })
+}
+
+/// Whether a `reference` to `id` occurs anywhere in `value`.
+fn references(value: &Value, id: &CheckedNodeId) -> bool {
+    match value {
+        Value::Object(members) => {
+            reference_target(value).as_ref() == Some(id)
+                || members.values().any(|member| references(member, id))
+        }
+        Value::Array(items) => items.iter().any(|item| references(item, id)),
+        _ => false,
+    }
+}
+
+/// How the consumers of the node `id` narrow it. A consumer is any other node whose body holds a
+/// `reference` to `id`; a narrowing conversion is one [`narrows`] accepts.
+fn narrowing<'g>(graph: &Graph<'g>, id: &CheckedNodeId) -> Narrowing<'g> {
+    let mut bounds = BTreeMap::new();
+    let (mut narrowed, mut other) = (false, false);
+    for consumer in graph.values() {
+        if &consumer.node_id == id || !references(&consumer.body, id) {
+            continue;
+        }
+        if !narrows(consumer, id) {
+            other = true;
+            continue;
+        }
+        narrowed = true;
+        if let Some(bound) = graph
+            .get(&consumer.semantic_type)
+            .filter(|typing| is_bounded_domain(typing))
+        {
+            bounds.insert(&bound.node_id, *bound);
+        }
+    }
+    match (narrowed, other) {
+        (false, _) => Narrowing::Unnarrowed,
+        (true, true) => Narrowing::Mixed,
+        (true, false) => Narrowing::To(bounds.into_values().collect()),
+    }
+}
+
+/// The node a `reference` term names.
+fn reference_target(term: &Value) -> Option<CheckedNodeId> {
+    if term.get("term")?.as_str()? != "reference" {
+        return None;
+    }
+    serde_json::from_value(term.get("target")?.clone()).ok()
 }
 
 /// Each argument of an application body, with its own bound where it has one.
@@ -1025,28 +1119,68 @@ fn own_bounds<'g>(graph: &Graph<'g>, body: &Value) -> Vec<Option<&'g CheckedSema
         .collect()
 }
 
-/// The own bound of each of the node's arguments, by position: the `bounded_domain` typing the
-/// argument, or `None` for a literal or a reference typed by a scalar type. Reads the same graph
+/// The literal an operand stands for: the operand itself when it is an inline `literal`, or the body
+/// of the `value` node it references when that body is a `literal` (QSL's shape for a literal).
+fn operand_literal<'a>(graph: &Graph<'a>, term: &'a Value) -> Option<&'a Value> {
+    if term.get("term").and_then(Value::as_str) == Some("literal") {
+        return Some(term);
+    }
+    let node = graph.get(&reference_target(term)?)?;
+    is_literal_value(node).then_some(&node.body)
+}
+
+/// How a Kani harness ranges one operand of a scalar node.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum OperandRange {
+    /// Over the operand's own `bounded_domain`, the node named.
+    Bound(CheckedNodeId),
+    /// Exactly the operand's own literal value, its spelling as the package carries it.
+    Literal(String),
+    /// Over the result bound: an operand that is neither (the shape IR-299 tracks).
+    Result,
+}
+
+/// How a Kani harness ranges each of the node's arguments, by position: over the
+/// `bounded_domain` typing the argument, exactly at the value of a literal argument (inline or a
+/// reference to a literal `value` node), or over the result bound otherwise. Reads the same graph
 /// [`generate_exact_scalar_oracles`] checked, so a Kani harness ranges each operand as the
-/// oracle's parameter check did. A claim records these ids in `checked_bounds` but not their
-/// positions, so the harness takes the positions from here and requires every id to appear in the
-/// claim's `checked_bounds` (`lower_scalar_claim`): the two sources cannot silently disagree.
-pub(crate) fn operand_bound_ids(
+/// oracle's parameter check did. A claim records the own-bound ids in `checked_bounds` but not
+/// their positions, so the harness takes the positions from here and requires every id to appear
+/// in the claim's `checked_bounds` (`lower_scalar_claim`): the two sources cannot silently
+/// disagree.
+pub(crate) fn operand_ranges(
     package: &CheckedPackageV2,
     node_id: &CheckedNodeId,
-) -> Vec<Option<CheckedNodeId>> {
+) -> Vec<OperandRange> {
     let graph = package
         .graph()
         .nodes
         .iter()
         .map(|node| (&node.node_id, node))
         .collect::<BTreeMap<_, _>>();
-    graph
-        .get(node_id)
-        .map(|node| own_bounds(&graph, &node.body))
-        .unwrap_or_default()
+    let Some(node) = graph.get(node_id) else {
+        return Vec::new();
+    };
+    node.body
+        .get("arguments")
+        .and_then(Value::as_array)
         .into_iter()
-        .map(|bound| bound.map(|bound| bound.node_id.clone()))
+        .flatten()
+        .map(|argument| {
+            if let Some(bound) = operand_own_bound(&graph, argument) {
+                OperandRange::Bound(bound.node_id.clone())
+            } else if let Some(literal) = operand_literal(&graph, argument) {
+                OperandRange::Literal(
+                    literal
+                        .get("value")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned(),
+                )
+            } else {
+                OperandRange::Result
+            }
+        })
         .collect()
 }
 
@@ -1146,9 +1280,10 @@ impl Bounds<'_, '_> {
     /// [`derive_exact_scalar_items`] use. Returns the bound's node and the value it reads as.
     ///
     /// The result's role is named by the node itself. A result typed by a `bounded_domain` has
-    /// that domain as its bound. A result typed by a scalar type has the one reachable bound of
-    /// `form` over that type and, where several are reachable, the one that is not an operand's
-    /// own bound; a node whose reachable bounds do not resolve that way is ambiguous.
+    /// that domain as its bound. A result typed by a scalar type has the bound of the narrowing
+    /// conversion that consumes it (QSL's shape for a bounded context); failing one, the one
+    /// reachable bound of `form` over that type and, where several are reachable, the one that is
+    /// not an operand's own bound; a node whose bounds do not resolve that way is ambiguous.
     fn read<T>(
         &self,
         form: BoundForm,
@@ -1174,12 +1309,61 @@ impl Bounds<'_, '_> {
         Ok((bound.node_id.clone(), value))
     }
 
+    /// How the nodes consuming this node narrow it, for a node whose result is typed by a scalar
+    /// type. QSL wraps an expression in a bounded context in a narrowing `conversion` typed by the
+    /// bound, and IR's forward-only `bounds` closure never reaches it from the expression, so the
+    /// enclosing conversion is where the result bound is named.
+    fn narrowing(&self) -> Narrowing<'_> {
+        narrowing(self.graph, &self.node.node.node_id)
+    }
+
     /// The result bound of a node whose result is typed by a scalar type.
+    ///
+    /// Where narrowing conversions consume the node, the result bound is the one bound they
+    /// narrow it to: of the descriptor's form and over the node's own scalar type, or it is
+    /// `MissingBound`; two or more distinct bounds are `AmbiguousBound`, and so is a node that a
+    /// narrowing conversion and any other node both consume, since the narrow's bound does not
+    /// bound the other use. Otherwise it is the one
+    /// reachable bound of the form over that type, or, where several are reachable, the one that
+    /// is no operand's own.
     fn scalar_result_bound(
         &self,
         form: BoundForm,
     ) -> Result<&CheckedSemanticNodeV2, ExactScalarRefusal> {
         let bounded_type = &self.node.semantic_type;
+        let narrowing = self.narrowing();
+        let narrowed = match &narrowing {
+            Narrowing::Unnarrowed => &[][..],
+            Narrowing::To(bounds) => bounds.as_slice(),
+            Narrowing::Mixed => {
+                return Err(ExactScalarRefusal::AmbiguousBound {
+                    bounded_type: bounded_type.clone(),
+                    expected_form: form,
+                })
+            }
+        };
+        match narrowed {
+            [] => {}
+            [bound] if &*bound.semantic_form != form.wire() => {
+                return Err(ExactScalarRefusal::MissingBound {
+                    bounded_type: bound.semantic_type.clone(),
+                    expected_form: form,
+                })
+            }
+            [bound] if &bound.semantic_type != bounded_type => {
+                return Err(ExactScalarRefusal::MissingBound {
+                    bounded_type: bounded_type.clone(),
+                    expected_form: form,
+                })
+            }
+            [bound] => return Ok(bound),
+            [_, _, ..] => {
+                return Err(ExactScalarRefusal::AmbiguousBound {
+                    bounded_type: bounded_type.clone(),
+                    expected_form: form,
+                })
+            }
+        }
         let candidates = self
             .node
             .bounds
@@ -1217,28 +1401,44 @@ impl Bounds<'_, '_> {
     /// operand typed by a bound of another form has no integer bound and is `MissingBound`.
     ///
     /// A `reference` operand typed by a plain scalar type owns no bound, so nothing bounds it but
-    /// the result's: where any operand owns a bound, or the result is typed by one, the package
-    /// bounds each operand by its own typing and such an operand is `RequiresBound`. A literal is
-    /// a constant, covered by any range containing it, and is never refused. Where no operand owns
-    /// a bound and the result is scalar-typed, the operands are bounded by the one bound the node
-    /// reaches (the shape IR-299 tracks), as before.
+    /// the result's: where any operand owns a bound, or the result is typed by one or narrowed to
+    /// one by a consuming conversion, the package bounds each operand by its own typing and such an
+    /// operand is `RequiresBound`. A literal, inline or a reference to a `value` node whose body is
+    /// a literal, is a constant: it owns no bound and a Kani harness ranges it at its own value
+    /// ([`operand_ranges`]); one that is not a canonical `integer` literal is `OperandTypeMismatch`
+    /// naming its kind, whatever the referenced node's type. Where no
+    /// operand owns a bound and the result is scalar-typed and not narrowed, the operands are
+    /// bounded by the one bound the node reaches (the shape IR-299 tracks), as before.
     fn integer_operand_bounds(&self) -> Result<Vec<CheckedNodeId>, ExactScalarRefusal> {
         let form = BoundForm::IntegerRange;
+        let arguments = self
+            .node
+            .node
+            .body
+            .get("arguments")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        for (position, argument) in arguments.iter().enumerate() {
+            if let Some(literal) = operand_literal(self.graph, argument) {
+                if literal_integer(literal).is_none() {
+                    return Err(ExactScalarRefusal::OperandTypeMismatch {
+                        position,
+                        expected: ScalarForm::Integer,
+                        found: literal_form(literal),
+                    });
+                }
+            }
+        }
         let owned = own_bounds(self.graph, &self.node.node.body);
         let result_typed = self
             .graph
             .get(&self.node.semantic_type)
-            .is_some_and(|typing| is_bounded_domain(typing));
+            .is_some_and(|typing| is_bounded_domain(typing))
+            || self.narrowing().narrowed();
         if result_typed || owned.iter().any(Option::is_some) {
-            let arguments = self
-                .node
-                .node
-                .body
-                .get("arguments")
-                .and_then(Value::as_array);
             let plain = arguments
-                .into_iter()
-                .flatten()
+                .iter()
                 .zip(&owned)
                 .find_map(|(argument, own)| match own {
                     None => plain_reference_type(self.graph, argument),
@@ -3322,6 +3522,50 @@ mod tests {
         serde_json::json!({"term": "reference", "target": {
             "domain": "quire.checked-semantic-node/v1", "digest": digit.to_string().repeat(64),
         }})
+    }
+
+    /// A conversion narrows a node only with the catalogued narrow identity and exactly one
+    /// argument, a reference to that node. IR refuses a two-argument narrow at admission, so this
+    /// reaches the check through a raw graph node.
+    ///
+    /// Trace: FR-014-AC-27, TC-024
+    #[test]
+    fn tc_024_a_conversion_narrows_only_its_one_referenced_argument() {
+        let target = node_id('2');
+        let conversion = |digit, identity: &str, arguments: Vec<Value>| {
+            v2_node(
+                digit,
+                "expression",
+                "conversion",
+                '9',
+                serde_json::json!({
+                    "term": "application",
+                    "operator": "convert",
+                    "operation": {"identity": identity},
+                    "arguments": arguments,
+                }),
+            )
+        };
+        assert!(narrows(
+            &conversion('a', NARROW_IDENTITY, vec![reference_to('2')]),
+            &target
+        ));
+        assert!(!narrows(
+            &conversion(
+                'b',
+                NARROW_IDENTITY,
+                vec![reference_to('2'), reference_to('3')]
+            ),
+            &target
+        ));
+        assert!(!narrows(
+            &conversion('c', "quire.op.numeric.convert", vec![reference_to('2')]),
+            &target
+        ));
+        assert!(!narrows(
+            &conversion('d', NARROW_IDENTITY, vec![reference_to('3')]),
+            &target
+        ));
     }
 
     /// A reference to a parameter typed by a `bounded_domain` is classified by the domain's base

@@ -85,6 +85,16 @@ the FR-015 generator returns for the same items.
     and look up each `Generated` claim's `oracle_<digest>` symbol in the returned
     `src/lib.rs` and in the harness's Rust source. Route alone the `integer.rem`
     node, and route nothing.
+16. **QSL-shaped nodes (FR-022-AC-15, FR-015-AC-16).** Route alone, from a package in QSL's
+    emitted shape, `x + 1`, `x + y` and `-z` narrowed to `Int[0, 10]`,
+    `Int[10, 29]` and `Int[-9, 0]`; `x + p` with `p` a plain-Integer parameter;
+    `x + n` with `n` a non-literal-bodied `value` node; and a sum narrowed to
+    two distinct bounds.
+17. **QSL-shaped literal and consumer refusals (FR-015-AC-17, FR-015-AC-18,
+    FR-014-AC-31, FR-014-AC-34).** Route alone, in the same shape, `x + 100` and
+    `x + 10^23` narrowed to `Int[0, 10]`, `x + "a"` with the text literal in an
+    Integer-typed `value` node, and `x + 2` narrowed to `Int[0, 11]` and also
+    consumed by `(x + 2) + x`.
 
 ## Expected Results
 
@@ -117,7 +127,7 @@ the FR-015 generator returns for the same items.
    `GenerationContexts::has` is an exhaustive `match` too, and `GenerationContexts`
    has exactly one field per `BackendKind::ALL` member.
 10. The record is `Supported`; its harness names `quire.op.integer.add` with
-    arguments `[0, 9]` and `[0, 9]`.
+    arguments `[0, 9]` and `[1, 1]`.
 11. The `integer.rem` node's record is `Unsupported` with `no_derivable_claim`
     naming the node and `operation_not_derivable`, and carries no harness; the
     group is not rejected and the three siblings keep their harnesses.
@@ -139,3 +149,14 @@ the FR-015 generator returns for the same items.
     `Generated` claim's symbol is defined in `src/lib.rs` and appears in the harness
     source. The `integer.rem` node returns the artifacts FR-014 gives an empty item
     set. Nothing routed gives `None`.
+16. `x + 1`, `x + y` and `-z` are `Supported` with arguments `[0, 9]` and
+    `[1, 1]` (the literal at its own value); `[0, 9]` and `[10, 20]`; and
+    `[0, 9]`, and each generated source asserts the result against `[0, 10]`,
+    `[10, 29]` and `[-9, 0]`. `x + p` and `x + n` settle `requires_bound`, and
+    the twice-narrowed sum is `oracle_refused` with `AmbiguousBound`; none
+    carries a harness.
+17. `x + 100` is `unsupported` as `result_bound_unreachable` with range
+    `[0, 10]` and reachable `[100, 109]`; `x + 10^23` is `unsupported` as
+    `domain_not_representable_in_i64` naming `100000000000000000000000` as both
+    endpoints; `x + "a"` is `oracle_refused` with `OperandTypeMismatch` and
+    `x + 2` with `AmbiguousBound`; none carries a harness.
