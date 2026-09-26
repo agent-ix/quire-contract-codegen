@@ -89,11 +89,50 @@ exactly the names of its form, once each:
 A bare literal member, a missing or duplicate name and an unlisted name are each
 an unreadable bound.
 
+### Deriving the descriptor from the node
+
+`derive_exact_scalar_items` builds each item's descriptor from the package
+alone, so a caller that holds only node ids need not declare one. For each
+node id it returns one `ExactScalarItem` or one typed `ClaimDerivationRefusal`,
+in input order. It reads the node's `operation.identity` and maps it to an
+operator through one table that the descriptor's own identity check also
+reads, so derivation and checking cannot name different operations. Its other
+sources are:
+
+- the operand scalar forms, for the identities whose operator depends on them
+  (`rational.div`: `IntegerDivide` when both operands are integers, `Divide`
+  when both are rationals; the IEEE comparisons: the operand width);
+- `operation.laws`, whose `definition.identity` selects the division profile
+  of `integer.div`;
+- `operation.mode`, whose rounding value must equal the rounding of the bound
+  the operation is read against, and which supplies the rounding of an
+  integer `quantity.convert` target;
+- the one reachable bound of the needed form on the node's result type, read by
+  the same selector the descriptor's parameter check uses: the integer, rational
+  or decimal domain, the IEEE rounding, the text bounds or the decimal target.
+
+The derivable operations are integer `add`, `sub`, `mul`, `negate`, `div` and
+`mod`; rational `add`, `sub`, `mul`, `negate` and `div` (both operands
+integers, or both rationals); `lt`, `le`, `gt` and `ge` over integers,
+rationals and decimals; decimal `add`, `sub`, `mul`, `div` and `negate`;
+`numeric.convert_rounding` to a decimal; IEEE `float32` and `float64` `add`,
+`sub`, `mul` and `div`, `numeric_equal`, `total_order`, `bit_identical`,
+`to_float32` and `to_float64`; every `text` and `enum` comparison;
+`quantity` `add`, `sub`, `mul`, `div`, `pow`, every comparison and `convert`;
+and `numeric.convert` to a text type. Every other operation identity is
+refused as `OperationNotDerivable`.
+
 ## Outputs
 
 - A generated crate: `Cargo.toml` (`publish = false`, runtime pinned by
   revision with the `exact` feature) and `src/lib.rs` with one oracle function
   per supported item.
+- `derive_exact_scalar_items`: one `Result<ExactScalarItem, ClaimDerivationRefusal>`
+  per requested node id, in input order. `ClaimDerivationRefusal` is a tagged
+  `code` enum: `not_application`, `missing_operation_identity`,
+  `operation_not_derivable`, `operand_forms_not_derivable`,
+  `law_not_derivable`, `mode_not_derivable` and `bound`, which carries the
+  `ExactScalarRefusal` of the bound read.
 - A typed claim map with one entry per requested item: node id, Contract IR
   semantic id, package id, semantic type, source map, claims, bounds, the
   bounds its parameters were checked against, operation identity with its
@@ -142,6 +181,15 @@ an unreadable bound.
   refuse every copy.
 - The generator shall order output by node id (digest domain, then digest) so
   that equal requests in any order produce identical bytes.
+- When a node id is passed to `derive_exact_scalar_items`, the generator shall
+  read the node's `operation.identity`, `operation.laws`, `operation.mode`
+  and operand forms and the one result bound, and return the descriptor they
+  determine.
+- If a node has no derivable descriptor, then the generator shall return the
+  `ClaimDerivationRefusal` naming why (a node that is not an application, an
+  absent identity, an identity outside the derivable set, operand forms that do
+  not select an operator, a law or mode that does not select a parameter, or a
+  bound refusal), and no descriptor.
 - If the generated source exceeds its size ceiling, then the generator shall
   return a typed error and no partial output.
 - If lowering a requested node's closure consumes more than 65,536 metered work
@@ -171,6 +219,8 @@ an unreadable bound.
 | FR-014-AC-15 | A requested item whose node closure exceeds the 65,536-unit lowering work ceiling is refused as `LoweringWorkExhausted`, naming the ceiling and the consumed counter, contributes no generated function, and leaves every other item's disposition unaffected. | Test (TC-024) |
 | FR-014-AC-16 | A bound is read from `binding` members looked up by name in any order (`min`/`max`, `numerator_min` through `denominator_max`, `coefficient_min` through `rounding`, `rounding`, `min`/`max`/`text_profile`); a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-024) |
 | FR-014-AC-17 | A `reference` operand whose target is typed by a `bounded_domain` node is classified by that domain's base scalar type, so `x + 1` over a parameter `x` of type `Int[0, 9]` generates, and a bounded text parameter is still a text operand. | Test (TC-024) |
+| FR-014-AC-18 | `derive_exact_scalar_items` returns, per node id in input order, the descriptor determined by the node's `operation.identity`, `operation.mode`, `operation.laws`, operand forms and the one bound of the needed form on its result type; a node that is not an application, has no identity, names an identity outside the derivable set, has operand forms, a law or a mode that select no parameter, or has a refused bound (missing, repeated or unreadable) is refused with the matching `ClaimDerivationRefusal` and no descriptor. | Test (TC-024) |
+| FR-014-AC-19 | A derived item generates an oracle whose operation is `ir_confirmed`, and for every item of the golden corpus the derived descriptor equals the descriptor the fixture declares. | Test (TC-024) |
 
 ## Dependencies
 
