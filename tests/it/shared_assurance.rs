@@ -162,6 +162,37 @@ fn tc_008_every_shared_pin_is_classified_by_the_packaged_matrix() {
     assert_eq!(report["acceptance_recorded_here"], false);
     assert!(report["acceptance_state"].is_string());
 
+    // `build_report` must actually fail on a ruled-out component, not merely
+    // report it: observe a quoin the matrix names incompatible through a fake
+    // `quoin` on PATH and require `accepted` to be false.
+    let fake = root().join("target/pins-fake-quoin");
+    fs::create_dir_all(&fake).expect("the fake tool directory is creatable");
+    let fake_quoin = fake.join("quoin");
+    fs::write(&fake_quoin, "#!/bin/sh\necho 0.22.5\n").expect("the fake quoin is writable");
+    Command::new("chmod")
+        .args(["+x", fake_quoin.to_str().expect("utf-8 path")])
+        .status()
+        .expect("chmod runs");
+    let path = format!(
+        "{}:{}",
+        fake.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let output = Command::new(&python)
+        .args(["scripts/check_shared_pins.py", "--json"])
+        .env("PATH", path)
+        .current_dir(root())
+        .output()
+        .expect("the pin gate runs");
+    let injected: Value = serde_json::from_slice(&output.stdout).expect("the gate emits JSON");
+    assert_eq!(
+        injected["incompatible_components"],
+        serde_json::json!(["quoin"]),
+        "the matrix must name quoin 0.22.5 incompatible: {injected:#}"
+    );
+    assert_eq!(injected["accepted"], false);
+    assert_eq!(output.status.code(), Some(1));
+
     // The version gate must be seen to refuse a version the matrix rules out, and
     // to let an `unknown` one through, or it is indistinguishable from one that
     // never fires.
@@ -665,78 +696,34 @@ fn tc_009_the_chain_never_executes_a_producer_and_the_probe_can_prove_it() {
         "the chain succeeded with quoin stubbed out, so it is not actually using it"
     );
 
-    // Run C: what is Quire asked to do, and who asks it?
+    // Run C: what is Quire asked to do during the chain?
     //
-    // Quire is excluded from run A because `quoin evidence audit` shells out to
-    // `quire coverage --scope <its own scratch repo> --json`. That is Quoin
-    // reading static facts, which is what the architecture says Quoin does with
-    // Quire's export; it is not the driver running a producer. Asserting only that
-    // the subcommand is `coverage` or `provenance` therefore permits the driver to
-    // run `quire coverage` itself, which is exactly the producer command — and an
-    // adversarial review did precisely that and was not caught.
-    //
-    // So the caller is what is asserted. Every invocation whose parent is the
-    // driver must be an observation. A coverage export requested by the driver is
-    // a producer run and is refused; the same request from Quoin is fine.
-    // This run's chain is expected to fail — a shim cannot serve a real export —
+    // Nothing in the chain may ask Quire to do work: the only invocations Quire
+    // may see are observations of its own version. Quoin embeds quire-rs and
+    // spawns no `quire` process, so no caller has a reason to request a coverage
+    // export, and the assertion does not depend on who the caller is: a driver
+    // that runs `quire coverage` directly, or through `sh -c`, is a producer run
+    // and is refused either way.
+    // This run's chain is expected to fail - a shim cannot serve a real export -
     // and that is fine, because what is being read is the log, not the exit code.
     let quire_shims = root().join("target/quire-shims");
     let quire_log = producer_shims(&quire_shims, &["quire"]);
     let _ = run_chain_with_path(&quire_shims);
     let quire_logged = fs::read_to_string(&quire_log).unwrap_or_default();
     assert!(
-        !quire_logged.trim().is_empty(),
-        "stubbing quire produced no invocation, so this run observed nothing"
+        quire_logged
+            .lines()
+            .any(|line| line.starts_with("observe ")),
+        "the driver never observed Quire, so this run observed nothing:\n{quire_logged}"
     );
-    // Quoin used to shell out to `quire coverage` from `quoin evidence audit`, which
-    // supplied the non-driver caller this run must see. Quoin 0.24.1 embeds
-    // quire-rs instead and spawns nothing, so the exemption is exercised here by
-    // a caller that is plainly not the driver: the shim must log it as work
-    // attributed to someone else, or the caller check below cannot tell the two
-    // apart.
-    let other_run = Command::new(quire_shims.join("quire"))
-        .args(["coverage", "--scope", ".", "--json"])
-        .status()
-        .expect("the quire shim runs");
-    assert_eq!(
-        other_run.code(),
-        Some(97),
-        "the shim refuses work with its fixed status"
-    );
-    let quire_logged = fs::read_to_string(&quire_log).unwrap_or_default();
-    let mut driver_calls = 0;
-    let mut other_calls = 0;
-    for line in quire_logged.lines().filter(|line| !line.trim().is_empty()) {
-        let (invocation, caller) = line.split_once("<<caller=").unwrap_or((line, ""));
-        assert!(
-            !caller.is_empty(),
-            "the shim recorded no caller, so this run cannot tell the driver from \
-             another caller and proves nothing: {line}"
-        );
-        if caller.contains("assurance_chain.py") {
-            driver_calls += 1;
-            assert!(
-                line.starts_with("observe "),
-                "the driver asked Quire to do work rather than to name its own \
-                 version: {invocation}"
-            );
-        } else {
-            other_calls += 1;
-        }
-    }
-    // Both halves must have happened, or the discrimination is untested. The
-    // driver must have been seen asking Quire something, or the caller check
-    // matched nothing; and a caller other than the driver must have been seen
-    // asking too, or the shim cannot tell them apart.
+    let work: Vec<&str> = quire_logged
+        .lines()
+        .filter(|line| line.starts_with("work "))
+        .collect();
     assert!(
-        driver_calls > 0,
-        "no Quire invocation was attributed to the driver, so the caller check \
-         matched nothing:\n{quire_logged}"
-    );
-    assert!(
-        other_calls > 0,
-        "every Quire invocation was attributed to the driver, so the shim cannot \
-         discriminate callers:\n{quire_logged}"
+        work.is_empty(),
+        "something asked Quire to do work during the chain, not just to name its \
+         version:\n{work:#?}"
     );
 
     // Run D: the driver wrote nothing into its own input directory.

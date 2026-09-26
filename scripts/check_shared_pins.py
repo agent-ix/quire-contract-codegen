@@ -4,7 +4,7 @@
 Four things this file deliberately is not.
 
 It is not a copy of the compatibility matrix. It never says which version of
-anything is correct. It observes what is installed and hands every verdict to
+anything is correct. It observes what is installed and hands every classification to
 `engineering_assurance.compatibility`, because a second copy of the rule is a
 second authority, and two authorities drift.
 
