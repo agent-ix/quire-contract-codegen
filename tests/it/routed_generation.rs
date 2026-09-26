@@ -432,6 +432,7 @@ fn tc_033_an_empty_routed_set_returns_an_empty_result() {
                 items: Vec::new(),
                 rejected: Vec::new(),
                 claim_map: None,
+                oracle_artifacts: None,
             })
         );
     }
@@ -969,4 +970,90 @@ fn tc_033_an_underivable_claim_is_underived_and_carries_the_nodes_identity() {
         absent.operation.provenance,
         quire_contract_codegen::OperationProvenance::Underived
     );
+}
+
+/// The artifacts FR-014 generates over the items derived from `nodes`.
+fn fr014_artifacts(
+    package: &CheckedPackageV2,
+    nodes: &[CheckedNodeId],
+) -> Vec<quire_contract_codegen::Artifact> {
+    let mut sorted = nodes.to_vec();
+    sorted.sort();
+    let items = derive_exact_scalar_items(package, &sorted)
+        .into_iter()
+        .filter_map(Result::ok)
+        .collect::<Vec<_>>();
+    generate_exact_scalar_oracles(package, &items)
+        .expect("generates")
+        .artifacts
+}
+
+/// `x + 1` over `Int[0, 9]` returns the oracle crate: equal to FR-014's artifacts, defining every
+/// `Generated` claim's `oracle_<digest>` symbol, which the harness source also references.
+///
+/// Trace: FR-022-AC-14, TC-033
+#[test]
+fn tc_033_the_oracle_crate_is_returned_and_defines_the_symbol_the_harness_references() {
+    let package = package::bounded_increment_package().admit();
+    let node_id = package::code_id(package::BOUNDED_INCREMENT);
+    let pins = pins();
+    let generation = generate_routed(
+        &package,
+        &[route(0, &node_id, "A")],
+        &kani_context(&pins, "crate::subject", 1),
+    )
+    .expect("routed generation succeeds");
+    let artifacts = generation.oracle_artifacts.expect("a Kani group ran");
+    assert_eq!(
+        artifacts,
+        fr014_artifacts(&package, std::slice::from_ref(&node_id))
+    );
+    let paths = artifacts
+        .iter()
+        .map(|artifact| artifact.path.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(paths, ["Cargo.toml", "src/lib.rs", "claim-map.json"]);
+    let lib = &artifacts[1].contents;
+
+    let claim_map = generation.claim_map.expect("a Kani group ran");
+    let symbols = claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+        .map(|claim| format!("oracle_{}", claim.node_id.digest))
+        .collect::<Vec<_>>();
+    assert_eq!(symbols.len(), 1, "the one routed node generates");
+    let [item] = generation.items.as_slice() else {
+        panic!("one routed item, got {:?}", generation.items);
+    };
+    let (_, harness) = kani_parts(&item.output);
+    let harness = harness.expect("a supported item carries its harness");
+    for symbol in &symbols {
+        assert!(
+            lib.contains(&format!("fn {symbol}(")),
+            "src/lib.rs defines {symbol}"
+        );
+        assert!(
+            harness.rust.contents.contains(symbol.as_str()),
+            "the harness references {symbol}"
+        );
+    }
+}
+
+/// A group with no derivable node returns what FR-014 gives an empty item set, and nothing routed
+/// returns no crate.
+///
+/// Trace: FR-022-AC-14, TC-033
+#[test]
+fn tc_033_an_all_underivable_group_returns_fr014_empty_crate_and_no_group_returns_none() {
+    let derived = derived();
+    let pins = pins();
+    let contexts = kani_context(&pins, "crate::subject", 1);
+    let generation = generate_routed(&derived.package, &[route(0, &derived.rem, "A")], &contexts)
+        .expect("generates");
+    let artifacts = generation.oracle_artifacts.expect("a Kani group ran");
+    assert_eq!(artifacts, fr014_artifacts(&derived.package, &[]));
+    assert!(!artifacts.is_empty());
+    let empty = generate_routed(&derived.package, &[], &contexts).expect("generates");
+    assert_eq!(empty.oracle_artifacts, None);
 }

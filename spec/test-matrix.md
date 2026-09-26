@@ -79,7 +79,7 @@ type: TestMatrix
 | FR-021 | FR-021-AC-15 | TC-031 | 🚧 Planned; the `origin` half is implemented and tested, but under this V1's scoped one-node body vocabulary `path` can never be non-empty by construction, so the `path`-non-empty case this AC also describes is not implemented |
 | FR-021 | FR-021-AC-16 | TC-031 (Inspection) | ✅ Covered |
 | FR-021 | FR-021-AC-18 | TC-031 | 🚧 Planned, pending the `quire-spec-language` re-pin named in FR-021's own Dependencies section |
-| FR-022 | FR-022-AC-2 through FR-022-AC-13 | TC-033 | ✅ Covered |
+| FR-022 | FR-022-AC-2 through FR-022-AC-14 | TC-033 | ✅ Covered |
 | FR-022 | FR-022-AC-1 | Analysis | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
@@ -268,7 +268,7 @@ row is therefore reachable only through a candidate set the registry supplies, w
 exercises it through `candidates` rather than by registering a second arm.
 
 FR-022 (Linear IR-293) is the generation arm of the seam FR-019 settles, and it takes the routed
-backend and kind as given. AC-2 through AC-13 are backed by TC-033's tests. AC-4's "converts to a kind other than the routed one" branch needs a second `BackendKind` variant
+backend and kind as given. AC-2 through AC-14 are backed by TC-033's tests. AC-4's "converts to a kind other than the routed one" branch needs a second `BackendKind` variant
 to be reachable, since with one variant the only disagreement is a backend with no kind
 (`converted: None`); TC-033 exercises only that `converted: None` case, so the other branch is untested until a second kind exists.
 AC-1 stays `🚧 Planned`
@@ -342,7 +342,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-028 | Verify interface-001's declared API surface and identity envelope match the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-3, interface-001-AC-4, interface-001-AC-5 | ✅ Covered |
 | TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13, FR-018-AC-14 | 🚧 Planned |
 | TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
-| TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-015-AC-15 | ✅ Covered |
+| TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-022-AC-14, FR-015-AC-15 | ✅ Covered |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and

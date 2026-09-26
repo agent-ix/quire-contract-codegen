@@ -9,7 +9,9 @@
 //! The Kani arm derives each item's FR-014 descriptor from the package with
 //! [`derive_exact_scalar_items`], generates the derived oracles, and calls
 //! [`negotiate_kani_obligations`] once over the routed Kani items in ascending
-//! request index. That generator numbers its records by position; this module maps every position
+//! request index. The oracle crate FR-014 generated is returned beside the claim map: each harness
+//! embeds its own oracle's source (FR-015), so the crate names no path or dependency for the
+//! harness. That generator numbers its records by position; this module maps every position
 //! back to the driver's request index and pairs each harness with its record by `harness_symbol`.
 
 use std::collections::BTreeMap;
@@ -17,10 +19,11 @@ use std::collections::BTreeMap;
 use quire_contract_ir::{CheckedNodeId, CheckedPackageV2};
 
 use crate::{
-    derive_exact_scalar_items, generate_exact_scalar_oracles, negotiate_kani_obligations,
-    AttestationContext, BackendKind, Candidate, ClaimMap, ExactScalarClaim, InvalidObligationItem,
-    KaniObligationError, KaniObligationOutcome, KaniObligationRequest, KaniScalarObligationHarness,
-    KaniToolPins, ObligationDisposition, ObligationItem, ObligationRecord, OracleGenerationError,
+    derive_exact_scalar_items, generate_exact_scalar_oracles, negotiate_kani_obligations, Artifact,
+    AttestationContext, BackendKind, Candidate, ClaimMap, ExactScalarClaim, ExactScalarOracles,
+    InvalidObligationItem, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
+    KaniScalarObligationHarness, KaniToolPins, ObligationDisposition, ObligationItem,
+    ObligationRecord, OracleGenerationError,
 };
 
 /// One item the driver routed to a backend.
@@ -105,6 +108,11 @@ pub struct RoutedGeneration {
     /// generated claims of the derivable nodes and a `NoDerivableClaim` claim for each other.
     /// `None` when no Kani group ran.
     pub claim_map: Option<ClaimMap<ExactScalarClaim>>,
+    /// The FR-014 oracle crate the Kani arm generated for its group: `Cargo.toml`, `src/lib.rs`
+    /// and `claim-map.json`, byte-identical to `generate_exact_scalar_oracles`'s artifacts over the
+    /// group's derived items. Every `Generated` claim's `oracle_<digest>` symbol is defined in its
+    /// `src/lib.rs`. `None` when no Kani group ran.
+    pub oracle_artifacts: Option<Vec<Artifact>>,
 }
 
 /// A whole-call refusal; nothing is generated.
@@ -168,6 +176,7 @@ pub fn generate_routed(
     let mut items = Vec::with_capacity(ordered.len());
     let mut rejected = Vec::new();
     let mut claim_map = None;
+    let mut oracle_artifacts = None;
     for kind in BackendKind::ALL {
         let group = ordered
             .iter()
@@ -179,8 +188,10 @@ pub fn generate_routed(
         }
         let arm = match kind {
             BackendKind::Kani => {
-                let (arm, kani_claim_map) = generate_kani(package, &group, contexts)?;
+                let (arm, kani_claim_map, kani_artifacts) =
+                    generate_kani(package, &group, contexts)?;
                 claim_map = Some(kani_claim_map);
+                oracle_artifacts = Some(kani_artifacts);
                 arm
             }
         };
@@ -194,6 +205,7 @@ pub fn generate_routed(
         items,
         rejected,
         claim_map,
+        oracle_artifacts,
     })
 }
 
@@ -227,18 +239,18 @@ fn refuse_inconsistent_routing(
     Ok(())
 }
 
-/// The Kani arm, and the claim map it derived: one `negotiate_kani_obligations` call over `group`, in ascending request index.
+/// The Kani arm, and the claim map and oracle crate it derived: one `negotiate_kani_obligations` call over `group`, in ascending request index.
 fn generate_kani(
     package: &CheckedPackageV2,
     group: &[&RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
-) -> Result<(ArmOutput, ClaimMap<ExactScalarClaim>), RoutedGenerationError> {
+) -> Result<(ArmOutput, ClaimMap<ExactScalarClaim>, Vec<Artifact>), RoutedGenerationError> {
     let Some(context) = contexts.kani else {
         return Err(RoutedGenerationError::MissingKindContext {
             kind: BackendKind::Kani,
         });
     };
-    let claim_map = derive_claim_map(package, group)?;
+    let (claim_map, artifacts) = derive_claim_map(package, group)?;
     let items = group
         .iter()
         .map(|item| ObligationItem::ScalarClaim {
@@ -313,15 +325,16 @@ fn generate_kani(
             }
         })
         .collect();
-    Ok((ArmOutput { outputs, rejected }, claim_map))
+    Ok((ArmOutput { outputs, rejected }, claim_map, artifacts))
 }
 
 /// The FR-014 claim map of `group`'s distinct nodes: each derivable node generated from its
-/// derived descriptor, each other node a `NoDerivableClaim` claim, ascending by node id.
+/// derived descriptor, each other node a `NoDerivableClaim` claim, ascending by node id; and the
+/// oracle crate FR-014 generated for the derivable nodes.
 fn derive_claim_map(
     package: &CheckedPackageV2,
     group: &[&RoutedGenerationItem],
-) -> Result<ClaimMap<ExactScalarClaim>, RoutedGenerationError> {
+) -> Result<(ClaimMap<ExactScalarClaim>, Vec<Artifact>), RoutedGenerationError> {
     // A node routed twice is one claim: FR-014 refuses every copy of a repeated request, and FR-015
     // reports the repeat as its own `DuplicateItem`.
     let mut node_ids = group
@@ -347,12 +360,14 @@ fn derive_claim_map(
             }
         }
     }
-    let mut claim_map = generate_exact_scalar_oracles(package, &derivable)
-        .map_err(RoutedGenerationError::Oracle)?
-        .claim_map;
+    let ExactScalarOracles {
+        artifacts,
+        mut claim_map,
+    } = generate_exact_scalar_oracles(package, &derivable)
+        .map_err(RoutedGenerationError::Oracle)?;
     claim_map.items.extend(underivable);
     claim_map
         .items
         .sort_by(|left, right| left.node_id.cmp(&right.node_id));
-    Ok(claim_map)
+    Ok((claim_map, artifacts))
 }
