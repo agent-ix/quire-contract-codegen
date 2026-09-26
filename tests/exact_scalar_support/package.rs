@@ -386,6 +386,12 @@ pub fn literal(kind: &str, value: &str) -> Value {
     })
 }
 
+/// A bound-body member in checked-package v2's shape (FR-322): a `binding` term naming the
+/// member and carrying its literal, not the bare literal.
+pub fn member(name: &str, value: Value) -> Value {
+    json!({"term": "binding", "name": name, "value": value})
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -754,14 +760,17 @@ impl PackageBuilder {
             let body = json!({
                 "term": "aggregate",
                 "members": [
-                    integer_literal(min),
-                    integer_literal(max),
-                    {
-                        "term": "literal",
-                        "type": node_ref(&type_digest),
-                        "value_kind": "text",
-                        "value": profile,
-                    },
+                    member("min", integer_literal(min)),
+                    member("max", integer_literal(max)),
+                    member(
+                        "text_profile",
+                        json!({
+                            "term": "literal",
+                            "type": node_ref(&type_digest),
+                            "value_kind": "text",
+                            "value": profile,
+                        }),
+                    ),
                 ],
             });
             self.node_with(
@@ -1182,25 +1191,28 @@ impl Bound {
 
     pub fn body(&self) -> Value {
         let members = match self {
-            Self::Integer(lower, upper) => vec![integer_literal(lower), integer_literal(upper)],
+            Self::Integer(lower, upper) => vec![
+                member("min", integer_literal(lower)),
+                member("max", integer_literal(upper)),
+            ],
             Self::Rational(nl, nu, dl, du) => vec![
-                integer_literal(nl),
-                integer_literal(nu),
-                integer_literal(dl),
-                integer_literal(du),
+                member("numerator_min", integer_literal(nl)),
+                member("numerator_max", integer_literal(nu)),
+                member("denominator_min", integer_literal(dl)),
+                member("denominator_max", integer_literal(du)),
             ],
             Self::Decimal(lower, upper, min, max, rounding) => vec![
-                integer_literal(lower),
-                integer_literal(upper),
-                integer_literal(min),
-                integer_literal(max),
-                literal("text", rounding),
+                member("coefficient_min", integer_literal(lower)),
+                member("coefficient_max", integer_literal(upper)),
+                member("scale_min", integer_literal(min)),
+                member("scale_max", integer_literal(max)),
+                member("rounding", literal("text", rounding)),
             ],
-            Self::Rounding(_, rounding) => vec![literal("text", rounding)],
+            Self::Rounding(_, rounding) => vec![member("rounding", literal("text", rounding))],
             Self::Text(min, max, profile) => vec![
-                integer_literal(min),
-                integer_literal(max),
-                literal("text", profile),
+                member("min", integer_literal(min)),
+                member("max", integer_literal(max)),
+                member("text_profile", literal("text", profile)),
             ],
             Self::Raw { body, .. } => return body.clone(),
         };
@@ -1226,7 +1238,10 @@ pub fn unreadable_bound() -> Bound {
         bounded: "integer",
         body: json!({
             "term": "aggregate",
-            "members": [literal("integer", "-5"), literal("integer", "05")],
+            "members": [
+                member("min", literal("integer", "-5")),
+                member("max", literal("integer", "05")),
+            ],
         }),
         foreign: vec![],
     }
@@ -1255,8 +1270,13 @@ pub const V_FLOAT32: u32 = 105;
 pub const V_FLOAT64: u32 = 106;
 pub const V_TEXT: u32 = 107;
 pub const V_QUANTITY: u32 = 108;
-/// A value whose semantic type is a bound, not a scalar type.
-pub const V_UNTYPED: u32 = 109;
+/// A value/literal node whose semantic type is an `integer_range` `bounded_domain` over the
+/// integer scalar type: what a QSL parameter typed `Int[0, 9]` references. It is an Integer
+/// operand (IR-297).
+pub const V_BOUNDED_PARAM: u32 = 109;
+/// A value whose semantic type is another value node, so neither a scalar type nor a
+/// `bounded_domain` over one.
+pub const V_UNTYPED: u32 = 110;
 
 /// The corpus integer subtraction, whose right operand is an inline literal.
 pub const LITERAL_OPERAND: u32 = 1003;
@@ -1312,6 +1332,9 @@ pub const EXPRESSION_OPERAND: u32 = 2029;
 pub const LITERAL_QUANTITY: u32 = 2030;
 /// An integer addition whose right operand has no scalar type.
 pub const UNTYPED_OPERAND: u32 = 2031;
+/// An integer addition whose right operand is typed by an `integer_range` `bounded_domain`. It is
+/// generated (IR-297), so it is requested by its own test and is in no golden item list.
+pub const BOUNDED_OPERAND: u32 = 2034;
 /// A rational division over two integer-typed *reference* operands: IR
 /// admits it (`quire.op.rational.div`'s catalogued operand family,
 /// `rational_promotable`, is `{integer, rational}`), but CG's own
@@ -2267,10 +2290,17 @@ pub fn corpus_package() -> PackageBuilder {
     );
     let int_bound = builder.bound(&INT);
     builder.code(
-        V_UNTYPED,
+        V_BOUNDED_PARAM,
         "value",
         "literal",
         &int_bound,
+        literal("integer", "3"),
+    );
+    builder.code(
+        V_UNTYPED,
+        "value",
+        "literal",
+        &key(V_BOOLEAN),
         literal("integer", "3"),
     );
     // Every catalogued law-role definition any corpus expression's
@@ -2489,7 +2519,7 @@ pub fn corpus_package() -> PackageBuilder {
                 foreign: vec![Bound::Raw {
                     form: "text_bounds",
                     bounded: "text",
-                    body: json!({"term": "aggregate", "members": [literal("text", "nfc")]}),
+                    body: json!({"term": "aggregate", "members": [member("text_profile", literal("text", "nfc"))]}),
                     foreign: vec![],
                 }],
             }],
@@ -2628,6 +2658,26 @@ pub fn corpus_package() -> PackageBuilder {
             vec![
                 reference(&untyped_operand_anchor),
                 reference(&key(V_UNTYPED)),
+            ],
+        ),
+        &[INT],
+    );
+    let bounded_operand_anchor = {
+        let int_key = builder.bound(&INT);
+        builder.dedicated_operand("integer", &[int_key])
+    };
+    builder.application_bounded(
+        BOUNDED_OPERAND,
+        "expression",
+        "binary",
+        &integer_type,
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &integer_type,
+            vec![
+                reference(&bounded_operand_anchor),
+                reference(&key(V_BOUNDED_PARAM)),
             ],
         ),
         &[INT],
@@ -2957,6 +3007,49 @@ pub fn corpus_package() -> PackageBuilder {
     builder.add_dependency(&literal_operand_anchor, code_id(CLAIM).digest.as_ref());
     builder.add_dependency(&literal_operand_anchor, code_id(CLAIM_ALT).digest.as_ref());
     builder
+}
+
+/// The QSL parameter `x: Int[0, 9]` of [`bounded_increment_package`].
+pub const V_PARAM_X: u32 = 111;
+/// `x + 1` over `Int[0, 9]`, with `x` typed by a `bounded_domain` and `[0, 9]` the one
+/// `integer_range` over Integer.
+pub const BOUNDED_INCREMENT: u32 = 2035;
+
+/// A package holding only `x + 1` over `Int[0, 9]` in QSL's shape: `x` is typed by an
+/// `integer_range` `bounded_domain` over Integer whose members are `min`/`max` bindings.
+pub fn bounded_increment_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    let bound = Bound::Integer(0, 9);
+    let bound_key = builder.bound(&bound);
+    builder.code(
+        V_PARAM_X,
+        "value",
+        "literal",
+        &bound_key,
+        literal("integer", "3"),
+    );
+    builder.application_bounded(
+        BOUNDED_INCREMENT,
+        "expression",
+        "binary",
+        &key(T_INTEGER),
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &key(T_INTEGER),
+            vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
+        ),
+        &[bound],
+    );
+    builder
+}
+
+/// Integer addition over the `Int[0, 9]` domain of [`bounded_increment_package`].
+pub fn integer_add_0_9() -> ExactScalarOperation {
+    ExactScalarOperation::IntegerArithmetic {
+        operator: IntegerOperator::Add,
+        domain: bounded(0, 9),
+    }
 }
 
 pub fn integer_add() -> ExactScalarOperation {

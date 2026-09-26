@@ -3,7 +3,7 @@
   "package_id": {
     "domain": "quire.package.semantic/v2",
     "algorithm": "sha256",
-    "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+    "digest": "6c0d9e2f6e7051e9bf60f7ade8d9c05cb6bd1e37344dddcdcc299bf8af408d05"
   },
   "runtime_revision": "c52442a56a879cb5ce02a63bcbe430b85bf74a6d",
   "blocked": [],
@@ -24,7 +24,7 @@
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+          "digest": "6c0d9e2f6e7051e9bf60f7ade8d9c05cb6bd1e37344dddcdcc299bf8af408d05"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",
@@ -82,7 +82,7 @@
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+          "digest": "6c0d9e2f6e7051e9bf60f7ade8d9c05cb6bd1e37344dddcdcc299bf8af408d05"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",
@@ -140,7 +140,7 @@
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+          "digest": "6c0d9e2f6e7051e9bf60f7ade8d9c05cb6bd1e37344dddcdcc299bf8af408d05"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",
@@ -198,7 +198,7 @@
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+          "digest": "6c0d9e2f6e7051e9bf60f7ade8d9c05cb6bd1e37344dddcdcc299bf8af408d05"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",
@@ -269,7 +269,7 @@
         "package_id": {
           "domain": "quire.package.semantic/v2",
           "algorithm": "sha256",
-          "digest": "eaf4801c4bfc930d15d813d20b77dd296ba2620d19dd2f0fe8126cf7bfad3f29"
+          "digest": "6c0d9e2f6e7051e9bf60f7ade8d9c05cb6bd1e37344dddcdcc299bf8af408d05"
         },
         "semantic_type": {
           "domain": "quire.checked-semantic-node/v1",

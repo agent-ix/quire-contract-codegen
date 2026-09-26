@@ -55,6 +55,8 @@ type: TestMatrix
 | FR-014 | FR-014-AC-13 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-14 | TC-024 | ⚠️ Partially covered; the `caller_declared` provenance is asserted for every refused and every never-inspected claim, but no test asserts that the identity such a claim reports is the request item's own descriptor-derived one |
 | FR-014 | FR-014-AC-15 | TC-024 | ⚠️ Partially covered; the typed refusal and the withheld generated function are asserted, but no fixture requests a work-exhausted item alongside healthy ones, so the per-item isolation clause is unasserted |
+| FR-014 | FR-014-AC-16 | TC-024 | ✅ Covered |
+| FR-014 | FR-014-AC-17 | TC-024 | ✅ Covered |
 | FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned |
 | FR-015 | FR-015-AC-3 through FR-015-AC-6 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-7 through FR-015-AC-12 | TC-025 | ✅ Covered |
@@ -65,7 +67,7 @@ type: TestMatrix
 | FR-016 | FR-016-AC-2 through FR-016-AC-4, FR-016-AC-6, FR-016-AC-7 | TC-026 | 🚧 Planned |
 | FR-017 | FR-017-AC-2 through FR-017-AC-5, FR-017-AC-8 through FR-017-AC-10, FR-017-CON-2 | TC-027 | ✅ Covered |
 | FR-017 | FR-017-AC-1, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1 | TC-027 | 🚧 Planned |
-| FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-10 through FR-018-AC-13 | TC-029 | ✅ Covered |
+| FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-10 through FR-018-AC-14 | TC-029 | ✅ Covered |
 | FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |
 | FR-019 | FR-019-AC-1 through FR-019-AC-8, FR-019-AC-10 | TC-030 | ✅ Covered |
 | FR-019 | FR-019-AC-9 | Analysis | ✅ Covered |
@@ -146,7 +148,7 @@ run carries a caller-declared wall-clock budget and reports an elapsed budget as
 inconclusive result. FR-017-AC-4 and FR-017-AC-5 enumerate the inconclusive reasons they cover by
 name; adding timed-out to that enumeration is codegen#55.
 
-FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-10 through FR-018-AC-13 are `✅ Covered`:
+FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-10 through FR-018-AC-14 are `✅ Covered`:
 the composite/structural equality slice of codegen#48 that TC-029 backs with a passing test for every
 clause those criteria name. Generation lives in `src/composite_equality.rs`; the committed golden
 crate under `tests/fixtures/composite_equality/` is the crate TC-029 step 4 compiles and executes,
@@ -330,12 +332,12 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-021 | Verify shrinking preserves numeric constraints | Property | P0 | FR-012-AC-1, FR-012-AC-2, FR-012-AC-3, FR-012-AC-4 | ✅ Covered |
 | TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4 | ✅ Covered |
 | TC-023 | Verify bounded Kani profile corpus parity | Integration | P0 | FR-007-AC-1, FR-007-AC-2, FR-007-AC-3, FR-007-AC-4, FR-007-AC-5, FR-007-AC-6, FR-007-AC-7 | ✅ Covered |
-| TC-024 | Verify exact complete-V1 scalar oracle generation and agreement | Integration | P0 | FR-014-AC-1, FR-014-AC-2, FR-014-AC-3, FR-014-AC-4, FR-014-AC-5, FR-014-AC-6, FR-014-AC-7, FR-014-AC-8, FR-014-AC-9, FR-014-AC-10, FR-014-AC-11, FR-014-AC-12, FR-014-AC-13, FR-014-AC-14, FR-014-AC-15 | ✅ Covered |
+| TC-024 | Verify exact complete-V1 scalar oracle generation and agreement | Integration | P0 | FR-014-AC-1, FR-014-AC-2, FR-014-AC-3, FR-014-AC-4, FR-014-AC-5, FR-014-AC-6, FR-014-AC-7, FR-014-AC-8, FR-014-AC-9, FR-014-AC-10, FR-014-AC-11, FR-014-AC-12, FR-014-AC-13, FR-014-AC-14, FR-014-AC-15, FR-014-AC-16, FR-014-AC-17 | ✅ Covered |
 | TC-025 | Verify separate bounded Kani obligations | Analysis | P0 | FR-015-AC-1, FR-015-AC-2, FR-015-AC-3, FR-015-AC-4, FR-015-AC-5, FR-015-AC-6, FR-015-AC-7, FR-015-AC-8, FR-015-AC-9, FR-015-AC-10, FR-015-AC-11, FR-015-AC-12, FR-015-AC-14 | 🚧 Planned |
 | TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4, FR-016-AC-5, FR-016-AC-6, FR-016-AC-7, FR-016-AC-8 | 🚧 Planned; AC-8 is backed (`src/kani_witness_join.rs unit tests, `tests/it/kani_argument_order.rs`, and the ignored Kani lane `tests/it/kani_witness_join.rs`); AC-1 and AC-5 are planned because every join refusal (identity, arity, width, schema, Boolean-byte, comment) is reported as a `KaniOutcome` refusal code rather than FR-016's malformed-witness replay result; AC-2, AC-3, AC-4, AC-6 and AC-7 are planned |
 | TC-027 | Verify pinned Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-1, FR-017-AC-2, FR-017-AC-3, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-8, FR-017-AC-9, FR-017-AC-10, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
 | TC-028 | Verify interface-001's declared API surface and identity envelope match the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-3, interface-001-AC-4, interface-001-AC-5 | ✅ Covered |
-| TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13 | 🚧 Planned |
+| TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13, FR-018-AC-14 | 🚧 Planned |
 | TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
 | TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9 | ✅ Covered |
 

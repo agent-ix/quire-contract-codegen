@@ -71,7 +71,10 @@
 //! `bounded_domain` nodes, and reconstructing a concrete `QuantityUnit`
 //! requires walking a unit graph this generator does not read.
 
-use crate::exact_scalar::{aggregate_members, literal_count};
+use crate::exact_scalar::{
+    aggregate_members, bound_members, literal_count, read_decimal_range, read_integer_range,
+    read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
+};
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{Artifact, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION};
 use quire_contract_ir::{
@@ -81,8 +84,8 @@ use quire_contract_ir::{
 use quire_contract_runtime::exact::{
     self as rt, CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration,
     CompositeShape, DecimalType, EqualityOperand, EqualitySchedule, FieldDeclaration,
-    IllTypedCause, IntegerInterval, NodeKey, Presence, RationalDomain, RoundingMode, TextProfile,
-    TextType, TypeEnvironment, ValueType,
+    IllTypedCause, IntegerInterval, NodeKey, Presence, RoundingMode, TextProfile, TypeEnvironment,
+    ValueType,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -1235,16 +1238,15 @@ fn resolve_composite(
                     bound: bounds_target,
                 });
             }
-            let bound_members = aggregate_members(&bounds_node.body).ok_or_else(|| {
+            let bound_members_terms = aggregate_members(&bounds_node.body).ok_or_else(|| {
                 CompositeEqualityRefusal::UnreadableBound {
                     bound: bounds_target.clone(),
                 }
             })?;
-            let [minimum, maximum] = bound_members else {
-                return Err(CompositeEqualityRefusal::UnreadableBound {
-                    bound: bounds_target,
-                });
-            };
+            let [minimum, maximum] = bound_members(bound_members_terms, COLLECTION_BOUNDS_MEMBERS)
+                .ok_or_else(|| CompositeEqualityRefusal::UnreadableBound {
+                    bound: bounds_target.clone(),
+                })?;
             let (minimum, maximum) = (
                 literal_count(minimum).ok_or_else(|| {
                     CompositeEqualityRefusal::UnreadableBound {
@@ -1284,69 +1286,6 @@ fn resolve_composite(
             node_tag: "composite_type",
         }),
     }
-}
-
-fn read_integer_range(members: &[Value]) -> Option<IntegerInterval> {
-    let [lower, upper] = members else {
-        return None;
-    };
-    IntegerInterval::new(
-        crate::exact_scalar::literal_integer(lower)?,
-        crate::exact_scalar::literal_integer(upper)?,
-    )
-    .ok()
-}
-
-fn read_rational_range(members: &[Value]) -> Option<RationalDomain> {
-    let [numerator_lower, numerator_upper, denominator_lower, denominator_upper] = members else {
-        return None;
-    };
-    RationalDomain::new(
-        IntegerInterval::new(
-            crate::exact_scalar::literal_integer(numerator_lower)?,
-            crate::exact_scalar::literal_integer(numerator_upper)?,
-        )
-        .ok()?,
-        IntegerInterval::new(
-            crate::exact_scalar::literal_integer(denominator_lower)?,
-            crate::exact_scalar::literal_integer(denominator_upper)?,
-        )
-        .ok()?,
-    )
-    .ok()
-}
-
-fn read_decimal_range(members: &[Value]) -> Option<DecimalType> {
-    let [lower, upper, min_scale, max_scale, rounding] = members else {
-        return None;
-    };
-    DecimalType::new(
-        crate::exact_scalar::literal_integer(lower)?,
-        crate::exact_scalar::literal_integer(upper)?,
-        literal_count(min_scale)?,
-        literal_count(max_scale)?,
-        RoundingMode::from_code(literal_text(rounding)?)?,
-    )
-    .ok()
-}
-
-fn read_text_bounds(members: &[Value]) -> Option<TextType> {
-    let [min, max, profile] = members else {
-        return None;
-    };
-    TextType::new(
-        literal_count(min)?,
-        literal_count(max)?,
-        TextProfile::from_code(literal_text(profile)?)?,
-    )
-    .ok()
-}
-
-fn literal_text(term: &Value) -> Option<&str> {
-    if term.get("term")?.as_str()? != "literal" || term.get("value_kind")?.as_str()? != "text" {
-        return None;
-    }
-    term.get("value")?.as_str()
 }
 
 fn hex_digest(key: &NodeKey) -> String {
@@ -1642,5 +1581,128 @@ fn artifact(path: &str, contents: String) -> Artifact {
         path: path.to_owned(),
         contents,
         sha256,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn interval_of(lower: &str, upper: &str) -> IntegerInterval {
+        IntegerInterval::new(
+            lower.parse().expect("integer"),
+            upper.parse().expect("integer"),
+        )
+        .expect("interval")
+    }
+
+    fn member(name: &str, value: &str) -> Value {
+        json!({"term": "binding", "name": name, "value": {
+            "term": "literal",
+            "type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+            "value_kind": "integer",
+            "value": value,
+        }})
+    }
+
+    fn text_member(name: &str, value: &str) -> Value {
+        json!({"term": "binding", "name": name, "value": {
+            "term": "literal", "value_kind": "text", "value": value,
+        }})
+    }
+
+    fn bare(kind: &str, value: &str) -> Value {
+        json!({"term": "literal", "value_kind": kind, "value": value})
+    }
+
+    /// Integer ranges, decimal ranges, text bounds and collection cardinalities are read from
+    /// binding-shaped members named as in QSpec's `positive-operation-identities.json`.
+    ///
+    /// Trace: FR-018-AC-14, TC-029.
+    #[test]
+    fn tc_029_bound_members_are_read_from_named_bindings() {
+        assert_eq!(
+            read_integer_range(&[member("max", "5"), member("min", "-5")]),
+            Some(interval_of("-5", "5"))
+        );
+        assert!(read_decimal_range(&[
+            member("coefficient_min", "-100"),
+            member("coefficient_max", "100"),
+            member("scale_min", "0"),
+            member("scale_max", "2"),
+            text_member("rounding", "nearest-even"),
+        ])
+        .is_some());
+        assert!(read_text_bounds(&[
+            member("min", "0"),
+            member("max", "16"),
+            text_member("text_profile", "nfc"),
+        ])
+        .is_some());
+        assert_eq!(
+            bound_members(
+                &[member("min", "0"), member("max", "8")],
+                COLLECTION_BOUNDS_MEMBERS
+            )
+            .map(|[minimum, maximum]| (literal_count(minimum), literal_count(maximum))),
+            Some((Some(0), Some(8)))
+        );
+    }
+
+    /// A bare literal in place of a `binding` member is refused: the integer endpoints, the
+    /// decimal `rounding`, the text `text_profile` and a collection cardinality.
+    ///
+    /// Trace: FR-018-AC-14, TC-029.
+    #[test]
+    fn tc_029_bare_literal_bound_members_are_refused() {
+        assert_eq!(
+            read_integer_range(&[bare("integer", "-5"), bare("integer", "5")]),
+            None
+        );
+        assert_eq!(
+            read_decimal_range(&[
+                member("coefficient_min", "-100"),
+                member("coefficient_max", "100"),
+                member("scale_min", "0"),
+                member("scale_max", "2"),
+                bare("text", "nearest-even"),
+            ]),
+            None,
+            "a bare `rounding` member"
+        );
+        assert_eq!(
+            read_text_bounds(&[member("min", "0"), member("max", "16"), bare("text", "nfc"),]),
+            None,
+            "a bare `text_profile` member"
+        );
+        assert_eq!(
+            read_text_bounds(&[
+                bare("integer", "0"),
+                bare("integer", "16"),
+                text_member("text_profile", "nfc"),
+            ]),
+            None,
+            "bare text-bounds `min`/`max` members"
+        );
+        assert_eq!(
+            bound_members(
+                &[bare("integer", "0"), bare("integer", "8")],
+                COLLECTION_BOUNDS_MEMBERS
+            )
+            .map(|_| ()),
+            None
+        );
+        // A wrong name is refused as well as a wrong shape.
+        assert_eq!(
+            read_decimal_range(&[
+                member("coefficient_min", "-100"),
+                member("coefficient_max", "100"),
+                member("scale_min", "0"),
+                member("scale_max", "2"),
+                text_member("mode", "nearest-even"),
+            ]),
+            None
+        );
     }
 }

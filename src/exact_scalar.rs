@@ -951,7 +951,15 @@ fn check_operand(
 
 fn reference_form(graph: &Graph<'_>, term: &Value) -> Option<String> {
     let target: CheckedNodeId = serde_json::from_value(term.get("target")?.clone()).ok()?;
-    type_form(graph, &graph.get(&target)?.semantic_type)
+    let mut type_id = &graph.get(&target)?.semantic_type;
+    // A parameter typed `Int[0, 9]` is typed by a `bounded_domain` whose own `semantic_type` is its
+    // base scalar type: QSL emits a bounded domain directly over its scalar base, so one step
+    // reaches the type the operand form is read from.
+    let node = graph.get(type_id)?;
+    if &*node.node_tag == CheckedNodeTag::BoundedDomain.as_wire() {
+        type_id = &node.semantic_type;
+    }
+    type_form(graph, type_id)
 }
 
 // ---------------------------------------------------------------------------
@@ -1095,7 +1103,38 @@ pub(crate) fn aggregate_members(body: &Value) -> Option<&[Value]> {
     body.get("members")?.as_array().map(Vec::as_slice)
 }
 
-fn literal<'v>(term: &'v Value, kind: &str) -> Option<&'v str> {
+/// The literals of a bound body, looked up BY NAME (QSpec's reader does the same), in any member
+/// order. Each member is `{term: binding, name, value: <literal>}` (checked-package v2, QSpec
+/// `positive-operation-identities.json`); the result holds each named member's `value`, in the
+/// order of `names`. A body with a missing, duplicate or unlisted name, or a member that is not a
+/// `binding` (a bare literal, say), is not a bound body and yields `None`.
+pub(crate) fn bound_members<'v, const N: usize>(
+    members: &'v [Value],
+    names: [&str; N],
+) -> Option<[&'v Value; N]> {
+    if members.len() != N {
+        return None;
+    }
+    let mut found: [Option<&'v Value>; N] = [None; N];
+    for member in members {
+        if member.get("term")?.as_str()? != "binding" {
+            return None;
+        }
+        let name = member.get("name")?.as_str()?;
+        let slot = &mut found[names.iter().position(|expected| *expected == name)?];
+        if slot.replace(member.get("value")?).is_some() {
+            return None;
+        }
+    }
+    found
+        .into_iter()
+        .collect::<Option<Vec<_>>>()?
+        .try_into()
+        .ok()
+}
+
+/// The spelling of a literal of `kind`.
+pub(crate) fn literal<'v>(term: &'v Value, kind: &str) -> Option<&'v str> {
     if term.get("term")?.as_str()? != "literal" || term.get("value_kind")?.as_str()? != kind {
         return None;
     }
@@ -1120,17 +1159,38 @@ fn literal_interval(lower: &Value, upper: &Value) -> Option<IntegerInterval> {
     IntegerInterval::new(literal_integer(lower)?, literal_integer(upper)?).ok()
 }
 
-fn read_integer_range(members: &[Value]) -> Option<IntegerInterval> {
-    let [lower, upper] = members else {
-        return None;
-    };
+/// The `integer_range` member names (QSpec `positive-operation-identities.json`).
+pub(crate) const INTEGER_RANGE_MEMBERS: [&str; 2] = ["min", "max"];
+/// The `rational_range` member names.
+pub(crate) const RATIONAL_RANGE_MEMBERS: [&str; 4] = [
+    "numerator_min",
+    "numerator_max",
+    "denominator_min",
+    "denominator_max",
+];
+/// The `decimal_range` member names.
+pub(crate) const DECIMAL_RANGE_MEMBERS: [&str; 5] = [
+    "coefficient_min",
+    "coefficient_max",
+    "scale_min",
+    "scale_max",
+    "rounding",
+];
+/// The `float_rounding` member names.
+pub(crate) const FLOAT_ROUNDING_MEMBERS: [&str; 1] = ["rounding"];
+/// The `text_bounds` member names.
+pub(crate) const TEXT_BOUNDS_MEMBERS: [&str; 3] = ["min", "max", "text_profile"];
+/// The `collection_bounds` member names.
+pub(crate) const COLLECTION_BOUNDS_MEMBERS: [&str; 2] = ["min", "max"];
+
+pub(crate) fn read_integer_range(members: &[Value]) -> Option<IntegerInterval> {
+    let [lower, upper] = bound_members(members, INTEGER_RANGE_MEMBERS)?;
     literal_interval(lower, upper)
 }
 
-fn read_rational_range(members: &[Value]) -> Option<RationalDomain> {
-    let [numerator_lower, numerator_upper, denominator_lower, denominator_upper] = members else {
-        return None;
-    };
+pub(crate) fn read_rational_range(members: &[Value]) -> Option<RationalDomain> {
+    let [numerator_lower, numerator_upper, denominator_lower, denominator_upper] =
+        bound_members(members, RATIONAL_RANGE_MEMBERS)?;
     RationalDomain::new(
         literal_interval(numerator_lower, numerator_upper)?,
         literal_interval(denominator_lower, denominator_upper)?,
@@ -1138,10 +1198,9 @@ fn read_rational_range(members: &[Value]) -> Option<RationalDomain> {
     .ok()
 }
 
-fn read_decimal_range(members: &[Value]) -> Option<DecimalType> {
-    let [lower, upper, min_scale, max_scale, rounding] = members else {
-        return None;
-    };
+pub(crate) fn read_decimal_range(members: &[Value]) -> Option<DecimalType> {
+    let [lower, upper, min_scale, max_scale, rounding] =
+        bound_members(members, DECIMAL_RANGE_MEMBERS)?;
     DecimalType::new(
         literal_integer(lower)?,
         literal_integer(upper)?,
@@ -1153,16 +1212,12 @@ fn read_decimal_range(members: &[Value]) -> Option<DecimalType> {
 }
 
 fn read_float_rounding(members: &[Value]) -> Option<RoundingMode> {
-    let [rounding] = members else {
-        return None;
-    };
+    let [rounding] = bound_members(members, FLOAT_ROUNDING_MEMBERS)?;
     RoundingMode::from_code(literal(rounding, "text")?)
 }
 
-fn read_text_bounds(members: &[Value]) -> Option<TextType> {
-    let [min, max, profile] = members else {
-        return None;
-    };
+pub(crate) fn read_text_bounds(members: &[Value]) -> Option<TextType> {
+    let [min, max, profile] = bound_members(members, TEXT_BOUNDS_MEMBERS)?;
     TextType::new(
         literal_count(min)?,
         literal_count(max)?,
@@ -2489,6 +2544,261 @@ mod tests {
             }),
             "a node missing the member IR admission guarantees must be refused by name, \
              not reported as an identity this generator declined to consume"
+        );
+    }
+    // -- QSL shape (FR-322): bounded_domain-typed parameters and binding-shaped bounds ---------
+
+    fn v2_node(
+        digit: char,
+        tag: &str,
+        form: &str,
+        semantic_type: char,
+        body: Value,
+    ) -> CheckedSemanticNodeV2 {
+        serde_json::from_value(serde_json::json!({
+            "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": digit.to_string().repeat(64)},
+            "schema_version": "quire.checked-semantic-graph/v2",
+            "node_tag": tag,
+            "semantic_form": form,
+            "semantic_type": {"domain": "quire.checked-semantic-node/v1", "digest": semantic_type.to_string().repeat(64)},
+            "dependencies": [],
+            "occurrences": [],
+            "body": body,
+        }))
+        .expect("v2 node")
+    }
+
+    /// A `{term: binding, name, value: <literal>}` member, the shape QSL emits and IR reads;
+    /// the literal carries `type` as FR-322 requires.
+    fn binding_member(name: &str, value: &str) -> Value {
+        serde_json::json!({"term": "binding", "name": name, "value": {
+            "term": "literal",
+            "type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+            "value_kind": "integer",
+            "value": value,
+        }})
+    }
+
+    /// A `text`-kind binding member.
+    fn text_member(name: &str, value: &str) -> Value {
+        serde_json::json!({"term": "binding", "name": name, "value": {
+            "term": "literal",
+            "type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+            "value_kind": "text",
+            "value": value,
+        }})
+    }
+
+    fn interval_of(lower: &str, upper: &str) -> IntegerInterval {
+        IntegerInterval::new(
+            lower.parse().expect("integer"),
+            upper.parse().expect("integer"),
+        )
+        .expect("interval")
+    }
+
+    fn range_body(members: Vec<Value>) -> Value {
+        serde_json::json!({"term": "aggregate", "members": members})
+    }
+
+    /// Nodes `1` (Integer scalar type), `2` (`Int[0,9]`, an `integer_range` bounded_domain over
+    /// `1`), `3` (a parameter typed by `2`), `4` (Text scalar type) and `5` (a parameter typed by
+    /// a `text_bounds` bounded_domain `6` over `4`).
+    fn bounded_parameter_nodes() -> Vec<CheckedSemanticNodeV2> {
+        vec![
+            v2_node('1', "scalar_type", "integer", '1', range_body(vec![])),
+            v2_node(
+                '2',
+                "bounded_domain",
+                "integer_range",
+                '1',
+                range_body(vec![binding_member("min", "0"), binding_member("max", "9")]),
+            ),
+            v2_node('3', "value", "parameter", '2', range_body(vec![])),
+            v2_node('4', "scalar_type", "text", '4', range_body(vec![])),
+            v2_node(
+                '6',
+                "bounded_domain",
+                "text_bounds",
+                '4',
+                range_body(vec![]),
+            ),
+            v2_node('5', "value", "parameter", '6', range_body(vec![])),
+        ]
+    }
+
+    fn reference_to(digit: char) -> Value {
+        serde_json::json!({"term": "reference", "target": {
+            "domain": "quire.checked-semantic-node/v1", "digest": digit.to_string().repeat(64),
+        }})
+    }
+
+    /// A reference to a parameter typed by a `bounded_domain` is classified by the domain's base
+    /// scalar type, not refused as `found: None`.
+    ///
+    /// Trace: FR-014-AC-17, TC-024.
+    #[test]
+    fn tc_024_reference_typed_by_a_bounded_domain_is_classified_by_its_base_scalar_type() {
+        let nodes = bounded_parameter_nodes();
+        let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+        assert_eq!(
+            check_operand(&graph, 0, &reference_to('3'), ScalarForm::Integer),
+            Ok(())
+        );
+        assert_eq!(
+            check_operand(&graph, 1, &reference_to('5'), ScalarForm::Integer),
+            Err(ExactScalarRefusal::OperandTypeMismatch {
+                position: 1,
+                expected: ScalarForm::Integer,
+                found: Some("text".to_owned()),
+            }),
+            "a bounded text parameter is a text operand, not an integer one"
+        );
+    }
+
+    /// The bound is read from binding-shaped members (`min`, `max`); the bare-literal shape this
+    /// generator once read is refused as unreadable.
+    ///
+    /// Trace: FR-014-AC-16, TC-024.
+    #[test]
+    fn tc_024_integer_range_is_read_from_binding_members_and_refuses_bare_literals() {
+        let bound_id = node_id('2');
+        let mut nodes = bounded_parameter_nodes();
+        let bare = |value: &str| serde_json::json!({"term": "literal", "value_kind": "integer", "value": value});
+        nodes.push(v2_node(
+            '7',
+            "bounded_domain",
+            "integer_range",
+            '1',
+            range_body(vec![bare("0"), bare("9")]),
+        ));
+        let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+        let members = |digit: char| {
+            aggregate_members(&graph[&node_id(digit)].body)
+                .expect("aggregate body")
+                .to_vec()
+        };
+        assert_eq!(
+            read_integer_range(&members('2')),
+            Some(interval_of("0", "9"))
+        );
+        assert_eq!(read_integer_range(&members('7')), None);
+
+        // Through `Bounds::equal`, as `check_parameters` reads it: the descriptor parameter equals
+        // the binding-shaped bound, and the bare one is `UnreadableBound`.
+        let node = |bound: char| CompleteContractNodeV2 {
+            node: v2_node('8', "expression", "application", '1', range_body(vec![])),
+            node_tag: CheckedNodeTag::Expression,
+            source_map: vec![],
+            semantic_type: node_id('1'),
+            dependencies: vec![],
+            bounds: vec![node_id(bound)],
+            claims: vec![],
+            ir_id: serde_json::from_value(serde_json::json!({
+                "domain": "quire.contract-ir.semantic/v1",
+                "algorithm": "sha-256",
+                "digest": "f".repeat(64),
+            }))
+            .expect("an ir id"),
+        };
+        let declared = interval_of("0", "9");
+        let (good, bad) = (node('2'), node('7'));
+        assert_eq!(
+            Bounds {
+                graph: &graph,
+                node: &good
+            }
+            .equal(BoundForm::IntegerRange, read_integer_range, Some(&declared)),
+            Ok(bound_id)
+        );
+        assert_eq!(
+            Bounds {
+                graph: &graph,
+                node: &bad
+            }
+            .equal(BoundForm::IntegerRange, read_integer_range, Some(&declared)),
+            Err(ExactScalarRefusal::UnreadableBound {
+                bound: node_id('7')
+            })
+        );
+    }
+
+    /// Bound members are looked up by name, in any order (QSpec's reader does the same); a
+    /// missing, duplicate or unknown name is refused.
+    ///
+    /// Trace: FR-014-AC-16, TC-024.
+    #[test]
+    fn tc_024_bound_members_are_looked_up_by_name_in_any_order() {
+        // Swapped integer range.
+        assert_eq!(
+            read_integer_range(&[binding_member("max", "9"), binding_member("min", "0")]),
+            Some(interval_of("0", "9"))
+        );
+        // A shuffled rational range still puts numerator and denominator in their own intervals.
+        let rational = read_rational_range(&[
+            binding_member("denominator_max", "7"),
+            binding_member("numerator_min", "-3"),
+            binding_member("denominator_min", "2"),
+            binding_member("numerator_max", "5"),
+        ])
+        .expect("shuffled rational range");
+        assert_eq!(
+            rational,
+            RationalDomain::new(interval_of("-3", "5"), interval_of("2", "7")).expect("domain")
+        );
+        // A shuffled decimal range and text bounds.
+        let decimal = read_decimal_range(&[
+            text_member("rounding", "nearest-even"),
+            binding_member("scale_max", "2"),
+            binding_member("coefficient_max", "1000"),
+            binding_member("scale_min", "0"),
+            binding_member("coefficient_min", "-1000"),
+        ])
+        .expect("shuffled decimal range");
+        assert_eq!(
+            decimal,
+            DecimalType::new(
+                "-1000".parse().expect("integer"),
+                "1000".parse().expect("integer"),
+                0,
+                2,
+                RoundingMode::NearestEven,
+            )
+            .expect("decimal type")
+        );
+        assert!(read_text_bounds(&[
+            text_member("text_profile", "nfc"),
+            binding_member("max", "64"),
+            binding_member("min", "0"),
+        ])
+        .is_some());
+        // Refusals: duplicate, wrong, missing and extra names.
+        assert_eq!(
+            read_integer_range(&[binding_member("min", "0"), binding_member("min", "9")]),
+            None
+        );
+        assert_eq!(
+            read_integer_range(&[binding_member("min", "0"), binding_member("high", "9")]),
+            None
+        );
+        assert_eq!(read_integer_range(&[binding_member("min", "0")]), None);
+        assert_eq!(
+            read_integer_range(&[
+                binding_member("min", "0"),
+                binding_member("max", "9"),
+                binding_member("max", "9"),
+            ]),
+            None
+        );
+        // A rational range whose members carry the integer-range names is not a rational range.
+        assert_eq!(
+            read_rational_range(&[
+                binding_member("min", "0"),
+                binding_member("max", "9"),
+                binding_member("min", "1"),
+                binding_member("max", "2"),
+            ]),
+            None
         );
     }
 }

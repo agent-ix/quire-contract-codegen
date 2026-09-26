@@ -104,7 +104,7 @@ A declaration is read from the `composite_type` node's body. Its body is an
 | `tuple` | one `reference` per position, in declaration order |
 | `option` | one `reference` to the payload type node |
 | `sequence`, `set`, `bag`, `ordered_set` | a `reference` to the element type node, then a `reference` to the `collection_bounds` domain node |
-| `collection_bounds` | two canonical decimal `integer` literals: minimum, maximum |
+| `collection_bounds` | two `binding` members, `min` and `max`, each carrying a canonical decimal `integer` literal |
 
 The runtime `NodeKey` of a declaration is `NodeKey::from_hex` of its V2 node id
 digest, whose domain is `NODE_KEY_DOMAIN`.
@@ -203,6 +203,7 @@ digest, whose domain is `NODE_KEY_DOMAIN`.
 | FR-018-AC-11 | Every claim marks its operation `caller_declared`, the claim map carries the blocked item "operation identity not consumed by codegen's generators", and two items over one node differing only in `EqualityOperator` both generate with that mark, under distinct symbols, each a digest over its descriptor key's node id digests and operator rank and over no rendered name, and produce complementary outcomes on a vector whose operands differ. | Test (TC-029) |
 | FR-018-AC-12 | The generated crate declares `publish = false`, pins the runtime revision with the `exact` feature, contains no charge amount and no planned pair count (every charge and every pair comes from runtime metering), and compiles. | Test (TC-029) |
 | FR-018-AC-13 | Every claim-map entry carries the node id, IR id, package id, source map, claims, reconstructed declaration keys and selected schedule of its item, and its declaration keys equal `NodeKey::from_hex` of the V2 node id digests its operand types reach. | Test (TC-029) |
+| FR-018-AC-14 | The `bounded_domain` nodes an operand type reaches (`integer_range`, `rational_range`, `decimal_range`, `text_bounds`, `collection_bounds`) are read from `binding` members looked up by name as FR-014 lists them, in any order; a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -231,6 +232,7 @@ without one is not written.
 | FR-018-AC-11 | Mark the operation checked rather than `caller_declared`; refuse the second descriptor as a duplicate; or derive both symbols from the node's declaration name, so the two items collide. |
 | FR-018-AC-12 | Emit the plan's pair count or a charge amount as a literal constant in the generated source. |
 | FR-018-AC-13 | Key declarations by request ordinal instead of by the V2 node id digest. |
+| FR-018-AC-14 | Read bound members by position, or accept a bare literal in place of a `binding` member, so a QSL-shaped or wrongly named bound is read as some other range. |
 
 ## Dependencies
 

@@ -56,7 +56,10 @@ use quire_contract_ir::{
 use serde::Serialize;
 
 use crate::{
-    exact_scalar::{aggregate_members, literal_count, literal_integer},
+    exact_scalar::{
+        aggregate_members, bound_members, literal_count, literal_integer,
+        COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
+    },
     kani::{
         adapter_options, i64_literal, readable_component, sha256, KaniBindingRole,
         KaniIntegerBounds, KaniPrimitiveType, KaniSolver, KANI_BACKEND_VERSION,
@@ -1334,9 +1337,11 @@ fn lower_scalar_claim(
 fn derive_domain(bound: &CheckedSemanticNodeV2) -> DerivedDomain {
     let members = aggregate_members(&bound.body);
     match (&*bound.semantic_form, members) {
-        ("integer_range", Some([lower, upper])) => {
-            match (literal_integer(lower), literal_integer(upper)) {
-                (Some(lower), Some(upper)) => DerivedDomain::IntegerRange {
+        ("integer_range", Some(members)) => {
+            match bound_members(members, INTEGER_RANGE_MEMBERS)
+                .map(|[lower, upper]| (literal_integer(lower), literal_integer(upper)))
+            {
+                Some((Some(lower), Some(upper))) => DerivedDomain::IntegerRange {
                     bound: bound.node_id.clone(),
                     lower: lower.to_string(),
                     upper: upper.to_string(),
@@ -1358,17 +1363,31 @@ fn not_symbolic(bound: &CheckedSemanticNodeV2) -> DerivedDomain {
 /// The canonical inclusive limits of a range bound that admits no value.
 fn unsatisfiable(bound: &CheckedSemanticNodeV2) -> Option<(String, String)> {
     let members = aggregate_members(&bound.body)?;
-    match (&*bound.semantic_form, members) {
-        ("integer_range", [lower, upper]) => {
+    match &*bound.semantic_form {
+        "integer_range" => {
+            let [lower, upper] = bound_members(members, INTEGER_RANGE_MEMBERS)?;
             let (lower, upper) = (literal_integer(lower)?, literal_integer(upper)?);
             (lower > upper).then(|| (lower.to_string(), upper.to_string()))
         }
-        ("text_bounds" | "collection_bounds", [minimum, maximum, ..]) => {
-            let (minimum, maximum) = (literal_count(minimum)?, literal_count(maximum)?);
-            (minimum > maximum).then(|| (minimum.to_string(), maximum.to_string()))
+        "text_bounds" => {
+            let [minimum, maximum, _] = bound_members(members, TEXT_BOUNDS_MEMBERS)?;
+            count_bounds(minimum, maximum)
+        }
+        "collection_bounds" => {
+            let [minimum, maximum] = bound_members(members, COLLECTION_BOUNDS_MEMBERS)?;
+            count_bounds(minimum, maximum)
         }
         _ => None,
     }
+}
+
+/// The canonical limits of a cardinality range whose minimum exceeds its maximum.
+fn count_bounds(
+    minimum: &serde_json::Value,
+    maximum: &serde_json::Value,
+) -> Option<(String, String)> {
+    let (minimum, maximum) = (literal_count(minimum)?, literal_count(maximum)?);
+    (minimum > maximum).then(|| (minimum.to_string(), maximum.to_string()))
 }
 
 fn reject_duplicates_and_mixtures(items: &[ObligationItem<'_>], states: &mut [ItemState<'_>]) {
@@ -2173,6 +2192,99 @@ mod tests {
         }
     }
 
+    /// The symbolic domain is read from binding-shaped `min`/`max` members (the shape QSL emits,
+    /// FR-322); a bare-literal member is not symbolic.
+    ///
+    /// Trace: FR-015-AC-5, TC-025.
+    #[test]
+    fn tc_025_derive_domain_reads_binding_shaped_range_members() {
+        let node = |members: Value| -> CheckedSemanticNodeV2 {
+            serde_json::from_value(json!({
+                "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": "0".repeat(64)},
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": "bounded_domain",
+                "semantic_form": "integer_range",
+                "semantic_type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+                "dependencies": [],
+                "occurrences": [],
+                "body": {"term": "aggregate", "members": members},
+            }))
+            .expect("node")
+        };
+        let literal = |value: &str| {
+            json!({"term": "literal",
+                "type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+                "value_kind": "integer", "value": value})
+        };
+        let bound = node(json!([
+            {"term": "binding", "name": "min", "value": literal("0")},
+            {"term": "binding", "name": "max", "value": literal("9")},
+        ]));
+        assert_eq!(
+            derive_domain(&bound),
+            DerivedDomain::IntegerRange {
+                bound: bound.node_id.clone(),
+                lower: "0".to_owned(),
+                upper: "9".to_owned(),
+            }
+        );
+        let bare = node(json!([literal("0"), literal("9")]));
+        assert!(matches!(
+            derive_domain(&bare),
+            DerivedDomain::NotSymbolic { .. }
+        ));
+    }
+
+    /// Bound members are looked up by name in any order: swapped `min`/`max` members still read
+    /// the right range, while a duplicated or unknown name is not a range.
+    ///
+    /// Trace: FR-015-AC-5, TC-025.
+    #[test]
+    fn tc_025_range_members_are_read_by_name_not_position() {
+        let node = |members: Value| -> CheckedSemanticNodeV2 {
+            serde_json::from_value(json!({
+                "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": "0".repeat(64)},
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": "bounded_domain",
+                "semantic_form": "integer_range",
+                "semantic_type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+                "dependencies": [],
+                "occurrences": [],
+                "body": {"term": "aggregate", "members": members},
+            }))
+            .expect("node")
+        };
+        let member = |name: &str, value: &str| {
+            json!({"term": "binding", "name": name, "value":
+                {"term": "literal", "value_kind": "integer", "value": value}})
+        };
+        let swapped = node(json!([member("max", "9"), member("min", "0")]));
+        assert_eq!(
+            derive_domain(&swapped),
+            DerivedDomain::IntegerRange {
+                bound: swapped.node_id.clone(),
+                lower: "0".to_owned(),
+                upper: "9".to_owned(),
+            }
+        );
+        // `[max=0, min=9]` written high-first is an inverted range, not the range `[0, 9]`.
+        assert_eq!(
+            unsatisfiable(&node(json!([member("max", "0"), member("min", "9")]))),
+            Some(("9".to_owned(), "0".to_owned()))
+        );
+        for members in [
+            json!([member("min", "0"), member("min", "9")]),
+            json!([member("min", "0"), member("high", "9")]),
+            json!([member("min", "0")]),
+        ] {
+            assert!(matches!(
+                derive_domain(&node(members.clone())),
+                DerivedDomain::NotSymbolic { .. }
+            ));
+            assert_eq!(unsatisfiable(&node(members)), None);
+        }
+    }
+
     /// Trace: FR-015-AC-5, TC-025.
     #[test]
     fn tc_025_inverted_ranges_are_unsatisfiable_and_ordered_ranges_are_not() {
@@ -2189,34 +2301,41 @@ mod tests {
             }))
             .expect("node")
         };
-        let int = |value: &str| serde_json::json!({"term":"literal","value_kind":"integer","value":value});
-        let text =
-            |value: &str| serde_json::json!({"term":"literal","value_kind":"text","value":value});
+        // FR-322 shape: each bound member is a `binding` carrying its literal.
+        let member = |name: &str, kind: &str, value: &str| {
+            serde_json::json!({"term":"binding","name":name,"value":
+                {"term":"literal","value_kind":kind,"value":value}})
+        };
+        let (lo, hi) = (
+            |value: &str| member("min", "integer", value),
+            |value: &str| member("max", "integer", value),
+        );
+        let text = |value: &str| member("text_profile", "text", value);
         assert_eq!(
             unsatisfiable(&node(
                 "integer_range",
-                serde_json::json!([int("5"), int("-5")])
+                serde_json::json!([lo("5"), hi("-5")])
             )),
             Some(("5".to_owned(), "-5".to_owned()))
         );
         assert_eq!(
             unsatisfiable(&node(
                 "integer_range",
-                serde_json::json!([int("-5"), int("5")])
+                serde_json::json!([lo("-5"), hi("5")])
             )),
             None
         );
         assert_eq!(
             unsatisfiable(&node(
                 "integer_range",
-                serde_json::json!([int("5"), int("5")])
+                serde_json::json!([lo("5"), hi("5")])
             )),
             None
         );
         assert_eq!(
             unsatisfiable(&node(
                 "text_bounds",
-                serde_json::json!([int("4"), int("0"), text("nfc")])
+                serde_json::json!([lo("4"), hi("0"), text("nfc")])
             )),
             Some(("4".to_owned(), "0".to_owned()))
         );

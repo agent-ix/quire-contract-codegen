@@ -25,7 +25,7 @@ path = "examples/generation_conformance.rs"
 test = true
 
 [dependencies]
-quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "b52c26380cb312e6005474d70ba2b88a37246ffe" }
+quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "48ab5dc29213c3975a5fe8f04ecbb3d1c2b345bb" }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "c52442a56a879cb5ce02a63bcbe430b85bf74a6d", features = ["exact"] }
 # IR-254: qsl-replay is the only QSL crate this repository may depend on (QSL arch-lint
 # T12-A). It stays a normal dependency, not a dev-dependency, because both IR-254 (this pin
