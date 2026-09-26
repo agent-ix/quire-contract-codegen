@@ -71,8 +71,11 @@ code.
 
 A bound is read from the one reachable `bounded_domain` node on the node's
 result type whose form matches the descriptor. Its body is an `aggregate` of
-literals: integers as canonical decimal `integer` literals, spellings as `text`
-literals. This encoding is defined by this generator, not by V2:
+`binding` members, the checked-package v2 shape (QSpec FR-322): each member is
+`{term: binding, name, value: <literal>}`, and this generator reads the member's
+`value` in the order below (integers as canonical decimal `integer` literals,
+spellings as `text` literals). A bare literal member is not a bound member and
+is unreadable.
 
 | Form | Members |
 |------|---------|
@@ -159,6 +162,7 @@ literals. This encoding is defined by this generator, not by V2:
 | FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition is absent from that node's `operation.laws`, or whose mode value disagrees with that node's `operation.mode`, is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |
 | FR-014-AC-14 | A claim whose node this generator never inspected — a duplicate copy, or a record that never lowered — or inspected and refused with a typed reason, marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |
 | FR-014-AC-15 | A requested item whose node closure exceeds the 65,536-unit lowering work ceiling is refused as `LoweringWorkExhausted`, naming the ceiling and the consumed counter, contributes no generated function, and leaves every other item's disposition unaffected. | Test (TC-024) |
+| FR-014-AC-16 | A descriptor parameter is read from `binding`-shaped bound members, and a bare literal member is refused as an unreadable bound; a `reference` operand whose target is typed by a `bounded_domain` node is classified by that domain's base scalar type. | Test (TC-024) |
 
 ## Dependencies
 

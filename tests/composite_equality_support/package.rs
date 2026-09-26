@@ -130,6 +130,12 @@ pub fn binding(name: &str, code: u32) -> Value {
     json!({"term": "binding", "name": name, "value": reference(code)})
 }
 
+/// A bound-body member in checked-package v2's shape (FR-322): a `binding` term naming the
+/// member and carrying its literal, not the bare literal.
+pub fn bound_member(name: &str, value: Value) -> Value {
+    json!({"term": "binding", "name": name, "value": value})
+}
+
 pub fn aggregate(members: Vec<Value>) -> Value {
     json!({"term": "aggregate", "members": members})
 }
@@ -639,9 +645,9 @@ pub fn corpus_package() -> PackageBuilder {
             "text_bounds",
             T_TEXT,
             aggregate(vec![
-                integer_literal(0),
-                integer_literal(16),
-                literal("text", "nfc"),
+                bound_member("min", integer_literal(0)),
+                bound_member("max", integer_literal(16)),
+                bound_member("text_profile", literal("text", "nfc")),
             ]),
         )
         .code(
@@ -656,7 +662,10 @@ pub fn corpus_package() -> PackageBuilder {
             "bounded_domain",
             "integer_range",
             T_INTEGER_BOUNDED,
-            aggregate(vec![integer_literal(-100), integer_literal(100)]),
+            aggregate(vec![
+                bound_member("min", integer_literal(-100)),
+                bound_member("max", integer_literal(100)),
+            ]),
         )
         .code(
             T_DECIMAL_SMALL,
@@ -671,11 +680,11 @@ pub fn corpus_package() -> PackageBuilder {
             "decimal_range",
             T_DECIMAL_SMALL,
             aggregate(vec![
-                integer_literal(-100),
-                integer_literal(100),
-                integer_literal(0),
-                integer_literal(0),
-                literal("text", "nearest-even"),
+                bound_member("coefficient_min", integer_literal(-100)),
+                bound_member("coefficient_max", integer_literal(100)),
+                bound_member("scale_min", integer_literal(0)),
+                bound_member("scale_max", integer_literal(0)),
+                bound_member("rounding", literal("text", "nearest-even")),
             ]),
         )
         .code(
@@ -691,10 +700,10 @@ pub fn corpus_package() -> PackageBuilder {
             "rational_range",
             T_RATIONAL_NARROW,
             aggregate(vec![
-                integer_literal(-10),
-                integer_literal(10),
-                integer_literal(1),
-                integer_literal(1),
+                bound_member("numerator_min", integer_literal(-10)),
+                bound_member("numerator_max", integer_literal(10)),
+                bound_member("denominator_min", integer_literal(1)),
+                bound_member("denominator_max", integer_literal(1)),
             ]),
         )
         .code(
@@ -710,10 +719,10 @@ pub fn corpus_package() -> PackageBuilder {
             "rational_range",
             T_RATIONAL_WIDE,
             aggregate(vec![
-                integer_literal(-100),
-                integer_literal(100),
-                integer_literal(1),
-                integer_literal(5),
+                bound_member("numerator_min", integer_literal(-100)),
+                bound_member("numerator_max", integer_literal(100)),
+                bound_member("denominator_min", integer_literal(1)),
+                bound_member("denominator_max", integer_literal(5)),
             ]),
         )
         .code(
@@ -729,10 +738,10 @@ pub fn corpus_package() -> PackageBuilder {
             "rational_range",
             T_RATIONAL_INT,
             aggregate(vec![
-                integer_literal(-50),
-                integer_literal(50),
-                integer_literal(1),
-                integer_literal(1),
+                bound_member("numerator_min", integer_literal(-50)),
+                bound_member("numerator_max", integer_literal(50)),
+                bound_member("denominator_min", integer_literal(1)),
+                bound_member("denominator_max", integer_literal(1)),
             ]),
         )
         .code(
@@ -748,11 +757,11 @@ pub fn corpus_package() -> PackageBuilder {
             "decimal_range",
             T_DECIMAL_WIDE,
             aggregate(vec![
-                integer_literal(-1000),
-                integer_literal(1000),
-                integer_literal(0),
-                integer_literal(2),
-                literal("text", "nearest-even"),
+                bound_member("coefficient_min", integer_literal(-1000)),
+                bound_member("coefficient_max", integer_literal(1000)),
+                bound_member("scale_min", integer_literal(0)),
+                bound_member("scale_max", integer_literal(2)),
+                bound_member("rounding", literal("text", "nearest-even")),
             ]),
         );
 
@@ -776,7 +785,10 @@ pub fn corpus_package() -> PackageBuilder {
             "bounded_domain",
             "collection_bounds",
             T_BOOLEAN,
-            aggregate(vec![integer_literal(0), integer_literal(8)]),
+            aggregate(vec![
+                bound_member("min", integer_literal(0)),
+                bound_member("max", integer_literal(8)),
+            ]),
         )
         .code(
             SEQ_R_FLOAT,

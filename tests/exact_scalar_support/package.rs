@@ -386,6 +386,12 @@ pub fn literal(kind: &str, value: &str) -> Value {
     })
 }
 
+/// A bound-body member in checked-package v2's shape (FR-322): a `binding` term naming the
+/// member and carrying its literal, not the bare literal.
+pub fn member(name: &str, value: Value) -> Value {
+    json!({"term": "binding", "name": name, "value": value})
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -754,14 +760,17 @@ impl PackageBuilder {
             let body = json!({
                 "term": "aggregate",
                 "members": [
-                    integer_literal(min),
-                    integer_literal(max),
-                    {
-                        "term": "literal",
-                        "type": node_ref(&type_digest),
-                        "value_kind": "text",
-                        "value": profile,
-                    },
+                    member("min", integer_literal(min)),
+                    member("max", integer_literal(max)),
+                    member(
+                        "text_profile",
+                        json!({
+                            "term": "literal",
+                            "type": node_ref(&type_digest),
+                            "value_kind": "text",
+                            "value": profile,
+                        }),
+                    ),
                 ],
             });
             self.node_with(
@@ -1182,25 +1191,28 @@ impl Bound {
 
     pub fn body(&self) -> Value {
         let members = match self {
-            Self::Integer(lower, upper) => vec![integer_literal(lower), integer_literal(upper)],
+            Self::Integer(lower, upper) => vec![
+                member("min", integer_literal(lower)),
+                member("max", integer_literal(upper)),
+            ],
             Self::Rational(nl, nu, dl, du) => vec![
-                integer_literal(nl),
-                integer_literal(nu),
-                integer_literal(dl),
-                integer_literal(du),
+                member("numerator_min", integer_literal(nl)),
+                member("numerator_max", integer_literal(nu)),
+                member("denominator_min", integer_literal(dl)),
+                member("denominator_max", integer_literal(du)),
             ],
             Self::Decimal(lower, upper, min, max, rounding) => vec![
-                integer_literal(lower),
-                integer_literal(upper),
-                integer_literal(min),
-                integer_literal(max),
-                literal("text", rounding),
+                member("coefficient_min", integer_literal(lower)),
+                member("coefficient_max", integer_literal(upper)),
+                member("scale_min", integer_literal(min)),
+                member("scale_max", integer_literal(max)),
+                member("rounding", literal("text", rounding)),
             ],
-            Self::Rounding(_, rounding) => vec![literal("text", rounding)],
+            Self::Rounding(_, rounding) => vec![member("rounding", literal("text", rounding))],
             Self::Text(min, max, profile) => vec![
-                integer_literal(min),
-                integer_literal(max),
-                literal("text", profile),
+                member("min", integer_literal(min)),
+                member("max", integer_literal(max)),
+                member("text_profile", literal("text", profile)),
             ],
             Self::Raw { body, .. } => return body.clone(),
         };
@@ -1226,7 +1238,10 @@ pub fn unreadable_bound() -> Bound {
         bounded: "integer",
         body: json!({
             "term": "aggregate",
-            "members": [literal("integer", "-5"), literal("integer", "05")],
+            "members": [
+                member("min", literal("integer", "-5")),
+                member("max", literal("integer", "05")),
+            ],
         }),
         foreign: vec![],
     }
@@ -2489,7 +2504,7 @@ pub fn corpus_package() -> PackageBuilder {
                 foreign: vec![Bound::Raw {
                     form: "text_bounds",
                     bounded: "text",
-                    body: json!({"term": "aggregate", "members": [literal("text", "nfc")]}),
+                    body: json!({"term": "aggregate", "members": [member("text_profile", literal("text", "nfc"))]}),
                     foreign: vec![],
                 }],
             }],

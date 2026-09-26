@@ -2173,6 +2173,49 @@ mod tests {
         }
     }
 
+    /// The symbolic domain is read from binding-shaped `min`/`max` members (the shape QSL emits,
+    /// FR-322); a bare-literal member is not symbolic.
+    ///
+    /// Trace: FR-015-AC-5, TC-025.
+    #[test]
+    fn tc_025_derive_domain_reads_binding_shaped_range_members() {
+        let node = |members: Value| -> CheckedSemanticNodeV2 {
+            serde_json::from_value(json!({
+                "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": "0".repeat(64)},
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": "bounded_domain",
+                "semantic_form": "integer_range",
+                "semantic_type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+                "dependencies": [],
+                "occurrences": [],
+                "body": {"term": "aggregate", "members": members},
+            }))
+            .expect("node")
+        };
+        let literal = |value: &str| {
+            json!({"term": "literal",
+                "type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+                "value_kind": "integer", "value": value})
+        };
+        let bound = node(json!([
+            {"term": "binding", "name": "min", "value": literal("0")},
+            {"term": "binding", "name": "max", "value": literal("9")},
+        ]));
+        assert_eq!(
+            derive_domain(&bound),
+            DerivedDomain::IntegerRange {
+                bound: bound.node_id.clone(),
+                lower: "0".to_owned(),
+                upper: "9".to_owned(),
+            }
+        );
+        let bare = node(json!([literal("0"), literal("9")]));
+        assert!(matches!(
+            derive_domain(&bare),
+            DerivedDomain::NotSymbolic { .. }
+        ));
+    }
+
     /// Trace: FR-015-AC-5, TC-025.
     #[test]
     fn tc_025_inverted_ranges_are_unsatisfiable_and_ordered_ranges_are_not() {
@@ -2189,9 +2232,13 @@ mod tests {
             }))
             .expect("node")
         };
-        let int = |value: &str| serde_json::json!({"term":"literal","value_kind":"integer","value":value});
-        let text =
-            |value: &str| serde_json::json!({"term":"literal","value_kind":"text","value":value});
+        // FR-322 shape: each bound member is a `binding` carrying its literal.
+        let member = |name: &str, kind: &str, value: &str| {
+            serde_json::json!({"term":"binding","name":name,"value":
+                {"term":"literal","value_kind":kind,"value":value}})
+        };
+        let int = |value: &str| member("min", "integer", value);
+        let text = |value: &str| member("text_profile", "text", value);
         assert_eq!(
             unsatisfiable(&node(
                 "integer_range",

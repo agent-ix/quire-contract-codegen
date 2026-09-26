@@ -1343,10 +1343,7 @@ fn read_text_bounds(members: &[Value]) -> Option<TextType> {
 }
 
 fn literal_text(term: &Value) -> Option<&str> {
-    if term.get("term")?.as_str()? != "literal" || term.get("value_kind")?.as_str()? != "text" {
-        return None;
-    }
-    term.get("value")?.as_str()
+    crate::exact_scalar::literal(term, "text")
 }
 
 fn hex_digest(key: &NodeKey) -> String {
@@ -1642,5 +1639,43 @@ fn artifact(path: &str, contents: String) -> Artifact {
         path: path.to_owned(),
         contents,
         sha256,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn interval_of(lower: &str, upper: &str) -> IntegerInterval {
+        IntegerInterval::new(
+            lower.parse().expect("integer"),
+            upper.parse().expect("integer"),
+        )
+        .expect("interval")
+    }
+
+    fn member(name: &str, value: &str) -> Value {
+        json!({"term": "binding", "name": name, "value": {
+            "term": "literal",
+            "type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+            "value_kind": "integer",
+            "value": value,
+        }})
+    }
+
+    /// Integer ranges and collection cardinalities are read from binding-shaped members (QSL's
+    /// shape, FR-322); bare literal members are unreadable.
+    ///
+    /// Trace: FR-018-AC-1, TC-029.
+    #[test]
+    fn tc_029_bound_members_are_read_from_bindings_and_bare_literals_are_unreadable() {
+        let bound = [member("min", "-5"), member("max", "5")];
+        assert_eq!(read_integer_range(&bound), Some(interval_of("-5", "5")));
+        assert_eq!(literal_count(&member("min", "3")), Some(3));
+        let bare =
+            |value: &str| json!({"term": "literal", "value_kind": "integer", "value": value});
+        assert_eq!(read_integer_range(&[bare("-5"), bare("5")]), None);
+        assert_eq!(literal_count(&bare("3")), None);
     }
 }
