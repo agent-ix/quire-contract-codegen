@@ -285,7 +285,7 @@ fn run_falsifying(installation: &KaniInstallation, harness: &KaniObligationHarne
     let target_directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-witness-join");
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         installation,
-        harness,
+        harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &target_directory,
         timeout: REAL_KANI_TIMEOUT,
