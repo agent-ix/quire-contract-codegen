@@ -57,8 +57,8 @@ use serde::Serialize;
 
 use crate::{
     exact_scalar::{
-        aggregate_members, bound_members, literal_count, literal_integer, operand_bound_ids,
-        COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
+        aggregate_members, bound_members, literal_count, literal_integer, operand_ranges,
+        OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
     },
     kani::{
         adapter_options, i64_literal, readable_component, sha256, KaniBindingRole,
@@ -318,8 +318,8 @@ pub enum UnsupportedObligation {
         derived_domains: Vec<DerivedDomain>,
     },
     /// The operation identity is IR-confirmed and its checked bound is an integer range, but one
-    /// of its inclusive endpoints does not fit `i64`, so no `kani::any::<i64>()` argument can be
-    /// constrained to it.
+    /// of its inclusive endpoints, or a literal operand's value (then both `lower` and `upper`),
+    /// does not fit `i64`, so no `kani::any::<i64>()` argument can be constrained to it.
     DomainNotRepresentableInI64 {
         /// The confirmed operation.
         operation_identity: String,
@@ -327,6 +327,22 @@ pub enum UnsupportedObligation {
         lower: String,
         /// Inclusive upper bound, canonical decimal.
         upper: String,
+    },
+    /// The operation identity is IR-confirmed, but no operand values the harness would assume
+    /// give a result inside the result range: every exact result lies in
+    /// `[reachable_lower, reachable_upper]`, disjoint from `[lower, upper]`. A harness would pass
+    /// with its non-vacuity cover unmet by any input, so none is rendered.
+    ResultBoundUnreachable {
+        /// The confirmed operation.
+        operation_identity: String,
+        /// The result range's inclusive lower bound.
+        lower: i64,
+        /// The result range's inclusive upper bound.
+        upper: i64,
+        /// The least exact result over the operand ranges, canonical decimal.
+        reachable_lower: String,
+        /// The greatest exact result over the operand ranges, canonical decimal.
+        reachable_upper: String,
     },
     /// A reachable node family has no finite encoding.
     NoFiniteEncoding {
@@ -1181,8 +1197,8 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                     })
                 }
                 OperationProvenance::IrConfirmed => {
-                    let operand_bounds = operand_bound_ids(package, &claim.node_id);
-                    match lower_scalar_claim(claim, generated, &derived, &operand_bounds) {
+                    let operand_ranges = operand_ranges(package, &claim.node_id);
+                    match lower_scalar_claim(claim, generated, &derived, &operand_ranges) {
                         Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
                         Err(ScalarLoweringRefusal::NoRenderer) => {
                             Outcome::Unsupported(UnsupportedObligation::OperationNotRendered {
@@ -1190,6 +1206,18 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                                 derived_domains: derived,
                             })
                         }
+                        Err(ScalarLoweringRefusal::ResultUnreachable {
+                            lower,
+                            upper,
+                            reachable_lower,
+                            reachable_upper,
+                        }) => Outcome::Unsupported(UnsupportedObligation::ResultBoundUnreachable {
+                            operation_identity: claim.operation.identity.clone(),
+                            lower,
+                            upper,
+                            reachable_lower,
+                            reachable_upper,
+                        }),
                         Err(ScalarLoweringRefusal::BoundNotI64 { lower, upper }) => {
                             Outcome::Unsupported(
                                 UnsupportedObligation::DomainNotRepresentableInI64 {
@@ -1303,7 +1331,19 @@ fn scalar_arity(operation_identity: &str) -> Option<ScalarArity> {
 enum ScalarLoweringRefusal {
     /// [`scalar_arity`] has no renderer for this operation identity.
     NoRenderer,
-    /// The `integer_range`'s lower or upper endpoint does not fit `i64`.
+    /// Every operand range combines to results outside the result range, so no input the harness
+    /// assumes completes and its non-vacuity cover could never be met.
+    ResultUnreachable {
+        /// The result range's inclusive lower bound.
+        lower: i64,
+        /// The result range's inclusive upper bound.
+        upper: i64,
+        /// The least result the operand ranges produce, canonical decimal.
+        reachable_lower: String,
+        /// The greatest result the operand ranges produce, canonical decimal.
+        reachable_upper: String,
+    },
+    /// The `integer_range`'s lower or upper endpoint, or a literal operand, does not fit `i64`.
     BoundNotI64 {
         /// Inclusive lower bound, canonical decimal.
         lower: String,
@@ -1314,12 +1354,14 @@ enum ScalarLoweringRefusal {
 
 /// Lowers one IR-confirmed V2 claim to a renderable scalar harness. The result range is the
 /// claim's first checked bound; each operand ranges over its own bound where the node's argument
-/// is typed by one (`operand_bounds`, by position) and over the result range otherwise.
+/// is typed by one, exactly at its value where it is a literal (`operand_ranges`, by position),
+/// and over the result range otherwise. A claim whose operand ranges produce no result inside the
+/// result range is refused rather than rendered with a cover no input can meet.
 fn lower_scalar_claim(
     claim: &ExactScalarClaim,
     generated: &GeneratedScalarClaim,
     derived: &[DerivedDomain],
-    operand_bounds: &[Option<CheckedNodeId>],
+    operand_ranges: &[OperandRange],
 ) -> Result<LoweredScalarClaim, ScalarLoweringRefusal> {
     let arity = scalar_arity(&claim.operation.identity).ok_or(ScalarLoweringRefusal::NoRenderer)?;
     let Some(bound_id) = generated.checked_bounds.first() else {
@@ -1358,22 +1400,31 @@ fn lower_scalar_claim(
         ScalarArity::Binary => 2,
     };
     let operands = (0..positions)
-        .map(
-            |position| match operand_bounds.get(position).and_then(Option::as_ref) {
-                None => Ok((lower, upper)),
-                // An own bound `check_parameters` recorded is in `checked_bounds` and a derived
-                // integer range; one that is not is a claim map this generator did not produce,
-                // which has no renderer.
-                Some(id) => generated
-                    .checked_bounds
-                    .contains(id)
-                    .then(|| range_of(id))
-                    .flatten()
-                    .ok_or(ScalarLoweringRefusal::NoRenderer)
-                    .and_then(to_i64),
-            },
-        )
+        .map(|position| match operand_ranges.get(position) {
+            None | Some(OperandRange::Result) => Ok((lower, upper)),
+            Some(OperandRange::Literal(value)) => to_i64((value, value)),
+            // An own bound `check_parameters` recorded is in `checked_bounds` and a derived
+            // integer range; one that is not is a claim map this generator did not produce,
+            // which has no renderer.
+            Some(OperandRange::Bound(id)) => generated
+                .checked_bounds
+                .contains(id)
+                .then(|| range_of(id))
+                .flatten()
+                .ok_or(ScalarLoweringRefusal::NoRenderer)
+                .and_then(to_i64),
+        })
         .collect::<Result<Vec<(i64, i64)>, _>>()?;
+    let (reachable_lower, reachable_upper) =
+        reachable_results(&claim.operation.identity, &operands);
+    if reachable_upper < i128::from(lower) || reachable_lower > i128::from(upper) {
+        return Err(ScalarLoweringRefusal::ResultUnreachable {
+            lower,
+            upper,
+            reachable_lower: reachable_lower.to_string(),
+            reachable_upper: reachable_upper.to_string(),
+        });
+    }
     let digest = sha256(claim.node_id.digest.as_bytes())
         .chars()
         .take(32)
@@ -1392,6 +1443,39 @@ fn lower_scalar_claim(
         module_symbol,
         harness_symbol,
     })
+}
+
+/// The least and greatest exact results of a rendered integer operation over inclusive `i64`
+/// operand ranges. Each is exact in `i128`: a sum, difference or product of two `i64` values, or
+/// the negation of one, fits. The extremes of `+`, `-` and unary `-` lie at the range endpoints,
+/// and so do those of `*`, which is bilinear.
+fn reachable_results(identity: &str, operands: &[(i64, i64)]) -> (i128, i128) {
+    let wide = |(low, high): (i64, i64)| (i128::from(low), i128::from(high));
+    match (identity, operands) {
+        ("quire.op.integer.negate", [operand]) => {
+            let (low, high) = wide(*operand);
+            (-high, -low)
+        }
+        ("quire.op.integer.add", [left, right]) => {
+            let ((a, b), (c, d)) = (wide(*left), wide(*right));
+            (a + c, b + d)
+        }
+        ("quire.op.integer.sub", [left, right]) => {
+            let ((a, b), (c, d)) = (wide(*left), wide(*right));
+            (a - d, b - c)
+        }
+        ("quire.op.integer.mul", [left, right]) => {
+            let ((a, b), (c, d)) = (wide(*left), wide(*right));
+            let corners = [a * c, a * d, b * c, b * d];
+            (
+                corners.into_iter().min().unwrap_or_default(),
+                corners.into_iter().max().unwrap_or_default(),
+            )
+        }
+        _ => unreachable!(
+            "scalar_arity renders only integer add, sub, mul and negate, with one range per operand"
+        ),
+    }
 }
 
 fn derive_domain(bound: &CheckedSemanticNodeV2) -> DerivedDomain {
@@ -2471,6 +2555,9 @@ mod tests {
             }
             Err(ScalarLoweringRefusal::NoRenderer) => {
                 panic!("quire.op.integer.add has a renderer")
+            }
+            Err(ScalarLoweringRefusal::ResultUnreachable { .. }) => {
+                panic!("the domain does not fit i64, so no reachability is computed")
             }
             Ok(_) => panic!("an arbitrary-precision Integer domain outside i64 must not lower"),
         }

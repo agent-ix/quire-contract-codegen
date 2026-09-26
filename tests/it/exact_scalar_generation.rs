@@ -1607,7 +1607,8 @@ fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_
         two_parameter_disposition(TWO_PARAMETER_LITERAL, add_over(0, 29)).1,
         ClaimDisposition::Generated(_)
     ));
-    // A bounded parameter beside a plain-typed reference is the same shape, with a scalar result.
+    // A bounded parameter beside a plain-typed reference to a `value` node whose body is a literal
+    // is a constant operand, not a plain-typed one (FR-014-AC-26), so it generates.
     let oracles = generate(
         &corpus_package().admit(),
         &[ExactScalarItem {
@@ -1616,8 +1617,231 @@ fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_
         }],
     );
     assert!(matches!(
-        refusal_of(&oracles, BOUNDED_OPERAND),
-        ExactScalarRefusal::RequiresBound { .. }
+        dispositions(&oracles).get(code_id(BOUNDED_OPERAND).digest.as_ref()),
+        Some(ClaimDisposition::Generated(_))
+    ));
+}
+
+fn qsl_disposition(
+    code: u32,
+    operation: ExactScalarOperation,
+) -> ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal> {
+    let oracles = generate(
+        &qsl_shaped_package().admit(),
+        &[ExactScalarItem {
+            node_id: code_id(code),
+            operation,
+        }],
+    );
+    dispositions(&oracles)
+        .get(code_id(code).digest.as_ref())
+        .map(|disposition| (*disposition).clone())
+        .expect("one claim per item")
+}
+
+/// The checked bounds of a QSL-shaped node that generates.
+fn qsl_checked_bounds(
+    code: u32,
+    operation: ExactScalarOperation,
+) -> Vec<quire_contract_ir::CheckedNodeId> {
+    match qsl_disposition(code, operation) {
+        ClaimDisposition::Generated(generated) => generated.checked_bounds,
+        other => panic!("node {code} is not generated: {other:?}"),
+    }
+}
+
+fn bound_ids(bounds: &[Bound]) -> Vec<quire_contract_ir::CheckedNodeId> {
+    bounds.iter().map(|bound| id(&bound.key())).collect()
+}
+
+/// Generation and derivation over a QSL-shaped node both refuse it with `expected`.
+fn assert_qsl_refused(code: u32, operation: ExactScalarOperation, expected: ExactScalarRefusal) {
+    match qsl_disposition(code, operation) {
+        ClaimDisposition::Refused { refusal } => assert_eq!(refusal, expected, "node {code}"),
+        other => panic!("node {code} is not refused: {other:?}"),
+    }
+    assert_eq!(
+        derive_one(&qsl_shaped_package().admit(), code),
+        Err(expected),
+        "node {code}: derivation refuses what generation refuses"
+    );
+}
+
+fn requires_integer_bound() -> ExactScalarRefusal {
+    ExactScalarRefusal::RequiresBound {
+        unbounded_type: code_id(T_INTEGER),
+    }
+}
+
+fn ambiguous_integer_bound() -> ExactScalarRefusal {
+    ExactScalarRefusal::AmbiguousBound {
+        bounded_type: code_id(T_INTEGER),
+        expected_form: BoundForm::IntegerRange,
+    }
+}
+
+/// QSL emits the literal of `x + 1` as a `reference` to its own `value` node, whose body is the
+/// literal and whose type is the plain Integer type: that operand is a literal, so `x + 1` over
+/// `x: Int[0, 9]` narrowed to `Int[0, 10]` generates with checked bounds `[0, 10]` then `[0, 9]`
+/// and derives the descriptor over `[0, 10]`.
+///
+/// Trace: FR-014-AC-26, TC-024
+#[test]
+fn tc_024_ac26_a_reference_to_a_literal_value_node_is_a_literal_operand() {
+    assert_eq!(
+        qsl_checked_bounds(QSL_INC, add_over(0, 10)),
+        bound_ids(&[Bound::Integer(0, 10), Bound::Integer(0, 9)])
+    );
+    assert_eq!(
+        derive_one(&qsl_shaped_package().admit(), QSL_INC)
+            .expect("derives")
+            .operation,
+        add_over(0, 10)
+    );
+}
+
+/// QSL wraps arithmetic in a bounded context in a narrowing `conversion` typed by the declared
+/// bound, and the arithmetic node's own result type is the plain Integer type: its result bound is
+/// the conversion's. `x + y` over `[0, 9]` and `[10, 20]` narrowed to `[10, 29]` checks `[10, 29]`,
+/// `[0, 9]`, `[10, 20]`, and a descriptor over an operand's bound is a mismatch against `[10, 29]`;
+/// `-z` over `[0, 9]` narrowed to `[-9, 0]` checks `[-9, 0]` then `[0, 9]`.
+///
+/// Trace: FR-014-AC-27, TC-024
+#[test]
+fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion() {
+    let package = qsl_shaped_package().admit();
+    let negate = ExactScalarOperation::IntegerArithmetic {
+        operator: IntegerOperator::Negate,
+        domain: bounded(-9, 0),
+    };
+    for (code, operation, expected) in [
+        (
+            QSL_ADD,
+            add_over(10, 29),
+            vec![
+                Bound::Integer(10, 29),
+                Bound::Integer(0, 9),
+                Bound::Integer(10, 20),
+            ],
+        ),
+        (
+            QSL_NEGATE,
+            negate,
+            vec![Bound::Integer(-9, 0), Bound::Integer(0, 9)],
+        ),
+    ] {
+        assert_eq!(
+            derive_one(&package, code).expect("derives").operation,
+            operation,
+            "node {code}"
+        );
+        assert_eq!(
+            qsl_checked_bounds(code, operation),
+            bound_ids(&expected),
+            "node {code}"
+        );
+    }
+    match qsl_disposition(QSL_ADD, add_over(0, 9)) {
+        ClaimDisposition::Refused { refusal } => assert_eq!(
+            refusal,
+            ExactScalarRefusal::BoundMismatch {
+                bound: id(&Bound::Integer(10, 29).key()),
+                form: BoundForm::IntegerRange,
+            }
+        ),
+        other => panic!("not refused: {other:?}"),
+    }
+}
+
+/// The referenced node's body decides: `n` is a plain-Integer `value` node of form `literal`
+/// whose body is not a literal, so `x + n` is `RequiresBound`.
+///
+/// Trace: FR-014-AC-28, TC-024
+#[test]
+fn tc_024_ac28_a_literal_form_node_without_a_literal_body_is_not_a_literal() {
+    assert_qsl_refused(
+        QSL_NOT_LITERAL_OPERAND,
+        add_over(0, 29),
+        requires_integer_bound(),
+    );
+}
+
+/// `x + p` narrowed to `Int[0, 29]`, `p` a plain-Integer parameter, is `RequiresBound`.
+///
+/// Trace: FR-014-AC-29, TC-024
+#[test]
+fn tc_024_ac29_a_plain_parameter_beside_a_bounded_one_requires_a_bound() {
+    assert_qsl_refused(QSL_PLAIN_OPERAND, add_over(0, 29), requires_integer_bound());
+}
+
+/// `q + q` narrowed to `Int[0, 29]`, no operand owning a bound, is `RequiresBound`: the narrowing
+/// bounds the result as a `bounded_domain` result type does.
+///
+/// Trace: FR-014-AC-30, TC-024
+#[test]
+fn tc_024_ac30_plain_operands_under_a_narrowing_require_a_bound() {
+    assert_qsl_refused(QSL_PLAIN_PAIR, add_over(0, 29), requires_integer_bound());
+}
+
+/// A literal operand of an integer operation that is not an `integer` literal is refused by its
+/// own kind, whatever the node referencing it is typed: `x + "a"`, the text literal in a
+/// plain-Integer-typed `value` node.
+///
+/// Trace: FR-014-AC-31, TC-024
+#[test]
+fn tc_024_ac31_a_non_integer_literal_operand_is_an_operand_type_mismatch() {
+    assert_qsl_refused(
+        QSL_PLUS_TEXT,
+        add_over(0, 10),
+        ExactScalarRefusal::OperandTypeMismatch {
+            position: 1,
+            expected: ScalarForm::Integer,
+            found: Some("text".to_owned()),
+        },
+    );
+}
+
+/// Two narrowing conversions to different bounds leave the result role unresolved.
+///
+/// Trace: FR-014-AC-32, TC-024
+#[test]
+fn tc_024_ac32_two_distinct_narrowings_are_ambiguous() {
+    assert_qsl_refused(
+        QSL_TWICE_NARROWED,
+        add_over(10, 29),
+        ambiguous_integer_bound(),
+    );
+}
+
+/// A narrowing to a bound of another form, or of the form over another scalar type, is
+/// `MissingBound`.
+///
+/// Trace: FR-014-AC-33, TC-024
+#[test]
+fn tc_024_ac33_a_narrowing_of_another_form_or_base_type_is_missing_bound() {
+    for code in [QSL_WRONG_FORM_NARROWED, QSL_WRONG_BASE_NARROWED] {
+        assert_qsl_refused(
+            code,
+            add_over(10, 29),
+            ExactScalarRefusal::MissingBound {
+                bounded_type: code_id(T_INTEGER),
+                expected_form: BoundForm::IntegerRange,
+            },
+        );
+    }
+}
+
+/// `x + 2` is narrowed to `Int[0, 11]` and is also an operand of `(x + 2) + x`: the narrow's
+/// bound does not bound that other use, so it is `AmbiguousBound`. `x + 1`, consumed only by its
+/// narrowing, generates.
+///
+/// Trace: FR-014-AC-34, TC-024
+#[test]
+fn tc_024_ac34_a_node_narrowed_and_consumed_otherwise_is_ambiguous() {
+    assert_qsl_refused(QSL_SHARED, add_over(0, 11), ambiguous_integer_bound());
+    assert!(matches!(
+        qsl_disposition(QSL_INC, add_over(0, 10)),
+        ClaimDisposition::Generated(_)
     ));
 }
 

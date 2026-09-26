@@ -481,7 +481,8 @@ fn tc_033_output_is_deterministic_and_independent_of_index_and_digest() {
 
 /// `x + 1` over `Int[0, 9]`, QSL's shape (a parameter typed by an `integer_range`
 /// `bounded_domain` with binding-shaped `min`/`max` members), routes to Kani and is Supported
-/// with a scalar harness carrying the inclusive `[0, 9]` domain (IR-297 with IR-296). No claim map
+/// with a scalar harness ranging `x` over the inclusive `[0, 9]` domain (IR-297 with IR-296) and
+/// the literal `1` at its own value (IR-302). No claim map
 /// is supplied: the operation and domain are derived from the package alone (IR-294).
 ///
 /// Trace: FR-014-AC-16, FR-014-AC-17, FR-022-AC-2, FR-022-AC-10, TC-024, TC-033
@@ -513,7 +514,7 @@ fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_
             .iter()
             .map(|argument| (argument.minimum, argument.maximum))
             .collect::<Vec<_>>(),
-        [(0, 9), (0, 9)]
+        [(0, 9), (1, 1)]
     );
 }
 
@@ -553,7 +554,7 @@ fn ranges(harness: &KaniScalarObligationHarness) -> Vec<(i64, i64)> {
 /// generated source asserts the result against the result bound (IR-298). `-e` over `[1, 9]` with
 /// a `[-9, -1]` result and `e * f` over `[1, 9]` and `[100, 200]` with a `[100, 1800]` result are
 /// Supported too: operand bounds need not lie inside the result bound. A literal operand has no
-/// bound of its own and ranges over the result bound.
+/// bound of its own and is ranged at its own value.
 ///
 /// Trace: FR-014-AC-20, FR-014-AC-24, FR-022-AC-13, TC-024, TC-033
 #[test]
@@ -568,7 +569,7 @@ fn tc_033_bounded_parameters_are_supported_with_a_per_operand_scalar_harness() {
         (
             package::TWO_PARAMETER_LITERAL,
             "quire.op.integer.add",
-            vec![(0, 9), (0, 29)],
+            vec![(0, 9), (1, 1)],
             (0, 29),
         ),
         (
@@ -646,6 +647,174 @@ fn tc_033_a_plain_typed_reference_operand_is_requires_bound_with_no_harness() {
             "node {code}: {record:#?}"
         );
         assert!(harness.is_none(), "node {code}: no harness");
+    }
+}
+
+fn route_qsl_shaped(code: u32) -> (ObligationRecord, Option<KaniScalarObligationHarness>) {
+    let package = package::qsl_shaped_package().admit();
+    let node_id = package::code_id(code);
+    let pins = pins();
+    let generation = generate_routed(
+        &package,
+        &[route(0, &node_id, "A")],
+        &kani_context(&pins, "crate::subject", 1),
+    )
+    .expect("routed generation succeeds");
+    let [item] = generation.items.as_slice() else {
+        panic!("one routed item, got {:?}", generation.items);
+    };
+    let (record, harness) = kani_parts(&item.output);
+    (record.clone(), harness.cloned())
+}
+
+/// The three functions the driver compiles through real QSL, in the shape QSL emits them (a
+/// literal as a reference to its own `value` node, the declared bounded result on a narrowing
+/// `conversion` that consumes the plain-typed arithmetic node), each route to Kani and are
+/// Supported: `x + 1` over `x: Int[0, 9]` into `Int[0, 10]` ranges `x` over `[0, 9]` and the
+/// literal at its own value `[1, 1]`; `x + y` over `Int[0, 9]` and `Int[10, 20]` into
+/// `Int[10, 29]` ranges each over its own bound; `-z` over `Int[0, 9]` into `Int[-9, 0]` ranges
+/// `z` over `[0, 9]`. Each harness asserts the result against the conversion's bound.
+///
+/// Trace: FR-014-AC-26, FR-014-AC-27, FR-015-AC-16, FR-022-AC-15, TC-033
+#[test]
+fn tc_033_qsl_shaped_increment_sum_and_negation_are_supported() {
+    for (code, identity, expected, result) in [
+        (
+            package::QSL_INC,
+            "quire.op.integer.add",
+            vec![(0, 9), (1, 1)],
+            (0, 10),
+        ),
+        (
+            package::QSL_ADD,
+            "quire.op.integer.add",
+            vec![(0, 9), (10, 20)],
+            (10, 29),
+        ),
+        (
+            package::QSL_NEGATE,
+            "quire.op.integer.negate",
+            vec![(0, 9)],
+            (-9, 0),
+        ),
+    ] {
+        let (record, harness) = route_qsl_shaped(code);
+        assert!(
+            matches!(record.disposition, ObligationDisposition::Supported { .. }),
+            "node {code}: {record:#?}"
+        );
+        let harness = harness.expect("a supported item carries its harness");
+        assert_eq!(harness.identity.operation_identity, identity);
+        assert_eq!(ranges(&harness), expected, "node {code}");
+        let (lower, upper) = result;
+        assert!(
+            harness.rust.contents.contains(&format!(
+                "rt::Integer::from({}), rt::Integer::from({})",
+                lit(lower),
+                lit(upper)
+            )),
+            "node {code}: the result assertion names the conversion's bound"
+        );
+    }
+}
+
+/// In the same QSL shape, a plain-Integer parameter beside a bounded one (`x + p`) and a reference
+/// to a `value` node whose body is not a literal each settle `requires_bound` with no harness, and
+/// a node narrowed by two conversions to different bounds is refused `AmbiguousBound` with no
+/// harness.
+///
+/// Trace: FR-014-AC-28, FR-014-AC-29, FR-014-AC-32, FR-022-AC-15, TC-033
+#[test]
+fn tc_033_qsl_shaped_plain_operands_and_ambiguous_narrowing_have_no_harness() {
+    for code in [package::QSL_PLAIN_OPERAND, package::QSL_NOT_LITERAL_OPERAND] {
+        let (record, harness) = route_qsl_shaped(code);
+        assert!(
+            matches!(
+                record.disposition,
+                ObligationDisposition::RequiresBound { .. }
+            ),
+            "node {code}: {record:#?}"
+        );
+        assert!(harness.is_none(), "node {code}: no harness");
+    }
+    let (record, harness) = route_qsl_shaped(package::QSL_TWICE_NARROWED);
+    assert!(
+        matches!(
+            &record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::OracleRefused {
+                    refusal: ExactScalarRefusal::AmbiguousBound { .. }
+                }
+            }
+        ),
+        "{record:#?}"
+    );
+    assert!(harness.is_none(), "no harness");
+}
+
+/// A literal operand is constrained to its own value, so a QSL-shaped node the literal pushes
+/// outside the result bound for every `x` has no harness: `x + 100` over `x: Int[0, 9]` into
+/// `Int[0, 10]` reaches only `[100, 109]` and is `result_bound_unreachable`, and `x + 10^23`,
+/// whose literal does not fit `i64`, is `domain_not_representable_in_i64` naming it. `x + "a"`
+/// (a text literal in an Integer-typed `value` node) and `x + 2`, narrowed and also consumed by
+/// `(x + 2) + x`, are `oracle_refused` with `OperandTypeMismatch` and `AmbiguousBound`.
+///
+/// Trace: FR-015-AC-17, FR-015-AC-18, FR-014-AC-31, FR-014-AC-34, TC-033
+#[test]
+fn tc_033_qsl_shaped_literal_and_consumer_refusals_have_no_harness() {
+    let (record, harness) = route_qsl_shaped(package::QSL_PLUS_HUNDRED);
+    assert_eq!(
+        record.disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::ResultBoundUnreachable {
+                operation_identity: "quire.op.integer.add".to_owned(),
+                lower: 0,
+                upper: 10,
+                reachable_lower: "100".to_owned(),
+                reachable_upper: "109".to_owned(),
+            }
+        }
+    );
+    assert!(harness.is_none());
+    let huge = "100000000000000000000000".to_owned();
+    let (record, harness) = route_qsl_shaped(package::QSL_PLUS_HUGE);
+    assert_eq!(
+        record.disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::DomainNotRepresentableInI64 {
+                operation_identity: "quire.op.integer.add".to_owned(),
+                lower: huge.clone(),
+                upper: huge,
+            }
+        }
+    );
+    assert!(harness.is_none());
+    for (code, refusal) in [
+        (
+            package::QSL_PLUS_TEXT,
+            ExactScalarRefusal::OperandTypeMismatch {
+                position: 1,
+                expected: quire_contract_codegen::ScalarForm::Integer,
+                found: Some("text".to_owned()),
+            },
+        ),
+        (
+            package::QSL_SHARED,
+            ExactScalarRefusal::AmbiguousBound {
+                bounded_type: package::code_id(package::T_INTEGER),
+                expected_form: quire_contract_codegen::BoundForm::IntegerRange,
+            },
+        ),
+    ] {
+        let (record, harness) = route_qsl_shaped(code);
+        assert_eq!(
+            record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::OracleRefused { refusal }
+            },
+            "node {code}"
+        );
+        assert!(harness.is_none(), "node {code}");
     }
 }
 
