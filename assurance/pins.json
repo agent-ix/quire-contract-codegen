@@ -1,7 +1,7 @@
 {
   "schema_version": "quire-contract-codegen.assurance-pins/v1",
   "purpose": "The Engineering Assurance release this repository adopts, and the digests of the artifacts it actually reads from that release. Component version pins are NOT restated here: the packaged compatibility matrix is their authority and a second copy would drift from it.",
-  "matrix_authority": "engineering_assurance/compatibility-matrix.json in the installed distribution. scripts/check_shared_pins.py observes the local toolchain and delegates every verdict to engineering_assurance.compatibility.",
+  "matrix_authority": "engineering_assurance/compatibility-matrix.json in the installed distribution. scripts/check_shared_pins.py observes the local toolchain and takes each component's classification (compatible, incompatible, unknown) from engineering_assurance.compatibility. The pass/fail rule is local: an unknown installed version is reported and does not gate; only a version the matrix names incompatible, an artifact digest mismatch, a mirror reference or an incompatible install line fails.",
   "registry": "Every npm component resolves from the public npm registry (registry.npmjs.org). The internal npm.ix mirror must not appear in any requirement, pin, lockfile, or .npmrc, and is not an oracle for whether a release landed. Querying an @agent-ix package needs --@agent-ix:registry=https://registry.npmjs.org; a bare --registry does not override the scoped .npmrc entry.",
   "engineering_assurance": {
     "version": "0.2.0",
@@ -13,7 +13,7 @@
     {
       "path": "compatibility.py",
       "sha256": "62829251d7697d279364eeb2395a1e86a81ef116703c4b89ec754f701475f654",
-      "why": "scripts/check_shared_pins.py imports load_matrix, classify_all and accepted from this module and delegates every component verdict to it. It is the one artifact this repository still reads out of the release on every `make pins`, so it is the one that carries a digest."
+      "why": "scripts/check_shared_pins.py imports load_matrix, classify_all and accepted from this module and takes every component classification from it. It is the one artifact this repository still reads out of the release on every `make pins`, so it is the one that carries a digest."
     },
     {
       "path": "compatibility-matrix.json",

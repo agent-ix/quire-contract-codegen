@@ -620,7 +620,7 @@ const LAUNCHER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// Kani's launcher forks `kani-driver`, which forks CBMC, so on a timeout `child.kill()` alone
 /// would leave CBMC — the actual solver, and the one most likely to be the non-terminating
 /// process a budget exists to bound — orphaned and still running past the deadline it just
-/// exceeded. [`kill_process_tree`] finds and signals every live descendant it can still see by
+/// exceeded. `kill_process_tree` finds and signals every live descendant it can still see by
 /// its own pid instead of relying on a process-group-wide signal: a negative-pid group kill is
 /// the textbook fix, but it is deliberately not used here, because it was measured to escape its
 /// own group on the sandbox this crate was developed in — killing a freshly spawned child's
@@ -1366,9 +1366,7 @@ mod tests {
             let grandchild_pid: Option<i32> = fs::read_to_string(&pidfile)
                 .ok()
                 .and_then(|contents| contents.trim().parse().ok());
-            let grandchild_survived = grandchild_pid
-                .map(|pid| Path::new(&format!("/proc/{pid}")).exists())
-                .unwrap_or(false);
+            let grandchild_survived = grandchild_pid.is_some_and(|pid| !process_gone_within(pid));
 
             if grandchild_survived {
                 let pid = grandchild_pid.expect("survived implies a parsed pid");
@@ -1400,6 +1398,39 @@ mod tests {
              scheduling delay"
         );
     }
+
+    /// Whether `pid` is dead, waiting up to [`GRANDCHILD_REAP_WAIT`] for it to become so.
+    ///
+    /// Two facts about a SIGKILLed process make a bare `/proc/<pid>` existence check wrong.
+    /// The kill is asynchronous: `kill_process_tree` has returned once the signal is sent, not
+    /// once the target has stopped running, so the process can still read as running for a few
+    /// milliseconds. And the grandchild is reparented to init when its parent dies, which
+    /// reaps it in its own time (measured here: PID 1 left killed grandchildren as zombies
+    /// for seconds), so `/proc/<pid>` outlives a process that is already dead. Dead means
+    /// absent or in state `Z`/`X`; anything else after the wait is a survivor.
+    fn process_gone_within(pid: i32) -> bool {
+        let deadline = Instant::now() + GRANDCHILD_REAP_WAIT;
+        loop {
+            let state = fs::read_to_string(format!("/proc/{pid}/stat"))
+                .ok()
+                .and_then(|stat| {
+                    stat.rsplit_once(')')
+                        .and_then(|(_, rest)| rest.trim_start().chars().next())
+                });
+            if matches!(state, None | Some('Z') | Some('X')) {
+                return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// How long a delivered SIGKILL is given to take effect before its target counts as a
+    /// survivor. Far longer than signal delivery takes; a process still running after it was
+    /// not killed.
+    const GRANDCHILD_REAP_WAIT: Duration = Duration::from_secs(2);
 
     /// Successive budgets [`a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`]
     /// tries, smallest first: the common case (an unloaded or lightly loaded run) settles on

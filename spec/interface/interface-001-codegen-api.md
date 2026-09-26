@@ -1,5 +1,5 @@
 ---
-id: interface-001
+id: interface_001
 title: "Contract code-generation API"
 type: interface
 ---
@@ -328,6 +328,54 @@ open_design_gates:
   native_run_authentication: producer result digests establish consistency only; Quoin-owned authorized producer and expected record/candidate/run verification must precede qualification; no caller verified flag
   serialized_package_cli: the pinned public IR derived-projection decoder now supplies BoundPackage; cli_generate remains unimplemented, and normal projection production remains the authoritative frontend/model lane rather than a codegen-owned authored sidecar
 ```
+
+## Features
+
+The interface's features in declaration order: every operation the contract above declares, one row each.
+
+| Feature | Kind |
+|---|---|
+| generate_bound_oracles | operation |
+| generate_bundle | operation |
+| generate_tristate_harness | operation |
+| generate_i64_strategy | operation |
+| generate_enum_strategy | operation |
+| generate_bound_strategy | operation |
+| generate_kani_bundle | operation |
+| write_bundle_atomic | operation |
+| analyze_coverage | operation |
+| analyze_bound_coverage | operation |
+| generate_boolean_oracle | operation |
+| generator_source_is_dirty | operation |
+| classify_clause | operation |
+| parse_llvm_coverage | operation |
+| classify_bounded_kani_profile | operation |
+| prepare_checked_arithmetic | operation |
+| prepare_bounded_collection_query | operation |
+| prepare_finite_graph_reaches | operation |
+| generate_bounded_kani_corpus_case | operation |
+| replay_codegen_counterexample | operation |
+| generate_exact_scalar_oracles | operation |
+| negotiate_kani_obligations | operation |
+| execute_kani_obligation | operation |
+| kani_launch_command | operation |
+| run_launcher_with_timeout | operation |
+| launch_evidence | operation |
+| file_sha256 | operation |
+| classify_kani_run | operation |
+| generate_composite_equality_oracles | operation |
+| negotiate_backend_provider | operation |
+| generate_routed | operation |
+| record_tool_probe | operation |
+| generate_exact_function_oracles | operation |
+| witness_schema | operation |
+| decode_falsification | operation |
+| bound_strategy::census::compute_census | operation |
+| bound_strategy::census::render_edge_constants | operation |
+| bound_strategy::census::render_boundary_constants | operation |
+| bound_strategy::population::side_values | operation |
+| bound_strategy::population::render_population | operation |
+| cli_generate | operation |
 
 ## Acceptance Criteria
 

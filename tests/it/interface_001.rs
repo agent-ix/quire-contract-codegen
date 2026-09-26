@@ -276,6 +276,50 @@ fn exported_functions() -> Vec<String> {
 /// whether a root `pub fn`, a root re-export or a function in a `pub mod`, and so does a declared
 /// entry the crate stops exposing. Neither side is a list typed into this file.
 ///
+/// The `## Features` table is the interface's feature order (the interface archetype requires
+/// it) and restates the Contract yaml's operations, so each operation must have exactly one row
+/// and no row may name anything else.
+///
+/// Trace: interface-001-AC-1, TC-028
+#[test]
+fn it_001_features_table_lists_exactly_the_contract_operations() {
+    let declared = sorted(
+        parse_operations(&contract_yaml())
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect(),
+    );
+    let source = contract_source();
+    let section = source
+        .split("\n## Features\n")
+        .nth(1)
+        .expect("the contract document must carry a `## Features` section")
+        .split("\n## ")
+        .next()
+        .expect("split always yields a first part");
+    let rows = sorted(
+        section
+            .lines()
+            .filter(|line| line.starts_with('|'))
+            .skip(2)
+            .map(|line| {
+                let cells: Vec<&str> = line.trim_matches('|').split('|').map(str::trim).collect();
+                assert_eq!(
+                    cells.len(),
+                    2,
+                    "a Features row has Feature and Kind: {line}"
+                );
+                assert_eq!(cells[1], "operation", "unexpected feature kind: {line}");
+                cells[0].to_owned()
+            })
+            .collect(),
+    );
+    assert_eq!(
+        rows, declared,
+        "the Features table must list each Contract operation exactly once and nothing else"
+    );
+}
+
 /// Trace: interface-001-AC-1, TC-028
 #[test]
 fn it_001_implemented_operations_are_exported_under_their_declared_names() {
