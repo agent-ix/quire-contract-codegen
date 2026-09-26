@@ -104,7 +104,7 @@ operations:
     semantics: exact scalar oracles plus a typed claim map identical to claim-map.json; per-item problems are refusals, and only a whole-generation failure is an error (FR-014)
   - name: derive_exact_scalar_items
     inputs: [admitted CheckedPackageV2, CheckedNodeId list]
-    output: one ExactScalarItem | ClaimDerivationRefusal per node id, in input order
+    output: one ExactScalarItem | ExactScalarRefusal per node id, in input order
     semantics: builds each item's descriptor from the node's operation identity, laws, mode, operand forms and the one bound of the needed form on its result type; a node with no derivable descriptor is a typed refusal, never a guess (FR-014)
   - name: negotiate_kani_obligations
     inputs: [KaniObligationRequest]

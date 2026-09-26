@@ -67,7 +67,11 @@ the FR-015 generator returns for the same items.
     bounded-increment node with no claim map anywhere in the context.
 11. **Underivable sibling (FR-022-AC-11, FR-015-AC-15).** Route the `integer.rem`
     node beside the three generated nodes.
-12. **Returned claim map (FR-022-AC-12).** Compare `RoutedGeneration.claim_map`
+12. **Refusals keep their disposition (FR-022-AC-11).** Route alone a node absent
+    from the graph, an unbounded node, nodes whose bound is missing, of the
+    wrong form or unreadable, an unsatisfiable bound and a function node; route one
+    node twice at request indexes `5` and `3`.
+13. **Returned claim map (FR-022-AC-12).** Compare `RoutedGeneration.claim_map`
     with `generate_exact_scalar_oracles` over `derive_exact_scalar_items` for
     the same nodes, and with `None` when nothing is routed.
 
@@ -106,6 +110,13 @@ the FR-015 generator returns for the same items.
 11. The `integer.rem` node's record is `Unsupported` with `no_derivable_claim`
     naming the node and `operation_not_derivable`, and carries no harness; the
     group is not rejected and the three siblings keep their harnesses.
-12. The claim map is `Some`, holds the FR-014 entries for the derivable nodes
+12. The absent node is `invalid_request` `unknown_node` and rejects the group;
+    the unbounded and missing or wrong-form bound nodes are `requires_bound`;
+    the function node is `blocked_on_upstream`; the unreadable bound is
+    `oracle_refused` and the unsatisfiable one `unsatisfiable_bound`, none of them
+    rejecting the group. The twice-routed node yields the first copy's supported
+    record at `3`, `duplicate_item{first_index: 3}` at `5`, a rejected group and
+    one claim. Underivable claims have provenance `underived`.
+13. The claim map is `Some`, holds the FR-014 entries for the derivable nodes
     and a `NoDerivableClaim` entry for the others, ordered by node id; it is
     `None` for an empty routed set.

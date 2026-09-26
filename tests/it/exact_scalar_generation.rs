@@ -1391,10 +1391,14 @@ fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
     ));
 }
 
+fn no_claim(reason: ClaimDerivationRefusal) -> ExactScalarRefusal {
+    ExactScalarRefusal::NoDerivableClaim { reason }
+}
+
 fn derive_one(
     package: &CheckedPackageV2,
     code: u32,
-) -> Result<ExactScalarItem, ClaimDerivationRefusal> {
+) -> Result<ExactScalarItem, ExactScalarRefusal> {
     derive_exact_scalar_items(package, &[code_id(code)])
         .pop()
         .expect("one result per node id")
@@ -1477,9 +1481,9 @@ fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
     ));
     assert_eq!(
         operation(DERIVE_MIXED_DIV),
-        Err(ClaimDerivationRefusal::OperandFormsNotDerivable {
+        Err(no_claim(ClaimDerivationRefusal::OperandFormsNotDerivable {
             operation_identity: "quire.op.rational.div".to_owned()
-        })
+        }))
     );
     // numeric.convert_rounding to a decimal is a rounding conversion.
     assert!(matches!(
@@ -1496,9 +1500,9 @@ fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
     ));
     assert_eq!(
         operation(DERIVE_CONVERT_TO_INTEGER),
-        Err(ClaimDerivationRefusal::OperandFormsNotDerivable {
+        Err(no_claim(ClaimDerivationRefusal::OperandFormsNotDerivable {
             operation_identity: "quire.op.numeric.convert".to_owned()
-        })
+        }))
     );
     // quantity.convert takes its target from the result form; an integer target takes its
     // rounding from the node's mode, a rational result is an exact conversion.
@@ -1551,22 +1555,28 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
     ] {
         assert_eq!(
             derive_one(&package, code),
-            Err(ClaimDerivationRefusal::OperationNotDerivable {
+            Err(no_claim(ClaimDerivationRefusal::OperationNotDerivable {
                 operation_identity: identity.to_owned()
-            })
+            }))
         );
     }
     assert_eq!(
         derive_one(&package, V_BOOLEAN),
-        Err(ClaimDerivationRefusal::NotApplication {
+        Err(no_claim(ClaimDerivationRefusal::NotApplication {
             node_tag: "value".to_owned()
-        })
+        }))
     );
+    // Lowering and bound refusals are the ones `generate_exact_scalar_oracles` gives, so FR-015
+    // classifies them as it always did.
     let bound = |code| match derive_one(&package, code) {
-        Err(ClaimDerivationRefusal::Bound { refusal }) => *refusal,
-        other => panic!("node {code}: expected a bound refusal, got {other:?}"),
+        Err(refusal) => refusal,
+        other => panic!("node {code}: expected a refusal, got {other:?}"),
     };
     assert_eq!(bound(MISSING), ExactScalarRefusal::InvalidInput);
+    assert!(matches!(
+        bound(FUNCTION),
+        ExactScalarRefusal::BlockedOnUpstream { .. }
+    ));
     assert!(matches!(
         bound(UNBOUNDED),
         ExactScalarRefusal::RequiresBound { .. }

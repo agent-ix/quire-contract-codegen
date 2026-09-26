@@ -402,6 +402,10 @@ pub enum OperationProvenance {
     /// this generator ever saw the package. A consumer may treat the
     /// operation identity as checked.
     IrConfirmed,
+    /// Derivation refused the node (`derive_exact_scalar_items`), so no descriptor was built:
+    /// nobody declared an operation and nothing was confirmed. The identity, when the node
+    /// carries one, is the node's own.
+    Underived,
 }
 
 /// The operation a claim-map entry is about.
@@ -2448,7 +2452,8 @@ fn artifact(path: &str, contents: String) -> Artifact {
 // Deriving the descriptor from the node
 // ---------------------------------------------------------------------------
 
-/// Why a node has no derivable [`ExactScalarItem`].
+/// Why a node has no derivable [`ExactScalarItem`], beyond the refusals
+/// [`ExactScalarRefusal`] already names for its lowering and bounds.
 ///
 /// Trace: TC-024
 // Implements: FR-014
@@ -2482,42 +2487,39 @@ pub enum ClaimDerivationRefusal {
         /// The node's `operation.identity`.
         operation_identity: String,
     },
-    /// The bound the operation is read against was refused.
-    Bound {
-        /// Why the bound could not be read.
-        refusal: Box<ExactScalarRefusal>,
-    },
 }
 
 impl ClaimDerivationRefusal {
-    /// The node's identity, when the refusal was reached after reading it.
-    fn operation_identity(&self) -> Option<&str> {
-        match self {
-            Self::OperationNotDerivable { operation_identity }
-            | Self::OperandFormsNotDerivable { operation_identity }
-            | Self::LawNotDerivable { operation_identity }
-            | Self::ModeNotDerivable { operation_identity } => Some(operation_identity),
-            Self::NotApplication { .. } | Self::MissingOperationIdentity | Self::Bound { .. } => {
-                None
-            }
-        }
+    fn refusal(self) -> ExactScalarRefusal {
+        ExactScalarRefusal::NoDerivableClaim { reason: self }
     }
 }
 
 impl ExactScalarClaim {
-    /// The claim for a node with no derivable descriptor.
-    pub(crate) fn no_derivable_claim(
+    /// The claim for a node derivation refused: the refusal `generate_exact_scalar_oracles` would
+    /// have produced for a lowering or bound problem, or `NoDerivableClaim`. Nobody declared an
+    /// operation, so the provenance is [`OperationProvenance::Underived`]; the identity is the
+    /// one the node carries, or empty when it carries none.
+    pub(crate) fn derivation_refused(
+        package: &CheckedPackageV2,
         node_id: CheckedNodeId,
-        reason: ClaimDerivationRefusal,
+        refusal: ExactScalarRefusal,
     ) -> Self {
-        let (operation, result) = refused_claim(
-            reason.operation_identity().unwrap_or_default().to_owned(),
-            ExactScalarRefusal::NoDerivableClaim { reason },
-        );
+        let identity = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == node_id)
+            .and_then(|node| node.body["operation"]["identity"].as_str())
+            .unwrap_or_default()
+            .to_owned();
         Self {
             node_id,
-            operation,
-            result,
+            operation: OperationClaim {
+                identity,
+                provenance: OperationProvenance::Underived,
+            },
+            result: ClaimDisposition::Refused { refusal },
         }
     }
 }
@@ -2649,14 +2651,16 @@ fn family_of_identity(identity: &str) -> Option<Family> {
 /// Each descriptor is read from the node's `operation.identity`, `operation.laws`,
 /// `operation.mode`, its operand scalar forms and the one bound of the needed form on its result
 /// type (the selector [`generate_exact_scalar_oracles`] checks the descriptor against). A node
-/// that yields no descriptor is a typed [`ClaimDerivationRefusal`].
+/// that yields no descriptor is the [`ExactScalarRefusal`] `generate_exact_scalar_oracles` would
+/// give its lowering or bound (so FR-015 classifies it as before), or `NoDerivableClaim` carrying a
+/// [`ClaimDerivationRefusal`].
 ///
 /// Trace: TC-024
 // Implements: FR-014
 pub fn derive_exact_scalar_items(
     package: &CheckedPackageV2,
     node_ids: &[CheckedNodeId],
-) -> Vec<Result<ExactScalarItem, ClaimDerivationRefusal>> {
+) -> Vec<Result<ExactScalarItem, ExactScalarRefusal>> {
     let lowering = package.lower(node_ids, &scalar_profile());
     let graph = package
         .graph()
@@ -2680,21 +2684,23 @@ pub fn derive_exact_scalar_items(
 struct Derivation<'a, 'g> {
     graph: &'a Graph<'g>,
     node: &'g CheckedSemanticNodeV2,
-    record: &'a CompleteLoweringRecordV2,
+    lowered: &'a CompleteContractNodeV2,
     identity: &'a str,
 }
 
 impl Derivation<'_, '_> {
-    fn operand_forms_not_derivable(&self) -> ClaimDerivationRefusal {
+    fn operand_forms_not_derivable(&self) -> ExactScalarRefusal {
         ClaimDerivationRefusal::OperandFormsNotDerivable {
             operation_identity: self.identity.to_owned(),
         }
+        .refusal()
     }
 
-    fn mode_not_derivable(&self) -> ClaimDerivationRefusal {
+    fn mode_not_derivable(&self) -> ExactScalarRefusal {
         ClaimDerivationRefusal::ModeNotDerivable {
             operation_identity: self.identity.to_owned(),
         }
+        .refusal()
     }
 
     /// The one bound of `form` on the node's result type.
@@ -2702,19 +2708,12 @@ impl Derivation<'_, '_> {
         &self,
         form: BoundForm,
         read: fn(&[Value]) -> Option<T>,
-    ) -> Result<T, ClaimDerivationRefusal> {
-        let wrap = |refusal| ClaimDerivationRefusal::Bound {
-            refusal: Box::new(refusal),
-        };
-        let node = lowered(self.record).map_err(wrap)?;
+    ) -> Result<T, ExactScalarRefusal> {
         let bounds = Bounds {
             graph: self.graph,
-            node,
+            node: self.lowered,
         };
-        bounds
-            .read(form, read)
-            .map(|(_, value)| value)
-            .map_err(wrap)
+        bounds.read(form, read).map(|(_, value)| value)
     }
 
     /// The scalar forms of the application's arguments.
@@ -2743,7 +2742,7 @@ impl Derivation<'_, '_> {
     }
 
     /// Requires `operation.mode` to carry `rounding`.
-    fn require_mode(&self, rounding: RoundingMode) -> Result<(), ClaimDerivationRefusal> {
+    fn require_mode(&self, rounding: RoundingMode) -> Result<(), ExactScalarRefusal> {
         if self.mode_value() == Some(rounding.as_str()) {
             Ok(())
         } else {
@@ -2752,7 +2751,7 @@ impl Derivation<'_, '_> {
     }
 
     /// The one division profile `operation.laws` names.
-    fn division_profile(&self) -> Result<DivisionProfile, ClaimDerivationRefusal> {
+    fn division_profile(&self) -> Result<DivisionProfile, ExactScalarRefusal> {
         let named = DivisionProfile::ALL
             .into_iter()
             .filter(|profile| {
@@ -2770,20 +2769,21 @@ impl Derivation<'_, '_> {
             [profile] => Ok(*profile),
             _ => Err(ClaimDerivationRefusal::LawNotDerivable {
                 operation_identity: self.identity.to_owned(),
-            }),
+            }
+            .refusal()),
         }
     }
 
-    fn integer_domain(&self) -> Result<IntegerDomain, ClaimDerivationRefusal> {
+    fn integer_domain(&self) -> Result<IntegerDomain, ExactScalarRefusal> {
         self.read(BoundForm::IntegerRange, read_integer_range)
             .map(IntegerDomain::Bounded)
     }
 
-    fn decimal_target(&self) -> Result<DecimalType, ClaimDerivationRefusal> {
+    fn decimal_target(&self) -> Result<DecimalType, ExactScalarRefusal> {
         self.read(BoundForm::DecimalRange, read_decimal_range)
     }
 
-    fn float_rounding(&self) -> Result<RoundingMode, ClaimDerivationRefusal> {
+    fn float_rounding(&self) -> Result<RoundingMode, ExactScalarRefusal> {
         self.read(BoundForm::FloatRounding, read_float_rounding)
     }
 
@@ -2791,7 +2791,7 @@ impl Derivation<'_, '_> {
     fn shared_operand_form<T: Copy>(
         &self,
         candidates: &[(&str, T)],
-    ) -> Result<T, ClaimDerivationRefusal> {
+    ) -> Result<T, ExactScalarRefusal> {
         let forms = self.operand_forms();
         let [Some(first), Some(second)] = forms.as_slice() else {
             return Err(self.operand_forms_not_derivable());
@@ -2808,34 +2808,37 @@ fn derive_operation(
     graph: &Graph<'_>,
     node_id: &CheckedNodeId,
     record: &CompleteLoweringRecordV2,
-) -> Result<ExactScalarOperation, ClaimDerivationRefusal> {
+) -> Result<ExactScalarOperation, ExactScalarRefusal> {
     use ExactScalarOperation as Op;
+    // The graph and the lowering come first, so a node absent from the graph, or one that does not
+    // lower, keeps the refusal `generate_exact_scalar_oracles` gives it and FR-015 classifies.
     let node = graph
         .get(node_id)
         .copied()
-        .ok_or_else(|| ClaimDerivationRefusal::Bound {
-            refusal: Box::new(ExactScalarRefusal::InvalidInput),
-        })?;
+        .ok_or(ExactScalarRefusal::InvalidInput)?;
+    let lowered = lowered(record)?;
     if &*node.node_tag != CheckedNodeTag::Expression.as_wire()
         || node.body.get("term").and_then(Value::as_str) != Some("application")
     {
         return Err(ClaimDerivationRefusal::NotApplication {
             node_tag: node.node_tag.to_string(),
-        });
+        }
+        .refusal());
     }
     let identity = node.body["operation"]["identity"]
         .as_str()
-        .ok_or(ClaimDerivationRefusal::MissingOperationIdentity)?;
+        .ok_or_else(|| ClaimDerivationRefusal::MissingOperationIdentity.refusal())?;
     let derivation = Derivation {
         graph,
         node,
-        record,
+        lowered,
         identity,
     };
     let family = family_of_identity(identity).ok_or_else(|| {
         ClaimDerivationRefusal::OperationNotDerivable {
             operation_identity: identity.to_owned(),
         }
+        .refusal()
     })?;
     Ok(match family {
         Family::IntegerArithmetic(operator) => Op::IntegerArithmetic {
@@ -3324,8 +3327,8 @@ mod tests {
     }
     // -- Derivation (IR-294) ---------------------------------------------------------------
 
-    /// One descriptor per catalogued identity the forward map can name, with its expected family.
-    fn every_descriptor() -> Vec<(ExactScalarOperation, Family)> {
+    /// One descriptor per catalogued identity the forward map can name.
+    fn every_operation() -> Vec<ExactScalarOperation> {
         use ExactScalarOperation as Op;
         let domain = IntegerDomain::Mathematical;
         let decimal = DecimalType::new(0_i64.into(), 9_i64.into(), 0, 0, RoundingMode::NearestEven)
@@ -3338,46 +3341,34 @@ mod tests {
             IntegerOperator::Multiply,
             IntegerOperator::Negate,
         ] {
-            all.push((
-                Op::IntegerArithmetic {
-                    operator,
-                    domain: domain.clone(),
-                },
-                Family::IntegerArithmetic(operator),
-            ));
+            all.push(Op::IntegerArithmetic {
+                operator,
+                domain: domain.clone(),
+            });
         }
         for profile in DivisionProfile::ALL {
-            all.push((
-                Op::IntegerDivision {
-                    profile,
-                    domain: domain.clone(),
-                },
-                Family::IntegerDivision,
-            ));
+            all.push(Op::IntegerDivision {
+                profile,
+                domain: domain.clone(),
+            });
         }
-        all.push((Op::IntegerModulo { domain }, Family::IntegerModulo));
+        all.push(Op::IntegerModulo { domain });
         for operator in [
             RationalOperator::Add,
             RationalOperator::Subtract,
             RationalOperator::Multiply,
             RationalOperator::Negate,
         ] {
-            all.push((
-                Op::RationalArithmetic {
-                    operator,
-                    domain: None,
-                },
-                Family::RationalArithmetic(operator),
-            ));
+            all.push(Op::RationalArithmetic {
+                operator,
+                domain: None,
+            });
         }
         for operator in [RationalOperator::Divide, RationalOperator::IntegerDivide] {
-            all.push((
-                Op::RationalArithmetic {
-                    operator,
-                    domain: None,
-                },
-                Family::RationalDivision,
-            ));
+            all.push(Op::RationalArithmetic {
+                operator,
+                domain: None,
+            });
         }
         for operator in [
             OrderingOperator::Less,
@@ -3390,10 +3381,7 @@ mod tests {
                 OrderingOperandKind::Rational,
                 OrderingOperandKind::Decimal,
             ] {
-                all.push((
-                    Op::Ordering { operator, operands },
-                    Family::Ordering(operator, operands),
-                ));
+                all.push(Op::Ordering { operator, operands });
             }
         }
         for operator in [
@@ -3404,13 +3392,10 @@ mod tests {
             DecimalOperator::Divide,
             DecimalOperator::Round,
         ] {
-            all.push((
-                Op::DecimalArithmetic {
-                    operator,
-                    target: decimal.clone(),
-                },
-                Family::DecimalArithmetic(operator),
-            ));
+            all.push(Op::DecimalArithmetic {
+                operator,
+                target: decimal.clone(),
+            });
         }
         for width in [IeeeWidth::Binary32, IeeeWidth::Binary64] {
             for operator in [
@@ -3419,59 +3404,35 @@ mod tests {
                 IeeeArithmeticOperator::Multiply,
                 IeeeArithmeticOperator::Divide,
             ] {
-                all.push((
-                    Op::IeeeArithmetic {
-                        operator,
-                        width,
-                        rounding: RoundingMode::NearestEven,
-                    },
-                    Family::IeeeArithmetic(operator, width),
-                ));
+                all.push(Op::IeeeArithmetic {
+                    operator,
+                    width,
+                    rounding: RoundingMode::NearestEven,
+                });
             }
             for comparison in [
                 IeeeComparison::NumericEqual,
                 IeeeComparison::TotalOrder,
                 IeeeComparison::BitIdentical,
             ] {
-                all.push((
-                    Op::IeeeComparison { comparison, width },
-                    Family::IeeeComparison(comparison),
-                ));
+                all.push(Op::IeeeComparison { comparison, width });
             }
         }
-        all.push((
-            Op::IeeeWidthConversion {
-                source: IeeeWidth::Binary64,
-                target: IeeeWidth::Binary32,
-                rounding: RoundingMode::NearestEven,
-            },
-            Family::IeeeToFloat32,
-        ));
-        all.push((
-            Op::IeeeWidthConversion {
-                source: IeeeWidth::Binary32,
-                target: IeeeWidth::Binary64,
-                rounding: RoundingMode::NearestEven,
-            },
-            Family::IeeeToFloat64,
-        ));
-        all.push((
-            Op::TextAdmission { text_type: text },
-            Family::NumericConvert,
-        ));
+        all.push(Op::IeeeWidthConversion {
+            source: IeeeWidth::Binary64,
+            target: IeeeWidth::Binary32,
+            rounding: RoundingMode::NearestEven,
+        });
+        all.push(Op::IeeeWidthConversion {
+            source: IeeeWidth::Binary32,
+            target: IeeeWidth::Binary64,
+            rounding: RoundingMode::NearestEven,
+        });
+        all.push(Op::TextAdmission { text_type: text });
         for operator in ComparisonOperator::ALL {
-            all.push((
-                Op::TextComparison { operator },
-                Family::TextComparison(operator),
-            ));
-            all.push((
-                Op::EnumComparison { operator },
-                Family::EnumComparison(operator),
-            ));
-            all.push((
-                Op::QuantityComparison { operator },
-                Family::QuantityComparison(operator),
-            ));
+            all.push(Op::TextComparison { operator });
+            all.push(Op::EnumComparison { operator });
+            all.push(Op::QuantityComparison { operator });
         }
         for operator in [
             QuantityOperator::Add,
@@ -3480,10 +3441,7 @@ mod tests {
             QuantityOperator::Divide,
             QuantityOperator::Power,
         ] {
-            all.push((
-                Op::QuantityArithmetic { operator },
-                Family::QuantityArithmetic(operator),
-            ));
+            all.push(Op::QuantityArithmetic { operator });
         }
         for target in [
             QuantityTarget::Exact,
@@ -3493,25 +3451,77 @@ mod tests {
                 rounding: RoundingMode::TowardZero,
             },
         ] {
-            all.push((
-                Op::QuantityConversion { target },
-                Family::QuantityConversion,
-            ));
+            all.push(Op::QuantityConversion { target });
         }
         all
     }
 
-    /// The inverse identity match and the forward `catalogued_operation` share one vocabulary:
-    /// every descriptor's forward identity inverts to the family that descriptor belongs to, and
-    /// no two distinct families share an identity. A catalogued identity added to one map and not
-    /// the other fails here.
+    /// The number of `ExactScalarOperation` variants: [`expected_family`]'s match names each, and
+    /// adding one fails to compile there until it has an arm. `every_operation` must then carry a
+    /// descriptor of it, which the coverage assertion below checks.
+    const OPERATION_VARIANTS: usize = 15;
+
+    /// The family each descriptor belongs to, by an exhaustive match with no wildcard arm over
+    /// `ExactScalarOperation` and, where the operator selects the identity, over the operator.
+    /// `None` for the one descriptor with no catalogued identity (same-width IEEE conversion).
+    fn expected_family(operation: &ExactScalarOperation) -> Option<Family> {
+        use ExactScalarOperation as Op;
+        Some(match operation {
+            Op::IntegerArithmetic { operator, .. } => Family::IntegerArithmetic(*operator),
+            Op::IntegerDivision { .. } => Family::IntegerDivision,
+            Op::IntegerModulo { .. } => Family::IntegerModulo,
+            Op::RationalArithmetic { operator, .. } => match operator {
+                RationalOperator::Divide | RationalOperator::IntegerDivide => {
+                    Family::RationalDivision
+                }
+                RationalOperator::Add
+                | RationalOperator::Subtract
+                | RationalOperator::Multiply
+                | RationalOperator::Negate => Family::RationalArithmetic(*operator),
+            },
+            Op::Ordering { operator, operands } => Family::Ordering(*operator, *operands),
+            Op::DecimalArithmetic { operator, .. } => Family::DecimalArithmetic(*operator),
+            Op::IeeeArithmetic {
+                operator, width, ..
+            } => Family::IeeeArithmetic(*operator, *width),
+            Op::IeeeComparison { comparison, .. } => Family::IeeeComparison(*comparison),
+            Op::IeeeWidthConversion { source, target, .. } => match (source, target) {
+                (IeeeWidth::Binary64, IeeeWidth::Binary32) => Family::IeeeToFloat32,
+                (IeeeWidth::Binary32, IeeeWidth::Binary64) => Family::IeeeToFloat64,
+                _ => return None,
+            },
+            Op::TextAdmission { .. } => Family::NumericConvert,
+            Op::TextComparison { operator } => Family::TextComparison(*operator),
+            Op::EnumComparison { operator } => Family::EnumComparison(*operator),
+            Op::QuantityArithmetic { operator } => Family::QuantityArithmetic(*operator),
+            Op::QuantityComparison { operator } => Family::QuantityComparison(*operator),
+            Op::QuantityConversion { .. } => Family::QuantityConversion,
+        })
+    }
+
+    /// The inverse identity match and the forward `catalogued_operation` are two exhaustive
+    /// matches over one vocabulary, kept aligned by this round trip: every descriptor's forward
+    /// identity inverts to the family that descriptor belongs to, no two families share an
+    /// identity, and `every_operation` covers every `ExactScalarOperation` variant. A catalogued
+    /// identity added to one map and not the other fails here.
     ///
     /// Trace: FR-014-AC-18, FR-014-AC-19, TC-024.
     #[test]
     fn tc_024_the_identity_inverse_matches_the_forward_catalogue_for_every_descriptor() {
+        let operations = every_operation();
+        let covered = operations
+            .iter()
+            .map(std::mem::discriminant)
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(
+            covered.len(),
+            OPERATION_VARIANTS,
+            "every variant has a descriptor"
+        );
         let mut seen = BTreeMap::new();
-        for (operation, family) in every_descriptor() {
-            let identity = catalogued_operation(&operation)
+        for operation in &operations {
+            let family = expected_family(operation).expect("every descriptor here is catalogued");
+            let identity = catalogued_operation(operation)
                 .expect("every descriptor here has a catalogued identity")
                 .identity;
             assert_eq!(
@@ -3523,10 +3533,40 @@ mod tests {
                 assert_eq!(previous, family, "{identity} names two families");
             }
         }
-        // The one identity the forward map does not name, and is never derived.
-        assert_eq!(family_of_identity("quire.op.integer.rem"), None);
-        assert_eq!(family_of_identity("quire.op.integer.eq"), None);
-        assert_eq!(family_of_identity("quire.op.ieee.float32.sqrt"), None);
+    }
+
+    /// Catalogued identities derivation refuses (checked against the operation catalog): every
+    /// one is outside `family_of_identity`, so it is `OperationNotDerivable`.
+    ///
+    /// Trace: FR-014-AC-18, TC-024.
+    #[test]
+    fn tc_024_the_refused_catalogue_identities_have_no_family() {
+        for identity in [
+            "quire.op.integer.eq",
+            "quire.op.integer.ne",
+            "quire.op.rational.eq",
+            "quire.op.rational.ne",
+            "quire.op.decimal.eq",
+            "quire.op.decimal.ne",
+            "quire.op.integer.rem",
+            "quire.op.ieee.float32.sqrt",
+            "quire.op.ieee.float64.sqrt",
+            "quire.op.ieee.float32.fma",
+            "quire.op.ieee.float64.fma",
+            "quire.op.ieee.from_exact",
+            "quire.op.ieee.to_rational",
+            "quire.op.numeric.narrow",
+            "quire.op.rational.narrow",
+            "quire.op.text.size",
+            "quire.op.boolean.and",
+            "quire.op.boolean.or",
+            "quire.op.boolean.not",
+            "quire.op.boolean.implies",
+            "quire.op.boolean.eq",
+            "quire.op.boolean.ne",
+        ] {
+            assert_eq!(family_of_identity(identity), None, "{identity}");
+        }
     }
 
     fn application_node(body: Value) -> (CheckedNodeId, CheckedSemanticNodeV2) {
@@ -3534,13 +3574,58 @@ mod tests {
         (node.node_id.clone(), node)
     }
 
-    fn derive_hand_built(body: Value) -> Result<ExactScalarOperation, ClaimDerivationRefusal> {
+    /// The lowered form of a hand-built node, as IR lowering would return it.
+    fn lowered_node(node: &CheckedSemanticNodeV2) -> CompleteContractNodeV2 {
+        CompleteContractNodeV2 {
+            node: node.clone(),
+            node_tag: CheckedNodeTag::Expression,
+            source_map: vec![],
+            semantic_type: node.semantic_type.clone(),
+            dependencies: vec![],
+            bounds: vec![],
+            claims: vec![],
+            ir_id: serde_json::from_value(serde_json::json!({
+                "domain": "quire.contract-ir.semantic/v1",
+                "algorithm": "sha-256",
+                "digest": "f".repeat(64),
+            }))
+            .expect("an ir id"),
+        }
+    }
+
+    fn derive_hand_built(body: Value) -> Result<ExactScalarOperation, ExactScalarRefusal> {
         let (id, node) = application_node(body);
+        let graph = BTreeMap::from([(&id, &node)]);
+        let record = CompleteLoweringRecordV2::Lowered {
+            node: Box::new(lowered_node(&node)),
+        };
+        derive_operation(&graph, &id, &record)
+    }
+
+    fn no_claim(reason: ClaimDerivationRefusal) -> ExactScalarRefusal {
+        ExactScalarRefusal::NoDerivableClaim { reason }
+    }
+
+    /// A node absent from the graph, and one whose record did not lower, keep the refusal
+    /// `generate_exact_scalar_oracles` gives them, before any identity is read.
+    ///
+    /// Trace: FR-014-AC-18, FR-022-AC-8, TC-024.
+    #[test]
+    fn tc_024_derivation_checks_the_graph_and_the_lowering_before_the_identity() {
+        let (id, node) = application_node(serde_json::json!({"term": "literal"}));
         let graph = BTreeMap::from([(&id, &node)]);
         let record = CompleteLoweringRecordV2::InvalidInput {
             node_id: id.clone(),
         };
-        derive_operation(&graph, &id, &record)
+        assert_eq!(
+            derive_operation(&graph, &node_id('9'), &record),
+            Err(ExactScalarRefusal::InvalidInput)
+        );
+        assert_eq!(
+            derive_operation(&graph, &id, &record),
+            Err(ExactScalarRefusal::InvalidInput),
+            "an unlowered record is refused before the body is read"
+        );
     }
 
     /// A node with no `operation.identity` (which admission forbids), a node that is not an
@@ -3552,21 +3637,21 @@ mod tests {
     fn tc_024_derivation_refuses_a_missing_identity_a_non_application_and_a_foreign_identity() {
         assert_eq!(
             derive_hand_built(serde_json::json!({"term": "application", "operation": {}})),
-            Err(ClaimDerivationRefusal::MissingOperationIdentity)
+            Err(no_claim(ClaimDerivationRefusal::MissingOperationIdentity))
         );
         assert_eq!(
             derive_hand_built(serde_json::json!({"term": "literal"})),
-            Err(ClaimDerivationRefusal::NotApplication {
+            Err(no_claim(ClaimDerivationRefusal::NotApplication {
                 node_tag: "expression".to_owned()
-            })
+            }))
         );
         assert_eq!(
             derive_hand_built(serde_json::json!({
                 "term": "application", "operation": {"identity": "quire.op.boolean.and"}
             })),
-            Err(ClaimDerivationRefusal::OperationNotDerivable {
+            Err(no_claim(ClaimDerivationRefusal::OperationNotDerivable {
                 operation_identity: "quire.op.boolean.and".to_owned()
-            })
+            }))
         );
     }
 
@@ -3589,22 +3674,20 @@ mod tests {
         };
         let (id, node) = application_node(laws(&[]));
         let graph = BTreeMap::from([(&id, &node)]);
-        let record = CompleteLoweringRecordV2::InvalidInput {
-            node_id: id.clone(),
-        };
         let profile_of = |body: Value| {
             let (_, node) = application_node(body);
+            let lowered = lowered_node(&node);
             Derivation {
                 graph: &graph,
                 node: &node,
-                record: &record,
+                lowered: &lowered,
                 identity: "quire.op.integer.div",
             }
             .division_profile()
         };
-        let law_refusal = Err(ClaimDerivationRefusal::LawNotDerivable {
+        let law_refusal = Err(no_claim(ClaimDerivationRefusal::LawNotDerivable {
             operation_identity: "quire.op.integer.div".to_owned(),
-        });
+        }));
         assert_eq!(profile_of(laws(&[])), law_refusal);
         assert_eq!(profile_of(laws(&["quire.value.other/v1"])), law_refusal);
         assert_eq!(
@@ -3634,20 +3717,18 @@ mod tests {
                 "operation": {"identity": "quire.op.decimal.add", "mode": mode},
             }));
             let graph = BTreeMap::from([(&id, &node)]);
-            let record = CompleteLoweringRecordV2::InvalidInput {
-                node_id: id.clone(),
-            };
+            let lowered = lowered_node(&node);
             Derivation {
                 graph: &graph,
                 node: &node,
-                record: &record,
+                lowered: &lowered,
                 identity: "quire.op.decimal.add",
             }
             .require_mode(RoundingMode::NearestEven)
         };
-        let refusal = Err(ClaimDerivationRefusal::ModeNotDerivable {
+        let refusal = Err(no_claim(ClaimDerivationRefusal::ModeNotDerivable {
             operation_identity: "quire.op.decimal.add".to_owned(),
-        });
+        }));
         assert_eq!(derivation_of(Value::Null), refusal);
         assert_eq!(
             derivation_of(serde_json::json!({"kind": "text_profile", "value": "nearest-even"})),

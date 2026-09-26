@@ -141,7 +141,6 @@ pub enum RoutedGenerationError {
 struct ArmOutput {
     outputs: Vec<RoutedItemOutput>,
     rejected: bool,
-    claim_map: ClaimMap<ExactScalarClaim>,
 }
 
 /// Runs the generation arm of every routed item's backend kind.
@@ -179,13 +178,16 @@ pub fn generate_routed(
             continue;
         }
         let arm = match kind {
-            BackendKind::Kani => generate_kani(package, &group, contexts)?,
+            BackendKind::Kani => {
+                let (arm, kani_claim_map) = generate_kani(package, &group, contexts)?;
+                claim_map = Some(kani_claim_map);
+                arm
+            }
         };
         if arm.rejected {
             rejected.push(kind);
         }
         items.extend(arm.outputs);
-        claim_map = Some(arm.claim_map);
     }
     items.sort_by_key(|item| item.request_index);
     Ok(RoutedGeneration {
@@ -225,12 +227,12 @@ fn refuse_inconsistent_routing(
     Ok(())
 }
 
-/// The Kani arm: one `negotiate_kani_obligations` call over `group`, in ascending request index.
+/// The Kani arm, and the claim map it derived: one `negotiate_kani_obligations` call over `group`, in ascending request index.
 fn generate_kani(
     package: &CheckedPackageV2,
     group: &[&RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
-) -> Result<ArmOutput, RoutedGenerationError> {
+) -> Result<(ArmOutput, ClaimMap<ExactScalarClaim>), RoutedGenerationError> {
     let Some(context) = contexts.kani else {
         return Err(RoutedGenerationError::MissingKindContext {
             kind: BackendKind::Kani,
@@ -311,11 +313,7 @@ fn generate_kani(
             }
         })
         .collect();
-    Ok(ArmOutput {
-        outputs,
-        rejected,
-        claim_map,
-    })
+    Ok((ArmOutput { outputs, rejected }, claim_map))
 }
 
 /// The FR-014 claim map of `group`'s distinct nodes: each derivable node generated from its
@@ -340,10 +338,11 @@ fn derive_claim_map(
     {
         match derived {
             Ok(item) => derivable.push(item),
-            Err(reason) => {
-                underivable.push(ExactScalarClaim::no_derivable_claim(
+            Err(refusal) => {
+                underivable.push(ExactScalarClaim::derivation_refused(
+                    package,
                     node_id.clone(),
-                    reason,
+                    refusal,
                 ));
             }
         }

@@ -1167,6 +1167,16 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                         derived_domains: derived,
                     })
                 }
+                // `generate_exact_scalar_oracles` never generates an underived claim (only the
+                // routed arm builds them, always refused); a hand-assembled claim map that
+                // pairs the two is as unchecked as a caller-declared one.
+                OperationProvenance::Underived => {
+                    Outcome::Unsupported(UnsupportedObligation::CallerDeclaredOperation {
+                        operation_identity: claim.operation.identity.clone(),
+                        blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+                        derived_domains: derived,
+                    })
+                }
                 OperationProvenance::IrConfirmed => {
                     match lower_scalar_claim(claim, generated, &derived) {
                         Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
