@@ -508,6 +508,65 @@ fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_
     );
 }
 
+/// `a + b` over `a: Int[0, 9]` and `b: Int[10, 20]` with the result typed `[0, 29]` routes to
+/// Kani and is Supported: the harness ranges each argument over its own operand's bound and its
+/// generated source asserts the result against the result bound (IR-298).
+///
+/// Trace: FR-014-AC-20, FR-022-AC-13, TC-024, TC-033
+#[test]
+fn tc_033_two_bounded_parameters_are_supported_with_a_per_operand_scalar_harness() {
+    let package = package::two_parameter_package().admit();
+    let pins = pins();
+    for (code, expected) in [
+        (package::TWO_PARAMETER_SUM, [(0, 9), (10, 20)]),
+        // The literal operand has no bound of its own, so it ranges over the result bound.
+        (package::TWO_PARAMETER_LITERAL, [(0, 9), (0, 29)]),
+    ] {
+        let node_id = package::code_id(code);
+        let generation = generate_routed(
+            &package,
+            &[route(0, &node_id, "A")],
+            &kani_context(&pins, "crate::subject", 1),
+        )
+        .expect("routed generation succeeds");
+        let [item] = generation.items.as_slice() else {
+            panic!("one routed item, got {:?}", generation.items);
+        };
+        let (record, harness) = kani_parts(&item.output);
+        assert!(
+            matches!(record.disposition, ObligationDisposition::Supported { .. }),
+            "{record:#?}"
+        );
+        let harness = harness.expect("a supported item carries its harness");
+        assert_eq!(harness.identity.operation_identity, "quire.op.integer.add");
+        assert_eq!(
+            harness
+                .identity
+                .arguments
+                .iter()
+                .map(|argument| (argument.minimum, argument.maximum))
+                .collect::<Vec<_>>(),
+            expected
+        );
+        assert!(
+            harness
+                .rust
+                .contents
+                .contains("rt::Integer::from(0_i64), rt::Integer::from(29_i64)"),
+            "the result assertion names the result bound"
+        );
+        let [left, right] = expected;
+        for (name, (minimum, maximum)) in [("left", left), ("right", right)] {
+            assert!(
+                harness.rust.contents.contains(&format!(
+                    "kani::assume({name} >= {minimum}_i64 && {name} <= {maximum}_i64);"
+                )),
+                "{name} is assumed over its own range"
+            );
+        }
+    }
+}
+
 /// The corpus package with the nodes derivation refuses, and the claims of what it derives.
 struct Derived {
     package: CheckedPackageV2,

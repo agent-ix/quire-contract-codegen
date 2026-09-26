@@ -47,6 +47,13 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    target); derive nodes that are not applications, carry no identity, name an
    identity outside the derivable set, or carry a law, mode, operand forms or
    bound that select no parameter (FR-014-AC-18).
+7. Generate and derive an integer add over two parameters typed by distinct
+   `integer_range` domains `[0, 9]` and `[10, 20]` with its result typed by
+   `[0, 29]`, and read the claim's checked bounds (FR-014-AC-20). Refuse an
+   operand bound outside the descriptor's domain, an operand and a result typed
+   by a bound of another form, a scalar-typed result reaching two bounds that
+   no operand types, and one whose two reachable bounds are both operand bounds
+   (FR-014-AC-21).
 
 ## Expected Results
 

@@ -1391,6 +1391,132 @@ fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
     ));
 }
 
+fn add_over(low: i64, high: i64) -> ExactScalarOperation {
+    ExactScalarOperation::IntegerArithmetic {
+        operator: IntegerOperator::Add,
+        domain: bounded(low, high),
+    }
+}
+
+fn two_parameter_refusal(code: u32, operation: ExactScalarOperation) -> ExactScalarRefusal {
+    let package = two_parameter_package().admit();
+    let oracles = generate(
+        &package,
+        &[ExactScalarItem {
+            node_id: code_id(code),
+            operation,
+        }],
+    );
+    refusal_of(&oracles, code)
+}
+
+/// Two distinct bounded parameters, `Int[0, 9]` and `Int[10, 20]`, with a result typed `[0, 29]`
+/// generate: the descriptor is compared with the result bound only, and the claim's checked
+/// bounds are the result bound first, then each operand's own. Derivation returns the descriptor
+/// over the result bound. Before IR-298 the three reachable `integer_range` bounds over Integer
+/// were `AmbiguousBound`.
+///
+/// Trace: FR-014-AC-20, TC-024
+#[test]
+fn tc_024_ac20_two_distinct_bounded_parameters_generate_against_the_result_bound() {
+    let package = two_parameter_package().admit();
+    let oracles = generate(
+        &package,
+        &[ExactScalarItem {
+            node_id: code_id(TWO_PARAMETER_SUM),
+            operation: add_over(0, 29),
+        }],
+    );
+    let Some(ClaimDisposition::Generated(generated)) =
+        dispositions(&oracles).get(code_id(TWO_PARAMETER_SUM).digest.as_ref())
+    else {
+        panic!("a node over two bounded parameters generates");
+    };
+    assert_eq!(
+        generated.checked_bounds,
+        [
+            id(&Bound::Integer(0, 29).key()),
+            id(&Bound::Integer(0, 9).key()),
+            id(&Bound::Integer(10, 20).key()),
+        ]
+    );
+    assert_eq!(
+        derive_one(&package, TWO_PARAMETER_SUM)
+            .expect("derives")
+            .operation,
+        add_over(0, 29)
+    );
+    // The descriptor is the result bound: one over an operand's bound is a mismatch, not a pick.
+    assert_eq!(
+        two_parameter_refusal(TWO_PARAMETER_SUM, add_over(0, 9)),
+        ExactScalarRefusal::BoundMismatch {
+            bound: id(&Bound::Integer(0, 29).key()),
+            form: BoundForm::IntegerRange,
+        }
+    );
+}
+
+/// A scalar-typed result whose reachable bounds are the operands' own two and one more resolves to
+/// the one that is no operand's; with none, the result role is ambiguous.
+///
+/// Trace: FR-014-AC-20, FR-014-AC-21, TC-024
+#[test]
+fn tc_024_ac21_a_scalar_typed_result_takes_the_one_bound_no_operand_types() {
+    let package = two_parameter_package().admit();
+    let oracles = generate(
+        &package,
+        &[
+            ExactScalarItem {
+                node_id: code_id(TWO_PARAMETER_ATTACHED),
+                operation: add_over(0, 29),
+            },
+            ExactScalarItem {
+                node_id: code_id(TWO_PARAMETER_NO_RESULT),
+                operation: add_over(0, 29),
+            },
+        ],
+    );
+    assert!(matches!(
+        dispositions(&oracles).get(code_id(TWO_PARAMETER_ATTACHED).digest.as_ref()),
+        Some(ClaimDisposition::Generated(_))
+    ));
+    assert_eq!(
+        refusal_of(&oracles, TWO_PARAMETER_NO_RESULT),
+        ExactScalarRefusal::AmbiguousBound {
+            bounded_type: code_id(T_INTEGER),
+            expected_form: BoundForm::IntegerRange,
+        }
+    );
+}
+
+/// An operand bound outside the descriptor's domain is `BoundMismatch` naming that operand's
+/// bound; an operand, or the result, typed by a bound of another form is `MissingBound`.
+///
+/// Trace: FR-014-AC-21, TC-024
+#[test]
+fn tc_024_ac21_an_operand_bound_outside_the_domain_or_of_the_wrong_form_is_refused() {
+    assert_eq!(
+        two_parameter_refusal(TWO_PARAMETER_WIDE, add_over(0, 29)),
+        ExactScalarRefusal::BoundMismatch {
+            bound: id(&Bound::Integer(0, 50).key()),
+            form: BoundForm::IntegerRange,
+        }
+    );
+    for code in [
+        TWO_PARAMETER_WRONG_FORM_OPERAND,
+        TWO_PARAMETER_WRONG_FORM_RESULT,
+    ] {
+        assert_eq!(
+            two_parameter_refusal(code, add_over(0, 29)),
+            ExactScalarRefusal::MissingBound {
+                bounded_type: code_id(T_INTEGER),
+                expected_form: BoundForm::IntegerRange,
+            },
+            "node {code}"
+        );
+    }
+}
+
 fn no_claim(reason: ClaimDerivationRefusal) -> ExactScalarRefusal {
     ExactScalarRefusal::NoDerivableClaim { reason }
 }
@@ -1589,9 +1715,9 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
         bound(UNREADABLE),
         ExactScalarRefusal::UnreadableBound { .. }
     ));
-    // A node whose closure carries two bounds of one form on its result type is ambiguous, so it
-    // derives no domain. Until IR-298 gives an operation the parameter it is bounded by, a
-    // two-parameter node lands here; when IR-298 lands this expectation changes with it.
+    // A node whose closure carries two bounds of one form on its scalar result type, neither the
+    // own bound of an operand, is ambiguous, so it derives no domain. A node over two bounded
+    // parameters is not: each operand names its own bound (IR-298, FR-014-AC-20).
     assert!(matches!(
         bound(AMBIGUOUS),
         ExactScalarRefusal::AmbiguousBound { .. }

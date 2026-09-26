@@ -832,7 +832,7 @@ fn check_item<'r>(
             expected_operator: shape.body_operator,
             expected_arguments: shape.operands.len(),
         })?;
-    let result = type_form(graph, &node.semantic_type);
+    let result = scalar_type_form(graph, &node.semantic_type);
     if result.as_deref() != Some(shape.result.wire()) {
         return Err(ExactScalarRefusal::ResultTypeMismatch {
             expected: shape.result,
@@ -974,23 +974,77 @@ fn operand_form(graph: &Graph<'_>, term: &Value) -> Option<String> {
 
 fn reference_form(graph: &Graph<'_>, term: &Value) -> Option<String> {
     let target: CheckedNodeId = serde_json::from_value(term.get("target")?.clone()).ok()?;
-    let mut type_id = &graph.get(&target)?.semantic_type;
-    // A parameter typed `Int[0, 9]` is typed by a `bounded_domain` whose own `semantic_type` is its
-    // base scalar type: QSL emits a bounded domain directly over its scalar base, so one step
-    // reaches the type the operand form is read from.
+    scalar_type_form(graph, &graph.get(&target)?.semantic_type)
+}
+
+/// The scalar form of `type_id`, following one `bounded_domain` step. A parameter typed
+/// `Int[0, 9]` is typed by a `bounded_domain` whose own `semantic_type` is its base scalar type:
+/// QSL emits a bounded domain directly over its scalar base, so one step reaches the type the form
+/// is read from. A node's result typed by a bounded domain reads the same way.
+fn scalar_type_form(graph: &Graph<'_>, type_id: &CheckedNodeId) -> Option<String> {
     let node = graph.get(type_id)?;
-    if &*node.node_tag == CheckedNodeTag::BoundedDomain.as_wire() {
-        type_id = &node.semantic_type;
+    if is_bounded_domain(node) {
+        type_form(graph, &node.semantic_type)
+    } else {
+        type_form(graph, type_id)
     }
-    type_form(graph, type_id)
+}
+
+fn is_bounded_domain(node: &CheckedSemanticNodeV2) -> bool {
+    &*node.node_tag == CheckedNodeTag::BoundedDomain.as_wire()
+}
+
+/// The `bounded_domain` node that types a `reference` operand's target: the operand's own bound.
+/// A literal, a reference typed by a scalar type, or any other term has none.
+fn operand_own_bound<'g>(graph: &Graph<'g>, term: &Value) -> Option<&'g CheckedSemanticNodeV2> {
+    if term.get("term")?.as_str()? != "reference" {
+        return None;
+    }
+    let target: CheckedNodeId = serde_json::from_value(term.get("target")?.clone()).ok()?;
+    let typing = graph.get(&graph.get(&target)?.semantic_type)?;
+    is_bounded_domain(typing).then_some(*typing)
+}
+
+/// Each argument of an application body, with its own bound where it has one.
+fn own_bounds<'g>(graph: &Graph<'g>, body: &Value) -> Vec<Option<&'g CheckedSemanticNodeV2>> {
+    body.get("arguments")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|argument| operand_own_bound(graph, argument))
+        .collect()
+}
+
+/// The own bound of each of the node's arguments, by position: the `bounded_domain` typing the
+/// argument, or `None` for a literal or a reference typed by a scalar type. Reads the same graph
+/// [`generate_exact_scalar_oracles`] checked, so a Kani harness ranges each operand as the
+/// oracle's parameter check did.
+pub(crate) fn operand_bound_ids(
+    package: &CheckedPackageV2,
+    node_id: &CheckedNodeId,
+) -> Vec<Option<CheckedNodeId>> {
+    let graph = package
+        .graph()
+        .nodes
+        .iter()
+        .map(|node| (&node.node_id, node))
+        .collect::<BTreeMap<_, _>>();
+    graph
+        .get(node_id)
+        .map(|node| own_bounds(&graph, &node.body))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|bound| bound.map(|bound| bound.node_id.clone()))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
 // Parameters against IR bounds
 // ---------------------------------------------------------------------------
 
-/// Check every descriptor parameter the IR carries against the one reachable
-/// bound of its form on the node's result type, returning the bounds checked.
+/// Check every descriptor parameter the IR carries against the node's result bound of its form,
+/// returning the bounds checked: the result bound first, then, for integer arithmetic, division
+/// and modulo, each operand's own bound (each of which must lie within the descriptor's domain).
 fn check_parameters(
     graph: &Graph<'_>,
     node: &CompleteContractNodeV2,
@@ -1012,7 +1066,8 @@ fn check_parameters(
                     ))
                 }
             };
-            bounds.equal(BoundForm::IntegerRange, read_integer_range, declared)?
+            let result = bounds.equal(BoundForm::IntegerRange, read_integer_range, declared)?;
+            return Ok(bounds.with_operand_bounds(result, declared)?);
         }
         ExactScalarOperation::RationalArithmetic { domain, .. } => bounds.equal(
             BoundForm::RationalRange,
@@ -1069,38 +1124,29 @@ struct Bounds<'g, 'n> {
 }
 
 impl Bounds<'_, '_> {
-    /// Read the single bound of `form` on the node's result type: the one selector both
-    /// [`Self::equal`] and [`derive_exact_scalar_items`] use. Returns the bound's node and the
-    /// value it reads as.
+    /// Read the result bound of `form`: the one selector both [`Self::equal`] and
+    /// [`derive_exact_scalar_items`] use. Returns the bound's node and the value it reads as.
+    ///
+    /// The result's role is named by the node itself. A result typed by a `bounded_domain` has
+    /// that domain as its bound. A result typed by a scalar type has the one reachable bound of
+    /// `form` over that type and, where several are reachable, the one that is not an operand's
+    /// own bound; a node whose reachable bounds do not resolve that way is ambiguous.
     fn read<T>(
         &self,
         form: BoundForm,
         read: fn(&[Value]) -> Option<T>,
     ) -> Result<(CheckedNodeId, T), ExactScalarRefusal> {
         let bounded_type = &self.node.semantic_type;
-        let candidates = self
-            .node
-            .bounds
-            .iter()
-            .filter_map(|id| self.graph.get(id))
-            .filter(|bound| {
-                &bound.semantic_type == bounded_type && &*bound.semantic_form == form.wire()
-            })
-            .collect::<Vec<_>>();
-        let bound = match candidates.as_slice() {
-            [bound] => bound,
-            [] => {
+        let typing = self.graph.get(bounded_type).copied();
+        let bound = match typing.filter(|typing| is_bounded_domain(typing)) {
+            Some(bound) if &*bound.semantic_form == form.wire() => bound,
+            Some(bound) => {
                 return Err(ExactScalarRefusal::MissingBound {
-                    bounded_type: bounded_type.clone(),
+                    bounded_type: bound.semantic_type.clone(),
                     expected_form: form,
                 })
             }
-            [_, _, ..] => {
-                return Err(ExactScalarRefusal::AmbiguousBound {
-                    bounded_type: bounded_type.clone(),
-                    expected_form: form,
-                })
-            }
+            None => self.scalar_result_bound(form)?,
         };
         let value = aggregate_members(&bound.body)
             .and_then(read)
@@ -1108,6 +1154,86 @@ impl Bounds<'_, '_> {
                 bound: bound.node_id.clone(),
             })?;
         Ok((bound.node_id.clone(), value))
+    }
+
+    /// The result bound of a node whose result is typed by a scalar type.
+    fn scalar_result_bound(
+        &self,
+        form: BoundForm,
+    ) -> Result<&CheckedSemanticNodeV2, ExactScalarRefusal> {
+        let bounded_type = &self.node.semantic_type;
+        let candidates = self
+            .node
+            .bounds
+            .iter()
+            .filter_map(|id| self.graph.get(id).copied())
+            .filter(|bound| {
+                &bound.semantic_type == bounded_type && &*bound.semantic_form == form.wire()
+            })
+            .collect::<Vec<_>>();
+        match candidates.as_slice() {
+            [bound] => Ok(bound),
+            [] => Err(ExactScalarRefusal::MissingBound {
+                bounded_type: bounded_type.clone(),
+                expected_form: form,
+            }),
+            [_, _, ..] => {
+                let own = own_bounds(self.graph, &self.node.node.body);
+                let mut free = candidates.iter().filter(|candidate| {
+                    !own.iter()
+                        .flatten()
+                        .any(|operand| operand.node_id == candidate.node_id)
+                });
+                match (free.next(), free.next()) {
+                    (Some(bound), None) => Ok(bound),
+                    _ => Err(ExactScalarRefusal::AmbiguousBound {
+                        bounded_type: bounded_type.clone(),
+                        expected_form: form,
+                    }),
+                }
+            }
+        }
+    }
+
+    /// `result` followed by each operand's own `integer_range` bound, deduplicated, after
+    /// requiring each to lie within the descriptor's `declared` domain. An operand typed by a
+    /// bound of another form has no integer bound and is `MissingBound`.
+    fn with_operand_bounds(
+        &self,
+        result: CheckedNodeId,
+        declared: Option<&IntegerInterval>,
+    ) -> Result<Vec<CheckedNodeId>, ExactScalarRefusal> {
+        let form = BoundForm::IntegerRange;
+        let mut checked = vec![result];
+        for bound in own_bounds(self.graph, &self.node.node.body)
+            .into_iter()
+            .flatten()
+        {
+            if &*bound.semantic_form != form.wire() {
+                return Err(ExactScalarRefusal::MissingBound {
+                    bounded_type: bound.semantic_type.clone(),
+                    expected_form: form,
+                });
+            }
+            let interval = aggregate_members(&bound.body)
+                .and_then(read_integer_range)
+                .ok_or_else(|| ExactScalarRefusal::UnreadableBound {
+                    bound: bound.node_id.clone(),
+                })?;
+            let within = declared.is_some_and(|domain| {
+                domain.lower() <= interval.lower() && interval.upper() <= domain.upper()
+            });
+            if !within {
+                return Err(ExactScalarRefusal::BoundMismatch {
+                    bound: bound.node_id.clone(),
+                    form,
+                });
+            }
+            if !checked.contains(&bound.node_id) {
+                checked.push(bound.node_id.clone());
+            }
+        }
+        Ok(checked)
     }
 
     /// Read the single bound of `form` on the result type and require the
@@ -2703,7 +2829,7 @@ impl Derivation<'_, '_> {
         .refusal()
     }
 
-    /// The one bound of `form` on the node's result type.
+    /// The node's result bound of `form`.
     fn read<T>(
         &self,
         form: BoundForm,
@@ -2730,7 +2856,7 @@ impl Derivation<'_, '_> {
 
     /// The scalar form of the node's result type.
     fn result_form(&self) -> Option<String> {
-        type_form(self.graph, &self.node.semantic_type)
+        scalar_type_form(self.graph, &self.node.semantic_type)
     }
 
     /// The `operation.mode` value when its kind is `rounding`.

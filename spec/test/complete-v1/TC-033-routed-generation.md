@@ -74,6 +74,8 @@ the FR-015 generator returns for the same items.
 13. **Returned claim map (FR-022-AC-12).** Compare `RoutedGeneration.claim_map`
     with `generate_exact_scalar_oracles` over `derive_exact_scalar_items` for
     the same nodes, and with `None` when nothing is routed.
+14. **Two bounded parameters (FR-022-AC-13).** Route alone the integer add over
+    parameters `Int[0, 9]` and `Int[10, 20]` whose result is typed `[0, 29]`.
 
 ## Expected Results
 
@@ -120,3 +122,6 @@ the FR-015 generator returns for the same items.
 13. The claim map is `Some`, holds the FR-014 entries for the derivable nodes
     and a `NoDerivableClaim` entry for the others, ordered by node id; it is
     `None` for an empty routed set.
+14. The record is `Supported`; its harness names `quire.op.integer.add` with
+    arguments `[0, 9]` and `[10, 20]`, and its generated source asserts the
+    result against `[0, 29]`.

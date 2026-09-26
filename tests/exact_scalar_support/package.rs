@@ -1231,6 +1231,29 @@ impl Bound {
     }
 }
 
+/// An `text_bounds` bound over Integer: a bound of the wrong form for an integer operation.
+pub fn wrong_form_bound() -> Bound {
+    Bound::Raw {
+        form: "text_bounds",
+        bounded: "integer",
+        body: Bound::Text(0, 4, "nfc").body(),
+        // The embedded profile literal is `text`, foreign to this
+        // bound's own `integer` type; without a reachable text bound
+        // the corpus expression is refused at IR's lowering stage
+        // before CG's own wrong-form check ever runs. A bare,
+        // integer-free text satisfier is used rather than the
+        // shared `TEXT` constant: `TEXT`'s own body embeds integer
+        // endpoints and would supply a genuine, correctly-formed
+        // `integer_range` bound, defeating this fixture's point.
+        foreign: vec![Bound::Raw {
+            form: "text_bounds",
+            bounded: "text",
+            body: json!({"term": "aggregate", "members": [member("text_profile", literal("text", "nfc"))]}),
+            foreign: vec![],
+        }],
+    }
+}
+
 /// An integer range whose upper bound is spelled non-canonically.
 pub fn unreadable_bound() -> Bound {
     Bound::Raw {
@@ -2502,28 +2525,7 @@ pub fn corpus_package() -> PackageBuilder {
         (MATHEMATICAL, vec![INT]),
         (AMBIGUOUS, vec![INT, INT5]),
         (UNREADABLE, vec![unreadable_bound()]),
-        (
-            WRONG_BOUND_FORM,
-            vec![Bound::Raw {
-                form: "text_bounds",
-                bounded: "integer",
-                body: Bound::Text(0, 4, "nfc").body(),
-                // The embedded profile literal is `text`, foreign to this
-                // bound's own `integer` type; without a reachable text bound
-                // the corpus expression is refused at IR's lowering stage
-                // before CG's own wrong-form check ever runs. A bare,
-                // integer-free text satisfier is used rather than the
-                // shared `TEXT` constant: `TEXT`'s own body embeds integer
-                // endpoints and would supply a genuine, correctly-formed
-                // `integer_range` bound, defeating this fixture's point.
-                foreign: vec![Bound::Raw {
-                    form: "text_bounds",
-                    bounded: "text",
-                    body: json!({"term": "aggregate", "members": [member("text_profile", literal("text", "nfc"))]}),
-                    foreign: vec![],
-                }],
-            }],
-        ),
+        (WRONG_BOUND_FORM, vec![wrong_form_bound()]),
         (DOMAIN_MISMATCH, vec![INT5]),
     ] {
         let bound_keys: Vec<String> = bounds.iter().map(|bound| builder.bound(bound)).collect();
@@ -3040,6 +3042,120 @@ pub fn bounded_increment_package() -> PackageBuilder {
             vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
         ),
         &[bound],
+    );
+    builder
+}
+
+/// Two parameters typed by distinct integer bounds, `a: Int[0, 9]` and `b: Int[10, 20]`.
+pub const V_PARAM_A: u32 = 112;
+pub const V_PARAM_B: u32 = 113;
+/// `wide: Int[0, 50]`, outside the result bound `[0, 29]`.
+pub const V_PARAM_WIDE: u32 = 114;
+/// `c: Int[1, 8]` and `d: Int[11, 19]`, the parameters of [`TWO_PARAMETER_ATTACHED`].
+pub const V_PARAM_C: u32 = 115;
+pub const V_PARAM_D: u32 = 116;
+/// `a + b` with the result typed by the `integer_range` `[0, 29]`.
+pub const TWO_PARAMETER_SUM: u32 = 2050;
+/// `a + wide` with the result typed `[0, 29]`: an operand bound outside the result domain.
+pub const TWO_PARAMETER_WIDE: u32 = 2051;
+/// `a + b` with a scalar-typed result and no bound but the two operands': the result role is
+/// unresolvable.
+pub const TWO_PARAMETER_NO_RESULT: u32 = 2052;
+/// `c + d` with a scalar-typed result and `[0, 29]` attached as the only bound that is no
+/// operand's own.
+pub const TWO_PARAMETER_ATTACHED: u32 = 2053;
+/// `a + w` where `w` is typed by a `text_bounds` bound over Integer.
+pub const TWO_PARAMETER_WRONG_FORM_OPERAND: u32 = 2054;
+/// `a + b` with the result typed by a `text_bounds` bound over Integer.
+pub const TWO_PARAMETER_WRONG_FORM_RESULT: u32 = 2055;
+/// `w`, the operand of [`TWO_PARAMETER_WRONG_FORM_OPERAND`].
+pub const V_PARAM_WRONG_FORM: u32 = 117;
+/// `a + 1` with the result typed `[0, 29]`: the literal operand has no bound of its own.
+pub const TWO_PARAMETER_LITERAL: u32 = 2056;
+
+/// [`corpus_package`] plus integer additions over parameters typed by distinct bounds: the
+/// two-parameter shapes of IR-298.
+pub fn two_parameter_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    let integer_type = key(T_INTEGER);
+    let a = builder.bound(&Bound::Integer(0, 9));
+    let b = builder.bound(&Bound::Integer(10, 20));
+    let wide = builder.bound(&Bound::Integer(0, 50));
+    let c = builder.bound(&Bound::Integer(1, 8));
+    let d = builder.bound(&Bound::Integer(11, 19));
+    let result = builder.bound(&Bound::Integer(0, 29));
+    let wrong = builder.bound(&wrong_form_bound());
+    for (code, bound) in [
+        (V_PARAM_A, &a),
+        (V_PARAM_B, &b),
+        (V_PARAM_WIDE, &wide),
+        (V_PARAM_C, &c),
+        (V_PARAM_D, &d),
+    ] {
+        builder.code(code, "value", "literal", bound, literal("integer", "3"));
+    }
+    builder.code(
+        V_PARAM_WRONG_FORM,
+        "value",
+        "literal",
+        &wrong,
+        literal("integer", "3"),
+    );
+    let sum = |operands: Vec<Value>, result_type: &str| {
+        application("binary", op("quire.op.integer.add"), result_type, operands)
+    };
+    let param = |code| reference(&key(code));
+    for (code, operands, result_type) in [
+        (
+            TWO_PARAMETER_SUM,
+            vec![param(V_PARAM_A), param(V_PARAM_B)],
+            &result,
+        ),
+        (
+            TWO_PARAMETER_WIDE,
+            vec![param(V_PARAM_A), param(V_PARAM_WIDE)],
+            &result,
+        ),
+        (
+            TWO_PARAMETER_NO_RESULT,
+            vec![param(V_PARAM_A), param(V_PARAM_B)],
+            &integer_type,
+        ),
+        (
+            TWO_PARAMETER_WRONG_FORM_OPERAND,
+            vec![param(V_PARAM_A), param(V_PARAM_WRONG_FORM)],
+            &result,
+        ),
+        (
+            TWO_PARAMETER_WRONG_FORM_RESULT,
+            vec![param(V_PARAM_A), param(V_PARAM_B)],
+            &wrong,
+        ),
+        (
+            TWO_PARAMETER_LITERAL,
+            vec![param(V_PARAM_A), literal("integer", "1")],
+            &result,
+        ),
+    ] {
+        // No bound is attached: each node reaches what its operands and its result type name.
+        builder.application_bounded(
+            code,
+            "expression",
+            "binary",
+            result_type,
+            sum(operands, result_type),
+            &[],
+        );
+    }
+    // `[0, 29]` reaches this node through `c`, so it is the one reachable bound no operand types.
+    builder.application_bounded_anchored(
+        TWO_PARAMETER_ATTACHED,
+        "expression",
+        "binary",
+        &integer_type,
+        sum(vec![param(V_PARAM_C), param(V_PARAM_D)], &integer_type),
+        &[Bound::Integer(0, 29)],
+        Some(&key(V_PARAM_C)),
     );
     builder
 }
