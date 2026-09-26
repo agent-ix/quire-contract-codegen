@@ -6,11 +6,13 @@
 use std::fs;
 
 use quire_contract_codegen::{
-    generate_routed, negotiate_kani_obligations, BackendKind, Candidate, ClaimDisposition,
-    GenerationContexts, InvalidObligationItem, KaniGenerationContext, KaniObligationError,
-    KaniObligationOutcome, KaniObligationRequest, KaniPinField, KaniScalarObligationHarness,
-    KaniToolPins, KindOutput, ObligationDisposition, ObligationItem, ObligationRecord,
-    RoutedGeneration, RoutedGenerationError, RoutedGenerationItem, UnsupportedObligation,
+    derive_exact_scalar_items, generate_exact_scalar_oracles, generate_routed,
+    negotiate_kani_obligations, BackendKind, Candidate, ClaimDerivationRefusal, ClaimDisposition,
+    ExactScalarRefusal, GenerationContexts, InvalidObligationItem, KaniGenerationContext,
+    KaniObligationError, KaniObligationOutcome, KaniObligationRequest, KaniPinField,
+    KaniScalarObligationHarness, KaniToolPins, KindOutput, ObligationDisposition, ObligationItem,
+    ObligationRecord, RoutedGeneration, RoutedGenerationError, RoutedGenerationItem,
+    UnsupportedObligation,
 };
 use quire_contract_ir::{CheckedNodeId, CheckedPackageV2};
 
@@ -81,14 +83,12 @@ fn route(request_index: usize, node_id: &CheckedNodeId, digest: &str) -> RoutedG
 }
 
 fn kani_context<'a>(
-    fixture: &'a Fixture,
     pins: &'a KaniToolPins,
     subject_path: &'a str,
     unwind: u32,
 ) -> GenerationContexts<'a> {
     GenerationContexts {
         kani: Some(KaniGenerationContext {
-            claim_map: &fixture.claim_map,
             subject_path,
             pins,
             unwind,
@@ -151,7 +151,7 @@ fn generate_step_one(fixture: &Fixture, routed: &[RoutedGenerationItem]) -> Rout
     generate_routed(
         &fixture.package,
         routed,
-        &kani_context(fixture, &pins, "crate::subject", 1),
+        &kani_context(&pins, "crate::subject", 1),
     )
     .expect("routed generation succeeds")
 }
@@ -252,7 +252,7 @@ fn tc_033_the_entry_point_takes_no_settlement_input() {
 fn tc_033_a_routed_kind_the_backend_does_not_have_refuses_the_call() {
     let fixture = fixture();
     let pins = pins();
-    let contexts = kani_context(&fixture, &pins, "crate::subject", 1);
+    let contexts = kani_context(&pins, "crate::subject", 1);
     let foreign = |index: usize| RoutedGenerationItem {
         request_index: index,
         node_id: fixture.rendered[0].clone(),
@@ -297,7 +297,7 @@ fn tc_033_a_routed_kind_the_backend_does_not_have_refuses_the_call() {
 fn tc_033_duplicate_index_and_missing_context_refuse_the_call() {
     let fixture = fixture();
     let pins = pins();
-    let contexts = kani_context(&fixture, &pins, "crate::subject", 1);
+    let contexts = kani_context(&pins, "crate::subject", 1);
     let duplicated = [
         route(8, &fixture.rendered[0], "A"),
         route(3, &fixture.rendered[1], "A"),
@@ -341,7 +341,7 @@ fn tc_033_a_kani_group_refusal_is_returned_unchanged() {
         generate_routed(
             &fixture.package,
             &routed,
-            &kani_context(&fixture, &drifted, "crate::subject", 1)
+            &kani_context(&drifted, "crate::subject", 1)
         ),
         Err(RoutedGenerationError::Kani(
             KaniObligationError::UnpinnedBackend {
@@ -356,7 +356,7 @@ fn tc_033_a_kani_group_refusal_is_returned_unchanged() {
         generate_routed(
             &fixture.package,
             &routed,
-            &kani_context(&fixture, &pinned, "crate::subject", 0)
+            &kani_context(&pinned, "crate::subject", 0)
         ),
         Err(RoutedGenerationError::Kani(
             KaniObligationError::InvalidUnwind { unwind: 0 }
@@ -366,7 +366,7 @@ fn tc_033_a_kani_group_refusal_is_returned_unchanged() {
         generate_routed(
             &fixture.package,
             &routed,
-            &kani_context(&fixture, &pinned, "not a path", 1)
+            &kani_context(&pinned, "not a path", 1)
         ),
         Err(RoutedGenerationError::Kani(
             KaniObligationError::InvalidSubjectPath
@@ -424,13 +424,14 @@ fn tc_033_an_empty_routed_set_returns_an_empty_result() {
     let pinned = pins();
     for contexts in [
         GenerationContexts { kani: None },
-        kani_context(&fixture, &pinned, "crate::subject", 1),
+        kani_context(&pinned, "crate::subject", 1),
     ] {
         assert_eq!(
             generate_routed(&fixture.package, &[], &contexts),
             Ok(RoutedGeneration {
                 items: Vec::new(),
-                rejected: Vec::new()
+                rejected: Vec::new(),
+                claim_map: None,
             })
         );
     }
@@ -471,32 +472,19 @@ fn tc_033_output_is_deterministic_and_independent_of_index_and_digest() {
 
 /// `x + 1` over `Int[0, 9]`, QSL's shape (a parameter typed by an `integer_range`
 /// `bounded_domain` with binding-shaped `min`/`max` members), routes to Kani and is Supported
-/// with a scalar harness carrying the inclusive `[0, 9]` domain (IR-297 with IR-296).
+/// with a scalar harness carrying the inclusive `[0, 9]` domain (IR-297 with IR-296). No claim map
+/// is supplied: the operation and domain are derived from the package alone (IR-294).
 ///
-/// Trace: FR-014-AC-16, FR-014-AC-17, FR-022-AC-2, TC-024, TC-033
+/// Trace: FR-014-AC-16, FR-014-AC-17, FR-022-AC-2, FR-022-AC-10, TC-024, TC-033
 #[test]
 fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_harness() {
     let package = package::bounded_increment_package().admit();
     let node_id = package::code_id(package::BOUNDED_INCREMENT);
-    let oracles = quire_contract_codegen::generate_exact_scalar_oracles(
-        &package,
-        &[quire_contract_codegen::ExactScalarItem {
-            node_id: node_id.clone(),
-            operation: package::integer_add_0_9(),
-        }],
-    )
-    .expect("generation succeeds");
-    let fixture = Fixture {
-        package,
-        claim_map: oracles.claim_map,
-        rendered: vec![node_id.clone()],
-        unrendered: node_id.clone(),
-    };
     let pins = pins();
     let generation = generate_routed(
-        &fixture.package,
+        &package,
         &[route(0, &node_id, "A")],
-        &kani_context(&fixture, &pins, "crate::subject", 1),
+        &kani_context(&pins, "crate::subject", 1),
     )
     .expect("routed generation succeeds");
     let [item] = generation.items.as_slice() else {
@@ -517,5 +505,336 @@ fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_
             .map(|argument| (argument.minimum, argument.maximum))
             .collect::<Vec<_>>(),
         [(0, 9), (0, 9)]
+    );
+}
+
+/// The corpus package with the nodes derivation refuses, and the claims of what it derives.
+struct Derived {
+    package: CheckedPackageV2,
+    /// The three rendered nodes and the unrendered one of [`Fixture`].
+    generated: Vec<CheckedNodeId>,
+    rem: CheckedNodeId,
+    integer_eq: CheckedNodeId,
+}
+
+fn derived() -> Derived {
+    let fixture = fixture();
+    let package = package::derivation_package().admit();
+    let mut generated = fixture.rendered.clone();
+    generated.push(fixture.unrendered.clone());
+    Derived {
+        package,
+        generated,
+        rem: package::code_id(package::DERIVE_REM),
+        integer_eq: package::code_id(package::DERIVE_INTEGER_EQ),
+    }
+}
+
+/// An underivable item keeps its typed refusal, `no_derivable_claim` naming the node and the
+/// derivation refusal, with no harness; the group is not rejected and its siblings' records and
+/// harnesses equal what they are without it.
+///
+/// Trace: FR-022-AC-11, FR-015-AC-15, TC-033
+#[test]
+fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected() {
+    let derived = derived();
+    let pins = pins();
+    let contexts = kani_context(&pins, "crate::subject", 1);
+    let with_siblings = derived
+        .generated
+        .iter()
+        .enumerate()
+        .map(|(index, node)| route(index, node, "A"))
+        .collect::<Vec<_>>();
+    let alone = generate_routed(&derived.package, &with_siblings, &contexts).expect("generates");
+
+    for (refused, identity) in [
+        (&derived.rem, "quire.op.integer.rem"),
+        (&derived.integer_eq, "quire.op.integer.eq"),
+    ] {
+        let mut routed = with_siblings.clone();
+        routed.push(route(9, refused, "A"));
+        let mixed = generate_routed(&derived.package, &routed, &contexts).expect("generates");
+        assert!(
+            mixed.rejected.is_empty(),
+            "an underivable item must not reject the group"
+        );
+        let (record, harness) = kani_parts(&mixed.items[4].output);
+        assert_eq!(mixed.items[4].request_index, 9);
+        assert!(harness.is_none());
+        assert_eq!(
+            record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::NoDerivableClaim {
+                    node_id: refused.clone(),
+                    reason: ClaimDerivationRefusal::OperationNotDerivable {
+                        operation_identity: identity.to_owned()
+                    },
+                }
+            }
+        );
+        let wire = serde_json::to_value(&record.disposition).expect("serializes");
+        assert_eq!(wire["reason"]["code"], "no_derivable_claim");
+        assert_eq!(wire["reason"]["reason"]["code"], "operation_not_derivable");
+        assert_eq!(wire["reason"]["reason"]["operation_identity"], identity);
+        // The siblings are unaffected: record and harness equal the run without the refused item.
+        assert_eq!(mixed.items[..4], alone.items[..]);
+        assert_eq!(
+            mixed.items[..4]
+                .iter()
+                .filter(|item| kani_parts(&item.output).1.is_some())
+                .count(),
+            3
+        );
+    }
+}
+
+/// `RoutedGeneration.claim_map` equals FR-014 over the derived items, plus one `NoDerivableClaim`
+/// claim per underivable node, ascending by node id; it is `None` with nothing routed.
+///
+/// Trace: FR-022-AC-12, TC-033
+#[test]
+fn tc_033_the_returned_claim_map_is_fr014_over_the_derived_items() {
+    let derived = derived();
+    let pins = pins();
+    let contexts = kani_context(&pins, "crate::subject", 1);
+    let nodes = derived
+        .generated
+        .iter()
+        .chain([&derived.rem, &derived.integer_eq])
+        .cloned()
+        .collect::<Vec<_>>();
+    let routed = nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| route(index, node, "A"))
+        .collect::<Vec<_>>();
+    let generation = generate_routed(&derived.package, &routed, &contexts).expect("generates");
+    let claim_map = generation.claim_map.expect("a Kani group ran");
+
+    let mut sorted = nodes.clone();
+    sorted.sort();
+    let items = derive_exact_scalar_items(&derived.package, &sorted)
+        .into_iter()
+        .filter_map(Result::ok)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        items.len(),
+        4,
+        "the four generated nodes derive; rem and eq do not"
+    );
+    let mut expected = generate_exact_scalar_oracles(&derived.package, &items)
+        .expect("generates")
+        .claim_map;
+    assert!(expected
+        .items
+        .iter()
+        .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
+    assert_eq!(claim_map.items.len(), 6);
+    let refused = claim_map
+        .items
+        .iter()
+        .filter(|claim| {
+            matches!(
+                &claim.result,
+                ClaimDisposition::Refused {
+                    refusal: ExactScalarRefusal::NoDerivableClaim { .. }
+                }
+            )
+        })
+        .map(|claim| claim.node_id.clone())
+        .collect::<Vec<_>>();
+    let mut underivable = vec![derived.rem.clone(), derived.integer_eq.clone()];
+    underivable.sort();
+    assert_eq!(refused, underivable);
+    // Dropping the refused claims leaves exactly FR-014's map.
+    let mut generated_only = claim_map.clone();
+    generated_only
+        .items
+        .retain(|claim| matches!(claim.result, ClaimDisposition::Generated(_)));
+    expected.items.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+    assert_eq!(generated_only, expected);
+    let ids = claim_map
+        .items
+        .iter()
+        .map(|claim| claim.node_id.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(ids, sorted, "claims ascend by node id");
+
+    let empty = generate_routed(&derived.package, &[], &contexts).expect("generates");
+    assert_eq!(empty.claim_map, None);
+}
+
+/// Which node each lowering and bound refusal is exercised on (TC-025's fixture).
+const UNSATISFIABLE: u32 = 3001;
+
+/// The record `generate_routed` returns for `node` routed alone, with whether the group rejected.
+fn routed_alone(package: &CheckedPackageV2, node: &CheckedNodeId) -> (ObligationRecord, bool) {
+    let pins = pins();
+    let generation = generate_routed(
+        package,
+        &[route(0, node, "A")],
+        &kani_context(&pins, "crate::subject", 1),
+    )
+    .expect("routed generation succeeds");
+    let [item] = generation.items.as_slice() else {
+        panic!("one routed item, got {:?}", generation.items);
+    };
+    let (record, harness) = kani_parts(&item.output);
+    assert!(harness.is_none(), "a refused item has no harness");
+    (record.clone(), !generation.rejected.is_empty())
+}
+
+/// An item derivation cannot build a descriptor for because its node is absent, does not lower or
+/// has a refused bound keeps the FR-015 disposition it had when the caller supplied the claim:
+/// a node absent from the graph is `invalid_request` and rejects the group; the others are
+/// `requires_bound`, `blocked_on_upstream` or `unsatisfiable_bound`, and reject nothing.
+///
+/// Trace: FR-022-AC-8, FR-015-AC-3, FR-015-AC-5, FR-015-AC-14, TC-033
+#[test]
+fn tc_033_lowering_and_bound_refusals_keep_their_fr015_dispositions() {
+    let (package, _) = scalar_package();
+    let node = |code| package::code_id(code);
+
+    let (record, rejected) = routed_alone(&package, &node(package::MISSING));
+    assert_eq!(
+        record.disposition,
+        ObligationDisposition::InvalidRequest {
+            reason: InvalidObligationItem::UnknownNode
+        }
+    );
+    assert!(rejected, "an absent node rejects the Kani group");
+
+    let requires_bound = |code, unbounded_type: Option<CheckedNodeId>| {
+        let (record, rejected) = routed_alone(&package, &node(code));
+        assert!(!rejected, "node {code} must not reject the group");
+        match (record.disposition, unbounded_type) {
+            (
+                ObligationDisposition::RequiresBound {
+                    unbounded_type: found,
+                },
+                Some(expected),
+            ) => {
+                assert_eq!(found, expected, "node {code}");
+            }
+            (ObligationDisposition::RequiresBound { .. }, None) => {}
+            (other, _) => panic!("node {code}: {other:?}"),
+        }
+    };
+    requires_bound(package::UNBOUNDED, Some(node(package::T_INTEGER)));
+    requires_bound(package::MISSING_ROUNDING, None);
+    requires_bound(package::WRONG_BOUND_FORM, None);
+
+    let unsupported = |code| {
+        let (record, rejected) = routed_alone(&package, &node(code));
+        assert!(!rejected, "node {code} must not reject the group");
+        match record.disposition {
+            ObligationDisposition::Unsupported { reason } => reason,
+            other => panic!("node {code}: {other:?}"),
+        }
+    };
+    assert_eq!(
+        unsupported(package::FUNCTION),
+        UnsupportedObligation::BlockedOnUpstream {
+            node_id: node(package::FUNCTION),
+            node_tag: "function",
+            issue: quire_contract_codegen::UpstreamBlocker::QuireContractRuntime34,
+        }
+    );
+    assert!(matches!(
+        unsupported(package::UNREADABLE),
+        UnsupportedObligation::OracleRefused {
+            refusal: ExactScalarRefusal::UnreadableBound { .. }
+        }
+    ));
+    assert!(matches!(
+        unsupported(UNSATISFIABLE),
+        UnsupportedObligation::UnsatisfiableBound { .. }
+    ));
+}
+
+/// A node routed twice is one FR-014 claim: without deduplication FR-014 would refuse both
+/// copies as a repeated request, and the first copy could not be `supported`. The second copy is
+/// FR-015's `duplicate_item` naming the driver's index of the first, the group is rejected, and
+/// the returned claim map holds the one generated claim.
+///
+/// Trace: FR-022-AC-7, FR-022-AC-12, TC-033
+#[test]
+fn tc_033_a_node_routed_twice_is_one_claim_and_one_duplicate_item() {
+    let fixture = fixture();
+    let pins = pins();
+    let node = &fixture.rendered[0];
+    let generation = generate_routed(
+        &fixture.package,
+        &[route(5, node, "A"), route(3, node, "A")],
+        &kani_context(&pins, "crate::subject", 1),
+    )
+    .expect("routed generation succeeds");
+    assert_eq!(generation.rejected, [BackendKind::Kani]);
+    assert_eq!(
+        generation
+            .items
+            .iter()
+            .map(|item| item.request_index)
+            .collect::<Vec<_>>(),
+        [3, 5]
+    );
+    let (first, _) = kani_parts(&generation.items[0].output);
+    assert!(
+        matches!(first.disposition, ObligationDisposition::Supported { .. }),
+        "the first copy is the generated claim's record: {first:#?}"
+    );
+    let (second, _) = kani_parts(&generation.items[1].output);
+    assert_eq!(
+        second.disposition,
+        ObligationDisposition::InvalidRequest {
+            reason: InvalidObligationItem::DuplicateItem { first_index: 3 }
+        }
+    );
+    let claim_map = generation.claim_map.expect("a Kani group ran");
+    assert_eq!(claim_map.items.len(), 1);
+    assert!(matches!(
+        claim_map.items[0].result,
+        ClaimDisposition::Generated(_)
+    ));
+}
+
+/// A refused derivation is an `Underived` claim: nobody declared an operation. It carries the
+/// identity the node holds.
+///
+/// Trace: FR-014-AC-18, FR-022-AC-12, TC-033
+#[test]
+fn tc_033_an_underivable_claim_is_underived_and_carries_the_nodes_identity() {
+    let derived = derived();
+    let pins = pins();
+    let generation = generate_routed(
+        &derived.package,
+        &[
+            route(0, &derived.rem, "A"),
+            route(1, &package::code_id(package::MISSING), "A"),
+        ],
+        &kani_context(&pins, "crate::subject", 1),
+    )
+    .expect("routed generation succeeds");
+    let claim_map = generation.claim_map.expect("a Kani group ran");
+    let claim = claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == derived.rem)
+        .expect("the rem node has a claim");
+    assert_eq!(claim.operation.identity, "quire.op.integer.rem");
+    assert_eq!(
+        claim.operation.provenance,
+        quire_contract_codegen::OperationProvenance::Underived
+    );
+    let absent = claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == package::code_id(package::MISSING))
+        .expect("the absent node has a claim");
+    assert_eq!(absent.operation.identity, "");
+    assert_eq!(
+        absent.operation.provenance,
+        quire_contract_codegen::OperationProvenance::Underived
     );
 }

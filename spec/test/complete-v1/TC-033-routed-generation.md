@@ -5,6 +5,8 @@ type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-022
     type: verifies
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
+    type: verifies
 ---
 # TC-033: Verify routed generation per backend kind without re-negotiation
 
@@ -23,7 +25,9 @@ the FR-015 generator returns for the same items.
   invalidating the request (for example an IR-confirmed family with no Kani
   renderer, refused `OperationNotRendered`). The existing TC-024 and TC-025
   fixtures serve.
-- Its FR-014 claim map from `generate_exact_scalar_oracles`.
+- The package alone: no claim map is built or supplied.
+- A package with a `quire.op.integer.rem` node, and the bounded-increment
+  package (`x + 1` over a parameter `Int[0, 9]`).
 - A `KaniGenerationContext` with `KaniToolPins::pinned()`, a valid subject
   path, unwind `1` and a valid attestation context.
 - The routed backend `Candidate { identity: "kani", manifest_digest: <any> }`.
@@ -59,6 +63,17 @@ the FR-015 generator returns for the same items.
    `identity_sha256`.
 9. **Exhaustive dispatch (AC-1).** Inspect the generation dispatch and the
    `GenerationContexts` definition.
+10. **Derivation without a claim map (FR-022-AC-10).** Route the
+    bounded-increment node with no claim map anywhere in the context.
+11. **Underivable sibling (FR-022-AC-11, FR-015-AC-15).** Route the `integer.rem`
+    node beside the three generated nodes.
+12. **Refusals keep their disposition (FR-022-AC-11).** Route alone a node absent
+    from the graph, an unbounded node, nodes whose bound is missing, of the
+    wrong form or unreadable, an unsatisfiable bound and a function node; route one
+    node twice at request indexes `5` and `3`.
+13. **Returned claim map (FR-022-AC-12).** Compare `RoutedGeneration.claim_map`
+    with `generate_exact_scalar_oracles` over `derive_exact_scalar_items` for
+    the same nodes, and with `None` when nothing is routed.
 
 ## Expected Results
 
@@ -90,3 +105,18 @@ the FR-015 generator returns for the same items.
 9. The dispatch is an exhaustive `match` over `BackendKind` with no `_` arm.
    `GenerationContexts::has` is an exhaustive `match` too, and `GenerationContexts`
    has exactly one field per `BackendKind::ALL` member.
+10. The record is `Supported`; its harness names `quire.op.integer.add` with
+    arguments `[0, 9]` and `[0, 9]`.
+11. The `integer.rem` node's record is `Unsupported` with `no_derivable_claim`
+    naming the node and `operation_not_derivable`, and carries no harness; the
+    group is not rejected and the three siblings keep their harnesses.
+12. The absent node is `invalid_request` `unknown_node` and rejects the group;
+    the unbounded and missing or wrong-form bound nodes are `requires_bound`;
+    the function node is `blocked_on_upstream`; the unreadable bound is
+    `oracle_refused` and the unsatisfiable one `unsatisfiable_bound`, none of them
+    rejecting the group. The twice-routed node yields the first copy's supported
+    record at `3`, `duplicate_item{first_index: 3}` at `5`, a rejected group and
+    one claim. Underivable claims have provenance `underived`.
+13. The claim map is `Some`, holds the FR-014 entries for the derivable nodes
+    and a `NoDerivableClaim` entry for the others, ordered by node id; it is
+    `None` for an empty routed set.

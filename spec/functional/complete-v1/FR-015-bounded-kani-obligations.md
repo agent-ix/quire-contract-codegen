@@ -111,6 +111,11 @@ each pinned to its backend identity and model-domain bounds. This is issue
   accounting it as supported with no contract role recorded; a claim naming a
   node id absent from the graph entirely is likewise refused, with no harness
   emitted.
+- If a V2 scalar-claim item's claim is a refusal that FR-022 recorded because the
+  node carries no derivable FR-014 descriptor (`NoDerivableClaim`), then the
+  generator shall account it `unsupported` with the `no_derivable_claim`
+  reason naming the node and the derivation refusal, emit no harness, and not
+  reject the request.
 
 ## Acceptance Criteria
 
@@ -130,6 +135,7 @@ each pinned to its backend identity and model-domain bounds. This is issue
 | FR-015-AC-12 | A request naming no items, more than 256 items, an unparsable subject path, or an unwind bound outside `1..=1024` is refused whole, with no item accounted and no harness exposed. | Test (TC-025) |
 | FR-015-AC-13 | An otherwise-supported obligation whose generated harness source exceeds the bounded-resource ceiling is refused with a distinct resource-limit reason naming the generated size, and one that fits the ceiling but fails to parse as Rust is refused with a distinct syntax reason naming the parse error; neither is reported as the internal-invariant render-assembly fallback. | Test (TC-025) |
 | FR-015-AC-14 | A scalar-claim item whose graph node carries a tag/form pair this generator does not model as a contract role is refused with a typed reason naming that tag and form, and no harness is emitted; a claim naming a node id absent from the graph entirely is refused rather than accounted as supported with no contract role recorded. | Test (TC-025) |
+| FR-015-AC-15 | A scalar-claim item whose claim is a `NoDerivableClaim` refusal yields `unsupported` with the `no_derivable_claim` reason naming the node and the derivation refusal, emits no harness, and does not reject the group. | Test (TC-033) |
 
 ## Dependencies
 

@@ -39,6 +39,14 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    execution and with `quire_spec_language::value`, including the outcome of
    denying each admitted charge in turn.
 5. Compile the generated crate manifest.
+6. Derive an item for every golden-corpus node with `derive_exact_scalar_items`
+   and compare it with the descriptor the fixture declares (FR-014-AC-19);
+   generate from the derived items and read each claim's provenance. Derive
+   every overloaded identity (`rational.div` over integers and over rationals,
+   `numeric.convert_rounding`, `numeric.convert`, `quantity.convert` to each
+   target); derive nodes that are not applications, carry no identity, name an
+   identity outside the derivable set, or carry a law, mode, operand forms or
+   bound that select no parameter (FR-014-AC-18).
 
 ## Expected Results
 
@@ -50,7 +58,10 @@ descriptor agreeing on identity, law and mode over a node that passes every
 check is `ir_confirmed`;
 bytes are identical across runs and orderings; all
 three executions agree on every vector; the generated crate compiles with
-`publish = false` and contains no charge literal.
+`publish = false` and contains no charge literal; every golden-corpus node
+derives to its declared descriptor and generates `ir_confirmed`, and every
+node with no derivable descriptor is refused with its typed
+`ClaimDerivationRefusal`.
 
 Integer arithmetic, rational arithmetic and ordering (including decimal
 ordering) now have an operator in the pinned authority (QSL 21c507e exports
