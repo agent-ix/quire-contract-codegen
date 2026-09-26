@@ -123,9 +123,23 @@ already does for the FR-331 envelope.
     crate (`Cargo.toml`, `src/lib.rs`, `claim-map.json`) that
     `generate_exact_scalar_oracles` returned for the group's derived items,
     and `None` otherwise. A `Generated` claim's `oracle_<digest>` symbol is
-    defined in that `src/lib.rs`. The Kani harness embeds its own oracle's
-    source (FR-015), so it names no crate, path or dependency and the caller
-    supplies nothing else to resolve the symbol. This is Linear IR-300.
+    defined in that `src/lib.rs`, which is the standalone FR-014 oracle crate
+    source. Each harness embeds its own oracle's source (FR-015), including
+    the `oracle_<digest>` definition and a `use quire_contract_runtime::exact
+    as rt;` line, so it needs a crate that depends on `quire-contract-runtime`.
+    The load-bearing returned artifact is `Cargo.toml`, which carries that
+    dependency (`rev` = the runtime revision, `features = ["exact"]`) and
+    `[workspace]`. To run a harness the driver writes the returned `Cargo.toml`
+    and the harness's `rust.contents` as `src/lib.rs`, because
+    `execute_kani_obligation` refuses with `HarnessNotInCrate` unless the
+    crate's `src/lib.rs` contains the harness source byte for byte. The driver
+    does not write the returned `src/lib.rs` as well: appending the harness to
+    it duplicates the `use ... as rt` line and the oracle definitions. The
+    `claim-map.json` covers the derivable items only; the in-memory `claim_map`
+    is authoritative for the routed group, since it also holds the
+    `NoDerivableClaim` claims. `oracle_artifacts` is `Some` even when the Kani
+    arm rejected the whole group (`rejected` lists `Kani`, no harness exists),
+    matching `claim_map`. This is Linear IR-300.
 - `KindOutput` has one variant per `BackendKind`. `KindOutput::Kani` carries
   the item's FR-015 `ObligationRecord` and its
   `Option<KaniScalarObligationHarness>`. Every request index inside that
@@ -170,7 +184,7 @@ already does for the FR-331 envelope.
 - When generating for the Kani kind, the generator shall return the artifacts
   `generate_exact_scalar_oracles` produced, unchanged, in
   `RoutedGeneration.oracle_artifacts`, including when no node of the group is
-  derivable.
+  derivable and when the group is rejected.
 - When generating for the Kani kind, the generator shall call
   `negotiate_kani_obligations` exactly once, with one
   `ObligationItem::ScalarClaim` per routed Kani item in ascending

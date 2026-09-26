@@ -9,9 +9,10 @@
 //! The Kani arm derives each item's FR-014 descriptor from the package with
 //! [`derive_exact_scalar_items`], generates the derived oracles, and calls
 //! [`negotiate_kani_obligations`] once over the routed Kani items in ascending
-//! request index. The oracle crate FR-014 generated is returned beside the claim map: each harness
-//! embeds its own oracle's source (FR-015), so the crate names no path or dependency for the
-//! harness. That generator numbers its records by position; this module maps every position
+//! request index. The oracle crate FR-014 generated is returned beside the claim map. Each harness
+//! embeds its own oracle's source, which uses `quire_contract_runtime`, so the driver writes the
+//! returned `Cargo.toml` and the harness's own source as `src/lib.rs`, and not the returned
+//! `src/lib.rs`. That generator numbers its records by position; this module maps every position
 //! back to the driver's request index and pairs each harness with its record by `harness_symbol`.
 
 use std::collections::BTreeMap;

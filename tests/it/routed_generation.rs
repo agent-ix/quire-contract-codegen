@@ -388,6 +388,14 @@ fn tc_033_an_invalid_kani_item_rejects_the_group_with_driver_indexes() {
     ];
     let generation = generate_step_one(&fixture, &routed);
     assert_eq!(generation.rejected, [BackendKind::Kani]);
+    // The rejected group still returns FR-014's crate, as it still returns its claim map.
+    assert_eq!(
+        generation.oracle_artifacts,
+        Some(fr014_artifacts(
+            &fixture.package,
+            &[fixture.rendered[0].clone(), fixture.rendered[1].clone()]
+        ))
+    );
     assert_eq!(
         generation
             .items
@@ -1056,4 +1064,33 @@ fn tc_033_an_all_underivable_group_returns_fr014_empty_crate_and_no_group_return
     assert!(!artifacts.is_empty());
     let empty = generate_routed(&derived.package, &[], &contexts).expect("generates");
     assert_eq!(empty.oracle_artifacts, None);
+}
+
+/// The returned `claim-map.json` is FR-014's output over the derivable items, while the in-memory
+/// `claim_map` also holds the `NoDerivableClaim` claim of an underivable sibling.
+///
+/// Trace: FR-022-AC-14, TC-033
+#[test]
+fn tc_033_the_returned_claim_map_file_omits_the_underivable_claims_the_map_keeps() {
+    let derived = derived();
+    let pins = pins();
+    let routed = [
+        route(0, &derived.generated[0], "A"),
+        route(1, &derived.rem, "A"),
+    ];
+    let generation = generate_routed(
+        &derived.package,
+        &routed,
+        &kani_context(&pins, "crate::subject", 1),
+    )
+    .expect("generates");
+    let claim_map = generation.claim_map.expect("a Kani group ran");
+    assert_eq!(claim_map.items.len(), 2);
+    let artifacts = generation.oracle_artifacts.expect("a Kani group ran");
+    let file = artifacts
+        .iter()
+        .find(|artifact| artifact.path == "claim-map.json")
+        .expect("the crate carries its claim map");
+    let on_file: serde_json::Value = serde_json::from_str(&file.contents).expect("json");
+    assert_eq!(on_file["items"].as_array().map(Vec::len), Some(1));
 }
