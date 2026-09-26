@@ -47,6 +47,21 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    target); derive nodes that are not applications, carry no identity, name an
    identity outside the derivable set, or carry a law, mode, operand forms or
    bound that select no parameter (FR-014-AC-18).
+7. Generate and derive an integer add over two parameters typed by distinct
+   `integer_range` domains `[0, 9]` and `[10, 20]` with its result typed by
+   `[0, 29]`, and read the claim's checked bounds; refuse the descriptor over
+   `[0, 9]` (FR-014-AC-20).
+8. Generate a node over the same two parameters with a scalar-typed result and
+   one further bound attached (FR-014-AC-21), and with none, in generation and
+   derivation (FR-014-AC-22).
+9. Generate an operand and a result each typed by a `text_bounds` bound over
+   Integer (FR-014-AC-23).
+10. Generate and derive `a + wide` over `[0, 9]` and `[0, 50]` with result
+    `[0, 29]`, `-e` over `[1, 9]` with result `[-9, -1]` and `e * f` over
+    `[1, 9]` and `[100, 200]` with result `[100, 1800]` (FR-014-AC-24).
+11. Generate and derive `a + p`, `p + p` and `a + p` over a scalar result, where
+    `p` is a `reference` typed by the plain Integer type, and `a + 1` with a
+    literal operand (FR-014-AC-25).
 
 ## Expected Results
 

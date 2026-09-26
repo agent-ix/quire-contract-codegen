@@ -57,7 +57,7 @@ use serde::Serialize;
 
 use crate::{
     exact_scalar::{
-        aggregate_members, bound_members, literal_count, literal_integer,
+        aggregate_members, bound_members, literal_count, literal_integer, operand_bound_ids,
         COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
     },
     kani::{
@@ -790,6 +790,9 @@ struct LoweredScalarClaim {
     oracle_source: String,
     oracle_symbol: String,
     arity: ScalarArity,
+    /// Each operand's inclusive range, in call order.
+    operands: Vec<(i64, i64)>,
+    /// The result's inclusive range: the checked domain a completed result must lie in.
     lower: i64,
     upper: i64,
     module_symbol: String,
@@ -1178,7 +1181,8 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                     })
                 }
                 OperationProvenance::IrConfirmed => {
-                    match lower_scalar_claim(claim, generated, &derived) {
+                    let operand_bounds = operand_bound_ids(package, &claim.node_id);
+                    match lower_scalar_claim(claim, generated, &derived, &operand_bounds) {
                         Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
                         Err(ScalarLoweringRefusal::NoRenderer) => {
                             Outcome::Unsupported(UnsupportedObligation::OperationNotRendered {
@@ -1308,11 +1312,14 @@ enum ScalarLoweringRefusal {
     },
 }
 
-/// Lowers one IR-confirmed V2 claim to a renderable scalar harness.
+/// Lowers one IR-confirmed V2 claim to a renderable scalar harness. The result range is the
+/// claim's first checked bound; each operand ranges over its own bound where the node's argument
+/// is typed by one (`operand_bounds`, by position) and over the result range otherwise.
 fn lower_scalar_claim(
     claim: &ExactScalarClaim,
     generated: &GeneratedScalarClaim,
     derived: &[DerivedDomain],
+    operand_bounds: &[Option<CheckedNodeId>],
 ) -> Result<LoweredScalarClaim, ScalarLoweringRefusal> {
     let arity = scalar_arity(&claim.operation.identity).ok_or(ScalarLoweringRefusal::NoRenderer)?;
     let Some(bound_id) = generated.checked_bounds.first() else {
@@ -1321,24 +1328,52 @@ fn lower_scalar_claim(
              IntegerArithmetic claim, the only family scalar_arity renders a harness for"
         );
     };
-    let Some(DerivedDomain::IntegerRange { lower, upper, .. }) = derived.iter().find(
-        |domain| matches!(domain, DerivedDomain::IntegerRange { bound, .. } if bound == bound_id),
-    ) else {
+    let range_of = |id: &CheckedNodeId| {
+        derived.iter().find_map(|domain| match domain {
+            DerivedDomain::IntegerRange {
+                bound,
+                lower,
+                upper,
+            } if bound == id => Some((lower, upper)),
+            _ => None,
+        })
+    };
+    let Some((lower, upper)) = range_of(bound_id) else {
         unreachable!(
             "the same node backs bound_id here and in check_parameters, which already parsed its \
              two members with the same literal_integer this function's derive_domain uses, so it \
              cannot fail to be read as an IntegerRange here"
         );
     };
-    let (lower, upper) = match (lower.parse::<i64>(), upper.parse::<i64>()) {
-        (Ok(lower), Ok(upper)) => (lower, upper),
-        _ => {
-            return Err(ScalarLoweringRefusal::BoundNotI64 {
-                lower: lower.clone(),
-                upper: upper.clone(),
-            })
-        }
+    let to_i64 = |(lower, upper): (&String, &String)| match (lower.parse(), upper.parse()) {
+        (Ok(lower), Ok(upper)) => Ok((lower, upper)),
+        _ => Err(ScalarLoweringRefusal::BoundNotI64 {
+            lower: lower.clone(),
+            upper: upper.clone(),
+        }),
     };
+    let (lower, upper) = to_i64((lower, upper))?;
+    let positions = match arity {
+        ScalarArity::Unary => 1,
+        ScalarArity::Binary => 2,
+    };
+    let operands = (0..positions)
+        .map(
+            |position| match operand_bounds.get(position).and_then(Option::as_ref) {
+                None => Ok((lower, upper)),
+                // An own bound `check_parameters` recorded is in `checked_bounds` and a derived
+                // integer range; one that is not is a claim map this generator did not produce,
+                // which has no renderer.
+                Some(id) => generated
+                    .checked_bounds
+                    .contains(id)
+                    .then(|| range_of(id))
+                    .flatten()
+                    .ok_or(ScalarLoweringRefusal::NoRenderer)
+                    .and_then(to_i64),
+            },
+        )
+        .collect::<Result<Vec<(i64, i64)>, _>>()?;
     let digest = sha256(claim.node_id.digest.as_bytes())
         .chars()
         .take(32)
@@ -1351,6 +1386,7 @@ fn lower_scalar_claim(
         oracle_source: generated.oracle_source.clone(),
         oracle_symbol: generated.symbol.clone(),
         arity,
+        operands,
         lower,
         upper,
         module_symbol,
@@ -1866,15 +1902,15 @@ struct HarnessRecord<'a> {
 /// Renders one IR-confirmed V2 exact-scalar claim to a `kani::proof` that the embedded oracle is
 /// *sound*, not that it is *total*: `assert!` that whenever the outcome is
 /// `Ok(rt::Outcome::Completed(value))`, `value` lies within the same checked domain -- reconstructed
-/// here from the identical literal bounds the `kani::assume`s above use -- that `bound.contains(&result)`
+/// here from the result bound's own literal bounds -- that `bound.contains(&result)`
 /// (`quire_contract_runtime::exact::numeric.rs`) itself checks before returning `Completed`. This is not
 /// `Result::is_ok()`: the oracle's `Result<rt::Outcome<T>, OracleStop>` nests the runtime's own four-way
 /// `Outcome` (`Completed`/`Undefined`/`Refused`/`Incomplete`) inside `Ok`, so `Ok(Refused(_))` is `is_ok()`
 /// without being sound-and-completed, and the `match` below only inspects the `Completed` arm; every other
 /// outcome (in particular `Refused`, which is exactly what an operand pair whose exact result leaves the
-/// domain produces) leaves `sound` at its vacuous default. The IR's own `require_bounds` closure typing
-/// makes the *operands* here (not just the result) members of the same bounded `integer` type, so the
-/// `kani::assume`s are IR-justified -- but the operation itself is genuinely partial over that domain
+/// domain produces) leaves `sound` at its vacuous default. Each operand's `kani::assume` is its own
+/// bound (the `bounded_domain` typing it; a literal operand, which is a constant, takes the result's),
+/// and the result is asserted against the result bound -- but the operation itself is genuinely partial over that domain
 /// (`quire.op.integer.add` over `[-1000,1000]` admits `600 + 600`), so asserting `Completed` unconditionally
 /// (this rendering's original defect) asserted a falsehood no operand assumption could fix. A `kani::cover!`
 /// on the same `completed` flag is the FR-015-AC-7 non-vacuity guard (this harness's proof is reachable at
@@ -1901,10 +1937,12 @@ fn render_scalar(
     };
     let declarations = names
         .iter()
-        .map(|name| {
+        .zip(&lowered.operands)
+        .map(|(name, (minimum, maximum))| {
+            let (minimum, maximum) = (i64_literal(*minimum), i64_literal(*maximum));
             format!(
                 "        let {name}: i64 = kani::any();\n\
-        kani::assume({name} >= {lower} && {name} <= {upper});\n\
+        kani::assume({name} >= {minimum} && {name} <= {maximum});\n\
         let {name} = rt::Integer::from({name});\n"
             )
         })
@@ -1916,10 +1954,11 @@ fn render_scalar(
         .join(", ");
     let arguments = names
         .iter()
-        .map(|name| ScalarObligationArgument {
+        .zip(&lowered.operands)
+        .map(|(name, (minimum, maximum))| ScalarObligationArgument {
             identifier: (*name).to_owned(),
-            minimum: lowered.lower,
-            maximum: lowered.upper,
+            minimum: *minimum,
+            maximum: *maximum,
         })
         .collect();
     let body = format!(
@@ -2422,7 +2461,7 @@ mod tests {
             lower: lower.clone(),
             upper: upper.clone(),
         }];
-        match lower_scalar_claim(&claim, generated, &derived) {
+        match lower_scalar_claim(&claim, generated, &derived, &[]) {
             Err(ScalarLoweringRefusal::BoundNotI64 {
                 lower: got_lower,
                 upper: got_upper,

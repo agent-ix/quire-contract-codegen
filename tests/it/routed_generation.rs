@@ -508,6 +508,138 @@ fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_
     );
 }
 
+fn route_two_parameter(code: u32) -> (ObligationRecord, Option<KaniScalarObligationHarness>) {
+    let package = package::two_parameter_package().admit();
+    let node_id = package::code_id(code);
+    let pins = pins();
+    let generation = generate_routed(
+        &package,
+        &[route(0, &node_id, "A")],
+        &kani_context(&pins, "crate::subject", 1),
+    )
+    .expect("routed generation succeeds");
+    let [item] = generation.items.as_slice() else {
+        panic!("one routed item, got {:?}", generation.items);
+    };
+    let (record, harness) = kani_parts(&item.output);
+    (record.clone(), harness.cloned())
+}
+
+/// How the generated source spells an `i64` bound.
+fn lit(value: i64) -> String {
+    format!("{value}_i64")
+}
+
+fn ranges(harness: &KaniScalarObligationHarness) -> Vec<(i64, i64)> {
+    harness
+        .identity
+        .arguments
+        .iter()
+        .map(|argument| (argument.minimum, argument.maximum))
+        .collect()
+}
+
+/// `a + b` over `a: Int[0, 9]` and `b: Int[10, 20]` with the result typed `[0, 29]` routes to
+/// Kani and is Supported: the harness ranges each argument over its own operand's bound and its
+/// generated source asserts the result against the result bound (IR-298). `-e` over `[1, 9]` with
+/// a `[-9, -1]` result and `e * f` over `[1, 9]` and `[100, 200]` with a `[100, 1800]` result are
+/// Supported too: operand bounds need not lie inside the result bound. A literal operand has no
+/// bound of its own and ranges over the result bound.
+///
+/// Trace: FR-014-AC-20, FR-014-AC-24, FR-022-AC-13, TC-024, TC-033
+#[test]
+fn tc_033_bounded_parameters_are_supported_with_a_per_operand_scalar_harness() {
+    for (code, identity, expected, result) in [
+        (
+            package::TWO_PARAMETER_SUM,
+            "quire.op.integer.add",
+            vec![(0, 9), (10, 20)],
+            (0, 29),
+        ),
+        (
+            package::TWO_PARAMETER_LITERAL,
+            "quire.op.integer.add",
+            vec![(0, 9), (0, 29)],
+            (0, 29),
+        ),
+        (
+            package::BOUNDED_NEGATE,
+            "quire.op.integer.negate",
+            vec![(1, 9)],
+            (-9, -1),
+        ),
+        (
+            package::BOUNDED_PRODUCT,
+            "quire.op.integer.mul",
+            vec![(1, 9), (100, 200)],
+            (100, 1800),
+        ),
+        (
+            package::TWO_PARAMETER_WIDE,
+            "quire.op.integer.add",
+            vec![(0, 9), (0, 50)],
+            (0, 29),
+        ),
+    ] {
+        let (record, harness) = route_two_parameter(code);
+        assert!(
+            matches!(record.disposition, ObligationDisposition::Supported { .. }),
+            "node {code}: {record:#?}"
+        );
+        let harness = harness.expect("a supported item carries its harness");
+        assert_eq!(harness.identity.operation_identity, identity);
+        assert_eq!(ranges(&harness), expected, "node {code}");
+        let (lower, upper) = result;
+        assert!(
+            harness.rust.contents.contains(&format!(
+                "rt::Integer::from({}), rt::Integer::from({})",
+                lit(lower),
+                lit(upper)
+            )),
+            "node {code}: the result assertion names the result bound"
+        );
+        let names: &[&str] = if expected.len() == 1 {
+            &["operand"]
+        } else {
+            &["left", "right"]
+        };
+        for (name, (minimum, maximum)) in names.iter().zip(expected) {
+            assert!(
+                harness.rust.contents.contains(&format!(
+                    "kani::assume({name} >= {} && {name} <= {});",
+                    lit(minimum),
+                    lit(maximum)
+                )),
+                "node {code}: {name} is assumed over its own range"
+            );
+        }
+    }
+}
+
+/// A `reference` operand typed by a plain scalar type beside bounded typing is `RequiresBound`
+/// with no harness: `x + y` (`x` bounded, `y` plain, result bounded), `y + y`, and `x + y` with a
+/// scalar-typed result.
+///
+/// Trace: FR-014-AC-25, FR-022-AC-13, TC-033
+#[test]
+fn tc_033_a_plain_typed_reference_operand_is_requires_bound_with_no_harness() {
+    for code in [
+        package::TWO_PARAMETER_UNBOUNDED_OPERAND,
+        package::TWO_PARAMETER_PLAIN_PAIR,
+        package::TWO_PARAMETER_PLAIN_SCALAR_RESULT,
+    ] {
+        let (record, harness) = route_two_parameter(code);
+        assert!(
+            matches!(
+                record.disposition,
+                ObligationDisposition::RequiresBound { .. }
+            ),
+            "node {code}: {record:#?}"
+        );
+        assert!(harness.is_none(), "node {code}: no harness");
+    }
+}
+
 /// The corpus package with the nodes derivation refuses, and the claims of what it derives.
 struct Derived {
     package: CheckedPackageV2,

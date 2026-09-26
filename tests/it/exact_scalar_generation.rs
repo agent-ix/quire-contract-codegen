@@ -1379,6 +1379,236 @@ fn sha256_hex(bytes: &[u8]) -> String {
 #[test]
 fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
     let oracles = generate(
+        &bounded_increment_package().admit(),
+        &[ExactScalarItem {
+            node_id: code_id(BOUNDED_INCREMENT),
+            operation: integer_add_0_9(),
+        }],
+    );
+    assert!(matches!(
+        dispositions(&oracles).get(code_id(BOUNDED_INCREMENT).digest.as_ref()),
+        Some(ClaimDisposition::Generated(_))
+    ));
+}
+
+fn add_over(low: i64, high: i64) -> ExactScalarOperation {
+    ExactScalarOperation::IntegerArithmetic {
+        operator: IntegerOperator::Add,
+        domain: bounded(low, high),
+    }
+}
+
+fn two_parameter_disposition(
+    code: u32,
+    operation: ExactScalarOperation,
+) -> (
+    ExactScalarOracles,
+    ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal>,
+) {
+    let package = two_parameter_package().admit();
+    let oracles = generate(
+        &package,
+        &[ExactScalarItem {
+            node_id: code_id(code),
+            operation,
+        }],
+    );
+    let disposition = dispositions(&oracles)
+        .get(code_id(code).digest.as_ref())
+        .map(|disposition| (*disposition).clone())
+        .expect("one claim per item");
+    (oracles, disposition)
+}
+
+fn two_parameter_refusal(code: u32, operation: ExactScalarOperation) -> ExactScalarRefusal {
+    match two_parameter_disposition(code, operation).1 {
+        ClaimDisposition::Refused { refusal } => refusal,
+        other => panic!("node {code} is not refused: {other:?}"),
+    }
+}
+
+fn two_parameter_checked_bounds(
+    code: u32,
+    operation: ExactScalarOperation,
+) -> Vec<quire_contract_ir::CheckedNodeId> {
+    match two_parameter_disposition(code, operation).1 {
+        ClaimDisposition::Generated(generated) => generated.checked_bounds,
+        other => panic!("node {code} is not generated: {other:?}"),
+    }
+}
+
+/// Two distinct bounded parameters, `Int[0, 9]` and `Int[10, 20]`, with a result typed `[0, 29]`
+/// generate: the descriptor is compared with the result bound only, and the claim's checked
+/// bounds are the result bound first, then each operand's own. Derivation returns the descriptor
+/// over the result bound. Before IR-298 the three reachable `integer_range` bounds over Integer
+/// were `AmbiguousBound`.
+///
+/// Trace: FR-014-AC-20, TC-024
+#[test]
+fn tc_024_ac20_two_distinct_bounded_parameters_generate_against_the_result_bound() {
+    assert_eq!(
+        two_parameter_checked_bounds(TWO_PARAMETER_SUM, add_over(0, 29)),
+        [
+            id(&Bound::Integer(0, 29).key()),
+            id(&Bound::Integer(0, 9).key()),
+            id(&Bound::Integer(10, 20).key()),
+        ]
+    );
+    assert_eq!(
+        derive_one(&two_parameter_package().admit(), TWO_PARAMETER_SUM)
+            .expect("derives")
+            .operation,
+        add_over(0, 29)
+    );
+    // The descriptor is the result bound: one over an operand's bound is a mismatch, not a pick.
+    assert_eq!(
+        two_parameter_refusal(TWO_PARAMETER_SUM, add_over(0, 9)),
+        ExactScalarRefusal::BoundMismatch {
+            bound: id(&Bound::Integer(0, 29).key()),
+            form: BoundForm::IntegerRange,
+        }
+    );
+}
+
+/// A scalar-typed result whose reachable bounds are the operands' own two and one more resolves to
+/// the one that is no operand's.
+///
+/// Trace: FR-014-AC-21, TC-024
+#[test]
+fn tc_024_ac21_a_scalar_typed_result_takes_the_one_bound_no_operand_types() {
+    assert_eq!(
+        two_parameter_checked_bounds(TWO_PARAMETER_ATTACHED, add_over(0, 29))[0],
+        id(&Bound::Integer(0, 29).key())
+    );
+}
+
+/// A scalar-typed result whose reachable bounds are all operands' own has no result bound.
+///
+/// Trace: FR-014-AC-22, TC-024
+#[test]
+fn tc_024_ac22_a_scalar_typed_result_with_only_operand_bounds_is_ambiguous() {
+    assert_eq!(
+        two_parameter_refusal(TWO_PARAMETER_NO_RESULT, add_over(0, 29)),
+        ExactScalarRefusal::AmbiguousBound {
+            bounded_type: code_id(T_INTEGER),
+            expected_form: BoundForm::IntegerRange,
+        }
+    );
+}
+
+/// An operand, or the result, typed by a bound of another form is `MissingBound`.
+///
+/// Trace: FR-014-AC-23, TC-024
+#[test]
+fn tc_024_ac23_an_operand_or_result_typed_by_a_bound_of_another_form_is_refused() {
+    for code in [
+        TWO_PARAMETER_WRONG_FORM_OPERAND,
+        TWO_PARAMETER_WRONG_FORM_RESULT,
+    ] {
+        assert_eq!(
+            two_parameter_refusal(code, add_over(0, 29)),
+            ExactScalarRefusal::MissingBound {
+                bounded_type: code_id(T_INTEGER),
+                expected_form: BoundForm::IntegerRange,
+            },
+            "node {code}"
+        );
+    }
+}
+
+/// Operand bounds need not lie inside the result bound: `a + wide` over `[0, 9]` and `[0, 50]`
+/// with a `[0, 29]` result, `-e` over `[1, 9]` with a `[-9, -1]` result and `e * f` over `[1, 9]`
+/// and `[100, 200]` with a `[100, 1800]` result all generate, derive the same descriptor, and
+/// record each operand's own bound after the result bound.
+///
+/// Trace: FR-014-AC-24, TC-024
+#[test]
+fn tc_024_ac24_operand_bounds_need_not_lie_inside_the_result_bound() {
+    let package = two_parameter_package().admit();
+    let negate = ExactScalarOperation::IntegerArithmetic {
+        operator: IntegerOperator::Negate,
+        domain: bounded(-9, -1),
+    };
+    let product = ExactScalarOperation::IntegerArithmetic {
+        operator: IntegerOperator::Multiply,
+        domain: bounded(100, 1800),
+    };
+    for (code, operation, expected) in [
+        (
+            TWO_PARAMETER_WIDE,
+            add_over(0, 29),
+            vec![
+                Bound::Integer(0, 29),
+                Bound::Integer(0, 9),
+                Bound::Integer(0, 50),
+            ],
+        ),
+        (
+            BOUNDED_NEGATE,
+            negate,
+            vec![Bound::Integer(-9, -1), Bound::Integer(1, 9)],
+        ),
+        (
+            BOUNDED_PRODUCT,
+            product,
+            vec![
+                Bound::Integer(100, 1800),
+                Bound::Integer(1, 9),
+                Bound::Integer(100, 200),
+            ],
+        ),
+    ] {
+        assert_eq!(
+            derive_one(&package, code).expect("derives").operation,
+            operation,
+            "node {code}: derivation and generation agree"
+        );
+        assert_eq!(
+            two_parameter_checked_bounds(code, operation),
+            expected
+                .iter()
+                .map(|bound| id(&bound.key()))
+                .collect::<Vec<_>>(),
+            "node {code}"
+        );
+    }
+}
+
+/// A `reference` operand typed by a plain scalar type owns no bound: where another operand owns
+/// one, or the result is typed by one, it is `RequiresBound` naming its type, in generation and in
+/// derivation. A literal operand is never refused, and a package whose operands own no bound and
+/// whose result is scalar-typed keeps the one-bound reading.
+///
+/// Trace: FR-014-AC-25, TC-024
+#[test]
+fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_bound() {
+    let package = two_parameter_package().admit();
+    // The scalar-typed result's one reachable bound is `[0, 9]`, so its descriptor is over that.
+    for (code, operation) in [
+        (TWO_PARAMETER_UNBOUNDED_OPERAND, add_over(0, 29)),
+        (TWO_PARAMETER_PLAIN_PAIR, add_over(0, 29)),
+        (TWO_PARAMETER_PLAIN_SCALAR_RESULT, add_over(0, 9)),
+    ] {
+        let expected = ExactScalarRefusal::RequiresBound {
+            unbounded_type: code_id(T_INTEGER),
+        };
+        assert_eq!(
+            two_parameter_refusal(code, operation),
+            expected,
+            "node {code}"
+        );
+        assert_eq!(
+            derive_one(&package, code),
+            Err(expected),
+            "node {code}: derivation refuses what generation refuses"
+        );
+    }
+    assert!(matches!(
+        two_parameter_disposition(TWO_PARAMETER_LITERAL, add_over(0, 29)).1,
+        ClaimDisposition::Generated(_)
+    ));
+    // A bounded parameter beside a plain-typed reference is the same shape, with a scalar result.
+    let oracles = generate(
         &corpus_package().admit(),
         &[ExactScalarItem {
             node_id: code_id(BOUNDED_OPERAND),
@@ -1386,8 +1616,8 @@ fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
         }],
     );
     assert!(matches!(
-        dispositions(&oracles).get(code_id(BOUNDED_OPERAND).digest.as_ref()),
-        Some(ClaimDisposition::Generated(_))
+        refusal_of(&oracles, BOUNDED_OPERAND),
+        ExactScalarRefusal::RequiresBound { .. }
     ));
 }
 
@@ -1545,7 +1775,7 @@ fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
 /// The refused set: identities outside the derivable set, nodes that are not applications, and
 /// refused bounds each return their own typed refusal and no descriptor.
 ///
-/// Trace: FR-014-AC-18, TC-024
+/// Trace: FR-014-AC-18, FR-014-AC-22, TC-024
 #[test]
 fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
     let package = derivation_package().admit();
@@ -1589,9 +1819,9 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
         bound(UNREADABLE),
         ExactScalarRefusal::UnreadableBound { .. }
     ));
-    // A node whose closure carries two bounds of one form on its result type is ambiguous, so it
-    // derives no domain. Until IR-298 gives an operation the parameter it is bounded by, a
-    // two-parameter node lands here; when IR-298 lands this expectation changes with it.
+    // A node whose closure carries two bounds of one form on its scalar result type, neither the
+    // own bound of an operand, is ambiguous, so it derives no domain. A node over two bounded
+    // parameters is not: each operand names its own bound (IR-298, FR-014-AC-20).
     assert!(matches!(
         bound(AMBIGUOUS),
         ExactScalarRefusal::AmbiguousBound { .. }
