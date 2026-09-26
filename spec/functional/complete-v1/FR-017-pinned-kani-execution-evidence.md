@@ -7,6 +7,8 @@ relationships:
     type: satisfies
   - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: depends_on
+  - target: ix://agent-ix/quire-contract-codegen/FR-022
+    type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
   - target: ix://agent-ix/quire-specification/FR-196
@@ -30,8 +32,16 @@ and it is stated here because `src/kani_execution.rs` had no owning requirement
 
 ## Inputs
 
-- One FR-015 harness, whose identity carries the backend pins the run is held
-  to, the option vector to invoke, the unwind bound and the solver.
+- One harness of either kind this requirement generates: an FR-015 contract
+  harness (`KaniObligationHarness`, contract role in
+  `ObligationKind`) or an FR-022/FR-014 exact-scalar harness
+  (`KaniScalarObligationHarness`, no contract role). Either way its identity
+  carries the backend pins the run is held to, the option vector to invoke,
+  the unwind bound and the solver. The two identity types are distinct
+  structs (`KaniObligationIdentity`, `ScalarObligationIdentity`); this
+  requirement reads the same handful of facts from whichever one the caller
+  hands it, through one borrowed view, rather than owning two execution
+  paths.
 - A Kani installation: the `cargo-kani` launcher to invoke, and the Kani home
   holding the release whose driver, CBMC and toolchain are measured.
 - The crate directory whose library source contains that harness's generated
@@ -41,7 +51,9 @@ and it is stated here because `src/kani_execution.rs` had no owning requirement
 
 - Execution evidence identifying its own schema, naming the harness that ran,
   the backend measured immediately before it ran, the exact invocation, and the
-  backend-reported outcome.
+  backend-reported outcome. The obligation-kind field is the contract harness's
+  role for a contract harness, and `None` for an exact-scalar harness, which
+  has no contract role to report.
 - A typed refusal, and no run, when the backend cannot be measured, when any
   pin differs, or when the crate does not contain the harness.
 
@@ -85,8 +97,15 @@ and it is stated here because `src/kani_execution.rs` had no owning requirement
   inconclusive with the reason that applies: no verdict was printed, a failure
   carried no counterexample, or no readable non-empty cover summary was printed
   so non-vacuity was not observed.
+- The generator shall run either harness kind through the one execution path:
+  the pin comparison, the byte-for-byte crate check, the launch and the
+  outcome classification read the pins, the identity digest, the source
+  artifact, the oracle-source digest, the runtime revision, the unwind bound,
+  the solver and the option vector from whichever kind's identity the caller
+  supplied, and none of those steps branches on which kind it is.
 - The generator shall retain, in the evidence, the harness identity digest and
-  obligation kind, the harness path and source digest, the pins measured
+  obligation kind when the harness carries one, the harness path and source
+  digest, the pins measured
   immediately before the run, the invoked launcher path, the complete argument
   vector, the generated crate's lockfile digest, the oracle digest, the runtime
   revision, the unwind bound, the solver, the process exit code and the
@@ -125,10 +144,13 @@ and it is stated here because `src/kani_execution.rs` had no owning requirement
 | FR-017-AC-8 | The generator computes no aggregate verdict over runs: no function in the execution surface accepts more than one run's evidence or outcome to produce a summary. | Test (TC-027) |
 | FR-017-AC-9 | The generator retains no evidence of its own: the execution surface writes no file. The caller receives the returned evidence and owns its retention. | Test (TC-027) |
 | FR-017-AC-10 | Kani's printed output is read to decide a verdict only in `src/kani_transcript.rs`, into a typed transcript of the verdict banners, the failed checks, the check and cover summaries and the playback tests; real Kani 0.67.0 captures of a verified run, a falsified run with a playback, an exhausted unwind bound, an unreachable cover, a partly satisfied cover and a run with no cover summary each parse to the expected transcript and classify to the expected outcome, and no other non-test source file under `src/` contains the wording; the playback block is passed through verbatim and decoded by the IR crate's witness parser. | Test (TC-027) |
+| FR-017-AC-11 | A routed FR-022/FR-014 exact-scalar harness (`KaniScalarObligationHarness`) runs through `execute_kani_obligation` and `kani_launch_command` the same way an FR-015 contract harness does: its identity pins are checked before the backend is measured, an installed backend that drifts is refused the same way, a crate whose library source lacks its generated source byte for byte is `HarnessNotInCrate`, its covers classify a run identically (all satisfied is verified, an unsatisfied one is cover-unsatisfied, none printed is inconclusive), and its evidence carries its identity digest, its oracle-source digest, and `None` for obligation kind, since an exact-scalar claim carries no contract role. | Test (TC-027) |
 
 ## Dependencies
 
 - **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md),
+  [FR-022](./FR-022-routed-generation.md), whose `generate_routed` is the source
+  of the exact-scalar harness this requirement also runs,
   [interface-001](../../interface/interface-001-codegen-api.md).
 - **Downstream**: [TC-027](../../test/complete-v1/TC-027-pinned-kani-execution-evidence.md),
   [FR-016](./FR-016-witness-native-replay.md), which decodes the counterexample

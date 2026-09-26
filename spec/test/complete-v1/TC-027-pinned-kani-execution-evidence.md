@@ -40,6 +40,15 @@ whose harness identity's pins differ from the committed pins against an installa
 exist, so that measuring the backend at all before the identity comparison would surface as an
 absent-tool refusal rather than as pin drift.
 
+Routed scalar harness (FR-017-AC-11): build a routed exact-scalar harness with `generate_routed`
+(`x + 1` over `Int[0, 9]`) and assemble the crate the way the driver does — the returned
+`Cargo.toml` as the manifest and the harness's `rust.contents` as `src/lib.rs`, never the returned
+`src/lib.rs`. Run it through `execute_kani_obligation`: a drifted harness identity is refused before
+the backend is measured; a drifted installed backend is refused the same way; a crate whose
+`src/lib.rs` lacks the harness is `HarnessNotInCrate`; and the harness's covers classify a run the
+same way a contract harness's do. Under the pinned lane, run it for real and confirm its evidence
+carries its identity digest, its oracle-source digest and `None` for obligation kind.
+
 Aggregate verdict and retained evidence: census `src/kani_execution.rs` — the surface FR-017 owns —
 for any function signature that takes more than one run's evidence or outcome, and for any
 filesystem write.
@@ -80,6 +89,12 @@ typed tool refusal naming the launcher and its path. A harness identity pin
 difference is reported as pin drift even against a nonexistent installation,
 proving the backend is measured only after the identity's own pins already
 match the committed pins.
+
+The routed scalar harness's identity pin drift and installed-backend drift refuse the same way a
+contract harness's do, before anything runs; the crate missing its `src/lib.rs` source is
+`HarnessNotInCrate`; its cover classifies identically to a contract harness's; and, under the
+pinned lane, it verifies with its evidence carrying its own identity digest, its oracle-source
+digest, and `None` for obligation kind.
 
 The census finds no function taking a collection of runs' evidence or outcomes, and no filesystem
 write, in `src/kani_execution.rs`.

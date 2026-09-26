@@ -42,10 +42,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     kani::{sha256, KANI_BACKEND_VERSION},
-    kani_obligations::{KaniObligationHarness, ObligationKind},
+    kani_obligations::{KaniObligationHarness, KaniScalarObligationHarness, ObligationKind},
     kani_transcript::{
         KaniBanner, KaniCoverSummary, KaniFailedCheck, KaniPlaybackTarget, KaniTranscript,
     },
+    oracle::Artifact,
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
@@ -330,12 +331,85 @@ impl KaniInstallation {
     }
 }
 
+/// A generated harness of either kind this module can run.
+///
+/// The two kinds carry their own identity types but share every fact execution reads, so
+/// `view()` projects those facts once and the pin check, the
+/// byte-for-byte source check, the launch and the classification stay one code path (FR-017).
+#[derive(Clone, Copy, Debug)]
+pub enum KaniExecutableHarness<'a> {
+    /// A V1 frozen-clause contract harness (FR-015).
+    Contract(&'a KaniObligationHarness),
+    /// A V2 exact-scalar harness, as `generate_routed` returns it (FR-022).
+    Scalar(&'a KaniScalarObligationHarness),
+}
+
+impl<'a> From<&'a KaniObligationHarness> for KaniExecutableHarness<'a> {
+    fn from(harness: &'a KaniObligationHarness) -> Self {
+        Self::Contract(harness)
+    }
+}
+
+impl<'a> From<&'a KaniScalarObligationHarness> for KaniExecutableHarness<'a> {
+    fn from(harness: &'a KaniScalarObligationHarness) -> Self {
+        Self::Scalar(harness)
+    }
+}
+
+/// Exactly what execution reads from a harness, whichever kind it is.
+struct HarnessView<'a> {
+    pins: &'a KaniToolPins,
+    identity_sha256: &'a str,
+    rust: &'a Artifact,
+    kind: Option<ObligationKind>,
+    oracle_digest: &'a str,
+    runtime_revision: &'a str,
+    unwind: u32,
+    solver: &'a str,
+    options: &'a [String],
+}
+
+impl<'a> KaniExecutableHarness<'a> {
+    fn view(self) -> HarnessView<'a> {
+        match self {
+            Self::Contract(harness) => {
+                let identity = &harness.identity;
+                HarnessView {
+                    pins: &identity.pins,
+                    identity_sha256: &harness.identity_sha256,
+                    rust: &harness.rust,
+                    kind: Some(identity.kind),
+                    oracle_digest: &identity.oracle_digest,
+                    runtime_revision: identity.runtime_revision,
+                    unwind: identity.unwind,
+                    solver: &identity.solver,
+                    options: &identity.options,
+                }
+            }
+            Self::Scalar(harness) => {
+                let identity = &harness.identity;
+                HarnessView {
+                    pins: &identity.pins,
+                    identity_sha256: &harness.identity_sha256,
+                    rust: &harness.rust,
+                    kind: None,
+                    oracle_digest: &identity.oracle_sha256,
+                    runtime_revision: identity.runtime_revision,
+                    unwind: identity.unwind,
+                    solver: &identity.solver,
+                    options: &identity.options,
+                }
+            }
+        }
+    }
+}
+
 /// One execution of one harness in a crate the caller wrote.
 pub struct KaniExecutionRequest<'a> {
     /// Backend to measure and invoke.
     pub installation: &'a KaniInstallation,
     /// The generated harness; its identity carries the pins to hold the backend to.
-    pub harness: &'a KaniObligationHarness,
+    pub harness: KaniExecutableHarness<'a>,
     /// Crate root whose `src/lib.rs` contains the harness source byte-for-byte.
     pub crate_directory: &'a Path,
     /// Cargo target directory for the run.
@@ -463,8 +537,9 @@ pub struct KaniExecutionEvidence {
     pub schema: &'static str,
     /// Identity digest of the harness that ran.
     pub obligation_identity_sha256: String,
-    /// Obligation kind.
-    pub kind: ObligationKind,
+    /// Contract role of a contract harness; `None` for an exact-scalar harness, whose claim
+    /// has no contract role.
+    pub kind: Option<ObligationKind>,
     /// Generated harness path.
     pub harness_path: String,
     /// Generated harness source digest.
@@ -504,13 +579,13 @@ pub struct KaniExecutionEvidence {
 pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
-    let identity = &request.harness.identity;
+    let harness = request.harness.view();
     // The harness identity's pins are known from the harness alone, without touching the
     // backend, so a drifted identity refuses with zero processes started rather than after
     // `observe()` has already spawned `cargo-kani kani --version`, `cbmc --version` and
     // `rustc -vV`.
     if let Some((field, expected, observed)) =
-        identity.pins.first_difference(&KaniToolPins::pinned())
+        harness.pins.first_difference(&KaniToolPins::pinned())
     {
         return Err(KaniExecutionRefusal::PinDrift {
             field,
@@ -529,12 +604,12 @@ pub fn execute_kani_obligation(
     let library_path = request.crate_directory.join("src").join("lib.rs");
     let library = read_file(KaniTool::Library, &library_path).map_err(|_| {
         KaniExecutionRefusal::HarnessNotInCrate {
-            harness_path: request.harness.rust.path.clone(),
+            harness_path: harness.rust.path.clone(),
         }
     })?;
-    if !String::from_utf8_lossy(&library).contains(&request.harness.rust.contents) {
+    if !String::from_utf8_lossy(&library).contains(&harness.rust.contents) {
         return Err(KaniExecutionRefusal::HarnessNotInCrate {
-            harness_path: request.harness.rust.path.clone(),
+            harness_path: harness.rust.path.clone(),
         });
     }
     let (arguments, command) = kani_launch_command(request);
@@ -552,18 +627,18 @@ pub fn execute_kani_obligation(
     });
     Ok(KaniExecutionEvidence {
         schema: KANI_EXECUTION_SCHEMA,
-        obligation_identity_sha256: request.harness.identity_sha256.clone(),
-        kind: identity.kind,
-        harness_path: request.harness.rust.path.clone(),
-        harness_sha256: request.harness.rust.sha256.clone(),
+        obligation_identity_sha256: harness.identity_sha256.to_owned(),
+        kind: harness.kind,
+        harness_path: harness.rust.path.clone(),
+        harness_sha256: harness.rust.sha256.clone(),
         observed_pins: observed,
         launcher_path: request.installation.launcher.display().to_string(),
         arguments,
         cargo_lock_sha256,
-        oracle_digest: identity.oracle_digest.clone(),
-        runtime_revision: identity.runtime_revision.to_owned(),
-        unwind: identity.unwind,
-        solver: identity.solver.clone(),
+        oracle_digest: harness.oracle_digest.to_owned(),
+        runtime_revision: harness.runtime_revision.to_owned(),
+        unwind: harness.unwind,
+        solver: harness.solver.to_owned(),
         exit_code,
         outcome,
     })
@@ -578,9 +653,8 @@ pub fn execute_kani_obligation(
 /// hand-copied approximation of it that can drift from what `execute_kani_obligation` actually
 /// invokes.
 pub fn kani_launch_command(request: &KaniExecutionRequest<'_>) -> (Vec<String>, Command) {
-    let identity = &request.harness.identity;
     let mut arguments = vec!["kani".to_owned()];
-    arguments.extend(identity.options.iter().cloned());
+    arguments.extend(request.harness.view().options.iter().cloned());
     let mut command = Command::new(&request.installation.launcher);
     command
         .args(&arguments)
