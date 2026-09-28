@@ -46,9 +46,10 @@ Routed scalar harness (FR-017-AC-11): build a routed exact-scalar harness with `
 `src/lib.rs`. Run it through `execute_kani_obligation`: a drifted harness identity is refused before
 the backend is measured; a drifted installed backend is refused the same way; a crate whose
 `src/lib.rs` lacks the harness is `HarnessNotInCrate`; and the harness's covers classify a run the
-same way a contract harness's do. Under the pinned lane, run it for real under a short budget and confirm its evidence
-carries its identity digest, its oracle-source digest and `None` for obligation kind. The verdict is
-not asserted: CBMC did not conclude this harness within ten minutes on the measuring host.
+same way a contract harness's do. Under the pinned lane, generated with unwind 3, run it for real
+and confirm it is `Verified` and its evidence carries its identity digest, its oracle-source digest
+and `None` for obligation kind. Then narrow the same harness's checked domain to `[0, 5]`, below
+the bound the oracle enforces, and confirm the run is `Falsified` with a counterexample.
 
 Aggregate verdict and retained evidence: census `src/kani_execution.rs` — the surface FR-017 owns —
 for any function signature that takes more than one run's evidence or outcome, and for any
