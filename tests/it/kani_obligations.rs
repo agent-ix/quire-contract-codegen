@@ -25,16 +25,18 @@ use package::{
     reference, Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
 };
 use quire_contract_codegen::{
-    execute_kani_obligation, file_sha256, generate_exact_scalar_oracles, kani_launch_command,
-    launch_evidence, negotiate_kani_obligations, run_launcher_with_timeout, AttestationContext,
-    ClaimDisposition, ClaimMap, ExactScalarClaim, ExactScalarItem, ExactScalarOperation,
+    classify_kani_run, execute_kani_obligation, file_sha256, generate_exact_scalar_oracles,
+    generate_routed, kani_launch_command, launch_evidence, negotiate_kani_obligations,
+    run_launcher_with_timeout, AttestationContext, BackendKind, Candidate, ClaimDisposition,
+    ClaimMap, ExactScalarClaim, ExactScalarItem, ExactScalarOperation, GenerationContexts,
     IntegerOperator, InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest,
-    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
-    KaniObligationOutcome, KaniObligationRequest, KaniPinField, KaniRunOutcome,
-    KaniScalarObligationHarness, KaniTool, KaniToolError, KaniToolPins, ObligationDisposition,
-    ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance,
-    UnsupportedObligation, UpstreamBlocker, IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION,
-    KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
+    KaniGenerationContext, KaniInconclusiveReason, KaniInstallation, KaniObligationError,
+    KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest, KaniPinField,
+    KaniRunOutcome, KaniScalarObligationHarness, KaniTool, KaniToolError, KaniToolPins, KindOutput,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
+    OperationProvenance, RoutedGenerationItem, UnsupportedObligation, UpstreamBlocker,
+    IR_CANDIDATE_REVISION, KANI_BACKEND_VERSION, KANI_OBLIGATION_PROFILE, MAX_OBLIGATION_ITEMS,
+    MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -1681,7 +1683,7 @@ fn tc_027_an_unmeasurable_backend_is_refused_before_running() {
     };
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
-        harness: &harness,
+        harness: (&harness).into(),
         crate_directory: &directory,
         target_directory: &directory.join("target"),
         timeout: UNUSED_TIMEOUT,
@@ -1765,7 +1767,7 @@ fn tc_027_every_backend_component_is_refused_with_its_own_typed_reason() {
         fs::remove_file(release.join("rust-toolchain-version")).unwrap();
         let refusal = execute_kani_obligation(&KaniExecutionRequest {
             installation: &installation,
-            harness: &harness,
+            harness: (&harness).into(),
             crate_directory: &installation.kani_home,
             target_directory: &installation.kani_home.join("target"),
             timeout: UNUSED_TIMEOUT,
@@ -1794,7 +1796,7 @@ fn tc_027_every_backend_component_is_refused_with_its_own_typed_reason() {
         );
         let refusal = execute_kani_obligation(&KaniExecutionRequest {
             installation: &installation,
-            harness: &harness,
+            harness: (&harness).into(),
             crate_directory: &installation.kani_home,
             target_directory: &installation.kani_home.join("target"),
             timeout: UNUSED_TIMEOUT,
@@ -1822,7 +1824,7 @@ fn tc_027_every_backend_component_is_refused_with_its_own_typed_reason() {
         fs::set_permissions(&driver, fs::Permissions::from_mode(0o000)).unwrap();
         let refusal = execute_kani_obligation(&KaniExecutionRequest {
             installation: &installation,
-            harness: &harness,
+            harness: (&harness).into(),
             crate_directory: &installation.kani_home,
             target_directory: &installation.kani_home.join("target"),
             timeout: UNUSED_TIMEOUT,
@@ -1848,7 +1850,7 @@ fn tc_027_every_backend_component_is_refused_with_its_own_typed_reason() {
         write_executable(&release.join("bin/cbmc"), "#!/bin/sh\nexit 7\n");
         let refusal = execute_kani_obligation(&KaniExecutionRequest {
             installation: &installation,
-            harness: &harness,
+            harness: (&harness).into(),
             crate_directory: &installation.kani_home,
             target_directory: &installation.kani_home.join("target"),
             timeout: UNUSED_TIMEOUT,
@@ -1887,7 +1889,7 @@ fn tc_027_harness_identity_pin_drift_is_refused_before_the_backend_is_measured()
     };
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
-        harness: &harness,
+        harness: (&harness).into(),
         crate_directory: &directory,
         target_directory: &directory.join("target"),
         timeout: UNUSED_TIMEOUT,
@@ -2079,7 +2081,7 @@ fn run(
     let crate_directory = write_crate(harness, subject);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         installation,
-        harness,
+        harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligations"),
         timeout: REAL_KANI_TIMEOUT,
@@ -2202,7 +2204,7 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
     let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
-        harness,
+        harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
         timeout: Duration::from_millis(1),
@@ -2243,7 +2245,7 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
     let target_directory = crate_directory.join("target");
     let request = KaniExecutionRequest {
         installation: &installation,
-        harness,
+        harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &target_directory,
         timeout: REAL_KANI_TIMEOUT,
@@ -2269,7 +2271,7 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
     let crate_directory = write_crate(&stale, HEALTHY_SUBJECT);
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
-        harness: &stale,
+        harness: (&stale).into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
         timeout: UNUSED_TIMEOUT,
@@ -2295,7 +2297,243 @@ fn tc_025_pinned_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defe
     .unwrap();
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
-        harness: &harness,
+        harness: (&harness).into(),
+        crate_directory: &crate_directory,
+        target_directory: &crate_directory.join("target"),
+        timeout: UNUSED_TIMEOUT,
+    })
+    .unwrap_err();
+    assert!(matches!(
+        refusal,
+        KaniExecutionRefusal::HarnessNotInCrate { .. }
+    ));
+    assert!(!crate_directory.join("target").exists(), "nothing ran");
+    let _ = fs::remove_dir_all(crate_directory);
+}
+
+/// The routed scalar harness for `x + 1` over `Int[0, 9]`, and the oracle crate's `Cargo.toml`, both
+/// exactly as `generate_routed` returns them: the inputs the driver assembles a run from.
+fn routed_scalar_increment() -> (
+    KaniScalarObligationHarness,
+    quire_contract_codegen::Artifact,
+) {
+    let package = package::bounded_increment_package().admit();
+    let node_id = package::code_id(package::BOUNDED_INCREMENT);
+    let pins = pins();
+    let generation = generate_routed(
+        &package,
+        &[RoutedGenerationItem {
+            request_index: 0,
+            node_id,
+            backend: Candidate {
+                identity: "kani".to_owned(),
+                manifest_digest: "A".to_owned(),
+            },
+            kind: BackendKind::Kani,
+        }],
+        &GenerationContexts {
+            kani: Some(KaniGenerationContext {
+                subject_path: "crate::subject",
+                pins: &pins,
+                unwind: 2,
+                attestation: context(),
+            }),
+        },
+    )
+    .expect("routed generation succeeds");
+    let manifest = generation
+        .oracle_artifacts
+        .expect("a Kani group ran")
+        .into_iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .expect("the oracle crate returns its manifest");
+    let [item] = generation.items.as_slice() else {
+        panic!("one routed item, got {:?}", generation.items);
+    };
+    let KindOutput::Kani { harness, .. } = &item.output;
+    (harness.clone().expect("the item is supported"), manifest)
+}
+
+/// Writes the crate the way the driver does: the returned `Cargo.toml` and `library` as
+/// `src/lib.rs`.
+fn write_scalar_crate(
+    name: &str,
+    manifest: &quire_contract_codegen::Artifact,
+    library: &str,
+) -> PathBuf {
+    let directory = scratch(name);
+    fs::write(directory.join("Cargo.toml"), &manifest.contents).unwrap();
+    fs::write(directory.join("src/lib.rs"), library).unwrap();
+    fs::write(
+        directory.join("build.rs"),
+        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+    )
+    .unwrap();
+    directory
+}
+
+/// A routed scalar harness is held to the committed pins before the backend is measured: the
+/// installation does not exist, so `PinDrift` (not a missing tool) proves the harness identity's
+/// own pins were compared first, through the execution module's one check.
+///
+/// Trace: FR-017-AC-1, FR-017-AC-11, TC-027
+#[test]
+fn tc_027_a_routed_scalar_harness_identity_pin_drift_is_refused_before_the_backend_is_measured() {
+    let (mut harness, manifest) = routed_scalar_increment();
+    harness.identity.pins.driver_sha256 = "0".repeat(64);
+    let crate_directory =
+        write_scalar_crate("scalar-identity-drift", &manifest, &harness.rust.contents);
+    let installation = KaniInstallation {
+        launcher: crate_directory.join("no-such-cargo-kani"),
+        kani_home: crate_directory.join("no-such-kani-home"),
+    };
+    let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        installation: &installation,
+        harness: (&harness).into(),
+        crate_directory: &crate_directory,
+        target_directory: &crate_directory.join("target"),
+        timeout: UNUSED_TIMEOUT,
+    })
+    .unwrap_err();
+    assert!(
+        matches!(
+            refusal,
+            KaniExecutionRefusal::PinDrift {
+                field: KaniPinField::DriverSha256,
+                ..
+            }
+        ),
+        "got {refusal}"
+    );
+    assert!(!crate_directory.join("target").exists(), "nothing ran");
+    let _ = fs::remove_dir_all(crate_directory);
+}
+
+/// A routed scalar harness whose identity is the committed one still refuses when the installed
+/// backend differs: the fake installation's launcher digest is not the pinned one.
+///
+/// Trace: FR-017-AC-1, FR-017-AC-11, TC-027
+#[test]
+fn tc_027_a_routed_scalar_harness_is_refused_when_the_installed_backend_drifts() {
+    let (harness, manifest) = routed_scalar_increment();
+    let crate_directory =
+        write_scalar_crate("scalar-backend-drift", &manifest, &harness.rust.contents);
+    let (installation, _release) = fake_installation("scalar-backend-drift-install");
+    let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        installation: &installation,
+        harness: (&harness).into(),
+        crate_directory: &crate_directory,
+        target_directory: &crate_directory.join("target"),
+        timeout: UNUSED_TIMEOUT,
+    })
+    .unwrap_err();
+    assert!(
+        matches!(
+            refusal,
+            KaniExecutionRefusal::PinDrift {
+                field: KaniPinField::LauncherSha256,
+                ..
+            }
+        ),
+        "got {refusal}"
+    );
+    assert!(!crate_directory.join("target").exists(), "nothing ran");
+    let _ = fs::remove_dir_all(crate_directory);
+    let _ = fs::remove_dir_all(installation.kani_home.parent().unwrap());
+}
+
+/// A routed scalar harness carries the same non-vacuity cover shape a contract harness does, so
+/// a run classifies identically: every cover satisfied is verified, an unsatisfied one is
+/// cover-unsatisfied, and success text with no cover summary is inconclusive.
+///
+/// Trace: FR-017-AC-4, FR-017-AC-11, TC-027
+#[test]
+fn tc_027_a_routed_scalar_harness_run_classifies_like_a_contract_harness() {
+    let (scalar, _manifest) = routed_scalar_increment();
+    let package = bound_package(1000);
+    let contract = supported_contract_harnesses(&package, &pins(), "crate::withdraw").remove(1);
+    let covers = |source: &str| source.matches("kani::cover!(").count();
+    assert_eq!(covers(&scalar.rust.contents), 1, "one non-vacuity cover");
+    assert_eq!(
+        covers(&contract.rust.contents),
+        1,
+        "the contract kind's shape"
+    );
+    let total = covers(&scalar.rust.contents);
+    let transcript = |satisfied: usize| {
+        format!(
+            "SUMMARY:\n ** 0 of 20 failed\n\n ** {satisfied} of {total} cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n"
+        )
+    };
+    assert_eq!(
+        classify_kani_run(true, &transcript(total)),
+        KaniRunOutcome::Verified
+    );
+    assert_eq!(
+        classify_kani_run(true, &transcript(0)),
+        KaniRunOutcome::CoverUnsatisfied {
+            satisfied: 0,
+            total: u64::try_from(total).unwrap()
+        }
+    );
+    assert_eq!(
+        classify_kani_run(
+            true,
+            "SUMMARY:\n ** 0 of 20 failed\nVERIFICATION:- SUCCESSFUL\n"
+        ),
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::MissingCoverSummary
+        }
+    );
+}
+
+/// The routed `x + 1` over `Int[0, 9]` harness runs through the execution module in the crate the
+/// driver assembles (`Cargo.toml` from `oracle_artifacts`, the harness source as `src/lib.rs`)
+/// under the real pinned backend, and its evidence carries the scalar identity; a crate whose
+/// `src/lib.rs` lacks the harness is refused with no run.
+///
+/// The outcome itself is not asserted: CBMC did not conclude this harness within ten minutes on
+/// the measuring host, so the run is given a short budget. What this test establishes is that the
+/// real launcher ran with the scalar harness's own options and pins and that the evidence names
+/// the scalar identity.
+///
+/// Trace: FR-017-AC-7, FR-017-AC-11, TC-027
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_027_a_routed_scalar_harness_runs_under_real_pinned_kani() {
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    assert_eq!(
+        installation.observe().expect("the backend is measurable"),
+        KaniToolPins::pinned(),
+        "the installed backend is the committed one"
+    );
+    let (harness, manifest) = routed_scalar_increment();
+    let crate_directory = write_scalar_crate("scalar-real", &manifest, &harness.rust.contents);
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        installation: &installation,
+        harness: (&harness).into(),
+        crate_directory: &crate_directory,
+        target_directory: &crate_directory.join("target"),
+        timeout: Duration::from_secs(60),
+    })
+    .unwrap_or_else(|refusal| panic!("{refusal}"));
+    assert!(
+        crate_directory.join("target").exists(),
+        "the backend was invoked"
+    );
+    assert_eq!(evidence.obligation_identity_sha256, harness.identity_sha256);
+    assert_eq!(evidence.kind, None);
+    assert_eq!(evidence.oracle_digest, harness.identity.oracle_sha256);
+    assert_eq!(evidence.harness_sha256, harness.rust.sha256);
+    assert_eq!(evidence.observed_pins, harness.identity.pins);
+    assert_eq!(evidence.arguments[1..], harness.identity.options[..]);
+    assert_eq!(evidence.unwind, harness.identity.unwind);
+    let _ = fs::remove_dir_all(&crate_directory);
+
+    let crate_directory = write_scalar_crate("scalar-real-missing", &manifest, "//! empty\n");
+    let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        installation: &installation,
+        harness: (&harness).into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
         timeout: UNUSED_TIMEOUT,

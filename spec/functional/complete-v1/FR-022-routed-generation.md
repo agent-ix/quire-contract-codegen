@@ -132,7 +132,11 @@ already does for the FR-331 envelope.
     `[workspace]`. To run a harness the driver writes the returned `Cargo.toml`
     and the harness's `rust.contents` as `src/lib.rs`, because
     `execute_kani_obligation` refuses with `HarnessNotInCrate` unless the
-    crate's `src/lib.rs` contains the harness source byte for byte. The driver
+    crate's `src/lib.rs` contains the harness source byte for byte.
+    `execute_kani_obligation` accepts this `KaniScalarObligationHarness`
+    directly (FR-017-AC-11): the driver assembles the request the same way
+    for either harness kind, and runs it through the one execution path
+    FR-017 owns (Linear IR-301). The driver
     does not write the returned `src/lib.rs` as well: appending the harness to
     it duplicates the `use ... as rt` line and the oracle definitions. The
     `claim-map.json` covers the derivable items only; the in-memory `claim_map`
