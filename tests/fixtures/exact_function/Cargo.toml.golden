@@ -13,4 +13,8 @@ quire-contract-runtime = { git = "https://github.com/agent-ix/quire-contract-run
 [lints.rust]
 unsafe_code = "forbid"
 
+[package.metadata.kani]
+unstable = { unstable-options = true }
+flags = { cbmc-args = ["--max-field-sensitivity-array-size", "1024"] }
+
 [workspace]

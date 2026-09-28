@@ -46,7 +46,7 @@
 //! [`ExactScalarRefusal`] and contributes no code; its siblings are unaffected.
 
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-use crate::oracle::{Artifact, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION};
+use crate::oracle::{Artifact, MAX_GENERATED_SOURCE_BYTES, ORACLE_KANI_METADATA, RUNTIME_REVISION};
 use quire_contract_ir::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteContractNodeV2, CompleteLoweringProfileV2,
@@ -2793,12 +2793,9 @@ fn profile_path(profile: TextProfile) -> &'static str {
     }
 }
 
-/// The oracle crate's manifest. CBMC tracks heap objects field by field only up to 64 bytes by
-/// default; RT's `Value` and `ValueType` are larger, and a non-field-sensitive read of them cannot
-/// be constant-folded, so the crate raises the limit the way RT's own `Cargo.toml` does.
 fn manifest() -> String {
     format!(
-        "[package]\nname = \"{EXACT_SCALAR_CRATE_NAME}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[lints.rust]\nunsafe_code = \"forbid\"\n\n[package.metadata.kani]\nunstable = {{ unstable-options = true }}\nflags = {{ cbmc-args = [\"--max-field-sensitivity-array-size\", \"1024\"] }}\n\n[workspace]\n"
+        "[package]\nname = \"{EXACT_SCALAR_CRATE_NAME}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[lints.rust]\nunsafe_code = \"forbid\"\n\n{ORACLE_KANI_METADATA}[workspace]\n"
     )
 }
 

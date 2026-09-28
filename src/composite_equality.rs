@@ -76,7 +76,7 @@ use crate::exact_scalar::{
     read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
 };
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-use crate::oracle::{Artifact, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION};
+use crate::oracle::{Artifact, MAX_GENERATED_SOURCE_BYTES, ORACLE_KANI_METADATA, RUNTIME_REVISION};
 use quire_contract_ir::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
@@ -1570,7 +1570,7 @@ fn profile_path(profile: TextProfile) -> &'static str {
 
 fn manifest() -> String {
     format!(
-        "[package]\nname = \"{COMPOSITE_EQUALITY_CRATE_NAME}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[lints.rust]\nunsafe_code = \"forbid\"\n\n[workspace]\n"
+        "[package]\nname = \"{COMPOSITE_EQUALITY_CRATE_NAME}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[lints.rust]\nunsafe_code = \"forbid\"\n\n{ORACLE_KANI_METADATA}[workspace]\n"
     )
 }
 
