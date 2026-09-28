@@ -5,7 +5,7 @@
     "algorithm": "sha256",
     "digest": "df8bc11d9583b64b8a957e725ac334508650fb542022d501ad6087d93c4ce92e"
   },
-  "runtime_revision": "c52442a56a879cb5ce02a63bcbe430b85bf74a6d",
+  "runtime_revision": "ed0a04b482216b79d3559a6ac59e6e260c5591cf",
   "blocked": [
     "operation identity not consumed by codegen's generators"
   ],

@@ -5,7 +5,7 @@
     "algorithm": "sha256",
     "digest": "fc1b1ae8eee481645641c4f687c6efd7d3043cc8cefe4da3b3af7fe50142a60d"
   },
-  "runtime_revision": "c52442a56a879cb5ce02a63bcbe430b85bf74a6d",
+  "runtime_revision": "ed0a04b482216b79d3559a6ac59e6e260c5591cf",
   "blocked": [],
   "items": [
     {

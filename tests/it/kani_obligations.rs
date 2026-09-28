@@ -2335,7 +2335,7 @@ fn routed_scalar_increment() -> (
             kani: Some(KaniGenerationContext {
                 subject_path: "crate::subject",
                 pins: &pins,
-                unwind: 2,
+                unwind: 3,
                 attestation: context(),
             }),
         },
@@ -2487,40 +2487,44 @@ fn tc_027_a_routed_scalar_harness_run_classifies_like_a_contract_harness() {
     );
 }
 
-/// The routed `x + 1` over `Int[0, 9]` harness runs through the execution module in the crate the
-/// driver assembles (`Cargo.toml` from `oracle_artifacts`, the harness source as `src/lib.rs`)
-/// under the real pinned backend, and its evidence carries the scalar identity; a crate whose
-/// `src/lib.rs` lacks the harness is refused with no run.
-///
-/// The outcome itself is not asserted: CBMC did not conclude this harness within ten minutes on
-/// the measuring host, so the run is given a short budget. What this test establishes is that the
-/// real launcher ran with the scalar harness's own options and pins and that the evidence names
-/// the scalar identity.
-///
-/// Trace: FR-017-AC-7, FR-017-AC-11, TC-027
-#[test]
-#[ignore = "kani lane: run serially through `make kani`"]
-fn tc_027_a_routed_scalar_harness_runs_under_real_pinned_kani() {
+/// Runs `library` (a routed scalar harness's source, possibly mutated) through the execution
+/// module in the crate the driver assembles, under the real pinned backend and the lane budget.
+fn run_scalar_under_real_kani(
+    name: &str,
+    harness: &KaniScalarObligationHarness,
+    manifest: &quire_contract_codegen::Artifact,
+) -> quire_contract_codegen::KaniExecutionEvidence {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     assert_eq!(
         installation.observe().expect("the backend is measurable"),
         KaniToolPins::pinned(),
         "the installed backend is the committed one"
     );
-    let (harness, manifest) = routed_scalar_increment();
-    let crate_directory = write_scalar_crate("scalar-real", &manifest, &harness.rust.contents);
+    let crate_directory = write_scalar_crate(name, manifest, &harness.rust.contents);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
-        harness: (&harness).into(),
+        harness: harness.into(),
         crate_directory: &crate_directory,
-        target_directory: &crate_directory.join("target"),
-        timeout: Duration::from_secs(60),
+        target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar"),
+        timeout: REAL_KANI_TIMEOUT,
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
-    assert!(
-        crate_directory.join("target").exists(),
-        "the backend was invoked"
-    );
+    let _ = fs::remove_dir_all(&crate_directory);
+    evidence
+}
+
+/// The routed `x + 1` over `Int[0, 9]` harness runs through the execution module in the crate the
+/// driver assembles (`Cargo.toml` from `oracle_artifacts`, the harness source as `src/lib.rs`)
+/// under the real pinned backend and is verified; its evidence carries the scalar identity. A
+/// crate whose `src/lib.rs` lacks the harness is refused with no run.
+///
+/// Trace: FR-017-AC-7, FR-017-AC-11, TC-027
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_027_a_routed_scalar_harness_verifies() {
+    let (harness, manifest) = routed_scalar_increment();
+    let evidence = run_scalar_under_real_kani("scalar-real", &harness, &manifest);
+    assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
     assert_eq!(evidence.obligation_identity_sha256, harness.identity_sha256);
     assert_eq!(evidence.kind, None);
     assert_eq!(evidence.oracle_digest, harness.identity.oracle_sha256);
@@ -2528,8 +2532,8 @@ fn tc_027_a_routed_scalar_harness_runs_under_real_pinned_kani() {
     assert_eq!(evidence.observed_pins, harness.identity.pins);
     assert_eq!(evidence.arguments[1..], harness.identity.options[..]);
     assert_eq!(evidence.unwind, harness.identity.unwind);
-    let _ = fs::remove_dir_all(&crate_directory);
 
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let crate_directory = write_scalar_crate("scalar-real-missing", &manifest, "//! empty\n");
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
@@ -2545,4 +2549,26 @@ fn tc_027_a_routed_scalar_harness_runs_under_real_pinned_kani() {
     ));
     assert!(!crate_directory.join("target").exists(), "nothing ran");
     let _ = fs::remove_dir_all(crate_directory);
+}
+
+/// The same harness with its checked domain narrowed to `[0, 5]` asserts a bound the oracle does
+/// not enforce (it completes up to 9), so the real backend falsifies it with a counterexample.
+///
+/// Trace: FR-017-AC-7, FR-017-AC-11, TC-027
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified() {
+    let (mut harness, manifest) = routed_scalar_increment();
+    let domain_upper = "rt::Integer::from(9_i64))";
+    assert_eq!(harness.rust.contents.matches(domain_upper).count(), 1);
+    harness.rust.contents = harness
+        .rust
+        .contents
+        .replace(domain_upper, "rt::Integer::from(5_i64))");
+    let evidence = run_scalar_under_real_kani("scalar-real-violating", &harness, &manifest);
+    assert!(
+        matches!(evidence.outcome, KaniRunOutcome::Falsified { .. }),
+        "got {:?}",
+        evidence.outcome
+    );
 }

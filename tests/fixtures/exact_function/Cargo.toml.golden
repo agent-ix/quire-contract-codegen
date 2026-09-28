@@ -8,9 +8,13 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-quire-contract-runtime = { git = "https://github.com/agent-ix/quire-contract-runtime", rev = "c52442a56a879cb5ce02a63bcbe430b85bf74a6d", features = ["exact"] }
+quire-contract-runtime = { git = "https://github.com/agent-ix/quire-contract-runtime", rev = "ed0a04b482216b79d3559a6ac59e6e260c5591cf", features = ["exact"] }
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[package.metadata.kani]
+unstable = { unstable-options = true }
+flags = { cbmc-args = ["--max-field-sensitivity-array-size", "1024"] }
 
 [workspace]
