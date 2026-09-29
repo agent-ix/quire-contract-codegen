@@ -59,7 +59,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-007-AC-4, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_replay_preserves_false_and_rejects_non_counterexample_results() {
         let agreement = replay_codegen_counterexample(packet(), |input| {

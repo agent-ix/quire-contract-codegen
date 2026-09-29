@@ -835,7 +835,7 @@ mod tests {
         (profile, dispatch, input)
     }
 
-    /// Trace: FR-007-AC-1, FR-007-AC-2, FR-007-AC-4, FR-007-AC-5, TC-023.
+    /// Trace: FR-007-AC-1, FR-007-AC-2, FR-007-AC-5, TC-023.
     #[test]
     fn tc_023_generates_deterministic_complete_artifacts_for_every_supported_family() {
         let (profile, dispatch, input) = fixture();
@@ -1159,7 +1159,7 @@ mod tests {
         assert_eq!(error.boolean_claim(), None);
     }
 
-    /// Trace: FR-007-AC-3, FR-007-AC-4, TC-023.
+    /// Trace: FR-007-AC-3, TC-023.
     #[test]
     fn tc_023_false_case_retains_a_replayable_counterexample_packet() {
         let (profile, dispatch, input) = fixture();
@@ -1384,7 +1384,7 @@ mod tests {
     /// `generate_bounded_kani_corpus_case`'s Arithmetic arm feeds into `assignments` before the
     /// checked-arithmetic Kani harness compiles.
     ///
-    /// Trace: FR-007-AC-4, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_arithmetic_assignments_are_exactly_the_two_operands() {
         let request = quire_contract_ir::kani::CheckedArithmeticRequest {
@@ -1406,7 +1406,7 @@ mod tests {
     /// family's content: exactly the ordered population's own values, never `max_items` or the
     /// query's `expected` oracle target.
     ///
-    /// Trace: FR-007-AC-4, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_collection_assignments_are_exactly_the_ordered_population() {
         let query = quire_contract_ir::kani::CollectionQuery {

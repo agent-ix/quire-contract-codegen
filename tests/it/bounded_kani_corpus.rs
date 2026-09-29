@@ -344,7 +344,7 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
     );
 }
 
-/// Trace: FR-007-AC-2, FR-007-AC-4, TC-023.
+/// Trace: FR-007-AC-2, TC-023.
 #[test]
 fn tc_023_kani_counterexample_replays_through_contract_ir() {
     let (profile, dispatch, input) = fixture();

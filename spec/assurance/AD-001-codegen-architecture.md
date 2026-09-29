@@ -155,14 +155,13 @@ success fallback, and no requirement converts one into another.
 
 ## Decisions
 
-- **Owner ruling, 2026-09-28.** QSL owns the replay and proof types in `qsl-replay`: `Witness`,
-  `ReplaySource`, the counterexample envelope, the FR-331 terminal record and
-  `ObligationIdentity`. Contract IR deletes its copies. CG uses QSL's `ObligationIdentity` and
-  QSL's envelope, and keeps the Kani transcript parser as part of its backend adapter. The
-  authority is this ruling and the `qsl-replay` API at the revision `Cargo.toml` pins
-  (`20ba521`), which defines all five types. QSL ADR-013 O-24 and O-25 and QSpec AD-016 still name
-  Contract IR as the witness and packet owner and give it the terminal-record map. Their amendment
-  is pending: the `qsl-replay` facade work is QSL-317, and the AD-016 amendment is unassigned.
+- QSL owns the replay and proof types in `qsl-replay`: `Witness`, `ReplaySource`, the
+  counterexample envelope, the FR-331 terminal record and `ObligationIdentity`. Contract IR holds
+  no copy of them. CG uses QSL's `ObligationIdentity` and QSL's envelope, and keeps the Kani
+  transcript parser as part of its backend adapter. The authority is the `qsl-replay` API at the
+  revision `Cargo.toml` pins, which defines all five types. QSL ADR-013 O-24 and O-25 and QSpec
+  AD-016 still name Contract IR as the witness and packet owner and give it the terminal-record
+  map; their amendment to match is pending upstream.
 - CG computes the obligation-identity digest over every `KaniObligationIdentity` member except
   `source_span` (AD-016 arrow 5), carries it as QSL's `ObligationIdentity`, and builds its
   envelopes as QSL's `WitnessEnvelope` (FR-024).

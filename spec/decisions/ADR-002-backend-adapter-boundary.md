@@ -21,7 +21,7 @@ relationships:
 ## Status
 
 Proposed. Questions Q0 to Q4 are open until the owner rules, and their recommendations decide
-nothing. The only settled input is the owner ruling of 2026-09-28 that AD-001 records.
+nothing. The only settled input is the owner's ruling of 2026-09-28, recorded under Context.
 
 ## Context
 
@@ -41,9 +41,12 @@ share no stated contract:
 | Playback typing | `src/kani_witness_join.rs` |
 | QSL witness rendering | `src/spine_replay.rs` |
 
-Under the owner ruling recorded in [AD-001](../assurance/AD-001-codegen-architecture.md), QSL owns
-`Witness`, `ReplaySource`, the counterexample envelope, the FR-331 terminal record and
-`ObligationIdentity`, and the Kani transcript parser stays in CG as part of its backend adapter.
+On 2026-09-28 the owner ruled that QSL owns `Witness`, `ReplaySource`, the counterexample
+envelope, the FR-331 terminal record and `ObligationIdentity` in `qsl-replay`, that Contract IR
+deletes its copies, and that the Kani transcript parser stays in CG as part of its backend adapter.
+[AD-001](../assurance/AD-001-codegen-architecture.md) states the resulting ownership. The QSL
+ADR-013 and QSpec AD-016 amendments that match the ruling had not landed when this record was
+written.
 
 ### Coverage of the adapter's intents
 

@@ -32,12 +32,10 @@ holding exactly one `qsl_replay::ReplaySource` arm. It shall validate every valu
 declared domain before any replay, and shall replay only through `qsl_replay::replay`, or through
 `qsl_replay::replay_frame` for a frame counterexample.
 
-The authority for QSL owning the envelope, the witness, the replay source, the FR-331 terminal
-record and the obligation identity type is the owner's ruling of 2026-09-28 and the `qsl-replay`
-API at the revision `Cargo.toml` pins (`20ba521`), which defines all five. QSL ADR-013 O-24 and O-25
-and QSpec AD-016 still name Contract IR as the witness and packet owner and give it the
-terminal-record map. Their amendment to match the ruling is pending: the `qsl-replay` facade work is
-QSL-317, and the AD-016 amendment is unassigned.
+The envelope, the witness, the replay source, the FR-331 terminal record and the obligation
+identity type are QSL's, as defined by the `qsl-replay` API at the revision `Cargo.toml` pins.
+[AD-001](../../assurance/AD-001-codegen-architecture.md) states that ownership and the upstream
+records that still differ from it.
 
 This requirement states what the generator puts into those types, and does not restate their shape.
 [FR-016](./FR-016-witness-native-replay.md) owns decoding a Kani playback, the adapter refusals and

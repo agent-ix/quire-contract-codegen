@@ -121,8 +121,8 @@ collection/query construct without giving Contract IR a dependency on codegen.
 
 ## Replay target
 
-The owner ruling of 2026-09-28 moves replay to QSL's `qsl-replay` facade, and Contract IR deletes
-its replay types. The replay part of this requirement (the counterexample output, the replay
+Replay is QSL's `qsl-replay` facade, and Contract IR holds no replay types
+([AD-001](../assurance/AD-001-codegen-architecture.md)). The replay part of this requirement (the counterexample output, the replay
 Behavior bullet and FR-007-AC-4) therefore states that target. At this revision
 `src/bounded_kani_replay.rs` still replays through Contract IR's `replay_counterexample` with a
 caller-supplied native evaluator, so FR-007-AC-4 is planned. Whether FR-007 stays at all is

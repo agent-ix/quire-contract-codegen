@@ -83,12 +83,19 @@ failure is reported.
   | `qsl_replay::replay` returns the `Input` arm for a witness-sourced request | adapter refusal (FR-016-AC-11) |
   | The `Witness` arm settles `inconclusive`, or matches the harness value but differs in admitted charges, consumed counters or limits | mismatch |
   | The `Witness` arm settles `reproduced-with-evaluated-witness` with category `violation` | reproduced failure |
+  | The `Witness` arm settles `reproduced-with-evaluated-witness` with any category other than `violation` | mismatch |
 
 - If native replay runs and disagrees with the harness result, then the
   generator shall report a typed mismatch rather than a failure or an
   unavailable result.
 - If the executor reports an internal fault, then the generator shall report
   a typed unavailable result rather than a failure, a refusal or a mismatch.
+- If the `Witness` arm settles `reproduced-with-evaluated-witness` with a
+  category other than `violation`, then the generator shall report a typed
+  mismatch. QSL's `WitnessArmResult::settle` takes the category independently
+  of the settlement, and only `violation` is a false predicate, so an
+  agreement in any other category does not reproduce the falsification the
+  harness reported.
 - The generator shall replay through QSL's layer-6 `replay` facade
   (`qsl_replay::replay`). The caller supplies the complete request: the proved
   package's `package_id`, the selected function's qualified name, the limits, and
@@ -117,6 +124,7 @@ failure is reported.
 | FR-016-AC-10 | A decoded falsification at which the native function evaluates the clause to true settles `inconclusive` with the proved violation and the replayed success both named. | Test (TC-026) |
 | FR-016-AC-11 | The adapter refuses, with a distinct typed error each, a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript QSL does not admit, a request QSL refuses with any `ReplayRefusal` other than `Fault` (returned with its cause), and a witness-sourced request that settles on the input arm. | Test (TC-026) |
 | FR-016-AC-12 | A `replay` call that returns `ReplayRefusal::Fault` yields a typed unavailable result, and never a mismatch, a refusal or a failure; no other condition yields unavailable. | Test (TC-026) |
+| FR-016-AC-13 | A `Witness` arm that settles `reproduced-with-evaluated-witness` with a category other than `violation` yields a typed mismatch, and never a reproduced failure. | Test (TC-026) |
 
 ## Dependencies
 

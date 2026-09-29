@@ -24,7 +24,8 @@ against the persisted schema, then against that schema with a binding dropped
 and with a binding retyped. Then replay a reproducing witness, a malformed
 witness, a witness bound to another harness identity, a witness over the decode
 size limit, an out-of-domain witness, a witness whose native value or charges
-disagree with the harness, and a witness whose native replay is unavailable.
+disagree with the harness, a witness whose native replay is unavailable, and
+a witness whose replay agrees in a category other than `violation`.
 
 ## Expected Results
 
@@ -37,7 +38,8 @@ and retyped schemas refuse by arity and width. Only the reproducing witness is
 reported as a failure; the others yield malformed (three cases), out-of-domain,
 mismatch and unavailable results respectively. The disagreeing witnesses are
 never reported unavailable, and the unavailable replay is never reported as a
-mismatch.
+mismatch. The witness that agrees in a category other than `violation` is a
+mismatch and never a failure.
 
 ## Status
 
@@ -65,4 +67,4 @@ refusals are tested in the default suite and against a real falsification in
 the ignored lane, and the others are tested only by quire-contract-ir's own
 `Witness::decode` tests. Binding to the harness pins (AC-5), the decode size
 limit (AC-6), domain validation (AC-2) and native replay (AC-3, AC-4, AC-7,
-AC-12) are also planned.
+AC-12, AC-13) are also planned.

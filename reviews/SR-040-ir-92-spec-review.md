@@ -135,3 +135,44 @@ Not mergeable yet. There are seven MEDIUM findings: two false or mis-cited autho
 (FND-001, FND-002), three untestable or conflicting criteria (FND-003, FND-004, FND-005), one
 unresolved conflict between two requirements (FND-006) and one private-schedule leak into a public
 repo (FND-007). All are text fixes inside this PR. The LOW findings are editorial.
+
+## Dispositions
+
+Round 1, reviewed at `49e797b5c80fd7f04389dc5a6116e56c26eb28b0`. The fix content is `d8fc593`.
+`49e797b` adds only this file, and it differs from the reviewer's copy in one line: line 62 has
+the two work-package tokens redacted to `WP<n>`.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed d8fc593 | The AD-001 seam row now reads "Target: no copy … see Current state". A new Current state section lists the IR `Witness` and `ReplaySource` imports, the IR replay path in `bounded_kani_replay.rs`, and the unbuilt domain check. |
+| FND-002 | fixed d8fc593 | FR-024 and AD-001 now name the 2026-09-28 owner ruling and the `qsl-replay` API at `20ba521` as the authority. They state that ADR-013 O-24/O-25 and AD-016 still name IR, and that the amendment is pending. |
+| FND-003 | fixed d8fc593 | FR-024-AC-4 lists exactly the 14 `WitnessPacket` members at `20ba521`, and each is refused by `WitnessEnvelope::reconstruct` with `MissingMember`. Trace position present with value none is admitted, which matches `Option<Option<TracePosition>>`. Dependency entries moved to the request members. |
+| FND-004 | fixed d8fc593 | FR-024-AC-2 now requires only that the renderer take decoded values and no backend-native text, and it defers wording exclusivity to FR-017-AC-10. TC-035 names the seven-literal wording set, which matches `tc_027_no_other_source_file_contains_kani_prose_literals` (`src/kani_transcript.rs:710-718`). FR-016 adds a target bullet for reading playback only through `kani_transcript.rs`. |
+| FND-005 | fixed d8fc593 | FR-016 has an ordered partition table. AC-12 is only `ReplayRefusal::Fault`, and AC-11 covers every other `ReplayRefusal`, so the two no longer overlap. Treating Fault as unavailable is consistent with QSL ADR-013 T-4 (an `InternalFault` maps to internal failure and is never a Refusal). One residual is recorded as FND-017. |
+| FND-006 | fixed d8fc593 | FR-007's output, Behavior bullet and AC-4 now target the QSL `Input` arm (FR-024). A Replay target section states the current IR path, and the matrix marks FR-007-AC-4 Planned. One residual is recorded as FND-016. |
+| FND-007 | fixed d8fc593 | `grep -rE 'WP[0-9]' spec reviews` finds nothing at `49e797b`. FR-025 Open items is removed. |
+| FND-008 | fixed d8fc593 | The open questions moved to the new ADR-004 (Proposed, with options and recommendations, deciding nothing). The While-clause became an unwanted-behaviour `If` bullet, and AC-5 no longer depends on external progress. |
+| FND-009 | fixed d8fc593 | FR-025 now says which parts AD-016 and ADR-013 decide, and states that the Rust-type table is the generator's own choice. |
+| FND-010 | fixed d8fc593 | The AD-001 execution view compares identity pins first, then measures, matching `src/kani_execution.rs:597-613`. |
+| FND-011 | fixed d8fc593 | AD-001 now places runtime-op selection at arrow 3, settlement and oracles at arrow 4, and harnesses at arrow 5. |
+| FND-012 | fixed d8fc593 | The ADR-002 Decision is options-only (new Q0: five parts or parser only). The owner ruling it cites is now recorded in AD-001's Decisions. |
+| FND-013 | fixed d8fc593 | interface-001 `outcome_source` now says "passed through verbatim to the FR-016 witness join". TC-035 Status lists `bounded_kani_replay.rs`. The `runtime::execute` mention is gone from FR-013. |
+| FND-014 | fixed d8fc593 | FR-024-AC-2 is a single claim. AC-7 is split into AC-7 and AC-8 (the old AC-8 and AC-9 are now AC-9 and AC-10). FR-025-AC-2 is split into AC-2 and AC-6. The matrix, TC-035 and TC-036 match. |
+| FND-015 | fixed d8fc593 | "Linear IR-309" is removed and the AD-001 no-convergence statement is restored. FR-018 drops "yet". The remaining "no requirement owns" is an Out of Scope fact, not a requirement statement. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-016 | low | FR-007-AC-4 now states the QSL `Input`-arm target, but six trace tags for FR-007-AC-4 remain on tests that exercise Contract IR's `replay_counterexample`. They back the rewritten criterion with tests of the retired behaviour, so `quire coverage` counts it as backed although the matrix says Planned. | src/bounded_kani_replay.rs:62, src/bounded_kani_corpus.rs:838, src/bounded_kani_corpus.rs:1162, src/bounded_kani_corpus.rs:1387, src/bounded_kani_corpus.rs:1409, tests/it/bounded_kani_corpus.rs:347 |
+| FND-017 | low | The FR-016 partition does not cover every result `replay` can return. `WitnessArmResult::settle` takes `category` from its caller independently of the settlement, so a `Witness` arm that settles `ReproducedWithEvaluatedWitness` with a category other than `Violation` matches no row, and the claim "exactly one of the outcomes" fails for it. | spec/functional/complete-v1/FR-016-witness-native-replay.md:76-86 |
+| FND-018 | low | The fix put process narration and a ticket id into requirement and architecture text: "the owner's ruling of 2026-09-28", "the `qsl-replay` facade work is QSL-317, and the AD-016 amendment is unassigned". This is status that will go stale. It belongs in the ADR or the ticket. | spec/functional/complete-v1/FR-024-counterexample-envelope-intake.md:35-40, spec/assurance/AD-001-codegen-architecture.md:158-165, spec/functional/FR-007-bounded-kani-profile-corpus.md:124 |
+
+### Round 1 verdict
+
+All 15 original findings are fixed in `d8fc593`, and none is still open. The fix round adds three
+LOW findings and no MEDIUM or HIGH. `make spec` is byte-identical to `origin/main` (both exit 2 from
+AP-001/MP-001). The changed files validate with `quire validate` (exit 0). `status_lies` is empty,
+and unbacked rows go from 11 to 32, all new Planned rows. The interface-001 edit touches only the
+single-line `outcome_source` scalar, which `tests/it/interface_001.rs` does not parse. Mergeable
+from the spec side. FND-016 to FND-018 can be fixed in this PR or deferred at the leader's call.
