@@ -1,45 +1,16 @@
-//! This repository's own generation producer (FR-006).
+//! The bounded generation conformance corpus (FR-006).
 //!
-//! It runs the bounded generation corpus through the public API and publishes
-//! `codegen.generation-conformance/v1` on stdout: one row per case, each row
-//! carrying the outcome, the Interface-001 terminal state the case reached, the
-//! diagnostic code it produced when it produced one, and the number of declared
-//! checks that actually held.
+//! It runs the bounded generation corpus through the public API and prints one
+//! JSON row per case on stdout, each carrying the outcome, the Interface-001
+//! terminal state the case reached, the diagnostic code it produced when it
+//! produced one, and the number of declared checks that held. A case expected
+//! to be rejected and rejected is a `pass`; one expected to be rejected that
+//! generated an artifact anyway is a `fail`. A row that held every check it ran
+//! but ran fewer than its declared floor is `vacuous`, not `pass`.
 //!
-//! Three things this file deliberately is not.
-//!
-//! It is not a judge of the crate. It states what the generator did. A case that
-//! was expected to be rejected and was rejected is a `pass`, because the
-//! rejection is the behaviour under test; a case that was expected to be
-//! rejected and generated an artifact anyway is a `fail`.
-//!
-//! It is not a second copy of the test suite. The integration tests assert
-//! properties of individual bundles in detail. This walks the corpus and emits a
-//! machine-readable census, so that something downstream can attest to it
-//! without reading a transcript. A producer whose only consumer is a human is
-//! not a producer.
-//!
-//! It is not a verdict on the whole repository. `cargo test`, `cargo clippy`,
-//! `cargo deny`, the MSRV build and the specification gates each report their
-//! own fact. This one reports generation conformance and nothing else.
-//!
-//! Every row carries `checksDischarged` and `floor`. A row that holds every
-//! check it ran but ran fewer than its declared floor is `vacuous`, not `pass`:
-//! a case that simplified away is not a case that held. That distinction is what
-//! stops a corpus from going green by getting smaller.
-//!
-//! The exit code carries that same census: `0` when every row is a `pass`, `1`
-//! when any row is a `fail`, and `2` when no row failed but one is `vacuous`,
-//! which is inconclusive rather than either verdict. The rows themselves are
-//! unchanged and still go to stdout; the failing and vacuous ones are named on
-//! stderr. This judges generation conformance and still nothing else.
-//!
-//! `ci` reaches this producer twice, and only one of them is a judgement. The
-//! `conformance` target runs it standalone, and nothing else looks at that
-//! invocation, so its exit code is the whole gate. `assurance-inputs` runs it
-//! redirected into the chain's intake and deliberately tolerates status 1 and
-//! 2, because the chain classifies the rows itself and cannot report a defect
-//! whose bytes never reached it.
+//! The exit code is `0` when every row is a `pass`, `1` when any row is a
+//! `fail`, and `2` when no row failed but one is `vacuous`. The failing and
+//! vacuous rows are named on stderr. `make conformance` runs it.
 
 use std::fmt::Write as _;
 use std::process;
@@ -1248,113 +1219,28 @@ mod tests {
     /// this, a serialization change that renamed or retyped the field would
     /// make every row unreadable and the whole run classify as `0`.
     ///
-    /// Trace: TC-032, FR-006-AC-9
+    /// Trace: TC-032, FR-006-AC-2
     #[test]
     #[should_panic(expected = "must carry a string `outcome`")]
     fn a_line_without_a_string_outcome_panics_rather_than_reading_as_a_pass() {
         let _ = exit_code(&[r#"{"outcome":7}"#.to_owned()]);
     }
 
-    /// The source of this file, for the tripwire below. `include_str!`
-    /// resolves relative to this file's own directory, so it embeds these
-    /// bytes at compile time rather than reading a path at run time that a
-    /// different working directory would move.
-    const OWN_SOURCE: &str = include_str!("generation_conformance.rs");
-
-    /// A tripwire and a floor, not a proof -- said plainly because the
-    /// distinction is the whole subject of this file.
-    ///
-    /// Every other test here exercises `exit_code`, and `main` reaching the
-    /// process's exit status through it is what makes those tests mean
-    /// anything. That link is the one thing they cannot check: replacing
-    /// `main`'s single call with `process::exit(0)` leaves every one of them
-    /// green, because the real bounded corpus passes today, so the end-to-end
-    /// test observes 0 either way and the classifier is simply never
-    /// consulted. Measured with this assertion deleted and that mutation in
-    /// place: exit 0, 7 of 7 passing. With it restored, the same tree is exit
-    /// 101 and this is the only test that fails.
-    ///
-    /// Nothing available here closes that by behaviour. A corpus row that
-    /// deliberately fails would, and does not exist; manufacturing one inside
-    /// the producer would be a fault-injection affordance in an evidence
-    /// producer, which costs more than it buys. So this reads the text of
-    /// this file instead and requires the single exit to be the classifier's
-    /// value.
-    ///
-    /// What it catches: a constant substituted for the call, and a second
-    /// exit path added anywhere outside the test module. The second half of
-    /// that needed a correction. An earlier version scanned only from `fn
-    /// main` to the test module, and review showed the obvious bypass --
-    /// `fn bail_out() -> ! { process::exit(0) }` declared *after* `mod
-    /// tests`, called from `main` -- left all seven tests green at exit 0
-    /// while the classifier was never consulted for any non-empty run. The
-    /// scan below therefore covers everything before the test module and
-    /// separately refuses a top-level item after it.
-    ///
-    /// What it does not catch: an early `return` in `main`. A behavioural
-    /// check would be better the moment a failing fixture exists.
-    ///
-    /// The pre-module slice cannot match this test's own expected strings,
-    /// because they live inside the module the slice stops at.
-    ///
-    /// Trace: TC-032, FR-006-AC-10
-    #[test]
-    fn main_reaches_the_process_exit_status_only_through_the_classifier() {
-        const MODULE: &str = "\n#[cfg(test)]";
-        let module_at = OWN_SOURCE
-            .find(MODULE)
-            .expect("this file declares a test module at the start of a line");
-        assert!(
-            OWN_SOURCE
-                .find("\nfn main() {")
-                .is_some_and(|at| at < module_at),
-            "fn main must be declared before the test module for the scan below \
-             to cover it"
-        );
-        let before_module = &OWN_SOURCE[..module_at];
-
-        let exits = before_module.matches("process::exit(").count();
-        assert_eq!(
-            exits, 1,
-            "everything outside the test module must reach the process's exit \
-             status exactly once, so that a test of `exit_code` is a test of what \
-             this producer exits with; found {exits} calls"
-        );
-        assert!(
-            before_module.contains("process::exit(exit_code(&published));"),
-            "the single exit must pass the classifier's value. A literal here \
-             would leave every test in this module green while the exit code \
-             stopped depending on the published rows at all"
-        );
-
-        // A top-level item after the test module is outside the slice above,
-        // which is exactly where the bypass review found was planted. Items
-        // inside the module are indented, so a column-zero `fn` here is one
-        // that escaped the scan.
-        let after_module = &OWN_SOURCE[module_at + MODULE.len()..];
-        assert!(
-            !after_module.contains("\nfn "),
-            "a top-level `fn` is declared after the test module, where the exit \
-             census above cannot see it. Move it before the module so it is \
-             scanned"
-        );
-    }
-
-    /// Trace: TC-032, FR-006-AC-8
+    /// Trace: TC-032, FR-006-AC-1
     #[test]
     fn all_rows_passing_exits_zero() {
         let rows = vec![published("pass"), published("pass")];
         assert_eq!(exit_code(&rows), 0);
     }
 
-    /// Trace: TC-032, FR-006-AC-8
+    /// Trace: TC-032, FR-006-AC-1
     #[test]
     fn one_failing_row_exits_one() {
         let rows = vec![published("pass"), published("fail")];
         assert_eq!(exit_code(&rows), 1);
     }
 
-    /// Trace: TC-032, FR-006-AC-8
+    /// Trace: TC-032, FR-006-AC-1
     #[test]
     fn one_vacuous_row_exits_two() {
         let rows = vec![published("pass"), published("vacuous")];
@@ -1367,7 +1253,7 @@ mod tests {
     /// single-outcome tests above green, which is exactly why this case has
     /// to be asserted on its own rather than assumed from the other two.
     ///
-    /// Trace: TC-032, FR-006-AC-8
+    /// Trace: TC-032, FR-006-AC-1
     #[test]
     fn failing_and_vacuous_together_exits_one_not_two() {
         let rows = vec![published("pass"), published("fail"), published("vacuous")];
@@ -1388,7 +1274,7 @@ mod tests {
     /// close it and an earlier version of this comment wrongly said it did:
     /// that test asserts exit 0, and an empty corpus produces exit 0 too.
     ///
-    /// Trace: TC-032, FR-006-AC-8
+    /// Trace: TC-032, FR-006-AC-1
     #[test]
     fn no_rows_exits_zero() {
         let rows: Vec<String> = Vec::new();
@@ -1440,7 +1326,7 @@ mod tests {
     /// compilation of the same already-reviewed source, not an evidence
     /// producer manufacturing its own input.
     ///
-    /// Trace: TC-032, FR-006-AC-11
+    /// Trace: TC-032, FR-006-AC-3
     #[test]
     fn built_example_binary_exits_zero_against_the_real_corpus() {
         let harness = std::env::current_exe().expect("current_exe resolves for a running test");

@@ -35,13 +35,7 @@ type: TestMatrix
 | FR-005 | FR-005-AC-3 | Inspection | 🚧 Planned |
 | FR-005 | FR-005-AC-4 | TC-007 | 🚧 Planned |
 | FR-005 | FR-005-AC-5 | TC-002 | 🚧 Planned |
-| FR-006 | FR-006-AC-1 | TC-008 | ✅ Covered |
-| FR-006 | FR-006-AC-2 | TC-009 | ✅ Covered |
-| FR-006 | FR-006-AC-3 | TC-010 | ✅ Covered |
-| FR-006 | FR-006-AC-5 | TC-012 | ✅ Covered |
-| FR-006 | FR-006-AC-6 | TC-013 | ✅ Covered |
-| FR-006 | FR-006-AC-7 | TC-013 | ✅ Covered |
-| FR-006 | FR-006-AC-8 through FR-006-AC-11 | TC-032 | ✅ Covered |
+| FR-006 | FR-006-AC-1 through FR-006-AC-3 | TC-032 | ✅ Covered |
 | FR-008 | FR-008-AC-1 through FR-008-AC-5, FR-008-CON-2 | TC-017 | ✅ Covered |
 | FR-008 | FR-008-CON-1 | Inspection | ✅ Covered |
 | FR-009 | FR-009-AC-1 through FR-009-AC-6 | TC-018 | ✅ Covered |
@@ -94,12 +88,9 @@ retains no local checker or copied traceability implementation.
 
 FR-001, FR-003, FR-006, and the numeric-strategy FR-008 through FR-013 slice are `✅ Covered` after
 their ticket-scoped current-head reviews. FR-002, FR-004, FR-005, the remaining NFR rows, and StR
-rows stay `🚧 Planned` until their complete ticket scopes are implemented and reviewed. The
-shared-assurance migration did not promote those semantic rows.
+rows stay `🚧 Planned` until their complete ticket scopes are implemented and reviewed.
 
-The FR-006 rows are the only ones this migration claims, and they are `✅ Covered` because TC-008
-through TC-013 are backed by tests in `tests/shared_assurance.rs` that invoke the gates rather than
-reimplementing them. FR-003 is backed by the reviewed Boolean and numeric/state Kani implementation
+FR-003 is backed by the reviewed Boolean and numeric/state Kani implementation
 and local SUITE-008. FR-004 has no complete implementation or suite.
 
 FR-008 through FR-013 and NFR-004 are covered by TC-017 through TC-022 after the bounded-integer
@@ -327,11 +318,6 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-005 | Enforce Kani proof dependencies | Analysis | P0 | FR-003-AC-1 | ✅ Covered |
 | TC-006 | Distinguish vacuity and unexecuted flow | Integration | P0 | FR-004-AC-1, FR-004-AC-2, FR-004-AC-3, FR-004-AC-5, FR-004-AC-6 | 🚧 Planned |
 | TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-003-AC-2, FR-005-AC-4 | 🚧 Planned |
-| TC-008 | Verify the shared component pins through the packaged matrix | Integration | P0 | FR-006-AC-1 | ✅ Covered |
-| TC-009 | Verify Quoin intake without Quoin or Quire executing a producer | Integration | P0 | FR-006-AC-2 | ✅ Covered |
-| TC-010 | Verify the sealed impact snapshot is the Quire export | Integration | P0 | FR-006-AC-3 | ✅ Covered |
-| TC-012 | Verify the demonstrable verification outcomes stay distinguishable | Integration | P0 | FR-006-AC-5, NFR-002-AC-3 | ✅ Covered |
-| TC-013 | Verify no local evidence framework remains | Integration | P0 | FR-006-AC-6, FR-006-AC-7 | ✅ Covered |
 | TC-014 | Verify bounded numeric and state Kani contracts | Analysis | P0 | FR-003-AC-2, FR-003-AC-3, FR-003-AC-4, FR-003-AC-5, FR-003-AC-6, FR-003-AC-7, FR-003-AC-8 | ✅ Covered |
 | TC-017 | Verify bound-clause domain derivation and refusal | Integration | P0 | FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-2 | ✅ Covered |
 | TC-018 | Verify constructive satisfying and violating populations | Property | P0 | FR-009-AC-1, FR-009-AC-2, FR-009-AC-3, FR-009-AC-4, FR-009-AC-5, FR-009-AC-6 | ✅ Covered |
@@ -348,7 +334,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13, FR-018-AC-14 | 🚧 Planned |
 | TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
 | TC-031 | Verify function-application oracle generation, agreement, and static location tagging | Integration | P0 | FR-021-AC-1, FR-021-AC-2, FR-021-AC-3, FR-021-AC-4, FR-021-AC-5, FR-021-AC-6, FR-021-AC-7, FR-021-AC-8, FR-021-AC-9, FR-021-AC-10, FR-021-AC-11, FR-021-AC-12, FR-021-AC-13, FR-021-AC-14, FR-021-AC-15, FR-021-AC-16, FR-021-AC-17, FR-021-AC-18 | ✅ Covered |
-| TC-032 | Verify the generation-conformance producer's own exit contract | Integration | P0 | FR-006-AC-8, FR-006-AC-9, FR-006-AC-10, FR-006-AC-11 | ✅ Covered |
+| TC-032 | Verify the generation-conformance exit status | Integration | P0 | FR-006-AC-1, FR-006-AC-2, FR-006-AC-3 | ✅ Covered |
 | TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-022-AC-14, FR-022-AC-15, FR-015-AC-15, FR-015-AC-16, FR-015-AC-17, FR-015-AC-18 | ✅ Covered |
 | TC-035 | Verify counterexample submission in QSL's counterexample envelope | Integration | P0 | FR-024-AC-1, FR-024-AC-2, FR-024-AC-3, FR-024-AC-4, FR-024-AC-5, FR-024-AC-6, FR-024-AC-7, FR-024-AC-8, FR-024-AC-9, FR-024-AC-10 | 🚧 Planned |
 | TC-036 | Verify the generated harness subject ABI | Integration | P0 | FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6 | 🚧 Planned |
@@ -359,8 +345,6 @@ independent evaluation for the supported grammar, proof-dependency closure, exac
 bounds, healthy and falsifying pinned-backend executions, and exact fail-closed diagnostics. TC-004,
 TC-006, and TC-007 remain planned until their complete backend/parity ticket scopes are independently
 reviewed; the FR-003 portion of TC-007 is already covered by TC-014 without promoting TC-007 overall.
-
-TC-008 through TC-013 are the shared-assurance migration's own rows and are covered by named tests.
 
 TC-017 through TC-022 are backed by passing named tests in `tests/bound_strategy_generation.rs`,
 `tests/bound_populations.rs`, and `tests/bound_census.rs`. Together they cover admission and ordered
@@ -376,23 +360,9 @@ remains planned pending independent review of the complete issue #3 scope.
 Each row is specified in the same-ID document under `spec/test/`. `spec/evidence/suites.md` is the
 suite registry: it names the command, tool and evidence kind for each suite. SUITE-008 is the reviewed
 local evidence producer for TC-003, TC-005, TC-014, and the FR-003 portion of TC-007; SUITE-010 is
-local pre-review evidence for the publication portion of TC-002. TC-008 through TC-013 are backed by
-`tests/shared_assurance.rs`, whose `/// Trace:` comments are what Quire's census reads. SR-016 and
-SR-017 record the closing code and gap reviews for TC-017 through TC-022.
+local pre-review evidence for the publication portion of TC-002. SR-016 and SR-017 record the closing
+code and gap reviews for TC-017 through TC-022.
 
-FR-006-AC-8 through FR-006-AC-11 are `✅ Covered` by TC-032, backed by the eight tests in
+FR-006-AC-1 through FR-006-AC-3 are `✅ Covered` by TC-032, backed by the tests in
 `examples/generation_conformance.rs`'s own `#[cfg(test)]` module, which `[[example]] test = true`
-makes `cargo test` build and run and which now carry `/// Trace:` comments like every other row in
-this census. Two limits are stated rather than papered over. The census in FR-006-AC-10 is textual,
-so an early `return` in `main` is outside it; closing that behaviourally needs a deliberately failing
-corpus row, which would be a fault-injection affordance in an evidence producer. And the end-to-end
-run in FR-006-AC-11 asserts exit 0 against a passing corpus, which a corpus that produced nothing
-would also yield — the ten-row floor on the emitted JSONL under TC-009 is what refuses that, not
-this row.
-
-`cargo test --locked --no-fail-fast` and `cargo test --example generation_conformance` both reach
-these eight. A stock fail-fast `cargo test` does not, because it aborts at `shared_assurance`
-(agent-ix/quire-contract-codegen#121) or `kani_execution`
-(agent-ix/quire-contract-codegen#128) first, both of which precede the example. That is pre-existing
-drift in those two binaries rather than a gap in this row, and `make test`, `make msrv` and `make ci`
-observe these tests once it clears.
+makes `cargo test` build and run.

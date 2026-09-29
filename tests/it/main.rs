@@ -57,7 +57,6 @@ mod kani_obligations;
 mod kani_witness_join;
 mod oracle_generation;
 mod routed_generation;
-mod shared_assurance;
 mod skeleton_spine;
 mod strategy_generation;
 mod vacuity_primitives;

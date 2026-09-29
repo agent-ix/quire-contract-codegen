@@ -8,86 +8,17 @@ Deterministic Rust, property-test, proof, and evidence generation from Quire con
 make fmt              # format with rustfmt
 make fmt-check        # verify formatting (CI gate)
 make lint             # locked clippy with -D warnings
-make test             # locked cargo test; depends on assurance-inputs
+make test             # locked cargo test
 make build            # locked release build
 make msrv             # execute all tests with exact Rust 1.98.1
 make spec             # Quire-validate the specification, planning, plan and review documents
-make clean            # cargo clean and drop the assurance environment
+make clean            # cargo clean
 make deny             # all configured cargo-deny lanes
 make audit-unsafe     # check that every unsafe block has a // SAFETY: comment
 make rustdoc          # build warning-free API documentation
 make conformance      # run the bounded generation conformance corpus
-make upstream-identity# check the IR and runtime revisions agree in all three places
-make assurance-env    # create the pinned shared-assurance interpreter
-make assurance-inputs # run the producers and write their structured results
-make pins             # classify the toolchain through the packaged compatibility matrix
-make assurance-chain  # seal, retain, and verify through Quoin
-make assurance        # pins + assurance-chain
 make ci               # every local gate above except build and clean
 ```
-
-## Shared assurance
-
-`make assurance-inputs` is the only target that runs a producer. Everything downstream consumes the
-files it writes and refuses to create them, because a consumer that can produce its own input can
-produce a green run out of nothing. `assurance/README.md` is the guide; `assurance/pins.json` records
-the adopted Engineering Assurance release and the digests of the artifacts read from it.
-
-Retention, integrity checking, audit, attestation and receipts are Quoin's. Static specification,
-obligation and coverage facts are Quire's. This repository retains no evidence of its own and
-computes no aggregate verdict.
-
-That applies to generated artifacts too, since #20. Each one is emitted with a proof attestation in
-Quoin's packaged `ProofAttestationV1` shape, one per artifact, because an attestation binds exactly
-one retained output — so an oracle emits two, for the Rust and for the source map. The emitted body is
-that schema without `digest` and without `retained_output`: `seal-attestation` derives both and
-refuses a body that supplies either, which is the same reason `scripts/assurance_chain.py` builds
-bodies rather than sealed records for the four proof obligations. All four body shapes — oracle Rust,
-oracle source map, harness, strategy — are sealed through the real CLI in the test suite and validated
-against the bytes `quoin change-assurance schema` publishes, with format assertion on. Nothing
-validates against a local copy, and this repository owns no evidence schema to copy.
-
-The caller supplies two fields — the sealed record digest and the candidate revision — and the
-generator states the other nine. `result` is derived rather than supplied: a bundle exists only when
-generation succeeded, so an attestation only ever says `passed`, and the six Interface-001 terminal
-states stay in the diagnostic that arrives instead of a bundle. `observed_at` is the generator's own
-source-commit time, frozen at build so regeneration stays byte-identical; it is not an observation of
-when generation ran, and `interface-001` says so.
-
-Fourteen things the deprecated envelope carried are not in the shared shape and were dropped rather
-than smuggled into `environment`, which is the one open map an attestation has. Four are worth naming
-here: reviewer logins, which belong to the ix-flow decision event a receipt binds; the contribution
-method, which has no field in any of the three packaged schemas and is dropped outright rather than
-rehomed; and the free-text result summary and requirement references, which belong to the record's own
-proof obligations. The other ten are enumerated in `interface-001`'s `not_carried` and in the change
-declaration, because "four things" was the first count written here and it was wrong by ten.
-
-There is no `evidence/` tree. It held 2,205 files — 44 envelopes of `quire.derivation-evidence/v1`,
-which the pinned compatibility mapping refused as an unknown schema version — plus the reader that
-asked the mapping, its fixtures, a proof obligation, a `compat-view` target, and two schemas frozen
-only because retained records named them by digest. All of it is deleted. The repository owner
-released the preservation constraint for the pre-stable phase on 2026-09-02; the authority is the
-"Preservation constraint released for the pre-stable phase" section of
-`agent-ix/engineering-assurance#7`, and the constraint re-applies unchanged when these repositories
-move toward stable releases.
-
-Nothing was rewritten to look as though it still verifies. FR-006-AC-4 and TC-011 are gone rather
-than restated over a smaller tree. `unsupported` and `malformed` — two of the twelve shared
-verification states, demonstrated here only by the deleted compatibility census — are withdrawn from
-FR-006-AC-5, so this repository demonstrates ten. `unsupported` is not in the adapter's producer
-vocabulary at all. `malformed` is, and was still withdrawn: the adapter maps it onto the same `fail`
-in both tables, so a scenario declaring that outcome yields a receipt byte-identical to the `fail`
-case. One was written, measured, found to be `attested-failed` under another name, and removed. What
-stops the gate weakening quietly is not a manufactured demonstration but TC-012's assertion that both
-states stay absent, so re-acquiring either goes red.
-
-## Before trusting a green `make ci`
-
-It is a statement about the tree as committed, and not about a tree whose Makefile has been edited.
-`.IGNORE:`, a `-` recipe prefix, or an assignment to `SHELL` each make every recipe report success.
-Measured here: with three injected defects the control exits 2 at `fmt-check`; the same tree with
-`.IGNORE:` prepended exits 0, runs all eleven prerequisites, and fails seven of them without failing
-the build. The Makefile header carries the numbers; the residual is issue #14.
 
 ## Safety scaffolding
 
@@ -104,14 +35,12 @@ Backported from `agent-ix/ecaz`:
 
 ```
 src/lib.rs                 # crate root
-examples/                  # the generation conformance producer
+examples/                  # the bounded generation conformance corpus
 tests/it/main.rs           # the merged integration test binary; each former tests/*.rs file is a mod here
-tests/it/shared_assurance.rs  # FR-006 gates; /// Trace: comments are Quire's census
 schemas/                   # domain output contracts included by their owning library producers
 spec/                      # requirements artifacts, the test matrix, the suite registry
 reviews/                   # quire-validated SpecReview artifacts
-assurance/                 # the change declaration and the adopted pins
-scripts/                   # producers and the assurance chain driver
+scripts/                   # the unsafe-comment audit
 ```
 
 New integration tests go under `tests/it/` as a module of the single `it` binary (add the file plus a

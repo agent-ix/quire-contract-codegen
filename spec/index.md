@@ -63,8 +63,8 @@ and semantic-parity results. A human release owner alone decides source release 
 ## Requirements Architecture
 
 StR-001 is the one stakeholder requirement. Every functional requirement except FR-006 satisfies
-it. NFR-001 and NFR-002 constrain it, and NFR-004 constrains FR-008 to FR-013. FR-006 adopts the shared assurance intake
-contract for this repository's own verification results, and NFR-002 constrains it.
+it. NFR-001 and NFR-002 constrain it, and NFR-004 constrains FR-008 to FR-013. FR-006 runs the
+bounded generation conformance corpus.
 `interface-001` defines the serialized input, the library and CLI operations, the artifact bundle,
 the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
 Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 hold the questions the owner has not ruled
@@ -73,7 +73,7 @@ on. `test-matrix.md` maps every criterion to its test case.
 | Area | Requirements | Test cases |
 |---|---|---|
 | V1 oracles, strategies and Kani lowering | FR-001 to FR-005, FR-007 | TC-001 to TC-007, TC-014, TC-023 |
-| Shared assurance intake | FR-006 | TC-008 to TC-010, TC-012, TC-013, TC-032 |
+| Generation conformance corpus | FR-006 | TC-032 |
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
 | Kani obligations and execution | FR-015 generation, FR-017 pinned execution, FR-025 subject ABI | TC-025, TC-027, TC-036 |
