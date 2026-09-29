@@ -22,9 +22,8 @@ failure-preserving linked revisions, and that the generator holds no copy of QSL
 1. Build two obligation identities that differ only in `source_span`, then two that differ in
    obligation kind, then two that differ in one argument binding. Compare their QSL
    `ObligationIdentity` values.
-2. Collect every call site of `qsl_replay::Witness::parse` in non-test source under `src/` with
-   `syn`, and resolve the argument each passes. Then read the signature of the adapter rendering
-   function.
+2. Decode a Kani counterexample, render it through the adapter rendering function from its decoded
+   values and parameter bindings, and pass the rendered transcript to `qsl_replay::Witness::parse`.
 3. For a parameter with declared domain `[lo, hi]`, submit counterexamples with the value at `lo`,
    `hi`, `lo - 1` and `hi + 1`, and record whether `replay` was called.
 4. Build one `WitnessPacket` per member (obligation identity, occurrence key, clause node,
@@ -37,16 +36,16 @@ failure-preserving linked revisions, and that the generator holds no copy of QSL
    occurrence identities QSL reports.
 7. Reduce one `Witness`-arm and one `Input`-arm counterexample with a candidate set that holds a
    failure-preserving candidate, an out-of-domain candidate and a verdict-changing candidate.
-8. Scan `src/` for definitions of `Witness`, `ReplaySource`, `WitnessEnvelope`, `TerminalRecord`
-   and `ObligationIdentity`, and for imports of any of them from `quire_contract_ir`.
+8. Submit a counterexample through the generator's replay entry point and pass the `Witness`,
+   `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` and `ObligationIdentity` values it produces
+   directly to `qsl_replay`'s own functions.
 
 ## Expected Results
 
 1. The `source_span` pair has equal identities, and the kind pair and the argument pair each
    differ (FR-024-AC-1).
-2. Every `Witness::parse` argument is the return value of the one rendering function, and that
-   function's parameters are decoded values and parameter bindings, with no string of backend
-   output (FR-024-AC-2).
+2. `Witness::parse` accepts the rendered transcript, and the rendering function takes decoded
+   values and parameter bindings, with no string of backend output (FR-024-AC-2).
 3. The values at `lo` and `hi` replay. The values at `lo - 1` and `hi + 1` are reported
    out-of-domain, and `replay` is not called for either (FR-024-AC-3).
 4. Each incomplete packet is refused by `WitnessEnvelope::reconstruct` with `MissingMember` naming
@@ -57,19 +56,14 @@ failure-preserving linked revisions, and that the generator holds no copy of QSL
 7. Only the failure-preserving candidate is retained (FR-024-AC-7, FR-024-AC-9). The `Witness`-arm
    revision links to its parent and carries its own re-run's transcript (FR-024-AC-8), and the
    `Input`-arm revision is an `Input`-arm envelope linked to its parent.
-8. Both scans find nothing (FR-024-AC-10).
-
-The rule that only `src/kani_transcript.rs` holds Kani's printed wording is TC-027's scan
-(FR-017-AC-10). Its wording set is the seven literals `VERIFICATION:-`, `Failed Checks`,
-`cover properties satisfied`, `unwinding assertion`, `Concrete playback unit test`,
-`kani::concrete_playback_run` and ``Check for `cover` ``, searched in the non-test part of every
-other source file under `src/`.
+8. Every value is QSL's own `qsl_replay` type and is accepted by `qsl_replay` unchanged
+   (FR-024-AC-10).
 
 ## Status
 
 Planned. No step is implemented. The skeleton spine renders a QSL transcript from decoded values
 (`src/spine_replay.rs`, TC-026), which is the shape step 2 checks, but it builds no envelope. Step 8
-fails at this revision: `src/kani_witness_join.rs` imports `Witness` and
+fails at this revision: `src/kani_witness_join.rs` uses `Witness` and
 `src/bounded_kani_corpus.rs` imports `ReplaySource` from `quire_contract_ir`, and
 `src/bounded_kani_replay.rs` replays through Contract IR's `replay_counterexample`, with its test
 module importing `ReplaySource`.

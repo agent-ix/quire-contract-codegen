@@ -43,9 +43,10 @@ type: TestMatrix
 | FR-011 | FR-011-AC-1 through FR-011-AC-5 | TC-020 | ✅ Covered |
 | FR-012 | FR-012-AC-1 through FR-012-AC-3 | TC-021 | ✅ Covered |
 | FR-012 | FR-012-AC-4 | TC-021 | ✅ Covered |
-| FR-013 | FR-013-AC-1 through FR-013-AC-4 | TC-022 | ✅ Covered |
+| FR-013 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-4 | TC-022 | ✅ Covered |
 | FR-013 | FR-013-AC-5 | Inspection | ✅ Covered |
-| FR-014 | FR-014-AC-1 through FR-014-AC-11 | TC-024 | ✅ Covered |
+| FR-014 | FR-014-AC-1 through FR-014-AC-3, FR-014-AC-5 through FR-014-AC-11 | TC-024 | ✅ Covered |
+| FR-014 | FR-014-AC-4 | TC-024 | ⚠️ Partially covered; byte identity across repeated runs and request permutations and the claim-map order are asserted by regeneration; the criterion's remaining clause has no test |
 | FR-014 | FR-014-AC-12 | TC-024 | ⚠️ Partially covered; a descriptor naming a different catalogued operation is discharged, but the clause covering a descriptor naming an operation the catalogue has no entry for is a defensive branch no fixture reaches -- the only such state is a same-width IEEE conversion, which the package builder refuses to construct (IR-225) |
 | FR-014 | FR-014-AC-13 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-14 | TC-024 | ⚠️ Partially covered; the `caller_declared` provenance is asserted for every refused and every never-inspected claim, but no test asserts that the identity such a claim reports is the request item's own descriptor-derived one |
@@ -63,20 +64,24 @@ type: TestMatrix
 | FR-015 | FR-015-AC-15 | TC-033 | ✅ Covered |
 | FR-015 | FR-015-AC-16 through FR-015-AC-18 | TC-033 | ✅ Covered |
 | FR-016 | FR-016-AC-8 through FR-016-AC-11 | TC-026 | ✅ Covered |
-| FR-016 | FR-016-AC-1, FR-016-AC-5 | TC-026 | ⚠️ Partially covered; the witness join (`witness_schema`, `decode_falsification`) decodes a matching transcript and refuses the harness-identity, arity, width, schema, Boolean-byte and comment cases, but reports every refusal as a `KaniOutcome` refusal code rather than FR-016's malformed-witness result, so neither criterion is backed and neither carries a trace tag; binding to the harness pins is unbuilt |
+| FR-016 | FR-016-AC-1, FR-016-AC-5 | TC-026 | ⚠️ Partially covered; the witness join (`witness_schema`, `decode_falsification`) decodes a matching transcript and refuses the harness-identity, arity, width, schema, Boolean-byte and comment cases, but reports every refusal as a `KaniOutcome` refusal code rather than FR-016's malformed-witness result, so neither criterion is backed and neither carries a trace tag |
 | FR-016 | FR-016-AC-2 through FR-016-AC-4, FR-016-AC-6, FR-016-AC-7, FR-016-AC-12, FR-016-AC-13 | TC-026 | 🚧 Planned |
-| FR-017 | FR-017-AC-2 through FR-017-AC-5, FR-017-AC-8 through FR-017-AC-11, FR-017-CON-2 | TC-027 | ✅ Covered |
-| FR-017 | FR-017-AC-1, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1 | TC-027 | 🚧 Planned |
-| FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-10 through FR-018-AC-14 | TC-029 | ✅ Covered |
+| FR-017 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-8, FR-017-AC-9, FR-017-CON-2 | TC-027 | ✅ Covered |
+| FR-017 | FR-017-AC-10 | TC-027 | ⚠️ Partially covered; each recorded Kani capture parses to its expected transcript and classifies to its expected outcome; the criterion's clause about other files under `src/` has no test |
+| FR-017 | FR-017-AC-1, FR-017-AC-3, FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-CON-1 | TC-027 | 🚧 Planned |
+| FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-11 through FR-018-AC-14 | TC-029 | ✅ Covered |
+| FR-018 | FR-018-AC-10 | TC-029 | ⚠️ Partially covered; byte identity across repeated runs and request permutations, the descriptor-key order, and the generated crate compiled and executed at test time under AC-2 are asserted; the criterion's remaining clause has no test |
 | FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |
-| FR-019 | FR-019-AC-1 through FR-019-AC-8, FR-019-AC-10 | TC-030 | ✅ Covered |
+| FR-019 | FR-019-AC-1 through FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | TC-030 | ✅ Covered |
+| FR-019 | FR-019-AC-5, FR-019-AC-6 | TC-030 | 🚧 Planned; no behavioural test backs either criterion |
 | FR-019 | FR-019-AC-9 | Analysis | ✅ Covered |
 | FR-021 | FR-021-AC-1 through FR-021-AC-3, FR-021-AC-5 through FR-021-AC-14, FR-021-AC-17 | TC-031 | ✅ Covered |
 | FR-021 | FR-021-AC-4 | TC-031 | ⚠️ Partially covered; only `InputRefusal::WrongValueKind` is asserted -- `::DanglingReference` is structurally unreachable for any oracle this generator can produce, since `validate_arguments` checks `WrongValueKind` before it ever walks a value for a dangling reference, and a reference-typed parameter is refused at generation time (AC-10, blocked on qsl#120) |
 | FR-021 | FR-021-AC-15 | TC-031 | 🚧 Planned; the `origin` half is implemented and tested, but under this V1's scoped one-node body vocabulary `path` can never be non-empty by construction, so the `path`-non-empty case this AC also describes is not implemented |
 | FR-021 | FR-021-AC-16 | TC-031 (Inspection) | ✅ Covered |
-| FR-021 | FR-021-AC-18 | TC-031 | 🚧 Planned, pending the `quire-spec-language` re-pin named in FR-021's own Dependencies section |
-| FR-022 | FR-022-AC-2 through FR-022-AC-15 | TC-033 | ✅ Covered |
+| FR-021 | FR-021-AC-18 | TC-031 | 🚧 Planned; the `quire-spec-language` authority leg is written and unasserted |
+| FR-022 | FR-022-AC-2 through FR-022-AC-5, FR-022-AC-7 through FR-022-AC-15 | TC-033 | ✅ Covered |
+| FR-022 | FR-022-AC-6 | TC-033 | ⚠️ Partially covered; the out-of-range unwind and unparsable subject path refusals are asserted; the criterion's first example has no test |
 | FR-022 | FR-022-AC-1 | Analysis | 🚧 Planned |
 | FR-024 | FR-024-AC-1 through FR-024-AC-10 | TC-035 | 🚧 Planned |
 | FR-025 | FR-025-AC-1 | TC-036 | ⚠️ Partially covered; emission order equals the persisted order for the V1 harness kinds, but the ascending order and the scalar-claim harness are unasserted |
@@ -96,17 +101,16 @@ and local SUITE-008. FR-004 has no complete implementation or suite.
 FR-008 through FR-013 and NFR-004 are covered by TC-017 through TC-022 after the bounded-integer
 oracle grammar landed in PR #29. The evidence includes exhaustive small-domain population and
 shrink walks, exact boundary censuses, all supported clause-kind/population campaigns at 256 and
-10,000 cases with zero global rejects, generated-consumer compilation, identity mutation, packaged
-attestation validation/sealing, closing Rust review SR-016, and gap analysis SR-017.
+10,000 cases with zero global rejects, generated-consumer compilation, identity mutation, closing
+Rust review SR-016, and gap analysis SR-017.
 
 FR-015 is split (codegen#49 slice A). `tests/kani_obligations.rs` backs AC-3 through AC-6: unbounded,
 non-finite and upstream-blocked items, unsatisfiable IR bounds and every `caller_declared` V2 scalar
 operation are refused with a typed reason and no harness, and the V1 harness assumptions constrain
 only arguments to their IR `bounded_domain` bounds. The same file backs the V1 half of AC-1 and AC-2:
 precondition, postcondition and invariant each lower to a separate harness whose identity carries IR
-bounds and every Kani pin, and `make kani` verifies all three and falsifies a seeded defect with a
-concrete counterexample under the committed backend pins, and reports jointly unsatisfiable
-`requires` as `cover_unsatisfied` rather than verified.
+bounds, and `make kani` verifies all three, falsifies a seeded defect with a concrete counterexample,
+and reports jointly unsatisfiable `requires` as `cover_unsatisfied` rather than verified.
 
 AC-7 through AC-12 are added by codegen#56, which found the decisions that make an FR-015 harness
 sound stated nowhere: the non-vacuity covers that are the only thing separating a proof from a
@@ -133,22 +137,20 @@ model and graph families. The V2 scalar item above is no longer among the reason
 `🚧 Planned`.
 
 FR-017 is the execution and evidence half of codegen#49, separated from FR-015 under codegen#55
-because `src/kani_execution.rs` — pin measurement, the pre-run drift refusal, the seven-value
-outcome vocabulary and the execution evidence document — had no owning requirement at all. AC-2
-through AC-5, AC-8, AC-9 and CON-2 are `✅ Covered` by the default lane: the classification and
-pin-comparison unit tests in `src/kani_execution.rs` run on every `cargo test` over the backend's own
-recorded output; the absent-launcher refusal, the identity-pin-drift-before-measurement refusal, the
-generation/execution boundary (CON-2), and the aggregate-verdict/retained-evidence census (AC-8,
-AC-9) are all in `tests/kani_obligations.rs` and run without a Kani installation. AC-1, AC-6, AC-7 and
-CON-1 are `🚧 Planned`: the parts of them that require a real installed backend — an installed-backend
-pin difference, the full pinned-lane evidence shape, the library-containment refusal after a real
-build, and never converting a non-verified outcome into a proof claim — are backed only by the
-`#[ignore]`d `make kani` lane, which needs a real pinned installation and is not a `make ci` gate. The
+because `src/kani_execution.rs` — the launch, the outcome vocabulary and the execution evidence —
+had no owning requirement. The outcome classification tests in `src/kani_execution.rs` run on every
+`cargo test` over recorded backend output; the absent-launcher refusal, the generation/execution
+boundary (CON-2) and the aggregate-verdict/retained-evidence census (AC-8, AC-9) are in
+`tests/it/kani_obligations.rs` and run without a Kani installation. The parts that need a real
+installed backend — the full evidence shape, the library-containment refusal after a real build,
+and never converting a non-verified outcome into a proof claim — are backed only by the
+`#[ignore]`d `make kani` lane, which needs a Kani installation and is not a `make ci` gate. The
 run carries a caller-declared wall-clock budget and reports an elapsed budget as a timed-out
 inconclusive result. FR-017-AC-4 and FR-017-AC-5 enumerate the inconclusive reasons they cover by
 name; adding timed-out to that enumeration is codegen#55.
 
-FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-10 through FR-018-AC-14 are `✅ Covered`:
+FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-11 through FR-018-AC-14 are `✅ Covered`,
+and FR-018-AC-10 is covered for the clauses its row names:
 the composite/structural equality slice of codegen#48 that TC-029 backs with a passing test for every
 clause those criteria name. Generation lives in `src/composite_equality.rs`; TC-029 step 4 generates
 the corpus crate at test time and compiles and executes it, over all 11 of its oracles — both
@@ -171,13 +173,8 @@ undetectable there; under either swap, with `E_CONV_CHARGE` in the corpus,
 `tc_029_ac2_a_converted_operand_agrees` and `tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges`
 go red.
 
-That coverage had a hard prerequisite, now satisfied: agent-ix/quire-contract-codegen#75, merged as
-`e74d592`, re-pinned Contract Runtime `a04bd47`→`4e33052` and quire-spec-language
-`d9d5273`→`21c507e`. Before it the equality surface FR-018 calls was not visible from this
-repository and `quire_spec_language::value` published no `check_equality`, `CheckedEquality` or
-`plan_equality`, so the third leg of the agreement had nothing to call. `quire_spec_language::value`
-at `21c507e` mirrors the pinned Contract Runtime's equality surface under identical names, with one
-signature difference: `InjectedDenial::occurrence` is a plain `u64` there against the runtime's
+`quire_spec_language::value` mirrors Contract Runtime's equality surface under identical names, with
+one signature difference: `InjectedDenial::occurrence` is a plain `u64` there against the runtime's
 `NonZeroU64`; the agreement harness's `denials` helper abstracts over it.
 
 FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 are `🚧 Planned`: each names at least one
@@ -205,8 +202,8 @@ every denial regardless of the charge's real kind, so only one of ten `LimitKind
 play. The property is verified in agent-ix/quire-contract-runtime#38.
 
 `admits_equality_conversion`'s `converted` operand path is exercised at generation time (AC-3, AC-5)
-and, for one `Int`-to-`Integer` vector, inside the three-way execution agreement (AC-2). The pinned
-Contract Runtime's `admits_equality_conversion` (`src/exact/equality.rs`) has eight arms: identity
+and, for one `Int`-to-`Integer` vector, inside the three-way execution agreement (AC-2). Contract
+Runtime's `admits_equality_conversion` (`src/exact/equality.rs`) has eight arms: identity
 (`source == target`), `Int -> {Integer, Int, Rational, Decimal}`, `Rational -> Rational`,
 `Rational -> {Integer, Int, Decimal}`, `Decimal -> Rational`, `Decimal -> Decimal`,
 `Decimal -> {Integer, Int}`, and `Quantity -> Quantity`. Since codegen#83,
@@ -224,32 +221,12 @@ FR-018's entry point refuses function application, the model graph
 (agent-ix/quire-spec-language#121) with distinct typed blockers. FR-021 generates function
 application through its own entry point, and FR-020 remains unwritten.
 
-`interface-001` declares FR-018's `generate_composite_equality_oracles` now that the code exists.
-TC-028 reads every public function from the crate's own source, including root `pub fn`s and
-everything reachable through a `pub mod`, and asserts it equals the declared operations in both
-directions, so a public function without an entry, or an entry without one, fails.
+`interface-001` declares FR-018's `generate_composite_equality_oracles`. TC-028 checks the
+contract's terminal-state vocabulary against the wire forms `GenerationTerminalState` emits.
 
-FR-019-AC-1 through FR-019-AC-8 and FR-019-AC-10 are `✅ Covered`: TC-030 walks every row of
+FR-019-AC-1 through FR-019-AC-4, FR-019-AC-7, FR-019-AC-8 and FR-019-AC-10 are `✅ Covered`: TC-030 walks every row of
 FR-290's ordered rules against the settlement point, and each assertion names the disposition and the
 typed cause the row requires rather than only that a refusal occurred.
-
-AC-5 is the seam itself, and it is backed by a scan of the source rather than by a behavioural test
-because the property is about where code lives: no `Disposition` is constructed outside a
-`negotiate_*` function in any Rust source this repository builds. The scan parses each file with
-`syn` and inspects expressions only. A line-based scan was written first and measured wrong in both
-directions under review — it did not recognise `pub(crate) fn`, so an injected settlement outside
-every arm passed green, and it read a rustdoc link naming a variant as code, failing and blaming the
-function above the comment. Three injections are now measured: a `pub(crate)` function and a
-`Self::Supported` constructor added to `impl Disposition` each turn it red, and the rustdoc link
-leaves it green. A paired test asserts the scan reads the three settlement functions by name and at
-least twelve construction sites, so a refactor that moves settlement out of the scan's reach fails
-even while the gate above stays green.
-
-AC-6 owns the record an observation produces, not the measurement of the tool. Resolving a launcher
-through `CARGO_HOME` and `PATH` and parsing what it prints is FR-017's, and TC-027 covers it. An
-earlier version of this test wrote a shell script and executed it; it measured nothing the assertions
-could catch, because `record_tool_probe` compares two strings, and it added a scratch-directory race
-that failed once inside a full suite and never in isolation.
 
 FR-019-AC-9 is `✅ Covered` by analysis, not by a test. The dispatch is an exhaustive `match` over
 `BackendKind` with no catch-all, so a variant added without an arm is a compile error; the evidence
@@ -262,7 +239,7 @@ row is therefore reachable only through a candidate set the registry supplies, w
 exercises it through `candidates` rather than by registering a second arm.
 
 FR-022 (Linear IR-293) is the generation arm of the seam FR-019 settles, and it takes the routed
-backend and kind as given. AC-2 through AC-14 are backed by TC-033's tests. AC-4's "converts to a kind other than the routed one" branch needs a second `BackendKind` variant
+backend and kind as given. AC-2 through AC-5 and AC-7 through AC-15 are backed by TC-033's tests. AC-4's "converts to a kind other than the routed one" branch needs a second `BackendKind` variant
 to be reachable, since with one variant the only disagreement is a backend with no kind
 (`converted: None`); TC-033 exercises only that `converted: None` case, so the other branch is untested until a second kind exists.
 AC-1 stays `🚧 Planned`
@@ -279,7 +256,8 @@ requirement here claims either one.
 
 | Interface | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| interface-001 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-4 | TC-028 | ✅ Covered |
+| interface-001 | interface-001-AC-4 | TC-028 | ✅ Covered |
+| interface-001 | interface-001-AC-1, interface-001-AC-2 | TC-028 | 🚧 Planned; no test compares the exported functions with the declared operations |
 
 ## Non-Functional Requirement Coverage
 
@@ -311,7 +289,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
-| TC-001 | Reproduce artifacts and attestations | Integration | P0 | FR-001-AC-1, FR-001-AC-3, FR-005-AC-2, NFR-001-AC-1, NFR-002-AC-1, NFR-002-AC-2 | ✅ Covered |
+| TC-001 | Reproduce artifacts | Integration | P0 | FR-001-AC-1, FR-001-AC-3, FR-005-AC-2, NFR-001-AC-1, NFR-002-AC-1, NFR-002-AC-2 | ✅ Covered |
 | TC-002 | Compile and publish atomically | Integration | P0 | FR-001-AC-2, FR-001-AC-8, FR-005-AC-1, FR-005-AC-5, NFR-001-AC-2, NFR-001-AC-3 | ✅ Covered |
 | TC-003 | Reject unsupported inputs explicitly | Integration | P0 | FR-001-AC-4, FR-003-AC-3, NFR-002-AC-3 | ✅ Covered |
 | TC-004 | Preserve shaped proptest strategies | Property | P0 | FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4, FR-002-AC-5, FR-002-AC-6 | 🚧 Planned |
@@ -324,12 +302,12 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-019 | Verify domain and relation boundary censuses | Integration | P0 | FR-010-AC-1, FR-010-AC-2, FR-010-AC-3, FR-010-AC-4, FR-010-AC-5, NFR-004-AC-2 | ✅ Covered |
 | TC-020 | Verify numeric conformance campaigns and rate reporting | Integration | P0 | FR-011-AC-1, FR-011-AC-2, FR-011-AC-3, FR-011-AC-4, FR-011-AC-5, NFR-004-AC-1 | ✅ Covered |
 | TC-021 | Verify shrinking preserves numeric constraints | Property | P0 | FR-012-AC-1, FR-012-AC-2, FR-012-AC-3, FR-012-AC-4 | ✅ Covered |
-| TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4 | ✅ Covered |
+| TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-4 | ✅ Covered |
 | TC-023 | Verify bounded Kani profile corpus parity | Integration | P0 | FR-007-AC-1, FR-007-AC-2, FR-007-AC-3, FR-007-AC-4, FR-007-AC-5, FR-007-AC-6, FR-007-AC-7 | ✅ Covered |
 | TC-024 | Verify exact complete-V1 scalar oracle generation and agreement | Integration | P0 | FR-014-AC-1, FR-014-AC-2, FR-014-AC-3, FR-014-AC-4, FR-014-AC-5, FR-014-AC-6, FR-014-AC-7, FR-014-AC-8, FR-014-AC-9, FR-014-AC-10, FR-014-AC-11, FR-014-AC-12, FR-014-AC-13, FR-014-AC-14, FR-014-AC-15, FR-014-AC-16, FR-014-AC-17, FR-014-AC-18, FR-014-AC-19, FR-014-AC-20, FR-014-AC-21, FR-014-AC-22, FR-014-AC-23, FR-014-AC-24, FR-014-AC-25, FR-014-AC-26, FR-014-AC-27, FR-014-AC-28, FR-014-AC-29, FR-014-AC-30, FR-014-AC-31, FR-014-AC-32, FR-014-AC-33, FR-014-AC-34 | ✅ Covered |
 | TC-025 | Verify separate bounded Kani obligations | Analysis | P0 | FR-015-AC-1, FR-015-AC-2, FR-015-AC-3, FR-015-AC-4, FR-015-AC-5, FR-015-AC-6, FR-015-AC-7, FR-015-AC-8, FR-015-AC-9, FR-015-AC-10, FR-015-AC-11, FR-015-AC-12, FR-015-AC-14 | 🚧 Planned |
 | TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4, FR-016-AC-5, FR-016-AC-6, FR-016-AC-7, FR-016-AC-8, FR-016-AC-9, FR-016-AC-10, FR-016-AC-11, FR-016-AC-12, FR-016-AC-13 | 🚧 Planned |
-| TC-027 | Verify pinned Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-1, FR-017-AC-2, FR-017-AC-3, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-8, FR-017-AC-9, FR-017-AC-10, FR-017-AC-11, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
+| TC-027 | Verify Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-1, FR-017-AC-2, FR-017-AC-3, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-8, FR-017-AC-9, FR-017-AC-10, FR-017-AC-11, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
 | TC-028 | Verify interface-001's declared API surface matches the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-4 | ✅ Covered |
 | TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13, FR-018-AC-14 | 🚧 Planned |
 | TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
@@ -342,14 +320,14 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and
 independent evaluation for the supported grammar, proof-dependency closure, exact IR-domain Kani
-bounds, healthy and falsifying pinned-backend executions, and exact fail-closed diagnostics. TC-004,
+bounds, healthy and falsifying Kani executions, and exact fail-closed diagnostics. TC-004,
 TC-006, and TC-007 remain planned until their complete backend/parity ticket scopes are independently
 reviewed; the FR-003 portion of TC-007 is already covered by TC-014 without promoting TC-007 overall.
 
 TC-017 through TC-022 are backed by passing named tests in `tests/bound_strategy_generation.rs`,
 `tests/bound_populations.rs`, and `tests/bound_census.rs`. Together they cover admission and ordered
-refusals, constructive populations, boundary censuses, runtime accounting and replay, generated
-consumer compilation, and Quoin attestation integration.
+refusals, constructive populations, boundary censuses, runtime accounting and replay, and generated
+consumer compilation.
 
 TC-004's generated-crate fixtures include deterministic mixed-campaign counts and distinguish
 framework exhaustion with a retained floor result from a completed below-floor campaign. Its row

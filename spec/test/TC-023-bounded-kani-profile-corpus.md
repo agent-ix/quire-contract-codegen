@@ -12,7 +12,7 @@ relationships:
 
 Verify that the complete selected bounded-Kani corpus preserves one profile
 disposition and typed outcome across native execution, generated oracle,
-strategy, Kani harness, provenance, proof graph, and retained-counterexample
+strategy, Kani harness, proof graph, and retained-counterexample
 replay for arithmetic/definedness, graph, and collection cases.
 
 ## Test Procedure
@@ -28,14 +28,13 @@ IR-to-codegen dependency.
 
 ## Expected Results
 
-Every supported case has matching typed classification and exact retained
-identity across backends. Every unsupported or adverse case has its original
+Every supported case has matching typed classification across backends. Every unsupported or adverse case has its original
 typed non-Boolean result and no partial artifact or proof claim. Every retained
 counterexample either reproduces native false or reports a typed replay
 non-success. The dependency graph keeps Contract IR below codegen. Every
-generated `#[kani::proof]` symbol is derived from, and carries, its corpus
-case's own identity digest, the same identity its artifact paths carry. A
+generated `#[kani::proof]` symbol carries its corpus case's readable name,
+family label plus positional counter, the same name its artifact paths carry. A
 declared proof-dependency census that is empty or duplicate-identity,
 kind/state/path-inconsistent, or names any non-`Required` kind is refused
 with a typed `InvalidInput` `kani_corpus_dependency_invalid` result and
-leaves no artifact and no identity-registry entry.
+leaves no artifact.

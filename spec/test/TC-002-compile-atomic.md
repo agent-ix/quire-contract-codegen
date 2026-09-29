@@ -17,18 +17,16 @@ Verify generated source compiles against only the runtime/customer types and pub
 ## Test Procedure
 
 Compile the supported Boolean and obligation-free bounded-integer comparison grammar in an isolated
-`rustc` fixture against only the pinned runtime and compare every Boolean assignment, integer
+`rustc` fixture against only the runtime and compare every Boolean assignment, integer
 boundary value, comparison operator, and current/pre/post state assignment with an independent
 evaluator. Require the generated signature to use `bool` and `i64` according to the typed
 dependency and to preserve distinct observation-qualified names. Generate every numeric/state case
-twice from identical inputs and require byte-identical Rust, source-map and attestation artifacts.
+twice from identical inputs and require byte-identical Rust and source-map artifacts.
 Construct a validated artifact
-bundle, inject a failure before every staged artifact and marker write and at both swap boundaries,
-and compare the destination plus an adjacent developer-owned file before and after each run. Attempt
-replacement after modifying, adding to, or symlinking the owned boundary and require refusal.
+bundle, inject a failure before every staged artifact write and at both swap boundaries,
+and compare the destination plus an adjacent developer-owned file before and after each run.
 Inject a replacement failure followed by failed rollback; inspect the complete backup and staged
-bundles and require `unknown`. Inject ownership-inspection/read failures and require `io_failed`
-with `unchanged`, distinct from a missing marker/artifact. Reject interior-dot artifact aliases
+bundles and require `unknown`. Reject interior-dot artifact aliases
 before publication, including a bundle containing both `a/b` and `a/./b`.
 
 ## Expected Results
@@ -42,7 +40,5 @@ file. Failed rollback reports `unknown`, leaves the destination absent, and pres
 prior bundle in its backup sibling and the complete staged replacement for recovery.
 A post-commit cleanup failure reports the
 destination as published, leaves a complete new bundle, and exposes backup residue rather than
-claiming rollback. Unmarked, modified, extra-entry, and symlinked destinations are never replaced.
-Portable replacement is not process-crash atomic between its two directory renames and does not
-guarantee persistence after power loss. A matching local marker establishes consistency, not
-authenticated authorship or a destination-specific ownership grant.
+claiming rollback. Portable replacement is atomic up to its two directory renames; process-crash
+and power-loss durability sit outside that guarantee.

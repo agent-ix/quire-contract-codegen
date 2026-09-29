@@ -18,7 +18,7 @@ permitted differential fixture has an attributed disposition.
 ## Test Procedure
 
 Execute the same canonical cases through each backend and compare normalized clause outcomes,
-diagnostics, dependencies, and proof attestations with golden and permitted attributed fixtures. For
+diagnostics, and dependencies with the expected outcomes and permitted attributed fixtures. For
 the Kani slice, compare the exact embedded executable-oracle predicates and enumerate the bounded
 Boolean/integer corpus, including each inclusive model endpoint and immediately outside values.
 

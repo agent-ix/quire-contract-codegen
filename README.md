@@ -14,27 +14,27 @@ This crate is pre-release. Dependency revisions are whatever `Cargo.toml` and `C
 make ci
 ```
 
-This runs formatting, specification/plan validation, Clippy, tests, an explicit Rust 1.98.1
-compatibility check, license checks, and the unsafe-code audit. CI workflows are manual-only; remote
-runs must be deliberately dispatched and retained when they are used as evidence.
+This runs formatting, specification/plan validation, Clippy, the test suite under the minimum
+supported Rust version, license and source checks, the unsafe-code audit, the API documentation
+build, and the generation conformance corpus. CI workflows are manual-only.
 
 ## Generated artifacts
 
-Every generated artifact is emitted with a proof attestation carrying Quoin's packaged
-`ProofAttestationV1` shape — one attestation per artifact, because an attestation binds exactly one
-retained output. The emitted body is that schema without `digest` and without `retained_output`:
-`quoin change-assurance seal-attestation` derives both from the retained bytes and refuses a body that
-supplies either, so the generator produces and Quoin seals.
+Every generated artifact is a path and its contents. The documents under `schemas/` are domain
+output contracts for those artifacts:
 
-The two documents under `schemas/` are domain output contracts for the generated Rust and the
-generated source map. They describe the artifacts themselves, not evidence about them, and this
-repository owns no evidence schema.
+- `generated-rust-oracle-v1.schema.json` and `oracle-source-map-v1.schema.json`: generated oracle
+  Rust and its source map.
+- `generated-rust-kani-v2.schema.json` and `kani-proof-graph-v2.schema.json`: generated Kani Rust
+  and its proof graph.
+- `kani-corpus-proof-graph-v1.schema.json`: the bounded Kani corpus proof graph.
+- `bound-coverage-observations-v1.schema.json`: bound coverage observations.
 
 ## Release boundary
 
 The public API is not stable, registry publication is disabled, and no foundation artifact is a
 source-release approval. Agent-assisted contributions remain subject to requirements traceability,
-testing, provenance review, and the recorded human release decision.
+testing, and the human release decision.
 
 ## License
 

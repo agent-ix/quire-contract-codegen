@@ -16,7 +16,7 @@ order with a located diagnostic and no bundle.
 
 ## Test Procedure
 
-1. Build `BoundPackage` fixtures through the public IR API at the pinned revision:
+1. Build `BoundPackage` fixtures through the public IR API:
    - ConfigVersion `VersionUnchanged` shaped as quire-spec-language FR-034 projects it
      (`Postcondition`, one state declaration for the `versionNumber` field named by an SL-style field
      alias `SymbolName`, 0..=1000, `Post` left, `Pre` right);

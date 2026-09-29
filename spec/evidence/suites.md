@@ -10,12 +10,12 @@ type: SuiteRegistry
 
 | ID | Name | Command | Tool | Evidence Kind |
 |---|---|---|---|---|
-| SUITE-001 | Bounded generation conformance corpus | `cargo run --quiet --example generation_conformance` | quire-contract-codegen 0.1.0 / rustc | Integration |
-| SUITE-003 | Strict specification validation | `quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'` | quire 0.31.0 / quire-rs 0.46.0 | Analysis |
-| SUITE-004 | Static specification and coverage export | `quire coverage --scope . --json` | quire 0.31.0 / quire-rs 0.46.0 | Static |
-| SUITE-007 | Minimum supported Rust version build | `rustup run 1.98.1 cargo check --locked --all-targets --message-format=json` | rustc 1.98.1 | Static |
+| SUITE-001 | Bounded generation conformance corpus | `cargo run --quiet --example generation_conformance` | quire-contract-codegen / rustc | Integration |
+| SUITE-003 | Strict specification validation | `quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'` | quire | Analysis |
+| SUITE-004 | Static specification and coverage export | `quire coverage --scope . --json` | quire | Static |
+| SUITE-007 | Minimum supported Rust version build | `make msrv` | rustc | Static |
 | SUITE-008 | Bounded Kani generation and execution | `cargo test --locked --target-dir target-codex-backends --test it kani_generation -- --test-threads=1` | cargo-kani / rustc | Analysis |
-| SUITE-010 | Atomic generated-boundary publication | `cargo test --lib publication` | quire-contract-codegen 0.1.0 / rustc | Integration |
+| SUITE-010 | Atomic generated-boundary publication | `cargo test --lib publication` | quire-contract-codegen / rustc | Integration |
 | SUITE-011 | Kani obligation execution | `make kani` | cargo-kani / rustc | Analysis |
 
 ## Notes
@@ -32,13 +32,11 @@ falsifying concrete-playback runs without changing the generation-time `not_run`
 classification. Its issue #2 current-head Rust review and gap analysis accept this local evidence;
 the suite still does not classify graph readiness as a completed proof. FR-004 still has no suite:
 `src/vacuity.rs` and `src/bound_coverage.rs` implement primitives and bound observations with focused
-TC-006-tagged tests, but no qualified native-campaign result producer is registered. The bound
-analyzer's observations are constructed with `provenance: "unqualified"` unconditionally.
+TC-006-tagged tests, but no qualified native-campaign result producer is registered.
 
-SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
-failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,
-complete ownership-census verification, and refusal of modified, extra-entry, unmarked, and symlinked
-destinations. It is local pre-review evidence for the publication portion of TC-002; the
+SUITE-010 exercises order-independent bundle construction, every injectable staging and swap
+boundary, failed-rollback recovery, post-commit cleanup failure, unsafe and interior-dot path
+refusal, the bounded artifact count and sizes, and symlink-safe cleanup. It is local pre-review evidence for the publication portion of TC-002; the
 serialized-package CLI remains blocked on an IR expression-binding design. The suite command is a
 focused local check; the full repository test target also includes these tests, but SUITE-010 has no
 separate structured execution-result producer yet.

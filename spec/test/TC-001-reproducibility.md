@@ -12,12 +12,12 @@ relationships:
 
 ## Description
 
-Verify repeated generation is byte-identical and every output retains complete identity and licensing.
+Verify repeated generation is byte-identical and every output retains its clause identity and licensing.
 
 ## Test Procedure
 
-Generate each pinned corpus package repeatedly while permuting irrelevant input ordering and supported
-platform execution; compare artifact names, bytes, attestations, source maps, and bundle digests.
+Generate each corpus package repeatedly while permuting irrelevant input ordering and supported
+platform execution; compare artifact names, bytes, and source maps.
 
 ## Expected Results
 

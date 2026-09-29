@@ -20,12 +20,11 @@ per-requirement vacuity report without executing a coverage producer itself.
 
 ## Inputs
 
-- The IR-owned bound executable clause population, including canonical identities, typed expressions,
+- The IR-owned bound executable clause population, including clause identities, typed expressions,
   clause kinds, execution anchors, and dependency/declaration context.
 - Generated Rust/source-map bytes with entry probes and the independently derived implication census.
 - LLVM coverage JSON export `3.0.1` bytes plus native run results binding source, instrumented binary,
   profiles, command, toolchain, target, optimization profile, and runtime campaign results.
-- Shared-assurance candidate/record context for downstream retention.
 
 ## Outputs
 
@@ -66,18 +65,15 @@ per-requirement vacuity report without executing a coverage producer itself.
   zero recorded invocations when the run declares the generated campaign as its only execution source.
 - Source-map requirement/revision identity shall equal the runtime campaign identity, and duplicate,
   missing, ambiguous, malformed, summary-only, or unsupported-version coverage input shall remain
-  a structured non-success analysis outcome. Such an outcome shall retain available input digests
-  and diagnostics but shall not claim that invalid or absent inputs were analyzed successfully.
+  a structured non-success analysis outcome.
+- A non-success analysis outcome shall retain its diagnostics without claiming that invalid or
+  absent inputs were analyzed successfully.
 - Coverage filenames shall match source-map artifact paths only after stripping the caller-declared
   source root and applying lexical normalization that rejects parent traversal and backslash aliases.
-- Every report shall retain the coverage producer name/version, LLVM export format version, coverage
-  export digest, source/map and bound-population digests, native run/binary/profile identities,
-  toolchain/target/optimization profile, generated-report schema identity, and exact requirement revision.
-- The v0.1 qualified producer profile shall be cargo-llvm-cov 0.9.0 emitting LLVM coverage JSON
-  export format 3.0.1.
-- Every other coverage producer or export format version shall fail as unsupported.
-- The export's `cargo_llvm_cov.version` and `manifest_path` shall agree with the retained native
-  producer run. Self-declared JSON metadata alone shall not establish executable provenance.
+- Every report shall retain the generated-report schema identity and exact requirement revision.
+- The analyzer shall read LLVM coverage JSON export format 3.0.1.
+- If the export declares any other format version, then the analyzer shall fail it as unsupported.
+- The export's `manifest_path` shall name the caller-declared source root's `Cargo.toml`.
 - The default coverage obligation succeeds only for a nonempty, completely bound population whose
   clauses are all exercised and whose native execution completed successfully. Vacuous, unexecuted,
   and partially exercised results are adverse; unavailable or inconclusive execution cannot pass.
@@ -91,31 +87,30 @@ per-requirement vacuity report without executing a coverage producer itself.
 | FR-004-AC-1 | An evaluated implication whose consequent is unobserved yields a vacuity finding even when every oracle return was true. | Test (TC-006) |
 | FR-004-AC-2 | A clause whose oracle-evaluation region was not observed is unexecuted, not vacuous. | Test (TC-006) |
 | FR-004-AC-3 | The four measured clause classifications form a total partition; an implication-bearing clause is exercised only when every expected consequent entry probe is observed, and implication-free clauses require observed evaluation. | Test (TC-006) |
-| FR-004-AC-4 | Every analysis outcome retains available input/run identities; successful analysis verifies bound population, source/map, native execution, producer, binary, profile, and candidate bindings. | Test (TC-006) |
+| FR-004-AC-4 | Successful analysis verifies the bound population, source/map, and native execution bindings. | Test (TC-006) |
 | FR-004-AC-5 | Malformed, summary-only, identity-mismatched, path-ambiguous, unsupported, or missing observation inputs retain structured non-success outcomes without invented classifications. | Test (TC-006) |
 | FR-004-AC-6 | Campaign counts and test outcome remain complete facts independent of coverage classification. | Test (TC-006) |
 | FR-004-AC-7 | Removing an expected clause, consequent, evaluation probe, or all clauses prevents successful analysis; the expected census comes from bound typed IR. | Test (TC-006) |
 | FR-004-AC-8 | Adverse coverage and non-success native execution cannot discharge the coverage obligation merely because a report serialized successfully. | Test (TC-006) |
-| FR-004-AC-9 | Complete bound observations without independently verified native-run provenance remain explicitly unqualified; internally consistent declared digests cannot manufacture a run-qualified result or passed coverage attestation. Valid informational-only populations retain their references as no executable work. | Test (TC-006; proposed next slice) |
+| FR-004-AC-9 | Complete bound observations without a native campaign run are reported as observations only and never as a passed coverage result. Valid informational-only populations retain their references as no executable work. | Test (TC-006; proposed next slice) |
 
 ## Implementation boundary
 
 The implementation provides source probes, bounded LLVM primitives, and complete bound
 observations through `analyze_bound_coverage`. Its strict domain schema is
-`codegen.bound-coverage-observations/v1`; all outcomes retain `provenance: unqualified`.
+`codegen.bound-coverage-observations/v1`.
 The complete immutable generated artifact population is checked against public typed IR
 before any measured classification. Missing measurements retain null counts and diagnostics;
 global binding failure emits no clause observations, with `population: not_emitted`.
 Serialization is bounded to 16 MiB. Resource refusal may omit a population, explicitly
 diagnosed, rather than allocate fabricated zero observations. Full ClauseRefs on every
 ordered clause retain per-requirement membership without duplicating or summing campaign counts.
-Neither native campaign-run binding nor a shared coverage attestation is implemented.
-FR-004/TC-006 remain planned until those producer and consuming obligation gates exist.
+Native campaign-run binding is planned; FR-004/TC-006 remain planned until it and a consuming
+obligation exist.
 
 The proposed next slice is [REV-017](../../planning/bound-vacuity-native-result-design.md):
-complete immutable BoundPackage/source/map observations first, explicitly unqualified.
-Native campaign transport is not yet provided by the pinned runtime, and declared producer
-digests are not authenticated execution. REV-017 requests coordinator approval before its
+complete immutable BoundPackage/source/map observations first. Native campaign transport is
+planned in the Contract Runtime. REV-017 requests coordinator approval before its
 new public API or domain schema is implemented; that phase-A approval is now recorded in
 REV-017. AC-9 records the boundary, not completion of issue #5 or native qualification.
 

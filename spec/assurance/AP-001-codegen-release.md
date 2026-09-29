@@ -4,9 +4,8 @@ title: Contract codegen v0.1 decision profile
 type: AssuranceProfile
 status: proposed
 owner: human-release-owner
-schema_version: 0.2
 profile_kind: general
-scope: one identified quire-contract-codegen v0.1 source candidate and pinned dependency set
+scope: one identified quire-contract-codegen v0.1 source candidate and the dependency revisions Cargo.toml names
 impact_assessments:
   - id: impact-semantic-drift
     scenario: a generated backend artifact differs from the authoritative contract or another backend
@@ -28,20 +27,20 @@ relationships:
 
 ## Decision Boundary
 
-This profile covers one codegen source revision, pinned IR/schema/corpus, runtime, backend versions,
-configuration, and platform profile. It supplies evidence only and confers no consuming-project
+This profile covers one codegen source revision, its IR, schema, corpus and runtime dependencies,
+its backends, configuration, and platform profile. It supplies evidence only and confers no consuming-project
 validation, accreditation, certification, or release authority.
 
 ## Impact Scenarios
 
 Material scenarios include silent construct loss, nondeterministic derivation, pass/rejection
 conflation, proof completion with missing dependencies, vacuous satisfaction presented as exercised,
-partial output publication, backend drift, and incomplete provenance or licensing.
+partial output publication, backend disagreement, and incomplete licensing.
 
 ## Evidence Policy
 
-Evidence identifies source, input, schema, corpus, runtime, tool, backend, options, platform, outputs,
-and digests. Unsupported, rejected, discarded, failed, inconclusive, unavailable, and differential
+Evidence identifies source, input, schema, corpus, runtime, tool, backend, options, platform and
+outputs. Unsupported, rejected, discarded, failed, inconclusive, unavailable, and differential
 states remain visible. A human release owner alone judges sufficiency.
 
 ## Exceptions

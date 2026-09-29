@@ -54,18 +54,12 @@ test:
 # holds a host-wide lock, runs one harness at a time, and builds in its own
 # target directory.
 #
-# IR-237 merged every `tests/*.rs` file into one `tests/it/main.rs` binary named
-# `it`, so `--test kani_obligations` no longer resolves -- the former
-# `kani_obligations.rs` is now the `kani_obligations` module inside `it`. `cargo
-# test --test it kani_obligations` filters by test-name substring on the merged
-# binary; verified against `cargo test --test it kani_obligations -- --list`
-# that this selects exactly the 20 tests the old `kani_obligations` binary held
-# (19 default-lane plus this one `#[ignore]`d harness) and nothing from any
-# other module, so the `--ignored` run below still exercises only this one test.
-#
-# The lane also runs the skeleton spine (`skeleton_spine`): one Boolean clause through the real
-# prover and native replay through QSL. Both filters follow `--`
-# because libtest accepts several; cargo's own positional filter takes one.
+# Integration tests live in the single `it` binary (`tests/it/main.rs`); the
+# `kani_obligations` and `skeleton_spine` filters select those modules' tests,
+# and `--ignored` runs only their `#[ignore]`d real-prover tests. The skeleton
+# spine runs one Boolean clause through the real prover and native replay
+# through QSL. Both filters follow `--` because libtest accepts several; cargo's
+# own positional filter takes one.
 .PHONY: kani
 kani:
 	flock /tmp/agent-e-heavy-build.lock $(CARGO) +$(MSRV) test --locked -j 4 \

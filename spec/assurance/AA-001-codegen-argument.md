@@ -12,15 +12,15 @@ top_claim:
   status: open
 reasoning:
   - id: reasoning-derivation-conformance
-    statement: evaluate reproducibility atomicity diagnostics backend parity and provenance against the declared boundary
+    statement: evaluate reproducibility atomicity diagnostics and backend parity against the declared boundary
     supports: claim-codegen-v01
     sufficiency_criteria:
       - every native issue and protected CI gate is complete
-      - upstream pins are released and reconciled
+      - upstream dependencies are released and reconciled
       - no blocking specification implementation or gap-review finding remains
 assumptions:
   - id: assumption-consumer-validation
-    statement: consuming projects validate the pinned generator and outputs for their own intended use
+    statement: consuming projects validate the generator and outputs for their own intended use
     owner: human-release-owner
     status: open
     review_by: "2026-12-31T00:00:00Z"
@@ -28,7 +28,7 @@ participants:
   - id: human-release-owner
     role: decision owner
     authority: accept or reject the bounded source candidate
-    independence: reviews agent-assisted implementation dependency pins and evidence
+    independence: reviews agent-assisted implementation dependencies and evidence
 challenges:
   - id: challenge-draft-dependencies
     target: claim-codegen-v01
@@ -48,50 +48,31 @@ relationships:
 
 ## Claim
 
-The bounded claim concerns one identified source revision, released dependency set, backend versions,
+The bounded claim concerns one identified source revision, released dependency set, backends,
 configuration, corpus, and platform profile. It remains open throughout foundation and implementation.
 
 ## Reasoning
 
-Specification traceability, deterministic/golden tests, atomic fault injection, compile tests, shaped
-strategy tests, bounded proofs, source-mapped coverage, cross-backend parity, differential fixtures,
-dependency/license audits, and the sealed change-assurance chain jointly address known failure
-scenarios. No single tool or generated manifest makes the release decision. The argument does not
-rest on a retained evidence tree: this repository holds none, and the records it once held are
-deleted under the pre-stable preservation release (`agent-ix/engineering-assurance#7`).
+Specification traceability, deterministic regeneration tests, atomic fault injection, compile tests,
+shaped strategy tests, bounded proofs, source-mapped coverage, cross-backend parity, differential
+fixtures, and dependency/license audits jointly address known failure scenarios. No single tool makes
+the release decision.
 
 ## Sufficiency Decision
 
 No automated sufficiency decision is recorded. The human release owner must review reconciled
-dependencies, protected CI, gap analysis, open assumptions, and challenges.
-
-"Retained measurements" was struck from that list rather than redefined. The retained evidence tree
-it named is deleted, so the item could not be satisfied, and narrowing it onto a different referent
-would be restating a claim over a weaker one. Nothing is substituted for it: this is a human release
-owner's obligation, and `planning/release-decision.md` records the same striking for the same
-reason.
+dependencies, the local gates, gap analysis, open assumptions, and challenges.
 
 ## Challenges
 
-Merged PGM-01 is pinned and reconciled. Runtime helpers remain provisionally pinned, and the IR
-corpus remains unavailable. The runtime and IR identities and contracts must be reconciled before
-semantic implementation leaves draft or this claim can be considered.
+Merged PGM-01 is reconciled. The runtime dependency remains provisional, and the IR corpus remains
+unavailable. The runtime and IR contracts must be reconciled before semantic implementation leaves
+draft or this claim can be considered.
 
 A second challenge is recorded against the reasoning above rather than against the claim's subject.
 The reasoning says "every native issue and protected CI gate is complete", and a reader may take a
 green `make ci` as evidence for that. It is evidence about the tree as committed and about nothing
-else.
+else: Make can be told to ignore a recipe's exit status (`.IGNORE:`, a `-` recipe prefix, or a
+`SHELL` assignment), so the decision owner reviews the diff, not only the result. Tracked as
+agent-ix/quire-contract-codegen#14.
 
-Measured here with three injected defects: the control tree exits 2 at `fmt-check`, the first of
-eleven `ci` prerequisites; the same tree with `.IGNORE:` prepended exits 0, runs all eleven, fails
-seven of them — `fmt-check`, `spec`, `lint`, `msrv`, `upstream-identity`, `test` and
-`assurance-chain` — prints every diagnostic, and fails the build for none of them. The chain itself
-detected the defect and returned 1; Make discarded that.
-
-Anything that feeds the change-assurance chain is protected differently and better: Quoin binds
-retained inputs by digest and every attested result is read out of the producer's own bytes, so a
-suppressed producer yields an absent or unreadable input and the chain errors. The gates that feed
-nothing into the chain are simply neutered, and the sufficiency criterion "every protected CI gate is
-complete" cannot be discharged by an exit code alone. The decision owner reviews the diff, not only
-the result. Tracked as agent-ix/quire-contract-codegen#14; the policer that used to make this claim
-locally was itself a self-attestation and was not re-added.

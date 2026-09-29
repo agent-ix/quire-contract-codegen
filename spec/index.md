@@ -37,7 +37,7 @@ derivation evidence. Generated artifacts remain traceable to one authoritative s
 - Library-first and CLI-driven deterministic generation.
 - Executable, property-test, proof, vacuity, source-map, and derivation outputs.
 - Explicit diagnostics for unsupported or unproved constructs.
-- Golden, differential, and cross-backend semantic conformance.
+- Differential and cross-backend semantic conformance, with determinism checked by regeneration.
 
 ### Out of Scope
 
@@ -57,8 +57,8 @@ coverage exports rather than implementing those engines.
 ### Intended Users
 
 Assurance engineers generate reproducible verification artifacts. Developers compile and execute the
-outputs. Reviewers inspect proof attestations, diagnostics, proof dependencies, coverage evidence,
-and semantic-parity results. A human release owner alone decides source release suitability.
+outputs. Reviewers inspect diagnostics, proof dependencies, coverage evidence and semantic-parity
+results. A human release owner alone decides source release suitability.
 
 ## Requirements Architecture
 
@@ -76,14 +76,14 @@ on. `test-matrix.md` maps every criterion to its test case.
 | Generation conformance corpus | FR-006 | TC-032 |
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
-| Kani obligations and execution | FR-015 generation, FR-017 pinned execution, FR-025 subject ABI | TC-025, TC-027, TC-036 |
+| Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI | TC-025, TC-027, TC-036 |
 | Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope | TC-026, TC-035 |
 | Capability settlement and routing | FR-019 settlement, FR-022 routed generation | TC-030, TC-033 |
 | Declared API surface | interface-001 | TC-028 |
 
 FR-020 is reserved for temporal and protocol oracles and is unwritten. FR-018 and FR-014 refuse the
 model graph, relation, temporal and protocol families with typed blockers. Function application is
-FR-021's. Numbers skip NFR-003, TC-011, TC-015 and TC-016, which are not reused.
+FR-021's. FR-023, NFR-003, TC-008 to TC-013, TC-015, TC-016 and TC-034 are unassigned.
 
 ### Subsystem layout
 
@@ -93,7 +93,7 @@ the directory carries the subsystem.
 | Subsystem | Directory | Artifacts |
 |---|---|---|
 | Strategies and harness campaigns | `functional/strategies/`, `nonfunctional/strategies/`, `test/strategies/` | FR-008 to FR-013, NFR-004, TC-017 to TC-022 |
-| Complete-V1 generation, execution and replay | `functional/complete-v1/`, `test/complete-v1/` | FR-014 to FR-025, TC-024 to TC-031, TC-033 to TC-036 |
+| Complete-V1 generation, execution and replay | `functional/complete-v1/`, `test/complete-v1/` | FR-014 to FR-019, FR-021, FR-022, FR-024, FR-025, TC-024 to TC-031, TC-033, TC-035, TC-036 |
 | Architecture decisions | `decisions/` | ADR-001 to ADR-004 |
 | Everything else | the flat `functional/`, `nonfunctional/`, `test/`, `stakeholder/` directories | FR-001 to FR-007, NFR-001, NFR-002, StR-001, the remaining TCs |
 

@@ -7,21 +7,18 @@ owner: codegen-maintainers
 kind: deterministic
 responsibility: derive semantically aligned reproducible verification artifacts from one contract package
 inputs: [serialized contract package, backend configuration, customer type bindings]
-outputs: [artifact bundle, diagnostics, proof attestations]
-invariants: [no silent approximation, one shared clause semantics, complete identity, atomic publication]
+outputs: [artifact bundle, diagnostics]
+invariants: [no silent approximation, one shared clause semantics, atomic publication]
 failure_behaviors: [emit explicit diagnostics, retain incomplete states, publish no partial bundle]
 version_pins:
   rust-msrv: "1.98.1"
-  governance: agent-ix/quire-contract-ir@7dac9d8c19952412b56a0347387666e2ca81e01d
-  ir-corpus: agent-ix/quire-contract-ir@5c49ebfd1c87415f74420ad047392bd03b1bd202
-  runtime: agent-ix/quire-contract-runtime@e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3
 controls:
   surfaces: [library API, CLI, backend adapters, bundle validator, CI]
   fallback: emit no backend artifact and retain an explicit diagnostic
   abstention: classify unsupported failed unavailable or inconclusive without completeness
   escalation: human release owner reviews unresolved gaps and dependency changes
 isolation: no dependency on Quoin Quire or engineering-assurance repositories
-replacement: preserve input output diagnostics identity atomicity and semantic parity contracts
+replacement: preserve input output diagnostics atomicity and semantic parity contracts
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AP-001
     type: references
@@ -49,12 +46,11 @@ counts as a complete artifact bundle.
 
 ## Controls
 
-Pinned compatibility checks, requirement-tagged tests, golden/differential corpora, backend parity,
-fault injection, cargo-deny, unsafe/panic audits, reproducibility measurements, protected CI, and
-human review constrain the generator.
+Requirement-tagged tests, differential corpora, regeneration determinism checks, backend parity,
+fault injection, cargo-deny, unsafe/panic audits, local gates, and human review constrain the generator.
 
 ## Replacement
 
 A replacement must consume the same versioned package, pass the same corpus and parity vectors,
-preserve every identity and non-success state, meet atomic/reproducible output contracts, and receive a
+preserve every requirement identity and non-success state, meet atomic/reproducible output contracts, and receive a
 new human decision.

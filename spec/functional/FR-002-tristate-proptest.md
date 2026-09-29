@@ -51,8 +51,8 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   out-of-membership customer enum value.
 - Generated harness campaign constructors shall bind exact Boolean inputs to accepted, rejected, or
   discarded disposition.
-- Harness and strategy generation shall return deterministic source plus a shared proof
-  attestation, or a structured non-generated terminal state with no partial bundle.
+- Harness and strategy generation shall return deterministic source, or a structured non-generated
+  terminal state with no partial bundle.
 
 ## Acceptance Criteria
 

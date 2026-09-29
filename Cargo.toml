@@ -15,10 +15,7 @@ path = "src/lib.rs"
 
 # Explicit so `test = true` can be set: this is what lets `cargo test` run the
 # `#[cfg(test)] mod tests` declared inside the example (issue #125). Edition
-# 2021 keeps autodiscovery on for every other target even with one example
-# declared explicitly here -- there is currently exactly one file under
-# examples/, so there is nothing else to discover either way; verified with
-# `cargo metadata` after adding this section.
+# 2021 keeps autodiscovery on for every other target.
 [[example]]
 name = "generation_conformance"
 path = "examples/generation_conformance.rs"

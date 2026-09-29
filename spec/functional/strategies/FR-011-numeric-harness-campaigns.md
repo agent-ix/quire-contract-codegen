@@ -58,13 +58,13 @@ until specified.
   - for a `Precondition` clause, `true` to `Passed` and `false` to `RejectedPrecondition`;
   - for a `Postcondition` clause, `true` to `Passed` and `false` to `FailedPostcondition`;
   - for an `Invariant` clause, `true` to `Passed` and `false` to `FailedPostcondition` whose clause
-    observation carries the pinned runtime's invariant clause kind, which quire-contract-runtime
+    observation carries the runtime's invariant clause kind, which quire-contract-runtime
     implements but does not yet specify.
 - The runner shall construct each verdict through the runtime `construct_verdict` operation
   (quire-contract-runtime interface-001) with the requirement and revision identity, the runtime
   execution point rendered from the clause's `quire_contract_ir::ExecutionPoint` serialized name
   (`initialization`, `handler`, `pre`, or `post`), and the clause observations.
-- For a false invariant, the runner shall use the failure detail the pinned runtime revision
+- For a false invariant, the runner shall use the failure detail the runtime
   provides for a contract clause, because quire-contract-runtime's specification does not yet state
   the failure detail of an invariant; a runtime specification of that mapping supersedes this rule.
 - The runner shall record each verdict through the runtime `record_campaign_verdict` operation, so
@@ -108,7 +108,7 @@ until specified.
 | FR-011-AC-1 | A `VersionUnchanged` (`Postcondition`) `Broad` campaign records `Holds` cases as `Passed` and `Violated` cases as `FailedPostcondition` and passes; a `Precondition` fixture records `Violated` cases as `RejectedPrecondition` in `rejected` and passes with zero proptest global rejects; the `amount < 7` `Invariant` records `Violated` cases as `FailedPostcondition`. | Test (TC-020) |
 | FR-011-AC-2 | An oracle deliberately swapped for its negation fails each campaign with `ConformanceMismatch` carrying the case values, expected tag, and observed verdict kind. | Test (TC-020) |
 | FR-011-AC-3 | The census runner evaluates each of the 10 `VersionUnchanged` in-domain census cases exactly once, in census order, and evaluates none of the out-of-domain cases. | Test (TC-020) |
-| FR-011-AC-4 | A campaign over a report seeded with pinned prior counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with those exact values, a fresh zero-attempt summary returns `None` for both, and a runtime snapshot whose counters are `at_limit` returns `None` for both through the generated snapshot-summary operation. | Test (TC-020) |
+| FR-011-AC-4 | A campaign over a report seeded with fixed prior counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with those exact values, a fresh zero-attempt summary returns `None` for both, and a runtime snapshot whose counters are `at_limit` returns `None` for both through the generated snapshot-summary operation. | Test (TC-020) |
 | FR-011-AC-5 | A fresh 10,000-case `Broad` campaign for each fixture returns `discard_rate() == Some((0, attempted))` with `attempted > 0`, passes a zero discard ceiling, and does not end `Exhausted`. | Test (TC-020) |
 
 ## Dependencies

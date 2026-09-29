@@ -54,24 +54,24 @@ relationships:
 
 Assurance engineers require that the generator shall derive executable, property-test, proof, and
 coverage artifacts reproducibly from one validated contract without hiding unsupported semantics,
-vacuity, rejection, assumptions, or tool identity.
+vacuity, rejection, or assumptions.
 
 ## Rationale
 
 Independently authored tests and proofs can drift from requirements and from each other. Deterministic
-generation with explicit provenance makes semantic alignment inspectable while keeping every
+generation traced to requirement identities makes semantic alignment inspectable while keeping every
 inconclusive or unsupported state visible to human decision makers.
 
 ## Validation Criteria
 
 | ID | Criteria | Validation |
 |----|----------|------------|
-| StR-001-VC-1 | Repeated generation of one pinned package produces byte-identical bundles with complete input, tool, backend, and output identities. | Demonstration |
+| StR-001-VC-1 | Repeated generation of one package produces byte-identical bundles whose artifacts name the requirement and clause they were generated from. | Demonstration |
 | StR-001-VC-2 | Executable, proptest, Kani, and vacuity outputs retain the same requirement identity and agree on the shared bounded corpus. | Demonstration |
 | StR-001-VC-3 | A proof counterexample is reported as a contract failure only after native replay of that counterexample reproduces it, and a malformed, out-of-domain or disagreeing counterexample is reported as exactly that. | Demonstration |
-| StR-001-VC-4 | A proof result is claimed only for an obligation that was settled once, generated under the committed backend pins, and observed verifying with its non-vacuity cover satisfied. | Demonstration |
+| StR-001-VC-4 | A proof result is claimed only for an obligation that was settled once, generated for its routed backend, and observed verifying with its non-vacuity cover satisfied. | Demonstration |
 
 ## Dependencies
 
-The governing compatibility, provenance, evidence, and qualification policy is PGM-01 at
+The governing compatibility, evidence, and qualification policy is PGM-01 at
 `ix://agent-ix/quire-contract-ir/PGM-01`.
