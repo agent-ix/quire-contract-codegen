@@ -257,7 +257,7 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
     fs::write(
         directory.join("Cargo.toml"),
         format!(
-            "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
+            "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[workspace]\n"
         ),
     )
     .unwrap();
