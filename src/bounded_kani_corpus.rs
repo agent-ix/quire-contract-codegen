@@ -738,8 +738,8 @@ mod tests {
 
     use super::{
         arithmetic_assignments, collection_assignments, generate_bounded_kani_corpus_case,
-        BoundedCorpusRequest, CorpusProofDependencyGraph, EmittedCorpusIdentities,
-        ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
+        BoundedCorpusRequest, CorpusProofDependencyGraph, EmittedCorpusIdentities, ProofReadiness,
+        CORPUS_PROOF_GRAPH_SCHEMA,
     };
     use crate::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
