@@ -35,7 +35,7 @@ that named Kani directly and shared no stated contract:
 
 | Kani-specific fact | Where it lived |
 |---|---|
-| Printed-output wording | `src/kani_transcript.rs`, the only non-test copy (FR-017-AC-10) |
+| Printed-output wording | `src/kani_transcript.rs` |
 | Real transcript captures | `tests/fixtures/` |
 | Playback typing | `src/kani_witness_join.rs` |
 | QSL witness rendering | `src/spine_replay.rs` |
@@ -59,7 +59,7 @@ once per kind, whose associated items are the adapter's four parts:
 2. **Execution.** Launch the installed backend under the harness identity's ceilings, and classify
    (FR-017).
 3. **Transcript parser.** The one module that reads the backend's native output, its
-   counterexample included, into a typed transcript (FR-017-AC-10).
+   counterexample included, into a typed transcript.
 4. **Witness renderer.** The one function that renders QSL's backend-witness transcript from the
    decoded values, admitted by `qsl_replay::Witness::parse` (FR-024).
 

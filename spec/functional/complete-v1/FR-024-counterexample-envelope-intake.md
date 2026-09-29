@@ -111,8 +111,7 @@ the partition of replay outcomes. This requirement owns what reaches QSL.
 | FR-024-AC-9 | A reduced `Input`-arm candidate is retained only when native replay preserves domain validity and the verdict, and it is itself an `Input`-arm envelope. | Test (TC-035) |
 | FR-024-AC-10 | No type named `Witness`, `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` or `ObligationIdentity` is defined under `src/`, and no source file under `src/` imports any of them from `quire_contract_ir`. | Test (TC-035) |
 
-The rule that only `src/kani_transcript.rs` reads Kani's printed wording, playback included, is
-FR-017-AC-10's and is not restated here. A transcript `Witness::parse` refuses is an adapter
+A transcript `Witness::parse` refuses is an adapter
 refusal under FR-016-AC-11.
 
 ## Current state

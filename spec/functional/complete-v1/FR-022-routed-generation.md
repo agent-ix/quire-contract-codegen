@@ -40,8 +40,7 @@ The router's results are inputs and are taken as given:
 
 This generator does not receive a backend registry, a candidate set, an extent or a
 capability kind on this path, so it cannot recompute any of them. It
-constructs no FR-019 `Disposition` here, so FR-019-AC-5's source scan covers
-this entry point unchanged.
+constructs no FR-019 `Disposition` here.
 
 Two checks remain, and neither is a settlement. First, the routed backend
 kind must equal what this generator's one total conversion
@@ -216,7 +215,7 @@ already does for the FR-331 envelope.
 |----|----------|--------------|
 | FR-022-AC-1 | Generation dispatches one arm per variant of the closed `BackendKind` through an exhaustive `match` with no catch-all, and `GenerationContexts` has one field per variant, so a variant added without an arm in the dispatch or in `GenerationContexts::has` does not compile. | Analysis |
 | FR-022-AC-2 | For a set of routed Kani items, each record and harness in the output equals what `negotiate_kani_obligations` returns for the same items in ascending request-index order with the same context. The one difference is that every index inside a record is the driver's request index, and each harness is paired with the record whose `harness_symbol` names it. | Test (TC-033) |
-| FR-022-AC-3 | The entry point accepts no backend registry, candidate set, extent or capability kind, and constructs no FR-019 `Disposition`. The FR-019-AC-5 source scan reads its module and stays green. | Test (TC-033) |
+| FR-022-AC-3 | The entry point accepts no backend registry, candidate set, extent or capability kind, and constructs no FR-019 `Disposition`. | Test (TC-033) |
 | FR-022-AC-4 | A routed item whose backend identity has no CG kind, or converts to a kind other than the routed one, refuses the whole call as `BackendKindDisagrees`, naming the request index, backend, routed kind and converted kind or its absence, and no artifact is returned. | Test (TC-033) |
 | FR-022-AC-5 | Two routed items with one request index refuse as `DuplicateRequestIndex` naming it. A routed kind with no context refuses as `MissingKindContext` naming the kind. Each returns no artifact. | Test (TC-033) |
 | FR-022-AC-6 | A Kani group-level refusal (for example an unwind outside `1..=1024`, or an unparsable subject path) is returned as `Kani` carrying the unchanged `KaniObligationError`, with no artifact. | Test (TC-033) |

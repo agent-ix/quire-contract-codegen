@@ -43,8 +43,8 @@ failure is reported.
   each witness value into its declared complete-V1 scalar type within the
   decode size limit.
 - The generator shall read the concrete values of a Kani playback only
-  through the Kani adapter's transcript module, `src/kani_transcript.rs`
-  (FR-017-AC-10). At this revision the witness join
+  through the Kani adapter's transcript module, `src/kani_transcript.rs`.
+  At this revision the witness join
   (`src/kani_witness_join.rs`) still decodes the playback through Contract
   IR's `Witness::parse`, so this bullet states the target and is not yet
   met.

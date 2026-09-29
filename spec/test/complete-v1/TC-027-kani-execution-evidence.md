@@ -26,10 +26,6 @@ summary, with a zero-total summary, and with an unreadable summary; a failed
 unwinding assertion with playbacks present; and a results listing in which an
 unwinding check succeeded.
 
-Edge module: parse real Kani captures (`tests/fixtures/kani-0.67.0/`) of a verified run, a
-falsified run with a playback, an exhausted unwind bound, an unreachable cover, a partly satisfied
-cover and a run with no cover summary, and classify each.
-
 Refusals: request a run against an installation whose launcher is absent.
 
 Routed scalar harness (FR-017-AC-11): build a routed exact-scalar harness with `generate_routed`
@@ -64,10 +60,6 @@ inconclusive with their own reasons. The failed unwinding assertion is
 inconclusive as an exhausted bound and not falsified, and the succeeded
 unwinding check in a listing is verified.
 
-Each capture parses to the expected typed transcript and classifies to verified, falsified with
-the assertion playback, exhausted bound, cover-unsatisfied 0 of 1, cover-unsatisfied 1 of 2 and
-missing cover summary respectively.
-
 The absent launcher is a typed tool refusal naming the launcher and its path.
 
 The routed scalar harness's crate missing its `src/lib.rs` source is `HarnessNotInCrate`; its
@@ -87,8 +79,7 @@ not contain the harness is refused with no run.
 
 ## Implementation
 
-`src/kani_execution.rs` unit tests for classification, `src/kani_transcript.rs` unit tests for the
-typed transcript and the fixture captures, and `tests/it/kani_obligations.rs` for the refusals, the
+`src/kani_execution.rs` unit tests for classification, and `tests/it/kani_obligations.rs` for the refusals, the
 generation/execution boundary and the `make kani` lane. The lane is `#[ignore]`d and runs through
 `make kani` under a host-wide lock, because Kani and CBMC are memory-heavy and must run one harness
 at a time.

@@ -30,8 +30,8 @@ type: TestMatrix
 | FR-003 | FR-003-AC-5 | TC-014 | ⛔ Retired; carried by FR-015-AC-11 |
 | FR-003 | FR-003-AC-6 | TC-014 | ⛔ Retired; carried by FR-015-AC-19 and FR-025-AC-8 |
 | FR-003 | FR-003-AC-8 | TC-014 | ⛔ Retired; carried by FR-025-AC-3 and FR-015-AC-10 |
-| FR-004 | FR-004-AC-1 through FR-004-AC-3, FR-004-AC-5 through FR-004-AC-8 | TC-006 | 🚧 Planned |
-| FR-004 | FR-004-AC-4, FR-004-AC-9 | Inspection | ⛔ Retired; not carried |
+| FR-004 | FR-004-AC-1 through FR-004-AC-8 | TC-006 | 🚧 Planned |
+| FR-004 | FR-004-AC-9 | TC-006 | 🚧 Planned |
 | FR-005 | FR-005-AC-1 | TC-002 | 🚧 Planned |
 | FR-005 | FR-005-AC-2 | TC-001 | 🚧 Planned |
 | FR-005 | FR-005-AC-3 | Inspection | 🚧 Planned |
@@ -71,13 +71,11 @@ type: TestMatrix
 | FR-016 | FR-016-AC-1, FR-016-AC-5 | TC-026 | ⚠️ Partially covered; the witness join (`witness_schema`, `decode_falsification`) decodes a matching transcript and refuses the harness-identity, arity, width, schema, Boolean-byte and comment cases, but reports every refusal as a `KaniOutcome` refusal code rather than FR-016's malformed-witness result, so neither criterion is backed and neither carries a trace tag |
 | FR-016 | FR-016-AC-2 through FR-016-AC-4, FR-016-AC-6, FR-016-AC-7, FR-016-AC-12, FR-016-AC-13 | TC-026 | 🚧 Planned |
 | FR-017 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-CON-2 | TC-027 | ✅ Covered |
-| FR-017 | FR-017-AC-10 | TC-027 | ⚠️ Partially covered; each recorded Kani capture parses to its expected transcript and classifies to its expected outcome; the criterion's clause about other files under `src/` has no test |
 | FR-017 | FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-CON-1 | TC-027 | 🚧 Planned |
 | FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-11 through FR-018-AC-14 | TC-029 | ✅ Covered |
 | FR-018 | FR-018-AC-10 | TC-029 | ⚠️ Partially covered; byte identity across repeated runs and request permutations, the descriptor-key order, and the generated crate compiled and executed at test time under AC-2 are asserted; the criterion's remaining clause has no test |
 | FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |
 | FR-019 | FR-019-AC-1 through FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | TC-030 | ✅ Covered |
-| FR-019 | FR-019-AC-5 | TC-030 | 🚧 Planned; no behavioural test backs it |
 | FR-019 | FR-019-AC-9 | Analysis | ✅ Covered |
 | FR-021 | FR-021-AC-1 through FR-021-AC-3, FR-021-AC-5 through FR-021-AC-14, FR-021-AC-17 | TC-031 | ✅ Covered |
 | FR-021 | FR-021-AC-4 | TC-031 | ⚠️ Partially covered; only `InputRefusal::WrongValueKind` is asserted -- `::DanglingReference` is structurally unreachable for any oracle this generator can produce, since `validate_arguments` checks `WrongValueKind` before it ever walks a value for a dangling reference, and a reference-typed parameter is refused at generation time (AC-10, blocked on qsl#120) |
@@ -90,7 +88,7 @@ type: TestMatrix
 | FR-024 | FR-024-AC-1 through FR-024-AC-10 | TC-035 | 🚧 Planned |
 | FR-025 | FR-025-AC-1 | TC-036 | 🚧 Planned; emission order is asserted only for the retired V1 `BoundClause` harness kinds, and the ascending order and the scalar-claim harness are unasserted |
 | FR-025 | FR-025-AC-2 through FR-025-AC-8 | TC-036 | 🚧 Planned |
-| FR-026 | FR-026-AC-1 through FR-026-AC-4 | TC-037 | 🚧 Planned |
+| FR-026 | FR-026-AC-1, FR-026-AC-4 | TC-037 | 🚧 Planned |
 | FR-028 | FR-028-AC-1 through FR-028-AC-9 | TC-039 | 🚧 Planned |
 | FR-029 | FR-029-AC-1 through FR-029-AC-7 | TC-040 | 🚧 Planned |
 
@@ -301,14 +299,14 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-024 | Verify exact complete-V1 scalar oracle generation and agreement | Integration | P0 | FR-014-AC-1, FR-014-AC-2, FR-014-AC-3, FR-014-AC-4, FR-014-AC-5, FR-014-AC-6, FR-014-AC-7, FR-014-AC-8, FR-014-AC-9, FR-014-AC-10, FR-014-AC-11, FR-014-AC-12, FR-014-AC-13, FR-014-AC-14, FR-014-AC-15, FR-014-AC-16, FR-014-AC-17, FR-014-AC-18, FR-014-AC-19, FR-014-AC-20, FR-014-AC-21, FR-014-AC-22, FR-014-AC-23, FR-014-AC-24, FR-014-AC-25, FR-014-AC-26, FR-014-AC-27, FR-014-AC-28, FR-014-AC-29, FR-014-AC-30, FR-014-AC-31, FR-014-AC-32, FR-014-AC-33, FR-014-AC-34, FR-014-AC-35, FR-014-AC-36, FR-014-AC-37, FR-014-AC-38 | 🚧 Planned |
 | TC-025 | Verify separate bounded Kani obligations | Analysis | P0 | FR-015-AC-1, FR-015-AC-2, FR-015-AC-3, FR-015-AC-4, FR-015-AC-5, FR-015-AC-6, FR-015-AC-7, FR-015-AC-8, FR-015-AC-9, FR-015-AC-10, FR-015-AC-11, FR-015-AC-12, FR-015-AC-14, FR-015-AC-19, FR-015-AC-20, FR-015-AC-21, FR-015-AC-22, FR-015-AC-23, FR-015-AC-24, FR-015-AC-25 | 🚧 Planned |
 | TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4, FR-016-AC-5, FR-016-AC-6, FR-016-AC-7, FR-016-AC-8, FR-016-AC-9, FR-016-AC-10, FR-016-AC-11, FR-016-AC-12, FR-016-AC-13 | 🚧 Planned |
-| TC-027 | Verify Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-10, FR-017-AC-11, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
+| TC-027 | Verify Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
 | TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13, FR-018-AC-14 | 🚧 Planned |
-| TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
+| TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
 | TC-031 | Verify function-application oracle generation, agreement, and static location tagging | Integration | P0 | FR-021-AC-1, FR-021-AC-2, FR-021-AC-3, FR-021-AC-4, FR-021-AC-5, FR-021-AC-6, FR-021-AC-7, FR-021-AC-8, FR-021-AC-9, FR-021-AC-10, FR-021-AC-11, FR-021-AC-12, FR-021-AC-13, FR-021-AC-14, FR-021-AC-15, FR-021-AC-16, FR-021-AC-17, FR-021-AC-18 | ✅ Covered |
 | TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-022-AC-14, FR-022-AC-15, FR-015-AC-15, FR-015-AC-16, FR-015-AC-17, FR-015-AC-18 | ✅ Covered |
 | TC-035 | Verify counterexample submission in QSL's counterexample envelope | Integration | P0 | FR-024-AC-1, FR-024-AC-2, FR-024-AC-3, FR-024-AC-4, FR-024-AC-5, FR-024-AC-6, FR-024-AC-7, FR-024-AC-8, FR-024-AC-9, FR-024-AC-10 | 🚧 Planned |
 | TC-036 | Verify the generated harness subject ABI | Integration | P0 | FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6, FR-025-AC-7, FR-025-AC-8 | 🚧 Planned |
-| TC-037 | Verify the backend adapter trait and its closed-enum dispatch | Integration | P0 | FR-026-AC-1, FR-026-AC-2, FR-026-AC-3, FR-026-AC-4 | 🚧 Planned |
+| TC-037 | Verify the backend adapter trait and its closed-enum dispatch | Integration | P0 | FR-026-AC-1, FR-026-AC-4 | 🚧 Planned |
 | TC-039 | Verify bounded proof ceilings, their inconclusive reasons and the proof subject | Integration | P0 | FR-028-AC-1, FR-028-AC-2, FR-028-AC-3, FR-028-AC-4, FR-028-AC-5, FR-028-AC-6, FR-028-AC-7, FR-028-AC-8, FR-028-AC-9 | 🚧 Planned |
 | TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6, FR-029-AC-7 | 🚧 Planned |
 

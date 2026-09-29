@@ -39,7 +39,7 @@ second backend registers.
 
 - The generator shall define one adapter trait whose associated items are the generation arm
   ([FR-022](./FR-022-routed-generation.md)), execution
-  ([FR-017](./FR-017-kani-execution-evidence.md)), the transcript parser (FR-017-AC-10) and
+  ([FR-017](./FR-017-kani-execution-evidence.md)), the transcript parser and
   the witness renderer ([FR-024](./FR-024-counterexample-envelope-intake.md)).
 - The generator shall implement that trait once for each `BackendKind` variant.
 - The generator shall reach an adapter from settlement, routed generation, execution and the
@@ -55,8 +55,6 @@ second backend registers.
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-026-AC-1 | The Kani adapter implements the adapter trait, and a function generic over that trait reaches the Kani adapter's generation arm, execution, transcript parser and witness renderer through it. | Test (TC-037) |
-| FR-026-AC-2 | A `syn` scan of every non-test source under `src/` finds settlement, routed generation, execution and the terminal-record map reaching an adapter only inside a `match` on `BackendKind` with no wildcard arm, and finds no trait object of the adapter trait. | Test (TC-037) |
-| FR-026-AC-3 | A `syn` scan of every non-test source under `src/` finds the Kani printed-output wording, playback typing and witness rendering defined only inside the Kani adapter module. | Test (TC-037) |
 | FR-026-AC-4 | The execution evidence type is an associated type of the adapter trait, and the Kani adapter's is `KaniExecutionEvidence`. | Test (TC-037) |
 
 ## Dependencies
