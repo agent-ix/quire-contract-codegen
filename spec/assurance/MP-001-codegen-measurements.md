@@ -75,9 +75,6 @@ observations; the generated graph's `proofExecutionState` stays `not_run`.
 `quire coverage --scope . --json` is the static specification, obligation and coverage export. Quire
 exports; it never executes a producer.
 
-`make msrv` is the minimum-supported-Rust build, whose verdict is read from cargo's own
-`build-finished` message rather than from its transcript.
-
 TC-006 has primitive and bound-observation tests, including a nested native LLVM fixture over the LLVM
 full JSON export format with per-file segments. The analyzer consumes export bytes and never invokes
 LLVM, Cargo, Quire, or Quoin. Mutation controls independently remove the evaluation hit, remove one of

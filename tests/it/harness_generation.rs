@@ -785,6 +785,34 @@ fn tc_004_invalid_campaign_inputs_fail_before_clause_generation() {
     assert_eq!(invalid_policy[0].path, "minimum_accepted_cases");
 }
 
+/// A precondition clause identical to its postcondition clause is refused before any clause
+/// is generated.
+///
+/// Trace: TC-004
+#[test]
+fn tc_004_identical_precondition_and_postcondition_clauses_are_refused() {
+    let (environment, precondition_expression, postcondition_expression) = typed_clauses();
+    let clause = ClauseId::new("shared-clause").unwrap();
+    let refused = generate_tristate_harness(&HarnessRequest {
+        requirement: environment.owner(),
+        precondition_clause: &clause,
+        postcondition_clause: &clause,
+        precondition: &precondition_expression,
+        postcondition: &postcondition_expression,
+        execution_point: "handler:update",
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 0,
+    })
+    .unwrap_err();
+    assert_eq!(refused[0].code, HarnessErrorCode::DuplicateClauseIdentity);
+    assert_eq!(
+        refused[0].terminal_state,
+        GenerationTerminalState::InvalidInput
+    );
+    assert_eq!(refused[0].path, "clauses");
+}
+
 /// Two clause ids equal in their first 24 characters share a readable oracle stem; the harness
 /// still generates, naming the two oracles by clause order rather than refusing.
 ///

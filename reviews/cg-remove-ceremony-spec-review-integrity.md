@@ -54,3 +54,12 @@ Round 1, reviewed at c0cc093bb657a92d280159e16424518e5440fd83. `make spec` exits
 | ID      | Severity | Summary | Refs |
 | ------- | -------- | ------- | ---- |
 | FND-012 | low | Stale lines in assurance documents this PR touched. MP-001:63 still prints `codegen.generation-conformance/v1`, although `PROTOCOL` is gone. MP-001:87-88 says `make msrv` is read from `build-finished`, which was chain behaviour. CAC-001:13-14 keeps `version_pins: rust-msrv`. | spec/assurance/MP-001-codegen-measurements.md:63; spec/assurance/MP-001-codegen-measurements.md:87-88; spec/assurance/CAC-001-codegen-contract.md:13-14 |
+
+### Round 2
+
+Reviewed at 476dbd1799cdd223b8a09fd79a11fd80e56dd837. `make spec` exits 0.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-009 | fixed | cba94dd: FR-006, TC-032, SUITE-001 and the conformance example are deleted. |
+| FND-012 | still-open | CAC-001 is deleted and the `PROTOCOL` line is gone from MP-001 (cba94dd). But MP-001:78-79 still says `make msrv`'s verdict "is read from cargo's own `build-finished` message", which described the deleted chain. `make msrv` is now plain `cargo test`. |

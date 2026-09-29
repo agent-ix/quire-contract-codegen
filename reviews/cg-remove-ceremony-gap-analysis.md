@@ -56,3 +56,13 @@ Round 1, reviewed at c0cc093bb657a92d280159e16424518e5440fd83. `quire coverage -
 | FND-011 | high | The matrix still marks FR-017-AC-8 and AC-9 `✅ Covered`, but their only test (the source census) was deleted in 87963e9 and nothing traces them now. Its prose at :142-144 still names that census. Mark them Planned or delete the ACs. | spec/test-matrix.md:69; spec/test-matrix.md:142-144 |
 | FND-012 | high | TC-028 still names `tests/it/interface_001.rs` as its implementation, but the file was deleted, and the matrix marks interface-001-AC-4 and TC-028 `✅ Covered`. `GenerationTerminalState::ALL` is now tested by nothing. Either delete TC-028 and those ACs, or back AC-4 with a plain unit test. | spec/test/complete-v1/TC-028-interface-001-declared-surface.md:33; spec/test-matrix.md:224-225; spec/test-matrix.md:259; spec/test-matrix.md:311; spec/interface/interface-001-codegen-api.md:363-373; spec/index.md:82 |
 | FND-013 | medium | A test still traces FR-013-AC-3, which was deleted. | tests/it/bound_strategy_generation.rs:1436 |
+
+### Round 2
+
+Reviewed at 476dbd1799cdd223b8a09fd79a11fd80e56dd837. `quire coverage --strict` exits 1 (198/265 rows backed); `make spec` exits 0.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-011 | fixed | cba94dd: FR-017-AC-8 and AC-9 are removed from the matrix. The FR-017 AC text is deferred to #186. |
+| FND-012 | fixed | cba94dd and 476dbd1: TC-028 is deleted. interface-001-AC-1, AC-2 and AC-4 are removed along with their matrix rows and open items. They could only be verified by a public-API census or document-parsing test, which the owner ruled out. |
+| FND-013 | fixed | cba94dd: the FR-013-AC-3 trace is removed (tests/it/bound_strategy_generation.rs:1436). |
