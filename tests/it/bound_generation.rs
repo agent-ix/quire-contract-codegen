@@ -233,7 +233,7 @@ fn unsupported_later_clause_fails_whole_batch_with_full_identity() {
 /// FR-001-AC-6
 #[test]
 fn batch_artifact_count_is_preflighted_before_lowering() {
-    let bound = decode(&projection("test/too-many", 1025, false));
+    let bound = decode(&projection("test/too-many", 2049, false));
     assert_eq!(
         generate_bound_oracles(&bound).unwrap_err(),
         BoundGenerationError::ResourceLimitExceeded
