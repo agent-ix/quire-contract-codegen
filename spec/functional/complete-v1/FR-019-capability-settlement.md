@@ -21,7 +21,6 @@ relationships:
 When a backend provider envelope requests claims of this generator, the
 generator shall settle each requested item at exactly one point, a `negotiate_*`
 arm over a closed backend kind, and shall settle no capability anywhere else.
-This is issue #86.
 
 AD-016 places the single negotiation point here so that language admission
 stays language-only and the IR stays target-neutral. That boundary holds only

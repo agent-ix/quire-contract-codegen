@@ -46,7 +46,7 @@ Assert that entirely exercised observations without a native run are still repor
 only, and retain informational references for valid no-executable input. Missing campaign transport
 must never become a passing coverage result. These controls are not implemented.
 
-Once IR #50 supplies the immutable executable population, remove one clause, consequent, evaluation
+Once Contract IR supplies the immutable executable population, remove one clause, consequent, evaluation
 probe, and the entire population independently. Rebind source/maps, requirement revisions and
 campaign independently; every mismatch must prevent coverage discharge. Exercise unavailable producer/evaluator and implication-free positive evaluation
 as different cases. Feed vacuous, unexecuted, partial, failed, aborted and unavailable outcomes

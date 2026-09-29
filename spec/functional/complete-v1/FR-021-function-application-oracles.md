@@ -34,7 +34,7 @@ caller-supplied `Meter` and `ObjectEnvironment`, returning the `Evaluation`'s `O
 unchanged. It never interprets an expression tree itself outside of what it lowers into Rust, and
 never charges a resource independently of the runtime's `function.call` accounting.
 
-This is issue #48, the function-application slice of complete-V1 oracle generation. Its scalar and
+This is the function-application slice of complete-V1 oracle generation. Its scalar and
 composite-equality siblings are [FR-014](./FR-014-exact-scalar-oracles.md) and
 [FR-018](./FR-018-composite-equality-oracles.md).
 
@@ -50,13 +50,13 @@ model/relation family it excludes, naming it by its blocking upstream issue inst
 repeats nor withdraws FR-018's surviving FR-020 reservation, which is FR-018's to keep.
 
 FR-018-AC-7 refuses `call` expressions and function-family nodes as blocked on
-`agent-ix/quire-contract-runtime#34`. Issue #34 is closed, and this requirement is what discharges it for the function family. FR-018's criterion is
+`agent-ix/quire-contract-runtime#34`. This requirement generates the function family. FR-018's criterion is
 neither restated nor weakened here: it governs FR-018's own composite-equality entry point, which
 still admits no `call` node, while the `call` family is admitted only through this requirement's
 separate entry point.
 
-The runtime function-application call surface this requirement generates against
-(`agent-ix/quire-contract-runtime#34`) is `quire-contract-runtime` FR-273.
+The runtime function-application call surface this requirement generates against is
+`quire-contract-runtime` FR-273.
 FR-273's own System Boundary (AD-002) holds here exactly as it does in the runtime: `Body` is a
 host callable, so the runtime is not a second semantic authority, and the callable's own logic is
 this generator's responsibility, produced by lowering — never by hand-writing a body's semantics
@@ -70,11 +70,8 @@ function: an unreachable `check` failure inside a generated oracle has nowhere t
 
 ### Location tagging: static half specified here, dynamic half blocked upstream
 
-`agent-ix/quire-contract-codegen#48`'s GitHub comment thread (2026-09-19, untrusted external
-text like any issue comment, but the underlying technical claim is independently verified below)
-states that generated function bodies must carry `Location` tags because `quire-contract-runtime`
-has no expression tree of its own to derive them from once a body is a host callable, and that
-codegen is "the only place the information exists." Measured directly against Contract Runtime
+Generated function bodies carry `Location` tags because `quire-contract-runtime` has no expression
+tree of its own to derive them from once a body is a host callable. In Contract Runtime
 (`src/exact/expression.rs`):
 
 - `pub type Body = Box<dyn for<'f> Fn(&Frame<'f>, &[Value]) -> Outcome<Value>>` (line 157). This is
@@ -108,9 +105,8 @@ Two scoping notes, because the unqualified claim would be wrong in both directio
   populate the `path` field at all.
 
 So: no generated body, however it is written, can make `Evaluation.location` or `.losses`
-non-empty under Contract Runtime. This is a runtime capability gap — the same shape as
-the now-closed `agent-ix/quire-contract-runtime#34` gap that blocked this whole requirement until
-FR-273 shipped — not something an emitter choice can work around. Populating those two fields
+non-empty under Contract Runtime. This is a runtime capability gap, not something an emitter choice
+can work around. Populating those two fields
 **dynamically, per invocation** is Out of Scope (see below) until the runtime publishes a
 reporting channel a `Body` can reach.
 
@@ -279,24 +275,18 @@ written.
   above, with file:line citations). The gap is structural rather than a matter of `Frame`'s method
   list: `Body`'s own return type is `Outcome<Value>`, so closing it requires the runtime to widen
   either that return type or `Frame`'s surface. This is a runtime capability gap, not an emitter
-  choice; it is the direct analogue of the now-closed `agent-ix/quire-contract-runtime#34` gap and
-  needs the same kind of resolution — a runtime-side ticket for a channel a running `Body` can use
-  to report a `Location`/`LocatedLoss` back into its own `Evaluation`. The runtime's own `Evaluation`
-  doc comment says such a path is "tracked separately from this issue"; a search of
-  `agent-ix/quire-contract-runtime` found no open ticket stating it, so it is recorded here as a
-  finding for the requirement owner to file, not as an already-tracked item.
+  choice.
 - **Standalone expression evaluation** (`CheckedPackage::evaluate` over a `CheckedExpression` not
   bound to a declared function name). This requirement generates oracles for named `call`
   application only; `evaluate`'s different charge-at-root behavior (zero `function.call` events at
   its own root, per `CallPlan::call_events`) is a distinct entry point left to a future requirement.
-- **Counterexample replay** (agent-ix/quire-contract-codegen#50, EXCLUDED this session by standing
-  ruling). This requirement generates the oracle and its static location map; consuming either to
+- **Counterexample replay.** This requirement generates the oracle and its static location map; consuming either to
   explain a falsified proof's counterexample is a different requirement's job, not designed here
   even at a spec level.
-- Model graph, identity and reachability oracles (quire-spec-language#120). This requirement
+- Model graph, identity and reachability oracles. This requirement
   reserves no FR number for them, for the reason given in the Description: FR-018's FR-019
   reservation for exactly this family did not survive.
-- Temporal and protocol oracles (quire-spec-language#121). FR-018 reserved FR-020 for these and that
+- Temporal and protocol oracles. FR-018 reserved FR-020 for these and that
   reservation still stands; this requirement neither renews nor withdraws it, and leaves FR-020 free
   for its owner.
 - Function *declaration* construction from scratch by a caller who supplies no body at all —

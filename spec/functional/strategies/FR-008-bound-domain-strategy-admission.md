@@ -98,10 +98,9 @@ integer declaration ([quire-contract-ir FR-013](ix://agent-ix/quire-contract-ir/
   `UnknownClause`, `UnsupportedClause`, `UnsupportedClauseKind`, `UnsupportedRelation`.
 - Every refusal diagnostic shall carry the full `ClauseRef`.
 - An `UnsupportedClause` refusal shall carry the span the oracle diagnostic carries, as
-  interface-001 `diagnostics.fields` requires it for expression failures after
-  agent-ix/quire-contract-codegen#4.
+  interface-001 `diagnostics.fields` requires it for expression failures.
 - An `UnsupportedRelation` refusal shall carry the exact IR `SourceSpan` of the first offending node
-  in authored preorder, matching the codegen#4 refusal locus rule.
+  in authored preorder, matching the oracle refusal locus rule.
 - `UnknownClause`, `UnsupportedClauseKind`, `EmptyPopulation`, and `UnsupportedCampaignConstraint`
   are not expression failures and shall carry no span.
 - The generator shall report every new refusal as a variant of the existing `StrategyErrorCode` in

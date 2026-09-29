@@ -20,7 +20,7 @@ index, its routed backend and that backend's closed backend kind, together
 with the admitted IR `CheckedPackageV2`, the generator shall run the
 generation arm of each item's backend kind and return that arm's output keyed
 by the item's request index. It shall not settle, select or route a backend
-again. This is Linear IR-293.
+again.
 
 This is the CG generation arm of seam S9 (QSL ADR-012 §5 and §7.2 step 4;
 ADR-011 T-13 driver step 7 and §9 scenario 7). FR-019 is the `negotiate_*`
@@ -131,14 +131,14 @@ already does for the FR-331 envelope.
     `execute_kani_obligation` accepts this `KaniScalarObligationHarness`
     directly (FR-017-AC-11): the driver assembles the request the same way
     for either harness kind, and runs it through the one execution path
-    FR-017 owns (Linear IR-301). The driver
+    FR-017 owns. The driver
     does not write the returned `src/lib.rs` as well: appending the harness to
     it duplicates the `use ... as rt` line and the oracle definitions. The
     `claim-map.json` covers the derivable items only; the in-memory `claim_map`
     is authoritative for the routed group, since it also holds the
     `NoDerivableClaim` claims. `oracle_artifacts` is `Some` even when the Kani
     arm rejected the whole group (`rejected` lists `Kani`, no harness exists),
-    matching `claim_map`. This is Linear IR-300.
+    matching `claim_map`.
 - `KindOutput` has one variant per `BackendKind`. `KindOutput::Kani` carries
   the item's FR-015 `ObligationRecord` and its
   `Option<KaniScalarObligationHarness>`. Every request index inside that
@@ -236,7 +236,7 @@ already does for the FR-331 envelope.
   the Kani generation arm. [FR-014](./FR-014-exact-scalar-oracles.md) derives
   the claim map the Kani arm builds.
 - **Downstream**: [TC-033](../../test/complete-v1/TC-033-routed-generation.md);
-  quire-driver FR-001 step 7 (QSL-1), which calls this entry point with
+  quire-driver FR-001 step 7, which calls this entry point with
   `Driven::routed` converted to `RoutedGenerationItem`s.
 
 ## Out of Scope
@@ -256,26 +256,17 @@ already does for the FR-331 envelope.
 
 ## Open items
 
-1. **Who builds the FR-014 claim map on the driver path.** Closed by Linear
-   IR-294: the Kani arm derives each item from the node's IR-confirmed
-   `operation.identity`, mode, laws and bound (FR-014-AC-18), so the driver
-   passes only the package and the routed items.
-2. **Whether FR-019's Kani arm should read the IR form.** QSL ADR-012 §7.2
+1. **Whether FR-019's Kani arm should read the IR form.** QSL ADR-012 §7.2
    step 3 has `negotiate_*` receive the IR form. FR-019's Kani arm reads only
    extent and advertised modes. So a `supported` item can still be refused at
    lowering, and it surfaces here as an FR-015 record. *Recommendation:* keep
    that for this version and file a separate FR-019 ticket. *Blocks:* nothing
    here. The driver reports both the settlement and the generation record.
-3. **Renaming `negotiate_kani_obligations`.** It settles no capability, but
+2. **Renaming `negotiate_kani_obligations`.** It settles no capability, but
    its `negotiate_` prefix reads like an FR-019 settlement point, and QSL
    ADR-012 §5 cites it as one. *Recommendation:* leave the name in this
    ticket. A rename is churn and needs the owner's go-ahead. *Blocks:*
    nothing.
-4. **Where the driver gets the Kani context values** (subject path and
-   unwind). *Recommendation:* they are driver or command inputs
-   (AGE-394 renders the command).
-   *Blocks:* the QSL-1 step 7 wiring, not this crate.
-5. **Follow-up tickets.** Linear IR-295 tracks FR-019's Kani settlement
-   reading the IR form (open item 2; QSL ADR-012 §7.2 step 3). Linear IR-298
-   (FR-014-AC-20) gives each operand its own bound, so a node over two bounded
-   parameters no longer reports `AmbiguousBound`. *Blocks:* nothing here.
+3. **Where the driver gets the Kani context values** (subject path and
+   unwind). *Recommendation:* they are driver or command inputs.
+   *Blocks:* the quire-driver step 7 wiring, not this crate.

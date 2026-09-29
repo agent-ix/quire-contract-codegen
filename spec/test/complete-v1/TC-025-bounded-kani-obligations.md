@@ -94,5 +94,4 @@ unsatisfiable requires as `cover_unsatisfied`.
   this generator, not an upstream block. A claim this generator lowered but
   whose operation it did not confirm against the node's own catalogued
   identity, mode or law definition is refused as `CallerDeclaredOperation`.
-- Model and graph bounds: refused as blocked until
-  agent-ix/quire-spec-language#120 lands.
+- Model and graph bounds: refused as blocked on `agent-ix/quire-spec-language#120`.

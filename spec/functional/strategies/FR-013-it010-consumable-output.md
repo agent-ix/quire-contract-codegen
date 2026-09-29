@@ -19,10 +19,8 @@ relationships:
 ## Description
 
 The generator shall deliver bound strategy, census, and runner output as typed generated Rust, so a
-downstream crate such as the
-consumer planned in agent-ix/quire-spec-language#84 can place every case's values into its own
-runtime inputs by declaration name and observation. quire-spec-language has no IT-010 specification
-yet, so this requirement references the issue, not a specification ID. The generator shall not
+downstream crate can place every case's values into its own runtime inputs by declaration name and
+observation. The generator shall not
 require any serialized case format or schema owned by this repository for that consumption.
 
 ## Inputs
@@ -70,5 +68,4 @@ require any serialized case format or schema owned by this repository for that c
 
 - **Upstream**: [FR-010](./FR-010-domain-boundary-campaigns.md) and
   [FR-011](./FR-011-numeric-harness-campaigns.md).
-- **Downstream**: the consumer planned in agent-ix/quire-spec-language#84;
-  [TC-022](../../test/strategies/TC-022-it010-consumable-output.md).
+- **Downstream**: [TC-022](../../test/strategies/TC-022-it010-consumable-output.md).
