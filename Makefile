@@ -109,7 +109,7 @@ test: assurance-inputs
 # other module, so the `--ignored` run below still exercises only this one test.
 #
 # The lane also runs the skeleton spine (`skeleton_spine`): one Boolean clause through the real
-# prover, the claimed-module gate, and native replay through QSL. Both filters follow `--`
+# prover and native replay through QSL. Both filters follow `--`
 # because libtest accepts several; cargo's own positional filter takes one.
 .PHONY: kani
 kani:

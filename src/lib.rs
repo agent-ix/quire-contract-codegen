@@ -24,8 +24,6 @@ mod kani_execution;
 mod kani_transcript;
 // IR-211: joins a real Kani witness to the generator's own persisted obligation schema.
 mod kani_witness_join;
-// Implements: FR-023
-mod kani_module_gate;
 // Implements: FR-016
 mod spine_replay;
 // Implements: FR-007
@@ -125,20 +123,16 @@ pub use kani::{
     ProofDependencyState, ProofReadiness, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
 };
 pub use kani_execution::{
-    classify_kani_run, execute_kani_obligation, execute_kani_obligation_with_transcript,
-    file_sha256, kani_launch_command, launch_evidence, run_launcher_with_timeout,
-    KaniExecutableHarness, KaniExecutionEvidence, KaniExecutionRefusal, KaniExecutionRequest,
-    KaniInconclusiveReason, KaniInstallation, KaniPinField, KaniRunOutcome, KaniTool,
-    KaniToolError, KaniToolPins, LaunchOutcome, KANI_EXECUTION_SCHEMA,
+    classify_kani_run, execute_kani_obligation, file_sha256, kani_launch_command, launch_evidence,
+    run_launcher_with_timeout, KaniExecutableHarness, KaniExecutionEvidence, KaniExecutionRefusal,
+    KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniPinField, KaniRunOutcome,
+    KaniTool, KaniToolError, KaniToolPins, LaunchOutcome, KANI_EXECUTION_SCHEMA,
 };
 pub use routed_generation::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
 };
 
-pub use kani_module_gate::{
-    claimed_module_gate, ClaimedModuleReport, ModuleGateFailure, ModuleStatus,
-};
 pub use kani_obligations::{
     negotiate_kani_obligations, DerivedDomain, EmbeddedOracle, InvalidObligationItem,
     KaniObligationError, KaniObligationHarness, KaniObligationIdentity, KaniObligationOutcome,

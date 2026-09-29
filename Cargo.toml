@@ -27,23 +27,17 @@ test = true
 [dependencies]
 quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "48ab5dc29213c3975a5fe8f04ecbb3d1c2b345bb" }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "ed0a04b482216b79d3559a6ac59e6e260c5591cf", features = ["exact"] }
-# qsl-replay is the only QSL crate this repository's src/ calls (QSL arch-lint T12-A); the
-# replay adapter in src/spine_replay.rs goes through its `replay` entry. The rev is whatever
+# qsl-replay is the only QSL crate this repository depends on (QSL arch-lint T12-A); the
+# replay adapter in src/spine_replay.rs goes through its `replay` entry, and the spine test
+# builds its requests from the facade's `call_site` and re-exported types. The rev is whatever
 # QSL main the build should resolve; nothing else reads it.
-qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "20ba521b8767b2faf5fda06ca163b50549a1a51f" }
+qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "1a368fa40412fa6fe475bdb2b294dd61a5498bff" }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"
 sha2 = "=0.10.9"
 syn = { version = "=2.0.119", features = ["full", "visit"] }
 
 [dev-dependencies]
-# Test-only exception to QSL's T12-A, tracked by IR-309 and expiring: the spine test compiles its own QSL source
-# (qsl_replay::spine) to learn the package id and parameter node ids, and builds the request's
-# typed limits and digests. Both dev-dependencies and that use go when qsl-replay re-exports
-# quire_exact::Identifier and ScalarLimits, WireNodeId and SourceIdentity and exposes a compiled
-# unit's package id and parameter node ids. Same QSL rev as qsl-replay.
-qsl-foundation = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "20ba521b8767b2faf5fda06ca163b50549a1a51f" }
-quire-exact = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "20ba521b8767b2faf5fda06ca163b50549a1a51f" }
 jsonschema = { version = "=0.17.1", default-features = false, features = ["draft202012"] }
 proptest = { version = "=1.5.0", default-features = false, features = ["std"] }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "ed0a04b482216b79d3559a6ac59e6e260c5591cf", features = ["proptest", "exact"] }

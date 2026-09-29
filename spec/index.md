@@ -76,7 +76,7 @@ on. `test-matrix.md` maps every criterion to its test case.
 | Shared assurance intake | FR-006 | TC-008 to TC-010, TC-012, TC-013, TC-032 |
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
-| Kani obligations and execution | FR-015 generation, FR-017 pinned execution, FR-023 claimed-module gate, FR-025 subject ABI | TC-025, TC-027, TC-034, TC-036 |
+| Kani obligations and execution | FR-015 generation, FR-017 pinned execution, FR-025 subject ABI | TC-025, TC-027, TC-036 |
 | Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope | TC-026, TC-035 |
 | Capability settlement and routing | FR-019 settlement, FR-022 routed generation | TC-030, TC-033 |
 | Declared API surface | interface-001 | TC-028 |
