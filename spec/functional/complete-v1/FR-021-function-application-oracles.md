@@ -5,7 +5,7 @@ type: FR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/StR-001
     type: satisfies
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/FR-018
     type: depends_on
@@ -34,32 +34,18 @@ caller-supplied `Meter` and `ObjectEnvironment`, returning the `Evaluation`'s `O
 unchanged. It never interprets an expression tree itself outside of what it lowers into Rust, and
 never charges a resource independently of the runtime's `function.call` accounting.
 
-This is issue #48, the function-application slice of complete-V1 oracle generation. Its scalar and
+This is the function-application slice of complete-V1 oracle generation. Its scalar and
 composite-equality siblings are [FR-014](./FR-014-exact-scalar-oracles.md) and
 [FR-018](./FR-018-composite-equality-oracles.md).
 
-This requirement is numbered FR-021 rather than FR-020 because FR-018's Out of Scope section made
-two forward reservations and exactly one of them still holds. It reserved FR-019 for model-graph
-oracles; that reservation did not hold, and the file now at
-`spec/functional/complete-v1/FR-019-capability-settlement.md` is an unrelated, already-shipped
-requirement. It also reserved FR-020 for temporal and protocol oracles; that reservation is still
-live and uncontradicted — FR-020 is unwritten, and `spec/test-matrix.md` records it as such. FR-020
-is therefore left free for its reserved owner, and this requirement takes the next number. Because
-the FR-019 reservation is the one that failed, this requirement predicts no FR number for the
-model/relation family it excludes, naming it by its blocking upstream issue instead; it neither
-repeats nor withdraws FR-018's surviving FR-020 reservation, which is FR-018's to keep.
-
 FR-018-AC-7 refuses `call` expressions and function-family nodes as blocked on
-`agent-ix/quire-contract-runtime#34`. That was correct at FR-018's pinned revision. Issue #34 is now
-closed and this requirement is what discharges it for the function family. FR-018's criterion is
+`agent-ix/quire-contract-runtime#34`. This requirement generates the function family. FR-018's criterion is
 neither restated nor weakened here: it governs FR-018's own composite-equality entry point, which
 still admits no `call` node, while the `call` family is admitted only through this requirement's
 separate entry point.
 
-The runtime function-application call surface this requirement generates against
-(`agent-ix/quire-contract-runtime#34`) is closed by `quire-contract-runtime` FR-273
-(`d97bc0b`, merged as PR #47), pinned in this repository's `Cargo.toml` at `9f311692`
-(agent-ix/quire-contract-codegen re-pin, this requirement's own prerequisite — see Dependencies).
+The runtime function-application call surface this requirement generates against is
+`quire-contract-runtime` FR-273.
 FR-273's own System Boundary (AD-002) holds here exactly as it does in the runtime: `Body` is a
 host callable, so the runtime is not a second semantic authority, and the callable's own logic is
 this generator's responsibility, produced by lowering — never by hand-writing a body's semantics
@@ -73,12 +59,9 @@ function: an unreachable `check` failure inside a generated oracle has nowhere t
 
 ### Location tagging: static half specified here, dynamic half blocked upstream
 
-`agent-ix/quire-contract-codegen#48`'s GitHub comment thread (2026-09-19, untrusted external
-text like any issue comment, but the underlying technical claim is independently verified below)
-states that generated function bodies must carry `Location` tags because `quire-contract-runtime`
-has no expression tree of its own to derive them from once a body is a host callable, and that
-codegen is "the only place the information exists." Measured directly against the pinned runtime
-revision (`9f311692`, `src/exact/expression.rs`):
+Generated function bodies carry `Location` tags because `quire-contract-runtime` has no expression
+tree of its own to derive them from once a body is a host callable. In Contract Runtime
+(`src/exact/expression.rs`):
 
 - `pub type Body = Box<dyn for<'f> Fn(&Frame<'f>, &[Value]) -> Outcome<Value>>` (line 157). This is
   decisive on its own and is the root of the gap: a host body's **return type is `Outcome<Value>`**.
@@ -111,9 +94,8 @@ Two scoping notes, because the unqualified claim would be wrong in both directio
   populate the `path` field at all.
 
 So: no generated body, however it is written, can make `Evaluation.location` or `.losses`
-non-empty under the pinned runtime revision. This is a runtime capability gap — the same shape as
-the now-closed `agent-ix/quire-contract-runtime#34` gap that blocked this whole requirement until
-FR-273 shipped — not something an emitter choice can work around. Populating those two fields
+non-empty under Contract Runtime. This is a runtime capability gap, not something an emitter choice
+can work around. Populating those two fields
 **dynamically, per invocation** is Out of Scope (see below) until the runtime publishes a
 reporting channel a `Body` can reach.
 
@@ -140,7 +122,7 @@ bodies to address that way at all.
   literal/reference shape FR-014 §Inputs already defines.
 - The declaration closure reachable from every function's parameter and result types, in the same
   `composite_type`/`scalar_type`/`bounded_domain` encoding FR-018 §Inputs already defines.
-- The pinned Contract Runtime revision with the `exact` feature.
+- Contract Runtime with the `exact` feature, as this repository's `Cargo.toml` names it.
 
 As in FR-014 and FR-018, the V2 transport carries each function declaration's own operator and
 capability requirements (the `IeeeItemRequirement` and `IntegerDivisionConsumer` lists FR-009's
@@ -149,7 +131,7 @@ come from the request, not from this generator's own inference.
 
 ## Outputs
 
-- A generated crate: `Cargo.toml` (`publish = false`, runtime pinned by revision with the `exact`
+- A generated crate: `Cargo.toml` (`publish = false`, the Contract Runtime dependency this repository's `Cargo.toml` names, with the `exact`
   feature) and `src/lib.rs` holding, per admitted package, its assembled `PackageDeclarations`
   lowering and, per requested `call` item, one oracle function
   `(&CheckedPackage, &str, Vec<Value>, &ObjectEnvironment, &mut Meter) -> Result<Outcome<Value>,
@@ -175,7 +157,7 @@ come from the request, not from this generator's own inference.
   own established node classifiers — scalar per FR-014, composite equality per FR-018, and nested
   `call` per this requirement — assigning each declared function the `Origin::Body { function,
   index }` its position in the assembled `functions: Vec<FunctionDeclaration>` gives it, ordered by
-  the function's declaring node id (digest domain, then digest), the same total order FR-014
+  the function's declaring node id, in node-id order, the same total order FR-014
   already uses.
 - If lowering any declared function's body fails — an unlowerable node, a form none of the three
   classifiers admits, or a nested `call` whose own callee is not among the request's declared
@@ -209,7 +191,7 @@ come from the request, not from this generator's own inference.
   generator shall refuse every copy, matching FR-014/FR-018's duplicate handling.
 - The generator shall order claim-map entries by the same descriptor-key discipline FR-018
   established: the `call` expression node's id, then the applied function's declaring node id, then
-  each argument operand's source node id, every node id compared by digest domain then digest.
+  each argument operand's source node id, every node id compared in node-id order.
 - The generator shall record, in the location map, one entry per runtime call point a lowered body
   reaches (a scalar operator, an equality evaluation, or a nested `Frame::call`), each carrying the
   `Location` that call point's `Origin::Body { function, index }` and child-index path — computed
@@ -234,12 +216,12 @@ come from the request, not from this generator's own inference.
 | FR-021-AC-10 | A function whose declared parameter or result type reaches a `reference` composite form at any depth is refused as blocked on quire-spec-language#120 for every item naming it, emits no code, and admits no charge on any `Meter`. | Test (TC-031) |
 | FR-021-AC-11 | Model and relation nodes are refused as blocked on quire-spec-language#120, and state, temporal and protocol nodes as blocked on quire-spec-language#121, each blocker distinct from the other and neither reported as generated. | Test (TC-031) |
 | FR-021-AC-12 | A declared function whose own body fails to lower — an unlowerable node, a form none of this generator's classifiers admits, or a nested `call` naming a function absent from the request — refuses every item bound to that function with a typed reason, without changing an unrelated package's items. | Test (TC-031) |
-| FR-021-AC-13 | Generated bytes are identical across repeated runs and across permutations of the request order; claim-map entries are ordered by the `call` node id, then the applied function's declaring node id, then each argument operand's source node id, every node id compared by digest domain then digest. | Test (TC-031) |
-| FR-021-AC-14 | The generated crate declares `publish = false`, pins the runtime revision with the `exact` feature, contains no charge amount and no literal `Outcome`/`Value` constant standing in for a runtime result, and compiles. | Test (TC-031) |
+| FR-021-AC-13 | Generated bytes are identical across repeated runs and across permutations of the request order; claim-map entries are ordered by the `call` node id, then the applied function's declaring node id, then each argument operand's source node id, every node id compared in node-id order. | Test (TC-031) |
+| FR-021-AC-14 | The generated crate declares `publish = false`, names the Contract Runtime dependency this repository's `Cargo.toml` names with the `exact` feature, contains no charge amount and no literal `Outcome`/`Value` constant standing in for a runtime result, and compiles. | Test (TC-031) |
 | FR-021-AC-15 | The location map records one entry per runtime call point (scalar operator, equality evaluation or nested `Frame::call`) a generated body reaches, each carrying a `Location{origin, path}` equal, field-for-field, to the value re-derived from the request's own expression tree by walking the same function from its root to that sub-expression's child index — a generation-time structural check against the request, requiring no runtime execution, and the only available check on `path`, which the runtime itself never populates. | Test (TC-031) |
-| FR-021-AC-16 | `Evaluation.location` and `Evaluation.losses`, as returned by every generated oracle's call into `CheckedPackage::call`, are never read, asserted non-empty, or otherwise relied on by the generated crate or its claim map: under the pinned runtime revision they are always `None`/empty regardless of what the applied body computed, so no generated code branches on either field. | Inspection (TC-031) |
+| FR-021-AC-16 | `Evaluation.location` and `Evaluation.losses`, as returned by every generated oracle's call into `CheckedPackage::call`, are never read, asserted non-empty, or otherwise relied on by the generated crate or its claim map: under Contract Runtime they are always `None`/empty regardless of what the applied body computed, so no generated code branches on either field. | Inspection (TC-031) |
 | FR-021-AC-17 | Each location map entry's `origin` field equals the `Origin::Body { function, index }` the runtime itself reports for that function, read from the `CheckRefusal`s `PackageDeclarations::check` returns when the same assembled package is re-submitted with that function's measure undischarged, so the generator's function indexing is confirmed against a runtime-authored value and not only against its own re-derivation. | Test (TC-031) |
-| FR-021-AC-18 | On every vector of the function-application corpus, the generated oracle's outcome, refusal and charge sequence are equal to `quire_spec_language::value::expression::CheckedPackage::call` under the authority revision `quire-contract-runtime` FR-273-AC-5 names (`ea39f91`), this requirement's third agreement leg alongside AC-2's generated and native legs. | Test (TC-031) — 🚧 Planned, pending the `quire-spec-language` re-pin named in Dependencies |
+| FR-021-AC-18 | On every vector of the function-application corpus, the generated oracle's outcome, refusal and charge sequence are equal to `quire_spec_language::value::expression::CheckedPackage::call` this requirement's third agreement leg alongside AC-2's generated and native legs. | Test (TC-031) |
 
 ### Mutations these criteria detect
 
@@ -269,85 +251,29 @@ written.
 
 ## Dependencies
 
-- **Upstream**: [FR-001](../FR-001-deterministic-oracles.md), [FR-014](./FR-014-exact-scalar-oracles.md),
+- **Upstream**: [FR-014](./FR-014-exact-scalar-oracles.md),
   [FR-018](./FR-018-composite-equality-oracles.md), Contract IR FR-036/FR-038 (CheckedPackage V2
   lowering), Contract Runtime FR-273 (function-application call surface).
-- **Prerequisite, satisfied**: this branch's own re-pin of `quire-contract-runtime` from `4e33052`
-  to `9f31169` (`Cargo.toml`, `Cargo.lock`, `RUNTIME_REVISION` in `src/oracle.rs`), which makes the
-  function-application surface this requirement calls (`PackageDeclarations`, `CheckedPackage`,
-  `Frame`, `Evaluation`) visible from this repository for the first time. At `4e33052`, the pinned
-  revision predates `quire-contract-runtime` PR #47 (FR-273, `d97bc0b`) by six commits; no item of
-  this requirement could have been generated against it.
-- **Prerequisite, NOT satisfied — and not for the reason an earlier draft of this requirement
-  gave**: this repository's `quire-spec-language` dev-dependency remains pinned at `21c507e`, while
-  `quire-contract-runtime` FR-273 names `ea39f91` as the authority revision it ports its
-  function-application semantics from (FR-273-AC-5, and FR-273's own Dependencies section). `21c507e`
-  is an ancestor of `ea39f91` by 14 commits.
-
-  An earlier draft inferred from that ancestry that the authority surface is *absent* at `21c507e` —
-  that "AC-2's agreement leg has nothing in `quire_spec_language::value` to call yet." **That
-  inference is false and was measured to be false.** At `21c507e`,
-  `quire_spec_language::value::expression` already publishes `PackageDeclarations`,
-  `PackageDeclarations::check`, `CheckedPackage`, `CheckedPackage::call`, `CheckedPackage::evaluate`,
-  `FunctionDeclaration` and `Evaluation`. Ancestry establishes that a revision is older; it does not
-  establish that a surface is missing, and here the surface is present. This paragraph records the
-  correction so the next reader does not re-derive the wrong conclusion from the same ancestry check.
-
-  The real prerequisite is **authority-revision identity, not surface availability**. Agreement
-  asserted against `21c507e` would be agreement against a different authority revision than the one
-  the runtime claims to implement, and the interval is not inert: across those 14 commits
-  `src/value/expression/` changes by +1718/−56 lines over all eight of its files, including
-  "FR-151: dispatched-call typing, bridge, runtime and termination" and a charge-accounting change.
-  An agreement leg run against `21c507e` could therefore pass while disagreeing with `ea39f91`, which
-  is precisely the divergence AC-18 exists to catch. Re-pinning `quire-spec-language` to `ea39f91`
-  is thus a prerequisite of *implementing* AC-18, not of specifying this requirement, and not of
-  AC-2, whose two legs do not reach the authority at all.
-
-  **Ruling on whether this branch should carry that second re-pin: it should not.** Three reasons,
-  recorded here so the decision is not re-litigated. First, nothing in this repository calls the
-  authority's function-application surface yet — FR-021 is spec-only and no oracle-generation code
-  exists — so the re-pin would change the dependency graph with no consumer. Second, the runtime
-  re-pin this branch does carry was load-bearing for a different reason: `RUNTIME_REVISION` in
-  `src/oracle.rs` is a committed constant that generated crates carry, and it must agree with
-  `Cargo.toml`; `quire-spec-language` is a dev-dependency with no such constant, so no committed
-  artifact is inconsistent while it stays at `21c507e`. Third, moving `quire-spec-language` across
-  +1718 lines of changed expression semantics can break FR-018's existing authority-agreement leg
-  (FR-018-AC-2) and TC-029 with it; that is a change needing its own test run and its own ticket, not
-  a rider on a spec branch.
 - **Downstream**: [TC-031](../../test/complete-v1/TC-031-function-application-oracles.md).
 
 ## Out of Scope
 
 - **Dynamic location and loss reporting.** Making a specific `CheckedPackage::call`/`::evaluate`
   invocation's own `Evaluation.location`/`.losses` non-empty requires a reporting channel on
-  `Frame` that the pinned runtime revision (`9f311692`) does not publish (see "Location tagging"
+  `Frame` that Contract Runtime does not publish (see "Location tagging"
   above, with file:line citations). The gap is structural rather than a matter of `Frame`'s method
   list: `Body`'s own return type is `Outcome<Value>`, so closing it requires the runtime to widen
   either that return type or `Frame`'s surface. This is a runtime capability gap, not an emitter
-  choice; it is the direct analogue of the now-closed `agent-ix/quire-contract-runtime#34` gap and
-  needs the same kind of resolution — a runtime-side ticket for a channel a running `Body` can use
-  to report a `Location`/`LocatedLoss` back into its own `Evaluation`. The runtime's own `Evaluation`
-  doc comment says such a path is "tracked separately from this issue"; a search of
-  `agent-ix/quire-contract-runtime` found no open ticket stating it, so it is recorded here as a
-  finding for the requirement owner to file, not as an already-tracked item.
-- **`quire-spec-language` re-pin.** See Dependencies above: implementing AC-18 needs it, specifying
-  this requirement does not, and AC-2 does not reach the authority at all. Note that the authority
-  surface is already present at the current pin — what the re-pin buys is agreement against the
-  revision FR-273 actually names.
+  choice.
 - **Standalone expression evaluation** (`CheckedPackage::evaluate` over a `CheckedExpression` not
   bound to a declared function name). This requirement generates oracles for named `call`
   application only; `evaluate`'s different charge-at-root behavior (zero `function.call` events at
   its own root, per `CallPlan::call_events`) is a distinct entry point left to a future requirement.
-- **Counterexample replay** (agent-ix/quire-contract-codegen#50, EXCLUDED this session by standing
-  ruling). This requirement generates the oracle and its static location map; consuming either to
+- **Counterexample replay.** This requirement generates the oracle and its static location map; consuming either to
   explain a falsified proof's counterexample is a different requirement's job, not designed here
   even at a spec level.
-- Model graph, identity and reachability oracles (quire-spec-language#120). This requirement
-  reserves no FR number for them, for the reason given in the Description: FR-018's FR-019
-  reservation for exactly this family did not survive.
-- Temporal and protocol oracles (quire-spec-language#121). FR-018 reserved FR-020 for these and that
-  reservation still stands; this requirement neither renews nor withdraws it, and leaves FR-020 free
-  for its owner.
+- Model graph, identity and reachability oracles.
+- Temporal and protocol oracles.
 - Function *declaration* construction from scratch by a caller who supplies no body at all —
   every function this requirement's package assembles must have a lowerable body in the request;
   declaring an uninterpreted function signature with no callable body is not a complete-V1 need this

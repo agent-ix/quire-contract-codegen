@@ -74,7 +74,7 @@ mod tests {
         (profile, dispatch, input)
     }
 
-    /// Trace: FR-007-AC-1, FR-007-AC-3, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_collection_order_duplicates_and_bounds_remain_exact() {
         let (profile, dispatch, input) = fixture();

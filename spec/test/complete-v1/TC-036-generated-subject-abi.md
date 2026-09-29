@@ -27,6 +27,10 @@ yield no harness.
 5. Request a frame obligation.
 6. Request an obligation whose function has a parameter no binding covers, and one whose binding
    names no parameter.
+7. Request an obligation over an argument of each family that has no row in FR-025's Rust-type
+   table.
+8. Generate a harness over a state-reading obligation and read the subject call and the pre-state
+   copy with `syn`.
 
 ## Expected Results
 
@@ -39,10 +43,16 @@ yield no harness.
 5. The frame obligation is accounted `unsupported` with a typed reason, and no harness is emitted
    (FR-025-AC-5).
 6. Both requests are refused with a typed reason and no harness (FR-025-AC-6).
+7. Each is accounted `unsupported` with a typed reason naming its family, and no harness is emitted
+   (FR-025-AC-7).
+8. Each state value is passed as `&mut` to a harness-owned value, a copy is taken before the call,
+   the pre-state assertion reads the copy and the post-state assertion reads the value after the
+   call (FR-025-AC-8).
 
 ## Status
 
-Partial. Step 1's order equality is implemented for the V1 precondition, postcondition and
-invariant harnesses (`tests/it/kani_argument_order.rs`, traced to FR-016-AC-8). The ascending check
-and the scalar-claim harness are not. Steps 2 and 6 are planned, because `ObligationBinding` carries
-no parameter node id at this revision. Steps 3 to 5 are planned.
+Planned. Step 1's order equality is asserted only for the precondition, postcondition and invariant
+harnesses of the V1 `BoundClause` arm (`tests/it/kani_argument_order.rs`, traced to
+FR-016-AC-8); the ascending check and the scalar-claim harness are not. Steps 2 and 6 are planned,
+because `ObligationBinding` carries no parameter node id at this revision. Steps 3 to 5, 7 and 8 are
+planned.

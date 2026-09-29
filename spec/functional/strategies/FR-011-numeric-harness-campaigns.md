@@ -95,7 +95,7 @@ until specified.
 - When the report snapshot is `at_limit` (quire-contract-runtime FR-004), `discard_rate()` and
   `rejection_rate()` shall return `None`, because a saturated counter is not an exact count.
 - The generator shall emit the rate accessors on the bound-strategy summary type only, leaving the
-  PR #22 harness summary unchanged.
+  harness summary unchanged.
 - The runner shall apply the existing floor, ceiling, and `Exhausted` conclusions of
   [FR-002](../FR-002-tristate-proptest.md) to the complete supplied report unchanged.
 - When proptest reports a failing case, the runner shall conclude `ConformanceMismatch` after the

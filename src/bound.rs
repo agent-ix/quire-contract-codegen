@@ -99,7 +99,6 @@ pub enum BoundGenerationError {
 /// This is an in-process generation operation, not a CLI or native campaign run. It does not infer
 /// pre/post pairings, omit unsupported clauses, publish files, or compute coverage sufficiency.
 /// Trace: TC-001, TC-002
-// Implements: FR-001
 pub fn generate_bound_oracles(
     package: &BoundPackage,
 ) -> Result<BoundOracleGeneration, BoundGenerationError> {

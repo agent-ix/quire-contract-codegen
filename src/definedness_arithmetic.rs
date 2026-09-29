@@ -32,7 +32,7 @@ mod tests {
 
     use super::{prepare_checked_arithmetic, CheckedArithmeticRequest};
 
-    /// Trace: FR-007-AC-1, FR-007-AC-3, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_division_by_zero_remains_a_typed_refusal() {
         let selection = ProfileSelection {
@@ -92,7 +92,7 @@ mod tests {
         assert_eq!(outcome.boolean_claim(), None);
     }
 
-    /// Trace: FR-007-AC-1, FR-007-AC-2, FR-007-AC-3, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_checked_domain_admits_exact_values_and_refuses_outside_results() {
         let selection = ProfileSelection {

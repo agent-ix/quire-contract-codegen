@@ -113,8 +113,6 @@ fn state_integer_projection() -> Value {
 }
 
 /// TC-001
-/// FR-001-AC-6
-/// FR-001-AC-7
 #[test]
 fn complete_public_binding_preserves_identity_population_and_derivation() {
     let value = projection("test/bound", 3, true);
@@ -149,8 +147,6 @@ fn complete_public_binding_preserves_identity_population_and_derivation() {
 }
 
 /// TC-002
-/// FR-001-AC-2
-/// FR-001-AC-8
 #[test]
 fn public_bound_state_scalar_projection_generates_typed_observation_parameters() {
     let value = state_integer_projection();
@@ -165,7 +161,6 @@ fn public_bound_state_scalar_projection_generates_typed_observation_parameters()
 }
 
 /// TC-001
-/// FR-001-AC-6
 #[test]
 fn empty_and_informational_only_are_explicit_non_artifact_results() {
     for info in [false, true] {
@@ -184,7 +179,6 @@ fn empty_and_informational_only_are_explicit_non_artifact_results() {
 }
 
 /// TC-002
-/// FR-001-AC-6
 #[test]
 fn unsupported_later_clause_fails_whole_batch_with_full_identity() {
     let mut value = projection("test/unsupported", 3, true);
@@ -209,7 +203,6 @@ fn unsupported_later_clause_fails_whole_batch_with_full_identity() {
 }
 
 /// TC-002
-/// FR-001-AC-6
 #[test]
 fn batch_artifact_count_is_preflighted_before_lowering() {
     let bound = decode(&projection("test/too-many", 2049, false));
@@ -220,7 +213,6 @@ fn batch_artifact_count_is_preflighted_before_lowering() {
 }
 
 /// TC-001
-/// FR-001-AC-6
 #[test]
 fn actual_bound_outputs_publish_then_compile_and_execute_against_the_runtime() {
     use std::{

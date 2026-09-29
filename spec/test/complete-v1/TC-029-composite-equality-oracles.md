@@ -43,9 +43,9 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
 2. Generate twice and with a permuted request that includes both descriptors of
    step 7 over one node id; compare bytes with each other, and inspect claim-map ordering by the descriptor key — expression node
    id, operator rank, then each operand's source-type and conversion-target node
-   ids, every node id compared by digest domain then digest; the expression node
+   ids, every node id compared in node-id order; the expression node
    id alone ties those two entries — reconstructed declaration keys against
-   `NodeKey::from_hex` of the V2 digests, and `caller_declared` provenance.
+   `NodeKey::from_hex` of the V2 node ids, and `caller_declared` provenance.
    Assert each entry's recorded descriptor is equal to the one the request
    supplied — operator, both operand source types, both conversion targets — and
    its recorded `EqualitySchedule` equal to `CheckedEquality::schedule()` of the
@@ -86,7 +86,7 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    `check_type` these vectors complete with a Boolean.
 7. Request one node twice in one request under descriptors differing only in
    `EqualityOperator`; confirm both generate under distinct readable symbols,
-   each built from its operation name and a positional counter, that both are
+   each built from its own operator's stem, that both are
    marked `caller_declared`, and
    that their outcomes are complementary on a vector whose operands differ. This
    is not the duplicate case of step 1: a duplicate is one node id under one

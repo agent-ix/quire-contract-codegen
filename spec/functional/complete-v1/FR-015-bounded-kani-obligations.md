@@ -19,29 +19,30 @@ relationships:
 When a caller selects Kani generation for complete-V1 contracts whose scalar
 oracles FR-014 generated, the code generator shall emit one bounded Kani
 obligation per precondition, postcondition, invariant and frame condition,
-each pinned to its backend identity and model-domain bounds. This is issue
-#49.
+each bounded by its model-domain bounds. It is the Kani
+backend's one generator
+([ADR-001](../../decisions/ADR-001-overlapping-generators-and-input-models.md)),
+and every item it lowers is a claim over an admitted `quire.checked-package/v2`
+package.
 
 ## Inputs
 
 - The FR-014 oracle crate and claim map for the contract's expressions.
-- Contract IR's lowered claims and bounds for each obligation. Bounds come
-  only from the lowered IR `bounded_domain` nodes, never from a caller
-  descriptor.
-- The pins: the Kani launcher and driver executable digests, the Kani version,
-  the CBMC version, solver and options, the unwind bound, the adapter profile,
-  the FR-014 oracle crate digest, and the Contract Runtime revision.
+- Contract IR's lowered claims and bounds for each obligation, read from an
+  admitted `CheckedPackageV2`. Bounds come only from the lowered IR
+  `bounded_domain` nodes, never from a caller descriptor, and are tightened
+  only as [FR-028](./FR-028-bounded-proof-ceilings.md) records.
+- An optional declared proof-dependency census per obligation.
 - A complete request. A postcondition or invariant is proved under the
   preconditions of its own anchor operation, so the request must name every
   package precondition sharing that anchor as an item of the same request. The
-  caller does not choose a solver on this path; FR-003's caller-supplied solver
-  is not carried into separate-obligation lowering.
+  caller does not choose a solver.
 - The loop unwind bound, which is a request-level value in `1..=1024`.
 
 ## Outputs
 
-- One Kani harness per obligation kind and claim, with its bounds and every
-  pin recorded in its identity.
+- One Kani harness per obligation kind and claim, with its bounds, solver,
+  option vector and unwind bound recorded in its identity.
 - Exactly one non-vacuity cover per harness, which is what distinguishes a
   proof from a harness whose assumptions are jointly unsatisfiable.
 - For a postcondition or invariant, the assumed preconditions recorded in the
@@ -127,13 +128,37 @@ each pinned to its backend identity and model-domain bounds. This is issue
   `result_bound_unreachable` naming the result range and the reachable result
   range, and emit no harness, since no assumed input could meet its
   non-vacuity cover.
+- When a transition obligation reads state, the generator shall emit a harness
+  that asserts the obligation over the pre-state and the post-state the
+  subject ABI binds ([FR-025](./FR-025-generated-subject-abi.md) owns how state
+  reaches the subject).
+- When a claim is a Boolean connective or a bounded-integer comparison, the
+  generator shall embed its FR-014 oracle byte-identical to the oracle crate's
+  function, so that the harness decides the same verdict the oracle decides.
+- If a precondition reads a post-state value, then the generator shall refuse
+  the obligation with a typed reason naming the node and emit no harness.
+- When a request declares a proof-dependency census for an obligation, the
+  generator shall admit only `Required` dependencies, fold the census into the
+  harness identity, and record generation-time readiness `ready` when every
+  dependency passed and `incomplete` while any is missing or failed, with proof
+  execution recorded `not_run`.
+- If a declared census has an empty or duplicate dependency identity, an
+  inconsistent kind, state and path combination, or a kind other than
+  `Required`, then the generator shall refuse the obligation as a typed invalid
+  input and emit no harness.
+- The generator shall give every requested item exactly one
+  `ObligationDisposition`: `supported`, `requires-bound`, `unsupported` or
+  `invalid-request`, the FR-331 disposition set.
+- If an item's disposition is `requires-bound`, `unsupported` or
+  `invalid-request`, then the generator shall keep its source identity and typed
+  reason and emit no harness and no assumption for it.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-015-AC-1 | Pre, post, invariant and frame obligations of one contract produce separate harnesses with distinct identities. | Test (TC-025) |
-| FR-015-AC-2 | Every harness identity records its model-domain bounds, taken only from IR `bounded_domain` nodes, and the Kani launcher and driver executable digests, Kani version, CBMC version, solver and options, unwind bound, adapter profile, oracle crate digest and runtime revision. | Test (TC-025) |
+| FR-015-AC-2 | Every harness identity records its model-domain bounds, taken only from IR `bounded_domain` nodes, and its solver and options and unwind bound. | Test (TC-025) |
 | FR-015-AC-3 | An unbounded or non-finite obligation is refused with a typed reason and no harness. | Test (TC-025) |
 | FR-015-AC-4 | No harness assumption excludes an undefined, refused or incomplete runtime outcome. | Test (TC-025) |
 | FR-015-AC-5 | An obligation whose bounds are unsatisfiable is refused with a typed reason and no harness. | Test (TC-025) |
@@ -141,7 +166,7 @@ each pinned to its backend identity and model-domain bounds. This is issue
 | FR-015-AC-7 | Every generated harness contains exactly one non-vacuity cover; a precondition harness covers that the precondition holds within the IR bounds, and a contract harness's cover stands after the contract call, so a run that satisfies every check without satisfying the cover is not a proof. | Test (TC-025) |
 | FR-015-AC-8 | A postcondition or invariant harness emits every package precondition sharing its anchor operation as a `requires` on its generated contract and records each in its identity's embedded oracles; it embeds no other obligation's oracle; and an obligation whose sibling precondition is not a supported item of the same request is refused with a typed reason naming that precondition and no harness. | Test (TC-025) |
 | FR-015-AC-9 | Every harness identity records solver `cadical` and the complete ordered option vector — function contracts, concrete playback, the exact fully qualified harness, `--exact`, the explicit unwind, the explicit solver, `--output-format regular`, and `--concrete-playback print` — and no option enabling stubbing is emitted. | Test (TC-025) |
-| FR-015-AC-10 | Regeneration from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes the harness identity digest. | Test (TC-025) |
+| FR-015-AC-10 | Regeneration from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes the harness identity. | Test (TC-025) |
 | FR-015-AC-11 | Every symbolic argument carries an inclusive assumption equal to its IR `bounded_domain` (a literal operand's, to its own value: FR-015-AC-16), and a bounded-integer post-state result is required to lie in the same domain; no generated source carries a `#[kani::unwind]`. | Test (TC-025) |
 | FR-015-AC-12 | A request naming no items, more than 256 items, an unparsable subject path, or an unwind bound outside `1..=1024` is refused whole, with no item accounted and no harness exposed. | Test (TC-025) |
 | FR-015-AC-13 | An otherwise-supported obligation whose generated harness source exceeds the bounded-resource ceiling is refused with a distinct resource-limit reason naming the generated size, and one that fits the ceiling but fails to parse as Rust is refused with a distinct syntax reason naming the parse error; neither is reported as the internal-invariant render-assembly fallback. | Test (TC-025) |
@@ -150,10 +175,18 @@ each pinned to its backend identity and model-domain bounds. This is issue
 | FR-015-AC-16 | A scalar harness constrains a literal operand, inline or a reference to a `value` node whose body is a literal, to exactly its own value: `x + 1` over `x: Int[0, 9]` into `Int[0, 10]` has arguments `[0, 9]` and `[1, 1]`. | Test (TC-033) |
 | FR-015-AC-17 | A scalar claim whose literal operand does not fit `i64` (`x + 10^23`) is `unsupported` as `domain_not_representable_in_i64` naming the literal as both endpoints, with no harness. | Test (TC-033) |
 | FR-015-AC-18 | A scalar claim whose operation over its operand ranges yields no result inside the result range (`x + 100` over `x: Int[0, 9]` into `Int[0, 10]`, reachable `[100, 109]`) is `unsupported` as `result_bound_unreachable` naming both ranges, with no harness. | Test (TC-033) |
+| FR-015-AC-19 | A zero-input transition over one bounded-integer state value verifies for an identity subject and is falsified with a concrete counterexample for a subject that changes the value. | Test (TC-025) |
+| FR-015-AC-20 | A harness for a Boolean-connective or bounded-integer comparison claim (`and`, `or`, `not`, `implies`, `eq`, `ne` and the six integer comparisons) embeds its FR-014 oracle byte-identical to the oracle crate's function. | Test (TC-025) |
+| FR-015-AC-21 | A precondition that reads a post-state value is refused with a typed reason naming the node, and no harness is emitted. | Test (TC-025) |
+| FR-015-AC-22 | A declared proof-dependency census with an empty or duplicate identity, an inconsistent kind, state and path combination, or a non-`Required` kind is refused as a typed invalid input with no harness. | Test (TC-025) |
+| FR-015-AC-23 | Every requested item receives exactly one `ObligationDisposition` (`supported`, `requires-bound`, `unsupported` or `invalid-request`), and an item that is not `supported` keeps its source identity and typed reason with no harness and no assumption emitted for it. | Test (TC-025) |
+| FR-015-AC-24 | A falsifying in-domain assignment of a plain bounded-integer comparison claim is reported through Kani's concrete playback. | Test (TC-025) |
+| FR-015-AC-25 | A valid declared census is folded into the harness identity, readiness is `ready` only when every dependency passed and `incomplete` while any is missing or failed, and proof execution is recorded `not_run`. | Test (TC-025) |
 
 ## Dependencies
 
-- **Upstream**: [FR-014](./FR-014-exact-scalar-oracles.md), [FR-003](../FR-003-kani-lowering.md).
+- **Upstream**: [FR-014](./FR-014-exact-scalar-oracles.md),
+  [FR-025](./FR-025-generated-subject-abi.md), [FR-028](./FR-028-bounded-proof-ceilings.md).
 - **Downstream**: [TC-025](../../test/complete-v1/TC-025-bounded-kani-obligations.md),
   [FR-016](./FR-016-witness-native-replay.md),
   [FR-022](./FR-022-routed-generation.md), whose Kani generation arm calls this generator.

@@ -5,7 +5,7 @@ type: FR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-002
     type: depends_on
-  - target: ix://agent-ix/quire-contract-codegen/FR-003
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/FR-004
     type: depends_on
@@ -38,7 +38,6 @@ atomically and shall retain differential and cross-backend semantic-parity resul
   before any staging or destination I/O begins.
 - Supported platforms shall produce reproducible generated files.
 - Every differential discrepancy shall become a fixture or documented semantic difference.
-- The Assurance Argument shall cite completed conformance evidence without closing the human claim.
 
 ## Acceptance Criteria
 
@@ -52,4 +51,4 @@ atomically and shall retain differential and cross-backend semantic-parity resul
 
 ## Dependencies
 
-- **Upstream**: [FR-002](./FR-002-tristate-proptest.md), [FR-003](./FR-003-kani-lowering.md), and [FR-004](./FR-004-vacuity-evidence.md).
+- **Upstream**: [FR-002](./FR-002-tristate-proptest.md), [FR-015](./complete-v1/FR-015-bounded-kani-obligations.md), and [FR-004](./FR-004-vacuity-evidence.md).

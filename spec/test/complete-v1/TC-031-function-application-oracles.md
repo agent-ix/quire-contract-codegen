@@ -17,12 +17,10 @@ declared function's body, admit the assembled package, apply the requested funct
 runtime's FR-273 call surface with agreeing outcomes and charges, refuse every non-generated item
 with its own typed reason, are byte-deterministic, and carry a static location map that round-trips
 to the request's own expression trees without executing anything. It also verifies that no
-generated code depends on `Evaluation.location`/`.losses` becoming non-empty, since the runtime
-never populates either field.
+generated code depends on `Evaluation.location`/`.losses` becoming non-empty, since Contract
+Runtime never populates either field.
 
-The authority-agreement leg (FR-021-AC-18) is 🚧 Planned: it compares against
-`quire_spec_language::value::expression::CheckedPackage::call` at the authority revision
-`quire-contract-runtime` FR-273-AC-5 names (see FR-021 Dependencies).
+The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
 
 ## Test Procedure
 
@@ -37,8 +35,8 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned: it compares against
    the same binding; (f) one or more `call` nodes over model, relation, state, temporal and protocol
    forms; and (g) a nested-`call` chain deep enough to reach `MAX_CALL_DEPTH` when executed.
 2. Generate twice and with a permuted request; compare bytes with each other, and inspect claim-map ordering by the `call` node id, then the applied function's
-   declaring node id, then each argument operand's source node id, every node id compared by digest
-   domain then digest.
+   declaring node id, then each argument operand's source node id, every node id compared in
+   node-id order.
 3. Inspect each refusal: its typed cause, that the item's symbols are absent from the generated
    source, that its siblings bound to an admitted package are unchanged, that the reference-typed
    function (b) is refused as blocked on quire-spec-language#120, that the model and relation nodes of
@@ -61,7 +59,7 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned: it compares against
    leg follow the mutation and the comparison vacuous. Assert each claim-map entry's recorded
    `Origin::Body { function, index }` equals the request's own declared-function ordering.
    **Agreement against `quire_spec_language::value::expression::CheckedPackage::call`** (FR-021-AC-18)
-   is 🚧 Planned against the authority revision FR-273-AC-5 names (FR-021 Dependencies).
+   is 🚧 Planned.
 5. Re-execute the corpus with a denial injected at the `function.call` charge point; confirm
    `Outcome::Incomplete` naming that point and that the denied charge was not applied — every
    counter equal to those of the same run stopped immediately before that point.

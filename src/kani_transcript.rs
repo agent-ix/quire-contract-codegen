@@ -261,7 +261,7 @@ mod tests {
     use super::*;
     use crate::kani_execution::{classify_kani_run, KaniInconclusiveReason, KaniRunOutcome};
 
-    /// Trace: FR-017-AC-10, TC-027
+    /// Trace: FR-017-AC-12, TC-027
     #[test]
     fn tc_027_a_typed_transcript_reads_each_prose_element() {
         let text = "SUMMARY:\n ** 1 of 39 failed (38 undetermined)\n\n ** 0 of 1 cover properties satisfied (1 unreachable)\n\nFailed Checks: unwinding assertion loop 0\n File: \"a.rs\"\nFailed Checks: assertion failed: x < 5\n\nVERIFICATION:- FAILED\nConcrete playback unit test for `h`:\n```\n/// Check for `cover`: \"c\"\nfn t() { kani::concrete_playback_run(v, h); }\n```\nConcrete playback unit test for `h`:\n```\n/// Check for `assertion`: \"a\"\nfn u() { kani::concrete_playback_run(v, h); }\n```\n";
@@ -306,7 +306,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-017-AC-10, TC-027
+    /// Trace: FR-017-AC-12, TC-027
     #[test]
     fn tc_027_banners_and_absent_prose_are_distinguished() {
         assert_eq!(KaniTranscript::parse("").banner, KaniBanner::Absent);
@@ -325,7 +325,7 @@ mod tests {
         assert!(empty.playbacks.is_empty());
     }
 
-    /// Trace: FR-017-AC-10, TC-027
+    /// Trace: FR-017-AC-12, TC-027
     #[test]
     fn tc_027_a_cover_line_without_the_counts_shape_is_malformed_not_absent() {
         for text in [
@@ -356,7 +356,7 @@ mod tests {
     /// An unterminated playback fence ends the scan and keeps what was read before it; a block
     /// that never calls the playback entry point is not a playback.
     ///
-    /// Trace: FR-017-AC-5, FR-017-AC-10, TC-027
+    /// Trace: FR-017-AC-5, FR-017-AC-12, TC-027
     #[test]
     fn tc_027_playback_scanning_stops_at_an_unterminated_fence() {
         let text = "Concrete playback unit test for `h`:\n```\nfn a() { kani::concrete_playback_run(v, h); }\n```\nConcrete playback unit test for `h`:\n```\nfn b() {}\n```\nConcrete playback unit test for `h`:\n```\nfn c() { kani::concrete_playback_run(v, h); }";
@@ -409,7 +409,7 @@ mod tests {
         transcript.playbacks.iter().map(|p| p.target).collect()
     }
 
-    /// Trace: FR-017-AC-10, TC-027
+    /// Trace: FR-017-AC-12, TC-027
     #[test]
     fn tc_027_real_kani_0_67_0_success_with_a_satisfied_cover_is_verified() {
         let capture = capture!("verified-satisfied-cover");
@@ -436,7 +436,7 @@ mod tests {
         assert_eq!(classified(&capture), KaniRunOutcome::Verified);
     }
 
-    /// Trace: FR-017-AC-5, FR-017-AC-10, TC-027
+    /// Trace: FR-017-AC-5, FR-017-AC-12, TC-027
     #[test]
     fn tc_027_real_kani_0_67_0_failure_carries_the_assertion_playback_not_the_cover_one() {
         let capture = capture!("falsified-with-playback");
@@ -464,7 +464,7 @@ mod tests {
         ));
     }
 
-    /// Trace: FR-017-AC-5, FR-017-AC-10, TC-027
+    /// Trace: FR-017-AC-5, FR-017-AC-12, TC-027
     #[test]
     fn tc_027_real_kani_0_67_0_unwinding_failure_is_inconclusive_not_falsified() {
         let capture = capture!("unwind-exhausted");
@@ -494,7 +494,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-017-AC-10, TC-027
+    /// Trace: FR-017-AC-12, TC-027
     #[test]
     fn tc_027_real_kani_0_67_0_unreachable_cover_is_cover_unsatisfied() {
         let capture = capture!("vacuous-cover");
@@ -526,7 +526,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-017-AC-10, TC-027
+    /// Trace: FR-017-AC-12, TC-027
     #[test]
     fn tc_027_real_kani_0_67_0_partly_satisfied_covers_are_cover_unsatisfied() {
         let capture = capture!("partial-cover");
@@ -549,7 +549,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-017-AC-10, TC-027
+    /// Trace: FR-017-AC-12, TC-027
     #[test]
     fn tc_027_real_kani_0_67_0_success_without_a_cover_summary_is_inconclusive() {
         let capture = capture!("no-cover");

@@ -9,12 +9,8 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/FR-011
     type: depends_on
-  - target: ix://agent-ix/quire-contract-codegen/NFR-002
-    type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
-  - target: ix://agent-ix/quire-contract-ir/FR-023
-    type: depends_on
   - target: ix://agent-ix/quire-spec-language/FR-034
     type: references
 ---
@@ -23,10 +19,8 @@ relationships:
 ## Description
 
 The generator shall deliver bound strategy, census, and runner output as typed generated Rust, so a
-downstream crate such as the
-consumer planned in agent-ix/quire-spec-language#84 can place every case's values into its own
-runtime inputs by declaration name and observation. quire-spec-language has no IT-010 specification
-yet, so this requirement references the issue, not a specification ID. The generator shall not
+downstream crate can place every case's values into its own runtime inputs by declaration name and
+observation. The generator shall not
 require any serialized case format or schema owned by this repository for that consumption.
 
 ## Inputs
@@ -53,9 +47,6 @@ require any serialized case format or schema owned by this repository for that c
   read, so a consumer needs no mapping table of its own.
 - The generator shall take field identifiers from bound oracle generation's dependency parameter
   names.
-- If bound oracle generation reports its batch-level `NameCollision` error for the clause, then the
-  generator shall refuse with `UnsupportedClause` carrying that error's full `ClauseRef` and its
-  `invalid-input` terminal state.
 - Generated output shall depend only on `proptest`, `quire-contract-runtime`, and `core`/`std`.
 - Generated output shall not depend on quire-spec-language, which depends on this crate.
 - The generator shall not emit a JSON, YAML, or other serialized case, census, or summary format.
@@ -75,8 +66,6 @@ require any serialized case format or schema owned by this repository for that c
 
 ## Dependencies
 
-- **Upstream**: [FR-010](./FR-010-domain-boundary-campaigns.md),
-  [FR-011](./FR-011-numeric-harness-campaigns.md),
-  [NFR-002](../../nonfunctional/NFR-002-provenance-boundary.md).
-- **Downstream**: the consumer planned in agent-ix/quire-spec-language#84;
-  [TC-022](../../test/strategies/TC-022-it010-consumable-output.md).
+- **Upstream**: [FR-010](./FR-010-domain-boundary-campaigns.md) and
+  [FR-011](./FR-011-numeric-harness-campaigns.md).
+- **Downstream**: [TC-022](../../test/strategies/TC-022-it010-consumable-output.md).

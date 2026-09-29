@@ -311,7 +311,6 @@ struct KaniSource<'a> {
 }
 
 /// Generates one bounded Kani contract/proof bundle or structured diagnostics with no partial output.
-// Implements: FR-003
 pub fn generate_kani_bundle(
     request: &KaniRequest<'_>,
 ) -> Result<KaniArtifactBundle, Vec<KaniDiagnostic>> {
@@ -481,8 +480,8 @@ fn validate_request(request: &KaniRequest<'_>) -> Result<(), Vec<KaniDiagnostic>
 /// against), and its kind/state/path combination is one of the three closed shapes (`Required`,
 /// `Assumed`, `Stubbed`).
 ///
-/// Shared by [`generate_kani_bundle`]'s FR-003 request validation and the bounded-Kani corpus's
-/// FR-007 declared-census validation (ir#80), so there is exactly one definition of what a valid
+/// Shared by [`generate_kani_bundle`]'s request validation and the bounded-Kani corpus's
+/// declared-census validation, so there is exactly one definition of what a valid
 /// proof-dependency census looks like rather than two that can drift apart.
 pub(crate) fn validate_dependencies(
     dependencies: &[ProofDependencyRequest<'_>],

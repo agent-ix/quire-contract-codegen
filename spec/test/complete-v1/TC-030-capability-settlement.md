@@ -20,7 +20,7 @@ own row, and that only an item settled `supported` routes a backend.
 
 Settle envelopes whose items exercise each rule in FR-290's stated order: an
 absent kind; an unknown kind; an absent extent classification; an unknown
-backend; a candidate absent from the manifest; a candidate not advertising the
+backend; a candidate absent from the registered descriptors; a candidate not advertising the
 item's kind; an empty candidate set; two candidates with no named backend; and
 exactly one candidate under each row of the advertised-mode table, including an
 unbounded extent against a `bounded`-only advertisement both with and without a

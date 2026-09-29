@@ -33,26 +33,22 @@ identity. Use the quire-contract-runtime
 An evaluated always-false implication is vacuous; a never-evaluated clause is unexecuted; a mixed
 multi-implication clause is partially exercised; and only complete consequent observation is
 exercised. An implication-free clause is never labeled vacuous. Accepted, rejected, failed, and
-discarded counts plus test outcome remain unchanged in every report. Each valid report contains its
-schema, requirement, and revision identity.
+discarded counts plus test outcome remain unchanged in every report.
 Every malformed or mismatched input retains a stable non-success diagnostic without inventing a
 measured-zero observation or passed coverage result. The primitive fixture emits no report and makes
 no native campaign binding claim.
 
 ## Remaining aggregate controls
 
-REV-017 proposes a first complete bound-observation slice with no run qualification. Bank
-complete-package native controls through `generate_bound_oracles` and independently corrupt
+Bank complete-package native controls through `generate_bound_oracles` and independently corrupt
 whole-population, source/map, full package identity and typed implication census bindings.
 Assert that entirely exercised observations without a native run are still reported as observations
 only, and retain informational references for valid no-executable input. Missing campaign transport
-must never become a passing coverage result. These controls are proposed,
-not implemented or retained native-run evidence in the current candidate.
+must never become a passing coverage result. These controls are not implemented.
 
-Once IR #50 supplies the immutable executable population, remove one clause, consequent, evaluation
-probe, and the entire population independently. Rebind source/maps, requirement revisions, binary,
-profiles, toolchain, target, campaign and candidate independently; every mismatch must prevent
-coverage discharge. Exercise unavailable producer/evaluator and implication-free positive evaluation
+Once Contract IR supplies the immutable executable population, remove one clause, consequent, evaluation
+probe, and the entire population independently. Rebind source/maps, requirement revisions and
+campaign independently; every mismatch must prevent coverage discharge. Exercise unavailable producer/evaluator and implication-free positive evaluation
 as different cases. Feed vacuous, unexecuted, partial, failed, aborted and unavailable outcomes
 through the consuming obligation gate: each must deny success even if its diagnostic report can be
 serialized. Check accepted/rejected/discarded accounting independently and reject passed execution

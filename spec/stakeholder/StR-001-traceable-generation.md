@@ -3,17 +3,15 @@ id: StR-001
 title: "Traceable multi-backend contract generation"
 type: StR
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
     type: satisfied_by
   - target: ix://agent-ix/quire-contract-codegen/FR-002
     type: satisfied_by
-  - target: ix://agent-ix/quire-contract-codegen/FR-003
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: satisfied_by
   - target: ix://agent-ix/quire-contract-codegen/FR-004
     type: satisfied_by
   - target: ix://agent-ix/quire-contract-codegen/FR-005
-    type: satisfied_by
-  - target: ix://agent-ix/quire-contract-codegen/FR-007
     type: satisfied_by
   - target: ix://agent-ix/quire-contract-codegen/FR-008
     type: satisfied_by
@@ -26,10 +24,6 @@ relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-012
     type: satisfied_by
   - target: ix://agent-ix/quire-contract-codegen/FR-013
-    type: satisfied_by
-  - target: ix://agent-ix/quire-contract-codegen/FR-014
-    type: satisfied_by
-  - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: satisfied_by
   - target: ix://agent-ix/quire-contract-codegen/FR-016
     type: satisfied_by

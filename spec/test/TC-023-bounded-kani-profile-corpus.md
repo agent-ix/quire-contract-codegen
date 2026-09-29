@@ -3,7 +3,7 @@ id: TC-023
 title: "Verify bounded Kani profile corpus parity"
 type: TC
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-007
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: verifies
 ---
 # TC-023: Verify bounded Kani profile corpus parity

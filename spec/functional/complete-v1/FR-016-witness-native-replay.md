@@ -43,8 +43,8 @@ failure is reported.
   each witness value into its declared complete-V1 scalar type within the
   decode size limit.
 - The generator shall read the concrete values of a Kani playback only
-  through the Kani adapter's transcript module, `src/kani_transcript.rs`
-  (FR-017-AC-10). At this revision the witness join
+  through the Kani adapter's transcript module, `src/kani_transcript.rs`.
+  At this revision the witness join
   (`src/kani_witness_join.rs`) still decodes the playback through Contract
   IR's `Witness::parse`, so this bullet states the target and is not yet
   met.
@@ -99,7 +99,7 @@ failure is reported.
 - The generator shall replay through QSL's layer-6 `replay` facade
   (`qsl_replay::replay`). The caller supplies the complete request: the proved
   package's `package_id`, the selected function's qualified name, the limits, and
-  the byte provision holding the proved unit's source under its digest; the
+  the byte provision holding the proved unit's source; the
   generator reads no path. The generator supplies the request's replay source,
   the decoded values as a backend-witness transcript keyed by parameter node id,
   and calls `replay`. QSL recompiles the source and evaluates the selected
@@ -129,7 +129,7 @@ failure is reported.
 ## Dependencies
 
 - **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md); QSL's
-  `qsl-replay` crate at the revision `Cargo.toml` names, the only QSL crate this
+  `qsl-replay` crate, the only QSL crate this
   repository depends on. The spine test takes a compiled unit's package id and
   parameter node ids from `qsl_replay::call_site`, and the request's types from
   `qsl-replay`'s re-exports.

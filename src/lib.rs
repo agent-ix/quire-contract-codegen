@@ -3,16 +3,19 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-// Implements: FR-001
-mod oracle;
-// Implements: FR-001
 mod bound;
+mod bounded_collections;
+mod bounded_kani_corpus;
+mod bounded_kani_profile;
+mod bounded_kani_replay;
+mod definedness_arithmetic;
+mod finite_reference_graphs;
+mod kani;
+mod oracle;
 // Implements: FR-005, NFR-001
 mod publication;
 // Implements: FR-002
 mod harness;
-// Implements: FR-003
-mod kani;
 // Implements: FR-015
 mod kani_obligations;
 // Implements: FR-019
@@ -26,18 +29,6 @@ mod kani_transcript;
 mod kani_witness_join;
 // Implements: FR-016
 mod spine_replay;
-// Implements: FR-007
-mod bounded_kani_profile;
-// Implements: FR-007
-mod definedness_arithmetic;
-// Implements: FR-007
-mod bounded_collections;
-// Implements: FR-007
-mod finite_reference_graphs;
-// Implements: FR-007
-mod bounded_kani_replay;
-// Implements: FR-007
-mod bounded_kani_corpus;
 // Implements: FR-002
 mod strategy;
 // Shared generation-result and claim vocabulary (FR-014, FR-018, FR-021).

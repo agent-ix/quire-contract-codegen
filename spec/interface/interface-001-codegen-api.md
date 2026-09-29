@@ -36,7 +36,7 @@ operations:
     output: GeneratedArtifactBundle | StrategyDiagnostic
     semantics: finite shaped cases with an explicit quire-contract-runtime consumer dependency
   - name: generate_bound_strategy
-    status: implemented for the codegen#3 numeric/state slice on the codegen#4 numeric oracle grammar from PR #29
+    status: implemented for the numeric/state slice on the bounded-integer comparison grammar
     inputs: [public BoundPackage, full ClauseRef, population Satisfying|Violating|Broad|Boundary, campaign policy]
     output: GeneratedArtifactBundle | StrategyDiagnostic
     semantics: admits only clauses bound oracle generation admits, narrowed to one Compare; domains taken from the clause's IR IntegerType declarations; constructive Holds/Violated populations, an exhaustive in-domain census and an untagged out-of-domain array; a subject-free oracle-conformance runner whose summary reports discard and rejection rates; see bound_strategy_slice
@@ -61,7 +61,7 @@ operations:
   - name: generate_boolean_oracle
     inputs: [OracleRequest over one typed Boolean clause]
     output: OracleArtifactBundle | GenerationDiagnostic list
-    semantics: one deterministic Boolean oracle and its source map, or diagnostics with no partial bundle; the single-clause core generate_bound_oracles batches (FR-001)
+    semantics: one deterministic Boolean oracle and its source map, or diagnostics with no partial bundle; the single-clause core generate_bound_oracles batches
   - name: classify_clause
     inputs: [oracle entry probe observation, independently derived expected consequent count, consequent probe observations]
     output: ClauseCoverage | CoverageDiagnostic
@@ -73,27 +73,27 @@ operations:
   - name: classify_bounded_kani_profile
     inputs: [KaniProfile, requested constructs, source id]
     output: CapabilityEntry list | KaniOutcome
-    semantics: classifies one request through the public bounded Kani profile with no reverse Contract IR dependency; a malformed request is a typed refusal, not a disposition (FR-007)
+    semantics: classifies one request through the public bounded Kani profile with no reverse Contract IR dependency; a malformed request is a typed refusal, not a disposition
   - name: prepare_checked_arithmetic
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CheckedArithmeticRequest]
     output: ArithmeticLowering | KaniOutcome
-    semantics: bounded checked-arithmetic lowering; division by zero, overflow, invalid ranges, profile refusal and dispatch mismatch stay Contract IR typed non-Boolean outcomes, never an assumption or partial artifact (FR-007)
+    semantics: bounded checked-arithmetic lowering; division by zero, overflow, invalid ranges, profile refusal and dispatch mismatch stay Contract IR typed non-Boolean outcomes, never an assumption or partial artifact
   - name: prepare_bounded_collection_query
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CollectionQuery]
     output: CollectionLowering | KaniOutcome
-    semantics: bounded collection-query lowering; bound exhaustion and profile or dispatch refusal stay typed non-Boolean outcomes with no partial artifact (FR-007)
+    semantics: bounded collection-query lowering; bound exhaustion and profile or dispatch refusal stay typed non-Boolean outcomes with no partial artifact
   - name: prepare_finite_graph_reaches
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, GraphRequest]
     output: GraphLowering | KaniOutcome
-    semantics: finite reference-graph reachability lowering; identity, snapshot and reference validation stay Contract IR-owned, and malformed or exhausted requests stay typed non-Boolean outcomes (FR-007)
+    semantics: finite reference-graph reachability lowering; identity, snapshot and reference validation stay Contract IR-owned, and malformed or exhausted requests stay typed non-Boolean outcomes
   - name: generate_bounded_kani_corpus_case
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
     output: BoundedCorpusCase | KaniOutcome
-    semantics: one bounded Kani corpus case and its proof dependency graph; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts (FR-007)
+    semantics: one bounded Kani corpus case and its proof dependency graph; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts
   - name: replay_codegen_counterexample
     inputs: [Contract IR CounterexamplePacket, native executor over the finite input]
     output: ReplayAgreement | KaniOutcome
-    semantics: replays a Kani counterexample natively; packet and population validation and the requirement for a native false result stay Contract IR-owned, and a disagreement is never repaired into a proof (FR-007)
+    semantics: replays a Kani counterexample natively; packet and population validation and the requirement for a native false result stay Contract IR-owned, and a disagreement is never repaired into a proof
   - name: generate_exact_scalar_oracles
     inputs: [admitted CheckedPackageV2, ExactScalarItem list]
     output: ExactScalarOracles | OracleGenerationError
@@ -189,7 +189,7 @@ artifact_bundle:
     - coverage source map and vacuity map
     - diagnostics
 diagnostics:
-  bound_batch_errors: typed ResourceLimitExceeded, NameCollision(full ClauseRef), Clause(full ClauseRef plus existing lower-level diagnostics and exact rejected IR source spans for expression failures), or Bundle(existing publication diagnostic); no partial artifacts
+  bound_batch_errors: typed ResourceLimitExceeded, Clause(full ClauseRef plus existing lower-level diagnostics and exact rejected IR source spans for expression failures), or Bundle(existing publication diagnostic); no partial artifacts
   no_executable: separate successful non-artifact result for valid empty or informational-only populations, not a terminal-state claim
   terminal_states: [generated, unsupported, invalid-input, backend-unavailable, io-failed, inconclusive]
   implemented_mapping:
@@ -204,7 +204,7 @@ diagnostics:
 oracle_slice:
   schemas: generated Rust and source-map outputs each identify and validate against their own versioned schema
   source_limit: 1048576 bytes per clause, enforced during rendering
-  artifact_names: readable names built from the requirement and clause names plus a positional counter, with per-clause source-map paths
+  artifact_names: readable names built from the requirement, revision and clause names, used bare when one clause holds the name; clauses sharing a name are suffixed `_{n}`, numbered from 1 in ascending full-identity order; with per-clause source-map paths
   supported_expression_grammar: Boolean literals, Boolean direct value references, Boolean not/operators, bounded i64 literals, bounded i64 direct input/state value references, and all six comparisons with a Boolean clause root
   dependency_types: Boolean dependencies render as bool; bounded-integer dependencies render as i64; current/pre/post observations remain distinct parameters
   undefined_result_boundary: a typed expression carrying any definedness obligation refuses before rendering; every numeric arithmetic and numeric-negation node remains unsupported even without an obligation until a versioned IR/runtime result can distinguish invalid from false; no checked result is unwrapped or defaulted into bool
@@ -219,13 +219,13 @@ harness_strategy_slice:
   expected_domain: generated integer cases expose executable accepted/rejected verdict checks; generated enum populations contain declared admissible members only and execute their admission expectation; generated Boolean campaign constructors bind accepted, rejected, or explicit-discarded disposition to the exact values consumed by the owned runner
   generated_crate_lints: generated crate roots deny missing documentation and compile under denied warnings
   source_limit: harness and strategy Rust are rejected above 1048576 bytes before bundling
-  artifact_names: readable names built from the request's requirement and clause names plus a positional counter
+  artifact_names: readable names built from the request's requirement, revision and clause names
 bound_strategy_slice:
   requirements: [FR-008, FR-009, FR-010, FR-011, FR-012, FR-013, NFR-004]
-  depends_on: FR-001-AC-8 bounded-integer oracle grammar (codegen#4, merged by PR #29); quire-contract-ir FR-012 through FR-015 and FR-023; quire-contract-runtime FR-001, FR-003, FR-004 and interface-001
+  depends_on: FR-014 bounded-integer comparison oracles; quire-contract-ir FR-012 through FR-015 and FR-023; quire-contract-runtime FR-001, FR-003, FR-004 and interface-001
   terms: the domain of a read is the inclusive minimum..=maximum of its integer declaration, not the IR IntegerType.domain representation field (quire-contract-ir FR-013); a read is one value-reference operand identified by declaration SymbolName and observation current, pre, or post (quire-contract-ir FR-014); the primary read is the left operand when it is a read, otherwise the right; the partner read is the other operand when both are reads
   admission: first the same admission generate_bound_oracles applies; then clause kind Precondition, Postcondition, or Invariant at any anchor the IR accepts; then a root of exactly one Compare whose operands are each an integer read or an IntegerLiteral, with at least one read, not the same read twice, and not Current mixed with Pre or Post of one declaration
-  refusals: new variants of the existing StrategyErrorCode, checked in order UnknownClause (invalid-input), UnsupportedClause (preserves the oracle's code, terminal state, and span), UnsupportedClauseKind (unsupported), UnsupportedRelation (unsupported); then per population EmptyPopulation (unsupported) and UnsupportedCampaignConstraint (unsupported); each carries the full ClauseRef; UnsupportedClause carries the oracle diagnostic's span and UnsupportedRelation the first offending node's SourceSpan in authored preorder, per the codegen#4 refusal locus, while UnknownClause, UnsupportedClauseKind, EmptyPopulation, and UnsupportedCampaignConstraint carry no span; a literal-only Compare and a Boolean or Text comparison refuse as UnsupportedRelation; no partial bundle or artifact; UnknownClause adds invalid-input for an unknown strategy ClauseRef to implemented_mapping, and UnsupportedClause keeps the oracle's terminal state, including invalid-input for a non-Boolean root or a batch NameCollision
+  refusals: new variants of the existing StrategyErrorCode, checked in order UnknownClause (invalid-input), UnsupportedClause (preserves the oracle's code, terminal state, and span), UnsupportedClauseKind (unsupported), UnsupportedRelation (unsupported); then per population EmptyPopulation (unsupported) and UnsupportedCampaignConstraint (unsupported); each carries the full ClauseRef; UnsupportedClause carries the oracle diagnostic's span and UnsupportedRelation the first offending node's SourceSpan in authored preorder, per the oracle refusal locus, while UnknownClause, UnsupportedClauseKind, EmptyPopulation, and UnsupportedCampaignConstraint carry no span; a literal-only Compare and a Boolean or Text comparison refuse as UnsupportedRelation; no partial bundle or artifact; UnknownClause adds invalid-input for an unknown strategy ClauseRef to implemented_mapping, and UnsupportedClause keeps the oracle's terminal state, including invalid-input for a non-Boolean root
   domains: inclusive IntegerType minimum/maximum; both operands of one Compare share one IntegerType; no caller-supplied range
   cases: a complete valuation of the clause's reads, including Post reads; the tag is the value the generated oracle returns for it and claims nothing about any other clause
   populations: Satisfying and Violating are constructed directly (interval draws and primary-dependent partner draws, 128-bit checked size and index arithmetic); Broad holds both with side-preserving tags and requires both sides non-empty; no filter, assume, reject, or discard
@@ -233,10 +233,10 @@ bound_strategy_slice:
   out_of_domain: every bundle generated for a non-refused population request carries a generated constant array of untagged out-of-domain edge cases for consumer domain-admission tests; the codegen runner never evaluates them and no counter records them
   unrepresentable_edges: edge values outside i64 are listed in a generated constant array by read, edge, and direction, never clamped or wrapped
   runner: subject-free oracle conformance; the oracle result maps by clause kind (Precondition false to RejectedPrecondition, Postcondition false to FailedPostcondition, Invariant false to FailedPostcondition with an Invariant observation, true to Passed); verdicts are built through runtime construct_verdict with the IR ExecutionPoint's serialized name and recorded through runtime record_campaign_verdict, so counters follow quire-contract-runtime FR-004; the runtime adapt_to_proptest operations are deliberately not used, and rejected preconditions stay counted only in rejected, never as successful evidence; a verdict equal to the tag's prediction returns a passing proptest result, otherwise ConformanceMismatch; never a global reject or explicit discard; the census runner evaluates each in-domain census case once in order without shrinking; a false invariant uses the failure detail the runtime provides for a contract clause until quire-contract-runtime specifies one; an identity mismatch from recording fails the campaign; FR-002 floors, ceiling, and Exhausted conclusions apply unchanged, and a proptest failure concludes ConformanceMismatch after the discard-ceiling check, never Failed
-  rates: the bound-strategy summary alone exposes discard_rate() and rejection_rate(), each Some((numerator, attempted)), or None at zero attempted or when the report snapshot is at_limit (quire-contract-runtime FR-004); a public generated summary_from_snapshot operation exposes this calculation without inventing a resumable report or local counter format; the PR #22 harness summary is unchanged
+  rates: the bound-strategy summary alone exposes discard_rate() and rejection_rate(), each Some((numerator, attempted)), or None at zero attempted or when the report snapshot is at_limit (quire-contract-runtime FR-004); a public generated summary_from_snapshot operation exposes this calculation without inventing a resumable report or local counter format; the harness summary is unchanged
   shrinking: partner values derive from the current primary value at every step; tags never change; Broad never shrinks across sides; shrink replays count in attempted
   consumer: case types expose one i64 field per read named by the generated oracle's dependency parameter identifier, plus constant IR declaration SymbolName and observation-name (current, pre, post; input declarations are always current) strings, where a quire-spec-language field projection's SymbolName is SL's deterministic field alias mapped back through SL FR-034 read correspondence; generated code depends only on proptest, quire-contract-runtime, and core/std; no serialized case, census, or summary format and no new schemas/ file; the generated header states the full ClauseRef
-  out_of_scope: Boolean connectives over comparisons; Boolean literal, reference, and negation roots; a Compare of one read with itself; Current mixed with Pre or Post of one declaration; arithmetic, negation, and definedness obligations, which oracle admission refuses so no admitted clause has an overflow edge (owned by codegen#4 and the qcir/runtime undefined-result decision under quire-spec-language#83); a numeric subject harness where an operation produces the post-state; StatePinned and NoEvent campaigns, which stay on the caller-constraint generate_i64_strategy API
+  out_of_scope: Boolean connectives over comparisons; Boolean literal, reference, and negation roots; a Compare of one read with itself; Current mixed with Pre or Post of one declaration; arithmetic, negation, and definedness obligations, which oracle admission refuses so no admitted clause has an overflow edge (owned by the qcir/runtime undefined-result decision); a numeric subject harness where an operation produces the post-state; StatePinned and NoEvent campaigns, which stay on the caller-constraint generate_i64_strategy API
 kani_slice:
   semantics_source: the executable-oracle analyzer and rendered predicates are reused exactly; the Kani adapter does not carry a second expression interpreter
   argument_binding: unique direct current input, current state and pre-state dependencies become ordered subject arguments; order is normalized dependency identity, not source spelling or traversal accident
@@ -257,11 +257,10 @@ kani_slice:
 kani_obligation_execution_slice:
   requirements: [FR-017]
   scope: running one FR-015 harness; FR-015 generation, and the FR-014 oracles it embeds, have no slice of their own yet and are governed by their requirements alone
-  adapter: distinct from the FR-003 slice above; the obligation path fixes solver `cadical` and emits no stubbing option, so FR-003's caller-supplied solver is not carried into it
   refusals: a refusal when the crate's library source does not contain the harness source byte for byte, and a tool refusal naming a launcher that cannot be started and its path. Neither runs anything
   outcomes: `verified`, `falsified` with the concrete playback verbatim, `cover_unsatisfied` with satisfied and total counts, and `inconclusive` with one of `failed_without_counterexample`, `no_verdict`, `missing_cover_summary`, `unwind_bound_exhausted`, `timed_out`. Success is never defaulted: without a readable, fully satisfied cover summary a successful run is not `verified`. A run is given a caller-declared wall-clock budget on every request; one that has not concluded when the budget elapses is killed, along with every process it forked that a `/proc` walk taken at that moment can still see (one forked or reparented away in the instant before that walk is not guaranteed reached, only that the caller is never made to wait for it), and reported `inconclusive`/`timed_out` rather than left running
   evidence: the kind, harness path, launcher path, complete argument vector, unwind bound, solver, exit code and outcome. This repository retains none of it and computes no aggregate verdict
-  outcome_source: the outcome is read from the backend's `--output-format regular` prose, because Kani publishes no machine-readable verdict; this crate reads that prose to decide a verdict only in `src/kani_transcript.rs`, which returns a typed transcript; a falsifying playback block is passed through verbatim to the FR-016 witness join (codegen#59)
+  outcome_source: the outcome is read from the backend's `--output-format regular` prose, because Kani publishes no machine-readable verdict; this crate reads that prose to decide a verdict only in `src/kani_transcript.rs`, which returns a typed transcript; a falsifying playback block is passed through verbatim to the FR-016 witness join
 coverage_analysis_slice:
   implementation_boundary: parse_llvm_coverage, LlvmCoverage.observe, and classify_clause remain unbound observation primitives; the separate bound observation API performs no native-qualified aggregate analysis, campaign binding, or obligation discharge
   bound_observation_boundary: analyze_bound_coverage emits the strict codegen.bound-coverage-observations/v1 domain schema from a complete immutable generated bundle plus independently validated BoundPackage; no campaign binding, native execution, or obligation discharge
@@ -351,5 +350,5 @@ The interface's features in declaration order: every operation the contract abov
   for their semantics belong with the requirement that implements them, once one exists.
 - The remaining prose fields this contract's slices carry — admission order, refusal vocabulary,
   domain and campaign rules, and so on — are the executable half of the FR that owns each slice
-  (FR-008 through FR-013 for `bound_strategy_slice`, FR-003 for `kani_slice`, FR-017 for
+  (FR-008 through FR-013 for `bound_strategy_slice`, FR-017 for
   `kani_obligation_execution_slice`, and so on) and are backed there rather than restated here.

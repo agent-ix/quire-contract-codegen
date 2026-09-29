@@ -139,3 +139,18 @@ ordering) have an operator in the QSL value authority
 (`evaluate_integer_arithmetic`, `evaluate_rational_arithmetic`, and
 `order_numbers`). Their oracles are checked against direct runtime execution
 and are counted separately from the three-way vectors.
+
+## Boolean connectives, comparisons and source maps
+
+1. Build a `CheckedPackageV2` with one node for each of Boolean `and`, `or`, `not`, `implies`, `eq`
+   and `ne` and integer `eq`, `ne`, `lt`, `le`, `gt` and `ge` over bounded operands. Derive and
+   generate every node and read each oracle's runtime call. Every node derives, every oracle is
+   `ir_confirmed`, each connective calls `evaluate_boolean` or `evaluate_boolean_short_circuit`, and
+   each `eq`/`ne` calls `check_equality` and `CheckedEquality::evaluate`, each returning
+   `Outcome<bool>` (FR-014-AC-35). Compile the crate against the runtime alone and run each oracle
+   over the bounded domain beside direct runtime execution and the QSL value authority. Outcomes,
+   charges and counters agree on every input (FR-014-AC-37).
+2. Generate an oracle over an `implies` node and read its source map. It declares the consequent
+   count, one evaluation-entry probe on the function-entry line outside every consequent region and
+   one entry-token probe inside each consequent's region; dropping or duplicating a region leaves the
+   declared count unchanged (FR-014-AC-36).

@@ -3,7 +3,7 @@ id: TC-014
 title: "Verify bounded numeric and state Kani contracts"
 type: TC
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-003
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: verifies
 ---
 # TC-014: Verify bounded numeric and state Kani contracts

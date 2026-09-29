@@ -5,7 +5,7 @@ type: FR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/StR-001
     type: satisfies
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
@@ -23,13 +23,12 @@ per-requirement vacuity report without executing a coverage producer itself.
 - The IR-owned bound executable clause population, including clause identities, typed expressions,
   clause kinds, execution anchors, and dependency/declaration context.
 - Generated Rust/source-map bytes with entry probes and the independently derived implication census.
-- LLVM coverage JSON export `3.0.1` bytes plus native run results binding source, instrumented binary,
-  profiles, command, toolchain, target, optimization profile, and runtime campaign results.
+- LLVM coverage JSON export bytes plus native runtime campaign results.
 
 ## Outputs
 
 - A versioned analysis outcome containing trusted observations, per-clause classifications where
-  measurable, structured diagnostics, input identities, and an explicit non-success state for
+  measurable, structured diagnostics, and an explicit non-success state for
   adverse, unavailable, unsupported, malformed, or inconclusive analysis.
 
 ## Behavior
@@ -70,15 +69,11 @@ per-requirement vacuity report without executing a coverage producer itself.
   absent inputs were analyzed successfully.
 - Coverage filenames shall match source-map artifact paths only after stripping the caller-declared
   source root and applying lexical normalization that rejects parent traversal and backslash aliases.
-- Every report shall retain the generated-report schema identity and exact requirement revision.
-- The analyzer shall read LLVM coverage JSON export format 3.0.1.
-- If the export declares any other format version, then the analyzer shall fail it as unsupported.
 - The export's `manifest_path` shall name the caller-declared source root's `Cargo.toml`.
 - The default coverage obligation succeeds only for a nonempty, completely bound population whose
   clauses are all exercised and whose native execution completed successfully. Vacuous, unexecuted,
   and partially exercised results are adverse; unavailable or inconclusive execution cannot pass.
-  Artifact serialization success shall never stand in for that coverage result. Exceptions require
-  an attributed retained owner decision; this implementation shall not manufacture one.
+  Artifact serialization success shall never stand in for that coverage result.
 
 ## Acceptance Criteria
 
@@ -108,12 +103,6 @@ ordered clause retain per-requirement membership without duplicating or summing 
 Native campaign-run binding is planned; FR-004/TC-006 remain planned until it and a consuming
 obligation exist.
 
-The proposed next slice is [REV-017](../../planning/bound-vacuity-native-result-design.md):
-complete immutable BoundPackage/source/map observations first. Native campaign transport is
-planned in the Contract Runtime. REV-017 requests coordinator approval before its
-new public API or domain schema is implemented; that phase-A approval is now recorded in
-REV-017. AC-9 records the boundary, not completion of issue #5 or native qualification.
-
 ## Dependencies
 
-- **Upstream**: [FR-001](./FR-001-deterministic-oracles.md) and [FR-002](./FR-002-tristate-proptest.md).
+- **Upstream**: [FR-014](./complete-v1/FR-014-exact-scalar-oracles.md) and [FR-002](./FR-002-tristate-proptest.md).

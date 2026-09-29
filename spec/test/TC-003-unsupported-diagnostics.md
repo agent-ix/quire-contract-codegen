@@ -3,9 +3,7 @@ id: TC-003
 title: "Reject unsupported or invalid constructs explicitly"
 type: TC
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
-    type: verifies
-  - target: ix://agent-ix/quire-contract-codegen/FR-003
+  - target: ix://agent-ix/quire-contract-codegen/NFR-002
     type: verifies
 ---
 # TC-003: Reject unsupported or invalid constructs explicitly
@@ -22,7 +20,7 @@ exact rejected IR source spans, exit status, and staged output
 directory. Include definedness obligations, scalar roots, numeric arithmetic/negation, indirect
 dependencies, object/graph reads such as dereference and reachability, and every expression node
 outside the supported grammar. Where more than one expression node or obligation is unsupported,
-require the deterministic first locus declared by FR-001 rather than accepting any failing span.
+require the deterministic first locus rather than accepting any failing span.
 
 For Kani, also vary pre/post placement and one cross-clause binding dimension at a time: dependency
 kind, observation, Boolean/integer type, integer domain/minimum/maximum/overflow policy, subject ABI,

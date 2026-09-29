@@ -3,9 +3,11 @@ id: TC-001
 title: "Verify deterministic derivation"
 type: TC
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
+  - target: ix://agent-ix/quire-contract-codegen/FR-005
     type: verifies
   - target: ix://agent-ix/quire-contract-codegen/NFR-001
+    type: verifies
+  - target: ix://agent-ix/quire-contract-codegen/NFR-002
     type: verifies
 ---
 # TC-001: Verify deterministic derivation
@@ -21,5 +23,5 @@ platform execution; compare artifact names, bytes, and source maps.
 
 ## Expected Results
 
-Bundles are byte-identical, identities and SPDX headers are complete, and no environmental path or
+Bundles are byte-identical, SPDX headers are complete, and no environmental path or
 nondeterministic order enters the output.

@@ -3,7 +3,7 @@ id: TC-005
 title: "Verify Kani proof dependency closure"
 type: TC
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-003
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: verifies
 ---
 # TC-005: Verify Kani proof dependency closure

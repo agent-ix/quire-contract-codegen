@@ -21,19 +21,14 @@ and that no local serialized format exists.
    warnings.
 2. In the fixture, draw cases and read each value through the generated declaration-name and
    observation-name constants; read the out-of-domain array the same way.
-3. Inspect the `BoundGenerationError::NameCollision` mapping to `UnsupportedClause`. Bound
-   generation gives every oracle symbol a positional counter, so no concrete fixture produces a
-   collision.
-4. List the bundle's files, and diff `schemas/` against the base revision.
-5. Generate two different `ClauseRef`s from one package, and compare the headers and the artifact
+3. List the bundle's files, and diff `schemas/` against the base revision.
+4. Generate two different `ClauseRef`s from one package, and compare the headers and the artifact
    paths.
 
 ## Expected Results
 
 - The fixture builds and reads the `versionNumber` field's declaration, by its SL field-alias
   `SymbolName`, at `"pre"` and at `"post"` by name and observation.
-- The total `NameCollision` mapping returns `UnsupportedClause` carrying the colliding full
-  `ClauseRef` and `invalid-input` terminal state if the preflight branch is reached.
 - The bundle holds only generated Rust; no serialized case, census, or summary file exists;
   `schemas/` is unchanged.
 - Each header carries its full `ClauseRef`, and the two clauses produce different headers and
