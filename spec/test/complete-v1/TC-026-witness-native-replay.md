@@ -39,7 +39,13 @@ mismatch and unavailable results respectively.
 
 ## Status
 
-Partial. FR-016-AC-8 is implemented and tested in the default suite: schema
+Partial. FR-016-AC-9 is implemented and tested: a falsifying input replays through
+`qsl_replay::replay` and settles the violation, the healthy native twin settles
+`inconclusive`, and an unbound value is refused, all in the default suite
+(`tests/it/skeleton_spine.rs`); the ignored Kani lane replays a real prover
+counterexample the same way.
+
+FR-016-AC-8 is implemented and tested in the default suite: schema
 order and naming by position (`src/kani_witness_join.rs` unit tests) and the
 harness emission order (`tests/it/kani_argument_order.rs`); the real-backend
 decode runs in the ignored Kani lane (`tests/it/kani_witness_join.rs`).

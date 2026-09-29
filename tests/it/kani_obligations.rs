@@ -54,7 +54,7 @@ const ASSERTION: &str = "amount-nonnegative";
 /// Budget for the pinned lane's real `cargo-kani` runs. Generous because CBMC is memory- and
 /// time-heavy on these small obligations; this is a ceiling against a genuine hang, not a
 /// performance target.
-const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
+pub(crate) const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
 /// Placeholder budget for tests that refuse before any process is spawned (a pin drift, a
 /// missing backend component, or a harness the crate does not contain): the value is never
 /// consulted, since `execute_kani_obligation` returns before reaching the launcher.
@@ -324,7 +324,7 @@ fn projection_of(fixtures: &[ClauseFixture]) -> Value {
     })
 }
 
-fn bound_package(balance_maximum_in_invariant: i64) -> BoundPackage {
+pub(crate) fn bound_package(balance_maximum_in_invariant: i64) -> BoundPackage {
     BoundPackage::from_json_bytes(
         &serde_json::to_vec(&projection(balance_maximum_in_invariant)).unwrap(),
     )
@@ -381,7 +381,7 @@ fn unsupported(record: &ObligationRecord) -> &UnsupportedObligation {
     }
 }
 
-fn supported_contract_harnesses(
+pub(crate) fn supported_contract_harnesses(
     package: &BoundPackage,
     pins: &KaniToolPins,
     subject: &str,
@@ -2029,7 +2029,7 @@ fn tc_027_no_conversion_exists_between_generation_and_execution_vocabularies() {
 
 // ---- kani lane ---------------------------------------------------------------
 
-fn scratch(name: &str) -> PathBuf {
+pub(crate) fn scratch(name: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -2046,7 +2046,7 @@ const HEALTHY_SUBJECT: &str = "/// Withdraws `amount` from `balance`.\n#[must_us
 const SEEDED_FAILING_SUBJECT: &str = "/// Seeded defect: credits instead of debiting.\n#[must_use]\npub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre + amount_current\n}\n";
 const VACUOUS_SUBJECT: &str = "/// Returns a balance no postcondition result satisfies.\n#[must_use]\npub fn transfer(amount_current: i64) -> i64 {\n    amount_current\n}\n";
 
-fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
+pub(crate) fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
     let directory = scratch("crate");
     fs::write(
         directory.join("src/lib.rs"),
@@ -2059,7 +2059,7 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
     fs::write(
         directory.join("Cargo.toml"),
         format!(
-            "[package]\nname = \"generated-kani-obligation\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
+            "[package]\nname = \"generated-kani-obligation\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[workspace]\n"
         ),
     )
     .unwrap();

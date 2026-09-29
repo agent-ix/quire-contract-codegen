@@ -88,6 +88,10 @@ FR-022 is the generation arm of the same seam: it takes the items the driver rou
 request index, backend and backend kind, and generates per kind without settling again. TC-030 and
 TC-033 verify them.
 
+FR-023 is the claimed-module gate over one Kani run (QSL ADR-011 section 2.3): it passes only when the
+prover discharged a check inside every module the gate claims. FR-016-AC-9 is the replay half of the
+skeleton spine, through QSL's `replay` facade. TC-034 and TC-026 verify them.
+
 FR-008 through FR-013 refine FR-002 for bound numeric and state-scalar clauses
 (agent-ix/quire-contract-codegen#3 under agent-ix/quire-spec-language#83), admit only clauses that the
 FR-001 bounded-integer oracle grammar of agent-ix/quire-contract-codegen#4 admits, and are constrained

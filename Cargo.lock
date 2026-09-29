@@ -1488,9 +1488,11 @@ version = "0.1.0"
 dependencies = [
  "jsonschema 0.17.1",
  "proptest",
+ "qsl-foundation 0.1.0 (git+https://github.com/agent-ix/quire-spec-language?rev=20ba521b8767b2faf5fda06ca163b50549a1a51f)",
  "qsl-replay 0.1.0 (git+https://github.com/agent-ix/quire-spec-language?rev=20ba521b8767b2faf5fda06ca163b50549a1a51f)",
  "quire-contract-ir",
  "quire-contract-runtime",
+ "quire-exact 0.1.0 (git+https://github.com/agent-ix/quire-spec-language?rev=20ba521b8767b2faf5fda06ca163b50549a1a51f)",
  "serde",
  "serde_json",
  "sha2",

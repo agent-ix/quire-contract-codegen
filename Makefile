@@ -107,11 +107,15 @@ test: assurance-inputs
 # that this selects exactly the 20 tests the old `kani_obligations` binary held
 # (19 default-lane plus this one `#[ignore]`d harness) and nothing from any
 # other module, so the `--ignored` run below still exercises only this one test.
+#
+# The lane also runs the skeleton spine (`skeleton_spine`): one Boolean clause through the real
+# prover, the claimed-module gate, and native replay through QSL. Both filters follow `--`
+# because libtest accepts several; cargo's own positional filter takes one.
 .PHONY: kani
 kani:
 	flock /tmp/agent-e-heavy-build.lock $(CARGO) +$(MSRV) test --locked -j 4 \
-		--test it kani_obligations --target-dir target-codex-backends \
-		-- --ignored --test-threads=1
+		--test it --target-dir target-codex-backends \
+		-- --ignored --test-threads=1 kani_obligations skeleton_spine
 
 .PHONY: build
 build:
