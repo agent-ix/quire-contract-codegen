@@ -213,7 +213,7 @@ macro_rules! shared_helpers {
         // ---- environments, one per corpus shape --------------------------
         //
         // Declared directly against `CompositeDeclaration`, `FieldDeclaration`
-        // and `NodeKey` rather than read back from the generated golden crate
+        // and `NodeKey` rather than read back from the generated crate
         // (which only ever produces `quire_contract_runtime::exact::TypeEnvironment`),
         // so this expands under `rt_side` into a Contract Runtime environment
         // built the same way the direct-call leg builds its own.

@@ -3739,7 +3739,7 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
     items
 }
 
-/// The golden request: every corpus expression plus every refused item.
+/// The corpus request: every corpus expression plus every refused item.
 pub fn golden_items() -> Vec<ExactScalarItem> {
     corpus()
         .into_iter()

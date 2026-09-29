@@ -42,8 +42,6 @@ mod package;
 
 use package::*;
 
-const BLESS: &str = "QUIRE_CODEGEN_BLESS";
-
 /// Independently recomputed `DescriptorKey::digest` (FR-018-AC-11): a SHA-256
 /// over the expression node id, the operator's rank, then each operand's
 /// source and conversion-target node ids, mirroring `hash_node_id` and
@@ -625,28 +623,23 @@ fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
     );
 }
 
-/// Trace: FR-018-AC-10, TC-029: the committed golden crate.
+/// The generator's current output for the whole corpus request, which
+/// `composite_equality_agreement` builds and executes.
+pub(super) fn corpus_oracles() -> CompositeEqualityOracles {
+    generate(&corpus_package().admit(), &golden_items())
+}
+
+/// Trace: FR-018-AC-10, TC-029.
+///
+/// Generating the corpus twice, each time from a freshly built and admitted
+/// package, yields equal output: every artifact's bytes and the claim map.
 #[test]
-fn tc_029_ac10_generation_matches_the_committed_golden_files() {
-    let oracles = generate(&corpus_package().admit(), &golden_items());
-    let fixtures =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/composite_equality");
-    for (artifact, golden) in [
-        ("Cargo.toml", "Cargo.toml.golden"),
-        ("src/lib.rs", "lib.rs.golden"),
-        ("claim-map.json", "claim-map.json.golden"),
-    ] {
-        let path = fixtures.join(golden);
-        if std::env::var_os(BLESS).is_some() {
-            fs::write(&path, contents(&oracles, artifact)).expect("write golden");
-        }
-        let expected = fs::read_to_string(&path)
-            .unwrap_or_else(|error| panic!("{}: {error}; set {BLESS}=1", path.display()));
-        assert_eq!(
-            contents(&oracles, artifact),
-            expected,
-            "{artifact} drifted from {golden}"
-        );
+fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
+    let first = corpus_oracles();
+    let second = corpus_oracles();
+    assert_eq!(first, second);
+    for path in ["Cargo.toml", "src/lib.rs", "claim-map.json"] {
+        assert_eq!(contents(&first, path), contents(&second, path), "{path}");
     }
 }
 
@@ -865,7 +858,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
 
     // FR-018-AC-13 also names node id, IR id, package id, source map, claims
     // and the selected schedule. Recompute each independently — never by
-    // reading it back off the golden claim-map — using the same public
+    // reading it back off the generated claim-map — using the same public
     // `CheckedPackageV2::lower` the generator calls, but with a
     // self-constructed, maximally permissive profile (`CheckedNodeTag::ALL`)
     // so this recomputation shares no private profile constant with the

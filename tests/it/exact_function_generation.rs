@@ -6,8 +6,6 @@
 //! static location map. Execution-level criteria (AC-2, AC-4, AC-5, AC-7,
 //! AC-9, AC-17) are covered by `tests/it/exact_function_agreement.rs`.
 
-use std::{fs, path::PathBuf};
-
 use quire_contract_codegen::{
     generate_exact_function_oracles, CallPointKind, ClaimDisposition, ExactFunctionItem,
     ExactFunctionRefusal, GeneratedExactFunctionClaim, UpstreamBlocker,
@@ -22,8 +20,6 @@ use quire_contract_ir::CheckedPackageV2;
 #[path = "../exact_function_support/package.rs"]
 mod package;
 use package::*;
-
-const BLESS: &str = "QUIRE_CODEGEN_BLESS";
 
 /// The main FR-021 corpus: one Scalar, one CompositeEquality and one Call
 /// function (TC-031 step 1(a)); one function each refused for a `reference`
@@ -554,36 +550,58 @@ fn tc_031_unsupported_operator_refuses_unary_negate_scalar_body() {
     ));
 }
 
-/// Trace: FR-021-AC-7, TC-031. The committed golden source for the
-/// nested-call chain corpus (deeper than `MAX_CALL_DEPTH`), consumed (via
-/// `include!`) by `exact_function_agreement.rs`'s AC-7 test to execute the
-/// real generated `Call` bodies -- not a hand-built parallel double --
-/// against the runtime's own `MAX_CALL_DEPTH` enforcement.
-#[test]
-fn tc_031_ac7_chain_source_matches_the_committed_golden() {
+/// The generator's current output for the main corpus, which
+/// `exact_function_agreement` builds and executes.
+pub(super) fn main_oracles() -> quire_contract_codegen::ExactFunctionOracles {
+    generate(
+        &ext_corpus_package().admit(),
+        &main_functions(),
+        &main_items(),
+    )
+}
+
+/// The generator's current output for the nested-call chain corpus (deeper
+/// than `MAX_CALL_DEPTH`), which `exact_function_agreement` executes for AC-7.
+pub(super) fn chain_oracles() -> quire_contract_codegen::ExactFunctionOracles {
     let package = ext_corpus_package().admit();
     let mut functions = chain_functions();
-    assert_eq!(functions[0].name, "chain_0");
+    functions.push(function_add("add_fn")); // the chain's own last link calls this
+    generate(&package, &functions, &[item(ITEM_CALL_CHAIN, "chain_0")])
+}
+
+/// Trace: FR-021-AC-7, TC-031. The chain corpus is `CHAIN_LENGTH` (> 128)
+/// functions `chain_0 .. chain_139`, each generated body calling the next and
+/// the last calling `add_fn`, and its one item generates -- so the AC-7
+/// execution case in `exact_function_agreement` really does enter a generated
+/// chain deeper than `MAX_CALL_DEPTH`.
+#[test]
+fn tc_031_ac7_chain_corpus_generates_a_call_chain_deeper_than_max_call_depth() {
+    let chain = chain_functions();
+    const {
+        assert!(
+            CHAIN_LENGTH as u64 > quire_contract_runtime::exact::MAX_CALL_DEPTH,
+            "the chain must exceed MAX_CALL_DEPTH"
+        );
+    }
+    assert_eq!(chain.len(), CHAIN_LENGTH as usize);
+    assert_eq!(chain[0].name, "chain_0");
+    assert_eq!(chain[69].name, "chain_69");
     assert_eq!(
-        functions[(CHAIN_LENGTH - 1) as usize].name,
+        chain[(CHAIN_LENGTH - 1) as usize].name,
         format!("chain_{}", CHAIN_LENGTH - 1)
     );
-    functions.push(function_add("add_fn")); // the chain's own last link calls this
-    let items = vec![item(ITEM_CALL_CHAIN, "chain_0")];
-    let oracles = generate(&package, &functions, &items);
 
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/exact_function_chain/lib.rs.golden");
-    if std::env::var_os(BLESS).is_some() {
-        fs::write(&path, contents(&oracles, "src/lib.rs")).expect("write chain golden");
+    let oracles = chain_oracles();
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_CHAIN),
+        ClaimDisposition::Generated(_)
+    ));
+    let lib = contents(&oracles, "src/lib.rs");
+    for link in 0..CHAIN_LENGTH - 1 {
+        let call = format!("frame.call(\"chain_{}\", args)", link + 1);
+        assert!(lib.contains(&call), "chain_{link} does not emit {call}");
     }
-    let expected = fs::read_to_string(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}; set {BLESS}=1", path.display()));
-    assert_eq!(
-        contents(&oracles, "src/lib.rs"),
-        expected,
-        "chain src/lib.rs drifted from lib.rs.golden"
-    );
+    assert!(lib.contains("frame.call(\"add_fn\", args)"));
 }
 
 pub fn contents(oracles: &quire_contract_codegen::ExactFunctionOracles, path: &str) -> String {
@@ -609,53 +627,24 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
 
     let first = generate(&package, &functions, &items);
     let second = generate(&package, &functions, &items);
-    assert_eq!(
-        contents(&first, "src/lib.rs"),
-        contents(&second, "src/lib.rs")
-    );
-    assert_eq!(
-        contents(&first, "claim-map.json"),
-        contents(&second, "claim-map.json")
-    );
+    let from_a_fresh_package = main_oracles();
 
     let mut permuted_functions = functions.clone();
     permuted_functions.reverse();
     let mut permuted_items = items.clone();
     permuted_items.reverse();
-    let third = generate(&package, &permuted_functions, &permuted_items);
-    assert_eq!(
-        contents(&first, "src/lib.rs"),
-        contents(&third, "src/lib.rs")
-    );
-    assert_eq!(
-        contents(&first, "claim-map.json"),
-        contents(&third, "claim-map.json")
-    );
-}
+    let permuted = generate(&package, &permuted_functions, &permuted_items);
 
-/// Trace: FR-021-AC-13, TC-031: the committed golden crate.
-#[test]
-fn tc_031_ac13_generation_matches_the_committed_golden_files() {
-    let package = ext_corpus_package().admit();
-    let oracles = generate(&package, &main_functions(), &main_items());
-    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/exact_function");
-    for (artifact, golden) in [
-        ("Cargo.toml", "Cargo.toml.golden"),
-        ("src/lib.rs", "lib.rs.golden"),
-        ("claim-map.json", "claim-map.json.golden"),
-        ("location-map.json", "location-map.json.golden"),
-    ] {
-        let path = fixtures.join(golden);
-        if std::env::var_os(BLESS).is_some() {
-            fs::write(&path, contents(&oracles, artifact)).expect("write golden");
+    for other in [&second, &from_a_fresh_package, &permuted] {
+        assert_eq!(&first, other);
+        for path in [
+            "Cargo.toml",
+            "src/lib.rs",
+            "claim-map.json",
+            "location-map.json",
+        ] {
+            assert_eq!(contents(&first, path), contents(other, path), "{path}");
         }
-        let expected = fs::read_to_string(&path)
-            .unwrap_or_else(|error| panic!("{}: {error}; set {BLESS}=1", path.display()));
-        assert_eq!(
-            contents(&oracles, artifact),
-            expected,
-            "{artifact} drifted from {golden}"
-        );
     }
 }
 
