@@ -62,61 +62,40 @@ and semantic-parity results. A human release owner alone decides source release 
 
 ## Requirements Architecture
 
-StR-001 is refined by FR-001 through FR-005 and FR-007 and constrained by NFR-001 and NFR-002.
-FR-006 adopts the shared assurance intake contract for this repository's own verification
-results and is constrained by NFR-002.
-`interface-001` defines the serialized input, library/CLI operation, artifact bundle, diagnostics, and
-evidence contract. TC-001 through TC-007 and TC-023 form the verification matrix. Assurance artifacts
-bind the intended use, trusted boundary, risks, measurement policy, and open human decision.
+StR-001 is the one stakeholder requirement. Every functional requirement except FR-006 satisfies
+it. NFR-001 and NFR-002 constrain it, and NFR-004 constrains FR-008 to FR-013. FR-006 adopts the shared assurance intake
+contract for this repository's own verification results, and NFR-002 constrains it.
+`interface-001` defines the serialized input, the library and CLI operations, the artifact bundle,
+the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
+Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 hold the questions the owner has not ruled
+on. `test-matrix.md` maps every criterion to its test case.
 
-FR-014 through FR-017 are the complete-V1 slice. FR-015 generates separate bounded Kani
-obligations from FR-014's exact scalar oracles; FR-017 runs one of them under the committed backend
-pins and retains its typed evidence; FR-016 decodes and natively replays the counterexample FR-017
-retains. Generation and execution are separate requirements because a harness that was emitted and a
-harness that was observed verifying are different claims. TC-024 through TC-027 verify them.
+| Area | Requirements | Test cases |
+|---|---|---|
+| V1 oracles, strategies and Kani lowering | FR-001 to FR-005, FR-007 | TC-001 to TC-007, TC-014, TC-023 |
+| Shared assurance intake | FR-006 | TC-008 to TC-010, TC-012, TC-013, TC-032 |
+| Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
+| Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
+| Kani obligations and execution | FR-015 generation, FR-017 pinned execution, FR-023 claimed-module gate, FR-025 subject ABI | TC-025, TC-027, TC-034, TC-036 |
+| Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope | TC-026, TC-035 |
+| Capability settlement and routing | FR-019 settlement, FR-022 routed generation | TC-030, TC-033 |
+| Declared API surface | interface-001 | TC-028 |
 
-FR-018 is the second family of the complete-V1 oracle slice: composite and structural equality over
-exact complete-V1 values, generated against the runtime's FR-008 `check_equality`/`evaluate` surface.
-TC-029 verifies it. It is authored ahead of its implementation and is `🚧 Planned` throughout the
-test matrix. The remaining families of agent-ix/quire-contract-codegen#48 have no requirement yet
-and FR-018 refuses them by name: function application has no runtime surface
-(agent-ix/quire-contract-runtime#34), the model graph awaits agent-ix/quire-spec-language#120, and
-temporal and protocol await agent-ix/quire-spec-language#121.
-
-FR-019 settles every capability claim at one `negotiate_*` point over the closed backend kind.
-FR-022 is the generation arm of the same seam: it takes the items the driver routed, each with its
-request index, backend and backend kind, and generates per kind without settling again. TC-030 and
-TC-033 verify them.
-
-FR-023 is the claimed-module gate over one Kani run (QSL ADR-011 section 2.3): it passes only when the
-prover discharged a check inside every module the gate claims. FR-016-AC-9 is the replay half of the
-skeleton spine, through QSL's `replay` facade. TC-034 and TC-026 verify them.
-
-FR-008 through FR-013 refine FR-002 for bound numeric and state-scalar clauses
-(agent-ix/quire-contract-codegen#3 under agent-ix/quire-spec-language#83), admit only clauses that the
-FR-001 bounded-integer oracle grammar of agent-ix/quire-contract-codegen#4 admits, and are constrained
-by NFR-004. TC-017 through TC-022 verify them. Numbers skip NFR-003 and TC-015 through TC-016
-because a parked expansion branch allocated them.
+FR-020 is reserved for temporal and protocol oracles and is unwritten. FR-018 and FR-014 refuse the
+model graph, relation, temporal and protocol families with typed blockers. Function application is
+FR-021's. Numbers skip NFR-003, TC-011, TC-015 and TC-016, which are not reused.
 
 ### Subsystem layout
 
 Specification files are grouped by crate subsystem. Identifiers stay flat and globally sequential;
 the directory carries the subsystem.
 
-| Subsystem | Source | Directory | Artifacts |
-|---|---|---|---|
-| Strategies and harness campaigns | `src/strategy.rs`, `src/harness.rs` | `functional/strategies/`, `nonfunctional/strategies/`, `test/strategies/` | FR-008–FR-013, NFR-004, TC-017–TC-022 |
-
-The earlier flat artifacts move into subsystem directories after the remaining in-flight codegen#2
-branch lands, so its edits do not conflict with the move:
-
-- oracles: FR-001, TC-001, TC-003
-- strategies: FR-002, TC-004
-- kani: FR-003, TC-005, TC-007
-- vacuity and coverage: FR-004, TC-006
-- publication and CLI: FR-005, TC-002
-- assurance intake: FR-006, TC-008–TC-010, TC-012, TC-013
-- cross-cutting: NFR-001, NFR-002, StR-001
+| Subsystem | Directory | Artifacts |
+|---|---|---|
+| Strategies and harness campaigns | `functional/strategies/`, `nonfunctional/strategies/`, `test/strategies/` | FR-008 to FR-013, NFR-004, TC-017 to TC-022 |
+| Complete-V1 generation, execution and replay | `functional/complete-v1/`, `test/complete-v1/` | FR-014 to FR-025, TC-024 to TC-031, TC-033 to TC-036 |
+| Architecture decisions | `decisions/` | ADR-001 to ADR-004 |
+| Everything else | the flat `functional/`, `nonfunctional/`, `test/`, `stakeholder/` directories | FR-001 to FR-007, NFR-001, NFR-002, StR-001, the remaining TCs |
 
 ## References
 

@@ -42,8 +42,8 @@ collection/query construct without giving Contract IR a dependency on codegen.
   dependency graph, and corpus-case artifacts for supported constructs.
 - A source-linked typed refusal or inconclusive result with no generated
   partial artifact for every non-supported construct or invalid finite input.
-- Concrete counterexample packets that can be replayed by Contract IR's native
-  runtime boundary.
+- Concrete counterexamples that can be replayed through QSL's replay facade as
+  `Input`-arm counterexamples (FR-024).
 
 ## Behavior
 
@@ -92,8 +92,9 @@ collection/query construct without giving Contract IR a dependency on codegen.
 - For every supported corpus case, the generator shall compare native runtime,
   executable oracle, generated strategy, and Kani outcomes using their exact
   typed classifications.
-- When the generator retains a Kani counterexample, the generator shall supply
-  the packet to the Contract IR native replay boundary.
+- When the generator retains a corpus counterexample, the generator shall
+  submit it to QSL's replay facade as an `Input`-arm counterexample
+  ([FR-024](./complete-v1/FR-024-counterexample-envelope-intake.md)).
 - If native replay mismatches or is unavailable, then the generator shall
   retain the typed non-Boolean replay result.
 
@@ -113,10 +114,19 @@ collection/query construct without giving Contract IR a dependency on codegen.
 | FR-007-AC-1 | Every selected arithmetic/definedness, graph, and collection construct receives one exact profile disposition before lowering. | Test (TC-023) |
 | FR-007-AC-2 | Supported finite corpus cases produce deterministic oracle, strategy, Kani, provenance, and proof-dependency artifacts from one validated input selection. | Test (TC-023) |
 | FR-007-AC-3 | Invalid, incomplete, unavailable, over-bound, refused, inconclusive, timed-out, and exhausted cases retain a typed non-Boolean result and no partial artifact. | Test (TC-023) |
-| FR-007-AC-4 | Every retained Kani counterexample replays through Contract IR's native runtime boundary with the same false classification, or the replay returns a typed non-Boolean mismatch or unavailable result. | Test (TC-023) |
+| FR-007-AC-4 | Every retained corpus counterexample replays through QSL's replay facade as an `Input`-arm counterexample with the same false classification, or the replay returns a typed non-Boolean mismatch or unavailable result. | Test (TC-023) |
 | FR-007-AC-5 | The generated corpus preserves the Contract IR to codegen dependency direction and no generated artifact requires a reverse Contract IR dependency. | Inspection (TC-023) |
 | FR-007-AC-6 | The generated `#[kani::proof]` symbol for a supported corpus case is derived from the case's own identity digest and carries the same identity the case's artifact paths carry. | Test (TC-023) |
 | FR-007-AC-7 | A declared census is validated with FR-003's dependency rules plus the Required-only rule; an invalid census (empty or duplicate identity, inconsistent kind/state/paths, or any non-Required kind) returns typed `InvalidInput` `kani_corpus_dependency_invalid` with no artifact and no identity-registry entry; a valid census is retained in the proof-graph artifact and folded into the case identity. | Test (TC-023) |
+
+## Replay target
+
+Replay is QSL's `qsl-replay` facade, and Contract IR holds no replay types
+([AD-001](../assurance/AD-001-codegen-architecture.md)). The replay part of this requirement (the counterexample output, the replay
+Behavior bullet and FR-007-AC-4) therefore states that target. At this revision
+`src/bounded_kani_replay.rs` still replays through Contract IR's `replay_counterexample` with a
+caller-supplied native evaluator, so FR-007-AC-4 is planned. Whether FR-007 stays at all is
+ADR-001 Q1, which is open; if FR-007 is withdrawn, this part goes with it.
 
 ## Dependencies
 

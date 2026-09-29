@@ -71,6 +71,9 @@ retention store, audit store, anchor file, or aggregate verdict of its own.
 | FR-006-AC-10 | Exactly one call reaches the producer's process exit status outside its test module, and its argument is the classification of the lines the producer published rather than a literal or a row collection held beside them, so what reaches the output and what sets the status cannot disagree; a second exit path before the test module and a top-level `fn` declared after it — where the census cannot see it — each fail. The census population is the exit paths in the producer's own source, so control flow that reaches no exit path, such as an early `return` in `main`, is outside it. | Test (TC-032) |
 | FR-006-AC-11 | The compiled conformance binary — the one `make conformance` and `make assurance-inputs` invoke, not the classifier and not a test harness — exits 0 when run against the real bounded corpus. | Test (TC-032) |
 
+FR-006-AC-4 is retired, and its identifier is not reused. The criteria keep their numbers so that
+every test trace tag still names the criterion it verifies.
+
 ## Dependencies
 
 - **Upstream**: the released Engineering Assurance, Quire/quire-cli, Quoin, and ix-flow versions
