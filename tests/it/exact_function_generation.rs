@@ -566,11 +566,7 @@ pub(super) fn chain_oracles() -> quire_contract_codegen::ExactFunctionOracles {
     let package = ext_corpus_package().admit();
     let mut functions = chain_functions();
     functions.push(function_add("add_fn")); // the chain's own last link calls this
-    generate(
-        &package,
-        &functions,
-        &[item(ITEM_CALL_CHAIN, "chain_0")],
-    )
+    generate(&package, &functions, &[item(ITEM_CALL_CHAIN, "chain_0")])
 }
 
 /// Trace: FR-021-AC-7, TC-031. The chain corpus is `CHAIN_LENGTH` (> 128)
@@ -581,7 +577,12 @@ pub(super) fn chain_oracles() -> quire_contract_codegen::ExactFunctionOracles {
 #[test]
 fn tc_031_ac7_chain_corpus_generates_a_call_chain_deeper_than_max_call_depth() {
     let chain = chain_functions();
-    assert!(CHAIN_LENGTH > 128, "the chain must exceed MAX_CALL_DEPTH");
+    const {
+        assert!(
+            CHAIN_LENGTH as u64 > quire_contract_runtime::exact::MAX_CALL_DEPTH,
+            "the chain must exceed MAX_CALL_DEPTH"
+        );
+    }
     assert_eq!(chain.len(), CHAIN_LENGTH as usize);
     assert_eq!(chain[0].name, "chain_0");
     assert_eq!(chain[69].name, "chain_69");

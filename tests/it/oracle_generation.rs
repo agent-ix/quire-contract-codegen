@@ -519,11 +519,13 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     // request carried. Executing `enabled -> false` itself is TC-002's job:
     // its differential corpus compiles and runs every `A -> false` shape.
     let symbol = source_symbol(&first.rust.contents);
-    assert!(symbol.starts_with("oracle_fr_001_7_clause_main_id_"), "{symbol}");
-    assert!(first
-        .rust
-        .contents
-        .contains(&format!("pub fn {symbol}(enabled_current: bool) -> bool {{")));
+    assert!(
+        symbol.starts_with("oracle_fr_001_7_clause_main_id_"),
+        "{symbol}"
+    );
+    assert!(first.rust.contents.contains(&format!(
+        "pub fn {symbol}(enabled_current: bool) -> bool {{"
+    )));
     assert!(first
         .rust
         .contents

@@ -33,17 +33,14 @@ const AGREEMENT_DEV_DEPENDENCIES: &str = "serde_json = \"=1.0.151\"\nsha2 = \"=0
 pub(super) fn run_agreement_cases<'a>(
     label: &str,
     artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
-    extra_files: &[(&str, &str)],
+    extra_files: &[(&'a str, &'a str)],
     cases: &str,
 ) {
     let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let root = scratch.join(label);
     let _ = fs::remove_dir_all(&root);
     let mut wrote_manifest = false;
-    for (path, contents) in artifacts
-        .into_iter()
-        .chain(extra_files.iter().copied())
-    {
+    for (path, contents) in artifacts.into_iter().chain(extra_files.iter().copied()) {
         wrote_manifest |= path == "Cargo.toml";
         let destination = root.join(path);
         fs::create_dir_all(destination.parent().expect("artifact paths are relative"))
