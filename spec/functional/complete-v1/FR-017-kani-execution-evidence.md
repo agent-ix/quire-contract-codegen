@@ -22,8 +22,7 @@ When a caller runs an FR-015 harness, the code generator shall invoke the
 installed Kani backend and retain the backend's own reported outcome as typed
 execution evidence.
 
-This is the surface that turns a generated harness into an assurance claim, and
-it is separate from FR-015 for that reason. FR-015 emits harnesses and typed
+FR-015 emits harnesses and typed
 refusals and asserts nothing about whether one ever ran; this requirement owns
 the run and everything read back from it.
 
@@ -33,14 +32,13 @@ the run and everything read back from it.
   harness (`KaniObligationHarness`, contract role in
   `ObligationKind`) or an FR-022/FR-014 exact-scalar harness
   (`KaniScalarObligationHarness`, no contract role). Either way its identity
-  carries the option vector to invoke, the unwind bound, the solver and the
-  memory and wall-clock ceilings
-  ([FR-028](./FR-028-bounded-proof-ceilings.md)) the run is held to. The two identity types are distinct
+  carries the option vector to invoke, the unwind bound and the solver. The two identity types are distinct
   structs (`KaniObligationIdentity`, `ScalarObligationIdentity`); this
   requirement reads the same handful of facts from whichever one the caller
   hands it, through one borrowed view, rather than owning two execution
   paths.
 - A Kani installation: the `cargo-kani` launcher to invoke.
+- The caller's wall-clock timeout, `KaniExecutionRequest::timeout`. The run has no memory ceiling.
 - The crate directory whose library source contains that harness's generated
   source byte for byte, and the Cargo target directory the run builds into.
 
@@ -73,6 +71,10 @@ the run and everything read back from it.
   as falsified and retain that playback verbatim as the counterexample. A
   playback printed for a satisfied cover witnesses reachability and shall never
   be taken as a counterexample.
+- If the process exited successfully and the backend reported success with zero successful
+  checks, then the generator shall classify the run as inconclusive with the vacuous-proof reason.
+- If the run does not conclude within the caller's timeout, then the generator shall kill it and
+  classify it as inconclusive with the timed-out reason.
 - If the backend reported a failed unwinding assertion, then the
   generator shall classify the run as inconclusive with the
   exhausted-loop-bound reason instead of falsified.
@@ -116,6 +118,8 @@ the run and everything read back from it.
 | FR-017-AC-6 | Execution evidence carries the obligation kind, the harness path, the launcher path, the complete argument vector, the unwind bound, the solver, the exit code and the outcome. | Test (TC-027) |
 | FR-017-AC-7 | A crate whose library source does not contain the harness source byte for byte is refused, and no backend runs. | Test (TC-027) |
 | FR-017-AC-11 | A routed FR-022/FR-014 exact-scalar harness (`KaniScalarObligationHarness`) runs through `execute_kani_obligation` and `kani_launch_command` the same way an FR-015 contract harness does: a crate whose library source lacks its generated source byte for byte is `HarnessNotInCrate`, its covers classify a run identically (all satisfied is verified, an unsatisfied one is cover-unsatisfied, none printed is inconclusive), and its evidence carries `None` for obligation kind, since an exact-scalar claim carries no contract role. | Test (TC-027) |
+| FR-017-AC-12 | Real Kani captures of a verified run, a falsified run with a playback, an exhausted unwind bound, an unreachable cover, a partly satisfied cover and a run with no cover summary each parse into the expected typed transcript of verdict banners, failed checks, check and cover summaries and playback tests, and classify to the expected outcome; the falsifying playback block passes through verbatim. | Test (TC-027) |
+| FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified. | Test (TC-027) |
 
 ## Dependencies
 
@@ -127,20 +131,3 @@ the run and everything read back from it.
   [FR-029](./FR-029-run-outcome-terminal-record.md), which maps the outcome to QSL's terminal value,
   [FR-016](./FR-016-witness-native-replay.md), which decodes the counterexample
   this requirement retains.
-
-## Open items
-
-- The outcome is read from the backend's human-readable output rather than a
-  machine-readable one (agent-ix/quire-contract-codegen#59). The classification
-  rule above is the intended rule; the format it reads is the defect.
-- The timed-out and memory-exhausted inconclusive reasons, and the ceilings a
-  run is held to, are [FR-028](./FR-028-bounded-proof-ceilings.md)'s criteria.
-  At this revision the run is held to a wall-clock budget the caller declares
-  at run time rather than to the ceiling its harness identity records, and no
-  memory ceiling is set.
-
-The retained argument vector is the `kani` subcommand followed by the harness identity's option
-vector unchanged (`src/kani_execution.rs`): the generator builds the invoked command line and the
-retained vector from the same `identity.options` value, so their equality is structural rather
-than an independently checkable behavior, and FR-017-AC-6 does not restate it as a criterion that
-could fail.

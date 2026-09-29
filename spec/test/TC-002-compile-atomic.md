@@ -3,9 +3,9 @@ id: TC-002
 title: "Compile generated code and publish atomically"
 type: TC
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
-    type: verifies
   - target: ix://agent-ix/quire-contract-codegen/FR-005
+    type: verifies
+  - target: ix://agent-ix/quire-contract-codegen/NFR-001
     type: verifies
 ---
 # TC-002: Compile generated code and publish atomically

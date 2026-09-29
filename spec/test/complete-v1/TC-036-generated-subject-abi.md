@@ -52,7 +52,7 @@ yield no harness.
 ## Status
 
 Planned. Step 1's order equality is asserted only for the precondition, postcondition and invariant
-harnesses of the retired V1 `BoundClause` arm (`tests/it/kani_argument_order.rs`, traced to
+harnesses of the V1 `BoundClause` arm (`tests/it/kani_argument_order.rs`, traced to
 FR-016-AC-8); the ascending check and the scalar-claim harness are not. Steps 2 and 6 are planned,
 because `ObligationBinding` carries no parameter node id at this revision. Steps 3 to 5, 7 and 8 are
 planned.

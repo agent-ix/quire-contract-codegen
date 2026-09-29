@@ -3,7 +3,7 @@ id: TC-023
 title: "Verify bounded Kani profile corpus parity"
 type: TC
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-007
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: verifies
 ---
 # TC-023: Verify bounded Kani profile corpus parity
@@ -38,10 +38,3 @@ declared proof-dependency census that is empty or duplicate-identity,
 kind/state/path-inconsistent, or names any non-`Required` kind is refused
 with a typed `InvalidInput` `kani_corpus_dependency_invalid` result and
 leaves no artifact.
-
-## Status
-
-Retired with [FR-007](../functional/FR-007-bounded-kani-profile-corpus.md). Its tests stay until the
-code retires the corpus path. The behaviours FR-007 carried into FR-015 are verified by
-[TC-025](./complete-v1/TC-025-bounded-kani-obligations.md), and replay of a counterexample no backend
-run produced by [TC-035](./complete-v1/TC-035-counterexample-envelope-intake.md).

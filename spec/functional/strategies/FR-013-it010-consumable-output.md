@@ -49,9 +49,6 @@ require any serialized case format or schema owned by this repository for that c
   read, so a consumer needs no mapping table of its own.
 - The generator shall take field identifiers from bound oracle generation's dependency parameter
   names.
-- If bound oracle generation reports its batch-level `NameCollision` error for the clause, then the
-  generator shall refuse with `UnsupportedClause` carrying that error's full `ClauseRef` and its
-  `invalid-input` terminal state.
 - Generated output shall depend only on `proptest`, `quire-contract-runtime`, and `core`/`std`.
 - Generated output shall not depend on quire-spec-language, which depends on this crate.
 - The generator shall not emit a JSON, YAML, or other serialized case, census, or summary format.

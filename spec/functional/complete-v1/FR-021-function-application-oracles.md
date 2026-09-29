@@ -5,7 +5,7 @@ type: FR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/StR-001
     type: satisfies
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/FR-018
     type: depends_on
@@ -266,7 +266,7 @@ written.
 
 ## Dependencies
 
-- **Upstream**: [FR-001](../FR-001-deterministic-oracles.md), [FR-014](./FR-014-exact-scalar-oracles.md),
+- **Upstream**: [FR-014](./FR-014-exact-scalar-oracles.md),
   [FR-018](./FR-018-composite-equality-oracles.md), Contract IR FR-036/FR-038 (CheckedPackage V2
   lowering), Contract Runtime FR-273 (function-application call surface).
 - **Downstream**: [TC-031](../../test/complete-v1/TC-031-function-application-oracles.md).

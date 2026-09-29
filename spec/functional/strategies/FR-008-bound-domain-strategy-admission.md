@@ -7,7 +7,7 @@ relationships:
     type: satisfies
   - target: ix://agent-ix/quire-contract-codegen/FR-002
     type: depends_on
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
@@ -32,10 +32,9 @@ single-comparison shape this slice can construct. The generator derives every ge
 domain from the clause's own integer declarations and refuses every other clause with a located
 diagnostic.
 
-This refines [FR-002](../FR-002-tristate-proptest.md) for bound numeric and state-scalar clauses
-(agent-ix/quire-contract-codegen#3 under epic agent-ix/quire-spec-language#83). The supported clause
-set is the bounded-integer comparison grammar that [FR-001](../FR-001-deterministic-oracles.md)
-FR-001-AC-8 adds (agent-ix/quire-contract-codegen#4). SL lowers a model field such as
+This refines [FR-002](../FR-002-tristate-proptest.md) for bound numeric and state-scalar clauses.
+The supported clause set is the bounded-integer comparison grammar of
+[FR-014](../complete-v1/FR-014-exact-scalar-oracles.md). SL lowers a model field such as
 ConfigVersion's `versionNumber` (0..=1000) into a `ValueDeclaration` whose `SymbolName` is a
 deterministic field alias
 ([quire-spec-language FR-034](ix://agent-ix/quire-spec-language/FR-034)) and whose type is an
@@ -131,8 +130,7 @@ integer declaration ([quire-contract-ir FR-013](ix://agent-ix/quire-contract-ir/
 ## Dependencies
 
 - **Upstream**: [StR-001](../../stakeholder/StR-001-traceable-generation.md);
-  [FR-001](../FR-001-deterministic-oracles.md) FR-001-AC-8 bounded-integer oracle grammar
-  (agent-ix/quire-contract-codegen#4, merged by PR #29 at `e0be330`);
+  [FR-014](../complete-v1/FR-014-exact-scalar-oracles.md) bounded-integer comparison oracles;
   [quire-contract-ir FR-012, FR-013, FR-014, FR-015](ix://agent-ix/quire-contract-ir/FR-014) at
   `04eb6f8`; [quire-spec-language FR-034](ix://agent-ix/quire-spec-language/FR-034) field aliases;
   [FR-002](../FR-002-tristate-proptest.md).

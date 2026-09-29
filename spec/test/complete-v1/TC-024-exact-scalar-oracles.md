@@ -140,9 +140,7 @@ ordering) have an operator in the QSL value authority
 `order_numbers`). Their oracles are checked against direct runtime execution
 and are counted separately from the three-way vectors.
 
-## Carried criteria
-
-These steps verify the criteria FR-014 carries from the retired FR-001. They are planned.
+## Boolean connectives, comparisons and source maps
 
 1. Build a `CheckedPackageV2` with one node for each of Boolean `and`, `or`, `not`, `implies`, `eq`
    and `ne` and integer `eq`, `ne`, `lt`, `le`, `gt` and `ge` over bounded operands. Derive and
@@ -156,5 +154,3 @@ These steps verify the criteria FR-014 carries from the retired FR-001. They are
    count, one evaluation-entry probe on the function-entry line outside every consequent region and
    one entry-token probe inside each consequent's region; dropping or duplicating a region leaves the
    declared count unchanged (FR-014-AC-36).
-3. Generate from two packages whose nodes share ids. No generated name is shared between the two
-   packages (FR-014-AC-38).

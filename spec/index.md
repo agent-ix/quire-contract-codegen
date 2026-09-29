@@ -72,7 +72,6 @@ generators, the input model, the backend adapter, Kani tractability and the gene
 | Area | Requirements | Test cases |
 |---|---|---|
 | Tri-state harnesses, vacuity and publication | FR-002, FR-004, FR-005 | TC-001 to TC-004, TC-006, TC-007 |
-| Retired, each criterion naming the one that carries it | FR-001, FR-003, FR-007 | TC-005, TC-014, TC-023 |
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings | TC-025, TC-027, TC-036, TC-039 |
@@ -94,7 +93,7 @@ the directory carries the subsystem.
 | Strategies and harness campaigns | `functional/strategies/`, `nonfunctional/strategies/`, `test/strategies/` | FR-008 to FR-013, NFR-004, TC-017 to TC-022 |
 | Complete-V1 generation, execution and replay | `functional/complete-v1/`, `test/complete-v1/` | FR-014 to FR-019, FR-021, FR-022, FR-024 to FR-026, FR-028, FR-029, TC-024 to TC-027, TC-029 to TC-031, TC-033, TC-035 to TC-037, TC-039, TC-040 |
 | Architecture decisions | `decisions/` | ADR-001 to ADR-004 |
-| Everything else | the flat `functional/`, `nonfunctional/`, `test/`, `stakeholder/` directories | FR-001 to FR-005, FR-007, NFR-001, NFR-002, StR-001, the remaining TCs |
+| Everything else | the flat `functional/`, `nonfunctional/`, `test/`, `stakeholder/` directories | FR-002, FR-004, FR-005, NFR-001, NFR-002, StR-001, the remaining TCs |
 
 ## References
 

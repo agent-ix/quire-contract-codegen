@@ -3,7 +3,7 @@ id: TC-014
 title: "Verify bounded numeric and state Kani contracts"
 type: TC
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-003
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: verifies
 ---
 # TC-014: Verify bounded numeric and state Kani contracts
@@ -49,9 +49,3 @@ proof population, while executable oracles continue to report their direct Boole
 unsupported or inconsistent case emits no partial Kani bundle. Boolean bundles retain their existing
 semantics, normalized-order permutations reproduce byte-identical artifacts, and unmodeled subject
 effects receive no framing or proof claim.
-
-## Status
-
-Retired with [FR-003](../functional/FR-003-kani-lowering.md). Its tests stay until the code retires
-the V1 path. The behaviours FR-003 carried into FR-015 are verified by
-[TC-025](./complete-v1/TC-025-bounded-kani-obligations.md).

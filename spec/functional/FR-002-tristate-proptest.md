@@ -3,7 +3,7 @@ id: FR-002
 title: "Generate tri-state harnesses and shaped strategies"
 type: FR
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
@@ -67,7 +67,7 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 
 ## Dependencies
 
-- **Upstream**: [FR-001](./FR-001-deterministic-oracles.md).
+- **Upstream**: [FR-014](./complete-v1/FR-014-exact-scalar-oracles.md).
 - **Downstream**: bound numeric/state-scalar refinement in
   [FR-008](./strategies/FR-008-bound-domain-strategy-admission.md) through
   [FR-013](./strategies/FR-013-it010-consumable-output.md).

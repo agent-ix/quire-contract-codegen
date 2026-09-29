@@ -67,9 +67,7 @@ and which failure states stay distinct.
 ### Generation view
 
 One input model enters the generator: an admitted `quire.checked-package/v2` package, read through
-Contract IR's `CheckedPackageV2` (ADR-001). Every generator reads it. FR-002, FR-004, FR-005, FR-008
-to FR-013 and interface-001 still state the V1 `BoundPackage` as their input; ADR-001's
-Consequences record that contradiction until a separate spec change restates them.
+Contract IR's `CheckedPackageV2` (ADR-001). Every generator reads it.
 
 The routed path runs in four steps:
 
@@ -158,9 +156,7 @@ success fallback, and no requirement converts one into another.
   counterexample envelope, the FR-331 terminal record and `ObligationIdentity`. Contract IR holds
   no copy of them. CG uses QSL's `ObligationIdentity` and QSL's envelope, and keeps the Kani
   transcript parser as part of its backend adapter. The authority is the `qsl-replay` API, which
-  defines all five types. QSL ADR-013 O-24 and O-25 and QSpec
-  AD-016 still name Contract IR as the witness and packet owner and give it the terminal-record
-  map; their amendment to match is pending upstream.
+  defines all five types.
 - CG builds QSL's `ObligationIdentity` from every `KaniObligationIdentity` member except
   `source_span` (AD-016 arrow 5), and builds its envelopes as QSL's `WitnessEnvelope` (FR-024).
 - CG replays only through `qsl_replay::replay`, the layer-6 facade (QSL ADR-013 TK-01), and frame
@@ -185,7 +181,7 @@ success fallback, and no requirement converts one into another.
 - Separate-obligation harnesses are lowered against `cadical` with no stubbing option, and every
   symbolic argument is assumed inside its IR `bounded_domain` (FR-015).
 - State reaches a generated subject by `&mut` reference to a harness-owned value. The frame harness
-  is written over AD-016's frame subject once QSpec decides the frame lowering (ADR-004, FR-025).
+  is written over AD-016's frame subject (ADR-004, FR-025).
 - `quote`, `syn` and the bounded renderer emit Rust syntax. Stable ordering and path-independent
   names make regeneration byte-identical (NFR-001).
 
@@ -199,9 +195,9 @@ The views and decisions above state the target. At this revision:
   and its test module imports Contract IR's `ReplaySource`.
 - Step 2 of the replay view, the domain check before replay, is not built. No `WitnessEnvelope` is
   built, and only the skeleton spine renders a QSL transcript (`src/spine_replay.rs`).
-- The retired V1 paths are still present: `src/oracle.rs` (FR-001), `src/kani.rs` (FR-003),
-  `src/bounded_kani_corpus.rs`, `src/bounded_kani_profile.rs` and `src/bounded_kani_replay.rs`
-  (FR-007), and the `BoundClause` arm of FR-015's `ObligationItem`. The FR-002 and FR-008 to FR-013
+- The V1 paths are still present: `src/oracle.rs`, `src/kani.rs`, `src/bounded_kani_corpus.rs`,
+  `src/bounded_kani_profile.rs` and `src/bounded_kani_replay.rs`, and the `BoundClause` arm of
+  FR-015's `ObligationItem`. The FR-002 and FR-008 to FR-013
   strategy generators still read the V1 `BoundPackage`.
 - No adapter trait exists, a run is held to a caller-declared wall-clock budget with no memory
   ceiling, and no outcome maps to QSL's terminal

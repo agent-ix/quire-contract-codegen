@@ -190,11 +190,3 @@ package.
 - **Downstream**: [TC-025](../../test/complete-v1/TC-025-bounded-kani-obligations.md),
   [FR-016](./FR-016-witness-native-replay.md),
   [FR-022](./FR-022-routed-generation.md), whose Kani generation arm calls this generator.
-
-## Carried criteria
-
-FR-015 carries the behaviours of the retired [FR-003](../FR-003-kani-lowering.md) and
-[FR-007](../FR-007-bounded-kani-profile-corpus.md) that it did not already state (ADR-001 Q1):
-FR-015-AC-19 to FR-015-AC-22, FR-015-AC-24 and FR-015-AC-25 carry FR-003's, and FR-015-AC-22,
-FR-015-AC-23 and FR-015-AC-25 carry FR-007's. FR-003's state binding is carried in the
-form ADR-004 Q2 decides, which FR-025-AC-8 states.

@@ -23,8 +23,12 @@ concrete playback for the failed assertion and another for a satisfied cover; a
 failed run with only a cover playback; a failed build with no verdict; success
 text from a process that exited unsuccessfully; a successful run with no cover
 summary, with a zero-total summary, and with an unreadable summary; a failed
-unwinding assertion with playbacks present; and a results listing in which an
-unwinding check succeeded.
+unwinding assertion with playbacks present; a results listing in which an
+unwinding check succeeded; and a successful run whose checks summary reports zero successful checks.
+
+Transcript parsing (FR-017-AC-12): parse real Kani captures (`tests/fixtures/kani-0.67.0/`) of a
+verified run, a falsified run with a playback, an exhausted unwind bound, an unreachable cover, a
+partly satisfied cover and a run with no cover summary, and classify each.
 
 Refusals: request a run against an installation whose launcher is absent.
 
@@ -58,7 +62,12 @@ playback; the failure with only a cover playback, the build failure, the
 unsuccessfully exited process, and the three unreadable cover summaries are
 inconclusive with their own reasons. The failed unwinding assertion is
 inconclusive as an exhausted bound and not falsified, and the succeeded
-unwinding check in a listing is verified.
+unwinding check in a listing is verified. The run with zero successful checks is inconclusive
+with the vacuous-proof reason (FR-017-AC-13).
+
+Each capture parses to the expected typed transcript and classifies to verified, falsified with
+the assertion playback passed through verbatim, exhausted bound, cover-unsatisfied 0 of 1,
+cover-unsatisfied 1 of 2 and missing cover summary respectively (FR-017-AC-12).
 
 The absent launcher is a typed tool refusal naming the launcher and its path.
 
@@ -79,18 +88,13 @@ not contain the harness is refused with no run.
 
 ## Implementation
 
-`src/kani_execution.rs` unit tests for classification, and `tests/it/kani_obligations.rs` for the refusals, the
+`src/kani_execution.rs` unit tests for classification, including
+`a_zero_total_checks_summary_is_inconclusive_not_verified_even_with_every_cover_satisfied` for
+FR-017-AC-13; the `src/kani_transcript.rs` tests `tc_027_a_typed_transcript_reads_each_prose_element`,
+`tc_027_banners_and_absent_prose_are_distinguished`,
+`tc_027_a_cover_line_without_the_counts_shape_is_malformed_not_absent`,
+`tc_027_playback_scanning_stops_at_an_unterminated_fence` and the six
+`tc_027_real_kani_0_67_0_*` capture tests for FR-017-AC-12; and `tests/it/kani_obligations.rs` for the refusals, the
 generation/execution boundary and the `make kani` lane. The lane is `#[ignore]`d and runs through
 `make kani` under a host-wide lock, because Kani and CBMC are memory-heavy and must run one harness
 at a time.
-
-## Blocked
-
-- Timed-out runs: the run carries a caller-declared wall-clock budget and a timed-out state is
-  observable (agent-ix/quire-contract-codegen#58, with its own hermetic unit coverage in
-  `src/kani_execution.rs`). No test in this repository exercises a timed-out state under
-  FR-007-AC-3: that criterion names the corpus path's own `KaniOutcomeKind` vocabulary, distinct
-  from this module's `KaniInconclusiveReason`, which FR-017-CON-2 forbids converting between. No
-  case is written here because FR-017's own acceptance criteria (AC-4, AC-5) enumerate the
-  inconclusive reasons they cover by name, and timed-out is not among them; adding it is
-  agent-ix/quire-contract-codegen#55.

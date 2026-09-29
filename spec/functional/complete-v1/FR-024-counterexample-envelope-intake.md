@@ -120,9 +120,7 @@ At this revision the generator meets none of these criteria in full:
 
 - `src/kani_witness_join.rs` imports Contract IR's `Witness`.
 - `src/bounded_kani_corpus.rs` imports Contract IR's `ReplaySource`, and `src/bounded_kani_replay.rs`
-  replays through Contract IR's `replay_counterexample` and `CounterexamplePacket`. Both implement
-  the retired [FR-007](../FR-007-bounded-kani-profile-corpus.md), and both go when the code retires
-  it.
+  replays through Contract IR's `replay_counterexample` and `CounterexamplePacket`.
 - No domain check runs before replay, and no `WitnessEnvelope` is built.
 - Only the skeleton spine renders a QSL transcript (`src/spine_replay.rs`), and it builds the
   request without an envelope.

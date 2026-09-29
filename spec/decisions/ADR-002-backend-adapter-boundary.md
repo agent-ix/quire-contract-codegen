@@ -24,29 +24,19 @@ relationships:
 
 ## Status
 
-Accepted. The owner ruled on Q0 to Q4 as the Decision states.
+Accepted.
 
 ## Context
 
 Kani is the one backend registered under the FR-331 contract. `BackendKind` has one variant, `Kani`
 (`src/capability.rs`). Settlement (FR-019) and routed generation (FR-022) dispatch over it
-exhaustively. When this question was raised, everything else specific to Kani lived in modules
-that named Kani directly and shared no stated contract:
-
-| Kani-specific fact | Where it lived |
-|---|---|
-| Printed-output wording | `src/kani_transcript.rs` |
-| Real transcript captures | `tests/fixtures/` |
-| Playback typing | `src/kani_witness_join.rs` |
-| QSL witness rendering | `src/spine_replay.rs` |
+exhaustively.
 
 QSL owns `Witness`, `ReplaySource`, the counterexample envelope, the FR-331 terminal record and
 `ObligationIdentity` in `qsl-replay`. Contract IR holds no copy of them, and the Kani transcript
 parser stays in CG as part of its backend adapter.
-[AD-001](../assurance/AD-001-codegen-architecture.md) states that ownership.
-
-QSL ADR-013 O-24 names Contract IR's `KaniOutcomeKind` as the source of the terminal-record map. CG's
-own run outcome is `KaniRunOutcome` (FR-017).
+[AD-001](../assurance/AD-001-codegen-architecture.md) states that ownership. CG's run outcome is
+`KaniRunOutcome` (FR-017).
 
 ## Decision
 
@@ -56,8 +46,7 @@ A backend adapter owns everything specific to one `BackendKind`. It is one Rust 
 once per kind, whose associated items are the adapter's four parts:
 
 1. **Generation arm.** The per-kind arm FR-022 dispatches to.
-2. **Execution.** Launch the installed backend under the harness identity's ceilings, and classify
-   (FR-017).
+2. **Execution.** Launch the installed backend and classify the run (FR-017).
 3. **Transcript parser.** The one module that reads the backend's native output, its
    counterexample included, into a typed transcript.
 4. **Witness renderer.** The one function that renders QSL's backend-witness transcript from the
@@ -99,25 +88,5 @@ A second backend registers in these steps:
 
 ## Consequences
 
-- FR-026 and FR-029 state the adapter trait and the terminal-record map. Each stays planned until code and a test back it.
-- FR-017 runs under the ceilings its harness identity records
-  ([FR-028](../functional/complete-v1/FR-028-bounded-proof-ceilings.md)).
+- FR-026 and FR-029 state the adapter trait and the terminal-record map.
 - FR-019 and FR-022 gain rows only when a second backend is added.
-
-## Alternatives Considered
-
-- **The adapter owns only the transcript parser.** Rejected, because adding a second backend would
-  then mean editing shared modules with no compile-time check that each kind supplies every part.
-- **No trait, a documented convention of free functions.** Rejected for the same reason.
-- **Trait objects registered at run time.** Rejected, because it contradicts FR-019's closed kind
-  set.
-- **QSL maps the outcome from a CG-exported type.** Rejected, because it needs a CG → QSL type edge,
-  which QSL ADR-013 T-7 and FB-05 exclude.
-- **Contract IR keeps `KaniOutcomeKind` and its map, and CG converts into it first.** Rejected,
-  because it keeps an IR copy of a backend outcome.
-- **One execution evidence type shared by all adapters with a per-backend payload.** Rejected,
-  because outcomes differ per backend, and a shared type would need an untyped extension
-  point.
-- **A backend-neutral transcript model shared by all adapters.** Rejected, because each backend
-  prints different facts, so the shared model would be either lossy or a union of every backend.
-  QSL's backend-witness transcript is already the one neutral form that matters.

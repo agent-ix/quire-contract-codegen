@@ -4,11 +4,11 @@ title: "Reproducible and atomic generation"
 type: NFR
 quality_attribute: reliability
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
     type: constrains
   - target: ix://agent-ix/quire-contract-codegen/FR-005
     type: constrains
-  - target: ix://agent-ix/quire-contract-codegen/FR-003
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: constrains
 ---
 # NFR-001: Reproducible and atomic generation
@@ -50,4 +50,4 @@ failures and verifies atomic directory state and unchanged developer-owned files
 
 ## Dependencies
 
-- **Upstream**: [FR-001](../functional/FR-001-deterministic-oracles.md) and [FR-005](../functional/FR-005-cli-conformance.md).
+- **Upstream**: [FR-014](../functional/complete-v1/FR-014-exact-scalar-oracles.md) and [FR-005](../functional/FR-005-cli-conformance.md).

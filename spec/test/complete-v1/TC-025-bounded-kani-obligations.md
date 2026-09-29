@@ -61,9 +61,7 @@ postcondition and invariant harnesses, falsifies a seeded postcondition defect
 with a concrete counterexample, and reports a contract harness with jointly
 unsatisfiable requires as `cover_unsatisfied`.
 
-## Carried criteria
-
-These steps verify the criteria FR-015 carries from the retired FR-003 and FR-007. They are planned.
+## State transitions, censuses and dispositions
 
 1. Generate a zero-input transition over one bounded-integer state value, run it for an identity
    subject and for a subject that changes the value. The identity subject verifies, and the

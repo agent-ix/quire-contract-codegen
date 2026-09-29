@@ -340,7 +340,6 @@ otherwise.
 | FR-014-AC-35 | Boolean `and`, `or`, `not`, `implies`, `eq` and `ne` nodes and integer `eq`, `ne`, `lt`, `le`, `gt` and `ge` nodes each derive a descriptor and generate an `ir_confirmed` oracle; each connective's oracle calls `evaluate_boolean` or `evaluate_boolean_short_circuit`, and each `eq`/`ne` oracle calls `check_equality` and `CheckedEquality::evaluate`, each returning `Outcome<bool>`. | Test (TC-024) |
 | FR-014-AC-36 | Every oracle's source map declares the node's implication-consequent count, one evaluation-entry probe on the function-entry line disjoint from every consequent region, and one entry-token probe inside the exact region of each consequent; a dropped or duplicated region does not change the declared count. | Test (TC-024) |
 | FR-014-AC-37 | A differential corpus covering every node FR-014-AC-35 names compiles against the runtime alone, and each oracle's outcome, admitted charges and consumed counters equal direct runtime execution and the QSL value authority. | Test (TC-024) |
-| FR-014-AC-38 | Generated names built from two packages whose nodes share ids do not alias. | Test (TC-024) |
 
 ## Dependencies
 
@@ -349,9 +348,3 @@ otherwise.
   scalar operators), QSpec FR-196.
 - **Downstream**: [TC-024](../../test/complete-v1/TC-024-exact-scalar-oracles.md),
   [FR-015](./FR-015-bounded-kani-obligations.md).
-
-## Carried criteria
-
-FR-014-AC-35 to FR-014-AC-38 carry the behaviours of the retired
-[FR-001](../FR-001-deterministic-oracles.md) that FR-014 did not already state
-(ADR-001 Q2).

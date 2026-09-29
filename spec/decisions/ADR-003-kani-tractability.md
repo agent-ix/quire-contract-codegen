@@ -20,42 +20,13 @@ relationships:
 
 ## Status
 
-Accepted. The owner ruled on Q1, Q2 and Q3 as the Decision states.
+Accepted.
 
 ## Context
 
 A generated Kani harness embeds its generated oracle. The oracle calls
 `quire_contract_runtime::exact`, so the prover proves the production code through the production
-data structures. No requirement stated how large an obligation the prover must discharge, what
-happens when it cannot, or what the prover is proving when the production code is too large for it.
-
-### Facts measured in this repository
-
-- FR-015-AC-9 forbids any option that enables stubbing, and FR-015 bounds every symbolic argument
-  by its IR `bounded_domain` and the unwind bound to `1..=1024`.
-- FR-015 refuses a harness whose generated source exceeds the crate's byte ceiling
-  (FR-015-AC-13). That ceiling limits source size and says nothing about prover cost.
-- FR-017 runs every harness under a caller-declared wall-clock budget. A run that does not
-  conclude is killed and classified `inconclusive`/`timed_out` (`src/kani_execution.rs`,
-  `KaniInconclusiveReason::TimedOut`). The run sets no memory ceiling.
-- The FR-015 scalar harnesses widen each `i64` argument into `rt::Integer` before calling the
-  oracle. In Contract Runtime, `Integer` is an inline `i64` with an optional
-  boxed `num_bigint::BigInt`, and `TypeEnvironment` holds two `BTreeMap`s.
-- A routed scalar harness over one integer operation verifies in the
-  ignored `make kani` lane (FR-017-AC-11).
-
-### Facts reported elsewhere and not re-measured here
-
-- An open Contract Runtime spike (agent-ix/quire-contract-runtime#78) reports three harnesses
-  through `PackageDeclarations` → `CheckedPackage` → `Frame::call`. Each timed out under a 900 s,
-  12 GB limit without a verdict. It places the blow-up in a bare `PackageDeclarations::check` and
-  drop, before any call.
-- A harness through `CheckedEquality::evaluate` over two `Option<Boolean>` values is reported to
-  have reached a 16 GB memory guard after about 18 minutes without a result, while a
-  `plan_equality`-only probe verified in about 2.5 s.
-
-If those reports hold, FR-021's function-application oracles and FR-018's equality oracles cannot
-be proved by embedding them in a harness as FR-015 does for scalar oracles.
+data structures.
 
 ## Decision
 
@@ -103,24 +74,6 @@ proof does not discharge.
 ## Consequences
 
 - FR-028 states the ceilings, their inconclusive reasons, the tightened-bound record, the
-  per-family naming and the proof subject. It stays planned until code and a test back
-  it.
-- FR-017 runs under the ceilings the harness identity records, rather than under a budget the
-  caller declares at run time.
-- The shadow model and its refinement obligation for the runtime kernel types need a Contract
-  Runtime requirement. FR-018 and FR-021 oracles get a Kani harness through FR-015 only over such a
-  shadow.
-
-## Alternatives Considered
-
-- **Production code only.** Rejected, because an intractable family would then have no proof
-  coverage at all.
-- **Production code with Kani-specific representations behind a `cfg(kani)` switch in Contract
-  Runtime.** Rejected, because the prover would then prove a build that does not ship.
-- **The caller-declared wall-clock budget only.** Rejected, because memory is then unbounded and a
-  run killed by the host is not classified, and a ceiling outside the harness identity cannot be
-  reproduced.
-- **Stubs admitted as proof-graph assumption edges, or only as contract-verified stubs.** Rejected,
-  because every stub is an assumption the proof does not discharge.
-- **Tune harnesses case by case.** Rejected, because the reported blow-up comes before any call, in
-  package admission, so no per-harness unwind or bound change reaches it.
+  per-family naming and the proof subject.
+- FR-018 and FR-021 oracles get a Kani harness through FR-015 only over a bounded shadow with its
+  refinement obligation.

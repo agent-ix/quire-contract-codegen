@@ -5,7 +5,7 @@ type: FR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/StR-001
     type: satisfies
-  - target: ix://agent-ix/quire-contract-codegen/FR-001
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
@@ -105,4 +105,4 @@ obligation exist.
 
 ## Dependencies
 
-- **Upstream**: [FR-001](./FR-001-deterministic-oracles.md) and [FR-002](./FR-002-tristate-proptest.md).
+- **Upstream**: [FR-014](./complete-v1/FR-014-exact-scalar-oracles.md) and [FR-002](./FR-002-tristate-proptest.md).

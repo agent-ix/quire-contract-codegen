@@ -86,7 +86,7 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    `check_type` these vectors complete with a Boolean.
 7. Request one node twice in one request under descriptors differing only in
    `EqualityOperator`; confirm both generate under distinct readable symbols,
-   each built from its operator name and its ordinal in descriptor-key order, that both are
+   each built from its own operator's stem, that both are
    marked `caller_declared`, and
    that their outcomes are complementary on a vector whose operands differ. This
    is not the duplicate case of step 1: a duplicate is one node id under one
