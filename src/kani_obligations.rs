@@ -60,17 +60,18 @@ use crate::{
         aggregate_members, bound_members, literal_count, literal_integer, operand_ranges,
         OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
     },
+    generate_boolean_oracle,
     kani::{
         adapter_options, i64_literal, readable_component, sha256, KaniBindingRole,
         KaniIntegerBounds, KaniPrimitiveType, KaniSolver,
     },
     oracle::{
-        length_delimited_identity,
-        reference_identifier, typed_dependency_parameters, DependencyParameter, RustValueType,
+        length_delimited_identity, reference_identifier, typed_dependency_parameters,
+        DependencyParameter, RustValueType,
     },
-    generate_boolean_oracle, Artifact, ClaimDerivationRefusal, ClaimDisposition, ClaimMap,
-    ExactScalarClaim, ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode,
-    OperationProvenance, OracleRequest, UpstreamBlocker, MAX_GENERATED_SOURCE_BYTES,
+    Artifact, ClaimDerivationRefusal, ClaimDisposition, ClaimMap, ExactScalarClaim,
+    ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode, OperationProvenance,
+    OracleRequest, UpstreamBlocker, MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Largest number of items one request may negotiate.
@@ -495,6 +496,9 @@ pub struct KaniObligationHarness {
     pub identity: KaniObligationIdentity,
     /// Self-contained Rust source.
     pub rust: Artifact,
+    /// JSON record of the identity and the Rust source path: the persisted obligation schema a
+    /// witness is decoded against.
+    pub record: Artifact,
 }
 
 /// One symbolic `i64` argument of a rendered scalar harness, bounded by the IR domain the
@@ -543,6 +547,9 @@ pub struct KaniScalarObligationHarness {
     pub identity: ScalarObligationIdentity,
     /// Self-contained Rust source.
     pub rust: Artifact,
+    /// JSON record of the identity and the Rust source path: the persisted obligation schema a
+    /// witness is decoded against.
+    pub record: Artifact,
 }
 
 /// The result of one negotiated request.
@@ -582,11 +589,7 @@ pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
-    let mut states = request
-        .items
-        .iter()
-        .map(classify)
-        .collect::<Vec<_>>();
+    let mut states = request.items.iter().map(classify).collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
     resolve_assumptions(&mut states);
     let rejected = states
@@ -779,9 +782,7 @@ struct Symbols {
 
 fn classify<'a>(item: &ObligationItem<'a>) -> ItemState<'a> {
     match *item {
-        ObligationItem::BoundClause { package, clause } => {
-            classify_clause(package, clause)
-        }
+        ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
             package,
             claim_map,
@@ -790,10 +791,7 @@ fn classify<'a>(item: &ObligationItem<'a>) -> ItemState<'a> {
     }
 }
 
-fn classify_clause<'a>(
-    package: &'a BoundPackage,
-    clause_ref: &ClauseRef,
-) -> ItemState<'a> {
+fn classify_clause<'a>(package: &'a BoundPackage, clause_ref: &ClauseRef) -> ItemState<'a> {
     let package_digest = package.digest().to_string();
     let identity = Some(ItemIdentity::Clause {
         package: package_digest,
@@ -1846,7 +1844,12 @@ fn render(
         format!("src/generated/{}.rs", lowered.symbols.module),
         source,
     );
-    Ok(KaniObligationHarness { identity, rust })
+    let record = record(&lowered.symbols.module, &identity, &rust)?;
+    Ok(KaniObligationHarness {
+        identity,
+        rust,
+        record,
+    })
 }
 
 /// Renders one IR-confirmed V2 exact-scalar claim to a `kani::proof` that the embedded oracle is
@@ -1983,7 +1986,33 @@ mod {module} {{\n\
         format!("src/generated/{}.rs", lowered.module_symbol),
         source,
     );
-    Ok(KaniScalarObligationHarness { identity, rust })
+    let record = record(&lowered.module_symbol, &identity, &rust)?;
+    Ok(KaniScalarObligationHarness {
+        identity,
+        rust,
+        record,
+    })
+}
+
+/// The persisted `kani-obligations/{module}.json` record of one harness.
+fn record<T: Serialize>(
+    module: &str,
+    identity: &T,
+    rust: &Artifact,
+) -> Result<Artifact, UnsupportedObligation> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct HarnessRecord<'a, T> {
+        identity: &'a T,
+        rust_path: &'a str,
+    }
+    let mut json = serde_json::to_string(&HarnessRecord {
+        identity,
+        rust_path: &rust.path,
+    })
+    .map_err(|_| UnsupportedObligation::RenderFailed)?;
+    json.push('\n');
+    Ok(artifact(format!("kani-obligations/{module}.json"), json))
 }
 
 fn artifact(path: String, contents: String) -> Artifact {
@@ -2449,9 +2478,7 @@ mod tests {
         )
     }
 
-    fn render_probe_request<'a>(
-        items: &'a [ObligationItem<'a>],
-    ) -> KaniObligationRequest<'a> {
+    fn render_probe_request<'a>(items: &'a [ObligationItem<'a>]) -> KaniObligationRequest<'a> {
         KaniObligationRequest {
             items,
             subject_path: "render_probe::subject",
@@ -2461,10 +2488,7 @@ mod tests {
 
     /// Real, legitimately-lowered `LoweredClause` for the probe package's one precondition, with
     /// its embedded oracle source intact for the caller to mutate.
-    fn render_probe_lowered<'a>(
-        request: &KaniObligationRequest<'a>,
-        item: &ObligationItem<'a>,
-    ) -> Box<LoweredClause<'a>> {
+    fn render_probe_lowered<'a>(item: &ObligationItem<'a>) -> Box<LoweredClause<'a>> {
         let Outcome::Lowered(lowered) = classify(item).outcome else {
             panic!("render-probe precondition must lower to a harness");
         };
@@ -2480,9 +2504,8 @@ mod tests {
             package: &package,
             clause: &clause_ref,
         }];
-        let pins = KaniToolPins::pinned();
-        let request = render_probe_request(&items, &pins);
-        let mut lowered = render_probe_lowered(&request, &items[0]);
+        let request = render_probe_request(&items);
+        let mut lowered = render_probe_lowered(&items[0]);
         // Oversized before the syntax check ever runs -- `render` checks byte length first, so
         // garbage content alone is enough to exercise this ground, and it stays garbage on
         // purpose to prove the length check short-circuits the syntax check.
@@ -2505,9 +2528,8 @@ mod tests {
             package: &package,
             clause: &clause_ref,
         }];
-        let pins = KaniToolPins::pinned();
-        let request = render_probe_request(&items, &pins);
-        let mut lowered = render_probe_lowered(&request, &items[0]);
+        let request = render_probe_request(&items);
+        let mut lowered = render_probe_lowered(&items[0]);
         // Well under the byte ceiling, but not valid Rust: an unbalanced brace `syn::parse_file`
         // rejects.
         lowered.oracle.source = "fn broken( {".to_owned();

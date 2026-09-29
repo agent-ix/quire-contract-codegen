@@ -17,9 +17,8 @@ use crate::{
     bound::BoundGenerationError,
     generate_bound_oracles,
     oracle::{length_delimited_identity, oracle_symbol, reference_identifier},
-    Artifact, BoundOracleGeneration, GeneratedArtifactBundle,
-    GenerationErrorCode, GenerationTerminalState, StrategyDiagnostic, StrategyErrorCode,
-    MAX_GENERATED_SOURCE_BYTES,
+    Artifact, BoundOracleGeneration, GeneratedArtifactBundle, GenerationErrorCode,
+    GenerationTerminalState, StrategyDiagnostic, StrategyErrorCode, MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Population selected for one bound numeric strategy bundle.
@@ -118,28 +117,27 @@ pub fn generate_bound_strategy(
         ));
     };
 
-    let generated_oracles =
-        generate_bound_oracles(request.package).map_err(|error| {
-            let diagnostic = map_oracle_error(request.clause, error);
-            if diagnostic.clause.as_deref() == Some(request.clause)
-                && matches!(
-                    diagnostic.generation_code,
-                    Some(
-                        GenerationErrorCode::UnsupportedExpression
-                            | GenerationErrorCode::UnsupportedDependency
-                    )
+    let generated_oracles = generate_bound_oracles(request.package).map_err(|error| {
+        let diagnostic = map_oracle_error(request.clause, error);
+        if diagnostic.clause.as_deref() == Some(request.clause)
+            && matches!(
+                diagnostic.generation_code,
+                Some(
+                    GenerationErrorCode::UnsupportedExpression
+                        | GenerationErrorCode::UnsupportedDependency
                 )
-            {
-                if let Some(locus) = explicit_relation_locus(clause) {
-                    return relation_diagnostic(
-                        clause,
-                        locus,
-                        "comparison operands must be bounded integer reads or integer literals",
-                    );
-                }
+            )
+        {
+            if let Some(locus) = explicit_relation_locus(clause) {
+                return relation_diagnostic(
+                    clause,
+                    locus,
+                    "comparison operands must be bounded integer reads or integer literals",
+                );
             }
-            diagnostic
-        })?;
+        }
+        diagnostic
+    })?;
     let BoundOracleGeneration::Generated(generated_oracles) = generated_oracles else {
         return Err(bound_diagnostic(
             StrategyErrorCode::UnknownClause,

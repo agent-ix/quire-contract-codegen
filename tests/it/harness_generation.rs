@@ -5,12 +5,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::common;
-
 use quire_contract_codegen::{
-    generate_tristate_harness, AttestationContext, AttestationResult, GenerationErrorCode,
-    GenerationTerminalState, HarnessErrorCode, HarnessRequest, ProofAttestationBody,
-    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    generate_tristate_harness, GenerationErrorCode, GenerationTerminalState, HarnessErrorCode,
+    HarnessRequest, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, DeclarationEnvironment, ExecutionPoint, Expression,
@@ -58,20 +55,6 @@ fn span(start: u64, end: u64) -> SourceSpan {
         SourceLocation::new(source, 1, end as u32 + 1, end).unwrap(),
     )
     .unwrap()
-}
-
-/// The record digest this test's attestations bind to.
-///
-/// No change-assurance record is sealed for a unit test, so there is no digest to
-/// name. The all-zero digest is the one 64-hexadecimal string no sealed record can
-/// have, so it cannot be mistaken for a real binding.
-const TEST_RECORD_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
-
-fn attestation_context() -> AttestationContext<'static> {
-    AttestationContext {
-        record_digest: TEST_RECORD_DIGEST,
-        candidate_revision: IR_CANDIDATE_REVISION,
-    }
 }
 
 fn harness_function_name(source: &str) -> &str {
@@ -183,7 +166,6 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
         minimum_accepted_cases: 2,
         minimum_rejected_cases: 1,
         maximum_discarded_cases: 0,
-        attestation: attestation_context(),
     };
     let first = generate_tristate_harness(&request).unwrap();
     let second = generate_tristate_harness(&request).unwrap();
@@ -198,11 +180,9 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
         minimum_accepted_cases: 3,
         minimum_rejected_cases: 2,
         maximum_discarded_cases: 1,
-        attestation: attestation_context(),
     })
     .unwrap();
     assert_ne!(first.rust, stricter.rust);
-    assert_ne!(first.attestation, stricter.attestation);
     let higher_rejected_floor = generate_tristate_harness(&HarnessRequest {
         requirement: environment.owner(),
         precondition_clause: &precondition,
@@ -213,42 +193,9 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
         minimum_accepted_cases: 2,
         minimum_rejected_cases: 2,
         maximum_discarded_cases: 0,
-        attestation: attestation_context(),
     })
     .unwrap();
     assert_ne!(first.rust, higher_rejected_floor.rust);
-    assert_ne!(first.attestation, higher_rejected_floor.attestation);
-    let attestation: ProofAttestationBody =
-        serde_json::from_str(&first.attestation.contents).unwrap();
-    assert_eq!(attestation.schema_version, 1);
-    assert_eq!(attestation.record_type, "proof_attestation");
-    assert_eq!(attestation.result, AttestationResult::Passed);
-    assert_eq!(attestation.record_digest, TEST_RECORD_DIGEST);
-    assert_eq!(attestation.candidate_revision, IR_CANDIDATE_REVISION);
-    assert_eq!(attestation.proof_id, "PROOF-codegen-generated-rust-harness");
-    // The attestation names the artifact it is emitted beside. The deprecated
-    // envelope said this with `outputs[0].uri`; the shared shape says it in the
-    // command that produced the file, and `retained_output` binds the bytes when
-    // Quoin seals it.
-    assert_eq!(
-        attestation.command.argv.last().map(String::as_str),
-        Some(first.rust.path.as_str())
-    );
-    // The harness body is a different shape from the oracle's -- it names no schema
-    // digest, carries no expression digest, and uses a different proof obligation --
-    // so the oracle slice's round trip does not cover it. It gets its own, against
-    // the real CLI and the schema Quoin publishes.
-    let schema = common::packaged_attestation_schema();
-    let validator = common::packaged_attestation_validator(&schema);
-    let sealed_directory = TemporaryDirectory::new("quire-harness-attestation");
-    let sealed = common::seal_and_validate(
-        &first.attestation.contents,
-        &first.rust,
-        &sealed_directory.0,
-        &validator,
-    );
-    assert_eq!(sealed["retained_output"]["media_type"], "text/x-rust");
-    assert_eq!(sealed["proof_id"], "PROOF-codegen-generated-rust-harness");
     assert!(first.rust.contents.starts_with("#![deny(missing_docs)]\n"));
     assert!(first
         .rust
@@ -695,7 +642,6 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 1,
-        attestation: attestation_context(),
     })
     .unwrap();
     let state_only = generate_tristate_harness(&HarnessRequest {
@@ -708,7 +654,6 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 1,
-        attestation: attestation_context(),
     })
     .unwrap();
 
@@ -774,7 +719,6 @@ fn tc_004_invalid_execution_point_is_a_structured_failure_without_artifact() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 1,
-        attestation: attestation_context(),
     })
     .unwrap_err();
     assert_eq!(diagnostic[0].code, HarnessErrorCode::InvalidExecutionPoint);
@@ -795,7 +739,6 @@ fn tc_004_invalid_execution_point_is_a_structured_failure_without_artifact() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 1,
-        attestation: attestation_context(),
     })
     .unwrap_err();
     assert_eq!(
@@ -829,7 +772,6 @@ fn tc_004_invalid_campaign_and_attestation_inputs_fail_before_clause_generation(
         minimum_accepted_cases: 0,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: attestation_context(),
     })
     .unwrap_err();
     assert_eq!(
@@ -841,53 +783,6 @@ fn tc_004_invalid_campaign_and_attestation_inputs_fail_before_clause_generation(
         GenerationTerminalState::InvalidInput
     );
     assert_eq!(invalid_policy[0].path, "minimum_accepted_cases");
-
-    for (name, attestation) in [
-        (
-            "record digest",
-            AttestationContext {
-                record_digest: "not-a-digest",
-                ..attestation_context()
-            },
-        ),
-        (
-            "candidate revision",
-            AttestationContext {
-                candidate_revision: "not-a-revision",
-                ..attestation_context()
-            },
-        ),
-    ] {
-        let invalid_attestation = generate_tristate_harness(&HarnessRequest {
-            requirement: environment.owner(),
-            precondition_clause: &precondition,
-            postcondition_clause: &postcondition,
-            precondition: &precondition_expression,
-            postcondition: &postcondition_expression,
-            execution_point: "handler:update",
-            minimum_accepted_cases: 1,
-            minimum_rejected_cases: 0,
-            maximum_discarded_cases: 0,
-            attestation,
-        })
-        .unwrap_err();
-        assert_eq!(
-            invalid_attestation[0].code,
-            HarnessErrorCode::AttestationGenerationFailed,
-            "{name}"
-        );
-        assert_eq!(
-            invalid_attestation[0].generation_code,
-            Some(GenerationErrorCode::InvalidAttestationContext),
-            "{name}"
-        );
-        assert_eq!(
-            invalid_attestation[0].terminal_state,
-            GenerationTerminalState::InvalidInput,
-            "{name}"
-        );
-        assert_eq!(invalid_attestation[0].path, "attestation.context", "{name}");
-    }
 }
 
 /// TC-003, TC-004.
@@ -960,7 +855,6 @@ fn tc_004_multiple_state_bindings_fail_closed() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 1,
-        attestation: attestation_context(),
     })
     .unwrap_err();
     assert_eq!(

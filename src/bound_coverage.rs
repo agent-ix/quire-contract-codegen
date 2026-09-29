@@ -567,7 +567,6 @@ fn check_output_size(body: &ObservationBody, limit: usize) -> Result<(), Coverag
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

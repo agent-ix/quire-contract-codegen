@@ -1,7 +1,5 @@
 //! Synthetic public executable projections for the complete numeric strategy slice.
 
-use crate::common;
-
 use std::{
     fmt::Write as _,
     fs,
@@ -11,13 +9,11 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    generate_bound_oracles, generate_bound_strategy, AttestationContext, BoundGenerationError,
-    BoundStrategyPopulation, BoundStrategyRequest, GenerationTerminalState, ProofAttestationBody,
-    StrategyErrorCode, IR_CANDIDATE_REVISION,
+    generate_bound_oracles, generate_bound_strategy, BoundGenerationError, BoundStrategyPopulation,
+    BoundStrategyRequest, GenerationTerminalState, StrategyErrorCode,
 };
 use quire_contract_ir::{
-    BoundPackage, ClauseId, ClauseRef, RequirementRef, BOUND_IDENTITY_PROFILE,
-    EXECUTABLE_PROJECTION_FORMAT,
+    BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
 
@@ -39,13 +35,6 @@ impl TemporaryDirectory {
 impl Drop for TemporaryDirectory {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
-fn context() -> AttestationContext<'static> {
-    AttestationContext {
-        record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
-        candidate_revision: IR_CANDIDATE_REVISION,
     }
 }
 
@@ -175,7 +164,6 @@ fn generate(
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap()
 }
@@ -196,7 +184,6 @@ fn generate_projection_population(
         minimum_accepted_cases,
         minimum_rejected_cases,
         maximum_discarded_cases,
-        attestation: context(),
     })
     .unwrap()
 }
@@ -308,7 +295,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap();
     let second = generate(BoundStrategyPopulation::Broad);
@@ -346,7 +332,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap_err();
     assert_eq!(error.code, StrategyErrorCode::UnknownClause);
@@ -364,7 +349,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap_err();
     assert_eq!(error.code, StrategyErrorCode::UnsupportedClauseKind);
@@ -379,7 +363,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap_err();
     assert_eq!(error.code, StrategyErrorCode::UnsupportedRelation);
@@ -400,7 +383,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap_err();
     assert_eq!(error.code, StrategyErrorCode::UnsupportedRelation);
@@ -422,7 +404,7 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         RequirementRef::parse("test/arithmetic", "FR-100", 3).unwrap(),
         ClauseId::new("amount-check").unwrap(),
     );
-    let arithmetic_oracles = match generate_bound_oracles(&arithmetic, context()).unwrap() {
+    let arithmetic_oracles = match generate_bound_oracles(&arithmetic).unwrap() {
         quire_contract_codegen::BoundOracleGeneration::Generated(generated) => generated,
         other => panic!("expected generated arithmetic oracle, got {other:?}"),
     };
@@ -446,7 +428,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap_err();
     assert_eq!(error.code, StrategyErrorCode::UnsupportedRelation);
@@ -507,7 +488,7 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         "right":division_bound, "source":span(4)
     });
     let negated = decode(&negated_value);
-    let oracle_error = match generate_bound_oracles(&negated, context()).unwrap_err() {
+    let oracle_error = match generate_bound_oracles(&negated).unwrap_err() {
         BoundGenerationError::Clause {
             identity,
             mut diagnostics,
@@ -525,7 +506,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap_err();
     assert_eq!(
@@ -545,7 +525,7 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
     // The guarded division discharges its non-zero-divisor obligation, so the oracle generates;
     // the strategy slice still refuses the connective relation with a typed diagnostic.
     let obligation = decode(&obligation_value);
-    let obligation_oracles = match generate_bound_oracles(&obligation, context()).unwrap() {
+    let obligation_oracles = match generate_bound_oracles(&obligation).unwrap() {
         quire_contract_codegen::BoundOracleGeneration::Generated(generated) => generated,
         other => panic!("expected generated guarded-division oracle, got {other:?}"),
     };
@@ -564,7 +544,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap_err();
     assert_eq!(
@@ -638,7 +617,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
             minimum_accepted_cases: 1,
             minimum_rejected_cases: 0,
             maximum_discarded_cases: 0,
-            attestation: context(),
         })
         .unwrap_err();
         assert_eq!(error.code, StrategyErrorCode::UnsupportedRelation);
@@ -660,7 +638,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
             minimum_accepted_cases: 1,
             minimum_rejected_cases: 0,
             maximum_discarded_cases: 0,
-            attestation: context(),
         })
         .unwrap_err();
         assert_eq!(error.code, StrategyErrorCode::UnsupportedClauseKind);
@@ -678,7 +655,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
             minimum_accepted_cases: 1,
             minimum_rejected_cases: 0,
             maximum_discarded_cases: 0,
-            attestation: context(),
         })
         .unwrap_err()
         .code,
@@ -698,7 +674,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
             minimum_accepted_cases: 1,
             minimum_rejected_cases: 0,
             maximum_discarded_cases: 0,
-            attestation: context(),
         })
         .unwrap_err()
         .code,
@@ -716,7 +691,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
             minimum_accepted_cases: 1,
             minimum_rejected_cases: 0,
             maximum_discarded_cases: 0,
-            attestation: context(),
         })
         .unwrap_err()
         .code,
@@ -736,7 +710,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
             minimum_accepted_cases: 1,
             minimum_rejected_cases: 0,
             maximum_discarded_cases: 0,
-            attestation: context(),
         })
         .is_ok());
     }
@@ -755,7 +728,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap();
     assert!(satisfying.rust.contents.contains("OUT_OF_DOMAIN_CASES_"));
@@ -767,7 +739,6 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap_err();
     assert_eq!(
@@ -813,7 +784,6 @@ fn tc_018_public_generation_refuses_every_population_with_an_empty_required_side
                 minimum_accepted_cases: 0,
                 minimum_rejected_cases: 0,
                 maximum_discarded_cases: 0,
-                attestation: context(),
             })
             .unwrap_err();
             assert_eq!(error.code, StrategyErrorCode::EmptyPopulation);
@@ -1465,11 +1435,10 @@ fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
 
 /// Trace: TC-022, FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4, FR-013-AC-5
 #[test]
-fn tc_022_bundle_is_typed_rust_with_bound_identity_and_packaged_attestation() {
+fn tc_022_bundle_is_typed_rust_with_bound_identity() {
     let package = decode(&version_projection());
     let generated = generate(BoundStrategyPopulation::Broad);
     assert!(generated.rust.path.ends_with(".rs"));
-    assert!(generated.attestation.path.ends_with(".json"));
     assert!(!generated.rust.path.contains("schema"));
     let digest = package.digest().to_string();
     assert!(generated.rust.contents.contains(&digest));
@@ -1477,19 +1446,6 @@ fn tc_022_bundle_is_typed_rust_with_bound_identity_and_packaged_attestation() {
         .rust
         .contents
         .contains("test/version-strategy/FR-034@9/VersionUnchanged"));
-    let attestation: ProofAttestationBody =
-        serde_json::from_str(&generated.attestation.contents).unwrap();
-    assert_eq!(
-        attestation.proof_id,
-        "PROOF-codegen-generated-rust-strategy"
-    );
-    let argv = &attestation.command.argv;
-    let flag = |name| &argv[argv.iter().position(|item| item == name).unwrap() + 1];
-    assert_eq!(argv[1], "generate_bound_strategy");
-    assert_eq!(flag("--canonical-profile"), BOUND_IDENTITY_PROFILE);
-    assert_eq!(flag("--input-digest"), &digest);
-    assert_eq!(flag("--requirement"), "FR-034@9");
-    assert_eq!(flag("--clause"), "VersionUnchanged");
 
     let mut changed_package_value = version_projection();
     changed_package_value["bindings"][0]["expression"]["values"][0]["value_type"]["maximum"] =
@@ -1502,30 +1458,14 @@ fn tc_022_bundle_is_typed_rust_with_bound_identity_and_packaged_attestation() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap();
     assert_ne!(changed_package.digest(), package.digest());
     assert_ne!(changed_package_bundle.rust.path, generated.rust.path);
-    assert_ne!(
-        changed_package_bundle.attestation.path,
-        generated.attestation.path
-    );
     assert!(changed_package_bundle
         .rust
         .contents
         .contains(&changed_package.digest().to_string()));
-    let changed_package_attestation: ProofAttestationBody =
-        serde_json::from_str(&changed_package_bundle.attestation.contents).unwrap();
-    let changed_package_argv = &changed_package_attestation.command.argv;
-    assert_eq!(
-        changed_package_argv[changed_package_argv
-            .iter()
-            .position(|item| item == "--input-digest")
-            .unwrap()
-            + 1],
-        changed_package.digest().to_string()
-    );
 
     let mut two_clause_value = version_projection();
     let mut second_clause = two_clause_value["package"]["requirements"][0]["clauses"][0].clone();
@@ -1552,7 +1492,6 @@ fn tc_022_bundle_is_typed_rust_with_bound_identity_and_packaged_attestation() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap();
     let changed_clause_bundle = generate_bound_strategy(&BoundStrategyRequest {
@@ -1562,49 +1501,14 @@ fn tc_022_bundle_is_typed_rust_with_bound_identity_and_packaged_attestation() {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 0,
-        attestation: context(),
     })
     .unwrap();
     assert_ne!(
         changed_clause_bundle.rust.path,
         first_clause_bundle.rust.path
     );
-    assert_ne!(
-        changed_clause_bundle.attestation.path,
-        first_clause_bundle.attestation.path
-    );
     assert!(changed_clause_bundle
         .rust
         .contents
         .contains("test/version-strategy/FR-034@9/VersionStillUnchanged"));
-    let changed_attestation: ProofAttestationBody =
-        serde_json::from_str(&changed_clause_bundle.attestation.contents).unwrap();
-    let changed_argv = &changed_attestation.command.argv;
-    assert_eq!(
-        changed_argv[changed_argv
-            .iter()
-            .position(|item| item == "--input-digest")
-            .unwrap()
-            + 1],
-        two_clause_package.digest().to_string()
-    );
-    assert_eq!(
-        changed_argv[changed_argv
-            .iter()
-            .position(|item| item == "--clause")
-            .unwrap()
-            + 1],
-        "VersionStillUnchanged"
-    );
-
-    let schema = common::packaged_attestation_schema();
-    let validator = common::packaged_attestation_validator(&schema);
-    let directory = TemporaryDirectory::new("quire-bound-strategy-attestation");
-    let sealed = common::seal_and_validate(
-        &generated.attestation.contents,
-        &generated.rust,
-        &directory.0,
-        &validator,
-    );
-    assert_eq!(sealed["proof_id"], "PROOF-codegen-generated-rust-strategy");
 }

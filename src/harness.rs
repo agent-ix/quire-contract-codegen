@@ -14,8 +14,8 @@ use crate::{
         bounded_readable_component, dependency_parameters, length_delimited_identity,
         oracle_symbol, reference_identifier,
     },
-    Artifact, GeneratedArtifactBundle, GenerationDiagnostic,
-    GenerationErrorCode, GenerationTerminalState, OracleRequest, MAX_GENERATED_SOURCE_BYTES,
+    Artifact, GeneratedArtifactBundle, GenerationDiagnostic, GenerationErrorCode,
+    GenerationTerminalState, OracleRequest, MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Explicit inputs for one generated pre/post harness.

@@ -320,8 +320,9 @@ impl Cause {
             | Self::UnknownBackend { .. }
             | Self::InconsistentCandidates { .. }
             | Self::AmbiguousBackend { .. } => "invalid_capability",
-            Self::UnsupportedRequestedCapability { .. }
-            | Self::UnboundedExtent { .. } => "unsupported_projection",
+            Self::UnsupportedRequestedCapability { .. } | Self::UnboundedExtent { .. } => {
+                "unsupported_projection"
+            }
         }
     }
 }

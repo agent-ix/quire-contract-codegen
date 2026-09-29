@@ -3,9 +3,9 @@
 use std::{collections::BTreeMap, fmt::Write as _};
 
 use quire_contract_ir::{
-    BooleanOperator, ClauseId, ComparisonOperator, DefinednessObligationKind,
-    DependencyIdentity, DependencyKind, Expression, ExpressionKind, IntegerType, NumericOperator,
-    RequirementRef, SourceSpan, StateObservation, TypedExpression, ValueType,
+    BooleanOperator, ClauseId, ComparisonOperator, DefinednessObligationKind, DependencyIdentity,
+    DependencyKind, Expression, ExpressionKind, IntegerType, NumericOperator, RequirementRef,
+    SourceSpan, StateObservation, TypedExpression, ValueType,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -323,9 +323,7 @@ pub fn generate_boolean_oracle(
         let handle = std::thread::Builder::new()
             .name("contract-oracle-generation".to_owned())
             .stack_size(16 * 1024 * 1024)
-            .spawn_scoped(scope, || {
-                generate_boolean_oracle_inner(request)
-            })
+            .spawn_scoped(scope, || generate_boolean_oracle_inner(request))
             .map_err(|error| {
                 single_diagnostic(
                     request,

@@ -13,10 +13,10 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    negotiate_backend_provider, record_tool_probe, BackendDescriptor, BackendKind,
-    BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause, Disposition,
-    EnvelopeRefusal, ExtentClassification, ItemResult, ItemSettlement, Mode, ProbePhase,
-    RequestItem, RequestedKind, ToolObservation, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
+    negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
+    Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
+    ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
+    CAPABILITY_VOCABULARY,
 };
 
 const KANI_DIGEST: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
@@ -27,7 +27,6 @@ fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
         identity: BackendKind::Kani.identity().to_owned(),
         manifest_digest: KANI_DIGEST.to_owned(),
         advertised,
-        pinned_tool: "cargo-kani 0.67.0".to_owned(),
     }
 }
 
@@ -203,7 +202,6 @@ fn tc_030_an_unroutable_backend_settles_invalid_request() {
         identity: "cvc5".to_owned(),
         manifest_digest: OTHER_DIGEST.to_owned(),
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
-        pinned_tool: "cvc5 1.2.0".to_owned(),
     };
     let unarmed = settle_one(
         vec![registered_without_arm],
@@ -320,7 +318,6 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
         identity: "kani-nightly".to_owned(),
         manifest_digest: OTHER_DIGEST.to_owned(),
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
-        pinned_tool: "cargo-kani 0.68.0".to_owned(),
     };
     let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
     // Candidate order is bytewise by identity then digest, and is a property of
@@ -723,135 +720,10 @@ fn rust_sources(root: &Path) -> Vec<PathBuf> {
 }
 
 // ---------------------------------------------------------------------------
-// FR-019-AC-6: the record a probe's observation produces
+// Routing a settled item
 // ---------------------------------------------------------------------------
 
-/// A routed item whose pinned tool is absent, and one whose tool is another
-/// identity, each record `unsupported`/`tool-unavailable` while keeping the
-/// item's `supported` disposition.
-///
-/// The observation is constructed, not measured. Resolving a launcher through
-/// `CARGO_HOME` and `PATH`, and parsing what it prints, is
-/// `KaniInstallation::discover`/`observe`'s job and is covered by FR-017's own
-/// tests; what this test owns is the record that an observation produces. An
-/// earlier version wrote a shell script and ran it, which measured nothing the
-/// assertions could catch — `record_tool_probe` compares two strings — while
-/// adding a scratch-directory race that failed once in a full suite.
-///
-/// Trace: TC-030
-/// Provenance: codegen#86
-#[test]
-fn tc_030_an_absent_or_mismatched_pinned_tool_records_unsupported() {
-    let manifest = vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])];
-    let settlement = settle_one(
-        manifest.clone(),
-        item(
-            RequestedKind::Known(CapabilityKind::ValueValidity),
-            Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
-        ),
-    );
-    let routed = settlement
-        .routed(&manifest)
-        .expect("a supported item routes to its one candidate");
-    assert_eq!(routed.backend, BackendKind::Kani.identity());
-    assert_eq!(routed.pinned_tool, "cargo-kani 0.67.0");
-
-    let absent = record_tool_probe(&routed, ProbePhase::BeforeRun, &ToolObservation::Absent)
-        .expect("an absent tool is not a passing probe");
-    assert_eq!(
-        absent,
-        ItemResult::Unsupported {
-            cause: Cause::ToolUnavailable {
-                kind: CapabilityKind::ValueValidity,
-                backend: BackendKind::Kani.identity().to_owned(),
-                expected: "cargo-kani 0.67.0".to_owned(),
-                actual: None,
-            }
-        }
-    );
-
-    let mismatched = record_tool_probe(
-        &routed,
-        ProbePhase::BeforeRun,
-        &ToolObservation::Identity("cargo-kani 0.66.0".to_owned()),
-    )
-    .expect("a mismatched tool is not a passing probe");
-    assert_eq!(
-        mismatched,
-        ItemResult::Unsupported {
-            cause: Cause::ToolUnavailable {
-                kind: CapabilityKind::ValueValidity,
-                backend: BackendKind::Kani.identity().to_owned(),
-                expected: "cargo-kani 0.67.0".to_owned(),
-                actual: Some("cargo-kani 0.66.0".to_owned()),
-            }
-        },
-        "the record names the expected and the actual identity, not just a failure"
-    );
-
-    // The disposition is not touched by either outcome: a claim no backend
-    // discharges and a claim whose backend is not installed are different facts.
-    assert_eq!(
-        settlement.disposition,
-        Disposition::Supported {
-            backend: BackendKind::Kani.identity().to_owned(),
-        }
-    );
-
-    // A matching tool records nothing, so the probe is not a second place a
-    // result can be invented.
-    assert_eq!(
-        record_tool_probe(
-            &routed,
-            ProbePhase::BeforeRun,
-            &ToolObservation::Identity("cargo-kani 0.67.0".to_owned())
-        ),
-        None
-    );
-}
-
-/// A tool that changes after a passing probe records `failed`, with the same
-/// cause as absence found at probe time.
-///
-/// Trace: TC-030
-/// Provenance: codegen#86
-#[test]
-fn tc_030_a_tool_that_changes_after_a_passing_probe_records_failed() {
-    let manifest = vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])];
-    let routed = settle_one(
-        manifest.clone(),
-        item(
-            RequestedKind::Known(CapabilityKind::ValueValidity),
-            Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
-        ),
-    )
-    .routed(&manifest)
-    .expect("a supported item routes");
-
-    let expected_cause = Cause::ToolUnavailable {
-        kind: CapabilityKind::ValueValidity,
-        backend: BackendKind::Kani.identity().to_owned(),
-        expected: "cargo-kani 0.67.0".to_owned(),
-        actual: Some("cargo-kani 0.66.0".to_owned()),
-    };
-    let observed = ToolObservation::Identity("cargo-kani 0.66.0".to_owned());
-    assert_eq!(
-        record_tool_probe(&routed, ProbePhase::DuringRun, &observed),
-        Some(ItemResult::Failed {
-            cause: expected_cause.clone()
-        }),
-        "the result, not the cause, separates a change mid-run from absence at probe"
-    );
-    assert_eq!(
-        record_tool_probe(&routed, ProbePhase::BeforeRun, &observed),
-        Some(ItemResult::Unsupported {
-            cause: expected_cause
-        })
-    );
-}
-
-/// Nothing but a `supported` item routes, so no probe has a tool to run against
-/// before settlement has chosen one.
+/// Nothing but a `supported` item routes.
 ///
 /// Trace: TC-030
 /// Provenance: codegen#86
@@ -896,7 +768,6 @@ fn tc_030_a_repeated_backend_identity_routes_nothing() {
     let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
     let second = BackendDescriptor {
         manifest_digest: OTHER_DIGEST.to_owned(),
-        pinned_tool: "cargo-kani 0.68.0".to_owned(),
         ..first.clone()
     };
     let manifest = vec![first, second];
@@ -917,7 +788,7 @@ fn tc_030_a_repeated_backend_identity_routes_nothing() {
     assert_eq!(
         settlement.routed(&manifest),
         None,
-        "the probe is not handed one of two pins by position"
+        "a settled item is not routed to one of two entries by position"
     );
 }
 
@@ -989,16 +860,6 @@ fn tc_030_kinds_and_causes_serialise_in_the_spelling_the_spec_writes() {
                 backend: "kani".to_owned(),
             },
             "unbounded-extent",
-            "unsupported_projection",
-        ),
-        (
-            Cause::ToolUnavailable {
-                kind: CapabilityKind::Refinement,
-                backend: "kani".to_owned(),
-                expected: "cargo-kani 0.67.0".to_owned(),
-                actual: None,
-            },
-            "tool-unavailable",
             "unsupported_projection",
         ),
     ];

@@ -20,7 +20,7 @@ help:
 	@echo "  make lint             - Clippy with -D warnings"
 	@echo "  make test             - cargo test"
 	@echo "  make build            - Release build"
-	@echo "  make kani             - Run the pinned Kani obligation lane serially"
+	@echo "  make kani             - Run the Kani obligation lane serially"
 	@echo "  make msrv             - Check the crate with Rust $(MSRV)"
 	@echo "  make spec             - Quire-validate the specification"
 	@echo "  make clean            - cargo clean"
@@ -50,11 +50,9 @@ lint:
 test:
 	$(CARGO) test --locked
 
-# The pinned Kani lane (FR-015, TC-025). Kani and CBMC are memory-heavy, so the
-# lane holds a host-wide lock, runs one harness at a time, and builds in its own
-# target directory. The installed Kani version, launcher and driver digests, CBMC,
-# toolchain and target are asserted equal to the committed pins
-# (KaniToolPins::pinned in src/kani_execution.rs) before anything runs.
+# The Kani lane (FR-015, TC-025). Kani and CBMC are memory-heavy, so the lane
+# holds a host-wide lock, runs one harness at a time, and builds in its own
+# target directory.
 #
 # IR-237 merged every `tests/*.rs` file into one `tests/it/main.rs` binary named
 # `it`, so `--test kani_obligations` no longer resolves -- the former

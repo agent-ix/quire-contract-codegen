@@ -8,8 +8,8 @@ use sha2::{Digest as _, Sha256};
 
 use crate::{
     oracle::{bounded_readable_component, length_delimited_identity},
-    Artifact, GeneratedArtifactBundle, GenerationErrorCode,
-    GenerationTerminalState, MAX_GENERATED_SOURCE_BYTES,
+    Artifact, GeneratedArtifactBundle, GenerationErrorCode, GenerationTerminalState,
+    MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Supported integer constraint shape for one generated strategy.
@@ -158,9 +158,7 @@ impl StrategyErrorCode {
             | Self::UnsupportedClause
             | Self::UnsupportedClauseKind
             | Self::UnsupportedRelation => GenerationTerminalState::Unsupported,
-            Self::InvalidGeneratedSyntax => {
-                GenerationTerminalState::Inconclusive
-            }
+            Self::InvalidGeneratedSyntax => GenerationTerminalState::Inconclusive,
         }
     }
 }

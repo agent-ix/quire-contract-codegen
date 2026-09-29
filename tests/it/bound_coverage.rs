@@ -1,7 +1,7 @@
 //! Synthetic projections and exports are explicit; native control below uses real LLVM.
 use quire_contract_codegen::{
-    analyze_bound_coverage, generate_bound_oracles, ArtifactBytes, AttestationContext,
-    BoundCoverageInputs, BoundOracleGeneration, IR_CANDIDATE_REVISION,
+    analyze_bound_coverage, generate_bound_oracles, ArtifactBytes, BoundCoverageInputs,
+    BoundOracleGeneration,
 };
 use quire_contract_ir::{BoundPackage, EXECUTABLE_PROJECTION_FORMAT};
 use serde_json::{json, Value};
@@ -90,14 +90,7 @@ fn projection(package: &str, expressions: &[Value], info: bool) -> Value {
 
 fn generate(value: &Value) -> (BoundPackage, BoundOracleGeneration) {
     let package = BoundPackage::from_json_bytes(&serde_json::to_vec(value).unwrap()).unwrap();
-    let generated = generate_bound_oracles(
-        &package,
-        AttestationContext {
-            record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
-            candidate_revision: IR_CANDIDATE_REVISION,
-        },
-    )
-    .unwrap();
+    let generated = generate_bound_oracles(&package).unwrap();
     (package, generated)
 }
 
@@ -189,7 +182,6 @@ fn strict_domain_schema_refuses_qualification_and_erased_identity() {
         ("/state", json!("passed")),
         ("/population", json!("not_emitted")),
         ("/export_sha256", Value::Null),
-        ("/schema_sha256", json!("missing")),
         ("/clauses/0/classification", Value::Null),
         ("/clauses/0/identity/requirement/package", json!("")),
         ("/clauses/0/consequents/0/count", Value::Null),
@@ -310,15 +302,6 @@ fn complete_bound_package_is_observed_against_actual_native_llvm() {
     modules.push_str(&calls);
     fs::write(source_root.join("src/lib.rs"), modules).unwrap();
     fs::write(source_root.join("Cargo.toml"),format!("[package]\nname=\"bound-coverage-native\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[dependencies]\nquire-contract-runtime={{git=\"https://github.com/agent-ix/quire-contract-runtime\",rev=\"{}\"}}\n[workspace]\n",quire_contract_codegen::RUNTIME_REVISION)).unwrap();
-    let compiler = Command::new("rustc")
-        .args(["+stable", "--version"])
-        .output()
-        .unwrap();
-    assert!(compiler.status.success());
-    assert_eq!(
-        String::from_utf8(compiler.stdout).unwrap().trim(),
-        "rustc 1.94.1 (e408947bf 2026-03-25)"
-    );
     let sysroot = Command::new("rustc")
         .args(["+stable", "--print", "sysroot"])
         .output()

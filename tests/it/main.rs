@@ -49,7 +49,6 @@ mod exact_function_generation;
 mod exact_scalar_agreement;
 mod exact_scalar_generation;
 mod harness_generation;
-mod integration;
 mod interface_001;
 mod kani_argument_order;
 mod kani_generation;

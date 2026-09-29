@@ -5,10 +5,11 @@ use std::collections::BTreeSet;
 use quire_contract_ir::{BoundPackage, CanonicalDigest, ClauseRef};
 
 use crate::{
+    generate_boolean_oracle,
     oracle::oracle_symbol,
     publication::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
-    generate_boolean_oracle, ArtifactBundle, GenerationDiagnostic, OracleArtifactBundle,
-    OracleRequest, PublicationDiagnostic,
+    ArtifactBundle, GenerationDiagnostic, OracleArtifactBundle, OracleRequest,
+    PublicationDiagnostic,
 };
 
 /// Complete generation result, distinct from a native execution or coverage result.

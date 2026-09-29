@@ -9,14 +9,13 @@ use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, generate_routed,
     negotiate_kani_obligations, BackendKind, Candidate, ClaimDerivationRefusal, ClaimDisposition,
     ExactScalarRefusal, GenerationContexts, InvalidObligationItem, KaniGenerationContext,
-    KaniObligationError, KaniObligationOutcome, KaniObligationRequest, KaniPinField,
-    KaniScalarObligationHarness, KaniToolPins, KindOutput, ObligationDisposition, ObligationItem,
-    ObligationRecord, RoutedGeneration, RoutedGenerationError, RoutedGenerationItem,
-    UnsupportedObligation,
+    KaniObligationError, KaniObligationOutcome, KaniObligationRequest, KaniScalarObligationHarness,
+    KindOutput, ObligationDisposition, ObligationItem, ObligationRecord, RoutedGeneration,
+    RoutedGenerationError, RoutedGenerationItem, UnsupportedObligation,
 };
 use quire_contract_ir::{CheckedNodeId, CheckedPackageV2};
 
-use crate::kani_obligations::{context, package, pins, scalar_package};
+use crate::kani_obligations::{package, scalar_package};
 
 const RENDERED: [&str; 3] = [
     "quire.op.integer.add",
@@ -82,17 +81,11 @@ fn route(request_index: usize, node_id: &CheckedNodeId, digest: &str) -> RoutedG
     }
 }
 
-fn kani_context<'a>(
-    pins: &'a KaniToolPins,
-    subject_path: &'a str,
-    unwind: u32,
-) -> GenerationContexts<'a> {
+fn kani_context(subject_path: &str, unwind: u32) -> GenerationContexts<'_> {
     GenerationContexts {
         kani: Some(KaniGenerationContext {
             subject_path,
-            pins,
             unwind,
-            attestation: context(),
         }),
     }
 }
@@ -110,13 +103,10 @@ fn fr015(
             node_id,
         })
         .collect::<Vec<_>>();
-    let pins = pins();
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
         items: &items,
         subject_path: "crate::subject",
-        pins: &pins,
         unwind: 1,
-        attestation: context(),
     })
     .expect("FR-015 accepts the request");
     match outcome {
@@ -147,13 +137,8 @@ fn step_one_routing(fixture: &Fixture) -> Vec<RoutedGenerationItem> {
 }
 
 fn generate_step_one(fixture: &Fixture, routed: &[RoutedGenerationItem]) -> RoutedGeneration {
-    let pins = pins();
-    generate_routed(
-        &fixture.package,
-        routed,
-        &kani_context(&pins, "crate::subject", 1),
-    )
-    .expect("routed generation succeeds")
+    generate_routed(&fixture.package, routed, &kani_context("crate::subject", 1))
+        .expect("routed generation succeeds")
 }
 
 /// Every routed Kani item equals what FR-015 returns in ascending request-index order, with the
@@ -251,8 +236,7 @@ fn tc_033_the_entry_point_takes_no_settlement_input() {
 #[test]
 fn tc_033_a_routed_kind_the_backend_does_not_have_refuses_the_call() {
     let fixture = fixture();
-    let pins = pins();
-    let contexts = kani_context(&pins, "crate::subject", 1);
+    let contexts = kani_context("crate::subject", 1);
     let foreign = |index: usize| RoutedGenerationItem {
         request_index: index,
         node_id: fixture.rendered[0].clone(),
@@ -296,8 +280,7 @@ fn tc_033_a_routed_kind_the_backend_does_not_have_refuses_the_call() {
 #[test]
 fn tc_033_duplicate_index_and_missing_context_refuse_the_call() {
     let fixture = fixture();
-    let pins = pins();
-    let contexts = kani_context(&pins, "crate::subject", 1);
+    let contexts = kani_context("crate::subject", 1);
     let duplicated = [
         route(8, &fixture.rendered[0], "A"),
         route(3, &fixture.rendered[1], "A"),
@@ -334,40 +317,18 @@ fn tc_033_duplicate_index_and_missing_context_refuse_the_call() {
 fn tc_033_a_kani_group_refusal_is_returned_unchanged() {
     let fixture = fixture();
     let routed = step_one_routing(&fixture);
-    let mut drifted = pins();
-    drifted.kani_version = "0.0.0".to_owned();
-    let expected_pin = pins().kani_version;
     assert_eq!(
         generate_routed(
             &fixture.package,
             &routed,
-            &kani_context(&drifted, "crate::subject", 1)
-        ),
-        Err(RoutedGenerationError::Kani(
-            KaniObligationError::UnpinnedBackend {
-                field: KaniPinField::KaniVersion,
-                expected: expected_pin,
-                supplied: "0.0.0".to_owned(),
-            }
-        ))
-    );
-    let pinned = pins();
-    assert_eq!(
-        generate_routed(
-            &fixture.package,
-            &routed,
-            &kani_context(&pinned, "crate::subject", 0)
+            &kani_context("crate::subject", 0)
         ),
         Err(RoutedGenerationError::Kani(
             KaniObligationError::InvalidUnwind { unwind: 0 }
         ))
     );
     assert_eq!(
-        generate_routed(
-            &fixture.package,
-            &routed,
-            &kani_context(&pinned, "not a path", 1)
-        ),
+        generate_routed(&fixture.package, &routed, &kani_context("not a path", 1)),
         Err(RoutedGenerationError::Kani(
             KaniObligationError::InvalidSubjectPath
         ))
@@ -429,10 +390,9 @@ fn tc_033_an_invalid_kani_item_rejects_the_group_with_driver_indexes() {
 #[test]
 fn tc_033_an_empty_routed_set_returns_an_empty_result() {
     let fixture = fixture();
-    let pinned = pins();
     for contexts in [
         GenerationContexts { kani: None },
-        kani_context(&pinned, "crate::subject", 1),
+        kani_context("crate::subject", 1),
     ] {
         assert_eq!(
             generate_routed(&fixture.package, &[], &contexts),
@@ -470,7 +430,7 @@ fn tc_033_output_is_deterministic_and_independent_of_index_and_digest() {
     );
     assert_eq!(low_harness.rust, high_harness.rust);
     assert_eq!(low_harness.record, high_harness.record);
-    assert_eq!(low_harness.identity_sha256, high_harness.identity_sha256);
+    assert_eq!(low_harness.identity, high_harness.identity);
     assert_eq!(
         (low_record.request_index, high_record.request_index),
         (0, 40)
@@ -490,11 +450,10 @@ fn tc_033_output_is_deterministic_and_independent_of_index_and_digest() {
 fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_harness() {
     let package = package::bounded_increment_package().admit();
     let node_id = package::code_id(package::BOUNDED_INCREMENT);
-    let pins = pins();
     let generation = generate_routed(
         &package,
         &[route(0, &node_id, "A")],
-        &kani_context(&pins, "crate::subject", 1),
+        &kani_context("crate::subject", 1),
     )
     .expect("routed generation succeeds");
     let [item] = generation.items.as_slice() else {
@@ -521,11 +480,10 @@ fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_
 fn route_two_parameter(code: u32) -> (ObligationRecord, Option<KaniScalarObligationHarness>) {
     let package = package::two_parameter_package().admit();
     let node_id = package::code_id(code);
-    let pins = pins();
     let generation = generate_routed(
         &package,
         &[route(0, &node_id, "A")],
-        &kani_context(&pins, "crate::subject", 1),
+        &kani_context("crate::subject", 1),
     )
     .expect("routed generation succeeds");
     let [item] = generation.items.as_slice() else {
@@ -653,11 +611,10 @@ fn tc_033_a_plain_typed_reference_operand_is_requires_bound_with_no_harness() {
 fn route_qsl_shaped(code: u32) -> (ObligationRecord, Option<KaniScalarObligationHarness>) {
     let package = package::qsl_shaped_package().admit();
     let node_id = package::code_id(code);
-    let pins = pins();
     let generation = generate_routed(
         &package,
         &[route(0, &node_id, "A")],
-        &kani_context(&pins, "crate::subject", 1),
+        &kani_context("crate::subject", 1),
     )
     .expect("routed generation succeeds");
     let [item] = generation.items.as_slice() else {
@@ -848,8 +805,7 @@ fn derived() -> Derived {
 #[test]
 fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected() {
     let derived = derived();
-    let pins = pins();
-    let contexts = kani_context(&pins, "crate::subject", 1);
+    let contexts = kani_context("crate::subject", 1);
     let with_siblings = derived
         .generated
         .iter()
@@ -906,8 +862,7 @@ fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected(
 #[test]
 fn tc_033_the_returned_claim_map_is_fr014_over_the_derived_items() {
     let derived = derived();
-    let pins = pins();
-    let contexts = kani_context(&pins, "crate::subject", 1);
+    let contexts = kani_context("crate::subject", 1);
     let nodes = derived
         .generated
         .iter()
@@ -980,11 +935,10 @@ const UNSATISFIABLE: u32 = 3001;
 
 /// The record `generate_routed` returns for `node` routed alone, with whether the group rejected.
 fn routed_alone(package: &CheckedPackageV2, node: &CheckedNodeId) -> (ObligationRecord, bool) {
-    let pins = pins();
     let generation = generate_routed(
         package,
         &[route(0, node, "A")],
-        &kani_context(&pins, "crate::subject", 1),
+        &kani_context("crate::subject", 1),
     )
     .expect("routed generation succeeds");
     let [item] = generation.items.as_slice() else {
@@ -1072,12 +1026,11 @@ fn tc_033_lowering_and_bound_refusals_keep_their_fr015_dispositions() {
 #[test]
 fn tc_033_a_node_routed_twice_is_one_claim_and_one_duplicate_item() {
     let fixture = fixture();
-    let pins = pins();
     let node = &fixture.rendered[0];
     let generation = generate_routed(
         &fixture.package,
         &[route(5, node, "A"), route(3, node, "A")],
-        &kani_context(&pins, "crate::subject", 1),
+        &kani_context("crate::subject", 1),
     )
     .expect("routed generation succeeds");
     assert_eq!(generation.rejected, [BackendKind::Kani]);
@@ -1116,14 +1069,13 @@ fn tc_033_a_node_routed_twice_is_one_claim_and_one_duplicate_item() {
 #[test]
 fn tc_033_an_underivable_claim_is_underived_and_carries_the_nodes_identity() {
     let derived = derived();
-    let pins = pins();
     let generation = generate_routed(
         &derived.package,
         &[
             route(0, &derived.rem, "A"),
             route(1, &package::code_id(package::MISSING), "A"),
         ],
-        &kani_context(&pins, "crate::subject", 1),
+        &kani_context("crate::subject", 1),
     )
     .expect("routed generation succeeds");
     let claim_map = generation.claim_map.expect("a Kani group ran");
@@ -1173,11 +1125,10 @@ fn fr014_artifacts(
 fn tc_033_the_oracle_crate_is_returned_and_defines_the_symbol_the_harness_references() {
     let package = package::bounded_increment_package().admit();
     let node_id = package::code_id(package::BOUNDED_INCREMENT);
-    let pins = pins();
     let generation = generate_routed(
         &package,
         &[route(0, &node_id, "A")],
-        &kani_context(&pins, "crate::subject", 1),
+        &kani_context("crate::subject", 1),
     )
     .expect("routed generation succeeds");
     let artifacts = generation.oracle_artifacts.expect("a Kani group ran");
@@ -1224,8 +1175,7 @@ fn tc_033_the_oracle_crate_is_returned_and_defines_the_symbol_the_harness_refere
 #[test]
 fn tc_033_an_all_underivable_group_returns_fr014_empty_crate_and_no_group_returns_none() {
     let derived = derived();
-    let pins = pins();
-    let contexts = kani_context(&pins, "crate::subject", 1);
+    let contexts = kani_context("crate::subject", 1);
     let generation = generate_routed(&derived.package, &[route(0, &derived.rem, "A")], &contexts)
         .expect("generates");
     let artifacts = generation.oracle_artifacts.expect("a Kani group ran");
@@ -1242,7 +1192,6 @@ fn tc_033_an_all_underivable_group_returns_fr014_empty_crate_and_no_group_return
 #[test]
 fn tc_033_the_returned_claim_map_file_omits_the_underivable_claims_the_map_keeps() {
     let derived = derived();
-    let pins = pins();
     let routed = [
         route(0, &derived.generated[0], "A"),
         route(1, &derived.rem, "A"),
@@ -1250,7 +1199,7 @@ fn tc_033_the_returned_claim_map_file_omits_the_underivable_claims_the_map_keeps
     let generation = generate_routed(
         &derived.package,
         &routed,
-        &kani_context(&pins, "crate::subject", 1),
+        &kani_context("crate::subject", 1),
     )
     .expect("generates");
     let claim_map = generation.claim_map.expect("a Kani group ran");

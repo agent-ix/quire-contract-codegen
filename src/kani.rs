@@ -15,7 +15,8 @@ use sha2::{Digest as _, Sha256};
 use crate::{
     generate_boolean_oracle,
     oracle::{
-        length_delimited_identity, oracle_symbol, typed_dependency_parameters, DependencyParameter, RustValueType,
+        length_delimited_identity, oracle_symbol, typed_dependency_parameters, DependencyParameter,
+        RustValueType,
     },
     Artifact, GenerationErrorCode, GenerationTerminalState, OracleRequest,
     MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
@@ -217,9 +218,9 @@ impl KaniErrorCode {
     #[must_use]
     pub const fn terminal_state(self) -> GenerationTerminalState {
         match self {
-            Self::InvalidIdentity
-            | Self::InvalidDependency
-            | Self::InvalidUnwind => GenerationTerminalState::InvalidInput,
+            Self::InvalidIdentity | Self::InvalidDependency | Self::InvalidUnwind => {
+                GenerationTerminalState::InvalidInput
+            }
             Self::UnsupportedBinding | Self::ResourceLimitExceeded => {
                 GenerationTerminalState::Unsupported
             }
@@ -1094,4 +1095,3 @@ pub(crate) fn sha256(bytes: &[u8]) -> String {
     }
     result
 }
-

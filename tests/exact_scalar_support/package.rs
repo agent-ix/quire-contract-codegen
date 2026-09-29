@@ -1,16 +1,10 @@
 //! Admitted CheckedPackage V2 fixtures for exact scalar generation.
 //!
-//! The base is QSpec's `positive-nominal-identities.json` I04 vector, vendored
-//! from Contract IR, which supplies an enum declaration, one of its
-//! members, a dimension and a declared unit under their honest nominal keys.
-//! It is not currently byte-identical to Contract IR's own copy: this
-//! repository's vendored copy carries a `package_id.digest` of
-//! `a4a3d1699e33ceed6084fab17ce174bd6391a21fcd504bbf5d153710c1d2df39`, while
-//! upstream's is `b70a9f27c9ef49711fb603d56014aa5ce092379cd820c5e62a0154c89877e7b4`
-//! (both at the pinned `ef11217` revision); every other byte matches. Scalar
-//! types, values and expressions are appended under readable zero-padded
-//! keys, and the package identity is re-derived exactly as the Contract IR
-//! fixture support does.
+//! The base (`tests/checked_package_support/base.rs`) supplies an enum declaration,
+//! one of its members, a dimension and a declared unit under their nominal
+//! keys. Scalar types, values and expressions are appended under readable
+//! zero-padded keys, and the package identity is re-derived from the
+//! finished graph.
 //!
 //! Bounds are `bounded_domain` nodes keyed by the digest of their content and
 //! `foreign` (see `Bound::key`/`Bound::foreign`), and listed in the
@@ -359,7 +353,7 @@ fn aggregate() -> Value {
 /// equal the containing node's own `semantic_type`, and most hand-written
 /// corpus fixtures that type themselves by kind rather than by a bound do
 /// follow that convention (`literal.type` == the node's own `semantic_type`),
-/// matching the vendored `positive-nominal-identities.json` pattern. `corpus_package`'s
+/// matching the base package's pattern. `corpus_package`'s
 /// own `V_QUANTITY` is the one exception: its `literal.type` is `rational`
 /// (this value's own `value_kind`) even though the node's `semantic_type` is
 /// `UNIT_TYPE`, because Contract IR's lowering reaches `literal.type`
@@ -405,11 +399,12 @@ pub struct PackageBuilder {
     dedicated_operands: BTreeSet<String>,
 }
 
+include!("../checked_package_support/base.rs");
+
 impl Default for PackageBuilder {
     fn default() -> Self {
-        let text = include_str!("../fixtures/exact_scalar/positive-nominal-identities.json");
         Self {
-            value: serde_json::from_str(text).expect("vendored fixture is JSON"),
+            value: base_package(),
             bounds: BTreeSet::new(),
             dedicated_operands: BTreeSet::new(),
         }

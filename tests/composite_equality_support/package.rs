@@ -1,7 +1,7 @@
 //! Admitted CheckedPackage V2 fixtures for composite/structural equality
 //! generation (FR-018).
 //!
-//! Built on the same vendored `positive-nominal-identities.json` base as
+//! Built on the same `tests/checked_package_support/base.rs` base as
 //! `exact_scalar_support::package`, with `scalar_type`, `composite_type`,
 //! `bounded_domain` and `expression` nodes appended under readable
 //! zero-padded keys. Composite/collection bodies use the encoding
@@ -136,8 +136,8 @@ pub fn aggregate(members: Vec<Value>) -> Value {
 /// The corpus's own scalar-type node for a literal `value_kind`. Contract IR
 /// (a606059) requires `literal.type` as a member and validates only that it
 /// resolves to a real node (FR-038-AC-17); every literal this module builds
-/// types itself by kind, matching the vendored `positive-nominal-identities.
-/// json` convention (`literal.type` == the node's own `semantic_type`).
+/// types itself by kind, matching the base package's convention
+/// (`literal.type` == the node's own `semantic_type`).
 fn literal_type(kind: &str) -> String {
     match kind {
         "boolean" => key(T_BOOLEAN),
@@ -291,11 +291,12 @@ pub struct PackageBuilder {
     value: Value,
 }
 
+include!("../checked_package_support/base.rs");
+
 impl Default for PackageBuilder {
     fn default() -> Self {
-        let text = include_str!("../fixtures/exact_scalar/positive-nominal-identities.json");
         Self {
-            value: serde_json::from_str(text).expect("vendored fixture is JSON"),
+            value: base_package(),
         }
     }
 }

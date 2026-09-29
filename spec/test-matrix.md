@@ -279,7 +279,7 @@ requirement here claims either one.
 
 | Interface | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| interface-001 | interface-001-AC-1 through interface-001-AC-5 | TC-028 | ✅ Covered |
+| interface-001 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-4 | TC-028 | ✅ Covered |
 
 ## Non-Functional Requirement Coverage
 
@@ -330,7 +330,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-025 | Verify separate bounded Kani obligations | Analysis | P0 | FR-015-AC-1, FR-015-AC-2, FR-015-AC-3, FR-015-AC-4, FR-015-AC-5, FR-015-AC-6, FR-015-AC-7, FR-015-AC-8, FR-015-AC-9, FR-015-AC-10, FR-015-AC-11, FR-015-AC-12, FR-015-AC-14 | 🚧 Planned |
 | TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4, FR-016-AC-5, FR-016-AC-6, FR-016-AC-7, FR-016-AC-8, FR-016-AC-9, FR-016-AC-10, FR-016-AC-11, FR-016-AC-12, FR-016-AC-13 | 🚧 Planned |
 | TC-027 | Verify pinned Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-1, FR-017-AC-2, FR-017-AC-3, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-8, FR-017-AC-9, FR-017-AC-10, FR-017-AC-11, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
-| TC-028 | Verify interface-001's declared API surface and identity envelope match the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-3, interface-001-AC-4, interface-001-AC-5 | ✅ Covered |
+| TC-028 | Verify interface-001's declared API surface matches the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-4 | ✅ Covered |
 | TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13, FR-018-AC-14 | 🚧 Planned |
 | TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
 | TC-031 | Verify function-application oracle generation, agreement, and static location tagging | Integration | P0 | FR-021-AC-1, FR-021-AC-2, FR-021-AC-3, FR-021-AC-4, FR-021-AC-5, FR-021-AC-6, FR-021-AC-7, FR-021-AC-8, FR-021-AC-9, FR-021-AC-10, FR-021-AC-11, FR-021-AC-12, FR-021-AC-13, FR-021-AC-14, FR-021-AC-15, FR-021-AC-16, FR-021-AC-17, FR-021-AC-18 | ✅ Covered |

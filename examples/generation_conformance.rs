@@ -12,15 +12,13 @@
 //! `fail`, and `2` when no row failed but one is `vacuous`. The failing and
 //! vacuous rows are named on stderr. `make conformance` runs it.
 
-use std::fmt::Write as _;
 use std::process;
 
 use quire_contract_codegen::{
-    generate_boolean_oracle, generate_i64_strategy, generate_tristate_harness, AttestationContext,
-    AttestationResult, GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
-    HarnessErrorCode, HarnessRequest, OracleArtifactBundle, OracleRequest, ProofAttestationBody,
-    SourceRegion, StrategyCampaign, StrategyConstraint, StrategyErrorCode, StrategyRequest,
-    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES,
+    generate_boolean_oracle, generate_i64_strategy, generate_tristate_harness,
+    GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState, HarnessErrorCode,
+    HarnessRequest, OracleArtifactBundle, OracleRequest, SourceRegion, StrategyCampaign,
+    StrategyConstraint, StrategyErrorCode, StrategyRequest, MAX_GENERATED_SOURCE_BYTES,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
@@ -30,7 +28,6 @@ use quire_contract_ir::{
     TypedExpression, ValueDeclaration, ValueDeclarationKind, ValueType,
 };
 use serde::Serialize;
-use sha2::{Digest as _, Sha256};
 
 /// The protocol this producer publishes. Named, so a consumer that transcribes
 /// it can refuse anything else rather than guess.
@@ -62,14 +59,6 @@ struct Row {
     trace_ids: Vec<&'static str>,
 }
 
-fn sha256(bytes: &[u8]) -> String {
-    let mut result = String::with_capacity(64);
-    for byte in Sha256::digest(bytes) {
-        let _ = write!(result, "{byte:02x}");
-    }
-    result
-}
-
 // ---------------------------------------------------------------------------
 // Corpus construction
 // ---------------------------------------------------------------------------
@@ -92,44 +81,6 @@ fn span(start: u64, end: u64) -> SourceSpan {
         SourceLocation::new(source, 1, end as u32 + 1, end).unwrap(),
     )
     .unwrap()
-}
-
-/// The record digest this corpus's attestations bind to.
-///
-/// A bounded corpus is not a change under review, so no change-assurance record is
-/// sealed for it and there is no digest to name. The all-zero digest is used
-/// because it is the one 64-hexadecimal string no sealed record can have: a
-/// plausible-looking value here would be a false binding, and this one cannot be
-/// mistaken for a real one.
-const CORPUS_RECORD_DIGEST: &str =
-    "0000000000000000000000000000000000000000000000000000000000000000";
-
-fn attestation() -> AttestationContext<'static> {
-    AttestationContext {
-        record_digest: CORPUS_RECORD_DIGEST,
-        candidate_revision: IR_CANDIDATE_REVISION,
-    }
-}
-
-/// Reads one emitted attestation and reports whether it is a well-formed
-/// `ProofAttestationV1` body bound to the context the caller supplied.
-///
-/// This is a shape check and deliberately not a conformance check against Quoin's
-/// packaged schema: the producer runs before the chain and shells out to nothing.
-/// `tests/oracle_generation.rs` seals these bytes through the real
-/// `quoin change-assurance seal-attestation` and validates the sealed result
-/// against the packaged schema.
-fn attestation_is_a_shared_body(contents: &str) -> bool {
-    let Ok(body) = serde_json::from_str::<ProofAttestationBody>(contents) else {
-        return false;
-    };
-    body.schema_version == 1
-        && body.record_type == "proof_attestation"
-        && body.result == AttestationResult::Passed
-        && body.record_digest == CORPUS_RECORD_DIGEST
-        && body.candidate_revision == IR_CANDIDATE_REVISION
-        && body.proof_id.starts_with("PROOF-codegen-")
-        && body.attestation_id.starts_with(&body.proof_id)
 }
 
 fn boolean_environment(
@@ -361,13 +312,12 @@ fn record_oracle_rejection(
 fn oracle_generated() -> Case {
     let mut case = Case::new(
         "generation::boolean-oracle",
-        7,
+        5,
         vec![
             "FR-001",
             "FR-001-AC-1",
             "FR-001-AC-3",
             "NFR-001-AC-1",
-            "NFR-002-AC-1",
             "NFR-002-AC-2",
             "TC-001",
         ],
@@ -393,7 +343,6 @@ fn oracle_generated() -> Case {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed_expression,
-        attestation: attestation(),
     };
 
     match generate_boolean_oracle(&request) {
@@ -428,20 +377,6 @@ fn oracle_generated() -> Case {
                     .map(|regions| !regions.is_empty())
                     .unwrap_or(false),
             );
-            case.check(
-                "each artifact's recorded digest is the digest of that artifact",
-                first.rust.sha256 == sha256(first.rust.contents.as_bytes())
-                    && first.source_map.sha256 == sha256(first.source_map.contents.as_bytes())
-                    && first.rust_attestation.sha256
-                        == sha256(first.rust_attestation.contents.as_bytes())
-                    && first.source_map_attestation.sha256
-                        == sha256(first.source_map_attestation.contents.as_bytes()),
-            );
-            case.check(
-                "both generated artifacts carry a shared proof-attestation body",
-                attestation_is_a_shared_body(&first.rust_attestation.contents)
-                    && attestation_is_a_shared_body(&first.source_map_attestation.contents),
-            );
         }
         Err(diagnostics) => {
             case.terminal_state = diagnostics.first().map(|item| item.terminal_state);
@@ -467,7 +402,7 @@ fn oracle_generated() -> Case {
 fn harness_generated() -> Case {
     let mut case = Case::new(
         "generation::tristate-harness",
-        5,
+        3,
         vec!["FR-002", "FR-002-AC-1", "NFR-002-AC-2", "TC-004"],
     );
     case.expected_terminal_state = Some(GenerationTerminalState::Generated);
@@ -518,7 +453,6 @@ fn harness_generated() -> Case {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 1,
-        attestation: attestation(),
     };
     match generate_tristate_harness(&request) {
         Ok(first) => {
@@ -541,15 +475,6 @@ fn harness_generated() -> Case {
             case.check(
                 "the harness exposes a proptest adapter",
                 first.rust.contents.contains("_proptest"),
-            );
-            case.check(
-                "each artifact's recorded digest is the digest of that artifact",
-                first.rust.sha256 == sha256(first.rust.contents.as_bytes())
-                    && first.attestation.sha256 == sha256(first.attestation.contents.as_bytes()),
-            );
-            case.check(
-                "the generated artifact carries a shared proof-attestation body",
-                attestation_is_a_shared_body(&first.attestation.contents),
             );
         }
         Err(diagnostics) => {
@@ -575,7 +500,7 @@ fn harness_generated() -> Case {
 fn strategy_generated() -> Case {
     let mut case = Case::new(
         "generation::i64-strategy",
-        4,
+        2,
         vec!["FR-002", "FR-002-AC-2", "NFR-002-AC-2", "TC-004"],
     );
     case.expected_terminal_state = Some(GenerationTerminalState::Generated);
@@ -588,7 +513,6 @@ fn strategy_generated() -> Case {
             maximum: 8,
         },
         campaign: StrategyCampaign::Boundary,
-        attestation: attestation(),
     };
     match generate_i64_strategy(&request) {
         Ok(first) => {
@@ -607,15 +531,6 @@ fn strategy_generated() -> Case {
                     .rust
                     .contents
                     .contains("// SPDX-License-Identifier: MIT OR Apache-2.0\n"),
-            );
-            case.check(
-                "each artifact's recorded digest is the digest of that artifact",
-                first.rust.sha256 == sha256(first.rust.contents.as_bytes())
-                    && first.attestation.sha256 == sha256(first.attestation.contents.as_bytes()),
-            );
-            case.check(
-                "the generated artifact carries a shared proof-attestation body",
-                attestation_is_a_shared_body(&first.attestation.contents),
             );
         }
         Err(diagnostic) => {
@@ -661,7 +576,6 @@ fn oracle_rejects_non_boolean_root() -> Case {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed_root,
-        attestation: attestation(),
     };
     record_oracle_rejection(&mut case, generate_boolean_oracle(&request));
     case
@@ -734,41 +648,6 @@ fn oracle_rejects_unsupported_expression() -> Case {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed_expression,
-        attestation: attestation(),
-    };
-    record_oracle_rejection(&mut case, generate_boolean_oracle(&request));
-    case
-}
-
-/// TC-003: an invalid caller-supplied attestation binding is rejected before any
-/// artifact exists, so a generated artifact cannot arrive bound to nothing.
-fn oracle_rejects_invalid_attestation_context() -> Case {
-    let mut case = Case::new(
-        "rejection::invalid-attestation-context",
-        2,
-        vec!["FR-001-AC-4", "NFR-002-AC-1", "NFR-002-AC-3", "TC-003"],
-    );
-    case.expected_terminal_state = Some(GenerationTerminalState::InvalidInput);
-    case.expected_diagnostic_code = Some("invalid_attestation_context");
-    let owner = requirement("FR-001", 7);
-    let environment = boolean_environment(owner, &[("enabled", ValueDeclarationKind::Input)]);
-    let expression = reference("enabled", StateObservation::Current, 3);
-    let typed_expression = match typed(&environment, &expression, &ValueType::Boolean, true) {
-        Ok(value) => value,
-        Err(reason) => {
-            case.check(&format!("the clause types: {reason}"), false);
-            return case;
-        }
-    };
-    let clause = ClauseId::new("clause-main").unwrap();
-    let request = OracleRequest {
-        requirement: environment.owner(),
-        clause: &clause,
-        expression: &typed_expression,
-        attestation: AttestationContext {
-            record_digest: "not-a-digest",
-            candidate_revision: "not-a-revision",
-        },
     };
     record_oracle_rejection(&mut case, generate_boolean_oracle(&request));
     case
@@ -850,7 +729,6 @@ fn harness_rejects_invalid_input(duplicate_clause: bool) -> Case {
         minimum_accepted_cases: 1,
         minimum_rejected_cases: 0,
         maximum_discarded_cases: 1,
-        attestation: attestation(),
     };
     match generate_tristate_harness(&request) {
         Ok(_) => {
@@ -916,7 +794,6 @@ fn strategy_rejects_invalid_range() -> Case {
             maximum: -8,
         },
         campaign: StrategyCampaign::Broad,
-        attestation: attestation(),
     };
     match generate_i64_strategy(&request) {
         Ok(_) => {
@@ -1001,10 +878,6 @@ fn diagnostic_census(rows: &[Row]) -> Case {
             GenerationTerminalState::InvalidInput,
         ),
         (
-            GenerationErrorCode::InvalidAttestationContext,
-            GenerationTerminalState::InvalidInput,
-        ),
-        (
             GenerationErrorCode::UnsupportedExpression,
             GenerationTerminalState::Unsupported,
         ),
@@ -1045,7 +918,6 @@ fn main() {
         strategy_generated().into_row(),
         oracle_rejects_non_boolean_root().into_row(),
         oracle_rejects_unsupported_expression().into_row(),
-        oracle_rejects_invalid_attestation_context().into_row(),
         harness_rejects_invalid_input(true).into_row(),
         harness_rejects_invalid_input(false).into_row(),
         strategy_rejects_invalid_range().into_row(),
@@ -1065,23 +937,11 @@ fn main() {
         println!("{line}");
     }
 
-    // `Makefile:233` lists `conformance` in `ci`, so this producer's own rows
-    // have to set its exit code. Printing a `fail` row and returning unit made
-    // that entry structurally incapable of failing: `rejection::unsupported-
-    // expression` sat red inside a green `make conformance`, and because the
-    // assurance chain asserts a zero exit, that one unjudged row suppressed
-    // four `shared_assurance` tests at once (#77).
-    //
-    // The three codes keep the row vocabulary's distinction instead of
-    // collapsing it, and they agree with the chain's `ROW_RESULTS`, which maps
-    // `fail` to `failed` and `vacuous` to `not_computed`, and with its
-    // `RESULT_PRECEDENCE`, where both outrank `passed` because the strongest
-    // thing observed is what the run has to be reported as. `vacuous` is not a
+    // `make ci` runs `conformance`, so this producer's own rows set its exit
+    // code: printing a `fail` row and returning unit would make that entry
+    // structurally incapable of failing (#77). The three codes keep the row
+    // vocabulary's distinction instead of collapsing it: `vacuous` is not a
     // failure and is not a pass either, so it exits 2 as inconclusive.
-    //
-    // Only `make conformance` acts on these codes. `make assurance-inputs`
-    // redirects this producer into the chain's intake and tolerates 1 and 2 on
-    // purpose; see the comment on that target.
     let failed: Vec<&Row> = rows.iter().filter(|row| row.outcome == "fail").collect();
     let vacuous: Vec<&Row> = rows.iter().filter(|row| row.outcome == "vacuous").collect();
 
@@ -1139,19 +999,11 @@ fn main() {
 /// structurally incapable of a non-zero exit, which is #77 verbatim, and the
 /// defect this contract exists to prevent. Deriving from the published bytes
 /// closes it: whatever reaches stdout is what is classified, so the two
-/// cannot disagree. A run that drops rows before publishing is a different
-/// defect and is caught elsewhere -- `tests/shared_assurance.rs` requires at
-/// least ten rows in the emitted JSONL.
-///
-/// This is the same discipline `scripts/assurance_chain.py` applies one layer
-/// out, deriving every attested result from the producer's own bytes rather
-/// than from anything the producer says about itself.
+/// cannot disagree.
 ///
 /// Precedence is fail, then vacuous, then pass -- a run with both a failing
-/// and a vacuous row exits 1, not 2, because a fail is the stronger claim and
-/// the row vocabulary is already ordered that way in the comment above (the
-/// chain's `RESULT_PRECEDENCE`, where both outrank `passed`). Checking
-/// vacuous first would silently invert that.
+/// and a vacuous row exits 1, not 2, because a fail is the stronger claim.
+/// Checking vacuous first would silently invert that.
 ///
 /// A line that is not an object carrying a string `outcome` is a defect in
 /// this producer rather than a verdict about the corpus, so it panics instead
@@ -1267,12 +1119,8 @@ mod tests {
     /// filtered out upstream) that this function has no information to
     /// detect.
     ///
-    /// That is a real gap, and it is closed elsewhere rather than here, so
-    /// this test is not blessing it. `tests/shared_assurance.rs` requires at
-    /// least ten rows in the emitted JSONL, which is what actually refuses a
-    /// corpus that shrank to nothing. The end-to-end test below does not
-    /// close it and an earlier version of this comment wrongly said it did:
-    /// that test asserts exit 0, and an empty corpus produces exit 0 too.
+    /// The end-to-end test below does not close that gap: it asserts exit 0,
+    /// and an empty corpus produces exit 0 too.
     ///
     /// Trace: TC-032, FR-006-AC-1
     #[test]
@@ -1287,8 +1135,8 @@ mod tests {
     ///
     /// `cargo test` builds this file's `#[cfg(test)] mod tests` into a
     /// harness binary (`current_exe()` while this test runs), separately from
-    /// the plain runnable example binary `make conformance` and
-    /// `make assurance-inputs` invoke via `cargo run --example
+    /// the plain runnable example binary `make conformance` invokes via
+    /// `cargo run --example
     /// generation_conformance`. `env!("CARGO_BIN_EXE_<name>")` only resolves
     /// `[[bin]]` targets, not examples, so there is no compile-time constant
     /// for the plain binary's path. Both binaries land as siblings in the
@@ -1301,7 +1149,7 @@ mod tests {
     /// Measured: on a from-scratch `CARGO_TARGET_DIR`, `cargo test --example
     /// generation_conformance` alone builds only the harness binary above,
     /// not the plain one -- the plain binary only appears once something
-    /// (`make conformance`, `make assurance-inputs`, or `cargo run --example
+    /// (`make conformance` or `cargo run --example
     /// generation_conformance`/`cargo build --example generation_conformance`
     /// directly) has built it first.
     ///
@@ -1321,8 +1169,7 @@ mod tests {
     /// entirely.
     ///
     /// Rebuilding costs nothing when the binary is already current -- cargo
-    /// is incremental, and `make test` and `make ci` have already built it
-    /// via `assurance-inputs` by the time this runs. It is ordinary
+    /// is incremental. It is ordinary
     /// compilation of the same already-reviewed source, not an evidence
     /// producer manufacturing its own input.
     ///

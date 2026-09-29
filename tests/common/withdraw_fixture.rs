@@ -14,9 +14,8 @@
 //! needs to exercise the axis its check is uniquely sensitive to.
 
 use quire_contract_codegen::{
-    negotiate_kani_obligations, AttestationContext, KaniObligationHarness, KaniObligationOutcome,
-    KaniObligationRequest, KaniToolPins, ObligationDisposition, ObligationItem, ObligationRecord,
-    IR_CANDIDATE_REVISION,
+    negotiate_kani_obligations, KaniObligationHarness, KaniObligationOutcome,
+    KaniObligationRequest, ObligationDisposition, ObligationItem, ObligationRecord,
 };
 use quire_contract_ir::{
     BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
@@ -27,13 +26,6 @@ const PACKAGE: &str = "test/kani-argument-order";
 const PRECONDITION: &str = "amount-within-balance";
 const POSTCONDITION: &str = "balance-never-grows";
 const INVARIANT: &str = "balance-nonnegative";
-
-fn context() -> AttestationContext<'static> {
-    AttestationContext {
-        record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
-        candidate_revision: IR_CANDIDATE_REVISION,
-    }
-}
 
 fn span(line: u64) -> Value {
     let source = json!({"document":"kani-argument-order", "revision":1});
@@ -188,7 +180,7 @@ fn emitted(outcome: KaniObligationOutcome) -> (Vec<ObligationRecord>, Vec<KaniOb
 /// The precondition, postcondition and invariant harnesses for `withdraw`, negotiated together so
 /// the postcondition's and invariant's subject ABI is the union `unify_subject_signatures`
 /// computes (three arguments: `amount_current`, `balance_pre`, `priority_current`).
-pub fn withdraw_harnesses(pins: &KaniToolPins) -> Vec<KaniObligationHarness> {
+pub fn withdraw_harnesses() -> Vec<KaniObligationHarness> {
     let package = bound_package();
     let refs = [
         clause(PRECONDITION),
@@ -205,9 +197,7 @@ pub fn withdraw_harnesses(pins: &KaniToolPins) -> Vec<KaniObligationHarness> {
     let request = KaniObligationRequest {
         items: &items,
         subject_path: "crate::withdraw",
-        pins,
         unwind: 4,
-        attestation: context(),
     };
     let (records, harnesses) = emitted(negotiate_kani_obligations(&request).unwrap());
     assert!(

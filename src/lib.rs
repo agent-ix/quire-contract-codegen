@@ -109,10 +109,10 @@ pub use bound::{
 };
 
 pub use capability::{
-    negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope,
-    Candidate, Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal,
-    ExtentClassification, ItemSettlement, Mode, RequestItem, RequestedKind, RoutedItem,
-    BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
+    negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
+    Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
+    ItemSettlement, Mode, RequestItem, RequestedKind, RoutedItem, BACKEND_PROVIDER_CONTRACT,
+    CAPABILITY_VOCABULARY,
 };
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
 pub use kani::{

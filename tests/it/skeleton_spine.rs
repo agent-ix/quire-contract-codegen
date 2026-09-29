@@ -25,14 +25,13 @@ use qsl_replay::{
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_falsification, KaniExecutionRequest,
-    KaniInstallation, KaniObligationHarness, KaniRunOutcome, KaniToolPins, ReplayParameter,
-    SpineReplayError,
+    KaniInstallation, KaniObligationHarness, KaniRunOutcome, ReplayParameter, SpineReplayError,
 };
 use quire_contract_ir::kani::WitnessValue;
 use sha2::{Digest, Sha256};
 
 use super::kani_obligations::{
-    bound_package, pins, supported_contract_harnesses, write_crate, REAL_KANI_TIMEOUT,
+    bound_package, supported_contract_harnesses, write_crate, REAL_KANI_TIMEOUT,
 };
 
 const SUBJECT_PATH: &str = "crate::subject::withdraw";
@@ -112,7 +111,6 @@ fn source_digest(bytes: &[u8]) -> DigestRecord {
 fn request(
     source: &str,
     proved: &Compiled,
-    backend: &KaniToolPins,
     counterexample: &str,
     replay_source: ReplaySource,
 ) -> ReplayRequestWire {
@@ -121,7 +119,8 @@ fn request(
         text_input_bytes: u64::try_from(MAX_ENCODED_BYTES).unwrap(),
         ..UNLIMITED
     };
-    let backend_digest = Sha256::digest(serde_json::to_vec(backend).unwrap());
+    // The replay wire names the backend that found the counterexample; a fixed name stands in.
+    let backend_digest = Sha256::digest(b"kani");
     ReplayRequestWire {
         contract_version: "quire.native-runtime/v1".to_owned(),
         capability_vocabulary: Some("quire.capability-kind/v1".to_owned()),
@@ -144,7 +143,7 @@ fn request(
         source: replay_source,
         originating_counterexample_identity: Sha256::digest(counterexample.as_bytes()).into(),
         backend: (
-            format!("kani-{}", backend.kani_version),
+            "kani".to_owned(),
             Some(DigestDomain::ToolManifestJcsV1.as_str().to_owned()),
             DigestRecord::mint(DigestDomain::ToolManifestJcsV1, backend_digest.into()).hex(),
         ),
@@ -183,7 +182,7 @@ fn replay_against(
         "balance-never-grows",
         values,
         &replay_parameters(&proved),
-        |source| request(native, &proved, &pins(), "counterexample", source),
+        |source| request(native, &proved, "counterexample", source),
     )
 }
 
@@ -287,7 +286,7 @@ fn tc_026_a_boolean_value_replays_as_zero_or_one() {
             "flag",
             &[("b".to_owned(), WitnessValue::Boolean(value))],
             &replay_parameters(&compiled),
-            |witness| request(&source, &compiled, &pins(), "flag", witness),
+            |witness| request(&source, &compiled, "flag", witness),
         )
         .expect("the replay settles")
     };
@@ -308,7 +307,7 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
     let native = native_source(VIOLATING_TWIN);
     let compiled = compile_native_twin(&native, FUNCTION);
     let parameters = replay_parameters(&compiled);
-    let build = |witness| request(&native, &compiled, &pins(), "x", witness);
+    let build = |witness| request(&native, &compiled, "x", witness);
 
     let delimiter = replay_falsification("a|b", "c", &values(1, 5), &parameters, build);
     assert!(matches!(delimiter, Err(SpineReplayError::FieldDelimiter)));
@@ -328,7 +327,7 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
 
     let stale = compile_native_twin(&native_source(HEALTHY_TWIN), FUNCTION);
     let refused = replay_falsification("h", "c", &values(1, 5), &parameters, |witness| {
-        let mut wire = request(&native, &compiled, &pins(), "x", witness);
+        let mut wire = request(&native, &compiled, "x", witness);
         wire.package_id.1 = stale.package_id.clone();
         wire
     });
@@ -344,7 +343,7 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
                 value,
             })
             .collect();
-        request(&native, &compiled, &pins(), "x", ReplaySource::Input(input))
+        request(&native, &compiled, "x", ReplaySource::Input(input))
     });
     assert!(matches!(wrong_arm, Err(SpineReplayError::WrongArm)));
 }
@@ -374,7 +373,7 @@ fn prove(harness: &KaniObligationHarness, subject: &str) -> KaniRunOutcome {
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_replay() {
     let package = bound_package(1000);
-    let harness = supported_contract_harnesses(&package, &pins(), SUBJECT_PATH).remove(1);
+    let harness = supported_contract_harnesses(&package, SUBJECT_PATH).remove(1);
 
     assert_eq!(prove(&harness, HEALTHY_SUBJECT), KaniRunOutcome::Verified);
 
@@ -415,7 +414,7 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         harness.identity.clause.clause().as_str(),
         &decoded,
         &replay_parameters(&proved),
-        |source| request(&native, &proved, &pins(), counterexample, source),
+        |source| request(&native, &proved, counterexample, source),
     )
     .expect("QSL settles the replay");
     assert_eq!(
@@ -432,7 +431,7 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         "balance-never-grows",
         &decoded,
         &replay_parameters(&proved),
-        |source| request(&healthy, &proved, &pins(), counterexample, source),
+        |source| request(&healthy, &proved, counterexample, source),
     )
     .expect("QSL settles the replay");
     assert_eq!(result.settlement(), WitnessSettlement::Inconclusive);
