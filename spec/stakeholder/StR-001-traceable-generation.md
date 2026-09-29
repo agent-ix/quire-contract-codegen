@@ -5,7 +5,49 @@ type: StR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-001
     type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-002
+    type: satisfied_by
   - target: ix://agent-ix/quire-contract-codegen/FR-003
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-004
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-005
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-007
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-008
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-009
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-010
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-011
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-012
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-013
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-016
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-017
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-018
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-019
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-021
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-022
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-023
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-024
+    type: satisfied_by
+  - target: ix://agent-ix/quire-contract-codegen/FR-025
     type: satisfied_by
 ---
 # StR-001: Traceable multi-backend contract generation
@@ -28,6 +70,8 @@ inconclusive or unsupported state visible to human decision makers.
 |----|----------|------------|
 | StR-001-VC-1 | Repeated generation of one pinned package produces byte-identical bundles with complete input, tool, backend, and output identities. | Demonstration |
 | StR-001-VC-2 | Executable, proptest, Kani, and vacuity outputs retain the same requirement identity and agree on the shared bounded corpus. | Demonstration |
+| StR-001-VC-3 | A proof counterexample is reported as a contract failure only after native replay of that counterexample reproduces it, and a malformed, out-of-domain or disagreeing counterexample is reported as exactly that. | Demonstration |
+| StR-001-VC-4 | A proof result is claimed only for an obligation that was settled once, generated under the committed backend pins, observed verifying with its non-vacuity cover satisfied, and shown to discharge a check in every module it claims. | Demonstration |
 
 ## Dependencies
 

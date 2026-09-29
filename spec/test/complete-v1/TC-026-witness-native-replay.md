@@ -35,7 +35,9 @@ reports no failure and is none of the five replay results.
 The real transcript decodes to values named by their bindings, and the dropped
 and retyped schemas refuse by arity and width. Only the reproducing witness is
 reported as a failure; the others yield malformed (three cases), out-of-domain,
-mismatch and unavailable results respectively.
+mismatch and unavailable results respectively. The disagreeing witnesses are
+never reported unavailable, and the unavailable replay is never reported as a
+mismatch.
 
 ## Status
 
@@ -62,5 +64,5 @@ Boolean-byte and comment refusals (kind `InvalidInput`); the arity and width
 refusals are tested in the default suite and against a real falsification in
 the ignored lane, and the others are tested only by quire-contract-ir's own
 `Witness::decode` tests. Binding to the harness pins (AC-5), the decode size
-limit (AC-6), domain validation (AC-2) and native replay (AC-3, AC-4, AC-7)
-are also planned.
+limit (AC-6), domain validation (AC-2) and native replay (AC-3, AC-4, AC-7,
+AC-12) are also planned.

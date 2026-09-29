@@ -85,7 +85,8 @@ the executable-oracle lowering core.
 ## Dependencies
 
 - **Upstream**: [FR-001](./FR-001-deterministic-oracles.md).
-- **Downstream**: `ix://agent-ix/quire-spec-language/IT-010` owns replay of a printed Kani
-  counterexample through native `runtime::execute`; this repository supplies the exact generated
-  harness, option vector, and typed binding/domain record but does not manufacture a native runtime
-  verdict.
+- **Downstream**: QSL's layer-6 `replay` facade (`qsl_replay::replay`) replays a counterexample
+  and owns the native verdict, as [FR-016](./complete-v1/FR-016-witness-native-replay.md) and
+  [FR-024](./complete-v1/FR-024-counterexample-envelope-intake.md) state. This requirement supplies
+  the exact generated harness, option vector and typed binding and domain record, and produces no
+  native verdict.

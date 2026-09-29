@@ -305,8 +305,8 @@ FR-003 Kani obligation lowering has reviewed Boolean and numeric/state implement
 local suite. Its generated graph states `proofExecutionState: not_run`: dependency readiness is not
 proof completion, and the two ProofAttestationV1 bodies attest only successful artifact generation.
 Successful and failing cargo-kani observations qualify only the exact recorded 0.67.0 executable,
-profile, and options. Native counterexample replay remains quire-spec-language IT-010 and cannot be
-claimed from codegen's generated source or Kani text alone. FR-004 has bounded LLVM
+profile, and options. Native counterexample replay is QSL's `qsl_replay::replay` evaluation and
+cannot be claimed from codegen's generated source or Kani text alone. FR-004 has bounded LLVM
 observation primitives, six actual generated-oracle native controls, and complete bound observations
 through `analyze_bound_coverage`, every outcome of which retains `provenance: unqualified`; it has
 no campaign-run provenance and no consuming obligation gate. Neither backend has a shared proof

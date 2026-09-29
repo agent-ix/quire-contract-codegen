@@ -61,7 +61,8 @@ Options:
 Recommendation: option 1. FR-015 is the only generator that routed generation calls, that runs
 under FR-017's pinned execution and that feeds the QSL replay facade. FR-007's replay path runs
 native replay through a caller-supplied closure (`src/bounded_kani_replay.rs`), which QSL ADR-011
-FB-07 does not count as replay evidence. FR-003's optional stubbing flag contradicts FR-015's
+FB-07 does not count as replay evidence. FR-007-AC-4 also names Contract IR's native runtime
+boundary as the replay target, which the QSL-owned replay facade has replaced. FR-003's optional stubbing flag contradicts FR-015's
 no-stubbing rule for the same backend. Carrying the unique FR-003 and FR-007 behaviours into FR-015
 first keeps the working path until its replacement works.
 

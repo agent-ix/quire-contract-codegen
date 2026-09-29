@@ -69,7 +69,7 @@ type: TestMatrix
 | FR-015 | FR-015-AC-16 through FR-015-AC-18 | TC-033 | ✅ Covered |
 | FR-016 | FR-016-AC-8 through FR-016-AC-11 | TC-026 | ✅ Covered |
 | FR-016 | FR-016-AC-1, FR-016-AC-5 | TC-026 | ⚠️ Partially covered; the witness join (`witness_schema`, `decode_falsification`) decodes a matching transcript and refuses the harness-identity, arity, width, schema, Boolean-byte and comment cases, but reports every refusal as a `KaniOutcome` refusal code rather than FR-016's malformed-witness result, so neither criterion is backed and neither carries a trace tag; binding to the harness pins is unbuilt |
-| FR-016 | FR-016-AC-2 through FR-016-AC-4, FR-016-AC-6, FR-016-AC-7 | TC-026 | 🚧 Planned |
+| FR-016 | FR-016-AC-2 through FR-016-AC-4, FR-016-AC-6, FR-016-AC-7, FR-016-AC-12 | TC-026 | 🚧 Planned |
 | FR-017 | FR-017-AC-2 through FR-017-AC-5, FR-017-AC-8 through FR-017-AC-11, FR-017-CON-2 | TC-027 | ✅ Covered |
 | FR-017 | FR-017-AC-1, FR-017-AC-6, FR-017-AC-7, FR-017-CON-1 | TC-027 | 🚧 Planned |
 | FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-10 through FR-018-AC-14 | TC-029 | ✅ Covered |
@@ -84,6 +84,9 @@ type: TestMatrix
 | FR-022 | FR-022-AC-2 through FR-022-AC-15 | TC-033 | ✅ Covered |
 | FR-022 | FR-022-AC-1 | Analysis | 🚧 Planned |
 | FR-023 | FR-023-AC-1 through FR-023-AC-4 | TC-034 | ✅ Covered |
+| FR-024 | FR-024-AC-1 through FR-024-AC-9 | TC-035 | 🚧 Planned |
+| FR-025 | FR-025-AC-1 | TC-036 | ⚠️ Partially covered; emission order equals the persisted order for the V1 harness kinds, but the ascending order and the scalar-claim harness are unasserted |
+| FR-025 | FR-025-AC-2 through FR-025-AC-5 | TC-036 | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
@@ -228,10 +231,10 @@ before `check_equality` runs (FR-018-AC-5, above), so `Quantity -> Quantity` can
 here. The corpus now has one `converted` vector per exercised arm, not per row of every
 target-type-pair the table names, and not the single `Int`-to-`Integer` vector it had before.
 
-FR-018 does not claim the rest of codegen#48. Function application has no runtime surface to call
-(agent-ix/quire-contract-runtime#34), the model graph awaits agent-ix/quire-spec-language#120, and
-temporal and protocol await agent-ix/quire-spec-language#121; FR-018 refuses all three with distinct
-typed blockers rather than specifying around them, and FR-020 remains unwritten.
+FR-018's entry point refuses function application, the model graph
+(agent-ix/quire-spec-language#120) and temporal and protocol nodes
+(agent-ix/quire-spec-language#121) with distinct typed blockers. FR-021 generates function
+application through its own entry point, and FR-020 remains unwritten.
 
 `interface-001` declares FR-018's `generate_composite_equality_oracles` now that the code exists.
 TC-028 reads every public function from the crate's own source, including root `pub fn`s and
@@ -308,6 +311,8 @@ requirement here claims either one.
 |---|---|---|---|
 | StR-001 | StR-001-VC-1, FR-001 | TC-001 | 🚧 Planned |
 | StR-001 | StR-001-VC-2, FR-003, FR-004 | TC-007 | 🚧 Planned |
+| StR-001 | StR-001-VC-3, FR-016, FR-024 | TC-026, TC-035 | 🚧 Planned |
+| StR-001 | StR-001-VC-4, FR-015, FR-017, FR-019, FR-023 | TC-025, TC-027, TC-030, TC-034 | 🚧 Planned |
 
 ## Test Case Summary
 
@@ -340,13 +345,17 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-023 | Verify bounded Kani profile corpus parity | Integration | P0 | FR-007-AC-1, FR-007-AC-2, FR-007-AC-3, FR-007-AC-4, FR-007-AC-5, FR-007-AC-6, FR-007-AC-7 | ✅ Covered |
 | TC-024 | Verify exact complete-V1 scalar oracle generation and agreement | Integration | P0 | FR-014-AC-1, FR-014-AC-2, FR-014-AC-3, FR-014-AC-4, FR-014-AC-5, FR-014-AC-6, FR-014-AC-7, FR-014-AC-8, FR-014-AC-9, FR-014-AC-10, FR-014-AC-11, FR-014-AC-12, FR-014-AC-13, FR-014-AC-14, FR-014-AC-15, FR-014-AC-16, FR-014-AC-17, FR-014-AC-18, FR-014-AC-19, FR-014-AC-20, FR-014-AC-21, FR-014-AC-22, FR-014-AC-23, FR-014-AC-24, FR-014-AC-25, FR-014-AC-26, FR-014-AC-27, FR-014-AC-28, FR-014-AC-29, FR-014-AC-30, FR-014-AC-31, FR-014-AC-32, FR-014-AC-33, FR-014-AC-34 | ✅ Covered |
 | TC-025 | Verify separate bounded Kani obligations | Analysis | P0 | FR-015-AC-1, FR-015-AC-2, FR-015-AC-3, FR-015-AC-4, FR-015-AC-5, FR-015-AC-6, FR-015-AC-7, FR-015-AC-8, FR-015-AC-9, FR-015-AC-10, FR-015-AC-11, FR-015-AC-12, FR-015-AC-14 | 🚧 Planned |
-| TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4, FR-016-AC-5, FR-016-AC-6, FR-016-AC-7, FR-016-AC-8, FR-016-AC-9, FR-016-AC-10, FR-016-AC-11 | 🚧 Planned; AC-9 through AC-11 are backed (`tests/it/skeleton_spine.rs`, default suite and the ignored Kani lane); AC-8 is backed (`src/kani_witness_join.rs unit tests, `tests/it/kani_argument_order.rs`, and the ignored Kani lane `tests/it/kani_witness_join.rs`); AC-1 and AC-5 are planned because every join refusal (identity, arity, width, schema, Boolean-byte, comment) is reported as a `KaniOutcome` refusal code rather than FR-016's malformed-witness replay result; AC-2, AC-3, AC-4, AC-6 and AC-7 are planned |
+| TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4, FR-016-AC-5, FR-016-AC-6, FR-016-AC-7, FR-016-AC-8, FR-016-AC-9, FR-016-AC-10, FR-016-AC-11, FR-016-AC-12 | 🚧 Planned |
 | TC-027 | Verify pinned Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-1, FR-017-AC-2, FR-017-AC-3, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-8, FR-017-AC-9, FR-017-AC-10, FR-017-AC-11, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
 | TC-028 | Verify interface-001's declared API surface and identity envelope match the generator | Integration | P1 | interface-001-AC-1, interface-001-AC-2, interface-001-AC-3, interface-001-AC-4, interface-001-AC-5 | ✅ Covered |
 | TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13, FR-018-AC-14 | 🚧 Planned |
 | TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
+| TC-031 | Verify function-application oracle generation, agreement, and static location tagging | Integration | P0 | FR-021-AC-1, FR-021-AC-2, FR-021-AC-3, FR-021-AC-4, FR-021-AC-5, FR-021-AC-6, FR-021-AC-7, FR-021-AC-8, FR-021-AC-9, FR-021-AC-10, FR-021-AC-11, FR-021-AC-12, FR-021-AC-13, FR-021-AC-14, FR-021-AC-15, FR-021-AC-16, FR-021-AC-17, FR-021-AC-18 | ✅ Covered |
+| TC-032 | Verify the generation-conformance producer's own exit contract | Integration | P0 | FR-006-AC-8, FR-006-AC-9, FR-006-AC-10, FR-006-AC-11 | ✅ Covered |
 | TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-022-AC-14, FR-022-AC-15, FR-015-AC-15, FR-015-AC-16, FR-015-AC-17, FR-015-AC-18 | ✅ Covered |
 | TC-034 | Verify the claimed-module proof gate | Integration | P0 | FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, FR-023-AC-4 | ✅ Covered |
+| TC-035 | Verify counterexample submission in QSL's counterexample envelope | Integration | P0 | FR-024-AC-1, FR-024-AC-2, FR-024-AC-3, FR-024-AC-4, FR-024-AC-5, FR-024-AC-6, FR-024-AC-7, FR-024-AC-8, FR-024-AC-9 | 🚧 Planned |
+| TC-036 | Verify the generated harness subject ABI | Integration | P0 | FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5 | 🚧 Planned |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and
