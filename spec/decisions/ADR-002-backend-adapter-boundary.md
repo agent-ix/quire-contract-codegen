@@ -20,8 +20,8 @@ relationships:
 
 ## Status
 
-Proposed. The boundary under Decision states the target design. Questions Q1 to Q4 are open until
-the owner rules, and their recommendations decide nothing.
+Proposed. Questions Q0 to Q4 are open until the owner rules, and their recommendations decide
+nothing. The only settled input is the owner ruling of 2026-09-28 that AD-001 records.
 
 ## Context
 
@@ -64,8 +64,24 @@ changes where code lives is a refactor and gets none.
 
 ## Decision
 
-A **backend adapter** is the unit that owns everything specific to one `BackendKind`. For its kind,
-an adapter holds exactly these parts:
+Nothing is decided beyond the owner ruling. The owner rules on each question below.
+
+### Q0: What does a backend adapter own?
+
+The ruling places the Kani transcript parser in CG's backend adapter. It does not say what else the
+adapter owns.
+
+Options:
+
+1. **Five parts per kind.** A backend adapter is the unit that owns everything specific to one
+   `BackendKind`, and for its kind it holds exactly the five parts listed after these options.
+2. **The parser only.** The adapter holds the transcript parser. Generation, execution and witness
+   rendering stay in modules shared across kinds.
+
+Recommendation: option 1. Under option 2, adding a second backend means editing shared modules
+with no compile-time check that each kind supplies every part.
+
+The five parts of option 1:
 
 1. **Version profile.** One value naming the backend version, the committed installation pins,
    the profile identities its harness identities record and the option vector template. Every
@@ -73,21 +89,21 @@ an adapter holds exactly these parts:
 2. **Generation arm.** The per-kind arm FR-022 dispatches to.
 3. **Execution.** Measure, compare with the version profile's pins, launch under the caller's
    budget, and classify (FR-017).
-4. **Transcript parser.** The one module that reads the backend's native output into a typed
-   transcript. No other non-test source reads that output.
-5. **Witness renderer.** The one function that turns the backend's native counterexample into QSL's
-   backend-witness transcript, admitted by `qsl_replay::Witness::parse` (FR-024). Nothing downstream
-   of the adapter reads backend-native counterexample text.
+4. **Transcript parser.** The one module that reads the backend's native output, its
+   counterexample included, into a typed transcript. No other non-test source reads that output
+   (FR-017-AC-10).
+5. **Witness renderer.** The one function that renders QSL's backend-witness transcript from the
+   decoded values, admitted by `qsl_replay::Witness::parse` (FR-024).
 
-The closed `BackendKind` enum stays the registry. An adapter is reached only through an exhaustive
-match on it.
+Under option 1, the closed `BackendKind` enum stays the registry, and an adapter is reached only
+through an exhaustive match on it.
 
 ### Q1: Is the adapter contract a Rust trait?
 
 Options:
 
 1. **A trait implemented once per kind, reached by the closed-enum match.** The trait's associated
-   types and functions are the five parts above. The compiler then checks that every adapter has
+   types and functions are Q0's five parts. The compiler then checks that every adapter has
    every part, and the enum keeps the kind set closed.
 2. **No trait.** Each kind keeps free functions, and the five parts are a documented convention.
 3. **Trait objects registered at run time.** This contradicts FR-019's closed kind set.
@@ -143,7 +159,8 @@ shared schema would need an untyped extension point.
 
 ## Consequences
 
-FR-024 adds the witness-renderer obligation. Q1 and Q2 change no behaviour, so the spec does not
+FR-024 adds the witness-renderer obligation. Q0 decides whether the other four parts move into
+per-kind adapters. Q1 and Q2 change no behaviour, so the spec does not
 change for them. Q3 adds a requirement once the owner rules. Q4 becomes FR-019 and FR-022 rows when
 a second backend is actually added.
 

@@ -67,7 +67,7 @@ it. NFR-001 and NFR-002 constrain it, and NFR-004 constrains FR-008 to FR-013. F
 contract for this repository's own verification results, and NFR-002 constrains it.
 `interface-001` defines the serialized input, the library and CLI operations, the artifact bundle,
 the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
-Contract IR, Contract Runtime and QSL. ADR-001 to ADR-003 hold the questions the owner has not ruled
+Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 hold the questions the owner has not ruled
 on. `test-matrix.md` maps every criterion to its test case.
 
 | Area | Requirements | Test cases |
@@ -94,7 +94,7 @@ the directory carries the subsystem.
 |---|---|---|
 | Strategies and harness campaigns | `functional/strategies/`, `nonfunctional/strategies/`, `test/strategies/` | FR-008 to FR-013, NFR-004, TC-017 to TC-022 |
 | Complete-V1 generation, execution and replay | `functional/complete-v1/`, `test/complete-v1/` | FR-014 to FR-025, TC-024 to TC-031, TC-033 to TC-036 |
-| Architecture decisions | `decisions/` | ADR-001 to ADR-003 |
+| Architecture decisions | `decisions/` | ADR-001 to ADR-004 |
 | Everything else | the flat `functional/`, `nonfunctional/`, `test/`, `stakeholder/` directories | FR-001 to FR-007, NFR-001, NFR-002, StR-001, the remaining TCs |
 
 ## References

@@ -32,11 +32,16 @@ holding exactly one `qsl_replay::ReplaySource` arm. It shall validate every valu
 declared domain before any replay, and shall replay only through `qsl_replay::replay`, or through
 `qsl_replay::replay_frame` for a frame counterexample.
 
-QSL owns the envelope, the witness, the replay source, the FR-331 terminal record and the obligation
-identity type (QSL ADR-013 O-25 to O-27). This requirement states what the generator puts into
-those types. It does not restate their shape. [FR-016](./FR-016-witness-native-replay.md) owns
-decoding a Kani playback into typed values and settling the replay result, and this requirement
-owns what reaches QSL.
+The authority for QSL owning the envelope, the witness, the replay source, the FR-331 terminal
+record and the obligation identity type is the owner's ruling of 2026-09-28 and the `qsl-replay`
+API at the revision `Cargo.toml` pins (`20ba521`), which defines all five. QSL ADR-013 O-24 and O-25
+and QSpec AD-016 still name Contract IR as the witness and packet owner and give it the
+terminal-record map. Their amendment to match the ruling is pending: the `qsl-replay` facade work is
+QSL-317, and the AD-016 amendment is unassigned.
+
+This requirement states what the generator puts into those types, and does not restate their shape.
+[FR-016](./FR-016-witness-native-replay.md) owns decoding a Kani playback, the adapter refusals and
+the partition of replay outcomes. This requirement owns what reaches QSL.
 
 ## Inputs
 
@@ -46,36 +51,41 @@ owns what reaches QSL.
   - a corpus counterexample: canonical assignments that no backend run produced.
 - The obligation's `KaniObligationIdentity` and its argument bindings, each naming its parameter
   node id and declared domain ([FR-025](./FR-025-generated-subject-abi.md)).
-- The proving run's members, supplied by the caller: the FR-322 package reference with one
-  dependency entry per `dependency_selections` entry (QSL ADR-015 D-4), the selected function's
-  `QualifiedName`, the failing node's occurrence key, the semantic profile selections, the
-  accounting limits and S1 to S4 stage limits, the `backend` member, the trace position where the
-  family has one, and the byte provision.
+- The proving run's envelope members, supplied by the caller: the occurrence key, the clause node,
+  the selected function's `QualifiedName`, the `package_id`, the package contract version, the
+  source digests, the profile selections, the run limits, the declared domains, the `backend`
+  member, the trace position (present in every packet, with the value none for a family that has
+  no trace position), and the family payload.
+- The proving run's request members, which belong to the replay request and not to the envelope:
+  the dependency entries (QSL ADR-015 D-4), the state environment, the accounting limits, the S1 to
+  S4 stage limits and the byte provision.
 
 ## Outputs
 
-- A `WitnessEnvelope` whose `ReplaySource` is `Witness` for a backend counterexample and `Input`
-  for a corpus counterexample, and the replay request built from it.
-- The QSL replay result for that envelope's arm, or a typed refusal with no replay.
+- A `WitnessEnvelope` admitted through `WitnessEnvelope::reconstruct`, whose `ReplaySource` is
+  `Witness` for a backend counterexample and `Input` for a corpus counterexample.
+- The replay request built from that envelope and the request members.
+- The QSL replay result for the envelope's arm, or a typed refusal with no replay.
 
 ## Behavior
 
 - The generator shall compute the obligation-identity digest over every `KaniObligationIdentity`
-  member except `source_span`, and shall carry it only as `qsl_replay::ObligationIdentity`.
-- The generator shall turn a backend's native counterexample into QSL's backend-witness transcript
-  in exactly one function of that backend's adapter, and shall admit the transcript only through
-  `qsl_replay::Witness::parse`.
-- No generator code outside the backend adapter shall read backend-native counterexample text.
-- If `Witness::parse` refuses a rendered transcript, then the generator shall return a typed
-  refusal carrying QSL's cause, and shall not call `replay`.
+  member except `source_span`.
+- The generator shall carry the obligation-identity digest only as `qsl_replay::ObligationIdentity`.
+- The generator shall build QSL's backend-witness transcript from FR-016's decoded values, never
+  from backend-native text, in exactly one function of the backend's adapter.
+- The generator shall admit that transcript only through `qsl_replay::Witness::parse`.
 - When a counterexample is to be replayed, the generator shall check every decoded or canonical
   value against the declared domain of the parameter it binds before it builds a replay request.
 - If a value lies outside its declared domain, then the generator shall report an out-of-domain
   counterexample and shall not call `replay` or `replay_frame`.
-- The generator shall copy every envelope member from the proving run's members and the obligation
-  identity, and shall invent none.
-- If any member of the envelope is absent, then the generator shall refuse the counterexample with
-  a typed cause naming that member, before any replay.
+- The generator shall fill every `WitnessPacket` member from the proving run's envelope members and
+  the obligation identity, and shall invent none.
+- The generator shall admit the envelope only through `WitnessEnvelope::reconstruct`.
+- If `WitnessEnvelope::reconstruct` refuses the packet, then the generator shall return QSL's
+  `WitnessRefusal` and shall not call `replay` or `replay_frame`.
+- The generator shall build the replay request from the admitted envelope and the proving run's
+  request members, and shall invent no request member.
 - When a counterexample did not come from a backend transcript, the generator shall submit it as
   the `Input` arm, keyed by parameter node id, and shall never build a `Witness` for it.
 - When a counterexample is a frame counterexample, the generator shall submit a
@@ -88,8 +98,8 @@ owns what reaches QSL.
 - Where the generator derives reduced candidates from an `Input`-arm counterexample, it shall
   retain only `Input`-arm revisions linked to their parent that preserve domain validity and the
   native verdict.
-- The generator shall define none of `Witness`, `ReplaySource`, the counterexample envelope, the
-  FR-331 terminal record or the obligation identity type.
+- The generator shall define none of `Witness`, `ReplaySource`, `WitnessEnvelope`,
+  `TerminalRecord` or `ObligationIdentity`.
 - The generator shall import none of those types from Contract IR.
 
 ## Acceptance Criteria
@@ -97,19 +107,36 @@ owns what reaches QSL.
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-024-AC-1 | The envelope's obligation identity is QSL's `ObligationIdentity` wrapping the digest over every `KaniObligationIdentity` member except `source_span`. Changing `source_span` leaves it unchanged, and changing the obligation kind or any argument binding changes it. | Test (TC-035) |
-| FR-024-AC-2 | A backend counterexample reaches QSL only as a transcript that `qsl_replay::Witness::parse` admitted, rendered by the one adapter function. No other non-test source file under `src/` reads backend-native counterexample text, and a transcript QSL refuses returns a typed refusal with no replay. | Test (TC-035) |
+| FR-024-AC-2 | Every backend-witness transcript the generator passes to `Witness::parse` is produced by the one adapter rendering function from decoded values, and that function takes no backend-native text as input. | Test (TC-035) |
 | FR-024-AC-3 | A counterexample with any value outside its declared domain is reported out-of-domain and neither `replay` nor `replay_frame` is called. The endpoints of each declared domain are admitted, and the values immediately outside it are not. | Test (TC-035) |
-| FR-024-AC-4 | For each envelope member in turn (package reference, dependency entries, selected function, occurrence key, profile selections, limits, declared domains, backend), a counterexample missing that member is refused with a typed cause naming it, and no replay runs. | Test (TC-035) |
+| FR-024-AC-4 | For each `WitnessPacket` member in turn (obligation identity, occurrence key, clause node, selected function, `package_id`, package contract version, source digests, profile selections, run limits, declared domains, backend, trace position, source, family payload), a packet missing that member is refused by `WitnessEnvelope::reconstruct` with QSL's `MissingMember` naming it, and no replay runs. A packet whose trace position is present with the value none is admitted. | Test (TC-035) |
 | FR-024-AC-5 | A corpus counterexample is submitted as the `Input` arm keyed by parameter node id. It settles `reproduced-without-witness` when it agrees, and no `Witness` is built for it. | Test (TC-035) |
 | FR-024-AC-6 | A frame counterexample is submitted as a `WitnessEnvelope<FrameCounterexample>` through `qsl_replay::replay_frame`, and its clause, frame, anchor and occurrence identities reach QSL unchanged. | Test (TC-035) |
-| FR-024-AC-7 | A minimized `Witness`-arm revision is retained only when a backend re-run and native replay both preserve domain validity and the failure. It links to its parent and carries its own re-run's transcript, and a candidate that changes domain validity or the verdict is discarded. | Test (TC-035) |
-| FR-024-AC-8 | A minimized `Input`-arm revision is retained only when native replay preserves domain validity and the verdict. It links to its parent and is itself an `Input`-arm envelope. | Test (TC-035) |
-| FR-024-AC-9 | No type named `Witness`, `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` or `ObligationIdentity` is defined under `src/`, and no source file under `src/` imports any of them from `quire_contract_ir`. | Test (TC-035) |
+| FR-024-AC-7 | A reduced `Witness`-arm candidate is retained only when a backend re-run and native replay both preserve domain validity and the failure; a candidate that changes domain validity or the verdict is discarded. | Test (TC-035) |
+| FR-024-AC-8 | A retained reduced `Witness`-arm revision links to its parent and carries its own backend re-run's transcript, never its parent's. | Test (TC-035) |
+| FR-024-AC-9 | A reduced `Input`-arm revision is retained only when native replay preserves domain validity and the verdict. It links to its parent and is itself an `Input`-arm envelope. | Test (TC-035) |
+| FR-024-AC-10 | No type named `Witness`, `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` or `ObligationIdentity` is defined under `src/`, and no source file under `src/` imports any of them from `quire_contract_ir`. | Test (TC-035) |
+
+The rule that only `src/kani_transcript.rs` reads Kani's printed wording, playback included, is
+FR-017-AC-10's and is not restated here. A transcript `Witness::parse` refuses is an adapter
+refusal under FR-016-AC-11.
+
+## Current state
+
+At this revision the generator meets none of these criteria in full:
+
+- `src/kani_witness_join.rs` imports Contract IR's `Witness`, and `src/bounded_kani_corpus.rs`
+  imports Contract IR's `ReplaySource`. `src/bounded_kani_replay.rs` replays through Contract IR's
+  `replay_counterexample` and `CounterexamplePacket`, and its test module imports Contract IR's
+  `ReplaySource`.
+- No domain check runs before replay, and no `WitnessEnvelope` is built.
+- Only the skeleton spine renders a QSL transcript (`src/spine_replay.rs`), and it builds the
+  request without an envelope.
 
 ## Dependencies
 
-- **Upstream**: [FR-016](./FR-016-witness-native-replay.md), which decodes the playback and settles
-  the result; [FR-017](./FR-017-pinned-kani-execution-evidence.md), which retains the playback;
-  [FR-025](./FR-025-generated-subject-abi.md), which gives each argument binding its parameter node
-  id and declared domain; QSL's `qsl-replay` crate at the revision `Cargo.toml` pins.
+- **Upstream**: [FR-016](./FR-016-witness-native-replay.md), which decodes the playback, refuses and
+  partitions the outcomes; [FR-017](./FR-017-pinned-kani-execution-evidence.md), which retains the
+  playback; [FR-025](./FR-025-generated-subject-abi.md), which gives each argument binding its
+  parameter node id and declared domain; QSL's `qsl-replay` crate at the revision `Cargo.toml` pins.
 - **Downstream**: [TC-035](../../test/complete-v1/TC-035-counterexample-envelope-intake.md).

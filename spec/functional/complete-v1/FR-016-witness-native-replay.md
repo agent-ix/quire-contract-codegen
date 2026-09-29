@@ -42,6 +42,12 @@ failure is reported.
   bound to the identity and pins of the harness being replayed, and decode
   each witness value into its declared complete-V1 scalar type within the
   decode size limit.
+- The generator shall read the concrete values of a Kani playback only
+  through the Kani adapter's transcript module, `src/kani_transcript.rs`
+  (FR-017-AC-10). At this revision the witness join
+  (`src/kani_witness_join.rs`) still decodes the playback through Contract
+  IR's `Witness::parse`, so this bullet states the target and is not yet
+  met.
 - The generator shall decode a witness against the harness's own persisted
   obligation schema: the obligation's argument bindings, in the order the
   obligation persists them, typed position for position against the
@@ -63,11 +69,26 @@ failure is reported.
   runtime execution and compare the typed outcome with the harness result.
   The same typed outcome means an equal value or typed refusal, equal admitted
   charges, equal consumed counters, and equal limits.
+- The generator shall classify every witness into exactly one of the
+  outcomes in the partition below. The conditions are checked in the order
+  the table lists them, and the first that holds decides the outcome.
+
+  | Condition | Outcome |
+  |---|---|
+  | The witness is bound to another harness identity or pins, fails to decode, or exceeds the decode size limit | malformed witness |
+  | A decoded value lies outside its declared domain | out-of-domain witness |
+  | The adapter cannot build an admitted request: a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript `Witness::parse` refuses, or an envelope QSL refuses to reconstruct | adapter refusal (FR-016-AC-11) |
+  | `qsl_replay::replay` returns `Err(ReplayRefusal::Fault(_))`, an internal fault of the executor | replay unavailable |
+  | `qsl_replay::replay` returns any other `Err(ReplayRefusal)` | QSL request refusal, returned with its cause (FR-016-AC-11) |
+  | `qsl_replay::replay` returns the `Input` arm for a witness-sourced request | adapter refusal (FR-016-AC-11) |
+  | The `Witness` arm settles `inconclusive`, or matches the harness value but differs in admitted charges, consumed counters or limits | mismatch |
+  | The `Witness` arm settles `reproduced-with-evaluated-witness` with category `violation` | reproduced failure |
+
 - If native replay runs and disagrees with the harness result, then the
   generator shall report a typed mismatch rather than a failure or an
   unavailable result.
-- If native replay cannot run, then the generator shall report a typed
-  unavailable result rather than a failure or a mismatch.
+- If the executor reports an internal fault, then the generator shall report
+  a typed unavailable result rather than a failure, a refusal or a mismatch.
 - The generator shall replay through QSL's layer-6 `replay` facade
   (`qsl_replay::replay`). The caller supplies the complete request: the proved
   package's `package_id`, the selected function's qualified name, the limits, and
@@ -94,8 +115,8 @@ failure is reported.
 | FR-016-AC-8 | A witness schema binds the obligation's persisted argument bindings, in the order the obligation persists them, position for position to the harness's symbolic arguments, and each decoded value is named by the binding at its position; a binding that is not an argument is refused with a typed schema refusal that reports no failure and is none of the five replay results. | Test (TC-026) |
 | FR-016-AC-9 | A decoded falsification whose witness makes the native function evaluate the clause to false settles as `reproduced-with-evaluated-witness` with category `violation`; the verdict depends on the witness value, so a witness at which the function holds does not settle so. | Test (TC-026) |
 | FR-016-AC-10 | A decoded falsification at which the native function evaluates the clause to true settles `inconclusive` with the proved violation and the replayed success both named. | Test (TC-026) |
-| FR-016-AC-11 | The adapter refuses, with a distinct typed error each, a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript QSL does not admit, a request QSL refuses (returned with its cause), and a witness-sourced request that settles on the input arm. | Test (TC-026) |
-| FR-016-AC-12 | A native replay that cannot run yields a typed unavailable result, and never a mismatch or a failure. | Test (TC-026) |
+| FR-016-AC-11 | The adapter refuses, with a distinct typed error each, a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript QSL does not admit, a request QSL refuses with any `ReplayRefusal` other than `Fault` (returned with its cause), and a witness-sourced request that settles on the input arm. | Test (TC-026) |
+| FR-016-AC-12 | A `replay` call that returns `ReplayRefusal::Fault` yields a typed unavailable result, and never a mismatch, a refusal or a failure; no other condition yields unavailable. | Test (TC-026) |
 
 ## Dependencies
 
@@ -106,7 +127,7 @@ failure is reported.
   as dev-dependencies, because `qsl-replay` re-exports neither the request's
   types (`quire_exact::Identifier`, `quire_exact::ScalarLimits`, `WireNodeId`,
   `SourceIdentity`) nor a compiled unit's package id and parameter node ids. The
-  exception (Linear IR-309) ends when `qsl-replay` exposes those through its facade.
+  exception ends when `qsl-replay` exposes those through its facade.
 - **Downstream**: [TC-026](../../test/complete-v1/TC-026-witness-native-replay.md),
   [FR-024](./FR-024-counterexample-envelope-intake.md), which carries the decoded
   values to QSL in QSL's counterexample envelope.

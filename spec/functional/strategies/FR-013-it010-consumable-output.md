@@ -94,6 +94,5 @@ require any serialized case format or schema owned by this repository for that c
 - **Upstream**: [FR-010](./FR-010-domain-boundary-campaigns.md),
   [FR-011](./FR-011-numeric-harness-campaigns.md),
   [NFR-002](../../nonfunctional/NFR-002-provenance-boundary.md).
-- **Downstream**: the consumer planned in agent-ix/quire-spec-language#84, which uses
-  `quire_spec_language::runtime::execute`;
+- **Downstream**: the consumer planned in agent-ix/quire-spec-language#84;
   [TC-022](../../test/strategies/TC-022-it010-consumable-output.md).

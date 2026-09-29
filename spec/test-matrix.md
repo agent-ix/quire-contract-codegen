@@ -18,7 +18,8 @@ type: TestMatrix
 | FR-001 | FR-001-AC-7 | TC-001 | ✅ Covered |
 | FR-001 | FR-001-AC-8 | TC-002 | ✅ Covered |
 | FR-002 | FR-002-AC-1 through FR-002-AC-6 | TC-004 | 🚧 Planned |
-| FR-007 | FR-007-AC-1 through FR-007-AC-7 | TC-023 | ✅ Covered |
+| FR-007 | FR-007-AC-1 through FR-007-AC-3, FR-007-AC-5 through FR-007-AC-7 | TC-023 | ✅ Covered |
+| FR-007 | FR-007-AC-4 | TC-023 | 🚧 Planned; replay still goes through Contract IR's `replay_counterexample` |
 | FR-003 | FR-003-AC-1 | TC-005, TC-014 | ✅ Covered |
 | FR-003 | FR-003-AC-2 | TC-007, TC-014 | ✅ Covered |
 | FR-003 | FR-003-AC-3 | TC-003, TC-014 | ✅ Covered |
@@ -84,9 +85,9 @@ type: TestMatrix
 | FR-022 | FR-022-AC-2 through FR-022-AC-15 | TC-033 | ✅ Covered |
 | FR-022 | FR-022-AC-1 | Analysis | 🚧 Planned |
 | FR-023 | FR-023-AC-1 through FR-023-AC-4 | TC-034 | ✅ Covered |
-| FR-024 | FR-024-AC-1 through FR-024-AC-9 | TC-035 | 🚧 Planned |
+| FR-024 | FR-024-AC-1 through FR-024-AC-10 | TC-035 | 🚧 Planned |
 | FR-025 | FR-025-AC-1 | TC-036 | ⚠️ Partially covered; emission order equals the persisted order for the V1 harness kinds, but the ascending order and the scalar-claim harness are unasserted |
-| FR-025 | FR-025-AC-2 through FR-025-AC-5 | TC-036 | 🚧 Planned |
+| FR-025 | FR-025-AC-2 through FR-025-AC-6 | TC-036 | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
@@ -354,8 +355,8 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-032 | Verify the generation-conformance producer's own exit contract | Integration | P0 | FR-006-AC-8, FR-006-AC-9, FR-006-AC-10, FR-006-AC-11 | ✅ Covered |
 | TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-022-AC-14, FR-022-AC-15, FR-015-AC-15, FR-015-AC-16, FR-015-AC-17, FR-015-AC-18 | ✅ Covered |
 | TC-034 | Verify the claimed-module proof gate | Integration | P0 | FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, FR-023-AC-4 | ✅ Covered |
-| TC-035 | Verify counterexample submission in QSL's counterexample envelope | Integration | P0 | FR-024-AC-1, FR-024-AC-2, FR-024-AC-3, FR-024-AC-4, FR-024-AC-5, FR-024-AC-6, FR-024-AC-7, FR-024-AC-8, FR-024-AC-9 | 🚧 Planned |
-| TC-036 | Verify the generated harness subject ABI | Integration | P0 | FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5 | 🚧 Planned |
+| TC-035 | Verify counterexample submission in QSL's counterexample envelope | Integration | P0 | FR-024-AC-1, FR-024-AC-2, FR-024-AC-3, FR-024-AC-4, FR-024-AC-5, FR-024-AC-6, FR-024-AC-7, FR-024-AC-8, FR-024-AC-9, FR-024-AC-10 | 🚧 Planned |
+| TC-036 | Verify the generated harness subject ABI | Integration | P0 | FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6 | 🚧 Planned |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and

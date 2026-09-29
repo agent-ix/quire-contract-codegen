@@ -255,7 +255,7 @@ without one is not written.
   [FR-021](./FR-021-function-application-oracles.md) generates through its own
   entry point.
 - Model graph, identity and reachability oracles
-  (agent-ix/quire-spec-language#120), which no requirement owns yet.
+  (agent-ix/quire-spec-language#120), which no requirement owns.
 - Temporal and protocol oracles (agent-ix/quire-spec-language#121), which FR-020
   will own.
 - `Refusal::ForeignReference`. It is the runtime's one substantive equality
