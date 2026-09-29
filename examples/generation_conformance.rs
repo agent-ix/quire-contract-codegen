@@ -837,7 +837,7 @@ fn strategy_rejects_invalid_range() -> Case {
 fn diagnostic_census(rows: &[Row]) -> Case {
     let mut case = Case::new(
         "census::diagnostic-vocabulary",
-        10,
+        9,
         vec!["FR-001-AC-4", "NFR-002-AC-3", "TC-003", "TC-006"],
     );
     // Only a case that passed demonstrates anything. A case that failed and
