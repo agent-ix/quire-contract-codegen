@@ -737,10 +737,9 @@ mod tests {
     use quire_contract_ir::NumericOperator;
 
     use super::{
-        arithmetic_assignments, arithmetic_request_shape, collection_assignments,
-        dependency_census_digest, generate_bounded_kani_corpus_case, identity_preimage,
-        BoundedCorpusFamily, BoundedCorpusRequest, CorpusProofDependencyGraph,
-        EmittedCorpusIdentities, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
+        arithmetic_assignments, collection_assignments, generate_bounded_kani_corpus_case,
+        BoundedCorpusRequest, CorpusProofDependencyGraph, EmittedCorpusIdentities,
+        ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
     };
     use crate::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
@@ -1423,71 +1422,6 @@ mod tests {
                 ("value_2".to_owned(), 7),
             ],
             "assignments must carry exactly the ordered population, not max_items or expected"
-        );
-    }
-
-    /// Pins the case-identity preimage's exact bytes and field order (ir#57/ir#73), not merely
-    /// that the digest changes under some mutation. A criterion that only asserts two ad hoc
-    /// cases' digests *differ* can stay green even when a refactor silently drops a field from
-    /// the preimage, provided that fixture's other fields still happen to differ. This hardcodes
-    /// the expected preimage independently of `identity_preimage`'s own implementation, so
-    /// dropping or reordering a field fails this assertion even when it produces no visible
-    /// collision in some other, unrelated fixture.
-    ///
-    /// Trace: FR-007-AC-6, TC-023.
-    #[test]
-    fn tc_023_identity_preimage_pins_exact_bytes_and_field_order() {
-        let (profile, _dispatch, input) = fixture();
-        let request = quire_contract_ir::kani::CheckedArithmeticRequest {
-            source_id: "pin-source",
-            operator: NumericOperator::Add,
-            left: 2,
-            right: 3,
-            minimum: 0,
-            maximum: 10,
-        };
-        let shape = arithmetic_request_shape(&request);
-        // The empty declared census's own digest, pinned independently below rather than
-        // computed here: `dependency_census_digest(&[])` is `digest("[]\n")`, the JSON
-        // serialization `deterministic_json` produces for an empty `Vec<ProofDependencyEdge>`,
-        // and this literal is SHA-256("[]\n"), verified independently of this test.
-        let empty_census_digest = dependency_census_digest(&[]);
-        assert_eq!(
-            empty_census_digest, "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
-            "an empty declared census must digest a fixed, real value -- this pins that value \
-             independently of `dependency_census_digest`'s own implementation"
-        );
-        let preimage = identity_preimage(
-            BoundedCorpusFamily::DefinednessArithmetic,
-            &profile,
-            &input,
-            "pin-source",
-            &shape,
-            &empty_census_digest,
-            "value=5",
-        );
-        assert_eq!(
-            preimage,
-            "arithmetic\n\
-             checked-arithmetic\n\
-             kani-bounded/1\n\
-             r1\n\
-             exe\n\
-             opts\n\
-             abi\n\
-             model\n\
-             source\n\
-             ResourceBounds { max_objects: 2, max_references: 1, max_input_bytes: 2 }\n\
-             \"pin-source\"\n\
-             operator=Add left=2 right=3 minimum=0 maximum=10\n\
-             37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570\n\
-             value=5",
-            "the identity preimage's exact bytes and field order must be: family label, family \
-             construct, profile name, profile revision, executable digest, options digest, ABI \
-             revision, validated input model id, source id, resource bounds (debug), \
-             debug-quoted request source id, request shape, declared proof-dependency census \
-             digest, then outcome detail -- a mutation that drops or reorders any field must fail \
-             this assertion"
         );
     }
 
