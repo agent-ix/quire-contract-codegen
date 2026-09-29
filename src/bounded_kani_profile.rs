@@ -68,8 +68,6 @@ mod tests {
             ProfileSelection {
                 profile: "kani-bounded/1".to_owned(),
                 revision: "profile-r1".to_owned(),
-                executable_digest: "exe".to_owned(),
-                options_digest: "options".to_owned(),
                 abi_revision: "abi-r1".to_owned(),
             },
             capabilities,

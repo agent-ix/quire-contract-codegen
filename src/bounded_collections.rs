@@ -36,8 +36,6 @@ mod tests {
         let selection = ProfileSelection {
             profile: "kani-bounded/1".to_owned(),
             revision: "r1".to_owned(),
-            executable_digest: "exe".to_owned(),
-            options_digest: "opts".to_owned(),
             abi_revision: "abi".to_owned(),
         };
         let profile = KaniProfile::new(
