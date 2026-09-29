@@ -30,6 +30,10 @@ const PLAYBACK_COVER_MARKER: &str = "/// Check for `cover`";
 const COVER_SUMMARY_MARKER: &str = " cover properties satisfied";
 const CHECKS_SUMMARY_MARKER: &str = " failed";
 const SUMMARY_LINE_PREFIX: &str = "** ";
+const CHECK_HEADER_PREFIX: &str = "Check ";
+const CHECK_STATUS_PREFIX: &str = "- Status: ";
+const CHECK_LOCATION_PREFIX: &str = "- Location: ";
+const LOCATION_FUNCTION_MARKER: &str = " in function ";
 
 /// Which `VERIFICATION:-` verdict banners the transcript contains.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -109,6 +113,34 @@ pub(crate) enum KaniPlaybackTarget {
     Property,
 }
 
+/// The status Kani reports for one check in its `RESULTS:` listing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum KaniCheckStatus {
+    /// `SUCCESS`: the assertion holds on every path that reaches it.
+    Success,
+    /// `FAILURE`: some path violates it.
+    Failure,
+    /// `UNREACHABLE`: no path reaches the check's location.
+    Unreachable,
+    /// `UNDETERMINED`: the solver could not decide.
+    Undetermined,
+    /// `SATISFIED`: a cover some path reaches.
+    Satisfied,
+    /// `UNSATISFIABLE`: a cover no path reaches.
+    Unsatisfiable,
+    /// Any status this reader does not name.
+    Other,
+}
+
+/// One entry of the `RESULTS:` listing: a check, its status, and the function its location is in.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct KaniCheck {
+    /// The reported status.
+    pub(crate) status: KaniCheckStatus,
+    /// The Rust path after `in function` on the check's `Location` line, when there is one.
+    pub(crate) function: Option<String>,
+}
+
 /// One fenced concrete-playback unit test that calls `kani::concrete_playback_run`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct KaniPlayback {
@@ -131,6 +163,8 @@ pub(crate) struct KaniTranscript {
     pub(crate) cover_summary: KaniCoverSummary,
     /// The playback tests, in order, up to the first unterminated fence.
     pub(crate) playbacks: Vec<KaniPlayback>,
+    /// Every listed check, in order.
+    pub(crate) checks: Vec<KaniCheck>,
 }
 
 impl KaniTranscript {
@@ -149,6 +183,7 @@ impl KaniTranscript {
             checks_summary: checks_summary(text),
             cover_summary: cover_summary(text),
             playbacks: playbacks(text),
+            checks: checks(text),
         }
     }
 }
@@ -223,6 +258,39 @@ fn cover_summary(text: &str) -> KaniCoverSummary {
     } else {
         KaniCoverSummary::Absent
     }
+}
+
+/// The `RESULTS:` listing: each `Check <n>: <name>` header opens an entry that the `Status` and
+/// `Location` lines after it fill in, until the next header.
+fn checks(text: &str) -> Vec<KaniCheck> {
+    let mut found: Vec<KaniCheck> = Vec::new();
+    for line in text.lines().map(str::trim) {
+        if line.starts_with(CHECK_HEADER_PREFIX) && line.contains(": ") {
+            found.push(KaniCheck {
+                status: KaniCheckStatus::Other,
+                function: None,
+            });
+        } else if let Some(status) = line.strip_prefix(CHECK_STATUS_PREFIX) {
+            if let Some(check) = found.last_mut() {
+                check.status = match status {
+                    "SUCCESS" => KaniCheckStatus::Success,
+                    "FAILURE" => KaniCheckStatus::Failure,
+                    "UNREACHABLE" => KaniCheckStatus::Unreachable,
+                    "UNDETERMINED" => KaniCheckStatus::Undetermined,
+                    "SATISFIED" => KaniCheckStatus::Satisfied,
+                    "UNSATISFIABLE" => KaniCheckStatus::Unsatisfiable,
+                    _ => KaniCheckStatus::Other,
+                };
+            }
+        } else if let Some(location) = line.strip_prefix(CHECK_LOCATION_PREFIX) {
+            if let Some(check) = found.last_mut() {
+                check.function = location
+                    .split_once(LOCATION_FUNCTION_MARKER)
+                    .map(|(_, function)| function.to_owned());
+            }
+        }
+    }
+    found
 }
 
 /// Fenced concrete-playback unit tests. A block with no closing fence ends the scan.
@@ -409,6 +477,42 @@ mod tests {
 
     fn targets(transcript: &KaniTranscript) -> Vec<KaniPlaybackTarget> {
         transcript.playbacks.iter().map(|p| p.target).collect()
+    }
+
+    /// The `RESULTS:` listing of a real capture reads as one typed check per entry: status and the
+    /// function the location is in.
+    ///
+    /// Trace: FR-017-AC-10, TC-027
+    #[test]
+    fn tc_027_the_results_listing_reads_status_and_function_per_check() {
+        let capture = capture!("verified-satisfied-cover");
+        assert_eq!(
+            KaniTranscript::parse(&capture.text).checks,
+            [
+                KaniCheck {
+                    status: KaniCheckStatus::Satisfied,
+                    function: Some("proofs::verified_satisfied_cover".to_owned())
+                },
+                KaniCheck {
+                    status: KaniCheckStatus::Success,
+                    function: Some("proofs::verified_satisfied_cover".to_owned())
+                },
+            ]
+        );
+        let text = "Check 1: a.assertion.1\n\t - Status: UNREACHABLE\n\t - Location: src/lib.rs:1:1 in function m::f\nCheck 2: b\n\t - Status: WEIRD\n";
+        assert_eq!(
+            KaniTranscript::parse(text).checks,
+            [
+                KaniCheck {
+                    status: KaniCheckStatus::Unreachable,
+                    function: Some("m::f".to_owned())
+                },
+                KaniCheck {
+                    status: KaniCheckStatus::Other,
+                    function: None
+                },
+            ]
+        );
     }
 
     /// Trace: FR-017-AC-10, TC-027
