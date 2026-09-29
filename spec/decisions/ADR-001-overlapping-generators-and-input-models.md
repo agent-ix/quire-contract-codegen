@@ -92,7 +92,7 @@ V1 model cannot be replayed through QSL, and it is not kept.
 - Code replaces each V1 path with its V2 equivalent and deletes the V1 path in the same change, so
   that each step leaves the repository green.
 - FR-002, FR-004, FR-005, FR-008 to FR-013, NFR-004 and interface-001 still state the V1
-  `BoundPackage` as their input, and their test cases (TC-004, TC-006, TC-017 to TC-022, and TC-028)
+  `BoundPackage` as their input, and their test cases (TC-004, TC-006 and TC-017 to TC-022)
   build V1 fixtures. Those texts contradict this decision until a separate spec change
   restates them over `CheckedPackageV2`. Until then their matrix rows record coverage of their
   current V1 text only.

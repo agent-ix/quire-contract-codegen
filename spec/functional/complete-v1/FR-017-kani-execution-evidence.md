@@ -98,9 +98,6 @@ the run and everything read back from it.
   wording that module matches is Kani's own and not this repository's.
   A falsifying playback block is passed through verbatim as the counterexample,
   which FR-016 decodes.
-- The generator shall compute no aggregate verdict over runs.
-- The generator shall retain no evidence of its own; the caller owns the
-  returned evidence.
 
 ## Constraints
 
@@ -113,15 +110,11 @@ the run and everything read back from it.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-017-AC-1 | Retired. | Inspection |
 | FR-017-AC-2 | An absent launcher is refused with a typed reason naming its path before anything runs. | Test (TC-027) |
-| FR-017-AC-3 | Retired. | Inspection |
 | FR-017-AC-4 | A run is verified only when the process exited successfully, the backend reported success, and every cover property is reported satisfied; a successful run with an unsatisfied cover is cover-unsatisfied with its satisfied and total counts; success text from an unsuccessfully exited process, an absent cover summary, a zero-total summary and an unreadable summary are each inconclusive with their own reason. | Test (TC-027) |
 | FR-017-AC-5 | A failed non-unwinding check with a concrete playback is falsified carrying that playback verbatim and never the playback of a satisfied cover; a failure with no playback is inconclusive for that reason; a failed unwinding assertion is inconclusive as an exhausted bound rather than falsified, and a succeeded unwinding check in a results listing is not a failure. | Test (TC-027) |
 | FR-017-AC-6 | Execution evidence carries the obligation kind, the harness path, the launcher path, the complete argument vector, the unwind bound, the solver, the exit code and the outcome. | Test (TC-027) |
 | FR-017-AC-7 | A crate whose library source does not contain the harness source byte for byte is refused, and no backend runs. | Test (TC-027) |
-| FR-017-AC-8 | The generator computes no aggregate verdict over runs: no function in the execution surface accepts more than one run's evidence or outcome to produce a summary. | Test (TC-027) |
-| FR-017-AC-9 | The generator retains no evidence of its own: the execution surface writes no file. The caller receives the returned evidence and owns its retention. | Test (TC-027) |
 | FR-017-AC-10 | Kani's printed output is read to decide a verdict only in `src/kani_transcript.rs`, into a typed transcript of the verdict banners, the failed checks, the check and cover summaries and the playback tests; real Kani captures of a verified run, a falsified run with a playback, an exhausted unwind bound, an unreachable cover, a partly satisfied cover and a run with no cover summary each parse to the expected transcript and classify to the expected outcome, and no other non-test source file under `src/` contains the wording; the playback block is passed through verbatim. | Test (TC-027) |
 | FR-017-AC-11 | A routed FR-022/FR-014 exact-scalar harness (`KaniScalarObligationHarness`) runs through `execute_kani_obligation` and `kani_launch_command` the same way an FR-015 contract harness does: a crate whose library source lacks its generated source byte for byte is `HarnessNotInCrate`, its covers classify a run identically (all satisfied is verified, an unsatisfied one is cover-unsatisfied, none printed is inconclusive), and its evidence carries `None` for obligation kind, since an exact-scalar claim carries no contract role. | Test (TC-027) |
 

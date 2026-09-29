@@ -209,11 +209,6 @@ The views and decisions above state the target. At this revision:
 - FR-014, FR-015, FR-024 to FR-026, FR-028, FR-029 and the test matrix record which criteria each of these leaves
   planned.
 
-This description claims no structural convergence across the program's Rust crates. Their
-ownership markers, gate names, evidence layouts and architecture records differ, and converging
-them is a separately reviewed cross-repository change that this repository's local controls cannot
-claim.
-
 ## Risks
 
 - Kani publishes no machine-readable verdict, so a Kani release that changes its wording changes

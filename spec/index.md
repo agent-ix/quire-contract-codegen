@@ -82,8 +82,7 @@ generators, the input model, the backend adapter, Kani tractability and the gene
 
 FR-020 is reserved for temporal and protocol oracles and is unwritten. FR-018 and FR-014 refuse the
 model graph, relation, temporal and protocol families with typed blockers. Function application is
-FR-021's. FR-006, FR-023, FR-027, NFR-003, TC-008 to TC-013, TC-015, TC-016, TC-028, TC-032, TC-034
-and TC-038 are unassigned.
+FR-021's.
 
 ### Subsystem layout
 

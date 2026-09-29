@@ -22,7 +22,7 @@ and that no local serialized format exists.
 2. In the fixture, draw cases and read each value through the generated declaration-name and
    observation-name constants; read the out-of-domain array the same way.
 3. Inspect the `BoundGenerationError::NameCollision` mapping to `UnsupportedClause`. Bound
-   generation gives every oracle symbol a positional counter, so no concrete fixture produces a
+   generation gives every oracle symbol an ordinal in clause-identity order, so no concrete fixture produces a
    collision.
 4. List the bundle's files, and diff `schemas/` against the base revision.
 5. Generate two different `ClauseRef`s from one package, and compare the headers and the artifact
