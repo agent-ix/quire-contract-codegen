@@ -5,9 +5,7 @@ use std::fmt::Write as _;
 use quire_contract_ir::{
     BoundClause, BoundPackage, ClauseKind, ClauseRef, ComparisonOperator as IrComparisonOperator,
     ExecutionPoint, Expression, ExpressionKind, StateObservation, ValueDeclarationKind, ValueType,
-    BOUND_IDENTITY_PROFILE,
 };
-use sha2::{Digest as _, Sha256};
 
 use super::{
     census::{compute_census, render_boundary_constants, render_edge_constants, CensusNames},
@@ -17,13 +15,9 @@ use super::{
 use crate::{
     bound::BoundGenerationError,
     generate_bound_oracles,
-    oracle::{
-        generated_output_attestation, generator_implementation_digest, length_delimited_identity,
-        oracle_symbol, reference_identifier, GeneratedAttestationSpec,
-    },
-    Artifact, AttestationContext, BoundOracleGeneration, GeneratedArtifactBundle,
-    GenerationErrorCode, GenerationTerminalState, StrategyDiagnostic, StrategyErrorCode,
-    MAX_GENERATED_SOURCE_BYTES,
+    oracle::{bounded_readable_component, oracle_symbol, reference_identifier, upper_camel},
+    Artifact, BoundOracleGeneration, GeneratedArtifactBundle, GenerationErrorCode,
+    GenerationTerminalState, StrategyDiagnostic, StrategyErrorCode, MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Population selected for one bound numeric strategy bundle.
@@ -73,8 +67,6 @@ pub struct BoundStrategyRequest<'a> {
     pub minimum_rejected_cases: u64,
     /// Maximum explicit framework discards permitted in the complete supplied report.
     pub maximum_discarded_cases: u64,
-    /// Caller-owned binding for the generated proof-attestation body.
-    pub attestation: AttestationContext<'a>,
 }
 
 #[derive(Clone)]
@@ -98,11 +90,11 @@ impl AdmittedRelation {
     }
 }
 
-/// Generates a deterministic strategy, census, oracle-conformance runner, and one attestation.
+/// Generates a deterministic strategy, census, and oracle-conformance runner.
 ///
 /// The operation first proves that the complete package is admitted by bound oracle generation,
 /// then narrows the selected clause to one supported integer comparison. Any refusal returns one
-/// structured diagnostic and no artifact or attestation.
+/// structured diagnostic and no artifact.
 // Implements: FR-008, FR-009, FR-010, FR-011, FR-012, FR-013
 pub fn generate_bound_strategy(
     request: &BoundStrategyRequest<'_>,
@@ -124,28 +116,27 @@ pub fn generate_bound_strategy(
         ));
     };
 
-    let generated_oracles =
-        generate_bound_oracles(request.package, request.attestation).map_err(|error| {
-            let diagnostic = map_oracle_error(request.clause, error);
-            if diagnostic.clause.as_deref() == Some(request.clause)
-                && matches!(
-                    diagnostic.generation_code,
-                    Some(
-                        GenerationErrorCode::UnsupportedExpression
-                            | GenerationErrorCode::UnsupportedDependency
-                    )
+    let generated_oracles = generate_bound_oracles(request.package).map_err(|error| {
+        let diagnostic = map_oracle_error(request.clause, error);
+        if diagnostic.clause.as_deref() == Some(request.clause)
+            && matches!(
+                diagnostic.generation_code,
+                Some(
+                    GenerationErrorCode::UnsupportedExpression
+                        | GenerationErrorCode::UnsupportedDependency
                 )
-            {
-                if let Some(locus) = explicit_relation_locus(clause) {
-                    return relation_diagnostic(
-                        clause,
-                        locus,
-                        "comparison operands must be bounded integer reads or integer literals",
-                    );
-                }
+            )
+        {
+            if let Some(locus) = explicit_relation_locus(clause) {
+                return relation_diagnostic(
+                    clause,
+                    locus,
+                    "comparison operands must be bounded integer reads or integer literals",
+                );
             }
-            diagnostic
-        })?;
+        }
+        diagnostic
+    })?;
     let BoundOracleGeneration::Generated(generated_oracles) = generated_oracles else {
         return Err(bound_diagnostic(
             StrategyErrorCode::UnknownClause,
@@ -202,9 +193,8 @@ pub fn generate_bound_strategy(
         }
         Err(_) => false,
     };
-    let identity = strategy_identity(request, &admitted);
-    let suffix = sha256(identity.as_bytes());
-    let item_suffix = &suffix[..16];
+    let suffix = strategy_name(request);
+    let item_suffix = &upper_camel(&suffix);
 
     let render_population_kind = request.population.sampled().unwrap_or(Population::Broad);
     let rendered_population = render_population(&PopulationRequest {
@@ -228,7 +218,6 @@ pub fn generate_bound_strategy(
 
     let requirement = request.clause.requirement();
     let oracle_function = oracle_symbol(
-        requirement.package().as_str(),
         requirement.requirement().as_str(),
         requirement.revision().get(),
         request.clause.clause().as_str(),
@@ -246,49 +235,20 @@ pub fn generate_bound_strategy(
         &oracle.bundle().rust.contents,
     )?;
     let path = format!("src/generated/bound_strategy_{suffix}.rs");
-    let rust = artifact(path, source);
-    let digest = request.package.digest().to_string();
-    let extra_argv = vec![
-        "--clause".to_owned(),
-        request.clause.clause().as_str().to_owned(),
-        "--population".to_owned(),
-        request.population.name().to_ascii_lowercase(),
-    ];
-    let attestation = generated_output_attestation(
-        &request.attestation,
-        requirement,
-        &GeneratedAttestationSpec {
-            operation: "generate_bound_strategy",
-            stable_identity: &identity,
-            input_bytes: identity.as_bytes(),
-            input_digest: Some(&digest),
-            output_role: "generated-rust-strategy",
-            media_type: "text/x-rust",
-            output_schema: "quire.codegen.rust-strategy/v1",
-            schema_digest: None,
-            canonical_profile: BOUND_IDENTITY_PROFILE,
-            backend: "none",
-            configuration_digest: generator_implementation_digest(),
-            extra_argv: &extra_argv,
-        },
-        &rust,
-    )
-    .map_err(|code| {
-        bound_diagnostic(
-            if code == GenerationErrorCode::ResourceLimitExceeded {
-                StrategyErrorCode::ResourceLimitExceeded
-            } else {
-                StrategyErrorCode::AttestationGenerationFailed
-            },
-            code.terminal_state(),
-            Some(code),
+    if source.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(bound_diagnostic(
+            StrategyErrorCode::ResourceLimitExceeded,
+            GenerationTerminalState::Unsupported,
+            Some(GenerationErrorCode::ResourceLimitExceeded),
             request.clause,
             None,
-            "generated.attestation",
-            "the bound strategy proof attestation could not be emitted",
-        )
-    })?;
-    Ok(GeneratedArtifactBundle { rust, attestation })
+            "generated.rust",
+            "the generated bound strategy exceeds the source-size limit",
+        ));
+    }
+    Ok(GeneratedArtifactBundle {
+        rust: artifact(path, source),
+    })
 }
 
 // Implements: FR-008-CON-1
@@ -511,12 +471,11 @@ fn render_complete_source(
     oracle_source: &str,
 ) -> Result<String, StrategyDiagnostic> {
     let full_clause = full_clause_ref(request.clause);
-    let digest = request.package.digest().to_string();
     let mut source = format!(
         "#![deny(missing_docs)]\n//! Generated bound numeric strategy artifact.\n\
 // SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // Generated by quire-contract-codegen {}; DO NOT EDIT.\n\
-// BoundPackage: {digest}; ClauseRef: {full_clause}\n\n",
+// ClauseRef: {full_clause}\n\n",
         env!("CARGO_PKG_VERSION")
     );
     source.push_str(oracle_source);
@@ -615,8 +574,8 @@ fn runner_source(
     suffix: &str,
 ) -> Result<String, StrategyDiagnostic> {
     let base = format!("bound_campaign_{suffix}");
-    let summary = format!("BoundCampaignSummary{}", &suffix[..16]);
-    let error = format!("BoundCampaignError{}", &suffix[..16]);
+    let summary = format!("BoundCampaignSummary{item_suffix}");
+    let error = format!("BoundCampaignError{item_suffix}");
     let selected_strategy = format!("bound_strategy_{suffix}");
     let runner = format!("{base}_run");
     let census_runner = format!("{base}_run_census");
@@ -818,25 +777,17 @@ where Strategy: proptest::strategy::Strategy<Value = {case_type}> {{\n\
     ))
 }
 
-fn strategy_identity(request: &BoundStrategyRequest<'_>, admitted: &AdmittedRelation) -> String {
-    let digest = request.package.digest().to_string();
-    let revision = request.clause.requirement().revision().get().to_string();
-    let relation = format!("{:?}", admitted.relation);
-    let domain = format!("{:?}", admitted.domain);
-    length_delimited_identity(&[
-        "bound-strategy/v1",
-        &digest,
-        request.clause.requirement().package().as_str(),
-        request.clause.requirement().requirement().as_str(),
-        &revision,
-        request.clause.clause().as_str(),
-        request.population.name(),
-        &request.minimum_accepted_cases.to_string(),
-        &request.minimum_rejected_cases.to_string(),
-        &request.maximum_discarded_cases.to_string(),
-        &relation,
-        &domain,
-    ])
+/// The readable stem of every generated name in one bound strategy: requirement, revision,
+/// clause and population.
+fn strategy_name(request: &BoundStrategyRequest<'_>) -> String {
+    let requirement = request.clause.requirement();
+    format!(
+        "{}_{}_{}_{}",
+        bounded_readable_component(requirement.requirement().as_str()),
+        requirement.revision().get(),
+        bounded_readable_component(request.clause.clause().as_str()),
+        request.population.name().to_ascii_lowercase()
+    )
 }
 
 fn execution_point_name(point: &ExecutionPoint) -> &'static str {
@@ -891,15 +842,6 @@ fn relation_diagnostic(
 
 fn map_oracle_error(requested: &ClauseRef, error: BoundGenerationError) -> StrategyDiagnostic {
     match error {
-        BoundGenerationError::NameCollision(identity) => bound_diagnostic(
-            StrategyErrorCode::UnsupportedClause,
-            GenerationTerminalState::InvalidInput,
-            Some(GenerationErrorCode::NameCollision),
-            &identity,
-            None,
-            "expression.dependencies",
-            "bound oracle generation found a dependency or symbol collision",
-        ),
         BoundGenerationError::Clause {
             identity,
             diagnostics,
@@ -976,13 +918,5 @@ fn bound_diagnostic(
 }
 
 fn artifact(path: String, contents: String) -> Artifact {
-    Artifact {
-        path,
-        sha256: sha256(contents.as_bytes()),
-        contents,
-    }
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    Artifact::new(path, contents)
 }

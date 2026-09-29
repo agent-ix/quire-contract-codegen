@@ -16,7 +16,7 @@ distinct from assumed proof edges.
 
 ## Test Procedure
 
-Generate fixtures with complete, missing, failed, and assumed dependency edges under the pinned Kani
+Generate fixtures with complete, missing, failed, and assumed dependency edges under the Kani
 adapter; execute bounded proofs and inspect graph/evidence classifications. Include Boolean and
 bounded-integer bindings, reorder the caller dependency census, and require one stable source marker
 per proof assumption/stub. Inspect model-domain binding records independently and confirm they do not
@@ -24,6 +24,6 @@ alter dependency readiness.
 
 ## Expected Results
 
-Only complete successful dependency closure can support a complete proof; every assumption, version,
+Only complete successful dependency closure can support a complete proof; every assumption,
 option, typed domain bound, and non-success state remains visible. Generation always reports
 `proofExecutionState: not_run`; a ready graph is not a completed Kani proof.

@@ -10,70 +10,39 @@ type: SuiteRegistry
 
 | ID | Name | Command | Tool | Evidence Kind |
 |---|---|---|---|---|
-| SUITE-001 | Bounded generation conformance corpus | `cargo run --quiet --example generation_conformance` | quire-contract-codegen 0.1.0 / rustc | Integration |
-| SUITE-002 | Upstream identity agreement | `python3 scripts/check_upstream_pins.py --json` | quire-contract-codegen 0.1.0 | Static |
-| SUITE-003 | Strict specification validation | `quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'` | quire 0.31.0 / quire-rs 0.46.0 | Analysis |
-| SUITE-004 | Static specification and coverage export | `quire coverage --scope . --json` | quire 0.31.0 / quire-rs 0.46.0 | Static |
-| SUITE-006 | Shared assurance intake chain | `python3 scripts/assurance_chain.py --candidate-revision <sha>` | quoin 0.23.1 change-assurance and evidence surfaces | Integration |
-| SUITE-007 | Minimum supported Rust version build | `rustup run 1.98.1 cargo check --locked --all-targets --message-format=json` | rustc 1.98.1 | Static |
-| SUITE-008 | Bounded Kani generation and execution | `cargo test --locked --target-dir target-codex-backends --test it kani_generation -- --test-threads=1` | cargo-kani 0.67.0 / rustc | Analysis |
-| SUITE-010 | Atomic generated-boundary publication | `cargo test --lib publication` | quire-contract-codegen 0.1.0 / rustc | Integration |
-| SUITE-011 | Pinned Kani obligation execution | `make kani` | cargo-kani 0.67.0 / rustc | Analysis |
+| SUITE-003 | Strict specification validation | `quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'` | quire | Analysis |
+| SUITE-004 | Static specification and coverage export | `quire coverage --scope . --json` | quire | Static |
+| SUITE-007 | Minimum supported Rust version build | `make msrv` | rustc | Static |
+| SUITE-008 | Bounded Kani generation and execution | `cargo test --locked --target-dir target-codex-backends --test it kani_generation -- --test-threads=1` | cargo-kani / rustc | Analysis |
+| SUITE-010 | Atomic generated-boundary publication | `cargo test --lib publication` | quire-contract-codegen / rustc | Integration |
+| SUITE-011 | Kani obligation execution | `make kani` | cargo-kani / rustc | Analysis |
 
 ## Notes
 
-This registry is new with the shared-assurance migration. Before it, the retained
-records named their commands only inside a collection manifest, which meant the
-suite a result discharged an obligation for was a fact recoverable only by
-reading the collector's shell script. Those records are deleted under the
-pre-stable preservation release (`agent-ix/engineering-assurance#7`); this
-registry is now the only place a suite's command is declared, which is where it
-should have been.
-
-SUITE-005 was the retained-evidence compatibility view. It is removed with the
-records it read. The identifiers of the remaining suites are not renumbered: a
-suite identifier that changes meaning is worse than a gap in a sequence.
-
-SUITE-001 is the suite whose run this repository transcribes into Quoin's
-evidence store. It is the crate's headline verification — the bounded generation
-corpus over the oracle, harness and strategy slices, with the rejection cases
-that keep the Interface-001 terminal states apart — and its rows carry trace
-bindings the corpus declares per case.
-
-SUITE-003, SUITE-004 and SUITE-006 were previously performed by the deleted
-collector, which conflated schema validation and envelope conformance in one
-lane and added the local traceability reimplementation and the local verifier. Every one of those concerns moved
-upstream. Quire is the authority on static specification, obligation and coverage
-facts; Quoin owns intake, retention, audit and receipts.
-
 SUITE-008 exists for the implemented FR-003 draft. It validates both output
-schemas, seals both generated attestation bodies through Quoin, checks every
-dependency classification and source-site edge, compares the embedded predicates
-with the executable-oracle output, and runs representative bundles under the
-pinned Kani backend. The numeric/state increment adds v2 typed subject bindings,
+schemas, checks every dependency classification and source-site edge, compares
+the embedded predicates with the executable-oracle output, and runs representative
+bundles under the installed Kani backend. The numeric/state increment adds v2 typed subject bindings,
 IR-owned integer assumptions, exact boundary/outside controls, and successful plus
 falsifying concrete-playback runs without changing the generation-time `not_run`
 classification. Its issue #2 current-head Rust review and gap analysis accept this local evidence;
 the suite still does not classify graph readiness as a completed proof. FR-004 still has no suite:
 `src/vacuity.rs` and `src/bound_coverage.rs` implement primitives and bound observations with focused
-TC-006-tagged tests, but no qualified native-campaign result producer is registered. The bound
-analyzer's observations are constructed with `provenance: "unqualified"` unconditionally.
+TC-006-tagged tests, but no qualified native-campaign result producer is registered.
 
-SUITE-010 exercises deterministic bundle identity, every injectable staging and swap boundary,
-failed-rollback recovery, distinct ownership I/O failures, interior-dot path refusal,
-complete ownership-census verification, and refusal of modified, extra-entry, unmarked, and symlinked
-destinations. It is local pre-review evidence for the publication portion of TC-002; the
+SUITE-010 exercises order-independent bundle construction, every injectable staging and swap
+boundary, failed-rollback recovery, post-commit cleanup failure, unsafe and interior-dot path
+refusal, the bounded artifact count and sizes, and symlink-safe cleanup. It is local pre-review evidence for the publication portion of TC-002; the
 serialized-package CLI remains blocked on an IR expression-binding design. The suite command is a
 focused local check; the full repository test target also includes these tests, but SUITE-010 has no
 separate structured execution-result producer yet.
 
-SUITE-011 is the FR-015 and FR-017 obligation lane. `make kani` runs `tests/kani_obligations.rs`'s
+SUITE-011 is the FR-015 and FR-017 obligation lane. `make kani` runs `tests/it/kani_obligations.rs`'s
 `#[ignore]`d lane serially under a host-wide lock and in its own target directory, because Kani and
-CBMC are memory-heavy. It asserts the installed backend equals the committed pins before anything
-runs, verifies the precondition, postcondition and invariant harnesses of a healthy subject,
+CBMC are memory-heavy. It verifies the precondition, postcondition and invariant harnesses of a healthy subject,
 falsifies a seeded defect with a concrete counterexample, reports a jointly unsatisfiable contract as
-cover-unsatisfied rather than verified, and refuses a drifted driver digest and a crate that does not
-contain its harness. It is deliberately not a `make ci` gate: it needs a real pinned installation,
+cover-unsatisfied rather than verified, and refuses a crate that does not contain its harness. It is
+deliberately not a `make ci` gate: it needs a real Kani installation,
 which is why the FR-017 rows it alone backs are `🚧 Planned`. SUITE-008 is the FR-003 lane and does
 not cover this one; that gap is agent-ix/quire-contract-codegen#66.
 

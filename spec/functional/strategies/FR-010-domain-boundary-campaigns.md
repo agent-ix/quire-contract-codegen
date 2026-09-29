@@ -67,7 +67,7 @@ generated oracle returns for it.
 - The generator shall emit the out-of-domain and unrepresentable-edge arrays in every bundle it
   generates for a non-refused population request, including a `Satisfying`, `Violating`, or `Broad`
   request for a clause whose `Boundary` population is refused.
-- A refused population request shall emit no artifact and no attestation.
+- A refused population request shall emit no artifact.
 - Generated Rust shall be the only carrier of the census arrays; the generator emits no serialized
   census file.
 
@@ -78,7 +78,7 @@ generated oracle returns for it.
 | FR-010-AC-1 | For `amount < 7` over 0..=1000, the in-domain census is exactly [0 Holds, 1 Holds, 6 Holds, 7 Violated, 8 Violated, 999 Violated, 1000 Violated], and the out-of-domain array is exactly [-1, 1001]; for `amount < 1`, where the literal edges coincide with the domain edges, the in-domain census is exactly [0 Holds, 1 Violated, 2 Violated, 999 Violated, 1000 Violated] with no duplicates, and the out-of-domain array is exactly [-1, 1001]. | Test (TC-019) |
 | FR-010-AC-2 | For `VersionUnchanged` (primary post, partner pre) over 0..=1000, the in-domain census is exactly the 10 pairs (post, pre): (0,0 H), (0,1 V), (1,0 V), (1,1 H), (1,2 V), (999,998 V), (999,999 H), (999,1000 V), (1000,999 V), (1000,1000 H); the out-of-domain array is exactly the 10 pairs (-1,0), (0,-1), (0,1001), (1,-1), (1,1001), (999,-1), (999,1001), (1000,-1), (1000,1001), (1001,1000). | Test (TC-019) |
 | FR-010-AC-3 | A domain `i64::MIN..=i64::MAX` compiles as generated Rust without overflow or panic, its out-of-domain array holds no case for either outer edge, and its unrepresentable-edge array lists both. | Test (TC-019) |
-| FR-010-AC-4 | `amount <= 1000` over 0..=1000 refuses `Boundary` with `UnsupportedCampaignConstraint` and emits no artifact or attestation for that request, while its `Satisfying` bundle still carries the out-of-domain array [-1, 1001]. | Test (TC-019) |
+| FR-010-AC-4 | `amount <= 1000` over 0..=1000 refuses `Boundary` with `UnsupportedCampaignConstraint` and emits no artifact for that request, while its `Satisfying` bundle still carries the out-of-domain array [-1, 1001]. | Test (TC-019) |
 | FR-010-AC-5 | Every in-domain census tag equals an independent evaluation of the relation, every out-of-domain case has at least one value outside the domain, and repeated generation produces byte-identical arrays. | Test (TC-019) |
 
 ## Dependencies

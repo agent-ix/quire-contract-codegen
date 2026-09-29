@@ -5,13 +5,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::common;
-
 use quire_contract_codegen::{
-    generate_enum_strategy, generate_i64_strategy, AttestationContext, AttestationResult,
-    EnumStrategyCampaign, EnumStrategyRequest, GenerationErrorCode, GenerationTerminalState,
-    ProofAttestationBody, StrategyCampaign, StrategyConstraint, StrategyErrorCode, StrategyRequest,
-    IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
+    GenerationErrorCode, GenerationTerminalState, StrategyCampaign, StrategyConstraint,
+    StrategyErrorCode, StrategyRequest, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
 };
 use quire_contract_ir::{PackageId, RequirementId, RequirementRef, RequirementRevision};
 
@@ -44,20 +41,6 @@ fn requirement() -> RequirementRef {
     )
 }
 
-/// The record digest this test's attestations bind to.
-///
-/// No change-assurance record is sealed for a unit test, so there is no digest to
-/// name. The all-zero digest is the one 64-hexadecimal string no sealed record can
-/// have, so it cannot be mistaken for a real binding.
-const TEST_RECORD_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
-
-fn attestation_context() -> AttestationContext<'static> {
-    AttestationContext {
-        record_digest: TEST_RECORD_DIGEST,
-        candidate_revision: IR_CANDIDATE_REVISION,
-    }
-}
-
 fn function_name(source: &str) -> &str {
     source
         .lines()
@@ -80,7 +63,6 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
     let requirement = requirement();
     let range = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "range-broad",
         constraint: StrategyConstraint::InclusiveRange {
             minimum: 10,
@@ -91,7 +73,6 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
     .unwrap();
     let range_again = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "range-broad",
         constraint: StrategyConstraint::InclusiveRange {
             minimum: 10,
@@ -101,38 +82,8 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
     })
     .unwrap();
     assert_eq!(range, range_again);
-    let attestation: ProofAttestationBody =
-        serde_json::from_str(&range.attestation.contents).unwrap();
-    assert_eq!(attestation.schema_version, 1);
-    assert_eq!(attestation.record_type, "proof_attestation");
-    assert_eq!(attestation.result, AttestationResult::Passed);
-    assert_eq!(attestation.record_digest, TEST_RECORD_DIGEST);
-    assert_eq!(attestation.candidate_revision, IR_CANDIDATE_REVISION);
-    assert_eq!(
-        attestation.proof_id,
-        "PROOF-codegen-generated-rust-strategy"
-    );
-    assert_eq!(
-        attestation.command.argv.last().map(String::as_str),
-        Some(range.rust.path.as_str())
-    );
-    // As with the harness slice: a different body shape from the oracle's, so it is
-    // sealed through the real CLI here rather than assumed covered.
-    let schema = common::packaged_attestation_schema();
-    let validator = common::packaged_attestation_validator(&schema);
-    let sealed_directory = TemporaryDirectory::new("quire-strategy-attestation");
-    let sealed = common::seal_and_validate(
-        &range.attestation.contents,
-        &range.rust,
-        &sealed_directory.0,
-        &validator,
-    );
-    assert_eq!(sealed["retained_output"]["media_type"], "text/x-rust");
-    assert_eq!(sealed["proof_id"], "PROOF-codegen-generated-rust-strategy");
-
     let correlated = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "correlated-broad",
         constraint: StrategyConstraint::CorrelatedOffset {
             primary_minimum: -20,
@@ -147,7 +98,6 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
 
     let residual = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "residual-broad",
         constraint: StrategyConstraint::ResidualExclusion {
             minimum: 0,
@@ -274,7 +224,6 @@ fn tc_004_boundary_campaigns_tag_inside_and_immediately_outside_values() {
     let requirement = requirement();
     let range = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "range-boundary",
         constraint: StrategyConstraint::InclusiveRange {
             minimum: 10,
@@ -302,7 +251,6 @@ fn tc_004_boundary_campaigns_tag_inside_and_immediately_outside_values() {
 
     let membership = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "membership-boundary",
         constraint: StrategyConstraint::Membership { values: &[3, 7] },
         campaign: StrategyCampaign::Boundary,
@@ -320,7 +268,6 @@ fn tc_004_boundary_campaigns_tag_inside_and_immediately_outside_values() {
 
     let residual = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "residual-boundary",
         constraint: StrategyConstraint::ResidualExclusion {
             minimum: 0,
@@ -342,7 +289,6 @@ fn tc_004_boundary_campaigns_tag_inside_and_immediately_outside_values() {
 
     let correlated = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "correlated-boundary",
         constraint: StrategyConstraint::CorrelatedOffset {
             primary_minimum: 10,
@@ -371,7 +317,6 @@ fn tc_004_boundary_campaigns_tag_inside_and_immediately_outside_values() {
 
     let pinned = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "state-pinned",
         constraint: StrategyConstraint::Membership { values: &[3, 7] },
         campaign: StrategyCampaign::StatePinned { value: 4 },
@@ -382,7 +327,6 @@ fn tc_004_boundary_campaigns_tag_inside_and_immediately_outside_values() {
 
     let no_event = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "no-event",
         constraint: StrategyConstraint::CorrelatedOffset {
             primary_minimum: 0,
@@ -406,7 +350,6 @@ fn tc_004_boundary_pinned_and_no_event_bodies_compile_and_execute_with_denied_wa
     let requirement = requirement();
     let boundary = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "compiled-boundary",
         constraint: StrategyConstraint::ResidualExclusion {
             minimum: 0,
@@ -418,7 +361,6 @@ fn tc_004_boundary_pinned_and_no_event_bodies_compile_and_execute_with_denied_wa
     .unwrap();
     let pinned = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "compiled-pinned",
         constraint: StrategyConstraint::Membership { values: &[3, 7] },
         campaign: StrategyCampaign::StatePinned { value: 3 },
@@ -426,7 +368,6 @@ fn tc_004_boundary_pinned_and_no_event_bodies_compile_and_execute_with_denied_wa
     .unwrap();
     let no_event = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "compiled-no-event",
         constraint: StrategyConstraint::CorrelatedOffset {
             primary_minimum: 0,
@@ -507,7 +448,6 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
     let requirement = requirement();
     let reversed = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "reversed",
         constraint: StrategyConstraint::InclusiveRange {
             minimum: 2,
@@ -520,7 +460,6 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
 
     let duplicate = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "duplicates",
         constraint: StrategyConstraint::Membership { values: &[1, 1] },
         campaign: StrategyCampaign::Broad,
@@ -530,7 +469,6 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
 
     let overflow = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "overflow",
         constraint: StrategyConstraint::CorrelatedOffset {
             primary_minimum: i64::MAX,
@@ -549,7 +487,6 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
 
     let pinned_correlation = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "pinned-correlation",
         constraint: StrategyConstraint::CorrelatedOffset {
             primary_minimum: 0,
@@ -571,7 +508,6 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
 
     let full_width_boundary = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "full-width-boundary",
         constraint: StrategyConstraint::InclusiveRange {
             minimum: i64::MIN,
@@ -587,7 +523,6 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
 
     let correlated_full_width = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "correlated-full-width-boundary",
         constraint: StrategyConstraint::CorrelatedOffset {
             primary_minimum: i64::MIN,
@@ -606,7 +541,6 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
 
     let empty_residual = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "empty-residual",
         constraint: StrategyConstraint::ResidualExclusion {
             minimum: 0,
@@ -619,57 +553,9 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
     assert_eq!(empty_residual.code, StrategyErrorCode::InvalidMembership);
     assert_eq!(empty_residual.path, "constraint.excluded");
 
-    // Both halves of the attestation binding, probed separately. The strategy
-    // slice reaches the same validation the oracle slice does, and each field has
-    // to be seen rejecting on its own or one of the two rules could be gone.
-    for (name, invalid) in [
-        (
-            "a candidate revision that is not a revision",
-            AttestationContext {
-                candidate_revision: "not-a-revision",
-                ..attestation_context()
-            },
-        ),
-        (
-            "a record digest that is not a digest",
-            AttestationContext {
-                record_digest: "not-a-digest",
-                ..attestation_context()
-            },
-        ),
-    ] {
-        let failure = generate_i64_strategy(&StrategyRequest {
-            requirement: &requirement,
-            attestation: invalid,
-            strategy_id: "invalid-attestation",
-            constraint: StrategyConstraint::InclusiveRange {
-                minimum: 0,
-                maximum: 1,
-            },
-            campaign: StrategyCampaign::Broad,
-        })
-        .unwrap_err();
-        assert_eq!(
-            failure.generation_code,
-            Some(GenerationErrorCode::InvalidAttestationContext),
-            "{name}"
-        );
-        assert_eq!(
-            failure.code,
-            StrategyErrorCode::AttestationGenerationFailed,
-            "{name}"
-        );
-        assert_eq!(
-            failure.terminal_state,
-            GenerationTerminalState::InvalidInput,
-            "{name}"
-        );
-    }
-
     let oversized_strategy_id = "x".repeat(MAX_GENERATED_SOURCE_BYTES);
     let resource_limit = generate_i64_strategy(&StrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: &oversized_strategy_id,
         constraint: StrategyConstraint::InclusiveRange {
             minimum: 0,
@@ -699,7 +585,6 @@ fn tc_004_customer_enum_memberships_are_directly_shaped_and_validated() {
     let requirement = requirement();
     let broad = generate_enum_strategy(&EnumStrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "mode-membership",
         enum_type: "Mode",
         variants: &["Idle", "Active"],
@@ -714,7 +599,6 @@ fn tc_004_customer_enum_memberships_are_directly_shaped_and_validated() {
 
     let no_event = generate_enum_strategy(&EnumStrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "mode-no-event",
         enum_type: "Mode",
         variants: &["Idle", "Active"],
@@ -804,7 +688,6 @@ mod generated_tests {{
 
     let outside = generate_enum_strategy(&EnumStrategyRequest {
         requirement: &requirement,
-        attestation: attestation_context(),
         strategy_id: "mode-pinned",
         enum_type: "Mode",
         variants: &["Idle", "Active"],

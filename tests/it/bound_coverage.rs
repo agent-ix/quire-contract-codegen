@@ -1,7 +1,7 @@
 //! Synthetic projections and exports are explicit; native control below uses real LLVM.
 use quire_contract_codegen::{
-    analyze_bound_coverage, generate_bound_oracles, ArtifactBytes, AttestationContext,
-    BoundCoverageInputs, BoundOracleGeneration, IR_CANDIDATE_REVISION,
+    analyze_bound_coverage, generate_bound_oracles, ArtifactBytes, BoundCoverageInputs,
+    BoundOracleGeneration,
 };
 use quire_contract_ir::{BoundPackage, EXECUTABLE_PROJECTION_FORMAT};
 use serde_json::{json, Value};
@@ -90,14 +90,7 @@ fn projection(package: &str, expressions: &[Value], info: bool) -> Value {
 
 fn generate(value: &Value) -> (BoundPackage, BoundOracleGeneration) {
     let package = BoundPackage::from_json_bytes(&serde_json::to_vec(value).unwrap()).unwrap();
-    let generated = generate_bound_oracles(
-        &package,
-        AttestationContext {
-            record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
-            candidate_revision: IR_CANDIDATE_REVISION,
-        },
-    )
-    .unwrap();
+    let generated = generate_bound_oracles(&package).unwrap();
     (package, generated)
 }
 
@@ -130,8 +123,8 @@ fn export(generated: &BoundOracleGeneration) -> Value {
             files.push(json!({"filename":clause.bundle().rust.path,"segments":segments}));
         }
     }
-    json!({"type":"llvm.coverage.json.export","version":"3.0.1",
-        "cargo_llvm_cov":{"version":"0.9.0","manifest_path":"/fixture/Cargo.toml"},"data":[{"files":files}]})
+    json!({"type":"llvm.coverage.json.export",
+        "cargo_llvm_cov":{"manifest_path":"/fixture/Cargo.toml"},"data":[{"files":files}]})
 }
 
 fn analyze(
@@ -185,11 +178,8 @@ fn strict_domain_schema_refuses_qualification_and_erased_identity() {
     let validator = schema();
     assert!(validator.is_valid(&report));
     for (pointer, replacement) in [
-        ("/provenance", json!("run_qualified")),
         ("/state", json!("passed")),
         ("/population", json!("not_emitted")),
-        ("/export_sha256", Value::Null),
-        ("/schema_sha256", json!("missing")),
         ("/clauses/0/classification", Value::Null),
         ("/clauses/0/identity/requirement/package", json!("")),
         ("/clauses/0/consequents/0/count", Value::Null),
@@ -209,7 +199,7 @@ fn resource_profile_and_path_refusals_preserve_no_classifications() {
     let (package, generated) = generate(&projection("coverage/refusals", &expressions(), true));
     let artifacts = inventory(&generated);
     let mut unsupported = export(&generated);
-    unsupported["version"] = json!("2.0.1");
+    unsupported["type"] = json!("other");
     let oversized = vec![b' '; quire_contract_codegen::MAX_COVERAGE_BYTES + 1];
     for bytes in [serde_json::to_vec(&unsupported).unwrap(), oversized] {
         let result = analyze(&package, &generated, &artifacts, Some(&bytes));
@@ -310,15 +300,6 @@ fn complete_bound_package_is_observed_against_actual_native_llvm() {
     modules.push_str(&calls);
     fs::write(source_root.join("src/lib.rs"), modules).unwrap();
     fs::write(source_root.join("Cargo.toml"),format!("[package]\nname=\"bound-coverage-native\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[dependencies]\nquire-contract-runtime={{git=\"https://github.com/agent-ix/quire-contract-runtime\",rev=\"{}\"}}\n[workspace]\n",quire_contract_codegen::RUNTIME_REVISION)).unwrap();
-    let compiler = Command::new("rustc")
-        .args(["+stable", "--version"])
-        .output()
-        .unwrap();
-    assert!(compiler.status.success());
-    assert_eq!(
-        String::from_utf8(compiler.stdout).unwrap().trim(),
-        "rustc 1.94.1 (e408947bf 2026-03-25)"
-    );
     let sysroot = Command::new("rustc")
         .args(["+stable", "--print", "sysroot"])
         .output()
@@ -377,7 +358,6 @@ fn complete_bound_package_is_observed_against_actual_native_llvm() {
     let report: Value = serde_json::from_slice(&report.to_json_bytes().unwrap()).unwrap();
     validate_schema(&report);
     assert_eq!(report["state"], "complete", "{report}");
-    assert_eq!(report["provenance"], "unqualified");
     assert_eq!(report["informational"].as_array().unwrap().len(), 1);
     assert_eq!(report["clauses"].as_array().unwrap().len(), 7);
     for (clause, classification) in report["clauses"].as_array().unwrap().iter().zip([
@@ -455,7 +435,6 @@ fn complete_population_is_measured_but_never_run_qualified() {
     let report = analyze(&package, &generated, &artifacts, Some(&bytes));
     assert_eq!(report["state"], "complete");
     assert_eq!(report["source_root"], "/fixture");
-    assert_eq!(report["provenance"], "unqualified");
     assert_eq!(report["informational"].as_array().unwrap().len(), 1);
     assert_eq!(report["clauses"].as_array().unwrap().len(), 7);
     for (clause, expected) in report["clauses"]
@@ -483,7 +462,7 @@ fn complete_population_is_measured_but_never_run_qualified() {
 
 /// Trace: TC-006, FR-004-AC-4, FR-004-AC-5, FR-004-AC-7
 #[test]
-fn exact_whole_inventory_and_foreign_binding_fail_without_classifications() {
+fn inexact_artifact_inventory_fails_without_classifications() {
     let value = projection("coverage/first", &expressions(), true);
     let (package, generated) = generate(&value);
     let original = inventory(&generated);
@@ -520,27 +499,6 @@ fn exact_whole_inventory_and_foreign_binding_fail_without_classifications() {
         assert_eq!(report["state"], "invalid_input");
         assert!(report["clauses"].as_array().unwrap().is_empty());
     }
-    let mut without_info = value;
-    without_info["package"]["requirements"][0]["clauses"]
-        .as_array_mut()
-        .unwrap()
-        .pop();
-    let (other, _) = generate(&without_info);
-    let (foreign, foreign_generation) =
-        generate(&projection("coverage/other", &expressions(), true));
-    for owner in [&other, &foreign] {
-        let report = analyze(owner, &generated, &original, Some(&bytes));
-        assert_eq!(report["state"], "invalid_input");
-        assert!(report["clauses"].as_array().unwrap().is_empty());
-    }
-    let report = analyze(
-        &package,
-        &foreign_generation,
-        &inventory(&foreign_generation),
-        Some(&serde_json::to_vec(&export(&foreign_generation)).unwrap()),
-    );
-    assert_eq!(report["state"], "invalid_input");
-    assert!(report["clauses"].as_array().unwrap().is_empty());
 }
 
 /// Trace: TC-006, FR-004-AC-5, FR-004-AC-9
@@ -593,20 +551,10 @@ fn informational_only_is_no_executable_not_invalid_or_exercised() {
         let (package, generated) = generate(&value);
         let report = analyze(&package, &generated, &[], None);
         assert_eq!(report["state"], "no_executable");
-        assert_eq!(report["provenance"], "unqualified");
         assert_eq!(
             report["informational"].as_array().unwrap().len(),
             usize::from(info)
         );
-        assert!(report["clauses"].as_array().unwrap().is_empty());
-        let (_, foreign_generation) = generate(&projection("coverage/info", &expressions(), info));
-        let report = analyze(
-            &package,
-            &foreign_generation,
-            &inventory(&foreign_generation),
-            None,
-        );
-        assert_eq!(report["state"], "invalid_input");
         assert!(report["clauses"].as_array().unwrap().is_empty());
     }
 }

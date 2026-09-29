@@ -1,19 +1,15 @@
 //! Deterministic, fail-closed lowering for Boolean clauses over Boolean and integer values.
 
-use std::{collections::BTreeMap, fmt::Write as _, sync::OnceLock};
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use quire_contract_ir::{
-    BooleanOperator, CanonicalProfile, ClauseId, ComparisonOperator, DefinednessObligationKind,
-    DependencyIdentity, DependencyKind, Expression, ExpressionKind, IntegerType, NumericOperator,
-    RequirementRef, SourceSpan, StateObservation, TypedExpression, ValueType,
+    BooleanOperator, ClauseId, ComparisonOperator, DefinednessObligationKind, DependencyIdentity,
+    DependencyKind, Expression, ExpressionKind, IntegerType, NumericOperator, RequirementRef,
+    SourceSpan, StateObservation, TypedExpression, ValueType,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 
-/// Exact reviewed public executable-binding IR revision consumed by this implementation.
-pub const IR_CANDIDATE_REVISION: &str = "48ab5dc29213c3975a5fe8f04ecbb3d1c2b345bb";
-
-/// Exact merged runtime revision required by generated source.
+/// The Contract Runtime git revision every generated crate's `Cargo.toml` depends on.
 pub const RUNTIME_REVISION: &str = "ed0a04b482216b79d3559a6ac59e6e260c5591cf";
 
 /// The `[package.metadata.kani]` table every generated oracle crate's manifest carries. CBMC
@@ -22,29 +18,8 @@ pub const RUNTIME_REVISION: &str = "ed0a04b482216b79d3559a6ac59e6e260c5591cf";
 /// the limit the way RT's own `Cargo.toml` does.
 pub(crate) const ORACLE_KANI_METADATA: &str = "[package.metadata.kani]\nunstable = { unstable-options = true }\nflags = { cbmc-args = [\"--max-field-sensitivity-array-size\", \"1024\"] }\n\n";
 
-/// Exact codegen Git revision captured by the build.
-pub const GENERATOR_SOURCE_REVISION: &str = env!("QUIRE_CODEGEN_SOURCE_REVISION");
-
-/// Reports whether generator build inputs differed from `GENERATOR_SOURCE_REVISION`.
-#[must_use]
-pub fn generator_source_is_dirty() -> bool {
-    env!("QUIRE_CODEGEN_SOURCE_DIRTY") == "true"
-}
-
 /// Maximum generated Rust bytes for one clause.
 pub const MAX_GENERATED_SOURCE_BYTES: usize = 1_048_576;
-
-const SOURCE_MAP_SCHEMA: &[u8] = include_bytes!("../schemas/oracle-source-map-v1.schema.json");
-const RUST_ORACLE_SCHEMA: &[u8] = include_bytes!("../schemas/generated-rust-oracle-v1.schema.json");
-const ORACLE_SPEC: &[u8] = include_bytes!("../spec/functional/FR-001-deterministic-oracles.md");
-const GENERATOR_SOURCE: &[u8] = include_bytes!("oracle.rs");
-const BOUND_SOURCE: &[u8] = include_bytes!("bound.rs");
-const PUBLICATION_SOURCE: &[u8] = include_bytes!("publication.rs");
-const HARNESS_SOURCE: &[u8] = include_bytes!("harness.rs");
-const STRATEGY_SOURCE: &[u8] = include_bytes!("strategy.rs");
-const HARNESS_SPEC: &[u8] = include_bytes!("../spec/functional/FR-002-tristate-proptest.md");
-const BUILD_SOURCE: &[u8] = include_bytes!("../build.rs");
-const LOCKFILE: &[u8] = include_bytes!("../Cargo.lock");
 
 /// One validated clause supplied to the oracle lowering core.
 ///
@@ -57,32 +32,6 @@ pub struct OracleRequest<'a> {
     pub clause: &'a ClauseId,
     /// Validated typed expression for the clause root.
     pub expression: &'a TypedExpression,
-    /// Caller-owned binding for the attestations emitted with this bundle.
-    pub attestation: AttestationContext<'a>,
-}
-
-/// Caller-owned binding shared by every attestation emitted with one bundle.
-///
-/// Both fields are the consuming assurance process's to state, because neither is
-/// knowable to a generator: the record is sealed by the process that reviews the
-/// change, and the candidate revision is the revision that process is reviewing.
-/// The other nine fields a proof attestation declares — the command, the tool, the
-/// environment, the time and the result — are stated here and are never accepted
-/// from a caller.
-///
-/// "Stated", not "observed", and the distinction matters for one of them.
-/// `observed_at` is the generator's own source-commit timestamp, frozen at build so
-/// that regeneration stays byte-identical; it is not an observation of when
-/// generation ran, and a consumer generating months later emits an attestation
-/// whose time predates the generation. Verification receipts derive staleness from
-/// `candidate_revision` rather than from this field, so nothing downstream is
-/// misled — but calling it an observation would be.
-#[derive(Clone, Copy, Debug)]
-pub struct AttestationContext<'a> {
-    /// Digest of the sealed change-assurance record these attestations bind to.
-    pub record_digest: &'a str,
-    /// Candidate revision the generated artifact is offered as evidence about.
-    pub candidate_revision: &'a str,
 }
 
 /// Interface-001 terminal state for a generation result.
@@ -104,19 +53,9 @@ pub enum GenerationTerminalState {
 }
 
 impl GenerationTerminalState {
-    /// Every terminal state, in declaration order. This is the census `tests/interface_001.rs`
-    /// compares against interface-001's declared `diagnostics.terminal_states`, kept beside the
-    /// enum rather than hand-copied into the test, so the two live in the same file a developer
-    /// edits when adding a variant.
-    ///
-    /// This array is not itself compiler-checked against the enum's variant set — Rust has no
-    /// stable way to derive that without a proc-macro crate this workspace does not depend on.
-    /// What the compiler does enforce is [`Self::label`] below: its `match` is exhaustive, so an
-    /// added variant fails the build until it is named there. Nothing forces the same edit to
-    /// reach this array at compile time; that is left to the developer fixing the build, standing
-    /// right next to it. `tests/it/interface_001.rs`'s `census_enum_variants` closes the gap at
-    /// test time instead, by counting this enum's own declared variants and asserting the count
-    /// equals `ALL.len()`.
+    /// Every terminal state, in declaration order. [`Self::label`]'s `match` is exhaustive, so an
+    /// added variant fails the build until it is named there; add it to this array in the same
+    /// edit.
     pub const ALL: [Self; 6] = [
         Self::Generated,
         Self::Unsupported,
@@ -155,13 +94,11 @@ pub enum GenerationErrorCode {
     UnsupportedObligations,
     /// Two input identities would claim the same generated name.
     NameCollision,
-    /// The caller-supplied attestation binding is invalid.
-    InvalidAttestationContext,
     /// The bounded output resource would be exceeded.
     ResourceLimitExceeded,
     /// Generated tokens did not parse as a Rust source file.
     InvalidGeneratedSyntax,
-    /// A deterministic attestation or source-map value could not be encoded.
+    /// A deterministic source-map value could not be encoded.
     SerializationFailed,
 }
 
@@ -170,9 +107,7 @@ impl GenerationErrorCode {
     #[must_use]
     pub const fn terminal_state(self) -> GenerationTerminalState {
         match self {
-            Self::NonBooleanRoot | Self::NameCollision | Self::InvalidAttestationContext => {
-                GenerationTerminalState::InvalidInput
-            }
+            Self::NonBooleanRoot | Self::NameCollision => GenerationTerminalState::InvalidInput,
             Self::UnsupportedExpression
             | Self::UnsupportedDependency
             | Self::UnsupportedObligations
@@ -207,7 +142,7 @@ pub struct GenerationDiagnostic {
     pub message: String,
 }
 
-/// One generated file with its content digest.
+/// One generated file.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Artifact {
@@ -215,8 +150,17 @@ pub struct Artifact {
     pub path: String,
     /// UTF-8 artifact contents.
     pub contents: String,
-    /// Lowercase SHA-256 of `contents`.
-    pub sha256: String,
+}
+
+impl Artifact {
+    /// One generated file at `path` holding `contents`.
+    #[must_use]
+    pub fn new(path: impl Into<String>, contents: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            contents: contents.into(),
+        }
+    }
 }
 
 /// Trace from a generated source range back to one requirement clause.
@@ -259,167 +203,20 @@ pub struct SourceProbe {
     pub end_column: u32,
 }
 
-/// The command a proof attestation declares (`ProofAttestationV1.command`).
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AttestationCommand {
-    /// Argument vector, rendering the in-process invocation and every parameter it used.
-    pub argv: Vec<String>,
-    /// Directory the argv is stated relative to.
-    pub working_directory: String,
-}
-
-/// The tool a proof attestation declares (`ProofAttestationV1.tool`).
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AttestationTool {
-    /// Producing repository.
-    pub identity: String,
-    /// Exact generator revision, in the 40-hexadecimal form the shared schema admits.
-    pub version: String,
-    /// Digest over the lowering implementation, build script, lockfile, output schemas, and specs.
-    pub configuration_digest: String,
-}
-
-/// The build environment a generation was observed in (`ProofAttestationV1.environment`).
-///
-/// The shared schema accepts any object of scalars here. This crate emits a fixed
-/// set of them, so that a field going missing is a compile error rather than a
-/// quietly smaller map.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AttestationEnvironment {
-    /// Compilation target triple.
-    pub target_triple: String,
-    /// Compilation target operating system.
-    pub operating_system: String,
-    /// Rust compiler identity.
-    pub toolchain: String,
-    /// Exact Cargo lockfile digest.
-    pub dependencies_digest: String,
-    /// Whether an exact generator revision was available from Git or archive metadata.
-    pub source_revision_available: bool,
-    /// Whether build inputs differed from the recorded Git revision.
-    pub source_dirty: bool,
-}
-
-/// The four results a proof attestation may state (`ProofAttestationV1.result`).
-///
-/// This is the shared vocabulary and not the generator's. A bundle exists only
-/// when generation succeeded, so this crate emits `Passed` and nothing else; the
-/// six Interface-001 terminal states stay in [`GenerationDiagnostic`], which no
-/// attestation ever accompanies.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AttestationResult {
-    /// The proof obligation held.
-    Passed,
-    /// The proof obligation did not hold.
-    Failed,
-    /// The proof could not be attempted.
-    Unavailable,
-    /// The proof was attempted and reached no conclusion.
-    NotComputed,
-}
-
-impl AttestationResult {
-    /// Every result, in declaration order. This is the census `tests/interface_001.rs` compares
-    /// against interface-001's declared `identity_envelope.results`, kept beside the enum rather
-    /// than hand-copied into the test, so the two live in the same file a developer edits when
-    /// adding a variant.
-    ///
-    /// This array is not itself compiler-checked against the enum's variant set — Rust has no
-    /// stable way to derive that without a proc-macro crate this workspace does not depend on.
-    /// What the compiler does enforce is [`Self::label`] below: its `match` is exhaustive, so an
-    /// added variant fails the build until it is named there. Nothing forces the same edit to
-    /// reach this array at compile time; that is left to the developer fixing the build, standing
-    /// right next to it. `tests/it/interface_001.rs`'s `census_enum_variants` closes the gap at
-    /// test time instead, by counting this enum's own declared variants and asserting the count
-    /// equals `ALL.len()`.
-    pub const ALL: [Self; 4] = [
-        Self::Passed,
-        Self::Failed,
-        Self::Unavailable,
-        Self::NotComputed,
-    ];
-
-    /// interface-001's declared label for this result. Exhaustive: a variant not named here fails
-    /// the build.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Passed => "passed",
-            Self::Failed => "failed",
-            Self::Unavailable => "unavailable",
-            Self::NotComputed => "not_computed",
-        }
-    }
-}
-
-/// One `ProofAttestationV1` body, emitted beside the artifact it describes.
-///
-/// This is Quoin's packaged `proof-attestation-v1.schema.json` shape without
-/// `digest` and without `retained_output`. Those two fields are not omitted by
-/// choice: `quoin change-assurance seal-attestation` derives both and **refuses a
-/// body that supplies either**, because they are statements about the retained
-/// bytes and about the sealed form, and a producer is not the thing that seals.
-/// So this crate emits the body and Quoin seals it — which is the same division
-/// of labour `scripts/assurance_chain.py` uses for this repository's four
-/// existing proof obligations.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProofAttestationBody {
-    /// Shared schema version; always `1`.
-    pub schema_version: u8,
-    /// Shared record discriminator; always `proof_attestation`.
-    pub record_type: String,
-    /// Stable identity of this attestation.
-    pub attestation_id: String,
-    /// Digest of the sealed change-assurance record this attestation binds to.
-    pub record_digest: String,
-    /// Candidate revision the attestation is about.
-    pub candidate_revision: String,
-    /// Proof obligation this attestation discharges.
-    pub proof_id: String,
-    /// The generation invocation, with every parameter it used.
-    pub command: AttestationCommand,
-    /// The generator's own identity.
-    pub tool: AttestationTool,
-    /// The build environment the generation was observed in.
-    pub environment: AttestationEnvironment,
-    /// Deterministic source-commit timestamp, in RFC 3339.
-    pub observed_at: String,
-    /// The shared four-value result.
-    pub result: AttestationResult,
-}
-
 /// Complete all-or-nothing result for one supported oracle clause.
-///
-/// Two artifacts, and therefore two attestations: a proof attestation binds one
-/// retained output, so the pair the deprecated manifest packed into a single
-/// record is one attestation each.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OracleArtifactBundle {
     /// Generated Rust source.
     pub rust: Artifact,
     /// Machine-readable source-region map.
     pub source_map: Artifact,
-    /// Proof-attestation body for `rust`.
-    pub rust_attestation: Artifact,
-    /// Proof-attestation body for `source_map`.
-    pub source_map_attestation: Artifact,
 }
 
 /// Complete all-or-nothing result for one generated Rust artifact.
-///
-/// Harness and strategy slices do not currently emit clause-level source maps, so
-/// they emit one generated artifact and the one attestation that binds it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedArtifactBundle {
     /// Generated Rust source.
     pub rust: Artifact,
-    /// Proof-attestation body for `rust`.
-    pub attestation: Artifact,
 }
 
 struct RenderedExpression {
@@ -514,23 +311,28 @@ impl SourceBuilder {
 pub fn generate_boolean_oracle(
     request: &OracleRequest<'_>,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
-    generate_oracle_with_derivation(request, None)
+    let symbol = oracle_symbol(
+        request.requirement.requirement().as_str(),
+        request.requirement.revision().get(),
+        request.clause.as_str(),
+    );
+    generate_named_boolean_oracle(request, &symbol)
 }
 
-pub(crate) fn generate_oracle_with_derivation(
+/// [`generate_boolean_oracle`] with the oracle function named `symbol`, for generators that name
+/// several oracles together through [`unique_names`].
+pub(crate) fn generate_named_boolean_oracle(
     request: &OracleRequest<'_>,
-    bound_digest: Option<&str>,
+    symbol: &str,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     if request.expression.nodes().len() < 128 {
-        return generate_boolean_oracle_inner(request, bound_digest);
+        return generate_boolean_oracle_inner(request, symbol);
     }
     std::thread::scope(|scope| {
         let handle = std::thread::Builder::new()
             .name("contract-oracle-generation".to_owned())
             .stack_size(16 * 1024 * 1024)
-            .spawn_scoped(scope, || {
-                generate_boolean_oracle_inner(request, bound_digest)
-            })
+            .spawn_scoped(scope, || generate_boolean_oracle_inner(request, symbol))
             .map_err(|error| {
                 single_diagnostic(
                     request,
@@ -552,9 +354,8 @@ pub(crate) fn generate_oracle_with_derivation(
 
 fn generate_boolean_oracle_inner(
     request: &OracleRequest<'_>,
-    bound_digest: Option<&str>,
+    symbol_text: &str,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
-    validate_attestation_context(request)?;
     if request.expression.value_type() != &ValueType::Boolean {
         return Err(expression_diagnostic(
             request,
@@ -594,12 +395,6 @@ fn generate_boolean_oracle_inner(
     let requirement = request.requirement.requirement().as_str();
     let revision = request.requirement.revision().get();
     let clause = request.clause.as_str();
-    let symbol_text = oracle_symbol(
-        request.requirement.package().as_str(),
-        requirement,
-        revision,
-        clause,
-    );
     let identity_symbol = format!("{}_IDENTITY", symbol_text.to_ascii_uppercase());
     let clause_symbol = format!("{}_CLAUSE", symbol_text.to_ascii_uppercase());
     let requirement_literal = format!("{requirement:?}");
@@ -696,120 +491,7 @@ fn generate_boolean_oracle_inner(
         format!("source-maps/{symbol_text}.json"),
         source_map_contents,
     );
-    let canonical_expression = request
-        .expression
-        .canonical_expression(CanonicalProfile::V1)
-        .map_err(|error| {
-            single_diagnostic(
-                request,
-                GenerationErrorCode::SerializationFailed,
-                "expression",
-                error.to_string(),
-            )
-        })?;
-    let input_digest = bound_digest
-        .map(str::to_owned)
-        .unwrap_or_else(|| sha256(canonical_expression.bytes().as_slice()));
-    let subject = vec![
-        "--requirement".to_owned(),
-        format!("{requirement}@{revision}"),
-        "--clause".to_owned(),
-        clause.to_owned(),
-    ];
-    let identity = sha256(format!("{}:{input_digest}", sha256(symbol_text.as_bytes())).as_bytes());
-    let rust_attestation = oracle_attestation(
-        request,
-        &identity,
-        &AttestationOutput {
-            role: ORACLE_RUST_ROLE,
-            path: &rust.path,
-            media_type: "text/x-rust",
-            schema: "quire.codegen.rust-oracle/v1",
-            schema_digest: Some(rust_oracle_schema_digest()),
-        },
-        &subject,
-        &input_digest,
-        &canonical_expression.digest().to_string(),
-        bound_digest.is_some(),
-    );
-    let source_map_attestation = oracle_attestation(
-        request,
-        &identity,
-        &AttestationOutput {
-            role: ORACLE_SOURCE_MAP_ROLE,
-            path: &source_map.path,
-            media_type: "application/json",
-            schema: "quire.codegen.oracle-source-map/v1",
-            schema_digest: Some(source_map_schema_digest()),
-        },
-        &subject,
-        &input_digest,
-        &canonical_expression.digest().to_string(),
-        bound_digest.is_some(),
-    );
-    let rust_attestation = attestation_artifact(&symbol_text, ORACLE_RUST_ROLE, &rust_attestation)
-        .map_err(|error| {
-            single_diagnostic(
-                request,
-                GenerationErrorCode::SerializationFailed,
-                "generated.attestation",
-                error.to_string(),
-            )
-        })?;
-    let source_map_attestation = attestation_artifact(
-        &symbol_text,
-        ORACLE_SOURCE_MAP_ROLE,
-        &source_map_attestation,
-    )
-    .map_err(|error| {
-        single_diagnostic(
-            request,
-            GenerationErrorCode::SerializationFailed,
-            "generated.attestation",
-            error.to_string(),
-        )
-    })?;
-    Ok(OracleArtifactBundle {
-        rust,
-        source_map,
-        rust_attestation,
-        source_map_attestation,
-    })
-}
-
-fn validate_attestation_context(
-    request: &OracleRequest<'_>,
-) -> Result<(), Vec<GenerationDiagnostic>> {
-    if attestation_context_is_valid(&request.attestation) {
-        return Ok(());
-    }
-    Err(single_diagnostic(
-        request,
-        GenerationErrorCode::InvalidAttestationContext,
-        "attestation.context",
-        "record_digest must be 64 lowercase hexadecimal characters and candidate_revision \
-         must be a 40-to-64 character lowercase hexadecimal revision",
-    ))
-}
-
-/// Reports whether a caller's attestation binding can be stated as it stands.
-///
-/// `record_digest` is held to the shared schema's own `digest` pattern. The
-/// `candidate_revision` rule is deliberately stricter than the shared schema,
-/// which asks only for a non-empty string: a generated artifact that names an
-/// unresolvable revision cannot be checked against anything later, and the
-/// deprecated manifest rejected exactly this input, so the rule is carried over
-/// rather than relaxed to the schema's floor.
-pub(crate) fn attestation_context_is_valid(context: &AttestationContext<'_>) -> bool {
-    is_lowercase_hexadecimal(context.record_digest, 64, 64)
-        && is_lowercase_hexadecimal(context.candidate_revision, 40, 64)
-}
-
-fn is_lowercase_hexadecimal(value: &str, minimum: usize, maximum: usize) -> bool {
-    (minimum..=maximum).contains(&value.len())
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    Ok(OracleArtifactBundle { rust, source_map })
 }
 
 pub(crate) fn dependency_parameters(
@@ -1277,319 +959,6 @@ fn render_node(
     result.map_err(|_| resource_error(request))
 }
 
-/// `tool.identity` for every attestation this crate emits.
-///
-/// The owning repository rather than the bare crate name, because the deprecated
-/// envelope's `provenance.repository` has no field of its own in the shared shape
-/// and the tool identity is where a reader resolves `tool.version` from.
-const TOOL_IDENTITY: &str = "agent-ix/quire-contract-codegen";
-
-/// `command.argv[0]` for every attestation this crate emits.
-///
-/// The crate name, and it names no program that can be run today: lowering happens
-/// in process, `Cargo.toml` declares a library and no binary, and the `cli_generate`
-/// operation interface-001 specifies is unimplemented. The deprecated envelope had
-/// the same property in `producer.invocation` and this does not pretend otherwise.
-/// A runnable-looking `argv[0]` naming something that does not exist would be worse
-/// than an honest description of an in-process call, and the limitation is declared
-/// as `UNKNOWN-attested-command-is-not-runnable` in the change declaration.
-const TOOL_ARGV0: &str = "quire-contract-codegen";
-
-/// `command.working_directory` for every attestation this crate emits.
-const WORKING_DIRECTORY: &str = ".";
-
-/// The output role of a generated Rust oracle.
-const ORACLE_RUST_ROLE: &str = "generated-rust-oracle";
-
-/// The output role of a generated oracle source map.
-const ORACLE_SOURCE_MAP_ROLE: &str = "oracle-source-map";
-
-/// One generated artifact an attestation is about.
-struct AttestationOutput<'a> {
-    /// Semantic role, which also names the proof obligation.
-    role: &'a str,
-    /// Bundle-relative path of the artifact.
-    path: &'a str,
-    /// Media type of the artifact, stated by the generator that knows it.
-    media_type: &'a str,
-    /// Identifier of the versioned schema the artifact validates against.
-    schema: &'a str,
-    /// Digest of that schema's own bytes, when the schema is a file in this repository.
-    ///
-    /// `None` for the harness and strategy slices, which name a schema identifier
-    /// for which no schema document exists. The deprecated envelope filled that
-    /// slot with `sha256` of the identifier string — the digest of a name rather
-    /// than of a schema — and stating nothing is the honest replacement.
-    schema_digest: Option<&'a str>,
-}
-
-/// Operation-specific facts used to emit one shared proof-attestation body.
-pub(crate) struct GeneratedAttestationSpec<'a> {
-    pub(crate) operation: &'a str,
-    pub(crate) stable_identity: &'a str,
-    pub(crate) input_bytes: &'a [u8],
-    /// Precomputed canonical input digest when the input's owning API already exposes one.
-    pub(crate) input_digest: Option<&'a str>,
-    pub(crate) output_role: &'a str,
-    pub(crate) media_type: &'a str,
-    pub(crate) output_schema: &'a str,
-    pub(crate) schema_digest: Option<&'a str>,
-    pub(crate) canonical_profile: &'a str,
-    pub(crate) backend: &'a str,
-    pub(crate) configuration_digest: &'a str,
-    pub(crate) extra_argv: &'a [String],
-}
-
-/// The proof obligation an output role discharges.
-fn proof_id_for(role: &str) -> String {
-    format!("PROOF-codegen-{role}")
-}
-
-/// Renders one in-process generation as the argv its attestation declares.
-///
-/// Everything the deprecated envelope carried as a `parameters_digest`, a
-/// `backend` discriminator, an `inputs[]` entry or a namespaced extension is
-/// written out here in full. A command line that names its parameters is
-/// readable and checkable where a digest over three of them was neither.
-fn generation_command(
-    operation: &str,
-    subject: &[String],
-    canonical_profile: &str,
-    input_digest: &str,
-    output: &AttestationOutput<'_>,
-    backend: &str,
-) -> AttestationCommand {
-    let mut argv = vec![TOOL_ARGV0.to_owned(), operation.to_owned()];
-    argv.extend(subject.iter().cloned());
-    argv.extend([
-        "--canonical-profile".to_owned(),
-        canonical_profile.to_owned(),
-        "--input-digest".to_owned(),
-        input_digest.to_owned(),
-        "--ir-revision".to_owned(),
-        IR_CANDIDATE_REVISION.to_owned(),
-        "--runtime-revision".to_owned(),
-        RUNTIME_REVISION.to_owned(),
-        "--backend".to_owned(),
-        backend.to_owned(),
-        "--maximum-source-bytes".to_owned(),
-        MAX_GENERATED_SOURCE_BYTES.to_string(),
-        "--output-schema".to_owned(),
-        output.schema.to_owned(),
-        "--output-media-type".to_owned(),
-        output.media_type.to_owned(),
-    ]);
-    if let Some(schema_digest) = output.schema_digest {
-        argv.extend([
-            "--output-schema-digest".to_owned(),
-            schema_digest.to_owned(),
-        ]);
-    }
-    argv.extend(["--output".to_owned(), output.path.to_owned()]);
-    AttestationCommand {
-        argv,
-        working_directory: WORKING_DIRECTORY.to_owned(),
-    }
-}
-
-/// Assembles one proof-attestation body over an already-generated artifact.
-///
-/// `result` is derived rather than accepted: this function is only reached when
-/// an artifact exists, so the only honest answer is `passed`. The deprecated
-/// envelope took its result status from the caller, which permitted an artifact
-/// that generated cleanly to carry `rejected` or `timed-out`.
-fn attestation_body(
-    context: &AttestationContext<'_>,
-    identity: &str,
-    output: &AttestationOutput<'_>,
-    command: AttestationCommand,
-    configuration_digest: &str,
-) -> ProofAttestationBody {
-    let proof_id = proof_id_for(output.role);
-    ProofAttestationBody {
-        schema_version: 1,
-        record_type: "proof_attestation".to_owned(),
-        attestation_id: format!("{proof_id}:{identity}"),
-        record_digest: context.record_digest.to_owned(),
-        candidate_revision: context.candidate_revision.to_owned(),
-        proof_id,
-        command,
-        tool: AttestationTool {
-            identity: TOOL_IDENTITY.to_owned(),
-            version: GENERATOR_SOURCE_REVISION.to_owned(),
-            configuration_digest: configuration_digest.to_owned(),
-        },
-        environment: AttestationEnvironment {
-            target_triple: env!("QUIRE_CODEGEN_TARGET").to_owned(),
-            operating_system: env!("QUIRE_CODEGEN_TARGET_OS").to_owned(),
-            toolchain: env!("QUIRE_CODEGEN_TOOLCHAIN").to_owned(),
-            dependencies_digest: lockfile_digest().to_owned(),
-            source_revision_available: env!("QUIRE_CODEGEN_SOURCE_REVISION_AVAILABLE") == "true",
-            source_dirty: generator_source_is_dirty(),
-        },
-        observed_at: env!("QUIRE_CODEGEN_RECORDED_AT").to_owned(),
-        result: AttestationResult::Passed,
-    }
-}
-
-/// The attestation body for one oracle-slice output.
-fn oracle_attestation(
-    request: &OracleRequest<'_>,
-    identity: &str,
-    output: &AttestationOutput<'_>,
-    subject: &[String],
-    input_digest: &str,
-    canonical_digest: &str,
-    bound: bool,
-) -> ProofAttestationBody {
-    let mut command = generation_command(
-        if bound {
-            "generate_bound_oracles"
-        } else {
-            "generate_boolean_oracle"
-        },
-        subject,
-        if bound {
-            quire_contract_ir::BOUND_IDENTITY_PROFILE
-        } else {
-            CanonicalProfile::V1.as_str()
-        },
-        input_digest,
-        output,
-        "none",
-    );
-    // The canonical semantic digest of the expression, which is a different fact
-    // from the digest of its canonical bytes and was a separate extension field.
-    command.argv.extend([
-        "--expression-canonical-digest".to_owned(),
-        canonical_digest.to_owned(),
-    ]);
-    attestation_body(
-        &request.attestation,
-        identity,
-        output,
-        command,
-        generator_implementation_digest(),
-    )
-}
-
-/// Serializes one attestation body into the artifact emitted beside its output.
-fn attestation_artifact(
-    symbol: &str,
-    role: &str,
-    body: &ProofAttestationBody,
-) -> Result<Artifact, SerializationError> {
-    let contents = deterministic_json(body)?;
-    Ok(artifact(
-        format!("attestations/{symbol}.{role}.json"),
-        contents,
-    ))
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn generated_artifact_bundle(
-    context: &AttestationContext<'_>,
-    requirement: &RequirementRef,
-    operation: &str,
-    stable_identity: &str,
-    input_bytes: &[u8],
-    output_role: &str,
-    output_schema: &str,
-    rust: Artifact,
-) -> Result<GeneratedArtifactBundle, GenerationErrorCode> {
-    let specification = GeneratedAttestationSpec {
-        operation,
-        stable_identity,
-        input_bytes,
-        input_digest: None,
-        output_role,
-        media_type: "text/x-rust",
-        output_schema,
-        schema_digest: None,
-        canonical_profile: "quire.codegen.request/v1",
-        backend: "none",
-        configuration_digest: generator_implementation_digest(),
-        extra_argv: &[],
-    };
-    let attestation = generated_output_attestation(context, requirement, &specification, &rust)?;
-    Ok(GeneratedArtifactBundle { rust, attestation })
-}
-
-/// Emits one Quoin proof-attestation body beside an arbitrary generated output.
-pub(crate) fn generated_output_attestation(
-    context: &AttestationContext<'_>,
-    requirement: &RequirementRef,
-    specification: &GeneratedAttestationSpec<'_>,
-    generated: &Artifact,
-) -> Result<Artifact, GenerationErrorCode> {
-    if !attestation_context_is_valid(context) {
-        return Err(GenerationErrorCode::InvalidAttestationContext);
-    }
-    if generated.contents.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(GenerationErrorCode::ResourceLimitExceeded);
-    }
-    let input_digest = specification
-        .input_digest
-        .map(str::to_owned)
-        .unwrap_or_else(|| sha256(specification.input_bytes));
-    let identity = sha256(
-        length_delimited_identity(&[
-            specification.operation,
-            requirement.requirement().as_str(),
-            &requirement.revision().get().to_string(),
-            specification.stable_identity,
-            &input_digest,
-        ])
-        .as_bytes(),
-    );
-    let output = AttestationOutput {
-        role: specification.output_role,
-        path: &generated.path,
-        media_type: specification.media_type,
-        schema: specification.output_schema,
-        schema_digest: specification.schema_digest,
-    };
-    let subject = vec![
-        "--requirement".to_owned(),
-        format!(
-            "{}@{}",
-            requirement.requirement().as_str(),
-            requirement.revision().get()
-        ),
-        "--identity".to_owned(),
-        specification.stable_identity.to_owned(),
-    ];
-    let mut command = generation_command(
-        specification.operation,
-        &subject,
-        specification.canonical_profile,
-        &input_digest,
-        &output,
-        specification.backend,
-    );
-    command
-        .argv
-        .extend(specification.extra_argv.iter().cloned());
-    let body = attestation_body(
-        context,
-        &identity,
-        &output,
-        command,
-        specification.configuration_digest,
-    );
-    let attestation = attestation_artifact(
-        &format!(
-            "{}_{}",
-            bounded_readable_component(specification.operation),
-            identity
-        ),
-        specification.output_role,
-        &body,
-    )
-    .map_err(|_| GenerationErrorCode::SerializationFailed)?;
-    Ok(attestation)
-}
-
 fn node_name(kind: &ExpressionKind) -> &'static str {
     match kind {
         ExpressionKind::BooleanLiteral { .. } => "boolean_literal",
@@ -1653,114 +1022,101 @@ fn rust_component(value: &str) -> String {
     result
 }
 
+/// `value` as a readable snake-case name component of at most 24 characters.
 pub(crate) fn bounded_readable_component(value: &str) -> String {
-    let mut result = String::with_capacity(value.len());
+    readable_name_component(value, 24)
+}
+
+/// `value` lowercased, each run of non-alphanumeric bytes as one `_`, cut to at most `limit`
+/// characters, with no leading or trailing `_`, so joining components with `_` never yields the
+/// `__` that Rust's `non_snake_case` lint rejects. An empty result is `x`.
+pub(crate) fn readable_name_component(value: &str, limit: usize) -> String {
+    let mut result = String::with_capacity(value.len().min(limit));
     for byte in value.bytes() {
+        if result.len() >= limit {
+            break;
+        }
         if byte.is_ascii_alphanumeric() {
             result.push(char::from(byte.to_ascii_lowercase()));
-        } else {
+        } else if !result.is_empty() && !result.ends_with('_') {
             result.push('_');
         }
     }
-    if result.is_empty() || result.as_bytes()[0].is_ascii_digit() {
-        result.insert(0, '_');
+    let trimmed = result.trim_end_matches('_');
+    if trimmed.is_empty() {
+        "x".to_owned()
+    } else {
+        trimmed.to_owned()
     }
-    result.chars().take(24).collect()
 }
 
-pub(crate) fn length_delimited_identity(values: &[&str]) -> String {
-    values
-        .iter()
-        .map(|value| format!("{}:{value}", value.len()))
-        .collect::<Vec<_>>()
-        .join(":")
+/// `strategy_fr_001_1_x` as `StrategyFr0011X`: a generated snake-case name as a type-name stem.
+pub(crate) fn upper_camel(value: &str) -> String {
+    value
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut characters = part.chars();
+            characters.next().map_or_else(String::new, |first| {
+                first.to_ascii_uppercase().to_string() + characters.as_str()
+            })
+        })
+        .collect()
 }
 
-pub(crate) fn oracle_symbol(
-    package: &str,
-    requirement: &str,
-    revision: u64,
-    clause: &str,
-) -> String {
-    let readable_requirement = bounded_readable_component(requirement);
-    let readable_clause = bounded_readable_component(clause);
-    let revision_text = revision.to_string();
-    let identity = length_delimited_identity(&[package, requirement, &revision_text, clause]);
+/// The final names of the items one generation emits side by side. Each item offers a readable
+/// `stem` and its full identity `key`. A stem held by one item is that item's name. Items sharing a
+/// stem are named `{stem}_{ordinal}`, numbered from 1 in ascending `key` order, so a name depends on
+/// the item and on which siblings share its stem, never on request order. Suffixing repeats until
+/// every name is distinct, since a suffixed name can meet another item's stem.
+pub(crate) fn unique_names<K: Ord>(items: Vec<(String, K)>) -> Vec<String> {
+    let (mut names, keys): (Vec<String>, Vec<K>) = items.into_iter().unzip();
+    loop {
+        let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for (index, name) in names.iter().enumerate() {
+            groups.entry(name.clone()).or_default().push(index);
+        }
+        if groups.values().all(|group| group.len() == 1) {
+            return names;
+        }
+        for (stem, mut group) in groups {
+            if group.len() > 1 {
+                group.sort_by(|left, right| keys[*left].cmp(&keys[*right]).then(left.cmp(right)));
+                for (ordinal, index) in group.into_iter().enumerate() {
+                    names[index] = format!("{stem}_{}", ordinal + 1);
+                }
+            }
+        }
+    }
+}
+
+/// [`unique_names`] for exactly two items.
+pub(crate) fn unique_pair<K: Ord>(first: (String, K), second: (String, K)) -> (String, String) {
+    let mut names = unique_names(vec![first, second]).into_iter();
+    let first = names.next().unwrap_or_default();
+    let second = names.next().unwrap_or_default();
+    (first, second)
+}
+
+/// The readable stem of one clause's oracle name: its requirement, revision and clause. Two
+/// clauses can share a stem; generators emitting several oracles together name them through
+/// [`unique_names`].
+pub(crate) fn oracle_symbol(requirement: &str, revision: u64, clause: &str) -> String {
     format!(
-        "oracle_{readable_requirement}_{revision}_{readable_clause}_id_{}",
-        sha256(identity.as_bytes())
+        "oracle_{}_{revision}_{}",
+        bounded_readable_component(requirement),
+        bounded_readable_component(clause)
     )
 }
 
 fn artifact(path: String, contents: String) -> Artifact {
-    Artifact {
-        sha256: sha256(contents.as_bytes()),
-        path,
-        contents,
-    }
+    Artifact::new(path, contents)
 }
 
 fn deterministic_json(value: &impl Serialize) -> Result<String, SerializationError> {
     let mut bytes = serde_json::to_vec(value).map_err(SerializationError::Json)?;
     bytes.push(b'\n');
     String::from_utf8(bytes).map_err(SerializationError::Utf8)
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut value = String::with_capacity(64);
-    for byte in digest {
-        let _ = write!(value, "{byte:02x}");
-    }
-    value
-}
-
-pub(crate) fn generator_implementation_digest() -> &'static str {
-    static VALUE: OnceLock<String> = OnceLock::new();
-    VALUE.get_or_init(|| {
-        let mut hasher = Sha256::new();
-        for value in [
-            GENERATOR_SOURCE,
-            BOUND_SOURCE,
-            PUBLICATION_SOURCE,
-            HARNESS_SOURCE,
-            STRATEGY_SOURCE,
-            BUILD_SOURCE,
-            LOCKFILE,
-            SOURCE_MAP_SCHEMA,
-            RUST_ORACLE_SCHEMA,
-            ORACLE_SPEC,
-            HARNESS_SPEC,
-        ] {
-            hasher.update(value.len().to_le_bytes());
-            hasher.update(value);
-        }
-        let bytes = hasher.finalize();
-        let mut value = String::with_capacity(64);
-        for byte in bytes {
-            let _ = write!(value, "{byte:02x}");
-        }
-        value
-    })
-}
-
-fn cached_digest(value: &'static [u8], cache: &'static OnceLock<String>) -> &'static str {
-    cache.get_or_init(|| sha256(value))
-}
-
-fn lockfile_digest() -> &'static str {
-    static VALUE: OnceLock<String> = OnceLock::new();
-    cached_digest(LOCKFILE, &VALUE)
-}
-
-fn source_map_schema_digest() -> &'static str {
-    static VALUE: OnceLock<String> = OnceLock::new();
-    cached_digest(SOURCE_MAP_SCHEMA, &VALUE)
-}
-
-fn rust_oracle_schema_digest() -> &'static str {
-    static VALUE: OnceLock<String> = OnceLock::new();
-    cached_digest(RUST_ORACLE_SCHEMA, &VALUE)
 }
 
 fn line_count(value: &str) -> u32 {
@@ -1882,4 +1238,74 @@ fn diagnostic(
         source_span,
         message: message.into(),
     }]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{oracle_symbol, unique_names};
+
+    /// Items sharing a stem are numbered in key order, whatever order they arrive in; an item
+    /// with a stem of its own keeps it.
+    ///
+    /// Trace: FR-022-AC-9, TC-033
+    #[test]
+    fn equal_stems_take_ordinals_in_key_order_not_arrival_order() {
+        let forward = unique_names(vec![
+            ("oracle_add".to_owned(), "node-a"),
+            ("oracle_sub".to_owned(), "node-b"),
+            ("oracle_add".to_owned(), "node-c"),
+        ]);
+        let reversed = unique_names(vec![
+            ("oracle_add".to_owned(), "node-c"),
+            ("oracle_sub".to_owned(), "node-b"),
+            ("oracle_add".to_owned(), "node-a"),
+        ]);
+        assert_eq!(forward, ["oracle_add_1", "oracle_sub", "oracle_add_2"]);
+        assert_eq!(reversed, ["oracle_add_2", "oracle_sub", "oracle_add_1"]);
+    }
+
+    /// A suffixed name that meets another item's own stem is suffixed again, so every name is
+    /// distinct.
+    ///
+    /// Trace: FR-022-AC-9, TC-033
+    #[test]
+    fn a_suffixed_name_meeting_another_stem_is_disambiguated_again() {
+        let names = unique_names(vec![
+            ("x".to_owned(), 1),
+            ("x".to_owned(), 2),
+            ("x_1".to_owned(), 3),
+        ]);
+        assert_eq!(names, ["x_1_1", "x_2", "x_1_2"]);
+    }
+
+    /// Two clause identities whose readable forms coincide get distinct names: a requirement,
+    /// revision and clause split differently, and two clause ids equal in their first 24
+    /// characters.
+    ///
+    /// Trace: FR-022-AC-9, TC-033
+    #[test]
+    fn readable_stems_that_coincide_still_yield_distinct_names() {
+        let split = [("fr-1", 2, "c"), ("fr", 1, "2-c")];
+        let long = [
+            ("FR-001", 7, "a-very-long-shared-clause-prefix-one"),
+            ("FR-001", 7, "a-very-long-shared-clause-prefix-two"),
+        ];
+        for pair in [split, long] {
+            let stems = pair.map(|(requirement, revision, clause)| {
+                oracle_symbol(requirement, revision, clause)
+            });
+            assert_eq!(stems[0], stems[1], "the readable stems coincide");
+            let names = unique_names(
+                pair.iter()
+                    .zip(&stems)
+                    .map(|(identity, stem)| (stem.clone(), *identity))
+                    .collect(),
+            );
+            assert_ne!(names[0], names[1]);
+            assert_eq!(
+                names[0],
+                format!("{}_{}", stems[0], 2 - usize::from(pair[0] < pair[1]))
+            );
+        }
+    }
 }

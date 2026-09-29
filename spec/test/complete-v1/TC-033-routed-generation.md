@@ -28,9 +28,8 @@ the FR-015 generator returns for the same items.
 - The package alone: no claim map is built or supplied.
 - A package with a `quire.op.integer.rem` node, and the bounded-increment
   package (`x + 1` over a parameter `Int[0, 9]`).
-- A `KaniGenerationContext` with `KaniToolPins::pinned()`, a valid subject
-  path, unwind `1` and a valid attestation context.
-- The routed backend `Candidate { identity: "kani", manifest_digest: <any> }`.
+- A `KaniGenerationContext` with a valid subject path and unwind `1`.
+- The routed backend `Candidate { identity: "kani" }`.
 
 ## Test Procedure
 
@@ -40,8 +39,7 @@ the FR-015 generator returns for the same items.
    `negotiate_kani_obligations` with the same four nodes as `ScalarClaim` items
    in ascending request-index order (`2`, `4`, `7`, `11`) and the same context.
    Compare record by record and harness by harness.
-2. **No settlement (AC-3).** Run the FR-019-AC-5 source scan (TC-030) over the
-   crate including the new module. Also assert, from the public signature, that
+2. **No settlement (AC-3).** Assert, from the public signature, that
    `generate_routed` takes no `BackendDescriptor`, `Candidates`,
    `ExtentClassification` or `CapabilityKind`.
 3. **Kind disagreement (AC-4).** Route one item whose backend identity is
@@ -50,17 +48,15 @@ the FR-015 generator returns for the same items.
 4. **Duplicate index and missing context (AC-5).** Route two items at request
    index `3`. Separately, route a valid Kani item with `GenerationContexts {
    kani: None }`.
-5. **Kani group refusal (AC-6).** Call once with pins that differ from
-   `KaniToolPins::pinned()` in one field, once with unwind `0`, and once with
-   the subject path `"not a path"`.
+5. **Kani group refusal (AC-6).** Call once with unwind `0`, and once with the
+   subject path `"not a path"`.
 6. **Kani group rejection (AC-7).** Route the same node at request indexes `9`
    and `6`.
 7. **Empty (AC-8).** Call with no routed items and `kani: None`.
 8. **Determinism (AC-9).** Repeat step 1 twice, then with the routed slice
-   reversed, and compare the results. Route one node alone at request index `0`
-   under manifest digest `A`, then at request index `40` under manifest digest
-   `B`, and compare its harness `rust` and `record` bytes and its
-   `identity_sha256`.
+   reversed, and compare the results. Route one node alone at request index `0`,
+   then at request index `40`, and compare its harness `rust` and `record`
+   bytes.
 9. **Exhaustive dispatch (AC-1).** Inspect the generation dispatch and the
    `GenerationContexts` definition.
 10. **Derivation without a claim map (FR-022-AC-10).** Route the
@@ -82,7 +78,7 @@ the FR-015 generator returns for the same items.
 15. **Returned oracle crate (FR-022-AC-14).** Route the bounded-increment node.
     Compare `RoutedGeneration.oracle_artifacts` with the artifacts of
     `generate_exact_scalar_oracles` over `derive_exact_scalar_items` for that node,
-    and look up each `Generated` claim's `oracle_<digest>` symbol in the returned
+    and look up each `Generated` claim's oracle symbol in the returned
     `src/lib.rs` and in the harness's Rust source. Route alone the `integer.rem`
     node, and route nothing.
 16. **QSL-shaped nodes (FR-022-AC-15, FR-015-AC-16).** Route alone, from a package in QSL's
@@ -105,23 +101,21 @@ the FR-015 generator returns for the same items.
    `identity.harness_symbol` equals their record's `harness_symbol`. The
    `Unsupported` node carries its FR-015 reason and no harness.
    `rejected` is empty.
-2. The scan is green and finds no `Disposition` built in the new module. The
-   signature carries none of the four settlement inputs.
+2. The signature carries none of the four settlement inputs.
 3. `Err(BackendKindDisagrees { request_index: 5, backend, routed: Kani,
    converted: None })`, with no output.
 4. `Err(DuplicateRequestIndex { request_index: 3 })` for the first call, and
    `Err(MissingKindContext { kind: Kani })` for the second. Neither returns
    output.
-5. `Err(Kani(UnpinnedBackend { .. }))` naming the differing field,
-   `Err(Kani(InvalidUnwind { unwind: 0 }))` and
+5. `Err(Kani(InvalidUnwind { unwind: 0 }))` and
    `Err(Kani(InvalidSubjectPath))`, each with no output.
 6. `rejected == [Kani]`, and both items have no harness. The record at request
    index `9` is `InvalidRequest { DuplicateItem { first_index: 6 } }`, naming
    the driver's index and not the Kani-group position `0`.
 7. `Ok` with empty `items` and empty `rejected`.
 8. The repeated runs and the reversed slice produce equal results. The
-   single-node harness bytes and `identity_sha256` are equal under both
-   request indexes and both manifest digests. Only the output's
+   single-node harness bytes are equal under both request indexes. Only the
+   output's
    `request_index` and `backend` differ.
 9. The dispatch is an exhaustive `match` over `BackendKind` with no `_` arm.
    `GenerationContexts::has` is an exhaustive `match` too, and `GenerationContexts`

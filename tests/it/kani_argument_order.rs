@@ -34,7 +34,7 @@
 use crate::common;
 
 use common::withdraw_fixture::withdraw_harnesses;
-use quire_contract_codegen::{KaniObligationHarness, KaniToolPins};
+use quire_contract_codegen::KaniObligationHarness;
 use syn::{
     visit::{self, Visit},
     Expr, Local, Pat,
@@ -128,8 +128,7 @@ fn assert_emission_order_matches_identity(harness: &KaniObligationHarness) {
 /// generator's own output, for every harness kind `symbolic_arguments` is called for.
 #[test]
 fn ir_213_kani_any_emission_order_matches_persisted_identity_arguments() {
-    let pins = KaniToolPins::pinned();
-    let harnesses = withdraw_harnesses(&pins);
+    let harnesses = withdraw_harnesses();
 
     // The join this test protects is only interesting for two or more positions: a
     // single-argument harness could never observe a reorder or a dropped binding. Every harness

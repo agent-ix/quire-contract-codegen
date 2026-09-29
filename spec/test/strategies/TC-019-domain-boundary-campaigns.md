@@ -34,8 +34,8 @@ exactly the cases FR-010 defines, in order, with correct tags and bounded size.
   exactly, in order, with no duplicates.
 - The extreme-domain bundles compile without overflow or panic, hold no out-of-domain case for either
   outer edge, and list both outer edges as unrepresentable.
-- `amount <= 1000` refuses `Boundary` with `UnsupportedCampaignConstraint` and emits no artifact or
-  attestation for it, and its `Satisfying` bundle
+- `amount <= 1000` refuses `Boundary` with `UnsupportedCampaignConstraint` and emits no artifact for
+  it, and its `Satisfying` bundle
   carries the out-of-domain array [-1, 1001].
 - Every tag equals the independent evaluation, and every out-of-domain case has at least one
   out-of-domain value.

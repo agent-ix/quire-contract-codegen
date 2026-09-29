@@ -37,7 +37,7 @@ sets, refuse empty sides explicitly, and handle `i64` extremes without overflow.
   is refused with `EmptyPopulation` instead of producing a strategy.
 - `amount < 0` refuses `Satisfying` and `Broad` naming `Satisfying` and generates `Violating`;
   `amount >= 0` refuses `Violating` and `Broad` naming `Violating` and generates `Satisfying`; no
-  refused request emits an artifact or attestation.
+  refused request emits an artifact.
 - The extreme-domain runs complete without overflow or panic, with every case in domain and on its
   side.
 - Repeated generation is byte-identical.

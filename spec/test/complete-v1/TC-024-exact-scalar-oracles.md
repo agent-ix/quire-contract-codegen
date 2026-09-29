@@ -23,8 +23,7 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    comparison operator, each depending on the `bounded_domain` nodes its
    descriptor needs, plus unlowered, unbounded, mismatched, mis-bounded,
    duplicate and non-scalar nodes and unsupported and literal operands.
-2. Generate twice and with a permuted request; compare bytes with each other
-   and with the committed golden.
+2. Generate twice and with a permuted request; compare bytes with each other.
 3. Inspect each claim-map entry, its ordering, its checked bounds and its
    `ir_confirmed` or `caller_declared` provenance, and each refusal; request a
    node under a descriptor naming a different catalogued operation; request a
@@ -33,13 +32,14 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    rounding mode agrees with the node's IR bound but disagrees with its
    catalogued operation mode; exhaust lowering work; exceed the
    generated source ceiling; construct invalid and incomplete body records.
-4. Compile the golden oracle into the test crate and execute it on vectors
+4. Generate the corpus crate at test time, compile it with the agreement cases
+   as its integration test, and execute its oracles on vectors
    adapted from QSpec TC-185, TC-186, TC-187, TC-192 and TC-193; compare each
    outcome, admitted charges and consumed counters with direct runtime
    execution and with `quire_spec_language::value`, including the outcome of
    denying each admitted charge in turn.
 5. Compile the generated crate manifest.
-6. Derive an item for every golden-corpus node with `derive_exact_scalar_items`
+6. Derive an item for every node of the exact-scalar corpus with `derive_exact_scalar_items`
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
    generate from the derived items and read each claim's provenance. Derive
    every overloaded identity (`rational.div` over integers and over rationals,
@@ -100,7 +100,7 @@ descriptor agreeing on identity, law and mode over a node that passes every
 check is `ir_confirmed`;
 bytes are identical across runs and orderings; all
 three executions agree on every vector; the generated crate compiles with
-`publish = false` and contains no charge literal; every golden-corpus node
+`publish = false` and contains no charge literal; every exact-scalar corpus node
 derives to its declared descriptor and generates `ir_confirmed`, and every
 node with no derivable descriptor is refused with its typed
 `ClaimDerivationRefusal`.
@@ -135,7 +135,7 @@ For the bounded-parameter and QSL-shaped steps:
   derivation; `x + 1` generates.
 
 Integer arithmetic, rational arithmetic and ordering (including decimal
-ordering) now have an operator in the pinned authority (QSL 21c507e exports
-`evaluate_integer_arithmetic`, `evaluate_rational_arithmetic`, and
-`order_numbers`). Their oracles are still checked against direct runtime
-execution only, not yet against the authority, and are counted separately.
+ordering) have an operator in the QSL value authority
+(`evaluate_integer_arithmetic`, `evaluate_rational_arithmetic`, and
+`order_numbers`). Their oracles are checked against direct runtime execution
+and are counted separately from the three-way vectors.

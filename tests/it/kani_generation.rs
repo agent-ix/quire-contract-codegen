@@ -1,20 +1,17 @@
 use std::{
-    env, fs,
+    fs,
     path::PathBuf,
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::common;
-
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    generate_boolean_oracle, generate_kani_bundle, AttestationContext, AttestationResult,
-    GenerationErrorCode, GenerationTerminalState, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
-    KaniPrimitiveType, KaniRequest, KaniSolver, OracleRequest, ProofAttestationBody,
-    ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
-    ProofReadiness, IR_CANDIDATE_REVISION, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
-    MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
+    generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode, GenerationTerminalState,
+    KaniBindingRole, KaniDiagnostic, KaniErrorCode, KaniPrimitiveType, KaniRequest, KaniSolver,
+    OracleRequest, ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest,
+    ProofDependencyState, ProofReadiness, MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
+    RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
@@ -23,9 +20,6 @@ use quire_contract_ir::{
     SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation, SymbolName,
     ValueDeclaration, ValueDeclarationKind, ValueType,
 };
-use sha2::{Digest as _, Sha256};
-
-const BACKEND_SHA256: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 struct TemporaryDirectory(PathBuf);
 
@@ -211,13 +205,6 @@ fn boolean_or(left: Expression, right: Expression, at: u64) -> Expression {
     )
 }
 
-fn attestation_context() -> AttestationContext<'static> {
-    AttestationContext {
-        record_digest: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        candidate_revision: IR_CANDIDATE_REVISION,
-    }
-}
-
 fn clauses(
     environment: &DeclarationEnvironment,
 ) -> (
@@ -256,12 +243,9 @@ fn request<'a>(
         postcondition,
         proof_id: "proof-boolean-transition",
         subject_path: "crate::subject",
-        backend_version: KANI_BACKEND_VERSION,
-        backend_executable_sha256: BACKEND_SHA256,
         unwind: 2,
         solver: KaniSolver::Cadical,
         dependencies,
-        attestation: attestation_context(),
     }
 }
 
@@ -345,18 +329,6 @@ fn execute_kani(
         .expect("cargo kani should launch")
 }
 
-fn cargo_kani_sha256() -> String {
-    let executable_name = format!("cargo-kani{}", env::consts::EXE_SUFFIX);
-    let executable = env::var_os("PATH")
-        .into_iter()
-        .flat_map(|value| env::split_paths(&value).collect::<Vec<_>>())
-        .map(|directory| directory.join(&executable_name))
-        .find(|candidate| candidate.is_file())
-        .expect("cargo-kani must be discoverable on PATH");
-    let bytes = fs::read(executable).expect("cargo-kani executable should be readable");
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 /// TC-003
 /// TC-005
 /// TC-007
@@ -372,7 +344,6 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     let first = fixture_bundle(&dependencies);
     let second = fixture_bundle(&dependencies);
     assert_eq!(first, second);
-    assert!(first.rust.contents.contains(KANI_ADAPTER_PROFILE));
     assert!(first.rust.contents.contains("// BEGIN framing"));
     assert!(first.rust.contents.contains("// BEGIN binding"));
     assert!(first.rust.contents.contains("// BEGIN contract"));
@@ -400,39 +371,6 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     );
 
     assert_eq!(graph.proof_execution_state, "not_run");
-    assert_eq!(graph.backend_executable_sha256, BACKEND_SHA256);
-    let schema = common::packaged_attestation_schema();
-    let validator = common::packaged_attestation_validator(&schema);
-    let sealed_directory = TemporaryDirectory::new("quire-kani-attestations");
-    for (attestation, artifact, proof_id) in [
-        (
-            &first.rust_attestation,
-            &first.rust,
-            "PROOF-codegen-generated-rust-kani-proof",
-        ),
-        (
-            &first.proof_graph_attestation,
-            &first.proof_graph,
-            "PROOF-codegen-kani-proof-dependency-graph",
-        ),
-    ] {
-        let body: ProofAttestationBody =
-            serde_json::from_str(&attestation.contents).expect("attestation should deserialize");
-        assert_eq!(body.proof_id, proof_id);
-        assert_eq!(body.result, AttestationResult::Passed);
-        assert!(body
-            .command
-            .argv
-            .windows(2)
-            .any(|pair| { pair[0] == "--proof-execution-state" && pair[1] == "not_run" }));
-        let sealed = common::seal_and_validate(
-            &attestation.contents,
-            artifact,
-            &sealed_directory.0,
-            &validator,
-        );
-        assert_eq!(sealed["proof_id"], proof_id);
-    }
 
     let directory = write_generated_crate(
         &first,
@@ -534,8 +472,6 @@ fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
         &[],
     );
     request.proof_id = "proof-mixed-numeric-state";
-    let backend_digest = cargo_kani_sha256();
-    request.backend_executable_sha256 = &backend_digest;
     let first = generate_kani_bundle(&request).expect("mixed numeric Kani bundle should generate");
     let second =
         generate_kani_bundle(&request).expect("repeated mixed numeric Kani bundle should generate");
@@ -544,8 +480,6 @@ fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
     let graph: ProofDependencyGraph =
         serde_json::from_str(&first.proof_graph.contents).expect("v2 graph should deserialize");
     assert_eq!(graph.schema_version, "quire.kani-proof-graph/v2");
-    assert_eq!(graph.adapter_profile, KANI_ADAPTER_PROFILE);
-    assert_eq!(graph.backend_executable_sha256, backend_digest);
     assert_eq!(
         graph
             .subject_arguments
@@ -793,7 +727,6 @@ fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
             requirement: environment.owner(),
             clause: &postcondition_clause,
             expression: &postcondition,
-            attestation: attestation_context(),
         })
         .expect("executable numeric oracle should generate");
         let mut kani_request = request(
@@ -941,16 +874,12 @@ fn declaration_and_dependency_order_do_not_change_the_normalized_bundle() {
 /// FR-003-AC-6
 /// FR-003-AC-7
 #[test]
-fn pinned_kani_proves_identity_and_prints_numeric_counterexamples() {
+fn kani_proves_identity_and_prints_numeric_counterexamples() {
     let version = Command::new("cargo")
         .args(["kani", "--version"])
         .output()
         .expect("cargo-kani must be installed for the numeric adapter test");
     assert!(version.status.success(), "cargo-kani version query failed");
-    assert_eq!(
-        String::from_utf8_lossy(&version.stdout).trim(),
-        format!("cargo-kani {KANI_BACKEND_VERSION}")
-    );
 
     let bounded = integer_type(0, 1000);
     let state_environment = numeric_environment(&[(
@@ -995,8 +924,6 @@ fn pinned_kani_proves_identity_and_prints_numeric_counterexamples() {
         &[],
     );
     state_request.proof_id = "proof-config-version";
-    let backend_digest = cargo_kani_sha256();
-    state_request.backend_executable_sha256 = &backend_digest;
     let state_bundle =
         generate_kani_bundle(&state_request).expect("state identity bundle should generate");
     let state_graph: ProofDependencyGraph =
@@ -1004,7 +931,6 @@ fn pinned_kani_proves_identity_and_prints_numeric_counterexamples() {
             .expect("state graph should deserialize");
     assert_eq!(state_graph.subject_arguments.len(), 1);
     assert_eq!(state_graph.subject_results.len(), 1);
-    assert_eq!(state_graph.backend_executable_sha256, backend_digest);
 
     let healthy = execute_kani(
         &state_bundle,
@@ -1221,35 +1147,11 @@ fn invalid_kani_requests_return_structured_non_generated_states() {
         &[],
     );
 
-    value.backend_version = "0.66.0";
-    let diagnostic = &generate_kani_bundle(&value).expect_err("version should be rejected")[0];
-    assert_eq!(diagnostic.code, KaniErrorCode::UnsupportedBackendVersion);
-    assert_eq!(
-        diagnostic.terminal_state,
-        GenerationTerminalState::BackendUnavailable
-    );
-
-    value.backend_version = KANI_BACKEND_VERSION;
-    value.backend_executable_sha256 = "not-a-digest";
-    let diagnostic =
-        &generate_kani_bundle(&value).expect_err("backend digest should be rejected")[0];
-    assert_eq!(diagnostic.code, KaniErrorCode::InvalidIdentity);
-    assert_eq!(diagnostic.path, "backend_executable_sha256");
-
-    value.backend_executable_sha256 = BACKEND_SHA256;
     value.subject_path = "not::a::valid::path::";
     let diagnostic = &generate_kani_bundle(&value).expect_err("subject should be rejected")[0];
     assert_eq!(diagnostic.code, KaniErrorCode::InvalidIdentity);
 
     value.subject_path = "crate::subject";
-    value.attestation = AttestationContext {
-        record_digest: "not-a-digest",
-        candidate_revision: IR_CANDIDATE_REVISION,
-    };
-    let diagnostic = &generate_kani_bundle(&value).expect_err("context should be rejected")[0];
-    assert_eq!(diagnostic.code, KaniErrorCode::InvalidAttestationContext);
-
-    value.attestation = attestation_context();
     value.unwind = 0;
     let diagnostic = &generate_kani_bundle(&value).expect_err("unwind should be rejected")[0];
     assert_eq!(diagnostic.code, KaniErrorCode::InvalidUnwind);
@@ -1508,14 +1410,12 @@ fn generated_kani_predicates_are_the_exact_executable_oracles_for_the_boolean_co
             requirement: environment.owner(),
             clause: &precondition_clause,
             expression: &precondition,
-            attestation: attestation_context(),
         })
         .expect("executable precondition should generate");
         let executable_postcondition = generate_boolean_oracle(&OracleRequest {
             requirement: environment.owner(),
             clause: &postcondition_clause,
             expression: &postcondition,
-            attestation: attestation_context(),
         })
         .expect("executable postcondition should generate");
         let bundle = generate_kani_bundle(&request(
@@ -1540,16 +1440,12 @@ fn generated_kani_predicates_are_the_exact_executable_oracles_for_the_boolean_co
 
 /// TC-007
 #[test]
-fn pinned_kani_executes_the_generated_contract_proof() {
+fn kani_executes_the_generated_contract_proof() {
     let version = Command::new("cargo")
         .args(["kani", "--version"])
         .output()
-        .expect("cargo-kani must be installed for the pinned adapter test");
+        .expect("cargo-kani must be installed for the adapter test");
     assert!(version.status.success(), "cargo-kani version query failed");
-    assert_eq!(
-        String::from_utf8_lossy(&version.stdout).trim(),
-        format!("cargo-kani {KANI_BACKEND_VERSION}")
-    );
 
     let bundle = fixture_bundle(&[]);
     let graph: ProofDependencyGraph =

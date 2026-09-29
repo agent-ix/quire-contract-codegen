@@ -6,7 +6,6 @@
   "type": "string",
   "allOf": [
     {"pattern": "^// SPDX-License-Identifier: MIT OR Apache-2\\.0\\n"},
-    {"pattern": "Kani adapter: kani-0\\.67\\.0-function-contracts-v2"},
     {"pattern": "// BEGIN framing"},
     {"pattern": "// BEGIN binding"},
     {"pattern": "// BEGIN contract"},

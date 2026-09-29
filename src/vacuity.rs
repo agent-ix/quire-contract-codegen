@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::SourceProbe;
 
@@ -16,8 +15,6 @@ const MAX_SEGMENTS: usize = 250_000;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CoverageErrorCode {
-    /// Bound package and immutable generated population differ.
-    BindingMismatch,
     /// Supplied artifact inventory or bytes differ from the generated bundle.
     ArtifactMismatch,
     /// Generated map does not match independently derived typed clause semantics.
@@ -28,7 +25,7 @@ pub enum CoverageErrorCode {
     ResourceLimitExceeded,
     /// JSON shape, tuple, or source coordinate ordering is invalid.
     MalformedExport,
-    /// The producer or LLVM format is outside the qualified pair.
+    /// The document is not an LLVM JSON coverage export.
     UnsupportedProfile,
     /// A path is traversing, ambiguous, or outside its declared root.
     InvalidPath,
@@ -137,14 +134,12 @@ impl Segment {
 struct Export {
     #[serde(rename = "type")]
     kind: String,
-    version: String,
     cargo_llvm_cov: Producer,
     data: Vec<ExportData>,
 }
 
 #[derive(Deserialize)]
 struct Producer {
-    version: String,
     manifest_path: String,
 }
 
@@ -159,24 +154,18 @@ struct ExportFile {
     segments: Vec<Segment>,
 }
 
-/// Parsed, normalized LLVM segment facts for the qualified structural profile.
+/// Parsed, normalized LLVM segment facts.
 ///
-/// Export metadata is self-declared. This type does not claim that a particular executable ran,
-/// validate generated source digests, or bind runtime counters. Those are native-producer duties.
+/// Export metadata is self-declared. This type does not claim that a particular executable ran or
+/// bind runtime counters. Those are native-producer duties.
 #[derive(Debug)]
 pub struct LlvmCoverage {
     files: BTreeMap<String, Vec<Segment>>,
-    export_sha256: String,
 }
 
 impl LlvmCoverage {
     pub(crate) fn paths(&self) -> impl Iterator<Item = &str> {
         self.files.keys().map(String::as_str)
-    }
-    /// Digest of the exact supplied bytes, not canonicalized JSON.
-    #[must_use]
-    pub fn export_sha256(&self) -> &str {
-        &self.export_sha256
     }
 
     /// Observe one complete single-line entry token in a root-relative generated source file.
@@ -222,7 +211,7 @@ impl LlvmCoverage {
     }
 }
 
-/// Parse full cargo-llvm-cov 0.9.0 / LLVM JSON 3.0.1 without executing any producer.
+/// Parse a cargo-llvm-cov LLVM JSON coverage export without executing any producer.
 ///
 /// `source_root` must be an absolute lexical path to the fixture/package containing Cargo.toml.
 /// Absolute external dependency files are checked structurally but cannot match generated paths.
@@ -247,15 +236,12 @@ pub fn parse_llvm_coverage(
     }
     let export: Export = serde_json::from_slice(bytes)
         .map_err(|error| diagnostic(CoverageErrorCode::MalformedExport, error.to_string()))?;
-    if export.kind != "llvm.coverage.json.export"
-        || export.version != "3.0.1"
-        || export.cargo_llvm_cov.version != "0.9.0"
-    {
+    if export.kind != "llvm.coverage.json.export" {
         return Err(diagnostic(
             CoverageErrorCode::UnsupportedProfile,
             format!(
-                "expected cargo-llvm-cov 0.9.0 / llvm.coverage.json.export 3.0.1; found {} / {} {}",
-                export.cargo_llvm_cov.version, export.kind, export.version
+                "expected an llvm.coverage.json.export; found {}",
+                export.kind
             ),
         ));
     }
@@ -299,10 +285,7 @@ pub fn parse_llvm_coverage(
             }
         }
     }
-    Ok(LlvmCoverage {
-        files,
-        export_sha256: format!("{:x}", Sha256::digest(bytes)),
-    })
+    Ok(LlvmCoverage { files })
 }
 
 fn validate_segments(segments: &[Segment]) -> Result<(), CoverageDiagnostic> {

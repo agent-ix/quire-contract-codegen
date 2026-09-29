@@ -50,12 +50,8 @@ pub enum ClaimDisposition<G, R> {
 /// `claim-map.json`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ClaimMap<C> {
-    /// The generator's claim-map version.
-    pub version: &'static str,
     /// Source package identity.
     pub package_id: CheckedSemanticId,
-    /// Pinned runtime revision the oracles call.
-    pub runtime_revision: &'static str,
     /// Upstream gaps every entry is subject to.
     pub blocked: Vec<UpstreamBlocker>,
     /// Entries, in the order the producing generator documents on its

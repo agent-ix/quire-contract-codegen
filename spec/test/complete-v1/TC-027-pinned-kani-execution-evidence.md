@@ -1,18 +1,18 @@
 ---
 id: TC-027
-title: "Verify pinned Kani obligation execution and its evidence"
+title: "Verify Kani obligation execution and its evidence"
 type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-017
     type: verifies
 ---
-# TC-027: Verify pinned Kani obligation execution and its evidence
+# TC-027: Verify Kani obligation execution and its evidence
 
 ## Description
 
-Verify that a bounded Kani obligation runs only under the committed backend
-pins, that its outcome is read from the backend rather than defaulted, and that
-the retained evidence describes the invocation that actually happened.
+Verify that a bounded Kani obligation runs against the installed backend, that
+its outcome is read from the backend rather than defaulted, and that the
+returned evidence describes the invocation that actually happened.
 
 ## Test Procedure
 
@@ -26,34 +26,21 @@ summary, with a zero-total summary, and with an unreadable summary; a failed
 unwinding assertion with playbacks present; and a results listing in which an
 unwinding check succeeded.
 
-Edge module: parse real Kani 0.67.0 captures (`tests/fixtures/kani-0.67.0/`, with the exact
-command of each in `MANIFEST.tsv`) of a verified run, a falsified run with a playback, an
-exhausted unwind bound, an unreachable cover, a partly satisfied cover and a run with no cover
-summary, and classify each; then scan every non-test file under `src/`, recursively, other than
-`src/kani_transcript.rs` for Kani's wording.
+Edge module: parse real Kani captures (`tests/fixtures/kani-0.67.0/`) of a verified run, a
+falsified run with a playback, an exhausted unwind bound, an unreachable cover, a partly satisfied
+cover and a run with no cover summary, and classify each.
 
-Pins: compare the committed pins with themselves, and with a copy differing in
-each of the six fields in turn.
-
-Refusals: request a run against an installation whose launcher is absent; separately, request a run
-whose harness identity's pins differ from the committed pins against an installation that does not
-exist, so that measuring the backend at all before the identity comparison would surface as an
-absent-tool refusal rather than as pin drift.
+Refusals: request a run against an installation whose launcher is absent.
 
 Routed scalar harness (FR-017-AC-11): build a routed exact-scalar harness with `generate_routed`
 (`x + 1` over `Int[0, 9]`) and assemble the crate the way the driver does — the returned
 `Cargo.toml` as the manifest and the harness's `rust.contents` as `src/lib.rs`, never the returned
-`src/lib.rs`. Run it through `execute_kani_obligation`: a drifted harness identity is refused before
-the backend is measured; a drifted installed backend is refused the same way; a crate whose
-`src/lib.rs` lacks the harness is `HarnessNotInCrate`; and the harness's covers classify a run the
-same way a contract harness's do. Under the pinned lane, generated with unwind 3, run it for real
-and confirm it is `Verified` and its evidence carries its identity digest, its oracle-source digest
-and `None` for obligation kind. Then narrow the same harness's checked domain to `[0, 5]`, below
-the bound the oracle enforces, and confirm the run is `Falsified` with a counterexample.
-
-Aggregate verdict and retained evidence: census `src/kani_execution.rs` — the surface FR-017 owns —
-for any function signature that takes more than one run's evidence or outcome, and for any
-filesystem write.
+`src/lib.rs`. Run it through `execute_kani_obligation`: a crate whose `src/lib.rs` lacks the harness
+is `HarnessNotInCrate`, and the harness's covers classify a run the same way a contract harness's
+do. In the `make kani` lane, generated with unwind 3, run it for real and confirm it is `Verified`
+and its evidence carries `None` for obligation kind. Then narrow the same harness's checked domain
+to `[0, 5]`, below the bound the oracle enforces, and confirm the run is `Falsified` with a
+counterexample.
 
 Generation/execution boundary: negotiate obligations that refuse before a harness exists —
 unbounded, non-finite, model-dependent, frame and definedness-bearing items, and whole-request
@@ -61,14 +48,10 @@ refusals (`KaniObligationError`) such as an empty request, an unparsable subject
 out-of-range unwind bound and too many items — and confirm none of them produces a
 `KaniObligationHarness`.
 
-Under the pinned lane, with a real installation: measure the backend and
-compare it with the committed pins; run the precondition, postcondition and
-invariant harnesses of a healthy subject; run the postcondition harness against
-a seeded defect; run a contract harness whose requires are jointly
-unsatisfiable; run a harness against a crate whose `Cargo.lock` is a directory
-so the backend runs but the post-run digest read fails; run a harness whose
-identity names another driver digest; and run a harness against a crate whose
-library source does not contain it.
+In the `make kani` lane, with a real installation: run the precondition, postcondition and
+invariant harnesses of a healthy subject; run the postcondition harness against a seeded defect;
+run a contract harness whose requires are jointly unsatisfiable; and run a harness against a crate
+whose library source does not contain it.
 
 ## Expected Results
 
@@ -83,61 +66,40 @@ unwinding check in a listing is verified.
 
 Each capture parses to the expected typed transcript and classifies to verified, falsified with
 the assertion playback, exhausted bound, cover-unsatisfied 0 of 1, cover-unsatisfied 1 of 2 and
-missing cover summary respectively; the scan finds none of the wording outside the edge module.
+missing cover summary respectively.
 
-Equal pins report no difference; each of the six altered fields is reported as
-that field with its expected and observed values. The absent launcher is a
-typed tool refusal naming the launcher and its path. A harness identity pin
-difference is reported as pin drift even against a nonexistent installation,
-proving the backend is measured only after the identity's own pins already
-match the committed pins.
+The absent launcher is a typed tool refusal naming the launcher and its path.
 
-The routed scalar harness's identity pin drift and installed-backend drift refuse the same way a
-contract harness's do, before anything runs; the crate missing its `src/lib.rs` source is
-`HarnessNotInCrate`; its cover classifies identically to a contract harness's; and, under the
-pinned lane, it runs with its evidence carrying its own identity digest, its oracle-source
-digest, and `None` for obligation kind.
-
-The census finds no function taking a collection of runs' evidence or outcomes, and no filesystem
-write, in `src/kani_execution.rs`.
+The routed scalar harness's crate missing its `src/lib.rs` source is `HarnessNotInCrate`; its
+cover classifies identically to a contract harness's; and, in the `make kani` lane, it runs with
+its evidence carrying `None` for obligation kind.
 
 Every generation-time refusal above exposes no harness, so `execute_kani_obligation` — which
 takes a `KaniObligationHarness` — has nothing to run for it: a generation-time classification can
 never surface as one of FR-017's execution outcomes because no code path converts one into the
 other.
 
-In the pinned lane the measured backend equals the committed pins; the three
-healthy harnesses are verified, each with the measured pins, exit code zero, an
-argument vector equal after the subcommand to its harness identity's options,
-its oracle digest and a lockfile digest; the seeded defect is falsified with a
-concrete counterexample naming its harness symbol and a nonzero exit code; the
-jointly unsatisfiable contract is cover-unsatisfied rather than verified; the
-harness run against a `Cargo.lock` directory reports evidence — not a refusal —
-carrying the backend's own verdict (the healthy subject verified) and no
-lockfile digest, because the backend already ran and a lockfile read failure is
-missing evidence about that run, never grounds to discard its verdict; the
-drifted driver digest is refused as pin drift on that field with no target
-directory created; and the crate that does not contain the harness is refused
-with no run.
+In the `make kani` lane the three healthy harnesses are verified, each with exit code zero and an
+argument vector equal after the subcommand to its harness identity's options; the seeded defect is
+falsified with a concrete counterexample naming its harness symbol and a nonzero exit code; the
+jointly unsatisfiable contract is cover-unsatisfied rather than verified; and the crate that does
+not contain the harness is refused with no run.
 
 ## Implementation
 
-`src/kani_execution.rs` unit tests for classification and pin comparison, `src/kani_transcript.rs`
-unit tests for the typed transcript, the fixture captures and the prose scan, and
-`tests/kani_obligations.rs` for the refusals, the generation/execution
-boundary, the aggregate-verdict/retained-evidence census, and the pinned lane.
-The lane is `#[ignore]`d and runs through `make kani` under a host-wide lock,
-because Kani and CBMC are memory-heavy and must run one harness at a time.
+`src/kani_execution.rs` unit tests for classification, `src/kani_transcript.rs` unit tests for the
+typed transcript and the fixture captures, and `tests/it/kani_obligations.rs` for the refusals, the
+generation/execution boundary and the `make kani` lane. The lane is `#[ignore]`d and runs through
+`make kani` under a host-wide lock, because Kani and CBMC are memory-heavy and must run one harness
+at a time.
 
 ## Blocked
 
-- Timed-out runs: the run now carries a caller-declared wall-clock budget and
-  a timed-out state is observable (agent-ix/quire-contract-codegen#58, closed
-  at the code level, with its own hermetic unit coverage in
-  `src/kani_execution.rs`). No test in this repository exercises a timed-out
-  state under FR-007-AC-3: that criterion names the corpus path's own
-  `KaniOutcomeKind` vocabulary, distinct from this module's
-  `KaniInconclusiveReason`, which FR-017-CON-2 forbids converting between. No
-  case is written here because FR-017's own acceptance criteria (AC-4, AC-5)
-  enumerate the inconclusive reasons they cover by name, and timed-out is not
-  among them; adding it is agent-ix/quire-contract-codegen#55.
+- Timed-out runs: the run carries a caller-declared wall-clock budget and a timed-out state is
+  observable (agent-ix/quire-contract-codegen#58, with its own hermetic unit coverage in
+  `src/kani_execution.rs`). No test in this repository exercises a timed-out state under
+  FR-007-AC-3: that criterion names the corpus path's own `KaniOutcomeKind` vocabulary, distinct
+  from this module's `KaniInconclusiveReason`, which FR-017-CON-2 forbids converting between. No
+  case is written here because FR-017's own acceptance criteria (AC-4, AC-5) enumerate the
+  inconclusive reasons they cover by name, and timed-out is not among them; adding it is
+  agent-ix/quire-contract-codegen#55.

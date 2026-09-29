@@ -16,20 +16,13 @@ Verify that composite equality oracles generated from an admitted
 CheckedPackage V2 cover every admitted composite and collection shape, refuse
 every non-generated item with its own typed reason, are byte-deterministic, and
 agree — outcome, admitted charges and consumed counters — with direct runtime
-execution and with the pinned quire-spec-language value authority.
+execution and with the quire-spec-language value authority.
 
-The discriminating evidence is the three-way agreement of step 4, not the
-committed golden. The golden is blessable with `QUIRE_CODEGEN_BLESS=1`, so it
-pins nothing on its own; it earns its place only because the golden crate is the
-crate step 4 compiles and executes against independently constructed native
-runs whose descriptor comes from the request. A blessed golden whose emitted
-operator, operand order or descriptor changed fails step 4.
-
-This test depends on the re-pin agent-ix/quire-contract-codegen#75 merged as
-`e74d592`: Contract Runtime `4e33052` and quire-spec-language `21c507e`. At the
-revisions pinned before it, the equality surface step 4(a) calls was not visible
-here and `quire_spec_language::value` published no `check_equality`,
-`CheckedEquality` or `plan_equality` for step 4(b) to call at all.
+The discriminating evidence is the agreement of step 4. No generated output is
+committed: step 4 generates the corpus crate at test time and executes it
+against independently constructed native runs whose descriptor comes from the
+request, so a generator change to an emitted operator, operand order or
+descriptor fails step 4. Determinism is checked by regeneration in step 2.
 
 ## Test Procedure
 
@@ -48,8 +41,7 @@ here and `quire_spec_language::value` published no `check_equality`,
    operand types, one node id repeated under one descriptor, and a request that
    exceeds the lowering work limit.
 2. Generate twice and with a permuted request that includes both descriptors of
-   step 7 over one node id; compare bytes with each other and with the committed
-   golden, and inspect claim-map ordering by the descriptor key — expression node
+   step 7 over one node id; compare bytes with each other, and inspect claim-map ordering by the descriptor key — expression node
    id, operator rank, then each operand's source-type and conversion-target node
    ids, every node id compared by digest domain then digest; the expression node
    id alone ties those two entries — reconstructed declaration keys against
@@ -65,14 +57,14 @@ here and `quire_spec_language::value` published no `check_equality`,
    quire-spec-language#121) are distinct values rather than one reason. Assert
    the generated source contains no `unwrap`, `expect`, panicking index or
    charge or pair-count literal, and that the crate manifest declares
-   `publish = false` and the pinned runtime revision with the `exact` feature.
-4. Compile the golden oracle crate into the test crate and execute it on the
-   corpus vectors. For each vector compare the `Outcome<bool>`, the admitted
+   `publish = false` and the runtime revision with the `exact` feature.
+4. Generate the corpus crate at test time, compile it with the agreement cases
+   as its integration test, and execute it on the corpus vectors. For each vector compare the `Outcome<bool>`, the admitted
    charge sequence and the consumed counters against (a) a direct call to
    `TypeEnvironment::check_equality` and `CheckedEquality::evaluate` on an
    environment, operands **and descriptor** constructed in the test from the
    request, not by or from the generator, and (b) the same call through
-   `quire_spec_language::value` at the runtime's pinned authority. The descriptor
+   `quire_spec_language::value`. The descriptor
    is the thing an emitter mutation changes, so reading it back out of the
    generated crate would make leg (a) follow the mutation and the comparison
    vacuous; it is held by the test.
@@ -93,11 +85,9 @@ here and `quire_spec_language::value` published no `check_equality`,
    `CheckedEquality::evaluate` takes no environment at all — so without
    `check_type` these vectors complete with a Boolean.
 7. Request one node twice in one request under descriptors differing only in
-   `EqualityOperator`; confirm both generate under distinct symbols, that each
-   symbol is the digest over its descriptor key's node id digests and operator
-   rank — so the two differ only because the operator ranks do, and no
-   declaration or field name is rendered into either — that both are marked
-   `caller_declared`, and
+   `EqualityOperator`; confirm both generate under distinct readable symbols,
+   each built from its operation name and a positional counter, that both are
+   marked `caller_declared`, and
    that their outcomes are complementary on a vector whose operands differ. This
    is not the duplicate case of step 1: a duplicate is one node id under one
    descriptor.
@@ -112,7 +102,7 @@ vector's outcome, charges and counters; every injected denial yields
 `Incomplete` at its point without applying that charge; a foreign environment
 refuses as `CheckedInvariant` without panicking and without charging, decided by
 the emitted `check_type` calls; the two operators generate under distinct
-descriptor-derived symbols with complementary results and one `caller_declared`
+symbols with complementary results and one `caller_declared`
 mark; and the generated crate
 compiles with `publish = false` and no charge or pair-count literal.
 

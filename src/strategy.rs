@@ -1,15 +1,14 @@
 //! Deterministic shaped proptest strategy generation.
 
-use std::{collections::BTreeSet, fmt::Write as _};
+use std::collections::BTreeSet;
 
 use quire_contract_ir::{ClauseRef, RequirementRef, SourceSpan};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 
 use crate::{
-    oracle::{bounded_readable_component, generated_artifact_bundle, length_delimited_identity},
-    Artifact, AttestationContext, GeneratedArtifactBundle, GenerationErrorCode,
-    GenerationTerminalState, MAX_GENERATED_SOURCE_BYTES,
+    oracle::{bounded_readable_component, upper_camel},
+    Artifact, GeneratedArtifactBundle, GenerationErrorCode, GenerationTerminalState,
+    MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Supported integer constraint shape for one generated strategy.
@@ -78,8 +77,6 @@ pub struct StrategyRequest<'a> {
     pub constraint: StrategyConstraint<'a>,
     /// Campaign population to emit.
     pub campaign: StrategyCampaign,
-    /// Caller-owned attestation binding for the generated artifact.
-    pub attestation: AttestationContext<'a>,
 }
 
 /// Campaign population for a customer enum membership.
@@ -111,8 +108,6 @@ pub struct EnumStrategyRequest<'a> {
     pub variants: &'a [&'a str],
     /// Campaign population to emit.
     pub campaign: EnumStrategyCampaign<'a>,
-    /// Caller-owned attestation binding for the generated artifact.
-    pub attestation: AttestationContext<'a>,
 }
 
 /// Stable reason a strategy could not be generated.
@@ -133,9 +128,7 @@ pub enum StrategyErrorCode {
     InvalidGeneratedSyntax,
     /// The requested campaign cannot satisfy its required population shape.
     UnsupportedCampaignConstraint,
-    /// A proof attestation could not be validated or serialized.
-    AttestationGenerationFailed,
-    /// Generated Rust exceeded the attested source-size limit.
+    /// Generated Rust exceeded the source-size limit.
     ResourceLimitExceeded,
     /// A requested bound population side has no value over the shared domain.
     EmptyPopulation,
@@ -164,9 +157,7 @@ impl StrategyErrorCode {
             | Self::UnsupportedClause
             | Self::UnsupportedClauseKind
             | Self::UnsupportedRelation => GenerationTerminalState::Unsupported,
-            Self::InvalidGeneratedSyntax | Self::AttestationGenerationFailed => {
-                GenerationTerminalState::Inconclusive
-            }
+            Self::InvalidGeneratedSyntax => GenerationTerminalState::Inconclusive,
         }
     }
 }
@@ -179,7 +170,7 @@ pub struct StrategyDiagnostic {
     pub code: StrategyErrorCode,
     /// Interface-001 terminal state for this failure.
     pub terminal_state: GenerationTerminalState,
-    /// Preserved attestation or syntax failure code, when one exists.
+    /// Preserved syntax failure code, when one exists.
     pub generation_code: Option<GenerationErrorCode>,
     /// Complete bound clause identity for clause-scoped generation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -205,24 +196,10 @@ pub fn generate_i64_strategy(
     validate_request(request)?;
     let requirement = request.requirement.requirement().as_str();
     let revision = request.requirement.revision().get();
-    let revision_text = revision.to_string();
-    let constraint_text = format!("{:?}", request.constraint);
-    let campaign_text = format!("{:?}", request.campaign);
-    let identity = length_delimited_identity(&[
-        requirement,
-        &revision_text,
-        request.strategy_id,
-        &constraint_text,
-        &campaign_text,
-    ]);
-    let suffix = sha256(identity.as_bytes());
-    let function = format!(
-        "strategy_{}_{}",
-        bounded_readable_component(request.strategy_id),
-        suffix
-    );
-    let case_type = format!("StrategyCase{}", &suffix[..16]);
-    let domain_type = format!("ExpectedDomain{}", &suffix[..16]);
+    let function = strategy_function(requirement, revision, request.strategy_id);
+    let stem = upper_camel(&function);
+    let case_type = format!("{stem}Case");
+    let domain_type = format!("{stem}ExpectedDomain");
     let body = strategy_body(
         request.constraint,
         request.campaign,
@@ -304,18 +281,9 @@ pub fn {function}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n\
             &error.to_string(),
         )
     })?;
-    let rust = artifact(format!("src/generated/{function}.rs"), source);
-    generated_artifact_bundle(
-        &request.attestation,
-        request.requirement,
-        "generate_i64_strategy",
-        &function,
-        identity.as_bytes(),
-        "generated-rust-strategy",
-        "quire.codegen.rust-strategy/v1",
-        rust,
-    )
-    .map_err(attestation_diagnostic)
+    Ok(GeneratedArtifactBundle {
+        rust: artifact(format!("src/generated/{function}.rs"), source),
+    })
 }
 
 /// Generates a deterministic customer-enum membership strategy.
@@ -373,25 +341,10 @@ pub fn generate_enum_strategy(
 
     let requirement = request.requirement.requirement().as_str();
     let revision = request.requirement.revision().get();
-    let revision_text = revision.to_string();
-    let variants_text = format!("{variants:?}");
-    let campaign_text = format!("{:?}", request.campaign);
-    let identity = length_delimited_identity(&[
-        requirement,
-        &revision_text,
-        request.strategy_id,
-        request.enum_type,
-        &variants_text,
-        &campaign_text,
-    ]);
-    let suffix = sha256(identity.as_bytes());
-    let function = format!(
-        "strategy_{}_{}",
-        bounded_readable_component(request.strategy_id),
-        suffix
-    );
-    let case_type = format!("EnumStrategyCase{}", &suffix[..16]);
-    let domain_type = format!("EnumExpectedDomain{}", &suffix[..16]);
+    let function = strategy_function(requirement, revision, request.strategy_id);
+    let stem = upper_camel(&function);
+    let case_type = format!("{stem}EnumCase");
+    let domain_type = format!("{stem}EnumExpectedDomain");
     let members = variants
         .iter()
         .map(|variant| format!("{}::{variant}", request.enum_type))
@@ -485,18 +438,9 @@ pub fn {function}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n\
             &error.to_string(),
         )
     })?;
-    let rust = artifact(format!("src/generated/{function}.rs"), source);
-    generated_artifact_bundle(
-        &request.attestation,
-        request.requirement,
-        "generate_enum_strategy",
-        &function,
-        identity.as_bytes(),
-        "generated-rust-strategy",
-        "quire.codegen.rust-strategy/v1",
-        rust,
-    )
-    .map_err(attestation_diagnostic)
+    Ok(GeneratedArtifactBundle {
+        rust: artifact(format!("src/generated/{function}.rs"), source),
+    })
 }
 
 fn validate_request(request: &StrategyRequest<'_>) -> Result<(), StrategyDiagnostic> {
@@ -585,6 +529,15 @@ fn validate_request(request: &StrategyRequest<'_>) -> Result<(), StrategyDiagnos
         }
         StrategyConstraint::InclusiveRange { .. } => Ok(()),
     }
+}
+
+/// The generated strategy function name, read from the requirement, revision and strategy id.
+fn strategy_function(requirement: &str, revision: u64, strategy_id: &str) -> String {
+    format!(
+        "strategy_{}_{revision}_{}",
+        bounded_readable_component(requirement),
+        bounded_readable_component(strategy_id)
+    )
 }
 
 fn validate_strategy_identity(value: &str) -> Result<(), StrategyDiagnostic> {
@@ -846,7 +799,7 @@ fn enforce_source_limit(source: &str) -> Result<(), StrategyDiagnostic> {
             StrategyErrorCode::ResourceLimitExceeded,
             Some(GenerationErrorCode::ResourceLimitExceeded),
             "generated.rust",
-            "the generated strategy exceeds the attested source-size limit",
+            "the generated strategy exceeds the source-size limit",
         ));
     }
     Ok(())
@@ -871,36 +824,6 @@ fn diagnostic_with_generation(
     }
 }
 
-fn attestation_diagnostic(code: GenerationErrorCode) -> StrategyDiagnostic {
-    let (strategy_code, path, message) = if code == GenerationErrorCode::ResourceLimitExceeded {
-        (
-            StrategyErrorCode::ResourceLimitExceeded,
-            "generated.rust",
-            "the generated strategy exceeds the attested source-size limit",
-        )
-    } else {
-        (
-            StrategyErrorCode::AttestationGenerationFailed,
-            "generated.attestation",
-            "the strategy proof attestation could not be emitted",
-        )
-    };
-    diagnostic_with_generation(strategy_code, Some(code), path, message)
-}
-
 fn artifact(path: String, contents: String) -> Artifact {
-    let sha256 = sha256(contents.as_bytes());
-    Artifact {
-        path,
-        contents,
-        sha256,
-    }
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    let mut result = String::with_capacity(64);
-    for byte in Sha256::digest(bytes) {
-        let _ = write!(result, "{byte:02x}");
-    }
-    result
+    Artifact::new(path, contents)
 }

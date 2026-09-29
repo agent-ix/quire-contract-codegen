@@ -25,7 +25,7 @@ failure is reported.
 
 ## Inputs
 
-- A retained Kani counterexample and the harness identity and pins that
+- A retained Kani counterexample and the harness identity that
   produced it.
 - The obligation's declared input domains.
 - A decode size limit bounding the witness bytes and value count read.
@@ -39,7 +39,7 @@ failure is reported.
 ## Behavior
 
 - When a counterexample is retained, the generator shall check that it is
-  bound to the identity and pins of the harness being replayed, and decode
+  bound to the identity of the harness being replayed, and decode
   each witness value into its declared complete-V1 scalar type within the
   decode size limit.
 - The generator shall read the concrete values of a Kani playback only
@@ -60,7 +60,7 @@ failure is reported.
   the five replay results. A binding that is not an argument has no symbolic
   position, and typing it would mistype a position that does not exist in the
   witness bytes.
-- If a witness is bound to a different harness identity or pins, fails to
+- If a witness is bound to a different harness identity, fails to
   decode, or exceeds the decode size limit, then the generator shall report a
   malformed witness and shall not report a failure.
 - If a decoded value is outside its declared domain, then the generator shall
@@ -75,7 +75,7 @@ failure is reported.
 
   | Condition | Outcome |
   |---|---|
-  | The witness is bound to another harness identity or pins, fails to decode, or exceeds the decode size limit | malformed witness |
+  | The witness is bound to another harness identity, fails to decode, or exceeds the decode size limit | malformed witness |
   | A decoded value lies outside its declared domain | out-of-domain witness |
   | The adapter cannot build an admitted request: a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript `Witness::parse` refuses, or an envelope QSL refuses to reconstruct | adapter refusal (FR-016-AC-11) |
   | `qsl_replay::replay` returns `Err(ReplayRefusal::Fault(_))`, an internal fault of the executor | replay unavailable |
@@ -116,7 +116,7 @@ failure is reported.
 | FR-016-AC-2 | An out-of-domain witness is reported as such and never as a contract failure. | Test (TC-026) |
 | FR-016-AC-3 | An in-domain witness is reported as a failure only when native replay reproduces the same typed outcome. | Test (TC-026) |
 | FR-016-AC-4 | A native replay that runs and disagrees with the harness result yields a typed mismatch, and never an unavailable result or a failure. | Test (TC-026) |
-| FR-016-AC-5 | A witness bound to a different harness identity or pins is reported as malformed and never replayed. | Test (TC-026) |
+| FR-016-AC-5 | A witness bound to a different harness identity is reported as malformed and never replayed. | Test (TC-026) |
 | FR-016-AC-6 | A witness over the decode size limit is reported as malformed without decoding past the limit. | Test (TC-026) |
 | FR-016-AC-7 | A native replay that matches the harness value but differs in admitted charges, consumed counters or limits yields a typed mismatch. | Test (TC-026) |
 | FR-016-AC-8 | A witness schema binds the obligation's persisted argument bindings, in the order the obligation persists them, position for position to the harness's symbolic arguments, and each decoded value is named by the binding at its position; a binding that is not an argument is refused with a typed schema refusal that reports no failure and is none of the five replay results. | Test (TC-026) |
@@ -129,13 +129,10 @@ failure is reported.
 ## Dependencies
 
 - **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md); QSL's
-  `qsl-replay` crate at the revision `Cargo.toml` names, the only QSL crate `src/`
-  calls. The spine test carries a test-only exception: it also calls
-  `qsl_replay::spine::compile` and depends on `qsl-foundation` and `quire-exact`
-  as dev-dependencies, because `qsl-replay` re-exports neither the request's
-  types (`quire_exact::Identifier`, `quire_exact::ScalarLimits`, `WireNodeId`,
-  `SourceIdentity`) nor a compiled unit's package id and parameter node ids. The
-  exception ends when `qsl-replay` exposes those through its facade.
+  `qsl-replay` crate at the revision `Cargo.toml` names, the only QSL crate this
+  repository depends on. The spine test takes a compiled unit's package id and
+  parameter node ids from `qsl_replay::call_site`, and the request's types from
+  `qsl-replay`'s re-exports.
 - **Downstream**: [TC-026](../../test/complete-v1/TC-026-witness-native-replay.md),
   [FR-024](./FR-024-counterexample-envelope-intake.md), which carries the decoded
   values to QSL in QSL's counterexample envelope.

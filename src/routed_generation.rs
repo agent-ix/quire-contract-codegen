@@ -21,10 +21,9 @@ use quire_contract_ir::{CheckedNodeId, CheckedPackageV2};
 
 use crate::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, negotiate_kani_obligations, Artifact,
-    AttestationContext, BackendKind, Candidate, ClaimMap, ExactScalarClaim, ExactScalarOracles,
-    InvalidObligationItem, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
-    KaniScalarObligationHarness, KaniToolPins, ObligationDisposition, ObligationItem,
-    ObligationRecord, OracleGenerationError,
+    BackendKind, Candidate, ClaimMap, ExactScalarClaim, ExactScalarOracles, InvalidObligationItem,
+    KaniObligationError, KaniObligationOutcome, KaniObligationRequest, KaniScalarObligationHarness,
+    ObligationDisposition, ObligationItem, ObligationRecord, OracleGenerationError,
 };
 
 /// One item the driver routed to a backend.
@@ -48,12 +47,8 @@ pub struct RoutedGenerationItem {
 pub struct KaniGenerationContext<'a> {
     /// Rust path of the customer subject.
     pub subject_path: &'a str,
-    /// The backend identity harnesses are generated for.
-    pub pins: &'a KaniToolPins,
     /// Loop unwind bound.
     pub unwind: u32,
-    /// Binding for the generation identity.
-    pub attestation: AttestationContext<'a>,
 }
 
 /// One optional generation context per [`BackendKind`] variant.
@@ -111,7 +106,7 @@ pub struct RoutedGeneration {
     pub claim_map: Option<ClaimMap<ExactScalarClaim>>,
     /// The FR-014 oracle crate the Kani arm generated for its group: `Cargo.toml`, `src/lib.rs`
     /// and `claim-map.json`, byte-identical to `generate_exact_scalar_oracles`'s artifacts over the
-    /// group's derived items. Every `Generated` claim's `oracle_<digest>` symbol is defined in its
+    /// group's derived items. Every `Generated` claim's oracle symbol is defined in its
     /// `src/lib.rs`. `None` when no Kani group ran.
     pub oracle_artifacts: Option<Vec<Artifact>>,
 }
@@ -263,9 +258,7 @@ fn generate_kani(
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
         items: &items,
         subject_path: context.subject_path,
-        pins: context.pins,
         unwind: context.unwind,
-        attestation: context.attestation,
     })
     .map_err(RoutedGenerationError::Kani)?;
 

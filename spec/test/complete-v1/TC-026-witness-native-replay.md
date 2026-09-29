@@ -65,6 +65,6 @@ harness-identity refusal (`cg_witness_harness_identity_mismatch`, kind
 Boolean-byte and comment refusals (kind `InvalidInput`); the arity and width
 refusals are tested in the default suite and against a real falsification in
 the ignored lane, and the others are tested only by quire-contract-ir's own
-`Witness::decode` tests. Binding to the harness pins (AC-5), the decode size
+`Witness::decode` tests. Binding to the harness identity (AC-5), the decode size
 limit (AC-6), domain validation (AC-2) and native replay (AC-3, AC-4, AC-7,
 AC-12, AC-13) are also planned.

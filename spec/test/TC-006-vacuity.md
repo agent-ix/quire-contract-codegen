@@ -16,7 +16,7 @@ coverage, runtime accounting, native execution outcome, and obligation discharge
 ## Test Procedure
 
 The implemented primitive fixture generates Rust and maps through `generate_boolean_oracle`, then
-executes the pinned cargo-llvm-cov producer outside the analyzer for vacuous, mixed,
+executes cargo-llvm-cov outside the analyzer for vacuous, mixed,
 implication-free, and never-called generated functions. Parse its actual full JSON and observe the
 generated entry probes. Synthetic export controls independently remove or corrupt exact fields;
 they test refusal behavior but do not masquerade as native coverage evidence.
@@ -24,8 +24,8 @@ they test refusal behavior but do not masquerade as native coverage evidence.
 Exercise exact positive and zero segment counts for oracle-evaluation and consequent regions,
 multiple consequents with mixed observation, and complete campaign counters. Mutate each input class
 independently: export type/version, absent segments from summary-only output, segment tuple shape,
-missing/duplicate filenames, parent-traversing or ambiguous paths, source-map digest, requirement or
-revision identity, and invalid attestation context. Use the pinned quire-contract-runtime
+missing/duplicate filenames, parent-traversing or ambiguous paths, and requirement or revision
+identity. Use the quire-contract-runtime
 `CampaignReport` type rather than constructing a caller-owned counter lookalike.
 
 ## Expected Results
@@ -33,20 +33,20 @@ revision identity, and invalid attestation context. Use the pinned quire-contrac
 An evaluated always-false implication is vacuous; a never-evaluated clause is unexecuted; a mixed
 multi-implication clause is partially exercised; and only complete consequent observation is
 exercised. An implication-free clause is never labeled vacuous. Accepted, rejected, failed, and
-discarded counts plus test outcome remain unchanged in every report. Each valid report contains exact
-tool, export-format, export-digest, source-map-digest, schema, requirement, and revision identity.
+discarded counts plus test outcome remain unchanged in every report. Each valid report contains its
+schema, requirement, and revision identity.
 Every malformed or mismatched input retains a stable non-success diagnostic without inventing a
-measured-zero observation or passed coverage attestation. The primitive fixture emits no report or
-attestation and makes no native campaign binding claim.
+measured-zero observation or passed coverage result. The primitive fixture emits no report and makes
+no native campaign binding claim.
 
 ## Remaining aggregate controls
 
 REV-017 proposes a first complete bound-observation slice with no run qualification. Bank
 complete-package native controls through `generate_bound_oracles` and independently corrupt
 whole-population, source/map, full package identity and typed implication census bindings.
-Assert explicit unqualified provenance even for entirely exercised observations, and retain
-informational references for valid no-executable input. Missing campaign transport or native
-authentication must never become a passing coverage result. These controls are proposed,
+Assert that entirely exercised observations without a native run are still reported as observations
+only, and retain informational references for valid no-executable input. Missing campaign transport
+must never become a passing coverage result. These controls are proposed,
 not implemented or retained native-run evidence in the current candidate.
 
 Once IR #50 supplies the immutable executable population, remove one clause, consequent, evaluation
@@ -59,4 +59,4 @@ serialized. Check accepted/rejected/discarded accounting independently and rejec
 with failed postconditions. Use the native runtime CampaignReport, never a private counter type.
 
 TC-006 and FR-004 matrix rows remain planned: primitive controls are partial implementation, not
-completion of bound analysis, native-run provenance, versioned report output or shared consumption.
+completion of bound analysis, native-run binding, or a consuming obligation.

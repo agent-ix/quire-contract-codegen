@@ -1,16 +1,10 @@
 //! Admitted CheckedPackage V2 fixtures for exact scalar generation.
 //!
-//! The base is QSpec's `positive-nominal-identities.json` I04 vector, vendored
-//! from Contract IR, which supplies an enum declaration, one of its
-//! members, a dimension and a declared unit under their honest nominal keys.
-//! It is not currently byte-identical to Contract IR's own copy: this
-//! repository's vendored copy carries a `package_id.digest` of
-//! `a4a3d1699e33ceed6084fab17ce174bd6391a21fcd504bbf5d153710c1d2df39`, while
-//! upstream's is `b70a9f27c9ef49711fb603d56014aa5ce092379cd820c5e62a0154c89877e7b4`
-//! (both at the pinned `ef11217` revision); every other byte matches. Scalar
-//! types, values and expressions are appended under readable zero-padded
-//! keys, and the package identity is re-derived exactly as the Contract IR
-//! fixture support does.
+//! The base (`tests/checked_package_support/base.rs`) supplies an enum declaration,
+//! one of its members, a dimension and a declared unit under their nominal
+//! keys. Scalar types, values and expressions are appended under readable
+//! zero-padded keys, and the package identity is re-derived from the
+//! finished graph.
 //!
 //! Bounds are `bounded_domain` nodes keyed by the digest of their content and
 //! `foreign` (see `Bound::key`/`Bound::foreign`), and listed in the
@@ -44,12 +38,23 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 pub const NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
-pub const ENUM_TYPE: &str = "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562";
-pub const ENUM_MEMBER: &str = "42ba51e7e622d99f292a5e6dcc196bd216efb98b33755910e54af4d65078d032";
-pub const UNIT_TYPE: &str = "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4";
+/// The base package's enum declaration node key.
+pub fn enum_type() -> String {
+    base_node_ids().enum_type
+}
 
-/// `validate_application_keys`'s own preimage version tag (quire-contract-ir
-/// dfd8bd78, crates/quire-contract-model/src/checked_package/v2/operations.rs).
+/// The base package's `OPEN` enum member node key.
+pub fn enum_member() -> String {
+    base_node_ids().enum_member
+}
+
+/// The base package's declared unit node key.
+pub fn unit_type() -> String {
+    base_node_ids().unit
+}
+
+/// `validate_application_keys`'s own preimage version tag (Contract IR
+/// crates/quire-contract-model/src/checked_package/v2/operations.rs).
 const APPLICATION_NODE_VERSION: &str = "quire.application-node/v1";
 
 /// A readable node key: the code, zero-padded to a 64-digit digest.
@@ -141,7 +146,7 @@ pub fn reference(digest: &str) -> Value {
     json!({"term": "reference", "target": node_ref(digest)})
 }
 
-/// Contract IR (a606059, FR-208 `DeclarationTagRules`/`DeclarationOccurrenceRule`)
+/// Contract IR (FR-208 `DeclarationTagRules`/`DeclarationOccurrenceRule`)
 /// forbids `declaration` on `expression`/`relation`/`state`/`temporal`/
 /// `correspondence` nodes and on `value`/`enum_value` nodes (and, measured
 /// against the reader, on `value`/`parameter` nodes, which QSL emits with no
@@ -163,12 +168,10 @@ fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
     }
 }
 
-/// Contract IR (a606059, FR-038-AC-17) requires `application.operation`
-/// and `application.result_type` as members; IR-216's `validate_operations`
-/// (quire-contract-ir dfd8bd78) checks `operation` against the closed
-/// 135-entry `quire.checked-operation-catalog/v1`
-/// (`tests/fixtures/checked-package/checked-package-v2/operation-catalog.json`),
-/// so `operation` must name a real catalogued identity with a conformant
+/// Contract IR (FR-038-AC-17) requires `application.operation`
+/// and `application.result_type` as members; Contract IR's `validate_operations`
+/// checks `operation` against the checked-operation catalog
+/// `quire-verification-contracts` publishes, so `operation` must name a real catalogued identity with a conformant
 /// `operator`/`laws`/`mode`/`member`, not an opaque placeholder. This crate's
 /// own generators still classify a body by `term`/`operator`/`arguments`
 /// (never by `operation`), but for an exact-scalar claim the *confirmation*
@@ -252,7 +255,7 @@ fn value_for_type(semantic_type: &str) -> Option<String> {
             return Some(key(value));
         }
     }
-    if semantic_type == UNIT_TYPE {
+    if semantic_type == unit_type() {
         return Some(key(V_QUANTITY));
     }
     None
@@ -288,7 +291,7 @@ pub fn law(role: &str, definition: Value) -> Value {
 /// An `operation.mode` member: `{"kind", "value"}`. `value` is never
 /// checked against the catalog's closed `modes` vocabulary by IR (only
 /// `kind` is, and by a type-pin lookup this module's types never carry --
-/// see `check_mode_type` in quire-contract-ir dfd8bd78's
+/// see `check_mode_type` in Contract IR's
 /// `checked_package/v2/operations.rs`), so any readable string works.
 pub fn mode_kv(kind: &str, value: &str) -> Value {
     json!({"kind": kind, "value": value})
@@ -301,11 +304,8 @@ pub fn member_kind(kind: &str) -> Value {
     json!({"kind": kind})
 }
 
-/// One catalogued law-role definition artifact ref, copied verbatim from
-/// quire-contract-ir dfd8bd78's `tests/fixtures/checked-package/checked-package-v2/
-/// operation-catalog.json` `law_roles` table -- `validate_operations`
-/// requires `operation.laws[].definition` to equal one of these exactly
-/// (quire-contract-ir dfd8bd78 `checked_package/v2/operations.rs`).
+/// A well-formed artifact ref for a profile-role law, which has no closed catalog to select from:
+/// any well-formed ref the lock selects under that role admits.
 pub fn artifact_ref(identity: &str, digest: &str) -> Value {
     json!({
         "authority": "agent-ix",
@@ -316,37 +316,36 @@ pub fn artifact_ref(identity: &str, digest: &str) -> Value {
     })
 }
 
+/// The catalogued `role` law definition named `identity`, read from the operation catalog's home
+/// (`quire-verification-contracts`), which `validate_operations` requires
+/// `operation.laws[].definition` to equal exactly.
+pub fn catalog_definition(role: &str, identity: &str) -> Value {
+    let catalog: Value = serde_json::from_str(
+        quire_verification_contracts::operation_catalog::CHECKED_OPERATION_CATALOG_V1,
+    )
+    .expect("the operation catalog is JSON");
+    catalog["law_roles"][role]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|definition| definition["identity"] == identity)
+        .cloned()
+        .unwrap_or_else(|| panic!("the catalog has no {role} definition {identity}"))
+}
+
 /// The catalogued `integer_division` law definition selecting `profile`.
 pub fn integer_division_definition(profile: DivisionProfile) -> Value {
-    let digest = match profile {
-        DivisionProfile::Truncating => {
-            "9998507608e4885b314d5dcc59a88bb3d04ef3c263d2d8ae5810f92ae1893364"
-        }
-        DivisionProfile::Floor => {
-            "ca8c7a20407eaff7f61074cc997e44ad1ab9a73f675d686c6250997c6ae6192f"
-        }
-        DivisionProfile::Euclidean => {
-            "9f5e59b3bfe1dd3c1efc74065b2e3e7869e21813a0c90b9c5938d82107267a51"
-        },
-        _ => unreachable!("DivisionProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
-    };
-    artifact_ref(profile.definition_identity(), digest)
+    catalog_definition("integer_division", profile.definition_identity())
 }
 
-/// The catalog's one `ieee_profile` law definition.
+/// The catalog's `ieee_profile` law definition.
 pub fn ieee_profile_definition() -> Value {
-    artifact_ref(
-        "quire.value.ieee754-2019-default/v1",
-        "3e9736fb8e1637b554385192de34547bafc073e90b4b85256c824be31e0aa6e5",
-    )
+    catalog_definition("ieee_profile", "quire.value.ieee754-2019-default/v1")
 }
 
-/// The catalog's one `text_profile` law definition.
+/// The catalog's `text_profile` law definition.
 pub fn text_profile_definition() -> Value {
-    artifact_ref(
-        "quire.value.text.unicode-17.0.0/v1",
-        "cd4a985a0d7d2f2b3d3625caee3787832c00c5244e805fb49e1c2c7075b9de5e",
-    )
+    catalog_definition("text_profile", "quire.value.text.unicode-17.0.0/v1")
 }
 
 fn aggregate() -> Value {
@@ -354,15 +353,15 @@ fn aggregate() -> Value {
 }
 
 /// The corpus's own scalar-type node for a literal `value_kind`. Contract IR
-/// (a606059) requires `literal.type` as a member and validates only that it
+/// requires `literal.type` as a member and validates only that it
 /// resolves to a real node (FR-038-AC-17); it does not require the target to
 /// equal the containing node's own `semantic_type`, and most hand-written
 /// corpus fixtures that type themselves by kind rather than by a bound do
 /// follow that convention (`literal.type` == the node's own `semantic_type`),
-/// matching the vendored `positive-nominal-identities.json` pattern. `corpus_package`'s
+/// matching the base package's pattern. `corpus_package`'s
 /// own `V_QUANTITY` is the one exception: its `literal.type` is `rational`
 /// (this value's own `value_kind`) even though the node's `semantic_type` is
-/// `UNIT_TYPE`, because Contract IR's lowering reaches `literal.type`
+/// `unit_type()`, because Contract IR's lowering reaches `literal.type`
 /// regardless of the containing node's declared type (see `V_QUANTITY`'s own
 /// comment in `corpus_package`).
 fn literal_type(kind: &str) -> String {
@@ -374,7 +373,7 @@ fn literal_type(kind: &str) -> String {
         "float32_bits" => key(T_FLOAT32),
         "float64_bits" => key(T_FLOAT64),
         "text" => key(T_TEXT),
-        "enum" => ENUM_TYPE.to_owned(),
+        "enum" => enum_type(),
         other => panic!("no corpus scalar type registered for literal kind {other}"),
     }
 }
@@ -405,11 +404,12 @@ pub struct PackageBuilder {
     dedicated_operands: BTreeSet<String>,
 }
 
+include!("../checked_package_support/base.rs");
+
 impl Default for PackageBuilder {
     fn default() -> Self {
-        let text = include_str!("../fixtures/exact_scalar/positive-nominal-identities.json");
         Self {
-            value: serde_json::from_str(text).expect("vendored fixture is JSON"),
+            value: base_package(),
             bounds: BTreeSet::new(),
             dedicated_operands: BTreeSet::new(),
         }
@@ -529,8 +529,8 @@ impl PackageBuilder {
     /// Registers one application-bodied node with the real `node_id`
     /// IR-216's `validate_application_keys` re-derives: the SHA-256 digest
     /// of `{version, node_tag, semantic_form, semantic_type, declaration,
-    /// recursion, body}` over sorted-key JSON bytes (quire-contract-ir
-    /// dfd8bd78, `crates/quire-contract-model/src/checked_package/v2/
+    /// recursion, body}` over sorted-key JSON bytes (Contract IR
+    /// `crates/quire-contract-model/src/checked_package/v2/
     /// operations.rs`). `digest` is not known until `declaration` -- itself
     /// part of the preimage -- is built, so `declaration` is derived from
     /// `code` (via `declaration_for`'s `label` parameter) rather than from
@@ -663,7 +663,7 @@ impl PackageBuilder {
     /// As [`Self::dedicated_operand`], for the "unit" form it does not
     /// cover: "unit" has no fixed literal kind that method's `form` match
     /// can name, because a unit operand is `V_QUANTITY`'s own shape (a
-    /// `rational`-typed magnitude under [`UNIT_TYPE`], not a scalar literal
+    /// `rational`-typed magnitude under [`unit_type`], not a scalar literal
     /// keyed by one of `T_INTEGER`/`T_RATIONAL`/etc.). This builds a node
     /// dedicated to `bound_keys` with that same shape, including
     /// `V_QUANTITY`'s own inherent `rational_range` bound (Contract IR's
@@ -684,7 +684,7 @@ impl PackageBuilder {
                 &digest,
                 "value",
                 "literal",
-                UNIT_TYPE,
+                &unit_type(),
                 literal("rational", "1"),
                 &[rational_bound],
             );
@@ -888,11 +888,11 @@ impl PackageBuilder {
     }
 
     /// Registers `definition` in `lock.definition_selections` (deduplicated),
-    /// so `validate_operations`'s law-selection check (quire-contract-ir
-    /// dfd8bd78 `checked_package/v2/operations.rs`) finds it selected for
+    /// so `validate_operations`'s law-selection check (Contract IR
+    /// `checked_package/v2/operations.rs`) finds it selected for
     /// any node whose `operation.laws` names it. Mirrors the same push into
     /// `identity_preimage.definition_selections`: `validate_lock`'s
-    /// `same_non_graph_lock` (quire-contract-ir dfd8bd78
+    /// `same_non_graph_lock` (Contract IR
     /// `checked_package/v2/mod.rs`) refuses `StaleDependency` at `"lock"`
     /// unless the preimage and the lock agree field-for-field, and this is
     /// the one field this fixture builder mutates after construction.
@@ -911,7 +911,7 @@ impl PackageBuilder {
     /// Registers `definition` under `role` in `lock.profile_selections`
     /// (deduplicated), the clause/profile-role analogue of
     /// [`Self::select_definition`]: `validate_operations`'s check for a
-    /// `temporal_profile`/`protocol_profile` law (quire-contract-ir dfd8bd78
+    /// `temporal_profile`/`protocol_profile` law (Contract IR
     /// `checked_package/v2/operations.rs`) accepts any published definition
     /// of that role exactly when the lock selected it under this role --
     /// there is no fixed catalogued list for a profile role the way there is
@@ -1153,7 +1153,7 @@ impl Bound {
         result_type(self.bounded_form())
     }
 
-    /// Contract IR (a606059, FR-038-AC-17) requires `literal.type`, so every
+    /// Contract IR (FR-038-AC-17) requires `literal.type`, so every
     /// numeric or text literal embedded in a bound's own body — not just the
     /// value it bounds — is a real graph edge: `CheckedPackageV2::lower`
     /// walks it and, with `require_bounds`, refuses any reachable
@@ -1890,7 +1890,7 @@ fn operand(form: &str) -> String {
         "float32" => key(V_FLOAT32),
         "float64" => key(V_FLOAT64),
         "text" => key(V_TEXT),
-        "enum" => ENUM_MEMBER.to_owned(),
+        "enum" => enum_member(),
         "unit" => key(V_QUANTITY),
         other => panic!("no operand node for {other}"),
     }
@@ -1906,7 +1906,7 @@ fn result_type(form: &str) -> String {
         "float32" => key(T_FLOAT32),
         "float64" => key(T_FLOAT64),
         "text" => key(T_TEXT),
-        "unit" => UNIT_TYPE.to_owned(),
+        "unit" => unit_type(),
         other => panic!("no type node for {other}"),
     }
 }
@@ -1935,7 +1935,7 @@ fn integer_pair_for_operand(code: u32, operand_ref: &str) -> Value {
 
 /// The catalogued `body.operator`/`operation` pair for one corpus
 /// expression, matched on its own [`ExactScalarOperation`] descriptor
-/// against quire-contract-ir dfd8bd78's 135-entry operation catalog.
+/// against the checked-operation catalog.
 /// `operation` is not read by this crate's own generators -- they classify
 /// a body by `term`/`operator`/`arguments` and the request item's own
 /// descriptor -- so which catalogued identity denotes a given expression is
@@ -2286,7 +2286,7 @@ pub fn corpus_package() -> PackageBuilder {
         builder.code(code, "value", "literal", &ty, literal(kind, value));
     }
     // `V_QUANTITY`'s own magnitude literal is `rational`-typed even though
-    // the node's `semantic_type` is `UNIT_TYPE`; Contract IR's lowering
+    // the node's `semantic_type` is `unit_type()`; Contract IR's lowering
     // reaches that `literal.type` edge and, with `require_bounds`, requires
     // a `rational_range` bound somewhere in the same closure. Every corpus
     // expression that references this node needs one reachable, so it is
@@ -2297,7 +2297,7 @@ pub fn corpus_package() -> PackageBuilder {
         &key(V_QUANTITY),
         "value",
         "literal",
-        UNIT_TYPE,
+        &unit_type(),
         literal("rational", "1"),
         &[rational_bound],
     );
@@ -2459,12 +2459,12 @@ pub fn corpus_package() -> PackageBuilder {
         }
         // No node this corpus builds has a `resolve_family` path to
         // `ordered_enum` (the enum type's own `scalar_type` form resolves
-        // only to `enum`; see quire-contract-ir dfd8bd78's `resolve_family`
+        // only to `enum`; see Contract IR's `resolve_family`
         // in `checked_package/v2/operations.rs`), so `enum.lt/le/gt/ge`'s
         // `ordered_enum` operand family can never be satisfied by a
         // `reference` argument here. Substituting literals for exactly the
         // ordering comparisons (never `eq`/`ne`, which accept the
-        // `enum_kind` group `ENUM_MEMBER` already resolves to) bypasses the
+        // `enum_kind` group `enum_member()` already resolves to) bypasses the
         // family check the same way `TextAdmission` does above.
         if let Op::EnumComparison { operator } = expression.operation {
             if !matches!(
@@ -2479,8 +2479,8 @@ pub fn corpus_package() -> PackageBuilder {
                 // keeps this resilient to that identity ever coinciding
                 // across two ordering operators).
                 arguments = vec![
-                    literal("enum", "READY"),
-                    literal("enum", &format!("READY{}", expression.code)),
+                    literal("enum", "OPEN"),
+                    literal("enum", &format!("OPEN{}", expression.code)),
                 ];
             }
         }
@@ -2595,11 +2595,11 @@ pub fn corpus_package() -> PackageBuilder {
             LITERAL_QUANTITY,
             "expression",
             "binary",
-            UNIT_TYPE,
+            &unit_type(),
             application(
                 "binary",
                 op("quire.op.quantity.add"),
-                UNIT_TYPE,
+                &unit_type(),
                 vec![reference(&key(V_QUANTITY)), literal("rational", "1")],
             ),
             &[],
@@ -2630,7 +2630,7 @@ pub fn corpus_package() -> PackageBuilder {
             // `validate_application_keys`/`validate_operations` only ever
             // re-derive/check a node whose own top-level `body` is an
             // application term, never a nested application inside
-            // `body.arguments[*]` (quire-contract-ir dfd8bd78's module doc,
+            // `body.arguments[*]` (Contract IR's module doc,
             // `checked_package/v2/operations.rs`), so this nested blob's own
             // placeholder-shaped `operation` is never itself validated. Its
             // own embedded `reference` is still picked up by
@@ -2846,7 +2846,7 @@ pub fn corpus_package() -> PackageBuilder {
             // IR's. `argument_family` only ever resolves a family for
             // `reference`/`binding` arguments (a `literal` always resolves
             // to `None`, per its own match arms in quire-contract-ir
-            // dfd8bd78's `checked_package/v2/operations.rs`), so a literal
+            // Contract IR's `checked_package/v2/operations.rs`), so a literal
             // operand bypasses that admission-time check entirely while
             // CG's `check_operand` still classifies it by its own
             // `value_kind` and refuses the same `OperandTypeMismatch
@@ -2900,7 +2900,7 @@ pub fn corpus_package() -> PackageBuilder {
     // always empty and TC-024 never exercised it (measured on origin/main:
     // zero `"node_tag": "claim"` occurrences anywhere in this file). These
     // two nodes are genuine `claim` nodes -- `CLAIM`'s `operation`/`body`
-    // shape is adapted from quire-contract-ir dfd8bd78's own admitted
+    // shape is adapted from Contract IR's own admitted
     // conformance fixture
     // (`tests/fixtures/checked-package/checked-package-v2/fixtures/
     // positive-all-families.json`, node index 11), which IR's own `admit()`
@@ -2933,15 +2933,13 @@ pub fn corpus_package() -> PackageBuilder {
     // (`analysis_claim`, not `verification_claim`) and a different
     // `temporal_profile` law -- so `LITERAL_OPERAND`'s `claims` array
     // gets two entries in a determinate (ascending node-id) order.
-    // `CLAIM_ALT`'s law identity/digest is not copied from any upstream
-    // vector: a profile-role law has no closed catalog to select from
-    // (see `select_profile`'s own doc) -- any well-formed artifact ref
-    // the lock selects under that role admits -- so this is a second,
-    // independently chosen well-formed value, distinct from `CLAIM`'s by
-    // construction.
+    // A profile-role law has no closed catalog to select from (see
+    // `select_profile`'s own doc) -- any well-formed artifact ref the lock
+    // selects under that role admits -- so both laws are locally chosen
+    // well-formed values, distinct by construction.
     let temporal_profile = artifact_ref(
         "quire.temporal.event-position.false-extension/v1",
-        "78c0a40768d8c2b165699e07ae5c3eed1676ecdca69fb222fa660845a998f8f1",
+        &"7".repeat(64),
     );
     builder.select_profile("temporal_profile", temporal_profile.clone());
     builder.application_code(
@@ -2963,7 +2961,7 @@ pub fn corpus_package() -> PackageBuilder {
     );
     let temporal_profile_alt = artifact_ref(
         "quire.temporal.event-position.true-extension/v1",
-        "1c01ae41ddcc0a645b07020e6e2a2e0c63a8c5f1afc8e9b7789e8b0b16c16939",
+        &"8".repeat(64),
     );
     builder.select_profile("temporal_profile", temporal_profile_alt.clone());
     builder.application_code(
@@ -3739,7 +3737,7 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
     items
 }
 
-/// The golden request: every corpus expression plus every refused item.
+/// The corpus request: every corpus expression plus every refused item.
 pub fn golden_items() -> Vec<ExactScalarItem> {
     corpus()
         .into_iter()

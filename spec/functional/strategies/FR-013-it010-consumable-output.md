@@ -17,17 +17,13 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-spec-language/FR-034
     type: references
-  - target: ix://agent-ix/quoin/FR-064
-    type: depends_on
-  - target: ix://agent-ix/quoin/FR-068
-    type: depends_on
 ---
 # FR-013: Emit strategy output consumable by SL IT-010 without a local wire schema
 
 ## Description
 
-The generator shall deliver bound strategy, census, and runner output as typed generated Rust plus
-Quoin's packaged `ProofAttestationV1` body, so a downstream crate such as the
+The generator shall deliver bound strategy, census, and runner output as typed generated Rust, so a
+downstream crate such as the
 consumer planned in agent-ix/quire-spec-language#84 can place every case's values into its own
 runtime inputs by declaration name and observation. quire-spec-language has no IT-010 specification
 yet, so this requirement references the issue, not a specification ID. The generator shall not
@@ -50,8 +46,6 @@ require any serialized case format or schema owned by this repository for that c
     consumer maps it back to the model field through SL's read correspondence (quire-spec-language
     FR-034);
   - the expectation tag, for in-domain cases.
-- One `ProofAttestationV1` body (quoin FR-064) per artifact under proof obligation
-  `PROOF-codegen-generated-rust-strategy`.
 
 ## Behavior
 
@@ -66,16 +60,7 @@ require any serialized case format or schema owned by this repository for that c
 - Generated output shall not depend on quire-spec-language, which depends on this crate.
 - The generator shall not emit a JSON, YAML, or other serialized case, census, or summary format.
 - This slice shall add no file under `schemas/`.
-- The attestation shall be Quoin's packaged `ProofAttestationV1` emitted form (quoin FR-064, sealed
-  and published through the quoin FR-068 `change-assurance` commands) defined in interface-001
-  `identity_envelope`, with `--backend none`.
-- The `--backend`, `--requirement`, `--clause`, and `--input-digest` argv entries are this
-  repository's rendering of an in-process call; Quoin specifies none of them.
-- The attestation argv shall render `--requirement <requirement>@<revision> --clause <clause id>`,
-  as bound oracle attestations do under [FR-001](../FR-001-deterministic-oracles.md).
-- The attestation argv shall bind the source package through `--input-digest` carrying the
-  `BoundPackage` bound identity digest defined by quire-contract-ir FR-023.
-- The generated Rust header shall state the `BoundPackage` digest and the full `ClauseRef`.
+- The generated Rust header shall state the full `ClauseRef`.
 - For a read of an input declaration, whose observation is always `current` under
   quire-contract-ir FR-014, the generated observation name shall be `"current"`.
 
@@ -85,8 +70,7 @@ require any serialized case format or schema owned by this repository for that c
 |----|----------|--------------|
 | FR-013-AC-1 | A consumer fixture crate whose manifest depends only on the generated artifact, `proptest`, and `quire-contract-runtime` compiles under denied warnings, draws `VersionUnchanged` cases, and reads the `versionNumber` field's declaration, by its SL field-alias `SymbolName`, at `"pre"` and `"post"` through the generated name and observation constants. | Test (TC-022) |
 | FR-013-AC-2 | The generated bundle contains no serialized case, census, or summary file, and the change adds no file under `schemas/`. | Test (TC-022) |
-| FR-013-AC-3 | The strategy attestation body validates against the bytes `quoin change-assurance schema` publishes, with format assertion on, and seals through the real CLI. | Test (TC-022) |
-| FR-013-AC-4 | The generated Rust header carries the `BoundPackage` digest and full `ClauseRef`; the attestation argv carries `--requirement <requirement>@<revision>`, `--clause <clause id>`, and `--input-digest <BoundPackage digest>`; changing the package digest or the `ClauseRef` changes the artifact identity. | Test (TC-022) |
+| FR-013-AC-4 | The generated Rust header carries the full `ClauseRef`, and generating two different `ClauseRef`s from one package produces different headers and artifact paths. | Test (TC-022) |
 | FR-013-AC-5 | interface-001 `bound_strategy_slice.consumer` records the case, census, and runner surface a downstream consumer compiles against. | Inspection |
 
 ## Dependencies

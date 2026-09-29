@@ -1,59 +1,42 @@
-//! FR-016 and FR-023: the skeleton spine over one Boolean clause. A Kani obligation is generated
+//! FR-016: the skeleton spine over one Boolean clause. A Kani obligation is generated
 //! from a hand-built bound package, proved, falsified by an injected violation, and the
 //! counterexample is replayed natively through QSL's layer-6 `replay` facade, which settles the
 //! same violation.
 //!
 //! What the input passes through, in ADR-011 terms: the clause enters at the Contract IR side as
 //! a hand-written `BoundPackage` projection (no contract is compiled, so E1 to E4 and the
-//! contract-to-IR step do not run), CG generates the Kani obligation from it (E7), the pinned
+//! contract-to-IR step do not run), CG generates the Kani obligation from it (E7), the installed
 //! prover proves and falsifies it (E8), and the decoded counterexample is replayed by
 //! `qsl_replay::replay` (E9), which recompiles QSL source and evaluates the function. The QSL
 //! source here is a hand-mirrored native twin of the subject and clause, tied to the Rust side
 //! only by the clause and its argument names. The replay request's limits are unlimited
-//! stand-ins, because no proving run carries limits.
+//! stand-ins, because no proving run carries limits. The package id and parameter node ids come
+//! from `qsl_replay::call_site`, and every request type from `qsl-replay`'s own re-exports.
 //!
-//! Test-only exception, tracked by IR-309 and expiring: this file calls `qsl_replay::spine::compile` and depends on
-//! `qsl-foundation` and `quire-exact`, which QSL's FB-05 and arch-lint T12-A keep out of CG.
-//! It does so because `qsl-replay` re-exports neither the types a request needs
-//! (`quire_exact::Identifier`, `quire_exact::ScalarLimits`, `WireNodeId`, `SourceIdentity`) nor
-//! the package id and parameter node ids of a compiled unit. The exception ends, and the
-//! `spine` calls and both dev-dependencies are removed, when `qsl-replay` exposes those through
-//! its facade.
-//!
-//! The default lane covers the replay adapter against QSL and the gate's own logic. The `kani`
-//! lane (`make kani`, `#[ignore]` here, not part of `make ci`) runs the real prover.
+//! The default lane covers the replay adapter against QSL. The `kani` lane (`make kani`,
+//! `#[ignore]` here, not part of `make ci`) runs the real prover.
 
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
-use qsl_foundation::{
-    digest::{ByteDigest, DigestDomain, DigestRecord, WireNodeId},
-    SourceIdentity,
-};
 use qsl_replay::{
-    spine::{compile, DependencyInput, SpineLimits},
-    CanonicalAssignment, ProofCategory, QualifiedName, ReplayRequestWire, ReplaySource,
-    StageLimits, StateEnvironment, Verdict, WitnessSettlement, MAX_ENCODED_BYTES,
+    call_site, ByteDigest, CanonicalAssignment, DigestDomain, DigestRecord, Identifier,
+    ProofCategory, QualifiedName, ReplayRequestWire, ReplaySource, ScalarLimits, SourceIdentity,
+    StageLimits, StateEnvironment, Verdict, WireNodeId, WitnessSettlement, MAX_ENCODED_BYTES,
 };
 use quire_contract_codegen::{
-    claimed_module_gate, decode_falsification, execute_kani_obligation_with_transcript,
-    replay_falsification, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
-    KaniRunOutcome, KaniToolPins, ModuleGateFailure, ModuleStatus, ReplayParameter,
-    SpineReplayError,
+    decode_falsification, execute_kani_obligation, replay_falsification, KaniExecutionRequest,
+    KaniInstallation, KaniObligationHarness, KaniRunOutcome, ReplayParameter, SpineReplayError,
 };
 use quire_contract_ir::kani::WitnessValue;
-use quire_exact::{Identifier, ScalarLimits};
 use sha2::{Digest, Sha256};
 
 use super::kani_obligations::{
-    bound_package, pins, supported_contract_harnesses, write_crate, REAL_KANI_TIMEOUT,
+    bound_package, supported_contract_harnesses, write_crate, REAL_KANI_TIMEOUT,
 };
 
 const SUBJECT_PATH: &str = "crate::subject::withdraw";
-/// The claimed modules the gate publishes: the generated obligation module, then the function
-/// under proof's module.
-const CLAIMED_MODULES: &str = include_str!("../fixtures/skeleton_spine/claimed-modules.txt");
 
-const HEALTHY_SUBJECT: &str = "pub mod subject {\n    pub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n        balance_pre - amount_current\n    }\n}\n\n/// Compiled but never called by the proof.\npub mod dead {\n    pub fn unused() -> i64 {\n        0\n    }\n}\n";
+const HEALTHY_SUBJECT: &str = "pub mod subject {\n    pub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n        balance_pre - amount_current\n    }\n}\n";
 const PROFILE: &str = "profile v = \"quire.value.complete/v1\" version \"1-draft.2\" digest \
     \"sha256:c8c7ae9fbe783286369ecc83f006190f83be4c3c8fc585766617c90f27a25b16\";\n";
 const AUTHORITY: &str = "agent-ix";
@@ -81,33 +64,26 @@ struct Compiled {
 
 /// Compiles the hand-mirrored native twin `source` and reads `function`'s identity from it.
 fn compile_native_twin(source: &str, function: &'static str) -> Compiled {
-    let compiled = compile(
+    let site = call_site(
         SourceIdentity::new(AUTHORITY, IDENTITY, NAMESPACE, REVISION),
         IDENTITY,
         source.as_bytes(),
-        &BTreeMap::new(),
-        &DependencyInput::default(),
-        SpineLimits::default(),
+        &selection(function),
     )
-    .expect("the native twin compiles");
-    let graph = compiled.package.graph();
-    let callable = graph.callable(function).expect("the function is declared");
-    let nodes = graph
-        .semantic_graph()
-        .node(callable.identity)
-        .and_then(|node| node.function_parameters())
-        .expect("a function node");
-    let parameters = callable
-        .parameters
-        .iter()
-        .zip(nodes)
-        .map(|((name, _), node)| (name.clone(), node.to_string()))
-        .collect();
+    .expect("the native twin compiles and declares the function");
     Compiled {
         function,
-        package_id: compiled.emitted.package_id().hex(),
-        parameters,
+        package_id: site.package_id.hex(),
+        parameters: site
+            .parameters
+            .iter()
+            .map(|(name, node)| (name.as_str().to_owned(), node.to_string()))
+            .collect(),
     }
+}
+
+fn selection(function: &str) -> QualifiedName {
+    QualifiedName::new(vec![Identifier::new(function).unwrap()]).unwrap()
 }
 
 const UNLIMITED: ScalarLimits = ScalarLimits {
@@ -135,7 +111,6 @@ fn source_digest(bytes: &[u8]) -> DigestRecord {
 fn request(
     source: &str,
     proved: &Compiled,
-    backend: &KaniToolPins,
     counterexample: &str,
     replay_source: ReplaySource,
 ) -> ReplayRequestWire {
@@ -144,7 +119,8 @@ fn request(
         text_input_bytes: u64::try_from(MAX_ENCODED_BYTES).unwrap(),
         ..UNLIMITED
     };
-    let backend_digest = Sha256::digest(serde_json::to_vec(backend).unwrap());
+    // The replay wire names the backend that found the counterexample; a fixed name stands in.
+    let backend_digest = Sha256::digest(b"kani");
     ReplayRequestWire {
         contract_version: "quire.native-runtime/v1".to_owned(),
         capability_vocabulary: Some("quire.capability-kind/v1".to_owned()),
@@ -163,12 +139,11 @@ fn request(
             digest.hex(),
         )],
         dependencies: Vec::new(),
-        selected_function: QualifiedName::new(vec![Identifier::new(proved.function).unwrap()])
-            .unwrap(),
+        selected_function: selection(proved.function),
         source: replay_source,
         originating_counterexample_identity: Sha256::digest(counterexample.as_bytes()).into(),
         backend: (
-            format!("kani-{}", backend.kani_version),
+            "kani".to_owned(),
             Some(DigestDomain::ToolManifestJcsV1.as_str().to_owned()),
             DigestRecord::mint(DigestDomain::ToolManifestJcsV1, backend_digest.into()).hex(),
         ),
@@ -207,7 +182,7 @@ fn replay_against(
         "balance-never-grows",
         values,
         &replay_parameters(&proved),
-        |source| request(native, &proved, &pins(), "counterexample", source),
+        |source| request(native, &proved, "counterexample", source),
     )
 }
 
@@ -311,7 +286,7 @@ fn tc_026_a_boolean_value_replays_as_zero_or_one() {
             "flag",
             &[("b".to_owned(), WitnessValue::Boolean(value))],
             &replay_parameters(&compiled),
-            |witness| request(&source, &compiled, &pins(), "flag", witness),
+            |witness| request(&source, &compiled, "flag", witness),
         )
         .expect("the replay settles")
     };
@@ -332,7 +307,7 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
     let native = native_source(VIOLATING_TWIN);
     let compiled = compile_native_twin(&native, FUNCTION);
     let parameters = replay_parameters(&compiled);
-    let build = |witness| request(&native, &compiled, &pins(), "x", witness);
+    let build = |witness| request(&native, &compiled, "x", witness);
 
     let delimiter = replay_falsification("a|b", "c", &values(1, 5), &parameters, build);
     assert!(matches!(delimiter, Err(SpineReplayError::FieldDelimiter)));
@@ -352,7 +327,7 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
 
     let stale = compile_native_twin(&native_source(HEALTHY_TWIN), FUNCTION);
     let refused = replay_falsification("h", "c", &values(1, 5), &parameters, |witness| {
-        let mut wire = request(&native, &compiled, &pins(), "x", witness);
+        let mut wire = request(&native, &compiled, "x", witness);
         wire.package_id.1 = stale.package_id.clone();
         wire
     });
@@ -368,24 +343,16 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
                 value,
             })
             .collect();
-        request(&native, &compiled, &pins(), "x", ReplaySource::Input(input))
+        request(&native, &compiled, "x", ReplaySource::Input(input))
     });
     assert!(matches!(wrong_arm, Err(SpineReplayError::WrongArm)));
 }
 
-fn claimed() -> Vec<&'static str> {
-    CLAIMED_MODULES
-        .lines()
-        .filter(|line| !line.is_empty())
-        .collect()
-}
-
-/// Runs `subject` under the pinned prover with `harness`, returning the classified outcome and
-/// the prover's transcript.
-fn prove(harness: &KaniObligationHarness, subject: &str) -> (KaniRunOutcome, String) {
+/// Runs `subject` under the installed prover with `harness`, returning the classified outcome.
+fn prove(harness: &KaniObligationHarness, subject: &str) -> KaniRunOutcome {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let directory = write_crate(harness, subject);
-    let (evidence, transcript) = execute_kani_obligation_with_transcript(&KaniExecutionRequest {
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
         harness: harness.into(),
         crate_directory: &directory,
@@ -394,75 +361,44 @@ fn prove(harness: &KaniObligationHarness, subject: &str) -> (KaniRunOutcome, Str
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
     let _ = fs::remove_dir_all(directory);
-    (evidence.outcome, transcript.expect("the run concluded"))
+    evidence.outcome
 }
 
-/// The spine over the hand-built bound package. The healthy subject verifies and the gate is green with a discharged check in
-/// every claimed module; an unclaimed-by-the-proof module is `unreached`; a violation injected
-/// into the subject module, and another into the generated obligation module, each turn the gate
-/// red; and the subject's counterexample replays through QSL to the same violation.
+/// The spine over the hand-built bound package. The healthy subject verifies; a violation
+/// injected into the subject is falsified, and its counterexample replays through QSL to the
+/// same violation.
 ///
-/// Trace: FR-016-AC-9, FR-016-AC-10, FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, TC-026, TC-034
+/// Trace: FR-016-AC-9, FR-016-AC-10, TC-026
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
-fn tc_034_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_replay() {
+fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_replay() {
     let package = bound_package(1000);
-    let harness = supported_contract_harnesses(&package, &pins(), SUBJECT_PATH).remove(1);
-    let claimed = claimed();
-    assert_eq!(
-        claimed,
-        [harness.identity.module_symbol.as_str(), "subject"],
-        "the checked-in claimed-module list names the generated module and the subject"
-    );
+    let harness = supported_contract_harnesses(&package, SUBJECT_PATH).remove(1);
 
-    // Proved: every claimed module has a discharged check.
-    let (outcome, transcript) = prove(&harness, HEALTHY_SUBJECT);
-    assert_eq!(outcome, KaniRunOutcome::Verified);
-    let reports = claimed_module_gate(&claimed, &outcome, &transcript).expect("the gate is green");
-    assert!(reports
-        .iter()
-        .all(|report| matches!(report.status, ModuleStatus::Discharged { .. })));
-
-    // A module the prover compiles but never reaches is unreached, and the gate fails.
-    let mut with_dead = claimed.clone();
-    with_dead.push("dead");
-    assert_eq!(
-        claimed_module_gate(&with_dead, &outcome, &transcript),
-        Err(ModuleGateFailure::Unreached(vec!["dead".to_owned()]))
-    );
+    assert_eq!(prove(&harness, HEALTHY_SUBJECT), KaniRunOutcome::Verified);
 
     // Mutation control inside the generated obligation module: the ensures bound is tightened
-    // past what the subject satisfies at zero.
+    // past what the subject satisfies at zero, so the same healthy subject is falsified.
     let mut mutated = harness.clone();
     let bound = "*post_state >= 0_i64";
     assert_eq!(mutated.rust.contents.matches(bound).count(), 1);
     mutated.rust.contents = mutated.rust.contents.replace(bound, "*post_state >= 1_i64");
-    let (outcome, transcript) = prove(&mutated, HEALTHY_SUBJECT);
+    let outcome = prove(&mutated, HEALTHY_SUBJECT);
     assert!(
         matches!(outcome, KaniRunOutcome::Falsified { .. }),
-        "{outcome:?}"
+        "the tightened ensures must be falsified: {outcome:?}"
     );
-    assert!(matches!(
-        claimed_module_gate(&claimed, &outcome, &transcript),
-        Err(ModuleGateFailure::NotVerified(_))
-    ));
 
-    // Mutation control inside the subject module, which is the injected violation: the gate is
-    // red and the prover prints a counterexample.
     // The injected violation: the subject credits instead of debiting.
     let violating = HEALTHY_SUBJECT.replace(
         "balance_pre - amount_current",
         "balance_pre + amount_current",
     );
     assert_ne!(violating, HEALTHY_SUBJECT);
-    let (outcome, transcript) = prove(&harness, &violating);
+    let outcome = prove(&harness, &violating);
     let KaniRunOutcome::Falsified { counterexample } = &outcome else {
         panic!("the injected violation must be falsified: {outcome:?}");
     };
-    assert!(matches!(
-        claimed_module_gate(&claimed, &outcome, &transcript),
-        Err(ModuleGateFailure::NotVerified(_))
-    ));
 
     // The counterexample decodes to typed values, and QSL replays them to the same violation.
     let decoded = decode_falsification(
@@ -490,7 +426,7 @@ fn tc_034_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         harness.identity.clause.clause().as_str(),
         &decoded,
         &replay_parameters(&proved),
-        |source| request(&native, &proved, &pins(), counterexample, source),
+        |source| request(&native, &proved, counterexample, source),
     )
     .expect("QSL settles the replay");
     assert_eq!(
@@ -507,7 +443,7 @@ fn tc_034_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         "balance-never-grows",
         &decoded,
         &replay_parameters(&proved),
-        |source| request(&healthy, &proved, &pins(), counterexample, source),
+        |source| request(&healthy, &proved, counterexample, source),
     )
     .expect("QSL settles the replay");
     assert_eq!(result.settlement(), WitnessSettlement::Inconclusive);

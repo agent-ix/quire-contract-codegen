@@ -33,16 +33,16 @@
 
 use serde_json::{json, Value as JsonValue};
 
-/// The vendored `Example.Status` enum declaration (`quire_type_id`
-/// `package::ENUM_TYPE_DIGEST`, already verified nominal identity):
-/// `ordered`, members `READY`/`DONE` in declaration order.
+/// The base package's `Example.Phase` enum declaration (`quire_type_id`
+/// `generated::ENUM_TYPE_DIGEST`): `ordered`, members `OPEN`/`SHUT` in
+/// declaration order.
 fn enum_status_declaration_json() -> JsonValue {
     json!({
         "version": "quire.enum-declaration-node/v1",
         "owner": {"kind": "definition", "authority": "agent-ix", "identity": "example-model"},
-        "qualified_declaration": ["Example", "Status"],
+        "qualified_declaration": ["Example", "Phase"],
         "ordered": true,
-        "members": ["READY", "DONE"],
+        "members": ["OPEN", "SHUT"],
     })
 }
 
@@ -51,13 +51,13 @@ fn enum_status_member_json(case: &str) -> JsonValue {
         "version": "quire.enum-member-node/v1",
         "declaration_node_id": {
             "domain": quire_contract_runtime::exact::NODE_KEY_DOMAIN,
-            "digest": super::package::ENUM_TYPE_DIGEST,
+            "digest": crate::generated::ENUM_TYPE_DIGEST,
         },
         "case": case,
     })
 }
 
-/// Member key for `case` of `Example.Status`. Self-consistent within this
+/// Member key for `case` of `Example.Phase`. Self-consistent within this
 /// process only (see the module doc: nothing compares this to QSL's own
 /// computation anymore), hashed directly with `sha2`.
 fn enum_status_member_key(case: &str) -> String {
@@ -213,7 +213,7 @@ macro_rules! shared_helpers {
         // ---- environments, one per corpus shape --------------------------
         //
         // Declared directly against `CompositeDeclaration`, `FieldDeclaration`
-        // and `NodeKey` rather than read back from the generated golden crate
+        // and `NodeKey` rather than read back from the generated crate
         // (which only ever produces `quire_contract_runtime::exact::TypeEnvironment`),
         // so this expands under `rt_side` into a Contract Runtime environment
         // built the same way the direct-call leg builds its own.
@@ -393,12 +393,10 @@ macro_rules! shared_helpers {
                 .unwrap()
         }
 
-        /// The vendored `Example.Status` enum's `ValueType`, matching
-        /// `package::ENUM_TYPE_DIGEST`.
+        /// The base package's `Example.Phase` enum's `ValueType`, matching
+        /// `generated::ENUM_TYPE_DIGEST`.
         pub fn enum_status_type() -> ValueType {
-            ValueType::Enum(node_key_from_digest(
-                super::super::package::ENUM_TYPE_DIGEST,
-            ))
+            ValueType::Enum(node_key_from_digest(crate::generated::ENUM_TYPE_DIGEST))
         }
 
         fn node_key_from_digest(digest: &str) -> NodeKey {
@@ -470,14 +468,14 @@ pub mod rt_side {
     pub use quire_contract_runtime::exact::*;
     shared_helpers!();
 
-    /// The vendored `Example.Status` declaration, under its verified node id
-    /// (`super::super::package::ENUM_TYPE_DIGEST`) and self-consistently
-    /// hashed member keys (see the module doc).
+    /// The base package's `Example.Phase` declaration, under its node key
+    /// (`generated::ENUM_TYPE_DIGEST`) and self-consistently hashed member
+    /// keys (see the module doc).
     pub struct EnumStatus(EnumDeclaration);
 
     pub fn enum_status() -> EnumStatus {
-        let key = NodeKey::from_hex(super::super::package::ENUM_TYPE_DIGEST).unwrap();
-        EnumStatus(EnumDeclaration::new(key, true, &["READY", "DONE"]).unwrap())
+        let key = NodeKey::from_hex(crate::generated::ENUM_TYPE_DIGEST).unwrap();
+        EnumStatus(EnumDeclaration::new(key, true, &["OPEN", "SHUT"]).unwrap())
     }
 
     impl EnumStatus {

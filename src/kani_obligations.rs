@@ -60,29 +60,19 @@ use crate::{
         aggregate_members, bound_members, literal_count, literal_integer, operand_ranges,
         OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
     },
+    generate_boolean_oracle,
     kani::{
-        adapter_options, i64_literal, readable_component, sha256, KaniBindingRole,
-        KaniIntegerBounds, KaniPrimitiveType, KaniSolver, KANI_BACKEND_VERSION,
+        adapter_options, i64_literal, readable_component, KaniBindingRole, KaniIntegerBounds,
+        KaniPrimitiveType, KaniSolver,
     },
-    kani_execution::{KaniPinField, KaniToolPins},
     oracle::{
-        attestation_context_is_valid, generate_oracle_with_derivation, length_delimited_identity,
-        reference_identifier, typed_dependency_parameters, DependencyParameter, RustValueType,
+        generate_named_boolean_oracle, reference_identifier, typed_dependency_parameters,
+        unique_names, DependencyParameter, RustValueType,
     },
-    Artifact, AttestationContext, ClaimDerivationRefusal, ClaimDisposition, ClaimMap,
-    ExactScalarClaim, ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode,
-    OperationProvenance, OracleRequest, UpstreamBlocker, IR_CANDIDATE_REVISION,
-    MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    Artifact, ClaimDerivationRefusal, ClaimDisposition, ClaimMap, ExactScalarClaim,
+    ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode, OperationProvenance,
+    OracleRequest, UpstreamBlocker, MAX_GENERATED_SOURCE_BYTES,
 };
-
-/// Schema identity of a generated obligation identity record.
-pub const KANI_OBLIGATION_SCHEMA: &str = "quire.codegen.kani-obligation/v1";
-
-/// Schema identity of a generated V2 exact-scalar obligation identity record.
-pub const KANI_SCALAR_OBLIGATION_SCHEMA: &str = "quire.codegen.kani-scalar-obligation/v1";
-
-/// Adapter profile for separate-obligation lowering against Kani 0.67.0.
-pub const KANI_OBLIGATION_PROFILE: &str = "kani-0.67.0-separate-obligations-v1";
 
 /// Largest number of items one request may negotiate.
 pub const MAX_OBLIGATION_ITEMS: usize = 256;
@@ -132,12 +122,8 @@ pub struct KaniObligationRequest<'a> {
     pub items: &'a [ObligationItem<'a>],
     /// Rust path of the customer subject called by postcondition and invariant harnesses.
     pub subject_path: &'a str,
-    /// The backend identity harnesses are generated for and must later run under.
-    pub pins: &'a KaniToolPins,
     /// Loop unwind bound, `1..=MAX_OBLIGATION_UNWIND`.
     pub unwind: u32,
-    /// Binding for the embedded clause oracles' generation identity.
-    pub attestation: AttestationContext<'a>,
 }
 
 /// A request that cannot be negotiated at all; no item is accounted.
@@ -157,17 +143,6 @@ pub enum KaniObligationError {
         /// The requested bound.
         unwind: u32,
     },
-    /// The requested backend is not the committed one ([`KaniToolPins::pinned`]).
-    UnpinnedBackend {
-        /// The first differing field.
-        field: KaniPinField,
-        /// The committed value.
-        expected: String,
-        /// The requested value.
-        supplied: String,
-    },
-    /// The attestation binding is malformed.
-    InvalidAttestationContext,
 }
 
 /// The IR item a record is about.
@@ -478,40 +453,22 @@ pub struct EmbeddedOracle {
     pub clause: ClauseRef,
     /// Its contract role.
     pub kind: ObligationKind,
-    /// Canonical IR expression digest.
-    pub expression_digest: String,
     /// Oracle function symbol.
     pub symbol: String,
-    /// Oracle source digest.
-    pub sha256: String,
 }
 
-/// Everything a harness's meaning depends on; its digest is embedded in the harness.
+/// What a generated harness proves and how it is run.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KaniObligationIdentity {
-    /// [`KANI_OBLIGATION_SCHEMA`].
-    pub schema: &'static str,
-    /// [`KANI_OBLIGATION_PROFILE`].
-    pub adapter_profile: &'static str,
     /// Contract role.
     pub kind: ObligationKind,
     /// The obligation's clause.
     pub clause: ClauseRef,
     /// Its QSL source span.
     pub source_span: SourceSpan,
-    /// Canonical bound-package digest.
-    pub bound_package_digest: String,
-    /// Canonical declaration-environment digest.
-    pub declaration_digest: String,
-    /// Canonical expression digest.
-    pub expression_digest: String,
-    /// Contract IR revision.
-    pub ir_revision: &'static str,
     /// The obligation's oracle followed by every assumed precondition's oracle.
     pub oracles: Vec<EmbeddedOracle>,
-    /// SHA-256 over the length-delimited embedded oracle sources.
-    pub oracle_digest: String,
     /// Harness module symbol.
     pub module_symbol: String,
     /// Proof function symbol.
@@ -524,16 +481,12 @@ pub struct KaniObligationIdentity {
     pub arguments: Vec<ObligationBinding>,
     /// Subject results, ascending by identifier.
     pub results: Vec<ObligationBinding>,
-    /// Backend pins.
-    pub pins: KaniToolPins,
     /// Solver.
     pub solver: String,
     /// Loop unwind bound.
     pub unwind: u32,
     /// Every flag passed after `cargo kani`.
     pub options: Vec<String>,
-    /// Contract Runtime revision the oracles call.
-    pub runtime_revision: &'static str,
 }
 
 /// One generated harness.
@@ -541,11 +494,10 @@ pub struct KaniObligationIdentity {
 pub struct KaniObligationHarness {
     /// Identity.
     pub identity: KaniObligationIdentity,
-    /// SHA-256 of the identity's JSON, embedded in the Rust source.
-    pub identity_sha256: String,
     /// Self-contained Rust source.
     pub rust: Artifact,
-    /// JSON record of identity, identity digest and Rust digest.
+    /// JSON record of the identity and the Rust source path: the persisted obligation schema a
+    /// witness is decoded against.
     pub record: Artifact,
 }
 
@@ -562,43 +514,30 @@ pub struct ScalarObligationArgument {
     pub maximum: i64,
 }
 
-/// Everything a V2 scalar obligation harness's meaning depends on; its digest is embedded in the
-/// harness. Parallel to [`KaniObligationIdentity`] but for an IR-confirmed exact-scalar claim,
+/// What a V2 scalar obligation harness proves and how it is run. Parallel to [`KaniObligationIdentity`] but for an IR-confirmed exact-scalar claim,
 /// which has no QSL clause, declaration or subject signature -- a node id and its confirmed
 /// operation identity stand in their place.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScalarObligationIdentity {
-    /// [`KANI_SCALAR_OBLIGATION_SCHEMA`].
-    pub schema: &'static str,
-    /// [`KANI_OBLIGATION_PROFILE`].
-    pub adapter_profile: &'static str,
     /// The claimed node.
     pub node_id: CheckedNodeId,
     /// The node's own catalogued operation identity, IR-confirmed at package admission.
     pub operation_identity: String,
-    /// Contract IR revision.
-    pub ir_revision: &'static str,
     /// The embedded oracle's function symbol.
     pub oracle_symbol: String,
-    /// SHA-256 of the embedded oracle's own source.
-    pub oracle_sha256: String,
     /// Harness module symbol.
     pub module_symbol: String,
     /// Proof function symbol.
     pub harness_symbol: String,
     /// Symbolic arguments, in call order.
     pub arguments: Vec<ScalarObligationArgument>,
-    /// Backend pins.
-    pub pins: KaniToolPins,
     /// Solver.
     pub solver: String,
     /// Loop unwind bound.
     pub unwind: u32,
     /// Every flag passed after `cargo kani`.
     pub options: Vec<String>,
-    /// Contract Runtime revision the oracle calls.
-    pub runtime_revision: &'static str,
 }
 
 /// One generated V2 exact-scalar obligation harness.
@@ -606,11 +545,10 @@ pub struct ScalarObligationIdentity {
 pub struct KaniScalarObligationHarness {
     /// Identity.
     pub identity: ScalarObligationIdentity,
-    /// SHA-256 of the identity's JSON, embedded in the Rust source.
-    pub identity_sha256: String,
     /// Self-contained Rust source.
     pub rust: Artifact,
-    /// JSON record of identity, identity digest and Rust digest.
+    /// JSON record of the identity and the Rust source path: the persisted obligation schema a
+    /// witness is decoded against.
     pub record: Artifact,
 }
 
@@ -651,12 +589,9 @@ pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
-    let mut states = request
-        .items
-        .iter()
-        .map(|item| classify(request, item))
-        .collect::<Vec<_>>();
+    let mut states = request.items.iter().map(classify).collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
+    assign_names(&mut states);
     resolve_assumptions(&mut states);
     let rejected = states
         .iter()
@@ -726,18 +661,6 @@ fn validate_request(request: &KaniObligationRequest<'_>) -> Result<(), KaniOblig
         return Err(KaniObligationError::InvalidUnwind {
             unwind: request.unwind,
         });
-    }
-    if let Some((field, expected, supplied)) =
-        request.pins.first_difference(&KaniToolPins::pinned())
-    {
-        return Err(KaniObligationError::UnpinnedBackend {
-            field,
-            expected,
-            supplied,
-        });
-    }
-    if !attestation_context_is_valid(&request.attestation) {
-        return Err(KaniObligationError::InvalidAttestationContext);
     }
     Ok(())
 }
@@ -841,10 +764,8 @@ struct ClauseOracle {
     clause: ClauseRef,
     kind: ObligationKind,
     anchor: ExecutionPoint,
-    expression_digest: String,
     symbol: String,
     source: String,
-    sha256: String,
     parameters: Vec<Parameter>,
 }
 
@@ -860,11 +781,11 @@ struct Symbols {
     contract: String,
 }
 
-fn classify<'a>(request: &KaniObligationRequest<'_>, item: &ObligationItem<'a>) -> ItemState<'a> {
+/// Classifies one request item. Its generated names are its readable stems until
+/// [`assign_names`] settles them across the request.
+fn classify<'a>(item: &ObligationItem<'a>) -> ItemState<'a> {
     match *item {
-        ObligationItem::BoundClause { package, clause } => {
-            classify_clause(request, package, clause)
-        }
+        ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
             package,
             claim_map,
@@ -873,14 +794,123 @@ fn classify<'a>(request: &KaniObligationRequest<'_>, item: &ObligationItem<'a>) 
     }
 }
 
-fn classify_clause<'a>(
-    request: &KaniObligationRequest<'_>,
-    package: &'a BoundPackage,
-    clause_ref: &ClauseRef,
-) -> ItemState<'a> {
+/// The full identity a generated name is ordered by when several items share its readable stem.
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+enum NameKey {
+    Clause(String, u64, String),
+    Node(CheckedNodeId),
+}
+
+fn clause_key(clause: &ClauseRef) -> NameKey {
+    let requirement = clause.requirement();
+    NameKey::Clause(
+        requirement.requirement().as_str().to_owned(),
+        requirement.revision().get(),
+        clause.clause().as_str().to_owned(),
+    )
+}
+
+/// Settles every lowered item's generated names across the request with [`unique_names`]: clause
+/// oracle functions (any may be embedded beside another as an assumed precondition), then the
+/// module and harness names of every clause and scalar obligation. A name depends on its item and
+/// on the siblings sharing its readable stem, never on the item's request position.
+fn assign_names(states: &mut [ItemState<'_>]) {
+    let oracle_slots = states
+        .iter()
+        .enumerate()
+        .filter_map(|(index, state)| match &state.outcome {
+            Outcome::Lowered(lowered) => Some((
+                index,
+                (
+                    lowered.oracle.symbol.clone(),
+                    clause_key(&lowered.oracle.clause),
+                ),
+            )),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let oracle_names = unique_names(oracle_slots.iter().map(|(_, slot)| slot.clone()).collect());
+    for ((index, (stem, _)), name) in oracle_slots.into_iter().zip(oracle_names) {
+        if name == stem {
+            continue;
+        }
+        let renamed = match &states[index].outcome {
+            Outcome::Lowered(lowered) => named_oracle_source(lowered.clause, &name),
+            _ => continue,
+        };
+        match renamed {
+            Ok(source) => {
+                if let Outcome::Lowered(lowered) = &mut states[index].outcome {
+                    lowered.oracle.symbol = name;
+                    lowered.oracle.source = source;
+                }
+            }
+            Err(reason) => states[index].outcome = Outcome::Unsupported(reason),
+        }
+    }
+
+    let module_slots = states
+        .iter()
+        .enumerate()
+        .filter_map(|(index, state)| match &state.outcome {
+            Outcome::Lowered(lowered) => Some((
+                index,
+                (
+                    clause_stem(lowered.clause.identity()),
+                    clause_key(lowered.clause.identity()),
+                ),
+            )),
+            Outcome::LoweredScalar(lowered) => Some((
+                index,
+                (
+                    scalar_stem(&lowered.operation_identity),
+                    NameKey::Node(lowered.node_id.clone()),
+                ),
+            )),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let module_names = unique_names(module_slots.iter().map(|(_, slot)| slot.clone()).collect());
+    for ((index, _), name) in module_slots.into_iter().zip(module_names) {
+        match &mut states[index].outcome {
+            Outcome::Lowered(lowered) => lowered.symbols = symbols(&name),
+            Outcome::LoweredScalar(lowered) => {
+                lowered.module_symbol = format!("{name}_module");
+                lowered.harness_symbol = format!("{name}_proof");
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The source of `clause`'s oracle with its function named `symbol`.
+fn named_oracle_source(
+    clause: &BoundClause,
+    symbol: &str,
+) -> Result<String, UnsupportedObligation> {
+    let identity = clause.identity();
+    generate_named_boolean_oracle(
+        &OracleRequest {
+            requirement: identity.requirement(),
+            clause: identity.clause(),
+            expression: clause.expression(),
+        },
+        symbol,
+    )
+    .map(|bundle| bundle.rust.contents)
+    .map_err(|diagnostics| UnsupportedObligation::ClauseLowering {
+        generation_code: diagnostics
+            .first()
+            .map_or(GenerationErrorCode::UnsupportedExpression, |diagnostic| {
+                diagnostic.code
+            }),
+    })
+}
+
+fn classify_clause<'a>(package: &'a BoundPackage, clause_ref: &ClauseRef) -> ItemState<'a> {
     let package_digest = package.digest().to_string();
     let identity = Some(ItemIdentity::Clause {
-        package: package_digest.clone(),
+        package: package_digest,
         clause: clause_ref.clone(),
     });
     let Some(clause) = package
@@ -907,7 +937,7 @@ fn classify_clause<'a>(
         None => Outcome::Unsupported(UnsupportedObligation::ClauseKindNotObligation {
             kind: clause.kind(),
         }),
-        Some(kind) => match lower_clause(request, &package_digest, clause, kind) {
+        Some(kind) => match lower_clause(clause, kind) {
             Ok(oracle) => {
                 let standalone = match kind {
                     ObligationKind::Precondition => {
@@ -928,7 +958,7 @@ fn classify_clause<'a>(
                         package,
                         clause,
                         kind,
-                        symbols: symbols(clause_ref, kind),
+                        symbols: symbols(&clause_stem(clause_ref)),
                         oracle,
                         assumed: Vec::new(),
                         signature: Vec::new(),
@@ -957,8 +987,6 @@ const fn obligation_kind(kind: ClauseKind) -> Option<ObligationKind> {
 }
 
 fn lower_clause(
-    request: &KaniObligationRequest<'_>,
-    package_digest: &str,
     clause: &BoundClause,
     kind: ObligationKind,
 ) -> Result<ClauseOracle, UnsupportedObligation> {
@@ -971,7 +999,6 @@ fn lower_clause(
         requirement: identity.requirement(),
         clause: identity.clause(),
         expression: clause.expression(),
-        attestation: request.attestation,
     };
     let first_code =
         |diagnostics: Vec<crate::GenerationDiagnostic>| UnsupportedObligation::ClauseLowering {
@@ -982,17 +1009,14 @@ fn lower_clause(
                 }),
         };
     let parameters = typed_dependency_parameters(&oracle_request).map_err(first_code)?;
-    let bundle = generate_oracle_with_derivation(&oracle_request, Some(package_digest))
-        .map_err(first_code)?;
+    let bundle = generate_boolean_oracle(&oracle_request).map_err(first_code)?;
     let symbol =
         oracle_function_symbol(&bundle.rust.contents).ok_or(UnsupportedObligation::RenderFailed)?;
     Ok(ClauseOracle {
         clause: identity.clone(),
         kind,
         anchor: clause.anchor().clone(),
-        expression_digest: clause.expression_digest().to_string(),
         symbol,
-        sha256: bundle.rust.sha256.clone(),
         source: bundle.rust.contents,
         parameters: parameters
             .into_iter()
@@ -1019,27 +1043,28 @@ fn oracle_function_symbol(source: &str) -> Option<String> {
     })
 }
 
-fn symbols(clause: &ClauseRef, kind: ObligationKind) -> Symbols {
+/// The readable stem of a clause obligation's names: its requirement, revision and clause. Kani
+/// derives object-file names from these symbols, so the readable components are bounded.
+fn clause_stem(clause: &ClauseRef) -> String {
     let requirement = clause.requirement();
-    let revision = requirement.revision().get().to_string();
-    let kind_text = kind_name(kind);
-    let identity = length_delimited_identity(&[
-        requirement.package().as_str(),
-        requirement.requirement().as_str(),
-        &revision,
-        clause.clause().as_str(),
-        kind_text,
-    ]);
-    // Kani derives object-file names from these symbols; keep them bounded.
-    let digest = sha256(identity.as_bytes())
-        .chars()
-        .take(32)
-        .collect::<String>();
-    let base = format!(
-        "kob_{}_{revision}_{}_{digest}",
+    format!(
+        "kob_{}_{}_{}",
         readable_component(requirement.requirement().as_str()),
+        requirement.revision().get(),
         readable_component(clause.clause().as_str()),
-    );
+    )
+}
+
+/// The readable stem of a scalar obligation's names: its confirmed operation.
+fn scalar_stem(operation: &str) -> String {
+    format!(
+        "kob_scalar_{}",
+        readable_component(operation.strip_prefix("quire.op.").unwrap_or(operation))
+    )
+}
+
+/// The module, harness and contract names built on one settled name.
+fn symbols(base: &str) -> Symbols {
     Symbols {
         module: format!("{base}_module"),
         harness: format!("{base}_proof"),
@@ -1425,12 +1450,10 @@ fn lower_scalar_claim(
             reachable_upper: reachable_upper.to_string(),
         });
     }
-    let digest = sha256(claim.node_id.digest.as_bytes())
-        .chars()
-        .take(32)
-        .collect::<String>();
-    let module_symbol = format!("kob_scalar_{digest}_module");
-    let harness_symbol = format!("kob_scalar_{digest}_proof");
+    // The readable stem; `assign_names` settles the final name across the request.
+    let base = scalar_stem(&claim.operation.identity);
+    let module_symbol = format!("{base}_module");
+    let harness_symbol = format!("{base}_proof");
     Ok(LoweredScalarClaim {
         node_id: claim.node_id.clone(),
         operation_identity: claim.operation.identity.clone(),
@@ -1868,6 +1891,7 @@ fn render(
     let abi = abi(&contexts)?;
     let exact_harness = format!("{}::{}", lowered.symbols.module, lowered.symbols.harness);
     let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
+    // `assign_names` gave every clause oracle in the request a distinct name.
     let mut embedded = vec![&lowered.oracle];
     embedded.extend(&lowered.assumed);
     let oracle_sources = embedded
@@ -1876,41 +1900,27 @@ fn render(
         .collect::<Vec<_>>();
     let is_contract = lowered.kind != ObligationKind::Precondition;
     let identity = KaniObligationIdentity {
-        schema: KANI_OBLIGATION_SCHEMA,
-        adapter_profile: KANI_OBLIGATION_PROFILE,
         kind: lowered.kind,
         clause: lowered.clause.identity().clone(),
         source_span: lowered.clause.source().clone(),
-        bound_package_digest: lowered.package.digest().to_string(),
-        declaration_digest: lowered.clause.declaration_digest().to_string(),
-        expression_digest: lowered.oracle.expression_digest.clone(),
-        ir_revision: IR_CANDIDATE_REVISION,
         oracles: embedded
             .iter()
             .map(|oracle| EmbeddedOracle {
                 clause: oracle.clause.clone(),
                 kind: oracle.kind,
-                expression_digest: oracle.expression_digest.clone(),
                 symbol: oracle.symbol.clone(),
-                sha256: oracle.sha256.clone(),
             })
             .collect(),
-        oracle_digest: sha256(length_delimited_identity(&oracle_sources).as_bytes()),
         module_symbol: lowered.symbols.module.clone(),
         harness_symbol: lowered.symbols.harness.clone(),
         contract_symbol: is_contract.then(|| lowered.symbols.contract.clone()),
         subject_path: is_contract.then(|| request.subject_path.to_owned()),
         arguments: abi.arguments.clone(),
         results: abi.results.clone(),
-        pins: request.pins.clone(),
         solver: "cadical".to_owned(),
         unwind: request.unwind,
         options,
-        runtime_revision: RUNTIME_REVISION,
     };
-    let identity_json =
-        serde_json::to_string(&identity).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let identity_sha256 = sha256(identity_json.as_bytes());
     let body = match lowered.kind {
         ObligationKind::Precondition => {
             render_precondition(lowered, &abi).ok_or(UnsupportedObligation::RenderFailed)?
@@ -1925,9 +1935,7 @@ fn render(
     let mut source = format!(
         "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // Generated by quire-contract-codegen {}; DO NOT EDIT.\n\
-// Obligation: {} {}@{}/{}\n\
-// Kani adapter: {KANI_OBLIGATION_PROFILE}; backend: {KANI_BACKEND_VERSION}\n\
-// Obligation identity sha256: {identity_sha256}\n\n",
+// Obligation: {} {}@{}/{}\n\n",
         env!("CARGO_PKG_VERSION"),
         kind_name(lowered.kind),
         clause.requirement().requirement().as_str(),
@@ -1953,34 +1961,12 @@ fn render(
         format!("src/generated/{}.rs", lowered.symbols.module),
         source,
     );
-    let record = HarnessRecord {
-        identity: &identity,
-        identity_sha256: &identity_sha256,
-        rust_path: &rust.path,
-        rust_sha256: &rust.sha256,
-    };
-    let mut record_json =
-        serde_json::to_string(&record).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    record_json.push('\n');
-    let record = artifact(
-        format!("kani-obligations/{}.json", lowered.symbols.module),
-        record_json,
-    );
+    let record = record(&lowered.symbols.module, &identity, &rust)?;
     Ok(KaniObligationHarness {
         identity,
-        identity_sha256,
         rust,
         record,
     })
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct HarnessRecord<'a> {
-    identity: &'a KaniObligationIdentity,
-    identity_sha256: &'a str,
-    rust_path: &'a str,
-    rust_sha256: &'a str,
 }
 
 /// Renders one IR-confirmed V2 exact-scalar claim to a `kani::proof` that the embedded oracle is
@@ -2082,34 +2068,22 @@ mod {module} {{\n\
         symbol = lowered.oracle_symbol,
     );
     let identity = ScalarObligationIdentity {
-        schema: KANI_SCALAR_OBLIGATION_SCHEMA,
-        adapter_profile: KANI_OBLIGATION_PROFILE,
         node_id: lowered.node_id.clone(),
         operation_identity: lowered.operation_identity.clone(),
-        ir_revision: IR_CANDIDATE_REVISION,
         oracle_symbol: lowered.oracle_symbol.clone(),
-        oracle_sha256: sha256(lowered.oracle_source.as_bytes()),
         module_symbol: lowered.module_symbol.clone(),
         harness_symbol: lowered.harness_symbol.clone(),
         arguments,
-        pins: request.pins.clone(),
         solver: "cadical".to_owned(),
         unwind: request.unwind,
         options,
-        runtime_revision: RUNTIME_REVISION,
     };
-    let identity_json =
-        serde_json::to_string(&identity).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let identity_sha256 = sha256(identity_json.as_bytes());
     let mut source = format!(
         "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // Generated by quire-contract-codegen {}; DO NOT EDIT.\n\
-// Obligation: exact-scalar node {}/{}\n\
-// Kani adapter: {KANI_OBLIGATION_PROFILE}; backend: {KANI_BACKEND_VERSION}\n\
-// Obligation identity sha256: {identity_sha256}\n\n",
+// Obligation: exact-scalar `{}`\n\n",
         env!("CARGO_PKG_VERSION"),
-        lowered.node_id.domain,
-        lowered.node_id.digest,
+        lowered.operation_identity,
     );
     source.push_str(&lowered.oracle_source);
     source.push('\n');
@@ -2128,42 +2102,37 @@ mod {module} {{\n\
         format!("src/generated/{}.rs", lowered.module_symbol),
         source,
     );
-    let record = ScalarHarnessRecord {
-        identity: &identity,
-        identity_sha256: &identity_sha256,
-        rust_path: &rust.path,
-        rust_sha256: &rust.sha256,
-    };
-    let mut record_json =
-        serde_json::to_string(&record).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    record_json.push('\n');
-    let record = artifact(
-        format!("kani-obligations/{}.json", lowered.module_symbol),
-        record_json,
-    );
+    let record = record(&lowered.module_symbol, &identity, &rust)?;
     Ok(KaniScalarObligationHarness {
         identity,
-        identity_sha256,
         rust,
         record,
     })
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ScalarHarnessRecord<'a> {
-    identity: &'a ScalarObligationIdentity,
-    identity_sha256: &'a str,
-    rust_path: &'a str,
-    rust_sha256: &'a str,
+/// The persisted `kani-obligations/{module}.json` record of one harness.
+fn record<T: Serialize>(
+    module: &str,
+    identity: &T,
+    rust: &Artifact,
+) -> Result<Artifact, UnsupportedObligation> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct HarnessRecord<'a, T> {
+        identity: &'a T,
+        rust_path: &'a str,
+    }
+    let mut json = serde_json::to_string(&HarnessRecord {
+        identity,
+        rust_path: &rust.path,
+    })
+    .map_err(|_| UnsupportedObligation::RenderFailed)?;
+    json.push('\n');
+    Ok(artifact(format!("kani-obligations/{module}.json"), json))
 }
 
 fn artifact(path: String, contents: String) -> Artifact {
-    Artifact {
-        sha256: sha256(contents.as_bytes()),
-        path,
-        contents,
-    }
+    Artifact::new(path, contents)
 }
 
 /// `kani::any()` for every argument, constrained only by its IR integer bounds.
@@ -2448,7 +2417,7 @@ mod tests {
             }))
             .expect("node")
         };
-        // FR-322 shape: each bound member is a `binding` carrying its literal.
+        // The QSL-emitted shape: each bound member is a `binding` carrying its literal.
         let member = |name: &str, kind: &str, value: &str| {
             serde_json::json!({"term":"binding","name":name,"value":
                 {"term":"literal","value_kind":kind,"value":value}})
@@ -2621,29 +2590,18 @@ mod tests {
         )
     }
 
-    fn render_probe_request<'a>(
-        items: &'a [ObligationItem<'a>],
-        pins: &'a KaniToolPins,
-    ) -> KaniObligationRequest<'a> {
+    fn render_probe_request<'a>(items: &'a [ObligationItem<'a>]) -> KaniObligationRequest<'a> {
         KaniObligationRequest {
             items,
             subject_path: "render_probe::subject",
-            pins,
             unwind: 4,
-            attestation: AttestationContext {
-                record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
-                candidate_revision: IR_CANDIDATE_REVISION,
-            },
         }
     }
 
     /// Real, legitimately-lowered `LoweredClause` for the probe package's one precondition, with
     /// its embedded oracle source intact for the caller to mutate.
-    fn render_probe_lowered<'a>(
-        request: &KaniObligationRequest<'a>,
-        item: &ObligationItem<'a>,
-    ) -> Box<LoweredClause<'a>> {
-        let Outcome::Lowered(lowered) = classify(request, item).outcome else {
+    fn render_probe_lowered<'a>(item: &ObligationItem<'a>) -> Box<LoweredClause<'a>> {
+        let Outcome::Lowered(lowered) = classify(item).outcome else {
             panic!("render-probe precondition must lower to a harness");
         };
         lowered
@@ -2658,9 +2616,8 @@ mod tests {
             package: &package,
             clause: &clause_ref,
         }];
-        let pins = KaniToolPins::pinned();
-        let request = render_probe_request(&items, &pins);
-        let mut lowered = render_probe_lowered(&request, &items[0]);
+        let request = render_probe_request(&items);
+        let mut lowered = render_probe_lowered(&items[0]);
         // Oversized before the syntax check ever runs -- `render` checks byte length first, so
         // garbage content alone is enough to exercise this ground, and it stays garbage on
         // purpose to prove the length check short-circuits the syntax check.
@@ -2683,9 +2640,8 @@ mod tests {
             package: &package,
             clause: &clause_ref,
         }];
-        let pins = KaniToolPins::pinned();
-        let request = render_probe_request(&items, &pins);
-        let mut lowered = render_probe_lowered(&request, &items[0]);
+        let request = render_probe_request(&items);
+        let mut lowered = render_probe_lowered(&items[0]);
         // Well under the byte ceiling, but not valid Rust: an unbalanced brace `syn::parse_file`
         // rejects.
         lowered.oracle.source = "fn broken( {".to_owned();

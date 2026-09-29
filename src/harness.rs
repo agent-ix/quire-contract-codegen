@@ -6,16 +6,14 @@ use quire_contract_ir::{
     ClauseId, DependencyIdentity, DependencyKind, RequirementRef, StateObservation, TypedExpression,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 
 use crate::{
-    generate_boolean_oracle,
     oracle::{
-        attestation_context_is_valid, bounded_readable_component, dependency_parameters,
-        generated_artifact_bundle, length_delimited_identity, oracle_symbol, reference_identifier,
+        bounded_readable_component, dependency_parameters, generate_named_boolean_oracle,
+        oracle_symbol, reference_identifier, unique_pair, upper_camel,
     },
-    Artifact, AttestationContext, GeneratedArtifactBundle, GenerationDiagnostic,
-    GenerationErrorCode, GenerationTerminalState, OracleRequest, MAX_GENERATED_SOURCE_BYTES,
+    Artifact, GeneratedArtifactBundle, GenerationDiagnostic, GenerationErrorCode,
+    GenerationTerminalState, OracleRequest, MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Explicit inputs for one generated pre/post harness.
@@ -40,8 +38,6 @@ pub struct HarnessRequest<'a> {
     pub minimum_rejected_cases: u32,
     /// Maximum explicit-discard invocations allowed before the campaign fails.
     pub maximum_discarded_cases: u32,
-    /// Caller-owned attestation binding shared by both clause derivations.
-    pub attestation: AttestationContext<'a>,
 }
 
 struct HarnessShellRequest<'a> {
@@ -67,9 +63,7 @@ pub enum HarnessErrorCode {
     UnsupportedHarnessBinding,
     /// Generated source did not parse as Rust.
     InvalidGeneratedSyntax,
-    /// A proof attestation could not be validated or serialized.
-    AttestationGenerationFailed,
-    /// Generated Rust exceeded the attested source-size limit.
+    /// Generated Rust exceeded the source-size limit.
     ResourceLimitExceeded,
 }
 
@@ -108,7 +102,7 @@ pub struct HarnessDiagnostic {
     pub code: HarnessErrorCode,
     /// Interface-001 terminal state for this failure.
     pub terminal_state: GenerationTerminalState,
-    /// Preserved lower-level clause or attestation failure code, when one exists.
+    /// Preserved lower-level clause failure code, when one exists.
     pub generation_code: Option<GenerationErrorCode>,
     /// Stable input path associated with the failure.
     pub path: String,
@@ -138,21 +132,29 @@ pub fn generate_tristate_harness(
             "minimum accepted cases must be greater than zero",
         )]);
     }
-    if !attestation_context_is_valid(&request.attestation) {
-        return Err(vec![generation_harness_diagnostic(
-            HarnessErrorCode::AttestationGenerationFailed,
-            GenerationErrorCode::InvalidAttestationContext,
-            "attestation.context",
-            "the harness attestation binding is invalid",
-        )]);
-    }
-    if request.precondition_clause == request.postcondition_clause {
+    let requirement = request.requirement.requirement().as_str();
+    let revision = request.requirement.revision().get();
+    let (precondition_clause, postcondition_clause) = (
+        request.precondition_clause.as_str(),
+        request.postcondition_clause.as_str(),
+    );
+    if precondition_clause == postcondition_clause {
         return Err(vec![direct_harness_diagnostic(
             DirectHarnessFailure::DuplicateClauseIdentity,
             "clauses",
-            "precondition and postcondition clause identities must be distinct",
+            "precondition and postcondition clauses must be distinct",
         )]);
     }
+    let (precondition_symbol, postcondition_symbol) = unique_pair(
+        (
+            oracle_symbol(requirement, revision, precondition_clause),
+            precondition_clause,
+        ),
+        (
+            oracle_symbol(requirement, revision, postcondition_clause),
+            postcondition_clause,
+        ),
+    );
     let shell_request = HarnessShellRequest {
         requirement: request.requirement,
         precondition_clause: request.precondition_clause,
@@ -164,26 +166,24 @@ pub fn generate_tristate_harness(
         requirement: request.requirement,
         clause: request.precondition_clause,
         expression: request.precondition,
-        attestation: request.attestation,
     };
     let postcondition_request = OracleRequest {
         requirement: request.requirement,
         clause: request.postcondition_clause,
         expression: request.postcondition,
-        attestation: request.attestation,
     };
-    let precondition = generate_boolean_oracle(&precondition_request)
-        .map_err(|diagnostics| map_clause_diagnostics("precondition", diagnostics))?;
-    let postcondition = generate_boolean_oracle(&postcondition_request)
-        .map_err(|diagnostics| map_clause_diagnostics("postcondition", diagnostics))?;
+    let precondition =
+        generate_named_boolean_oracle(&precondition_request, &precondition_symbol)
+            .map_err(|diagnostics| map_clause_diagnostics("precondition", diagnostics))?;
+    let postcondition =
+        generate_named_boolean_oracle(&postcondition_request, &postcondition_symbol)
+            .map_err(|diagnostics| map_clause_diagnostics("postcondition", diagnostics))?;
     let precondition_parameters = dependency_parameters(&precondition_request)
         .map_err(|diagnostics| map_clause_diagnostics("precondition", diagnostics))?;
     let postcondition_parameters = dependency_parameters(&postcondition_request)
         .map_err(|diagnostics| map_clause_diagnostics("postcondition", diagnostics))?;
     let binding = harness_binding(&precondition_parameters, &postcondition_parameters)?;
 
-    let requirement = request.requirement.requirement().as_str();
-    let revision = request.requirement.revision().get();
     let base_symbol = harness_symbol(
         requirement,
         revision,
@@ -198,10 +198,10 @@ pub fn generate_tristate_harness(
     let accepted_case_symbol = format!("{base_symbol}_accepted_case");
     let rejected_case_symbol = format!("{base_symbol}_rejected_case");
     let discarded_case_symbol = format!("{base_symbol}_discarded_case");
-    let summary_type = format!("{}CampaignSummary", to_upper_camel(&base_symbol));
-    let outcome_error_type = format!("{}CampaignError", to_upper_camel(&base_symbol));
-    let case_type = format!("{}CampaignCase", to_upper_camel(&base_symbol));
-    let disposition_type = format!("{}CampaignDisposition", to_upper_camel(&base_symbol));
+    let summary_type = format!("{}CampaignSummary", upper_camel(&base_symbol));
+    let outcome_error_type = format!("{}CampaignError", upper_camel(&base_symbol));
+    let case_type = format!("{}CampaignCase", upper_camel(&base_symbol));
+    let disposition_type = format!("{}CampaignDisposition", upper_camel(&base_symbol));
     let minimum_accepted_symbol = format!(
         "{}_MINIMUM_ACCEPTED_CASES",
         base_symbol.to_ascii_uppercase()
@@ -213,18 +213,6 @@ pub fn generate_tristate_harness(
     let maximum_discarded_symbol = format!(
         "{}_MAXIMUM_DISCARDED_CASES",
         base_symbol.to_ascii_uppercase()
-    );
-    let precondition_symbol = oracle_symbol(
-        request.requirement.package().as_str(),
-        requirement,
-        revision,
-        request.precondition_clause.as_str(),
-    );
-    let postcondition_symbol = oracle_symbol(
-        request.requirement.package().as_str(),
-        requirement,
-        revision,
-        request.postcondition_clause.as_str(),
     );
     let shell_precondition_identity_symbol =
         format!("{}_PRECONDITION", shell_symbol.to_ascii_uppercase());
@@ -693,7 +681,7 @@ where\n\
             HarnessErrorCode::ResourceLimitExceeded,
             GenerationErrorCode::ResourceLimitExceeded,
             "generated.rust",
-            "the generated harness exceeds the attested source-size limit",
+            "the generated harness exceeds the source-size limit",
         )]);
     }
     syn::parse_file(&source).map_err(|error| {
@@ -704,53 +692,8 @@ where\n\
             &error.to_string(),
         )]
     })?;
-    let rust = artifact(format!("src/generated/{base_symbol}.rs"), source);
-    let revision_text = revision.to_string();
-    let input = length_delimited_identity(&[
-        requirement,
-        &revision_text,
-        request.precondition_clause.as_str(),
-        request.postcondition_clause.as_str(),
-        request.execution_point,
-        &minimum_accepted_cases,
-        &minimum_rejected_cases,
-        &maximum_discarded_cases,
-        &precondition.rust.sha256,
-        &postcondition.rust.sha256,
-    ]);
-    generated_artifact_bundle(
-        &request.attestation,
-        request.requirement,
-        "generate_tristate_harness",
-        &base_symbol,
-        input.as_bytes(),
-        "generated-rust-harness",
-        "quire.codegen.rust-harness/v1",
-        rust,
-    )
-    .map_err(|code| {
-        let harness_code = if code == GenerationErrorCode::ResourceLimitExceeded {
-            HarnessErrorCode::ResourceLimitExceeded
-        } else {
-            HarnessErrorCode::AttestationGenerationFailed
-        };
-        let (path, message) = if code == GenerationErrorCode::ResourceLimitExceeded {
-            (
-                "generated.rust",
-                "the generated harness exceeds the attested source-size limit",
-            )
-        } else {
-            (
-                "generated.attestation",
-                "the harness proof attestation could not be emitted",
-            )
-        };
-        vec![generation_harness_diagnostic(
-            harness_code,
-            code,
-            path,
-            message,
-        )]
+    Ok(GeneratedArtifactBundle {
+        rust: artifact(format!("src/generated/{base_symbol}.rs"), source),
     })
 }
 
@@ -1100,7 +1043,7 @@ where\n\
             HarnessErrorCode::ResourceLimitExceeded,
             GenerationErrorCode::ResourceLimitExceeded,
             "generated.rust",
-            "the generated harness shell exceeds the attested source-size limit",
+            "the generated harness shell exceeds the source-size limit",
         ));
     }
 
@@ -1116,49 +1059,21 @@ where\n\
     Ok(source)
 }
 
+/// The generated harness name, read from its requirement, revision and two clauses.
 fn harness_symbol(
     requirement: &str,
     revision: u64,
     precondition: &str,
     postcondition: &str,
 ) -> String {
-    let readable = bounded_readable_component(requirement);
-    let revision_text = revision.to_string();
-    let identity =
-        length_delimited_identity(&[requirement, &revision_text, precondition, postcondition]);
     format!(
-        "harness_{readable}_{revision}_{}",
-        sha256(identity.as_bytes())
+        "harness_{}_{revision}_{}_{}",
+        bounded_readable_component(requirement),
+        bounded_readable_component(precondition),
+        bounded_readable_component(postcondition)
     )
 }
 
-fn to_upper_camel(value: &str) -> String {
-    value
-        .split('_')
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let mut characters = part.chars();
-            match characters.next() {
-                Some(first) => first.to_ascii_uppercase().to_string() + characters.as_str(),
-                None => String::new(),
-            }
-        })
-        .collect()
-}
-
 fn artifact(path: String, contents: String) -> Artifact {
-    let sha256 = sha256(contents.as_bytes());
-    Artifact {
-        path,
-        contents,
-        sha256,
-    }
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    let mut result = String::with_capacity(64);
-    for byte in Sha256::digest(bytes) {
-        let _ = write!(result, "{byte:02x}");
-    }
-    result
+    Artifact::new(path, contents)
 }

@@ -11,14 +11,9 @@
 
 // Implements: FR-009, FR-012
 
-use std::fmt::Write as _;
-
-use sha2::{Digest as _, Sha256};
-
 use super::relation::{ComparisonOperator, Domain, OperandPosition, Partner, Relation};
 use crate::{
-    oracle::length_delimited_identity, GenerationErrorCode, StrategyDiagnostic, StrategyErrorCode,
-    MAX_GENERATED_SOURCE_BYTES,
+    GenerationErrorCode, StrategyDiagnostic, StrategyErrorCode, MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Field name of the expectation tag in every generated case type.
@@ -526,7 +521,7 @@ pub struct RenderedPopulation {
 /// Returns `InvalidStrategyIdentity` for a wrong number of identifiers or an identifier that is not
 /// a unique Rust identifier distinct from [`EXPECTATION_FIELD`]; `EmptyPopulation` naming the first
 /// empty requested side; and `InvalidGeneratedSyntax` or `ResourceLimitExceeded` for rendered
-/// source that does not parse or exceeds the attested source limit.
+/// source that does not parse or exceeds the source limit.
 // Implements: FR-009, FR-012
 pub fn render_population(
     request: &PopulationRequest<'_>,
@@ -549,28 +544,14 @@ pub fn render_population(
         ),
     };
 
-    let relation_debug = format!("{:?}", request.relation);
-    let domain_debug = format!("{:?}", request.domain);
-    let population_debug = format!("{:?}", request.population);
-    let identifiers_debug = format!("{:?}", request.read_identifiers);
-    let identity = length_delimited_identity(&[
-        "bound-population/v1",
-        &relation_debug,
-        &domain_debug,
-        &population_debug,
-        &identifiers_debug,
-    ]);
-    let digest = sha256(identity.as_bytes());
-    let short = &digest[..16];
+    // One population is rendered per generated file, so its population name alone is unique there.
+    let population_name = request.population.name();
     let names = Names {
-        case_type: format!("BoundCase{short}"),
-        expectation_type: format!("BoundExpectation{short}"),
+        case_type: format!("BoundCase{population_name}"),
+        expectation_type: format!("BoundExpectation{population_name}"),
         identifiers: request.read_identifiers,
     };
-    let strategy_function = format!(
-        "bound_population_{}_{digest}",
-        request.population.component()
-    );
+    let strategy_function = format!("bound_population_{}", request.population.component());
     let relation = relation_text(
         &request.relation,
         request.read_identifiers[0],
@@ -672,7 +653,7 @@ pub fn {strategy_function}() -> proptest::strategy::BoxedStrategy<{case_type}> {
             StrategyErrorCode::ResourceLimitExceeded,
             GenerationErrorCode::ResourceLimitExceeded,
             "generated.rust",
-            "the generated population exceeds the attested source-size limit",
+            "the generated population exceeds the source-size limit",
         ));
     }
     syn::parse_file(&source).map_err(|error| {
@@ -914,12 +895,4 @@ fn diagnostic_with_generation(
         path: path.to_owned(),
         message: message.to_owned(),
     }
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    let mut result = String::with_capacity(64);
-    for byte in Sha256::digest(bytes) {
-        let _ = write!(result, "{byte:02x}");
-    }
-    result
 }

@@ -20,9 +20,8 @@ Construct checked clause pairs over direct Boolean values and all six integer co
 plain comparison and a ConfigVersion-style `post(version) = pre(version)` state clause whose signed
 integer type is exactly 0 through 1000. Generate bundles repeatedly with passed, missing, failed,
 assumed, and stubbed proof dependencies. Inspect the generated argument/result ABI, model-domain
-assumptions, post-state domain guarantee, proof graph, schemas, attestations, adapter profile, backend
-executable digest, solver, unwind, exact harness, function-contract, concrete-playback, output-format,
-and stubbing options.
+assumptions, post-state domain guarantee, proof graph, schemas, solver, unwind, exact harness,
+function-contract, concrete-playback, output-format, and stubbing options.
 
 Exercise direct current-input, current-state, pre-state, and post-state observations and the zero,
 one, and multiple post-state result shapes. Include a mixed Boolean/integer subject and permute the
@@ -31,15 +30,14 @@ invalid customer subject signature and require an external Rust/Kani failure wit
 success claim; generation itself validates only the subject path syntax and typed IR-owned ABI.
 
 Compile every generated crate with `publish = false`. Run the exact generated harness under
-cargo-kani 0.67.0 for an identity state subject and require proof success. Run it for a changed-value
+cargo-kani for an identity state subject and require proof success. Run it for a changed-value
 subject and for a falsifiable plain integer comparison and require proof failure plus printed concrete
 playback data. Independently evaluate the embedded oracle predicates over a finite corpus containing
 -1, 0, 1, 999, 1000, and 1001; distinguish the in-domain Kani population from outside-domain oracle
 checks.
 
 Mutate one dimension at a time: cross-clause type or bound, observation placement, indirect path,
-definedness obligation, arithmetic/negation, object/graph read, backend version, executable digest,
-unwind, identity, and generated-source limit. Require the stable diagnostic path and original
+definedness obligation, arithmetic/negation, object/graph read, unwind, identity, and generated-source limit. Require the stable diagnostic path and original
 expression source span where one exists.
 
 ## Expected Results

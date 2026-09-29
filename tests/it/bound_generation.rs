@@ -1,18 +1,11 @@
 //! Explicitly synthetic public executable projections, not a source-language frontend.
 
 use quire_contract_codegen::{
-    generate_bound_oracles, AttestationContext, BoundGenerationError, BoundOracleGeneration,
-    GenerationErrorCode, ProofAttestationBody, SourceRegion, IR_CANDIDATE_REVISION,
+    generate_bound_oracles, BoundGenerationError, BoundOracleGeneration, GenerationErrorCode,
+    SourceRegion,
 };
-use quire_contract_ir::{BoundPackage, BOUND_IDENTITY_PROFILE, EXECUTABLE_PROJECTION_FORMAT};
+use quire_contract_ir::{BoundPackage, EXECUTABLE_PROJECTION_FORMAT};
 use serde_json::{json, Value};
-
-fn context() -> AttestationContext<'static> {
-    AttestationContext {
-        record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
-        candidate_revision: IR_CANDIDATE_REVISION,
-    }
-}
 
 fn span() -> Value {
     let source = json!({"document":"synthetic-contract", "revision":1});
@@ -57,7 +50,7 @@ fn decode(value: &Value) -> BoundPackage {
 }
 
 fn generated(value: &Value) -> quire_contract_codegen::GeneratedBoundOracles {
-    match generate_bound_oracles(&decode(value), context()).unwrap() {
+    match generate_bound_oracles(&decode(value)).unwrap() {
         BoundOracleGeneration::Generated(result) => result,
         other => panic!("expected executable result: {other:?}"),
     }
@@ -129,13 +122,10 @@ fn complete_public_binding_preserves_identity_population_and_derivation() {
     let result = generated(&value);
     assert_eq!(result.clauses().len(), 3);
     assert_eq!(result.informational().len(), 1);
-    assert_eq!(result.bundle().artifacts().len(), 12);
-    assert_eq!(result.bound_digest(), bound.digest());
+    assert_eq!(result.bundle().artifacts().len(), 6);
     assert_eq!(result.informational(), bound.informational());
     for (output, clause) in result.clauses().iter().zip(bound.clauses()) {
         assert_eq!(output.identity(), clause.identity());
-        assert_eq!(output.expression_digest(), clause.expression_digest());
-        assert_eq!(output.declaration_digest(), clause.declaration_digest());
         let bundle = output.bundle();
         let map: Vec<SourceRegion> = serde_json::from_str(&bundle.source_map.contents).unwrap();
         for region in &map {
@@ -148,18 +138,6 @@ fn complete_public_binding_preserves_identity_population_and_derivation() {
         assert!(map
             .iter()
             .any(|region| region.role == "oracle_evaluation" && region.probe.is_some()));
-        for artifact in [&bundle.rust_attestation, &bundle.source_map_attestation] {
-            let body: ProofAttestationBody = serde_json::from_str(&artifact.contents).unwrap();
-            let argv = &body.command.argv;
-            let flag = |key| &argv[argv.iter().position(|item| item == key).unwrap() + 1];
-            assert_eq!(argv[1], "generate_bound_oracles");
-            assert_eq!(flag("--input-digest"), &bound.digest().to_string());
-            assert_eq!(flag("--canonical-profile"), BOUND_IDENTITY_PROFILE);
-            assert_eq!(
-                flag("--expression-canonical-digest"),
-                &clause.expression_digest().to_string()
-            );
-        }
     }
     let mut reordered = value;
     reordered["bindings"].as_array_mut().unwrap().reverse();
@@ -168,23 +146,6 @@ fn complete_public_binding_preserves_identity_population_and_derivation() {
         .unwrap()
         .reverse();
     assert_eq!(result, generated(&reordered));
-}
-
-/// TC-001
-/// FR-001-AC-7
-#[test]
-fn distinct_packages_never_alias_oracle_paths_or_symbols() {
-    let first = generated(&projection("test/first", 1, false));
-    let second = generated(&projection("test/second", 1, false));
-    assert_ne!(first.bound_digest(), second.bound_digest());
-    assert_ne!(
-        first.clauses()[0].bundle().rust.path,
-        second.clauses()[0].bundle().rust.path
-    );
-    assert_ne!(
-        first.clauses()[0].bundle().rust.contents,
-        second.clauses()[0].bundle().rust.contents
-    );
 }
 
 /// TC-002
@@ -213,12 +174,10 @@ fn empty_and_informational_only_are_explicit_non_artifact_results() {
             value["package"]["requirements"] = json!([]);
         }
         let bound = decode(&value);
-        let BoundOracleGeneration::NoExecutable(result) =
-            generate_bound_oracles(&bound, context()).unwrap()
+        let BoundOracleGeneration::NoExecutable(result) = generate_bound_oracles(&bound).unwrap()
         else {
             panic!("must not publish an empty package")
         };
-        assert_eq!(result.bound_digest(), bound.digest());
         assert_eq!(result.informational().len(), usize::from(info));
         assert_eq!(result.informational(), bound.informational());
     }
@@ -234,7 +193,7 @@ fn unsupported_later_clause_fails_whole_batch_with_full_identity() {
         "left":{"node":"boolean_literal","value":true,"source":span()},
         "right":{"node":"boolean_literal","value":false,"source":span()}});
     let bound = decode(&value);
-    match generate_bound_oracles(&bound, context()).unwrap_err() {
+    match generate_bound_oracles(&bound).unwrap_err() {
         BoundGenerationError::Clause {
             identity,
             diagnostics,
@@ -253,40 +212,17 @@ fn unsupported_later_clause_fails_whole_batch_with_full_identity() {
 /// FR-001-AC-6
 #[test]
 fn batch_artifact_count_is_preflighted_before_lowering() {
-    let bound = decode(&projection("test/too-many", 1025, false));
+    let bound = decode(&projection("test/too-many", 2049, false));
     assert_eq!(
-        generate_bound_oracles(&bound, context()).unwrap_err(),
+        generate_bound_oracles(&bound).unwrap_err(),
         BoundGenerationError::ResourceLimitExceeded
-    );
-}
-
-/// TC-001
-/// FR-001-AC-7
-#[test]
-fn declaration_identity_changes_bind_attestations_even_when_source_is_unchanged() {
-    let original = projection("test/declarations", 1, false);
-    let mut changed = original.clone();
-    changed["bindings"][0]["expression"]["values"] = json!([{
-        "name":"unused_input","kind":"input","value_type":{"kind":"boolean"},
-        "source":span()}]);
-    let first = generated(&original);
-    let second = generated(&changed);
-    let left = &first.clauses()[0];
-    let right = &second.clauses()[0];
-    assert_eq!(left.bundle().rust, right.bundle().rust);
-    assert_eq!(left.expression_digest(), right.expression_digest());
-    assert_ne!(left.declaration_digest(), right.declaration_digest());
-    assert_ne!(first.bound_digest(), second.bound_digest());
-    assert_ne!(
-        left.bundle().rust_attestation,
-        right.bundle().rust_attestation
     );
 }
 
 /// TC-001
 /// FR-001-AC-6
 #[test]
-fn actual_bound_outputs_publish_then_compile_and_execute_against_pinned_runtime() {
+fn actual_bound_outputs_publish_then_compile_and_execute_against_the_runtime() {
     use std::{
         fs,
         process::Command,

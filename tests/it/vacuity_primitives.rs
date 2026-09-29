@@ -5,8 +5,8 @@ use quire_contract_codegen::{
 use serde_json::{json, Value};
 
 fn export(segments: Value) -> Value {
-    json!({"type":"llvm.coverage.json.export", "version":"3.0.1",
-        "cargo_llvm_cov":{"version":"0.9.0","manifest_path":"/fixture/Cargo.toml"},
+    json!({"type":"llvm.coverage.json.export",
+        "cargo_llvm_cov":{"manifest_path":"/fixture/Cargo.toml"},
         "data":[{"files":[{"filename":"/fixture/src/generated.rs","segments":segments}]}]})
 }
 
@@ -35,7 +35,6 @@ fn tc_006_complete_span_observation_and_total_measured_partition() {
     ])))
     .unwrap();
     let coverage = parse_llvm_coverage(&bytes, "/fixture").unwrap();
-    assert_eq!(coverage.export_sha256().len(), 64);
     let positive = coverage
         .observe("src/generated.rs", probe(1, 1, 4))
         .unwrap();
@@ -114,18 +113,13 @@ fn tc_006_partial_gap_unterminated_and_noncount_spans_cannot_prove_entry() {
 
 /// Trace: TC-006
 #[test]
-fn tc_006_export_shape_version_tuple_order_and_size_refuse_independently() {
+fn tc_006_export_shape_tuple_order_and_size_refuse_independently() {
     let valid = export(json!([
         [1, 1, 0, true, true, false],
         [2, 1, 0, false, false, false]
     ]));
-    for (key, value) in [("type", json!("other")), ("version", json!("2.0.2"))] {
-        let mut changed = valid.clone();
-        changed[key] = value;
-        assert_eq!(code(&changed), CoverageErrorCode::UnsupportedProfile);
-    }
     let mut changed = valid.clone();
-    changed["cargo_llvm_cov"]["version"] = json!("0.8.0");
+    changed["type"] = json!("other");
     assert_eq!(code(&changed), CoverageErrorCode::UnsupportedProfile);
     for segments in [
         json!([[1, 1, 0, true, true]]),

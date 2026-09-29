@@ -9,16 +9,12 @@
     "proofId",
     "requirementId",
     "requirementRevision",
-    "adapterProfile",
-    "backendVersion",
-    "backendExecutableSha256",
     "options",
     "readiness",
     "proofExecutionState",
     "subjectArguments",
     "subjectResults",
     "sourceArtifactPath",
-    "sourceArtifactSha256",
     "dependencies"
   ],
   "properties": {
@@ -26,9 +22,6 @@
     "proofId": {"type": "string", "minLength": 1},
     "requirementId": {"type": "string", "minLength": 1},
     "requirementRevision": {"type": "integer", "minimum": 1},
-    "adapterProfile": {"const": "kani-0.67.0-function-contracts-v2"},
-    "backendVersion": {"const": "0.67.0"},
-    "backendExecutableSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "options": {
       "type": "array",
       "minItems": 15,
@@ -47,7 +40,6 @@
       "items": {"$ref": "#/definitions/subjectBinding"}
     },
     "sourceArtifactPath": {"type": "string", "minLength": 1},
-    "sourceArtifactSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "dependencies": {
       "type": "array",
       "uniqueItems": true,

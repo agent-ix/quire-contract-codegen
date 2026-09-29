@@ -2,7 +2,7 @@
 //! persisted obligation schema (`kani-obligations/{module}.json`), then proves the join actually
 //! depends on that persisted schema by mutating it on disk and showing the decode refuses.
 //!
-//! Like `tests/it/kani_obligations.rs`'s own pinned lane, this needs the real installed Kani 0.67.0
+//! Like `tests/it/kani_obligations.rs`'s own Kani lane, this needs the real installed Kani 0.67.0
 //! backend and is `#[ignore]`d by default. Run it with:
 //!
 //! ```text
@@ -25,10 +25,10 @@ use std::{
 
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, negotiate_kani_obligations, write_bundle_atomic,
-    ArtifactBundle, AttestationContext, KaniBindingRole, KaniExecutionRequest, KaniInstallation,
-    KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest, KaniPrimitiveType,
-    KaniRunOutcome, KaniToolPins, ObligationBinding, ObligationDisposition, ObligationItem,
-    ObligationKind, ObligationRecord, IR_CANDIDATE_REVISION, RUNTIME_REVISION,
+    ArtifactBundle, KaniBindingRole, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
+    KaniObligationOutcome, KaniObligationRequest, KaniPrimitiveType, KaniRunOutcome,
+    ObligationBinding, ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord,
+    RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     kani::WitnessValue, BoundPackage, ClauseId, ClauseRef, RequirementRef,
@@ -51,13 +51,6 @@ const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
 /// negotiates (only to give the postcondition's union ABI its real two-argument shape — see
 /// `withdraw_harnesses`) are never run against any subject.
 const SEEDED_FAILING_SUBJECT: &str = "/// Seeded defect: credits instead of debiting.\n#[must_use]\npub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre + amount_current\n}\n";
-
-fn context() -> AttestationContext<'static> {
-    AttestationContext {
-        record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
-        candidate_revision: IR_CANDIDATE_REVISION,
-    }
-}
 
 // ---- minimal V1 fixture: withdraw's precondition, postcondition and invariant ----------------
 //
@@ -205,7 +198,7 @@ fn emitted(outcome: KaniObligationOutcome) -> (Vec<ObligationRecord>, Vec<KaniOb
 /// The precondition, postcondition and invariant harnesses for `withdraw`, negotiated together so
 /// their subject ABI is the union `unify_subject_signatures` computes — matching
 /// `HEALTHY_SUBJECT`'s two-argument signature.
-fn withdraw_harnesses(pins: &KaniToolPins) -> Vec<KaniObligationHarness> {
+fn withdraw_harnesses() -> Vec<KaniObligationHarness> {
     let package = bound_package();
     let refs = [
         clause(PRECONDITION),
@@ -222,9 +215,7 @@ fn withdraw_harnesses(pins: &KaniToolPins) -> Vec<KaniObligationHarness> {
     let request = KaniObligationRequest {
         items: &items,
         subject_path: "crate::withdraw",
-        pins,
         unwind: 4,
-        attestation: context(),
     };
     let (records, harnesses) = emitted(negotiate_kani_obligations(&request).unwrap());
     assert!(
@@ -266,7 +257,7 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
     fs::write(
         directory.join("Cargo.toml"),
         format!(
-            "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
+            "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[workspace]\n"
         ),
     )
     .unwrap();
@@ -278,7 +269,7 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
     directory
 }
 
-/// Runs the seeded defect through the real pinned `execute_kani_obligation` (the actual code path
+/// Runs the seeded defect through the real `execute_kani_obligation` (the actual code path
 /// this test's join relies on) and returns its real counterexample transcript.
 fn run_falsifying(installation: &KaniInstallation, harness: &KaniObligationHarness) -> String {
     let crate_directory = write_crate(harness, SEEDED_FAILING_SUBJECT);
@@ -353,7 +344,7 @@ fn persisted_arguments(record: &Value) -> Vec<ObligationBinding> {
 /// Real backend, real transcript, real persisted schema: negotiates the withdraw obligations,
 /// publishes the postcondition harness's record to a real `kani-obligations/{module}.json` on
 /// disk (`write_bundle_atomic`, the same call a real generation pipeline makes), runs the seeded
-/// defect under the pinned Kani 0.67.0 backend to get a real falsification, reads the schema back
+/// defect under the installed Kani backend to get a real falsification, reads the schema back
 /// off disk, and decodes the transcript with it. Then mutates the file two ways — drops a binding,
 /// and separately changes a declared primitive type (hence byte width) — and shows the decode
 /// refuses by name both times, against the very same transcript that decoded cleanly.
@@ -363,14 +354,7 @@ fn persisted_arguments(record: &Value) -> Vec<ObligationBinding> {
 #[ignore = "kani lane: run serially through `cargo test --test it kani_witness_join -- --ignored`"]
 fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_refuses() {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
-    let pins = installation.observe().expect("the backend is measurable");
-    assert_eq!(
-        pins,
-        KaniToolPins::pinned(),
-        "the installed backend is the committed one"
-    );
-
-    let harnesses = withdraw_harnesses(&pins);
+    let harnesses = withdraw_harnesses();
     let postcondition_harness = harnesses
         .iter()
         .find(|harness| harness.identity.kind == ObligationKind::Postcondition)
@@ -406,7 +390,7 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         .to_owned();
 
     // Real falsification: the seeded defect credits instead of debiting, so the postcondition
-    // (`balance` never grows) is falsified under the real pinned backend.
+    // (`balance` never grows) is falsified under the real backend.
     let transcript = run_falsifying(&installation, postcondition_harness);
     println!("IR-211 real transcript:\n{transcript}");
 

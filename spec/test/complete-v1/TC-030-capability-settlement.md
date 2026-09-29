@@ -14,7 +14,7 @@ relationships:
 
 Verify that every requested capability claim is settled by exactly one
 `negotiate_*` arm over a closed backend kind, that each FR-290 rule settles its
-own row, and that no capability is settled anywhere else in the repository.
+own row, and that only an item settled `supported` routes a backend.
 
 ## Test Procedure
 
@@ -35,12 +35,7 @@ is another identity, and inspect which kinds were read.
 Enumerate the closed backend kind's variants and assert that settlement
 dispatches an arm for each.
 
-Scan the crate's own sources for a settlement that is reached other than
-through a `negotiate_*` arm.
-
-Record the probe outcome for a routed item under an absent tool, under a tool
-whose identity differs from the pin, under a matching tool, and under a tool that
-changes after a passing probe. Ask each settlement that is not `supported`
+Ask each settlement that is not `supported`
 whether it routes a backend at all, and ask a manifest that repeats one backend
 identity the same question.
 
@@ -62,13 +57,7 @@ order, identically under both registration orders.
 Both malformed-vocabulary envelopes refuse as
 `invalid_capability`/`unsupported-version` with no kind read.
 
-Every variant of the closed backend kind has a dispatched arm, and the source
-scan finds no settlement outside a `negotiate_*` arm.
+Every variant of the closed backend kind has a dispatched arm.
 
-The absent tool and the mismatched tool each record the FR-331 result
-`unsupported` with cause `unsupported_projection`/`tool-unavailable`, naming the
-backend, the expected and actual or absent tool identity and the claim; the item
-keeps its `supported` disposition; a matching tool records nothing; and a tool
-that changes after a passing probe records `failed` with the same cause. No
-settlement other than `supported` routes a backend, and a manifest repeating an
+No settlement other than `supported` routes a backend, and a manifest repeating an
 identity routes none.

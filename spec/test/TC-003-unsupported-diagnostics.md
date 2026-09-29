@@ -18,7 +18,7 @@ complete artifacts or lose their refusal locus.
 ## Test Procedure
 
 Run every negative conformance fixture through every applicable backend and inspect diagnostics,
-exact rejected IR source spans, attestation completeness state, exit status, and staged output
+exact rejected IR source spans, exit status, and staged output
 directory. Include definedness obligations, scalar roots, numeric arithmetic/negation, indirect
 dependencies, object/graph reads such as dereference and reachability, and every expression node
 outside the supported grammar. Where more than one expression node or obligation is unsupported,
@@ -26,9 +26,9 @@ require the deterministic first locus declared by FR-001 rather than accepting a
 
 For Kani, also vary pre/post placement and one cross-clause binding dimension at a time: dependency
 kind, observation, Boolean/integer type, integer domain/minimum/maximum/overflow policy, subject ABI,
-backend version, executable digest, unwind, solver and identity. A post-state dependency in a
+unwind, solver and identity. A post-state dependency in a
 precondition, conflicting declarations for one dependency, or any range not taken from the checked
-IR is unrepresentable and must refuse before source, graph, or attestation publication.
+IR is unrepresentable and must refuse before source or graph publication.
 
 ## Expected Results
 
