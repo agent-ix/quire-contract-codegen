@@ -66,7 +66,6 @@ type: TestMatrix
 | FR-015 | FR-015-AC-13 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-14 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-15 | TC-033 | ✅ Covered |
-| TC-034 | Verify the claimed-module proof gate | Integration | P0 | FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, FR-023-AC-4 | ✅ Covered |
 | FR-015 | FR-015-AC-16 through FR-015-AC-18 | TC-033 | ✅ Covered |
 | FR-016 | FR-016-AC-8 through FR-016-AC-11 | TC-026 | ✅ Covered |
 | FR-016 | FR-016-AC-1, FR-016-AC-5 | TC-026 | ⚠️ Partially covered; the witness join (`witness_schema`, `decode_falsification`) decodes a matching transcript and refuses the harness-identity, arity, width, schema, Boolean-byte and comment cases, but reports every refusal as a `KaniOutcome` refusal code rather than FR-016's malformed-witness result, so neither criterion is backed and neither carries a trace tag; binding to the harness pins is unbuilt |
@@ -347,6 +346,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13, FR-018-AC-14 | 🚧 Planned |
 | TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-5, FR-019-AC-6, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
 | TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-022-AC-14, FR-022-AC-15, FR-015-AC-15, FR-015-AC-16, FR-015-AC-17, FR-015-AC-18 | ✅ Covered |
+| TC-034 | Verify the claimed-module proof gate | Integration | P0 | FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, FR-023-AC-4 | ✅ Covered |
 
 TC-001 through TC-003, TC-005, and TC-014 are covered after ticket-scoped current-head Rust review
 and gap analysis. Together they establish deterministic identity-bearing artifacts, compilation and

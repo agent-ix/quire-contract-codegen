@@ -42,3 +42,29 @@ files. Its exit 2 comes from AP-001 and MP-001, which fail the same way on `orig
 
 One MEDIUM mismatch between spec and code (FND-001). Either narrow FR-016's paragraph to what the
 adapter does, or move request construction into the generator. The rest is minor.
+
+## Dispositions
+
+Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546`.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed 728e431 | FR-016 Behavior now says the caller supplies the complete request (package id, function, limits, byte provision) and the generator supplies the witness replay source and calls `replay`. This matches `replay_falsification` and interface-001. |
+| FND-002 | fixed 728e431 | AC-9 is split into FR-016-AC-9 (reproduced, depends on the witness value), AC-10 (inconclusive naming both verdicts) and AC-11 (distinct typed refusals). The matrix and TC-026 are updated to match. |
+| FND-003 | fixed 728e431 | FR-016 Dependencies now names qsl-replay as the only QSL crate src/ calls, and describes the test-only exception, the qsl-foundation/quire-exact dev-deps and its end condition. |
+| FND-004 | fixed 728e431 | "Step 1 is" is fixed, the duplicate "AC-8 is backed" is removed, and the test procedure is removed from FR-023 Behavior. The TC-034 row move introduced a new defect, recorded as FND-005. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | The TC-034 registry row was moved into the FR-to-TC coverage table: a 6-cell row among 4-column FR-015 rows. TC-034 is now missing from the TC registry table. `make spec` does not catch this. | spec/test-matrix.md:69 |
+
+### FND-005 detail
+
+To fix "TC-034 sits before TC-033", the fix commit deleted the row from the TC registry table
+(previously test-matrix.md:348) and inserted it at test-matrix.md:69. That spot is between
+`FR-015-AC-15` and `FR-015-AC-16 through FR-015-AC-18` in the FR → AC → TC coverage table, whose
+columns are `FR | AC | TC | Status`. As a result, the coverage table holds a malformed row whose
+first cell is `TC-034`, and the TC registry (TC-001 to TC-033) has no TC-034 entry. Fix: delete line
+69 and put the row back in the TC registry table, after TC-033.

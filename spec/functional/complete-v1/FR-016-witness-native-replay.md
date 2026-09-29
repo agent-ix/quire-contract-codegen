@@ -102,5 +102,5 @@ failure is reported. This is issue #50.
   as dev-dependencies, because `qsl-replay` re-exports neither the request's
   types (`quire_exact::Identifier`, `quire_exact::ScalarLimits`, `WireNodeId`,
   `SourceIdentity`) nor a compiled unit's package id and parameter node ids. The
-  exception ends when `qsl-replay` exposes those through its facade.
+  exception (Linear IR-309) ends when `qsl-replay` exposes those through its facade.
 - **Downstream**: [TC-026](../../test/complete-v1/TC-026-witness-native-replay.md).

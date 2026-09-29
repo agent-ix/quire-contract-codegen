@@ -42,3 +42,13 @@ SR-037).
 
 Every IR-21 functional criterion is backed by a test that passes on a real prover run. The gap is in
 the evidence-scope criterion (FND-001), which needs a statement, not code.
+
+## Dispositions
+
+Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546`.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed 728e431 | TC-034 (new paragraph after step 3), TC-026 Status and the skeleton_spine module doc now state that the input is a hand-built BoundPackage (contract-to-IR and E1-E4 do not run), that the twin is hand-mirrored, and that the limits are stand-ins. |
+| FND-002 | fixed 728e431 | Both inconclusive replays assert `(cause.proved(), cause.replayed()) == (violation, success)`, in the default lane and the prover lane. |
+| FND-003 | fixed 728e431 | src/lib.rs:27 `// Implements: FR-023`. |

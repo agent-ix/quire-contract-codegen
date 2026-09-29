@@ -37,7 +37,7 @@ sha2 = "=0.10.9"
 syn = { version = "=2.0.119", features = ["full", "visit"] }
 
 [dev-dependencies]
-# Test-only exception to QSL's T12-A, expiring: the spine test compiles its own QSL source
+# Test-only exception to QSL's T12-A, tracked by IR-309 and expiring: the spine test compiles its own QSL source
 # (qsl_replay::spine) to learn the package id and parameter node ids, and builds the request's
 # typed limits and digests. Both dev-dependencies and that use go when qsl-replay re-exports
 # quire_exact::Identifier and ScalarLimits, WireNodeId and SourceIdentity and exposes a compiled

@@ -127,3 +127,16 @@ Logs are under `/tmp/claude-1000/-home-peter-dev/7460db9c-2787-438d-92ba-cee3b3b
 No HIGH findings, and the functional spine works on a real prover run. Two MEDIUM findings (FND-001
 and FND-002) concern whether the spine is described honestly and whether the replay request can be
 built from src. Fix both, or disposition them with a ticket, before merge.
+
+## Dispositions
+
+Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546` (fix commit `728e431`).
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | still-open | The test-only T12-A/FB-05 exception and its expiry condition are now written down (Cargo.toml:40-44, tests/it/skeleton_spine.rs:14-20, FR-016 Dependencies). No ticket tracks the expiry, though: none is cited, and Linear search finds no QSL/IR ticket for the qsl-replay re-exports or for exposing a compiled unit's ids. File one and cite its id in Cargo.toml and the test's module doc. |
+| FND-002 | fixed 728e431 | The module doc names the stages the input passes through (hand-built BoundPackage; E1-E4 and contract-to-IR do not run; E7, E8, E9 do). `prove_identity` is renamed `compile_native_twin`. The limits are documented as unlimited stand-ins. The test is renamed `..._from_a_bound_package_...`. TC-026/TC-034 say the same. |
+| FND-003 | fixed 728e431 | src/lib.rs:27 now reads `// Implements: FR-023`. |
+| FND-004 | fixed 728e431 | The witness is now (1,5), which satisfies amount<=balance. A new test replays (0,5) against the violating twin and expects inconclusive with proved=violation and replayed=success. Both healthy-twin replays (default and prover lane) now assert the named verdicts. The prover lane asserts that the decoded counterexample satisfies the precondition. |
+| FND-005 | fixed 728e431 | `tc_026_each_adapter_refusal_is_its_own_typed_error` covers FieldDelimiter, Transcript, Refused (stale package_id) and WrongArm. `tc_026_a_boolean_value_replays_as_zero_or_one` replays false (reproduced) and true (inconclusive). |
+| FND-006 | fixed 728e431 | The skeleton_spine module doc, FR-023 and TC-034 Status now state that the prover spine is an ignored `make kani` test outside `make ci`. |

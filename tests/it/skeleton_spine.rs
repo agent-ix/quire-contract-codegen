@@ -12,7 +12,7 @@
 //! only by the clause and its argument names. The replay request's limits are unlimited
 //! stand-ins, because no proving run carries limits.
 //!
-//! Test-only exception, expiring: this file calls `qsl_replay::spine::compile` and depends on
+//! Test-only exception, tracked by IR-309 and expiring: this file calls `qsl_replay::spine::compile` and depends on
 //! `qsl-foundation` and `quire-exact`, which QSL's FB-05 and arch-lint T12-A keep out of CG.
 //! It does so because `qsl-replay` re-exports neither the types a request needs
 //! (`quire_exact::Identifier`, `quire_exact::ScalarLimits`, `WireNodeId`, `SourceIdentity`) nor
