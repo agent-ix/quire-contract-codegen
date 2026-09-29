@@ -20,7 +20,7 @@ make fmt-check        # verify formatting (CI gate)
 make lint             # locked clippy with -D warnings
 make test             # locked cargo test
 make build            # locked release build
-make msrv             # execute all tests with exact Rust 1.98.1
+make msrv
 make spec             # Quire-validate the specification, planning, plan and review documents
 make clean            # cargo clean
 make deny             # all configured cargo-deny lanes
