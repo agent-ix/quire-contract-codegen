@@ -26,8 +26,7 @@ summary, with a zero-total summary, and with an unreadable summary; a failed
 unwinding assertion with playbacks present; and a results listing in which an
 unwinding check succeeded.
 
-Edge module: parse real Kani 0.67.0 captures (`tests/fixtures/kani-0.67.0/`, with the exact
-command of each in `MANIFEST.tsv`) of a verified run, a falsified run with a playback, an
+Edge module: parse real Kani 0.67.0 captures (`tests/fixtures/kani-0.67.0/`) of a verified run, a falsified run with a playback, an
 exhausted unwind bound, an unreachable cover, a partly satisfied cover and a run with no cover
 summary, and classify each; then scan every non-test file under `src/`, recursively, other than
 `src/kani_transcript.rs` for Kani's wording.

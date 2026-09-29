@@ -6,15 +6,7 @@ Deterministic Rust, property-test, proof, and evidence generation from Quire con
 
 ## Development status
 
-This crate is in its specification-first foundation phase. The requirements, assurance plan,
-dependency pins, and shared-assurance intake procedure are reviewable now; semantic code generation is
-intentionally deferred until the upstream IR corpus and runtime interfaces are reconciled.
-
-The provisional dependency state is recorded in
-[`planning/draft-dependency-pins.md`](planning/draft-dependency-pins.md). Draft work may advance
-against those exact pins, but it does not establish compatibility or release readiness. Before
-semantic implementation or release, the branch must be rebased and the pins reconciled with the
-accepted upstream revisions.
+This crate is pre-release. Dependency revisions are whatever `Cargo.toml` and `Cargo.lock` name.
 
 ## Local validation
 

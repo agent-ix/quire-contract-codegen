@@ -370,8 +370,7 @@ mod tests {
     }
 
     /// A real Kani 0.67.0 capture: its stdout and stderr newline-joined as the launcher joins
-    /// them, and whether it exited successfully. See `tests/fixtures/kani-0.67.0/MANIFEST.tsv`
-    /// for the exact command each was captured with.
+    /// them, and whether it exited successfully.
     struct Capture {
         text: String,
         exited_successfully: bool,

@@ -1425,12 +1425,11 @@ fn lower_scalar_claim(
             reachable_upper: reachable_upper.to_string(),
         });
     }
-    let digest = sha256(claim.node_id.digest.as_bytes())
-        .chars()
-        .take(32)
-        .collect::<String>();
-    let module_symbol = format!("kob_scalar_{digest}_module");
-    let harness_symbol = format!("kob_scalar_{digest}_proof");
+    // The node's own QSL id is already a fixed-length lowercase hex string, so it names the
+    // harness directly.
+    let node = &claim.node_id.digest;
+    let module_symbol = format!("kob_scalar_{node}_module");
+    let harness_symbol = format!("kob_scalar_{node}_proof");
     Ok(LoweredScalarClaim {
         node_id: claim.node_id.clone(),
         operation_identity: claim.operation.identity.clone(),
