@@ -503,7 +503,7 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
         .iter()
         .find(|region| region.role == "implication_consequent")
         .unwrap();
-    assert_eq!((consequent.start_line, consequent.end_line), (21, 21));
+    assert_eq!((consequent.start_line, consequent.end_line), (20, 20));
     assert_eq!(
         first
             .rust
