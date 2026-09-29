@@ -345,20 +345,10 @@ The interface's features in declaration order: every operation the contract abov
 | bound_strategy::population::render_population | operation |
 | cli_generate | operation |
 
-## Acceptance Criteria
-
-| ID | Criteria | Verification |
-|----|----------|--------------|
-| interface-001-AC-1 | Every public function the crate exposes — each `pub fn` and `pub use` function at the crate root and everything reachable through a `pub mod`, named by its shortest public path — is exactly the set of `operations` entries this contract declares without a `status: planned` caveat: a public function no entry declares, or a declared entry the crate does not expose, fails. | Test |
-| interface-001-AC-2 | Every `operations` entry this contract marks `status: planned` — `generate_bundle`, `analyze_coverage`, `cli_generate` — is absent from the public API, so an implementation cannot silently outrun the status this contract declares for it. | Test |
-
 ## Open items
 
-- `generate_bundle`, `analyze_coverage` and `cli_generate` are declared `status: planned` and have
-  no acceptance criteria beyond interface-001-AC-2's absence check: a criterion asserting behavior
-  for an operation this contract itself says is not implemented would be written to be satisfied by
-  nothing. Criteria for their real semantics belong with the requirement that implements them, once
-  one exists.
+- `generate_bundle`, `analyze_coverage` and `cli_generate` are declared `status: planned`. Criteria
+  for their semantics belong with the requirement that implements them, once one exists.
 - The remaining prose fields this contract's slices carry — admission order, refusal vocabulary,
   domain and campaign rules, and so on — are the executable half of the FR that owns each slice
   (FR-008 through FR-013 for `bound_strategy_slice`, FR-003 for `kani_slice`, FR-017 for

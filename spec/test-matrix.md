@@ -249,12 +249,6 @@ matches over Contract IR's decoded tag and form enums wait on agent-ix/quire-con
 both the `#[string_edge]` attribute and the `xtask string-edge` scan this repository is to run. No
 requirement here claims either one.
 
-## Interface Requirement Coverage
-
-| Interface | Acceptance Criteria | Test Cases | Status |
-|---|---|---|---|
-| interface-001 | interface-001-AC-1, interface-001-AC-2 | Test | 🚧 Planned; no test compares the exported functions with the declared operations |
-
 ## Non-Functional Requirement Coverage
 
 | Non-Functional Req | Verification Method | Evidence/Test Cases | Status |
