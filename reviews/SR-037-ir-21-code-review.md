@@ -140,3 +140,9 @@ Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546` (fix commit `728
 | FND-004 | fixed 728e431 | The witness is now (1,5), which satisfies amount<=balance. A new test replays (0,5) against the violating twin and expects inconclusive with proved=violation and replayed=success. Both healthy-twin replays (default and prover lane) now assert the named verdicts. The prover lane asserts that the decoded counterexample satisfies the precondition. |
 | FND-005 | fixed 728e431 | `tc_026_each_adapter_refusal_is_its_own_typed_error` covers FieldDelimiter, Transcript, Refused (stale package_id) and WrongArm. `tc_026_a_boolean_value_replays_as_zero_or_one` replays false (reproduced) and true (inconclusive). |
 | FND-006 | fixed 728e431 | The skeleton_spine module doc, FR-023 and TC-034 Status now state that the prover spine is an ignored `make kani` test outside `make ci`. |
+
+Round 2, reviewed at `9e1787611dac0bf29bacec38dff4804e2f3c86ce` (fix commit `9e17876`).
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed 9e17876 | IR-309 now tracks the exception and names the expiry condition. It is cited in Cargo.toml:40, the tests/it/skeleton_spine.rs module doc (line 15) and FR-016 Dependencies. |

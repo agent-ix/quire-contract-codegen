@@ -54,6 +54,12 @@ Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546`.
 | FND-003 | fixed 728e431 | FR-016 Dependencies now names qsl-replay as the only QSL crate src/ calls, and describes the test-only exception, the qsl-foundation/quire-exact dev-deps and its end condition. |
 | FND-004 | fixed 728e431 | "Step 1 is" is fixed, the duplicate "AC-8 is backed" is removed, and the test procedure is removed from FR-023 Behavior. The TC-034 row move introduced a new defect, recorded as FND-005. |
 
+Round 2, reviewed at `9e1787611dac0bf29bacec38dff4804e2f3c86ce` (fix commit `9e17876`).
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-005 | fixed 9e17876 | The malformed row is gone from the FR coverage table, and the TC-034 row is back in the TC registry directly after TC-033. The test-matrix diff is exactly that one deletion and one insertion; nothing else moved. |
+
 ## New findings (disposition pass 1)
 
 | ID | Severity | Summary | Refs |
