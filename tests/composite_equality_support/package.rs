@@ -785,13 +785,7 @@ pub fn corpus_package() -> PackageBuilder {
             T_BOOLEAN,
             aggregate(vec![]),
         )
-        .code(
-            S_BARE,
-            "state",
-            "state_clause",
-            T_BOOLEAN,
-            aggregate(vec![]),
-        )
+        .code(S_BARE, "state", "snapshot", T_BOOLEAN, aggregate(vec![]))
         .code(
             T_BARE,
             "temporal",

@@ -14,7 +14,7 @@ name = "quire_contract_codegen"
 path = "src/lib.rs"
 
 [dependencies]
-quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "48ab5dc29213c3975a5fe8f04ecbb3d1c2b345bb" }
+quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "37c34de8c119d368369cb70abd74dbe0bc254bfd" }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "ed0a04b482216b79d3559a6ac59e6e260c5591cf", features = ["exact"] }
 # qsl-replay is the only QSL crate this repository depends on (QSL arch-lint T12-A); the
 # replay adapter in src/spine_replay.rs goes through its `replay` entry, and the spine test

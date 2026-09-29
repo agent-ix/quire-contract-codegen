@@ -392,6 +392,8 @@ pub(crate) fn supported_contract_harnesses(
 const UNSATISFIABLE: u32 = 3001;
 /// A frame clause.
 const FRAME: u32 = 3002;
+/// The object type `FRAME` frames.
+const FRAMED_OBJECT: u32 = 3004;
 
 pub(crate) fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>) {
     let mut builder = corpus_package();
@@ -429,11 +431,19 @@ pub(crate) fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>)
             ),
             &[Bound::Integer(5, -5)],
         )
+        // Contract IR types a frame by the `model`/`object_type` node it frames.
+        .code(
+            FRAMED_OBJECT,
+            "model",
+            "object_type",
+            &key(T_BOOLEAN),
+            json!({"term": "aggregate", "members": []}),
+        )
         .code(
             FRAME,
             "state",
             "frame",
-            &key(T_BOOLEAN),
+            &key(FRAMED_OBJECT),
             json!({"term": "frame", "modifies": [], "creates": [], "deletes": []}),
         );
     let package = builder.admit();

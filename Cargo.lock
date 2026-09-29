@@ -1501,9 +1501,9 @@ dependencies = [
 [[package]]
 name = "quire-contract-ir"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-ir?rev=48ab5dc29213c3975a5fe8f04ecbb3d1c2b345bb#48ab5dc29213c3975a5fe8f04ecbb3d1c2b345bb"
+source = "git+https://github.com/agent-ix/quire-contract-ir?rev=37c34de8c119d368369cb70abd74dbe0bc254bfd#37c34de8c119d368369cb70abd74dbe0bc254bfd"
 dependencies = [
- "quire-contract-model 0.1.0 (git+https://github.com/agent-ix/quire-contract-ir?rev=48ab5dc29213c3975a5fe8f04ecbb3d1c2b345bb)",
+ "quire-contract-model 0.1.0 (git+https://github.com/agent-ix/quire-contract-ir?rev=37c34de8c119d368369cb70abd74dbe0bc254bfd)",
  "quire-mltl",
  "quire-observation",
  "quire-protocol",
@@ -1516,6 +1516,21 @@ dependencies = [
  "thiserror",
  "tl-mltl",
  "tl-syntax",
+]
+
+[[package]]
+name = "quire-contract-model"
+version = "0.1.0"
+source = "git+https://github.com/agent-ix/quire-contract-ir?rev=37c34de8c119d368369cb70abd74dbe0bc254bfd#37c34de8c119d368369cb70abd74dbe0bc254bfd"
+dependencies = [
+ "jsonschema 0.17.1",
+ "quire-verification-contracts 0.1.0 (git+https://github.com/agent-ix/quire-verification-contracts?rev=4c49706d5db3ba77f96088ddcbb2635046246e32)",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_stacker",
+ "sha2",
+ "stacker",
 ]
 
 [[package]]
@@ -1670,6 +1685,23 @@ dependencies = [
  "sha2",
  "thiserror",
  "unicode-normalization",
+]
+
+[[package]]
+name = "quire-verification-contracts"
+version = "0.1.0"
+source = "git+https://github.com/agent-ix/quire-verification-contracts?rev=4c49706d5db3ba77f96088ddcbb2635046246e32#4c49706d5db3ba77f96088ddcbb2635046246e32"
+dependencies = [
+ "chrono",
+ "jsonschema 0.55.1",
+ "regress",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serde_json_canonicalizer",
+ "sha2",
+ "thiserror",
+ "typify",
 ]
 
 [[package]]
