@@ -463,6 +463,12 @@ impl PackageBuilder {
             .into_iter()
             .map(|digest| node_ref(digest))
             .collect::<Vec<_>>();
+        // The schema's `BodyBindingRules` fix the occurrence role of these forms.
+        let role = match (tag, form) {
+            ("value", "parameter") => "expression",
+            ("state", "frame") => "generated",
+            _ => "declaration",
+        };
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
@@ -473,7 +479,7 @@ impl PackageBuilder {
             "semantic_form": form,
             "semantic_type": node_ref(semantic_type),
             "dependencies": dependencies,
-            "occurrences": [{"role": "declaration", "ordinal": 0}],
+            "occurrences": [{"role": role, "ordinal": 0}],
             "body": body,
         });
         if let Some(declaration) = declaration_for(tag, form, label) {
@@ -485,7 +491,7 @@ impl PackageBuilder {
         let start = map.len();
         map.push(json!({
             "node_id": node_ref(digest),
-            "role": "declaration",
+            "role": role,
             "ordinal": 0,
             "regions": [{
                 "source": source,
@@ -2741,7 +2747,7 @@ pub fn corpus_package() -> PackageBuilder {
         )
         .code(MODEL, "model", "model_import", &boolean, aggregate())
         .code(RELATION, "relation", "relationship", &boolean, aggregate())
-        .code(STATE, "state", "state_clause", &boolean, aggregate())
+        .code(STATE, "state", "snapshot", &boolean, aggregate())
         .application_code(
             TEMPORAL,
             "temporal",
