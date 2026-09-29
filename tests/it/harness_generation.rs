@@ -758,7 +758,7 @@ fn tc_004_invalid_execution_point_is_a_structured_failure_without_artifact() {
 
 /// TC-003, TC-004.
 #[test]
-fn tc_004_invalid_campaign_and_attestation_inputs_fail_before_clause_generation() {
+fn tc_004_invalid_campaign_inputs_fail_before_clause_generation() {
     let (environment, precondition_expression, postcondition_expression) = typed_clauses();
     let precondition = ClauseId::new("precondition-main").unwrap();
     let postcondition = ClauseId::new("postcondition-main").unwrap();

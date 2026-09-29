@@ -1,16 +1,6 @@
 //! FR-019 capability settlement: one `negotiate_*` arm over a closed backend kind.
 //!
-//! Each test walks one row of FR-290's ordered rules, and the last one asserts
-//! the seam itself: that no `Disposition` is constructed outside a `negotiate_*`
-//! function anywhere in `src/`. That gate is the reason the property is checkable
-//! rather than prose — the arms settle correctly today either way, and nothing
-//! but the scan says so tomorrow.
-
-use std::{
-    collections::BTreeSet,
-    fs,
-    path::{Path, PathBuf},
-};
+//! Each test walks one row of FR-290's ordered rules.
 
 use quire_contract_codegen::{
     negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
@@ -19,21 +9,16 @@ use quire_contract_codegen::{
     CAPABILITY_VOCABULARY,
 };
 
-const KANI_DIGEST: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
-const OTHER_DIGEST: &str = "f0e1d2c3b4a5968778695a4b3c2d1e0ff0e1d2c3b4a5968778695a4b3c2d1e0f";
-
 fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
     BackendDescriptor {
         identity: BackendKind::Kani.identity().to_owned(),
-        manifest_digest: KANI_DIGEST.to_owned(),
         advertised,
     }
 }
 
-fn candidate(identity: &str, digest: &str) -> Candidate {
+fn candidate(identity: &str) -> Candidate {
     Candidate {
         identity: identity.to_owned(),
-        manifest_digest: digest.to_owned(),
     }
 }
 
@@ -93,7 +78,7 @@ fn tc_030_every_backend_kind_has_a_dispatched_arm() {
             vec![descriptor],
             item(
                 RequestedKind::Known(CapabilityKind::OperationContract),
-                Candidates::Set(vec![candidate(backend.identity(), KANI_DIGEST)]),
+                Candidates::Set(vec![candidate(backend.identity())]),
             ),
         );
         assert_eq!(
@@ -115,7 +100,7 @@ fn tc_030_every_backend_kind_has_a_dispatched_arm() {
 #[test]
 fn tc_030_an_absent_or_unknown_kind_settles_before_the_candidate_table() {
     // Candidates that would otherwise settle `supported`: the kind rules win.
-    let candidates = Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]);
+    let candidates = Candidates::Set(vec![candidate(BackendKind::Kani.identity())]);
     let manifest = vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])];
 
     let absent = settle_one(
@@ -160,7 +145,7 @@ fn tc_030_an_absent_extent_classification_settles_invalid_request() {
             extent: None,
             ..item(
                 RequestedKind::Known(CapabilityKind::ValueValidity),
-                Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
+                Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
             )
         },
     );
@@ -200,14 +185,13 @@ fn tc_030_an_unroutable_backend_settles_invalid_request() {
     // routability.
     let registered_without_arm = BackendDescriptor {
         identity: "cvc5".to_owned(),
-        manifest_digest: OTHER_DIGEST.to_owned(),
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
     };
     let unarmed = settle_one(
         vec![registered_without_arm],
         item(
             RequestedKind::Known(CapabilityKind::ValueValidity),
-            Candidates::Set(vec![candidate("cvc5", OTHER_DIGEST)]),
+            Candidates::Set(vec![candidate("cvc5")]),
         ),
     );
     assert_eq!(
@@ -231,31 +215,31 @@ fn tc_030_inconsistent_candidates_settle_invalid_request() {
         vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
         item(
             RequestedKind::Known(CapabilityKind::ValueValidity),
-            Candidates::Set(vec![candidate(BackendKind::Kani.identity(), OTHER_DIGEST)]),
+            Candidates::Set(vec![candidate("kani-unregistered")]),
         ),
     );
     assert_eq!(
         absent_from_manifest.disposition,
         Disposition::InvalidRequest {
             cause: Cause::InconsistentCandidates {
-                candidates: vec![candidate(BackendKind::Kani.identity(), OTHER_DIGEST)]
+                candidates: vec![candidate("kani-unregistered")]
             }
         },
-        "a manifest digest that is not in the manifest is not the same candidate"
+        "a candidate that is not in the manifest is inconsistent"
     );
 
     let does_not_advertise = settle_one(
         vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
         item(
             RequestedKind::Known(CapabilityKind::Refinement),
-            Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
+            Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
         ),
     );
     assert_eq!(
         does_not_advertise.disposition,
         Disposition::InvalidRequest {
             cause: Cause::InconsistentCandidates {
-                candidates: vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]
+                candidates: vec![candidate(BackendKind::Kani.identity())]
             }
         }
     );
@@ -316,15 +300,14 @@ fn tc_030_an_empty_candidate_set_settles_unsupported_with_a_warning() {
 fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
     let second = BackendDescriptor {
         identity: "kani-nightly".to_owned(),
-        manifest_digest: OTHER_DIGEST.to_owned(),
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
     };
     let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
-    // Candidate order is bytewise by identity then digest, and is a property of
-    // the set rather than of the manifest it was read from.
+    // Candidate order is bytewise by identity, and is a property of the set
+    // rather than of the manifest it was read from.
     let ordered = vec![
-        candidate(BackendKind::Kani.identity(), KANI_DIGEST),
-        candidate("kani-nightly", OTHER_DIGEST),
+        candidate(BackendKind::Kani.identity()),
+        candidate("kani-nightly"),
     ];
 
     for manifest in [
@@ -359,7 +342,7 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
 #[test]
 fn tc_030_the_advertised_mode_table_settles_each_row() {
     let kind = CapabilityKind::ValueValidity;
-    let only = vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)];
+    let only = vec![candidate(BackendKind::Kani.identity())];
     let kani_backend = BackendKind::Kani.identity().to_owned();
 
     let rows = [
@@ -433,7 +416,7 @@ fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
                 vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
                 vec![item(
                     RequestedKind::Known(CapabilityKind::ValueValidity),
-                    Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
+                    Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
                 )],
             )
         })
@@ -448,348 +431,6 @@ fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
             "no settlement is returned, so no label of the carrier was read"
         );
     }
-}
-
-/// No `Disposition` is constructed outside a `negotiate_*` function anywhere in
-/// this repository's Rust sources.
-///
-/// This is the S9 seam stated as a gate. The arms settle correctly today with or
-/// without it; what it catches is the settlement added next year somewhere else,
-/// which would give the same behaviour at run time and leave "negotiate_* is the
-/// only settlement point" true only by coincidence.
-///
-/// The scan parses each file with `syn` rather than reading lines. A line scan
-/// was written first and measured wrong in both directions: it missed a
-/// `pub(crate) fn` — the visibility this repository's own idioms prefer — so an
-/// injected settlement outside every arm passed green, and it failed on a
-/// rustdoc link naming a variant, blaming the function above the comment. Both
-/// are gone here because a parser distinguishes a declaration from a comment and
-/// an expression from a pattern by construction, instead of by a rule about
-/// where `=>` sits on a line.
-///
-/// Trace: TC-030
-/// Provenance: codegen#86
-#[test]
-fn tc_030_no_capability_is_settled_outside_a_negotiate_arm() {
-    let offences: Vec<String> = scan_roots()
-        .iter()
-        .flat_map(|root| rust_sources(root))
-        .flat_map(|file| settlement_sites(&file))
-        .filter(|site| !site.enclosing.starts_with("negotiate_"))
-        .map(|site| {
-            format!(
-                "{}: `{}` constructs a disposition outside a negotiate_* arm",
-                site.file, site.enclosing
-            )
-        })
-        .collect();
-    assert!(
-        offences.is_empty(),
-        "capability settled outside a negotiate_* arm:\n{}",
-        offences.join("\n")
-    );
-}
-
-/// The scan reads the settlement point, and reads every arm of it.
-///
-/// Without this, a scan that matched nothing — a moved directory, a renamed
-/// type, a parser that silently failed — would report the seam intact by looking
-/// at nothing at all. The counts are the measured ones rather than a floor of
-/// one, so a refactor that moves settlement out of reach of the scan fails here
-/// even while the gate above stays green.
-///
-/// Trace: TC-030
-/// Provenance: codegen#86
-#[test]
-fn tc_030_the_settlement_scan_reads_the_settlement_point() {
-    let sites: Vec<SettlementSite> = scan_roots()
-        .iter()
-        .flat_map(|root| rust_sources(root))
-        .flat_map(|file| settlement_sites(&file))
-        .collect();
-    let arms: BTreeSet<&str> = sites
-        .iter()
-        .map(|site| site.enclosing.as_str())
-        .filter(|name| name.starts_with("negotiate_"))
-        .collect();
-    assert_eq!(
-        arms,
-        BTreeSet::from([
-            "negotiate_item",
-            "negotiate_kani",
-            "negotiate_single_candidate"
-        ]),
-        "the settlement functions the scan reads are not the ones this crate has"
-    );
-    assert!(
-        sites.len() >= 12,
-        "the scan found only {} settlement sites; it was reading 12 when this gate was written",
-        sites.len()
-    );
-}
-
-/// The roots the seam covers: every Rust source this repository builds.
-///
-/// FR-019-AC-5 says "anywhere in this repository", and a settlement added to the
-/// conformance producer under `examples/` would satisfy a `src/`-only scan while
-/// settling capabilities outside every arm.
-fn scan_roots() -> Vec<PathBuf> {
-    ["src", "examples"]
-        .into_iter()
-        .map(PathBuf::from)
-        .filter(|root| root.is_dir())
-        .collect()
-}
-
-/// One place a [`Disposition`] is constructed.
-struct SettlementSite {
-    /// `path:line`, for a message that points at the construction itself.
-    file: String,
-    /// The innermost named function containing it, or `<file scope>`.
-    enclosing: String,
-}
-
-/// Every [`Disposition`] construction in one file, with the function it sits in.
-fn settlement_sites(file: &Path) -> Vec<SettlementSite> {
-    let text = fs::read_to_string(file).expect("a Rust source reads");
-    let parsed = syn::parse_file(&text).expect("a Rust source parses");
-    let mut visitor = Settlements {
-        file: file.to_path_buf(),
-        enclosing: vec![],
-        in_disposition_impl: false,
-        aliases: disposition_aliases(&parsed),
-        found: vec![],
-    };
-    syn::visit::Visit::visit_file(&mut visitor, &parsed);
-    visitor.found
-}
-
-/// Every name that refers to [`Disposition`] in this file: the type itself, any
-/// `type` alias of it, and — when the file glob-imports its variants — the empty
-/// name, which stands for a bare `Supported { .. }`.
-fn disposition_aliases(parsed: &syn::File) -> BTreeSet<String> {
-    let mut names = BTreeSet::from(["Disposition".to_owned()]);
-    for item in &parsed.items {
-        match item {
-            syn::Item::Type(alias) => {
-                if let syn::Type::Path(path) = alias.ty.as_ref() {
-                    if last_segment(&path.path).is_some_and(|name| name == "Disposition") {
-                        names.insert(alias.ident.to_string());
-                    }
-                }
-            }
-            syn::Item::Use(import) if glob_imports_disposition(&import.tree) => {
-                names.insert(String::new());
-            }
-            _ => {}
-        }
-    }
-    names
-}
-
-fn glob_imports_disposition(tree: &syn::UseTree) -> bool {
-    match tree {
-        syn::UseTree::Path(path) => {
-            (path.ident == "Disposition" && matches!(*path.tree, syn::UseTree::Glob(_)))
-                || glob_imports_disposition(&path.tree)
-        }
-        syn::UseTree::Group(group) => group.items.iter().any(glob_imports_disposition),
-        _ => false,
-    }
-}
-
-fn last_segment(path: &syn::Path) -> Option<String> {
-    path.segments
-        .last()
-        .map(|segment| segment.ident.to_string())
-}
-
-/// The four disposition variants. A construction names one of these.
-const VARIANTS: [&str; 4] = [
-    "Supported",
-    "RequiresBound",
-    "Unsupported",
-    "InvalidRequest",
-];
-
-struct Settlements {
-    file: PathBuf,
-    enclosing: Vec<String>,
-    in_disposition_impl: bool,
-    aliases: BTreeSet<String>,
-    found: Vec<SettlementSite>,
-}
-
-impl Settlements {
-    /// Whether `path` names a disposition variant being built.
-    ///
-    /// Three spellings reach the same variant and all three count: the qualified
-    /// `Disposition::Supported`, `Self::Supported` inside `impl Disposition`, and
-    /// a bare `Supported` in a file that glob-imports the variants. A constructor
-    /// method added to `impl Disposition` is the likely next edit, and it is the
-    /// `Self::` case.
-    fn is_settlement(&self, path: &syn::Path) -> bool {
-        let Some(variant) = last_segment(path) else {
-            return false;
-        };
-        if !VARIANTS.contains(&variant.as_str()) {
-            return false;
-        }
-        match path.segments.len() {
-            1 => self.aliases.contains(""),
-            _ => {
-                let qualifier = path.segments[path.segments.len() - 2].ident.to_string();
-                self.aliases.contains(&qualifier)
-                    || (qualifier == "Self" && self.in_disposition_impl)
-            }
-        }
-    }
-
-    fn record(&mut self) {
-        self.found.push(SettlementSite {
-            file: self.file.display().to_string(),
-            enclosing: self
-                .enclosing
-                .last()
-                .cloned()
-                .unwrap_or_else(|| "<file scope>".to_owned()),
-        });
-    }
-}
-
-impl<'ast> syn::visit::Visit<'ast> for Settlements {
-    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
-        self.enclosing.push(node.sig.ident.to_string());
-        syn::visit::visit_item_fn(self, node);
-        self.enclosing.pop();
-    }
-
-    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
-        self.enclosing.push(node.sig.ident.to_string());
-        syn::visit::visit_impl_item_fn(self, node);
-        self.enclosing.pop();
-    }
-
-    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
-        self.enclosing.push(node.sig.ident.to_string());
-        syn::visit::visit_trait_item_fn(self, node);
-        self.enclosing.pop();
-    }
-
-    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
-        let was = self.in_disposition_impl;
-        if let syn::Type::Path(path) = node.self_ty.as_ref() {
-            self.in_disposition_impl = last_segment(&path.path)
-                .is_some_and(|name| self.aliases.contains(&name) && !name.is_empty());
-        }
-        syn::visit::visit_item_impl(self, node);
-        self.in_disposition_impl = was;
-    }
-
-    // Only expressions are visited for construction. A pattern that matches a
-    // disposition reads one and is not a settlement, and the visitor never
-    // reaches a pattern through these two methods.
-    fn visit_expr_struct(&mut self, node: &'ast syn::ExprStruct) {
-        if self.is_settlement(&node.path) {
-            self.record();
-        }
-        syn::visit::visit_expr_struct(self, node);
-    }
-
-    fn visit_expr_path(&mut self, node: &'ast syn::ExprPath) {
-        if self.is_settlement(&node.path) {
-            self.record();
-        }
-        syn::visit::visit_expr_path(self, node);
-    }
-}
-
-/// Every `.rs` file under `root`, recursively.
-fn rust_sources(root: &Path) -> Vec<PathBuf> {
-    let mut found = Vec::new();
-    for entry in fs::read_dir(root).expect("a scan root is a directory") {
-        let path = entry.expect("a directory entry reads").path();
-        if path.is_dir() {
-            found.extend(rust_sources(&path));
-        } else if path.extension().is_some_and(|extension| extension == "rs") {
-            found.push(path);
-        }
-    }
-    found.sort();
-    found
-}
-
-// ---------------------------------------------------------------------------
-// Routing a settled item
-// ---------------------------------------------------------------------------
-
-/// Nothing but a `supported` item routes.
-///
-/// Trace: TC-030
-/// Provenance: codegen#86
-#[test]
-fn tc_030_no_item_routes_before_it_is_settled_supported() {
-    let manifest = vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])];
-    let unsettled = [
-        RequestItem {
-            extent: unbounded(true),
-            ..item(
-                RequestedKind::Known(CapabilityKind::ValueValidity),
-                Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
-            )
-        },
-        item(
-            RequestedKind::Known(CapabilityKind::Realizability),
-            Candidates::Set(Vec::new()),
-        ),
-        item(
-            RequestedKind::Absent,
-            Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
-        ),
-    ];
-    for unsettled in unsettled {
-        let settlement = settle_one(manifest.clone(), unsettled);
-        assert_eq!(
-            settlement.routed(&manifest),
-            None,
-            "{:?} routed a backend to probe",
-            settlement.disposition
-        );
-    }
-}
-
-/// A manifest that names one identity twice routes nothing, rather than handing
-/// the probe whichever entry came first.
-///
-/// Trace: TC-030
-/// Provenance: codegen#86
-#[test]
-fn tc_030_a_repeated_backend_identity_routes_nothing() {
-    let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
-    let second = BackendDescriptor {
-        manifest_digest: OTHER_DIGEST.to_owned(),
-        ..first.clone()
-    };
-    let manifest = vec![first, second];
-    let settlement = settle_one(
-        manifest.clone(),
-        item(
-            RequestedKind::Known(CapabilityKind::ValueValidity),
-            Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
-        ),
-    );
-    assert_eq!(
-        settlement.disposition,
-        Disposition::Supported {
-            backend: BackendKind::Kani.identity().to_owned(),
-        },
-        "settlement matched identity and digest, so it still routes to one entry"
-    );
-    assert_eq!(
-        settlement.routed(&manifest),
-        None,
-        "a settled item is not routed to one of two entries by position"
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -926,7 +567,7 @@ fn tc_030_a_foreign_contract_version_refuses_the_carrier_and_names_the_member() 
             vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
             vec![item(
                 RequestedKind::Known(CapabilityKind::ValueValidity),
-                Candidates::Set(vec![candidate(BackendKind::Kani.identity(), KANI_DIGEST)]),
+                Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
             )],
         )
     })

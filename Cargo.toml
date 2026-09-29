@@ -38,6 +38,9 @@ syn = { version = "=2.0.119", features = ["full", "visit"] }
 jsonschema = { version = "=0.17.1", default-features = false, features = ["draft202012"] }
 proptest = { version = "=1.5.0", default-features = false, features = ["std"] }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "ed0a04b482216b79d3559a6ac59e6e260c5591cf", features = ["proptest", "exact"] }
+# The home of the checked-operation catalog Contract IR validates against; tests select law
+# definitions from it instead of copying them.
+quire-verification-contracts = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-verification-contracts", rev = "61f4a44d76d51cc53b2dfe7ed10aba7b23cfa6ef" }
 
 [profile.release]
 lto = "thin"

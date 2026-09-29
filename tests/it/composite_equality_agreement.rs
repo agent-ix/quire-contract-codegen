@@ -22,13 +22,14 @@ use super::exact_scalar_agreement::run_agreement_cases;
 #[test]
 fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
     let oracles = super::composite_equality_generation::corpus_oracles();
+    let names = super::composite_equality_generation::agreement_names(&oracles);
     run_agreement_cases(
         "composite-equality-agreement",
         oracles
             .artifacts
             .iter()
             .map(|artifact| (artifact.path.as_str(), artifact.contents.as_str())),
-        &[],
+        &[("names.rs", names.as_str())],
         "tests/composite_equality_support/agreement_cases.rs",
     );
 }

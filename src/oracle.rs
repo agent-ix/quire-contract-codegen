@@ -8,12 +8,8 @@ use quire_contract_ir::{
     SourceSpan, StateObservation, TypedExpression, ValueType,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 
-/// Exact reviewed public executable-binding IR revision consumed by this implementation.
-pub const IR_CANDIDATE_REVISION: &str = "48ab5dc29213c3975a5fe8f04ecbb3d1c2b345bb";
-
-/// Exact merged runtime revision required by generated source.
+/// The Contract Runtime git revision every generated crate's `Cargo.toml` depends on.
 pub const RUNTIME_REVISION: &str = "ed0a04b482216b79d3559a6ac59e6e260c5591cf";
 
 /// The `[package.metadata.kani]` table every generated oracle crate's manifest carries. CBMC
@@ -57,19 +53,9 @@ pub enum GenerationTerminalState {
 }
 
 impl GenerationTerminalState {
-    /// Every terminal state, in declaration order. This is the census `tests/interface_001.rs`
-    /// compares against interface-001's declared `diagnostics.terminal_states`, kept beside the
-    /// enum rather than hand-copied into the test, so the two live in the same file a developer
-    /// edits when adding a variant.
-    ///
-    /// This array is not itself compiler-checked against the enum's variant set — Rust has no
-    /// stable way to derive that without a proc-macro crate this workspace does not depend on.
-    /// What the compiler does enforce is [`Self::label`] below: its `match` is exhaustive, so an
-    /// added variant fails the build until it is named there. Nothing forces the same edit to
-    /// reach this array at compile time; that is left to the developer fixing the build, standing
-    /// right next to it. `tests/it/interface_001.rs`'s `census_enum_variants` closes the gap at
-    /// test time instead, by counting this enum's own declared variants and asserting the count
-    /// equals `ALL.len()`.
+    /// Every terminal state, in declaration order. [`Self::label`]'s `match` is exhaustive, so an
+    /// added variant fails the build until it is named there; add it to this array in the same
+    /// edit.
     pub const ALL: [Self; 6] = [
         Self::Generated,
         Self::Unsupported,
@@ -156,7 +142,7 @@ pub struct GenerationDiagnostic {
     pub message: String,
 }
 
-/// One generated file with its content digest.
+/// One generated file.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Artifact {
@@ -164,8 +150,17 @@ pub struct Artifact {
     pub path: String,
     /// UTF-8 artifact contents.
     pub contents: String,
-    /// Lowercase SHA-256 of `contents`.
-    pub sha256: String,
+}
+
+impl Artifact {
+    /// One generated file at `path` holding `contents`.
+    #[must_use]
+    pub fn new(path: impl Into<String>, contents: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            contents: contents.into(),
+        }
+    }
 }
 
 /// Trace from a generated source range back to one requirement clause.
@@ -385,12 +380,7 @@ fn generate_boolean_oracle_inner(
     let requirement = request.requirement.requirement().as_str();
     let revision = request.requirement.revision().get();
     let clause = request.clause.as_str();
-    let symbol_text = oracle_symbol(
-        request.requirement.package().as_str(),
-        requirement,
-        revision,
-        clause,
-    );
+    let symbol_text = oracle_symbol(requirement, revision, clause);
     let identity_symbol = format!("{}_IDENTITY", symbol_text.to_ascii_uppercase());
     let clause_symbol = format!("{}_CLAUSE", symbol_text.to_ascii_uppercase());
     let requirement_literal = format!("{requirement:?}");
@@ -1018,66 +1008,67 @@ fn rust_component(value: &str) -> String {
     result
 }
 
+/// `value` as a readable snake-case name component of at most 24 characters.
 pub(crate) fn bounded_readable_component(value: &str) -> String {
-    let mut result = String::with_capacity(value.len());
+    readable_name_component(value, 24)
+}
+
+/// `value` lowercased, each run of non-alphanumeric bytes as one `_`, cut to at most `limit`
+/// characters, with no leading or trailing `_`, so joining components with `_` never yields the
+/// `__` that Rust's `non_snake_case` lint rejects. An empty result is `x`.
+pub(crate) fn readable_name_component(value: &str, limit: usize) -> String {
+    let mut result = String::with_capacity(value.len().min(limit));
     for byte in value.bytes() {
+        if result.len() >= limit {
+            break;
+        }
         if byte.is_ascii_alphanumeric() {
             result.push(char::from(byte.to_ascii_lowercase()));
-        } else {
+        } else if !result.is_empty() && !result.ends_with('_') {
             result.push('_');
         }
     }
-    if result.is_empty() || result.as_bytes()[0].is_ascii_digit() {
-        result.insert(0, '_');
+    let trimmed = result.trim_end_matches('_');
+    if trimmed.is_empty() {
+        "x".to_owned()
+    } else {
+        trimmed.to_owned()
     }
-    result.chars().take(24).collect()
 }
 
-pub(crate) fn length_delimited_identity(values: &[&str]) -> String {
-    values
-        .iter()
-        .map(|value| format!("{}:{value}", value.len()))
-        .collect::<Vec<_>>()
-        .join(":")
+/// `strategy_fr_001_1_x` as `StrategyFr0011X`: a generated snake-case name as a type-name stem.
+pub(crate) fn upper_camel(value: &str) -> String {
+    value
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut characters = part.chars();
+            characters.next().map_or_else(String::new, |first| {
+                first.to_ascii_uppercase().to_string() + characters.as_str()
+            })
+        })
+        .collect()
 }
 
-pub(crate) fn oracle_symbol(
-    package: &str,
-    requirement: &str,
-    revision: u64,
-    clause: &str,
-) -> String {
-    let readable_requirement = bounded_readable_component(requirement);
-    let readable_clause = bounded_readable_component(clause);
-    let revision_text = revision.to_string();
-    let identity = length_delimited_identity(&[package, requirement, &revision_text, clause]);
+/// The generated function name of one clause's oracle, read from its requirement, revision and
+/// clause. Two clauses whose readable forms coincide get the same name; every generator that puts
+/// more than one oracle in one crate or file refuses that as a name collision.
+pub(crate) fn oracle_symbol(requirement: &str, revision: u64, clause: &str) -> String {
     format!(
-        "oracle_{readable_requirement}_{revision}_{readable_clause}_id_{}",
-        sha256(identity.as_bytes())
+        "oracle_{}_{revision}_{}",
+        bounded_readable_component(requirement),
+        bounded_readable_component(clause)
     )
 }
 
 fn artifact(path: String, contents: String) -> Artifact {
-    Artifact {
-        sha256: sha256(contents.as_bytes()),
-        path,
-        contents,
-    }
+    Artifact::new(path, contents)
 }
 
 fn deterministic_json(value: &impl Serialize) -> Result<String, SerializationError> {
     let mut bytes = serde_json::to_vec(value).map_err(SerializationError::Json)?;
     bytes.push(b'\n');
     String::from_utf8(bytes).map_err(SerializationError::Utf8)
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut value = String::with_capacity(64);
-    for byte in digest {
-        let _ = write!(value, "{byte:02x}");
-    }
-    value
 }
 
 fn line_count(value: &str) -> u32 {

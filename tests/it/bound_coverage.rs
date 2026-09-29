@@ -123,8 +123,8 @@ fn export(generated: &BoundOracleGeneration) -> Value {
             files.push(json!({"filename":clause.bundle().rust.path,"segments":segments}));
         }
     }
-    json!({"type":"llvm.coverage.json.export","version":"3.0.1",
-        "cargo_llvm_cov":{"version":"0.9.0","manifest_path":"/fixture/Cargo.toml"},"data":[{"files":files}]})
+    json!({"type":"llvm.coverage.json.export",
+        "cargo_llvm_cov":{"manifest_path":"/fixture/Cargo.toml"},"data":[{"files":files}]})
 }
 
 fn analyze(
@@ -178,10 +178,8 @@ fn strict_domain_schema_refuses_qualification_and_erased_identity() {
     let validator = schema();
     assert!(validator.is_valid(&report));
     for (pointer, replacement) in [
-        ("/provenance", json!("run_qualified")),
         ("/state", json!("passed")),
         ("/population", json!("not_emitted")),
-        ("/export_sha256", Value::Null),
         ("/clauses/0/classification", Value::Null),
         ("/clauses/0/identity/requirement/package", json!("")),
         ("/clauses/0/consequents/0/count", Value::Null),
@@ -201,7 +199,7 @@ fn resource_profile_and_path_refusals_preserve_no_classifications() {
     let (package, generated) = generate(&projection("coverage/refusals", &expressions(), true));
     let artifacts = inventory(&generated);
     let mut unsupported = export(&generated);
-    unsupported["version"] = json!("2.0.1");
+    unsupported["type"] = json!("other");
     let oversized = vec![b' '; quire_contract_codegen::MAX_COVERAGE_BYTES + 1];
     for bytes in [serde_json::to_vec(&unsupported).unwrap(), oversized] {
         let result = analyze(&package, &generated, &artifacts, Some(&bytes));
@@ -360,7 +358,6 @@ fn complete_bound_package_is_observed_against_actual_native_llvm() {
     let report: Value = serde_json::from_slice(&report.to_json_bytes().unwrap()).unwrap();
     validate_schema(&report);
     assert_eq!(report["state"], "complete", "{report}");
-    assert_eq!(report["provenance"], "unqualified");
     assert_eq!(report["informational"].as_array().unwrap().len(), 1);
     assert_eq!(report["clauses"].as_array().unwrap().len(), 7);
     for (clause, classification) in report["clauses"].as_array().unwrap().iter().zip([
@@ -438,7 +435,6 @@ fn complete_population_is_measured_but_never_run_qualified() {
     let report = analyze(&package, &generated, &artifacts, Some(&bytes));
     assert_eq!(report["state"], "complete");
     assert_eq!(report["source_root"], "/fixture");
-    assert_eq!(report["provenance"], "unqualified");
     assert_eq!(report["informational"].as_array().unwrap().len(), 1);
     assert_eq!(report["clauses"].as_array().unwrap().len(), 7);
     for (clause, expected) in report["clauses"]
@@ -576,7 +572,6 @@ fn informational_only_is_no_executable_not_invalid_or_exercised() {
         let (package, generated) = generate(&value);
         let report = analyze(&package, &generated, &[], None);
         assert_eq!(report["state"], "no_executable");
-        assert_eq!(report["provenance"], "unqualified");
         assert_eq!(
             report["informational"].as_array().unwrap().len(),
             usize::from(info)

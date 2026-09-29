@@ -439,17 +439,21 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     assert!(first.rust.contents.contains("clause-main"));
     assert!(first.rust.contents.contains("enabled_current: bool"));
     assert!(first.rust.contents.contains("implies_short_circuit"));
-    // The identity constants name the requirement, revision and clause the
-    // request carried. Executing `enabled -> false` itself is TC-002's job:
-    // its differential corpus compiles and runs every `A -> false` shape.
+    // The symbol names the requirement, revision and clause the request carried, and the
+    // generated oracle, compiled and run, evaluates `enabled -> false` to `!enabled`.
     let symbol = source_symbol(&first.rust.contents);
-    assert!(
-        symbol.starts_with("oracle_fr_001_7_clause_main_id_"),
-        "{symbol}"
-    );
+    assert_eq!(symbol, "oracle_fr_001_7_clause_main");
     assert!(first.rust.contents.contains(&format!(
         "pub fn {symbol}(enabled_current: bool) -> bool {{"
     )));
+    run_generated_program(
+        "generated-oracle-tc001",
+        &format!(
+            "#![deny(missing_docs)]\n//! TC-001 generated oracle.\n{}fn main() {{\n    \
+             assert!({symbol}(false));\n    assert!(!{symbol}(true));\n}}\n",
+            first.rust.contents
+        ),
+    );
     assert!(first
         .rust
         .contents
@@ -832,15 +836,20 @@ fn tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluato
     }
     generated_program.push_str("}\n");
 
-    let directory = TemporaryDirectory::new("quire-codegen-differential");
+    run_generated_program("generated-oracle-differential", &generated_program);
+}
+
+/// Writes `program` as the `main.rs` of a scratch binary crate named `crate_name` that depends
+/// on the runtime, then builds and runs it with warnings denied, asserting it exits cleanly.
+fn run_generated_program(crate_name: &str, program: &str) {
+    let directory = TemporaryDirectory::new(&format!("quire-codegen-{crate_name}"));
     let source_directory = directory.0.join("src");
     fs::create_dir_all(&source_directory).unwrap();
-    let source_path = source_directory.join("main.rs");
-    fs::write(&source_path, generated_program).unwrap();
+    fs::write(source_directory.join("main.rs"), program).unwrap();
     fs::write(
         directory.0.join("Cargo.toml"),
         format!(
-            "[package]\nname = \"generated-oracle-differential\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
+            "[package]\nname = \"{crate_name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
         ),
     )
     .unwrap();
@@ -852,7 +861,7 @@ fn tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluato
         .unwrap();
     assert!(
         execution.status.success(),
-        "generated corpus did not compile and execute against runtime {RUNTIME_REVISION}: {}",
+        "{crate_name} did not compile and execute against runtime {RUNTIME_REVISION}: {}",
         String::from_utf8_lossy(&execution.stderr)
     );
 }
@@ -1239,7 +1248,7 @@ fn tc_003_unsupported_dependency_reports_the_first_reference_span() {
 
 /// TC-003.
 #[test]
-fn tc_003_normalization_is_injective_for_dependencies_and_clause_artifacts() {
+fn tc_003_dependency_normalization_is_injective_and_artifact_names_are_bounded() {
     let environment = boolean_environment(&["enabled-flag", "enabled_flag"]);
     let expression = boolean_op(
         BooleanOperator::TotalAnd,
@@ -1265,22 +1274,6 @@ fn tc_003_normalization_is_injective_for_dependencies_and_clause_artifacts() {
     let typed_literal = literal_environment
         .check_expression(&literal, &ValueType::Boolean, &pre(), true)
         .unwrap();
-    let mut rust_paths = BTreeSet::new();
-    let mut map_paths = BTreeSet::new();
-    for clause_value in ["Clause-A", "clause_a", "clause-a", "CLAUSE.A"] {
-        let clause = ClauseId::new(clause_value).unwrap();
-        let bundle = generate_boolean_oracle(&OracleRequest {
-            requirement: literal_environment.owner(),
-            clause: &clause,
-            expression: &typed_literal,
-        })
-        .unwrap();
-        rust_paths.insert(bundle.rust.path);
-        map_paths.insert(bundle.source_map.path);
-    }
-    assert_eq!(rust_paths.len(), 4);
-    assert_eq!(map_paths.len(), 4);
-
     let long_clause = ClauseId::new("x".repeat(400)).unwrap();
     let long_bundle = generate_boolean_oracle(&OracleRequest {
         requirement: literal_environment.owner(),

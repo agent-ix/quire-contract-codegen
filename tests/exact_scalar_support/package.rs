@@ -38,9 +38,20 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 pub const NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
-pub const ENUM_TYPE: &str = "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562";
-pub const ENUM_MEMBER: &str = "42ba51e7e622d99f292a5e6dcc196bd216efb98b33755910e54af4d65078d032";
-pub const UNIT_TYPE: &str = "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4";
+/// The base package's enum declaration node key.
+pub fn enum_type() -> String {
+    base_node_ids().enum_type
+}
+
+/// The base package's `OPEN` enum member node key.
+pub fn enum_member() -> String {
+    base_node_ids().enum_member
+}
+
+/// The base package's declared unit node key.
+pub fn unit_type() -> String {
+    base_node_ids().unit
+}
 
 /// `validate_application_keys`'s own preimage version tag (quire-contract-ir
 /// dfd8bd78, crates/quire-contract-model/src/checked_package/v2/operations.rs).
@@ -246,7 +257,7 @@ fn value_for_type(semantic_type: &str) -> Option<String> {
             return Some(key(value));
         }
     }
-    if semantic_type == UNIT_TYPE {
+    if semantic_type == unit_type() {
         return Some(key(V_QUANTITY));
     }
     None
@@ -295,11 +306,8 @@ pub fn member_kind(kind: &str) -> Value {
     json!({"kind": kind})
 }
 
-/// One catalogued law-role definition artifact ref, copied verbatim from
-/// quire-contract-ir dfd8bd78's `tests/fixtures/checked-package/checked-package-v2/
-/// operation-catalog.json` `law_roles` table -- `validate_operations`
-/// requires `operation.laws[].definition` to equal one of these exactly
-/// (quire-contract-ir dfd8bd78 `checked_package/v2/operations.rs`).
+/// A well-formed artifact ref for a profile-role law, which has no closed catalog to select from:
+/// any well-formed ref the lock selects under that role admits.
 pub fn artifact_ref(identity: &str, digest: &str) -> Value {
     json!({
         "authority": "agent-ix",
@@ -310,37 +318,36 @@ pub fn artifact_ref(identity: &str, digest: &str) -> Value {
     })
 }
 
+/// The catalogued `role` law definition named `identity`, read from the operation catalog's home
+/// (`quire-verification-contracts`), which `validate_operations` requires
+/// `operation.laws[].definition` to equal exactly.
+pub fn catalog_definition(role: &str, identity: &str) -> Value {
+    let catalog: Value = serde_json::from_str(
+        quire_verification_contracts::operation_catalog::CHECKED_OPERATION_CATALOG_V1,
+    )
+    .expect("the operation catalog is JSON");
+    catalog["law_roles"][role]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|definition| definition["identity"] == identity)
+        .cloned()
+        .unwrap_or_else(|| panic!("the catalog has no {role} definition {identity}"))
+}
+
 /// The catalogued `integer_division` law definition selecting `profile`.
 pub fn integer_division_definition(profile: DivisionProfile) -> Value {
-    let digest = match profile {
-        DivisionProfile::Truncating => {
-            "9998507608e4885b314d5dcc59a88bb3d04ef3c263d2d8ae5810f92ae1893364"
-        }
-        DivisionProfile::Floor => {
-            "ca8c7a20407eaff7f61074cc997e44ad1ab9a73f675d686c6250997c6ae6192f"
-        }
-        DivisionProfile::Euclidean => {
-            "9f5e59b3bfe1dd3c1efc74065b2e3e7869e21813a0c90b9c5938d82107267a51"
-        },
-        _ => unreachable!("DivisionProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
-    };
-    artifact_ref(profile.definition_identity(), digest)
+    catalog_definition("integer_division", profile.definition_identity())
 }
 
-/// The catalog's one `ieee_profile` law definition.
+/// The catalog's `ieee_profile` law definition.
 pub fn ieee_profile_definition() -> Value {
-    artifact_ref(
-        "quire.value.ieee754-2019-default/v1",
-        "3e9736fb8e1637b554385192de34547bafc073e90b4b85256c824be31e0aa6e5",
-    )
+    catalog_definition("ieee_profile", "quire.value.ieee754-2019-default/v1")
 }
 
-/// The catalog's one `text_profile` law definition.
+/// The catalog's `text_profile` law definition.
 pub fn text_profile_definition() -> Value {
-    artifact_ref(
-        "quire.value.text.unicode-17.0.0/v1",
-        "cd4a985a0d7d2f2b3d3625caee3787832c00c5244e805fb49e1c2c7075b9de5e",
-    )
+    catalog_definition("text_profile", "quire.value.text.unicode-17.0.0/v1")
 }
 
 fn aggregate() -> Value {
@@ -356,7 +363,7 @@ fn aggregate() -> Value {
 /// matching the base package's pattern. `corpus_package`'s
 /// own `V_QUANTITY` is the one exception: its `literal.type` is `rational`
 /// (this value's own `value_kind`) even though the node's `semantic_type` is
-/// `UNIT_TYPE`, because Contract IR's lowering reaches `literal.type`
+/// `unit_type()`, because Contract IR's lowering reaches `literal.type`
 /// regardless of the containing node's declared type (see `V_QUANTITY`'s own
 /// comment in `corpus_package`).
 fn literal_type(kind: &str) -> String {
@@ -368,7 +375,7 @@ fn literal_type(kind: &str) -> String {
         "float32_bits" => key(T_FLOAT32),
         "float64_bits" => key(T_FLOAT64),
         "text" => key(T_TEXT),
-        "enum" => ENUM_TYPE.to_owned(),
+        "enum" => enum_type(),
         other => panic!("no corpus scalar type registered for literal kind {other}"),
     }
 }
@@ -658,7 +665,7 @@ impl PackageBuilder {
     /// As [`Self::dedicated_operand`], for the "unit" form it does not
     /// cover: "unit" has no fixed literal kind that method's `form` match
     /// can name, because a unit operand is `V_QUANTITY`'s own shape (a
-    /// `rational`-typed magnitude under [`UNIT_TYPE`], not a scalar literal
+    /// `rational`-typed magnitude under [`unit_type`], not a scalar literal
     /// keyed by one of `T_INTEGER`/`T_RATIONAL`/etc.). This builds a node
     /// dedicated to `bound_keys` with that same shape, including
     /// `V_QUANTITY`'s own inherent `rational_range` bound (Contract IR's
@@ -679,7 +686,7 @@ impl PackageBuilder {
                 &digest,
                 "value",
                 "literal",
-                UNIT_TYPE,
+                &unit_type(),
                 literal("rational", "1"),
                 &[rational_bound],
             );
@@ -1885,7 +1892,7 @@ fn operand(form: &str) -> String {
         "float32" => key(V_FLOAT32),
         "float64" => key(V_FLOAT64),
         "text" => key(V_TEXT),
-        "enum" => ENUM_MEMBER.to_owned(),
+        "enum" => enum_member(),
         "unit" => key(V_QUANTITY),
         other => panic!("no operand node for {other}"),
     }
@@ -1901,7 +1908,7 @@ fn result_type(form: &str) -> String {
         "float32" => key(T_FLOAT32),
         "float64" => key(T_FLOAT64),
         "text" => key(T_TEXT),
-        "unit" => UNIT_TYPE.to_owned(),
+        "unit" => unit_type(),
         other => panic!("no type node for {other}"),
     }
 }
@@ -2281,7 +2288,7 @@ pub fn corpus_package() -> PackageBuilder {
         builder.code(code, "value", "literal", &ty, literal(kind, value));
     }
     // `V_QUANTITY`'s own magnitude literal is `rational`-typed even though
-    // the node's `semantic_type` is `UNIT_TYPE`; Contract IR's lowering
+    // the node's `semantic_type` is `unit_type()`; Contract IR's lowering
     // reaches that `literal.type` edge and, with `require_bounds`, requires
     // a `rational_range` bound somewhere in the same closure. Every corpus
     // expression that references this node needs one reachable, so it is
@@ -2292,7 +2299,7 @@ pub fn corpus_package() -> PackageBuilder {
         &key(V_QUANTITY),
         "value",
         "literal",
-        UNIT_TYPE,
+        &unit_type(),
         literal("rational", "1"),
         &[rational_bound],
     );
@@ -2459,7 +2466,7 @@ pub fn corpus_package() -> PackageBuilder {
         // `ordered_enum` operand family can never be satisfied by a
         // `reference` argument here. Substituting literals for exactly the
         // ordering comparisons (never `eq`/`ne`, which accept the
-        // `enum_kind` group `ENUM_MEMBER` already resolves to) bypasses the
+        // `enum_kind` group `enum_member()` already resolves to) bypasses the
         // family check the same way `TextAdmission` does above.
         if let Op::EnumComparison { operator } = expression.operation {
             if !matches!(
@@ -2474,8 +2481,8 @@ pub fn corpus_package() -> PackageBuilder {
                 // keeps this resilient to that identity ever coinciding
                 // across two ordering operators).
                 arguments = vec![
-                    literal("enum", "READY"),
-                    literal("enum", &format!("READY{}", expression.code)),
+                    literal("enum", "OPEN"),
+                    literal("enum", &format!("OPEN{}", expression.code)),
                 ];
             }
         }
@@ -2590,11 +2597,11 @@ pub fn corpus_package() -> PackageBuilder {
             LITERAL_QUANTITY,
             "expression",
             "binary",
-            UNIT_TYPE,
+            &unit_type(),
             application(
                 "binary",
                 op("quire.op.quantity.add"),
-                UNIT_TYPE,
+                &unit_type(),
                 vec![reference(&key(V_QUANTITY)), literal("rational", "1")],
             ),
             &[],
@@ -2928,15 +2935,13 @@ pub fn corpus_package() -> PackageBuilder {
     // (`analysis_claim`, not `verification_claim`) and a different
     // `temporal_profile` law -- so `LITERAL_OPERAND`'s `claims` array
     // gets two entries in a determinate (ascending node-id) order.
-    // `CLAIM_ALT`'s law identity/digest is not copied from any upstream
-    // vector: a profile-role law has no closed catalog to select from
-    // (see `select_profile`'s own doc) -- any well-formed artifact ref
-    // the lock selects under that role admits -- so this is a second,
-    // independently chosen well-formed value, distinct from `CLAIM`'s by
-    // construction.
+    // A profile-role law has no closed catalog to select from (see
+    // `select_profile`'s own doc) -- any well-formed artifact ref the lock
+    // selects under that role admits -- so both laws are locally chosen
+    // well-formed values, distinct by construction.
     let temporal_profile = artifact_ref(
         "quire.temporal.event-position.false-extension/v1",
-        "78c0a40768d8c2b165699e07ae5c3eed1676ecdca69fb222fa660845a998f8f1",
+        &"7".repeat(64),
     );
     builder.select_profile("temporal_profile", temporal_profile.clone());
     builder.application_code(
@@ -2958,7 +2963,7 @@ pub fn corpus_package() -> PackageBuilder {
     );
     let temporal_profile_alt = artifact_ref(
         "quire.temporal.event-position.true-extension/v1",
-        "1c01ae41ddcc0a645b07020e6e2a2e0c63a8c5f1afc8e9b7789e8b0b16c16939",
+        &"8".repeat(64),
     );
     builder.select_profile("temporal_profile", temporal_profile_alt.clone());
     builder.application_code(

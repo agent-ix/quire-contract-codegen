@@ -13,9 +13,8 @@ use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
     ClaimDisposition, DecimalOperator, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
     ExactScalarRefusal, GeneratedScalarClaim, IntegerOperator, OperationProvenance,
-    OracleGenerationError, RationalOperator, ScalarForm, UpstreamBlocker,
-    EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME, RUNTIME_REVISION,
-    SCALAR_LOWERING_SUPPORTED_TAGS,
+    OracleGenerationError, RationalOperator, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CRATE_NAME,
+    RUNTIME_REVISION, SCALAR_LOWERING_SUPPORTED_TAGS,
 };
 use quire_contract_ir::CheckedPackageV2;
 use quire_contract_runtime::exact::{
@@ -85,8 +84,12 @@ fn refusal_of(oracles: &ExactScalarOracles, code: u32) -> ExactScalarRefusal {
     }
 }
 
-fn symbol(code: u32) -> String {
-    format!("oracle_{}", code_id(code).digest)
+/// The generated oracle function name of node `code`, as the claim map records it.
+pub(super) fn symbol(oracles: &ExactScalarOracles, code: u32) -> String {
+    match dispositions(oracles).get(code_id(code).digest.as_ref()) {
+        Some(ClaimDisposition::Generated(generated)) => generated.symbol.clone(),
+        other => panic!("node {code} is not generated: {other:?}"),
+    }
 }
 
 /// The generator's current output for the whole corpus request, which
@@ -118,21 +121,13 @@ fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
     let lib = contents(&oracles, "src/lib.rs");
     let mut generated = 0_usize;
     for claim in &oracles.claim_map.items {
-        if let ClaimDisposition::Generated(_) = &claim.result {
-            let symbol = format!("pub fn oracle_{}(", claim.node_id.digest);
+        if let ClaimDisposition::Generated(generated_claim) = &claim.result {
+            let symbol = format!("pub fn {}(", generated_claim.symbol);
             assert!(lib.contains(&symbol), "{symbol} is not defined");
             generated += 1;
         }
     }
     assert!(generated > 60, "the corpus generates every family");
-    for artifact in &oracles.artifacts {
-        assert_eq!(
-            artifact.sha256,
-            sha256_hex(artifact.contents.as_bytes()),
-            "{}",
-            artifact.path
-        );
-    }
 }
 
 /// Trace: FR-014-AC-4, TC-024.
@@ -354,7 +349,7 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
     assert_eq!(generated, expected, "exactly the corpus is generated");
     assert_eq!(corpus().len(), calls.len());
     for (code, call) in &calls {
-        let body = function_body(lib, &symbol(*code));
+        let body = function_body(lib, &symbol(&oracles, *code));
         assert!(
             body.contains(call.as_str()),
             "{code} does not call `{call}`:\n{body}"
@@ -615,8 +610,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     let package = corpus_package().admit();
     let oracles = generate(&package, &golden_items());
     let map = &oracles.claim_map;
-    assert_eq!(map.version, EXACT_SCALAR_CLAIM_MAP_VERSION);
-    assert_eq!(map.runtime_revision, RUNTIME_REVISION);
+    let lib = contents(&oracles, "src/lib.rs");
     assert_eq!(map.package_id, *package.package_id());
     let json: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).expect("json");
     assert_eq!(json, serde_json::to_value(map).expect("typed map"));
@@ -715,7 +709,12 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
         let ClaimDisposition::Generated(generated) = &claim.result else {
             panic!("corpus node {} generates", expression.code);
         };
-        assert_eq!(generated.symbol, symbol(expression.code));
+        assert!(
+            generated.symbol.starts_with("oracle_")
+                && lib.contains(&format!("pub fn {}(", generated.symbol)),
+            "{} names no generated function",
+            generated.symbol
+        );
         assert_eq!(generated.ir_id, node.ir_id);
         assert_eq!(generated.semantic_form, expression.form);
         assert_eq!(generated.semantic_type, node.semantic_type);
@@ -1261,7 +1260,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
         dispositions(&oracles)[code_id(LITERAL_OPERAND).digest.as_ref()],
         ClaimDisposition::Generated(_)
     ));
-    let subtract = function_body(lib, &symbol(LITERAL_OPERAND));
+    let subtract = function_body(lib, &symbol(&oracles, LITERAL_OPERAND));
     assert!(
         subtract.contains("rt::IntegerArithmetic::Subtract("),
         "{subtract}"
@@ -1307,7 +1306,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
 
     // A decimal target the runtime refuses is an invalid constant, like every
     // other generated constant.
-    let add = function_body(lib, &symbol(1051));
+    let add = function_body(lib, &symbol(&oracles, 1051));
     assert!(
         add.contains("rt::DecimalType::new(")
             && add.contains(".map_err(|_| OracleStop::InvalidConstant)?"),
@@ -1329,12 +1328,11 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
 
 /// Trace: FR-014-AC-8, FR-014-AC-9, TC-024.
 #[test]
-fn tc_024_generated_crate_is_unpublished_pinned_charge_free_and_compiles() {
+fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
     let oracles = generate(&corpus_package().admit(), &golden_items());
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains(&format!("name = \"{EXACT_SCALAR_CRATE_NAME}\"")));
     assert!(manifest.contains("publish = false"));
-    assert!(manifest.contains(&format!("rev = \"{RUNTIME_REVISION}\"")));
     assert!(manifest.contains("features = [\"exact\"]"));
 
     let lib = contents(&oracles, "src/lib.rs");
@@ -1375,11 +1373,6 @@ fn tc_024_generated_crate_is_unpublished_pinned_charge_free_and_compiles() {
         "generated crate did not compile against runtime {RUNTIME_REVISION}: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    use sha2::Digest as _;
-    format!("{:x}", sha2::Sha256::digest(bytes))
 }
 
 /// A `reference` operand typed by an `integer_range` `bounded_domain` (QSL's `Int[0, 9]`

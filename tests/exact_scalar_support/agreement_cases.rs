@@ -19,77 +19,79 @@
 #[macro_use]
 mod support;
 
-/// The generated crate under test.
+/// The generated crate under test. `names.rs`, written beside the scratch crate's manifest at test
+/// time, re-exports each generated oracle under the operation name these cases call it by.
 mod generated {
     pub use quire_exact_scalar_oracles::*;
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
 }
 
 use generated::{
-    oracle_023a7c7899ad28a2b8b47bf438524ec7f8059cb32f30e091c62f310a10da8dea as decimal_multiply, // code 1055
-    oracle_03998dbd449185d5a24f89edd67e298526f60f5be3cbdf706182bbf5ec312165 as integer_multiply, // code 1004
-    oracle_057193aeb6aa1dc3dff1d19f02a6816c24e3a42cc417b5dc7255c8fba994cd2e as binary32_add, // code 1061
-    oracle_05c0126b00d4c35d0cee23b36e7db9593e256f043e04ac8b13b3a67195c8f86f as text_not_equal, // code 1112
-    oracle_0979b4cf4ab9a40079cb667ef5d273dc280a9e317b4cb875af62a17a098fe8a8 as quantity_at_least, // code 1135
-    oracle_0ff72ab7bd470d4e070c76f71467e5b4af5b1a39248b29d7c704db7c20508ec2 as integer_at_least, // code 1045
-    oracle_1555cf7cf56611df60fee43aed3052a67348e26a5924c07d10116eddbf51e696 as narrow_to_binary32, // code 1064
-    oracle_19c4db98ef4e75a17e4911d2c10ffe15b213119d79da54e9da0382ecbba581db as enum_at_least, // code 1125
-    oracle_1d22a331e4928f0d5d8c67edbabbb308a39cd042c44b4020da97fbb1d8b4e937 as quantity_add, // code 1081
-    oracle_1dd28e414bd2dc340150bb4b937214a0855ba524041a8a53756a5c299a28ed6b as integer_less, // code 1041
-    oracle_28b63aa3b023d2cb6bbf577f17f1991daf4189c060230fad8ede5977a9c05f1a as rational_divide, // code 1032
-    oracle_2ae81bb9f99bc4020cb60eac561f0c6b51b0ecaa83269d7ac701dd2609d0b353 as binary32_numeric_equal, // code 1067
-    oracle_2ed051e1ad26bfd6a63b4c53efd6e390441b929a2293a751b4f8ef730ea2f5ed as admit_nfkd, // code 1077
-    oracle_31ba8be5c3bdf1f42d890b944c5e77537aa9514d08bc582ea21f4248dc5aa545 as enum_equal, // code 1121
-    oracle_3c95106396eb8a46e2e6fbff9f1889ca588c24f5b72d15489f8d617256fbccd7 as integer_at_most, // code 1044
-    oracle_44ce7ab25410aedc4a224b16f0c28ea3e7f2e95ae72d3b8ef2fee1679bd2e255 as quantity_power, // code 1083
-    oracle_46e03f0408c41931cbd449dfd928a3eae03b2f4287cc2d4d0de5cdbd9411b112 as text_greater, // code 1114
-    oracle_47a3a2b2588b2df95bf54c2378e48b5cd9b08a5de8b49bfba2e57c01b4b653f8 as quantity_greater, // code 1134
-    oracle_47be84c28abb1cdc91d44a8f42d1d6291b525b765e98983b079a14a40d4c3134 as rational_multiply, // code 1035
-    oracle_49c85c0670aa6de15b470d0ea804c138c965e3a0acbc168adcf64e42ca60211c as modulo_bounded, // code 1021
-    oracle_52244a384ed3bbff2a449749cb5a4365b6e2302737adbedfdb531fd992d5f77d as binary64_bit_identical, // code 1068
-    oracle_58e0beddd2a160e69f0107eeb47f336c57a6b85494717b5766c8ea3d08942b2b as quantity_equal, // code 1131
-    oracle_58e715478854ee9d2aa1224cd7474d5df597245cc2d0928cdc8f7e6a7548f2c6 as quantity_at_most, // code 1133
-    oracle_5b80928aa601d72cb880cdd7596ff33ec1deacbdb74133b51983a9e26b62cb0c as integer_subtract, // code 1003
-    oracle_61cc4ca3923c78141d6b9d650a1b2e0d8bb408cefd7420bb6911e7e1b58a831c as convert_integer, // code 1087
-    oracle_64710f7e7809cae676d517c6597b9bfbb9c495fc1dbdcad6061a0e1ed40ee3c2 as decimal_subtract, // code 1054
-    oracle_66f5fb44ac00188af91047fb5d2a905cb77a95c15d5f856a7f3da8a879323493 as integer_add, // code 1001
-    oracle_6bf6f9dec50f69449bb65eee6a7aee2280985580471bd1e3e01bae3076dd4f90 as enum_greater, // code 1124
-    oracle_6cd3711230a48efe9649fa3c1fe8ce56c02c0cdc06bfba76a8d6fa9a62db5202 as integer_negate, // code 1002
-    oracle_6f65e1aa850db3e76f592d5c8b386cae616c42ad3d63270fe486984fa4a2f7f1 as text_at_least, // code 1115
-    oracle_77522d61dc9a13b4fa7fc7a22d4d62fd8fb38321f648725d95e55873dccb6a72 as text_less, // code 1072
-    oracle_78f5388c369e811e456d167e4cecec24d13ef6dbb5506324810f9172282be745 as decimal_add, // code 1051
-    oracle_833cfe4d57f1414714494541ef3feff763f2804f1fe358657a310f9f9d8d5225 as divide_euclidean, // code 1013
-    oracle_881f7096c9f5e5f762928a6f3592199f75c50e02f36a722d6011c366a66ac5ec as rational_add, // code 1031
-    oracle_8934e78d606afb09f442ccd6306fb6a0a2362b26852b3f40cf3acfdeb550813d as decimal_round, // code 1053
-    oracle_8dfd1575da12cd93adddbad7389a7bb64968219c7f44a8da5c751c6cff9c9588 as text_equal, // code 1111
-    oracle_908706f2cdab4b62bc1d0265da8c292e3c383482a4944634f7998c7038207a33 as quantity_multiply, // code 1082
-    oracle_90fd0ba9dba964da54b023fd70b8d89256fca2e776e1e179c61fcad927ba56d6 as admit_nfkc, // code 1076
-    oracle_955a088ba7135710272899f4a292c8d8f42de0fb87a327de838df86e2696b09f as binary64_multiply, // code 1066
-    oracle_95f1142d0d0e41632c7412bef27134eaf9fde71ee5b341ccc36c77bf03c9b9f6 as divide_bounded, // code 1014
-    oracle_97adc14d28b80ceaac9527102e1e0cc06084fe543dbb729c1998ecd970422942 as text_at_most, // code 1113
-    oracle_9abfd23d5a2d5269a25c0c23010b8a9049287de8040a385b2eef6cf405fe511a as binary64_divide, // code 1062
-    oracle_a0de80d9f4f37ad7a773d1ff7c6c65b88a7e4e394728821c909276d18c57756e as enum_at_most, // code 1123
-    oracle_a2ba447bad58ca0b042a0b34e40d3a5b99ba5f2a3c213a900f9a1169309284e2 as binary64_total_order, // code 1063
-    oracle_a377c02012a91a9f94843b4cc2166c44076bf22086cd71aa978bc2ae696f1b19 as enum_less, // code 1073
-    oracle_b005a09ae6d60451ec03c882bb37eb56bf3d82c82ee51901b3d3ccfe13dd4b2b as binary32_subtract, // code 1065
-    oracle_b16cf657ba381db0997d24f7a5153a0497a237c532cc5c912a4388ff645ff3fd as enum_not_equal, // code 1122
-    oracle_b3a52a46e70f557fb756fba25bcdb6236373ed390334a31169edc86b9d3f9d6e as convert_decimal, // code 1086
-    oracle_bceb553b994a11bb19607a0934084b740a5d2b0a24635863fbe9a4e0160b0dd1 as quantity_less, // code 1084
-    oracle_bf735a59a4668e41d8376b764f04813ed364fd676b2a63db9e070e64b38a74eb as divide_floor, // code 1012
-    oracle_c7d15808611304731578243b6d740b3fc44e858251eb840d3b3b8c2fb854d1af as admit_binary_utf8, // code 1078
-    oracle_c9cd0b5a50b22e6782495be9100904d87d0c0aaf9436d85746a3440c2dfe3406 as quantity_subtract, // code 1088
-    oracle_ce34ac94ef80573d495cb589af8cc55399467c9399f219fe9daaa331eef25aba as rational_negate, // code 1036
-    oracle_d5bc5fbdaa1150e0cdaf5fd959392416c0b06ebcc671cffd721264de8c411047 as quantity_divide, // code 1089
-    oracle_d9ab86e6f7113cf5a709436d0784788fdef6943b3ce837a9bf11e5563fc6f44f as divide_truncating, // code 1011
-    oracle_dc94ec84289415fbb96f7de03754972b10fe0519161ca515dc7ec40993d2690e as admit_unicode_scalars, // code 1074
-    oracle_dcb99655fccb080a5011f79f1f647d4cd3ceb808d3b8cdfb59db329f69b1c5b9 as decimal_negate, // code 1056
-    oracle_ed6dc6d3570931c21da1df6818ebf0fd7e24cdf682d900506354e5673914cba0 as rational_greater, // code 1043
-    oracle_ed7cbabe610e1c6f5082ed106efeb68367ccfedfa2d9391721f174c57c66c579 as admit_nfc, // code 1071
-    oracle_f2927ffb5f00452e5ec2284106a9acb247d9aefa287c5c4a335225ea98828031 as quantity_not_equal, // code 1132
-    oracle_f709ebe5f6e6e728f8672b1ddf2e33823d7b11e8876b07c6279e9eb37415698e as admit_nfd, // code 1075
-    oracle_f89731858451339334388eee083d5be9224275053578cc8dea7b599d10fb1879 as integer_divide, // code 1033
-    oracle_f92c6ba41eeec5eb2f8213c786246003d48ad8016466e6584c0c428aebc8757c as decimal_at_most, // code 1042
-    oracle_facd7b0996f3b855ebdf308b4eba95fb66678284eeae7e834faee149ba42ee0a as rational_subtract, // code 1034
-    oracle_fc166ef1e8eb3389b063d8ab0426f0dc825659bf01becf6f3035dcf8530bd3b7 as decimal_divide, // code 1052
+    decimal_multiply,
+    integer_multiply,
+    binary32_add,
+    text_not_equal,
+    quantity_at_least,
+    integer_at_least,
+    narrow_to_binary32,
+    enum_at_least,
+    quantity_add,
+    integer_less,
+    rational_divide,
+    binary32_numeric_equal,
+    admit_nfkd,
+    enum_equal,
+    integer_at_most,
+    quantity_power,
+    text_greater,
+    quantity_greater,
+    rational_multiply,
+    modulo_bounded,
+    binary64_bit_identical,
+    quantity_equal,
+    quantity_at_most,
+    integer_subtract,
+    convert_integer,
+    decimal_subtract,
+    integer_add,
+    enum_greater,
+    integer_negate,
+    text_at_least,
+    text_less,
+    decimal_add,
+    divide_euclidean,
+    rational_add,
+    decimal_round,
+    text_equal,
+    quantity_multiply,
+    admit_nfkc,
+    binary64_multiply,
+    divide_bounded,
+    text_at_most,
+    binary64_divide,
+    enum_at_most,
+    binary64_total_order,
+    enum_less,
+    binary32_subtract,
+    enum_not_equal,
+    convert_decimal,
+    quantity_less,
+    divide_floor,
+    admit_binary_utf8,
+    quantity_subtract,
+    rational_negate,
+    quantity_divide,
+    divide_truncating,
+    admit_unicode_scalars,
+    decimal_negate,
+    rational_greater,
+    admit_nfc,
+    quantity_not_equal,
+    admit_nfd,
+    integer_divide,
+    decimal_at_most,
+    rational_subtract,
+    decimal_divide,
     OracleStop,
 };
 use quire_contract_runtime::exact::{

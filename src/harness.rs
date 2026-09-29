@@ -6,13 +6,11 @@ use quire_contract_ir::{
     ClauseId, DependencyIdentity, DependencyKind, RequirementRef, StateObservation, TypedExpression,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 
 use crate::{
     generate_boolean_oracle,
     oracle::{
-        bounded_readable_component, dependency_parameters, length_delimited_identity,
-        oracle_symbol, reference_identifier,
+        bounded_readable_component, dependency_parameters, oracle_symbol, reference_identifier,
     },
     Artifact, GeneratedArtifactBundle, GenerationDiagnostic, GenerationErrorCode,
     GenerationTerminalState, OracleRequest, MAX_GENERATED_SOURCE_BYTES,
@@ -134,11 +132,18 @@ pub fn generate_tristate_harness(
             "minimum accepted cases must be greater than zero",
         )]);
     }
-    if request.precondition_clause == request.postcondition_clause {
+    let requirement = request.requirement.requirement().as_str();
+    let revision = request.requirement.revision().get();
+    let precondition_symbol =
+        oracle_symbol(requirement, revision, request.precondition_clause.as_str());
+    let postcondition_symbol =
+        oracle_symbol(requirement, revision, request.postcondition_clause.as_str());
+    // Identical clause ids, or distinct ids with one readable name, would emit one function twice.
+    if precondition_symbol == postcondition_symbol {
         return Err(vec![direct_harness_diagnostic(
             DirectHarnessFailure::DuplicateClauseIdentity,
             "clauses",
-            "precondition and postcondition clause identities must be distinct",
+            "precondition and postcondition clauses must have distinct generated names",
         )]);
     }
     let shell_request = HarnessShellRequest {
@@ -168,8 +173,6 @@ pub fn generate_tristate_harness(
         .map_err(|diagnostics| map_clause_diagnostics("postcondition", diagnostics))?;
     let binding = harness_binding(&precondition_parameters, &postcondition_parameters)?;
 
-    let requirement = request.requirement.requirement().as_str();
-    let revision = request.requirement.revision().get();
     let base_symbol = harness_symbol(
         requirement,
         revision,
@@ -199,18 +202,6 @@ pub fn generate_tristate_harness(
     let maximum_discarded_symbol = format!(
         "{}_MAXIMUM_DISCARDED_CASES",
         base_symbol.to_ascii_uppercase()
-    );
-    let precondition_symbol = oracle_symbol(
-        request.requirement.package().as_str(),
-        requirement,
-        revision,
-        request.precondition_clause.as_str(),
-    );
-    let postcondition_symbol = oracle_symbol(
-        request.requirement.package().as_str(),
-        requirement,
-        revision,
-        request.postcondition_clause.as_str(),
     );
     let shell_precondition_identity_symbol =
         format!("{}_PRECONDITION", shell_symbol.to_ascii_uppercase());
@@ -1041,7 +1032,7 @@ where\n\
             HarnessErrorCode::ResourceLimitExceeded,
             GenerationErrorCode::ResourceLimitExceeded,
             "generated.rust",
-            "the generated harness shell exceeds the attested source-size limit",
+            "the generated harness shell exceeds the source-size limit",
         ));
     }
 
@@ -1057,19 +1048,18 @@ where\n\
     Ok(source)
 }
 
+/// The generated harness name, read from its requirement, revision and two clauses.
 fn harness_symbol(
     requirement: &str,
     revision: u64,
     precondition: &str,
     postcondition: &str,
 ) -> String {
-    let readable = bounded_readable_component(requirement);
-    let revision_text = revision.to_string();
-    let identity =
-        length_delimited_identity(&[requirement, &revision_text, precondition, postcondition]);
     format!(
-        "harness_{readable}_{revision}_{}",
-        sha256(identity.as_bytes())
+        "harness_{}_{revision}_{}_{}",
+        bounded_readable_component(requirement),
+        bounded_readable_component(precondition),
+        bounded_readable_component(postcondition)
     )
 }
 
@@ -1088,18 +1078,5 @@ fn to_upper_camel(value: &str) -> String {
 }
 
 fn artifact(path: String, contents: String) -> Artifact {
-    let sha256 = sha256(contents.as_bytes());
-    Artifact {
-        path,
-        contents,
-        sha256,
-    }
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    let mut result = String::with_capacity(64);
-    for byte in Sha256::digest(bytes) {
-        let _ = write!(result, "{byte:02x}");
-    }
-    result
+    Artifact::new(path, contents)
 }

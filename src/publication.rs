@@ -2,7 +2,6 @@
 
 use std::{
     collections::BTreeSet,
-    fmt::Write as _,
     fs::{self, OpenOptions},
     io::Write as _,
     path::{Component, Path, PathBuf},
@@ -10,12 +9,10 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 
 use crate::{Artifact, GenerationTerminalState};
 
-const MARKER_NAME: &str = ".quire-codegen-owned.json";
-const MARKER_SCHEMA: &str = "quire.codegen-owned-bundle/v1";
+const BUNDLE_SCHEMA: &str = "quire.artifact-bundle/v1";
 pub(crate) const MAX_ARTIFACTS: usize = 4096;
 pub(crate) const MAX_ARTIFACT_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const MAX_BUNDLE_BYTES: usize = 128 * 1024 * 1024;
@@ -27,14 +24,10 @@ static PUBLICATION_NONCE: AtomicU64 = AtomicU64::new(0);
 pub enum PublicationErrorCode {
     /// The bundle contains no artifacts or exceeds a bounded resource limit.
     InvalidBundle,
-    /// An artifact path is absolute, non-canonical, reserved, or traverses a parent.
+    /// An artifact path is absolute, non-canonical, or traverses a parent.
     UnsafeArtifactPath,
     /// Two artifacts claim the same bundle-relative path.
     DuplicateArtifactPath,
-    /// An artifact digest does not match its exact bytes.
-    ArtifactDigestMismatch,
-    /// The existing destination does not completely match its local ownership marker.
-    DestinationNotOwned,
     /// Staging, swapping, rollback, or cleanup encountered an I/O error.
     IoFailed,
 }
@@ -56,11 +49,9 @@ impl PublicationErrorCode {
     #[must_use]
     pub const fn terminal_state(self) -> GenerationTerminalState {
         match self {
-            Self::InvalidBundle
-            | Self::UnsafeArtifactPath
-            | Self::DuplicateArtifactPath
-            | Self::ArtifactDigestMismatch
-            | Self::DestinationNotOwned => GenerationTerminalState::InvalidInput,
+            Self::InvalidBundle | Self::UnsafeArtifactPath | Self::DuplicateArtifactPath => {
+                GenerationTerminalState::InvalidInput
+            }
             Self::IoFailed => GenerationTerminalState::IoFailed,
         }
     }
@@ -88,19 +79,16 @@ pub struct PublicationDiagnostic {
 pub struct ArtifactBundle {
     schema_version: String,
     artifacts: Vec<Artifact>,
-    bundle_sha256: String,
 }
 
 impl ArtifactBundle {
-    /// Validates, path-sorts, and identifies a complete artifact set.
+    /// Validates and path-sorts a complete artifact set.
     pub fn new(mut artifacts: Vec<Artifact>) -> Result<Self, PublicationDiagnostic> {
         validate_artifacts(&artifacts)?;
         artifacts.sort_by(|left, right| left.path.cmp(&right.path));
-        let bundle_sha256 = bundle_digest(&artifacts);
         Ok(Self {
-            schema_version: "quire.artifact-bundle/v1".to_owned(),
+            schema_version: BUNDLE_SCHEMA.to_owned(),
             artifacts,
-            bundle_sha256,
         })
     }
 
@@ -116,14 +104,8 @@ impl ArtifactBundle {
         &self.artifacts
     }
 
-    /// Lowercase SHA-256 over every length-delimited path and content digest.
-    #[must_use]
-    pub fn bundle_sha256(&self) -> &str {
-        &self.bundle_sha256
-    }
-
     fn revalidate(&self) -> Result<(), PublicationDiagnostic> {
-        if self.schema_version != "quire.artifact-bundle/v1" {
+        if self.schema_version != BUNDLE_SCHEMA {
             return Err(diagnostic(
                 PublicationErrorCode::InvalidBundle,
                 "bundle.schemaVersion",
@@ -135,70 +117,42 @@ impl ArtifactBundle {
             .artifacts
             .windows(2)
             .any(|pair| pair[0].path >= pair[1].path)
-            || self.bundle_sha256 != bundle_digest(&self.artifacts)
         {
             return Err(diagnostic(
                 PublicationErrorCode::InvalidBundle,
-                "bundle.bundleSha256",
-                "the artifact bundle is not canonically sorted and identified",
+                "bundle.artifacts",
+                "the artifact bundle is not sorted by path",
             ));
         }
         Ok(())
     }
 }
 
-/// Identity of a successfully published bundle.
+/// A successfully published bundle.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct PublishedBundleIdentity {
     /// Destination directory supplied by the caller.
     pub destination: String,
-    /// Published bundle digest.
-    pub bundle_sha256: String,
-    /// Number of published artifacts, excluding the ownership marker.
+    /// Number of published artifacts.
     pub artifact_count: usize,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct OwnershipMarker {
-    schema_version: String,
-    bundle_sha256: String,
-    artifacts: Vec<PublishedArtifact>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct PublishedArtifact {
-    path: String,
-    sha256: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PublicationFault {
     None,
     BeforeArtifact(usize),
-    BeforeMarker,
     BeforeSwap,
     DuringSwap,
     DuringRollback,
-    OwnershipIo(OwnershipIoPoint),
     AfterCommitBeforeBackupCleanup,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum OwnershipIoPoint {
-    DestinationMetadata,
-    MarkerRead,
-    ArtifactMetadata,
-    ArtifactRead,
-}
-
-/// Publishes a complete bundle without editing any file outside its destination boundary.
+/// Publishes a complete bundle, replacing the destination directory as one unit, without editing
+/// any file outside its destination boundary.
 ///
 /// Callers must serialize publishers and other writers to the destination and its generated sibling
-/// names for the duration of this call.
-/// A destination's marker establishes content consistency, not authenticated provenance.
+/// names for the duration of this call. An existing destination is replaced whole.
 /// The rollback guarantee does not cover process crashes or power-loss durability.
 // Implements: FR-005, NFR-001
 pub fn write_bundle_atomic(
@@ -245,9 +199,6 @@ fn publish(
             return Err(io_diagnostic(destination, "inspect destination", &error));
         }
     };
-    if replacing {
-        verify_owned_destination(destination, fault)?;
-    }
 
     let staging = unique_sibling(parent, name, "stage")?;
     let backup = unique_sibling(parent, name, "backup")?;
@@ -320,7 +271,6 @@ fn publish(
 
     Ok(PublishedBundleIdentity {
         destination: destination.to_string_lossy().into_owned(),
-        bundle_sha256: bundle.bundle_sha256.clone(),
         artifact_count: bundle.artifacts.len(),
     })
 }
@@ -352,13 +302,6 @@ fn validate_artifacts(artifacts: &[Artifact]) -> Result<(), PublicationDiagnosti
             ));
         }
         total = total.saturating_add(artifact.contents.len());
-        if artifact.sha256 != sha256(artifact.contents.as_bytes()) {
-            return Err(diagnostic(
-                PublicationErrorCode::ArtifactDigestMismatch,
-                &format!("bundle.artifacts[{index}].sha256"),
-                "the artifact digest does not match its exact contents",
-            ));
-        }
     }
     if total > MAX_BUNDLE_BYTES {
         return Err(diagnostic(
@@ -378,7 +321,6 @@ fn validate_path(path: &str, index: usize) -> Result<(), PublicationDiagnostic> 
         && path
             .split('/')
             .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
-        && path != MARKER_NAME
         && !path.chars().any(char::is_control)
         && parsed
             .components()
@@ -391,34 +333,6 @@ fn validate_path(path: &str, index: usize) -> Result<(), PublicationDiagnostic> 
             &format!("bundle.artifacts[{index}].path"),
             "artifact paths must be canonical relative paths inside the generated boundary",
         ))
-    }
-}
-
-fn bundle_digest(artifacts: &[Artifact]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(b"quire.artifact-bundle/v1\0");
-    for artifact in artifacts {
-        for value in [&artifact.path, &artifact.sha256] {
-            let length = u64::try_from(value.len()).expect("bounded artifact identity length");
-            hasher.update(length.to_be_bytes());
-            hasher.update(value.as_bytes());
-        }
-    }
-    hex(hasher.finalize())
-}
-
-fn marker(bundle: &ArtifactBundle) -> OwnershipMarker {
-    OwnershipMarker {
-        schema_version: MARKER_SCHEMA.to_owned(),
-        bundle_sha256: bundle.bundle_sha256.clone(),
-        artifacts: bundle
-            .artifacts
-            .iter()
-            .map(|artifact| PublishedArtifact {
-                path: artifact.path.clone(),
-                sha256: artifact.sha256.clone(),
-            })
-            .collect(),
     }
 }
 
@@ -445,202 +359,6 @@ fn stage_bundle(
             .and_then(|()| file.sync_all())
             .map_err(|error| io_diagnostic(&path, "write artifact", &error))?;
     }
-    if fault == PublicationFault::BeforeMarker {
-        return Err(injected(staging, "during staged ownership-marker write"));
-    }
-    let marker = deterministic_json(&marker(bundle)).map_err(|message| {
-        diagnostic(
-            PublicationErrorCode::InvalidBundle,
-            "bundle.marker",
-            &message,
-        )
-    })?;
-    let marker_path = staging.join(MARKER_NAME);
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&marker_path)
-        .map_err(|error| io_diagnostic(&marker_path, "create ownership marker", &error))?;
-    file.write_all(marker.as_bytes())
-        .and_then(|()| file.sync_all())
-        .map_err(|error| io_diagnostic(&marker_path, "write ownership marker", &error))?;
-    Ok(())
-}
-
-fn verify_owned_destination(
-    destination: &Path,
-    fault: PublicationFault,
-) -> Result<(), PublicationDiagnostic> {
-    let metadata = ownership_io(fault, OwnershipIoPoint::DestinationMetadata, || {
-        destination.symlink_metadata()
-    })
-    .map_err(|error| {
-        ownership_io_diagnostic(
-            destination,
-            destination,
-            "inspect ownership boundary",
-            &error,
-        )
-    })?;
-    if !metadata.is_dir() || metadata.file_type().is_symlink() {
-        return Err(not_owned(
-            destination,
-            "destination is not a regular directory boundary",
-        ));
-    }
-    let marker_path = destination.join(MARKER_NAME);
-    let bytes = ownership_io(fault, OwnershipIoPoint::MarkerRead, || {
-        fs::read(&marker_path)
-    })
-    .map_err(|error| {
-        ownership_io_diagnostic(destination, &marker_path, "read ownership marker", &error)
-    })?;
-    if bytes.len() > MAX_ARTIFACT_BYTES {
-        return Err(not_owned(
-            destination,
-            "ownership marker exceeds the bounded size",
-        ));
-    }
-    let marker: OwnershipMarker = serde_json::from_slice(&bytes)
-        .map_err(|_| not_owned(destination, "ownership marker is malformed"))?;
-    if marker.schema_version != MARKER_SCHEMA
-        || marker.artifacts.is_empty()
-        || marker.artifacts.len() > MAX_ARTIFACTS
-    {
-        return Err(not_owned(
-            destination,
-            "ownership marker identity is invalid",
-        ));
-    }
-    let mut expected = BTreeSet::from([MARKER_NAME.to_owned()]);
-    let mut marker_artifacts = Vec::with_capacity(marker.artifacts.len());
-    for (index, artifact) in marker.artifacts.iter().enumerate() {
-        validate_path(&artifact.path, index)
-            .map_err(|_| not_owned(destination, "ownership marker contains an unsafe path"))?;
-        if !expected.insert(artifact.path.clone()) {
-            return Err(not_owned(
-                destination,
-                "ownership marker contains duplicate paths",
-            ));
-        }
-        let mut parent_path = PathBuf::new();
-        if let Some(parent) = Path::new(&artifact.path).parent() {
-            for component in parent.components() {
-                parent_path.push(component.as_os_str());
-                expected.insert(format!(
-                    "{}/",
-                    parent_path.to_string_lossy().replace('\\', "/")
-                ));
-            }
-        }
-        let path = destination.join(&artifact.path);
-        let metadata = ownership_io(fault, OwnershipIoPoint::ArtifactMetadata, || {
-            path.symlink_metadata()
-        })
-        .map_err(|error| {
-            ownership_io_diagnostic(destination, &path, "inspect marked artifact", &error)
-        })?;
-        if !metadata.is_file() || metadata.file_type().is_symlink() {
-            return Err(not_owned(
-                destination,
-                "a marked artifact is not a regular file",
-            ));
-        }
-        let contents = ownership_io(fault, OwnershipIoPoint::ArtifactRead, || fs::read(&path))
-            .map_err(|error| {
-                ownership_io_diagnostic(destination, &path, "read marked artifact", &error)
-            })?;
-        if sha256(&contents) != artifact.sha256 {
-            return Err(not_owned(destination, "a marked artifact digest changed"));
-        }
-        marker_artifacts.push(Artifact {
-            path: artifact.path.clone(),
-            sha256: artifact.sha256.clone(),
-            contents: String::new(),
-        });
-    }
-    if marker.bundle_sha256 != bundle_digest(&marker_artifacts) {
-        return Err(not_owned(
-            destination,
-            "ownership marker bundle digest is inconsistent",
-        ));
-    }
-    let mut observed = BTreeSet::new();
-    collect_entries(destination, destination, &mut observed)?;
-    if observed != expected {
-        return Err(not_owned(
-            destination,
-            "destination contains unmarked or missing files",
-        ));
-    }
-    Ok(())
-}
-
-fn ownership_io<T>(
-    fault: PublicationFault,
-    point: OwnershipIoPoint,
-    operation: impl FnOnce() -> std::io::Result<T>,
-) -> std::io::Result<T> {
-    if fault == PublicationFault::OwnershipIo(point) {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "injected ownership I/O failure",
-        ))
-    } else {
-        operation()
-    }
-}
-
-fn ownership_io_diagnostic(
-    destination: &Path,
-    path: &Path,
-    action: &str,
-    error: &std::io::Error,
-) -> PublicationDiagnostic {
-    if error.kind() == std::io::ErrorKind::NotFound {
-        not_owned(
-            destination,
-            &format!("ownership input is absent: {}", path.display()),
-        )
-    } else {
-        io_diagnostic(path, action, error)
-    }
-}
-
-fn collect_entries(
-    root: &Path,
-    directory: &Path,
-    observed: &mut BTreeSet<String>,
-) -> Result<(), PublicationDiagnostic> {
-    for entry in fs::read_dir(directory)
-        .map_err(|error| io_diagnostic(directory, "read owned destination", &error))?
-    {
-        let entry =
-            entry.map_err(|error| io_diagnostic(directory, "read destination entry", &error))?;
-        let path = entry.path();
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|error| io_diagnostic(&path, "read destination metadata", &error))?;
-        if metadata.file_type().is_symlink() {
-            return Err(not_owned(root, "destination contains a symbolic link"));
-        }
-        if metadata.is_dir() {
-            let relative = path
-                .strip_prefix(root)
-                .map_err(|_| not_owned(root, "destination entry escaped its boundary"))?;
-            observed.insert(format!(
-                "{}/",
-                relative.to_string_lossy().replace('\\', "/")
-            ));
-            collect_entries(root, &path, observed)?;
-        } else if metadata.is_file() {
-            let relative = path
-                .strip_prefix(root)
-                .map_err(|_| not_owned(root, "destination entry escaped its boundary"))?;
-            observed.insert(relative.to_string_lossy().replace('\\', "/"));
-        } else {
-            return Err(not_owned(root, "destination contains a non-file entry"));
-        }
-    }
     Ok(())
 }
 
@@ -660,25 +378,6 @@ fn unique_sibling(parent: &Path, name: &str, role: &str) -> Result<PathBuf, Publ
         "destination",
         "no unused staging name was available",
     ))
-}
-
-fn deterministic_json(value: &impl Serialize) -> Result<String, String> {
-    let mut bytes = serde_json::to_vec(value).map_err(|error| error.to_string())?;
-    bytes.push(b'\n');
-    String::from_utf8(bytes).map_err(|error| error.to_string())
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    hex(Sha256::digest(bytes))
-}
-
-fn hex(bytes: impl AsRef<[u8]>) -> String {
-    let bytes = bytes.as_ref();
-    let mut value = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        let _ = write!(value, "{byte:02x}");
-    }
-    value
 }
 
 fn cleanup(path: &Path, action: &str) -> Result<(), PublicationDiagnostic> {
@@ -724,14 +423,6 @@ fn io_diagnostic_with_state(
     diagnostic
 }
 
-fn not_owned(path: &Path, message: &str) -> PublicationDiagnostic {
-    diagnostic(
-        PublicationErrorCode::DestinationNotOwned,
-        &path.to_string_lossy(),
-        message,
-    )
-}
-
 fn injected(path: &Path, point: &str) -> PublicationDiagnostic {
     diagnostic(
         PublicationErrorCode::IoFailed,
@@ -767,17 +458,13 @@ mod tests {
     }
 
     fn generated(path: &str, contents: &str) -> Artifact {
-        Artifact {
-            path: path.to_owned(),
-            contents: contents.to_owned(),
-            sha256: sha256(contents.as_bytes()),
-        }
+        Artifact::new(path, contents)
     }
 
     fn bundle(version: &str) -> ArtifactBundle {
         ArtifactBundle::new(vec![
             generated("src/generated.rs", version),
-            generated("attestations/generated.json", "{}\n"),
+            generated("src/generated/nested.rs", "{}\n"),
         ])
         .unwrap()
     }
@@ -793,7 +480,7 @@ mod tests {
 
     /// Trace: TC-001, TC-002, FR-005-AC-1, FR-005-AC-2, NFR-001-AC-1, NFR-001-AC-2, NFR-001-AC-3
     #[test]
-    fn publication_is_order_independent_and_replaces_only_owned_boundaries() {
+    fn publication_is_order_independent_and_replaces_only_its_destination() {
         let parent = temporary("replace");
         let destination = parent.join("generated");
         let developer = parent.join("developer.rs");
@@ -803,15 +490,20 @@ mod tests {
             ArtifactBundle::new(first.artifacts.iter().cloned().rev().collect()).unwrap();
         assert_eq!(first, reversed);
         let identity = write_bundle_atomic(&first, &destination).unwrap();
-        assert_eq!(identity.bundle_sha256, first.bundle_sha256());
+        assert_eq!(identity.artifact_count, 2);
         assert_eq!(
             fs::read_to_string(destination.join("src/generated.rs")).unwrap(),
             "first\n"
         );
+        fs::write(destination.join("stale.rs"), "stale\n").unwrap();
         write_bundle_atomic(&bundle("second\n"), &destination).unwrap();
         assert_eq!(
             fs::read_to_string(destination.join("src/generated.rs")).unwrap(),
             "second\n"
+        );
+        assert!(
+            !destination.join("stale.rs").exists(),
+            "the destination is replaced whole"
         );
         assert_eq!(fs::read_to_string(&developer).unwrap(), "developer-owned\n");
         assert!(residue(&parent).is_empty());
@@ -823,11 +515,7 @@ mod tests {
     fn every_injected_failure_preserves_old_and_developer_owned_bytes() {
         let faults = (0..bundle("new\n").artifacts().len())
             .map(PublicationFault::BeforeArtifact)
-            .chain([
-                PublicationFault::BeforeMarker,
-                PublicationFault::BeforeSwap,
-                PublicationFault::DuringSwap,
-            ]);
+            .chain([PublicationFault::BeforeSwap, PublicationFault::DuringSwap]);
         for fault in faults {
             for replacing in [false, true] {
                 let parent = temporary("rollback");
@@ -885,10 +573,6 @@ mod tests {
         assert_eq!(recovery.len(), 2);
         for (role, expected) in [(".quire-backup-", old), (".quire-stage-", new)] {
             let path = parent.join(recovery.iter().find(|name| name.contains(role)).unwrap());
-            verify_owned_destination(&path, PublicationFault::None).unwrap();
-            let observed: OwnershipMarker =
-                serde_json::from_slice(&fs::read(path.join(MARKER_NAME)).unwrap()).unwrap();
-            assert_eq!(observed, marker(&expected));
             for artifact in expected.artifacts() {
                 assert_eq!(
                     fs::read_to_string(path.join(&artifact.path)).unwrap(),
@@ -896,75 +580,6 @@ mod tests {
                 );
             }
         }
-        fs::remove_dir_all(parent).unwrap();
-    }
-
-    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-3
-    #[test]
-    fn ownership_io_failures_remain_distinct_from_observed_missing_inputs() {
-        let parent = temporary("ownership-io");
-        let destination = parent.join("generated");
-        let old = bundle("old\n");
-        write_bundle_atomic(&old, &destination).unwrap();
-        for (point, path, action) in [
-            (
-                OwnershipIoPoint::DestinationMetadata,
-                destination.clone(),
-                "inspect ownership boundary",
-            ),
-            (
-                OwnershipIoPoint::MarkerRead,
-                destination.join(MARKER_NAME),
-                "read ownership marker",
-            ),
-            (
-                OwnershipIoPoint::ArtifactMetadata,
-                destination.join("attestations/generated.json"),
-                "inspect marked artifact",
-            ),
-            (
-                OwnershipIoPoint::ArtifactRead,
-                destination.join("attestations/generated.json"),
-                "read marked artifact",
-            ),
-        ] {
-            let error = publish(
-                &bundle("new\n"),
-                &destination,
-                PublicationFault::OwnershipIo(point),
-            )
-            .unwrap_err();
-            assert_eq!(error.code, PublicationErrorCode::IoFailed, "{point:?}");
-            assert_eq!(error.terminal_state, GenerationTerminalState::IoFailed);
-            assert_eq!(
-                error.destination_state,
-                PublicationDestinationState::Unchanged
-            );
-            assert_eq!(error.path, path.to_string_lossy());
-            assert!(error.message.contains(action));
-            assert!(error.message.contains("injected ownership I/O failure"));
-            verify_owned_destination(&destination, PublicationFault::None).unwrap();
-            assert_eq!(
-                fs::read_to_string(destination.join("src/generated.rs")).unwrap(),
-                "old\n"
-            );
-            assert!(residue(&parent).is_empty());
-        }
-        let missing = destination.join("src/generated.rs");
-        fs::remove_file(&missing).unwrap();
-        let error = write_bundle_atomic(&bundle("new\n"), &destination).unwrap_err();
-        assert_eq!(error.code, PublicationErrorCode::DestinationNotOwned);
-        assert_eq!(error.terminal_state, GenerationTerminalState::InvalidInput);
-        assert_eq!(
-            error.destination_state,
-            PublicationDestinationState::Unchanged
-        );
-        assert_eq!(
-            error.message,
-            format!("ownership input is absent: {}", missing.display())
-        );
-        assert!(!missing.exists());
-        assert!(residue(&parent).is_empty());
         fs::remove_dir_all(parent).unwrap();
     }
 
@@ -1002,7 +617,7 @@ mod tests {
 
     /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-3
     #[test]
-    fn unsafe_bundles_and_unowned_or_modified_destinations_are_refused() {
+    fn unsafe_and_duplicate_artifact_paths_are_refused() {
         for path in [
             "../escape",
             "/absolute",
@@ -1012,7 +627,6 @@ mod tests {
             "nested//alias",
             "trailing/",
             "nested\\windows",
-            MARKER_NAME,
         ] {
             let error = ArtifactBundle::new(vec![generated(path, "x")]).unwrap_err();
             assert_eq!(
@@ -1025,75 +639,10 @@ mod tests {
             ArtifactBundle::new(vec![generated("a/b", "x"), generated("a/./b", "y")]).unwrap_err();
         assert_eq!(alias_pair.code, PublicationErrorCode::UnsafeArtifactPath);
         assert_eq!(alias_pair.path, "bundle.artifacts[1].path");
-        let mut wrong_digest = generated("safe", "x");
-        wrong_digest.sha256 = "0".repeat(64);
-        assert_eq!(
-            ArtifactBundle::new(vec![wrong_digest]).unwrap_err().code,
-            PublicationErrorCode::ArtifactDigestMismatch
-        );
-
-        let parent = temporary("ownership");
-        let destination = parent.join("generated");
-        fs::create_dir(&destination).unwrap();
-        fs::write(destination.join("developer.rs"), "owned elsewhere\n").unwrap();
-        let error = write_bundle_atomic(&bundle("new\n"), &destination).unwrap_err();
-        assert_eq!(error.code, PublicationErrorCode::DestinationNotOwned);
-        assert_eq!(
-            fs::read_to_string(destination.join("developer.rs")).unwrap(),
-            "owned elsewhere\n"
-        );
-
-        fs::remove_dir_all(&destination).unwrap();
-        write_bundle_atomic(&bundle("old\n"), &destination).unwrap();
-        fs::write(
-            destination.join("src/generated.rs"),
-            "developer changed this\n",
-        )
-        .unwrap();
-        let error = write_bundle_atomic(&bundle("new\n"), &destination).unwrap_err();
-        assert_eq!(error.code, PublicationErrorCode::DestinationNotOwned);
-        assert_eq!(
-            fs::read_to_string(destination.join("src/generated.rs")).unwrap(),
-            "developer changed this\n"
-        );
-
-        fs::remove_dir_all(&destination).unwrap();
-        write_bundle_atomic(&bundle("old\n"), &destination).unwrap();
-        fs::write(destination.join("extra.rs"), "extra\n").unwrap();
-        let error = write_bundle_atomic(&bundle("new\n"), &destination).unwrap_err();
-        assert_eq!(error.code, PublicationErrorCode::DestinationNotOwned);
-
-        fs::remove_file(destination.join("extra.rs")).unwrap();
-        fs::create_dir(destination.join("empty-developer-directory")).unwrap();
-        let error = write_bundle_atomic(&bundle("new\n"), &destination).unwrap_err();
-        assert_eq!(error.code, PublicationErrorCode::DestinationNotOwned);
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::symlink;
-
-            fs::remove_dir_all(&destination).unwrap();
-            write_bundle_atomic(&bundle("old\n"), &destination).unwrap();
-            let external = parent.join("external.rs");
-            fs::write(&external, "old\n").unwrap();
-            fs::remove_file(destination.join("src/generated.rs")).unwrap();
-            symlink(&external, destination.join("src/generated.rs")).unwrap();
-            let error = write_bundle_atomic(&bundle("new\n"), &destination).unwrap_err();
-            assert_eq!(error.code, PublicationErrorCode::DestinationNotOwned);
-            assert_eq!(fs::read_to_string(&external).unwrap(), "old\n");
-
-            fs::remove_dir_all(&destination).unwrap();
-            fs::remove_file(&external).unwrap();
-            symlink(&external, &destination).unwrap();
-            let error = write_bundle_atomic(&bundle("new\n"), &destination).unwrap_err();
-            assert_eq!(error.code, PublicationErrorCode::DestinationNotOwned);
-            assert!(fs::symlink_metadata(&destination)
-                .unwrap()
-                .file_type()
-                .is_symlink());
-            assert!(residue(&parent).is_empty());
-        }
-        fs::remove_dir_all(parent).unwrap();
+        let duplicate =
+            ArtifactBundle::new(vec![generated("a/b", "x"), generated("a/b", "y")]).unwrap_err();
+        assert_eq!(duplicate.code, PublicationErrorCode::DuplicateArtifactPath);
+        assert_eq!(duplicate.path, "bundle.artifacts[1].path");
     }
 
     /// Trace: TC-002, FR-005-AC-5
@@ -1123,13 +672,8 @@ mod tests {
     #[test]
     fn bundle_construction_refuses_a_complete_bundle_over_the_bounded_size() {
         let large = "x".repeat(MAX_ARTIFACT_BYTES);
-        let digest = sha256(large.as_bytes());
         let mut artifacts: Vec<Artifact> = (0..(MAX_BUNDLE_BYTES / MAX_ARTIFACT_BYTES))
-            .map(|index| Artifact {
-                path: format!("src/large_{index}.rs"),
-                contents: large.clone(),
-                sha256: digest.clone(),
-            })
+            .map(|index| generated(&format!("src/large_{index}.rs"), &large))
             .collect();
         artifacts.push(generated("src/extra.rs", "x"));
         let total: usize = artifacts

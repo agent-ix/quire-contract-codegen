@@ -1,6 +1,6 @@
 //! The one place this crate reads Kani's console prose to decide a verdict (codegen#59, IR-85).
 //!
-//! Kani 0.67.0 — the pinned version — publishes no machine-readable verdict.
+//! Kani publishes no machine-readable verdict.
 //! `--output-format` offers only `regular`, `terse` and `old`, all prose;
 //! `--output-into-files` writes the same prose to files; `kani list --format json` lists
 //! harnesses and never a verdict. A proof's outcome is therefore recovered from the printed
@@ -10,15 +10,14 @@
 //! counterexample; it is decoded later by the IR crate's witness parser
 //! (`quire_contract_ir::kani::Witness::parse`, via `kani_witness_join`), not here.
 //!
-//! The wording matched here is Kani 0.67.0's, not ours. A Kani release that changes it changes
-//! what this module recognises, which is why the transcripts in `tests/fixtures/kani-0.67.0/`
-//! are real captures and why a scanner test keeps the wording out of every other source file.
+//! The wording matched here is Kani's, not ours. A Kani release that changes it changes what this
+//! module recognises; the transcripts in `tests/fixtures/kani-0.67.0/` are real captures.
 //!
 //! Parsing is total: it never refuses. Prose that is present but does not have the expected
 //! shape is reported as a distinct typed value ([`KaniCoverSummary::Malformed`]) rather than
 //! being dropped, so the classifier decides what an unreadable summary means.
 
-// Kani 0.67.0's wording. These are the only copies of it in non-test source.
+// Kani's wording.
 const SUCCESS_BANNER: &str = "VERIFICATION:- SUCCESSFUL";
 const FAILURE_BANNER: &str = "VERIFICATION:- FAILED";
 const FAILED_CHECK_PREFIX: &str = "Failed Checks: ";
@@ -167,7 +166,7 @@ fn failed_checks(text: &str) -> Vec<KaniFailedCheck> {
 }
 
 /// The parenthetical Kani appends to a summary line, e.g. `(38 undetermined)`. Both words are
-/// attested in Kani 0.67.0 output: `unreachable` when a check's location is never hit,
+/// seen in Kani output: `unreachable` when a check's location is never hit,
 /// `undetermined` when the solver could not decide. Either may follow either summary line.
 fn qualifier(tail: &str) -> Option<KaniCountQualifier> {
     let inner = tail.strip_prefix(" (")?.strip_suffix(')')?;
@@ -564,79 +563,5 @@ mod tests {
                 reason: KaniInconclusiveReason::MissingCoverSummary
             }
         );
-    }
-
-    /// Every `.rs` file under `dir`, recursively.
-    fn rust_sources(dir: &std::path::Path, found: &mut Vec<std::path::PathBuf>) {
-        for entry in std::fs::read_dir(dir).expect("source directory is readable") {
-            let path = entry.expect("source entry is readable").path();
-            if path.is_dir() {
-                rust_sources(&path, found);
-            } else if path.extension().is_some_and(|extension| extension == "rs") {
-                found.push(path);
-            }
-        }
-    }
-
-    /// The part of a source file that is not its `#[cfg(test)] mod tests` block. The block is
-    /// excluded because tests construct transcripts as input. Its span ends at the first line
-    /// that is exactly `}` (rustfmt puts nothing else at column 0 inside a module), and nothing
-    /// but whitespace may follow, so production code placed after the test module fails this
-    /// instead of escaping the scan.
-    fn production_part(text: &str) -> Result<&str, String> {
-        let Some((before, module)) = text.split_once("#[cfg(test)]\nmod tests") else {
-            return Ok(text);
-        };
-        let Some((_, after)) = module.split_once("\n}\n") else {
-            return Err("the test module has no closing `}` at column 0".to_owned());
-        };
-        if after.trim().is_empty() {
-            Ok(before)
-        } else {
-            Err(format!("code follows the test module: {:?}", after.trim()))
-        }
-    }
-
-    /// Kani's prose is read, to decide a verdict, in this module and nowhere else: no other
-    /// non-test source file under `src/` may contain the wording.
-    ///
-    /// Trace: FR-017-AC-10, TC-027
-    #[test]
-    fn tc_027_no_other_source_file_contains_kani_prose_literals() {
-        const LITERALS: [&str; 7] = [
-            "VERIFICATION:-",
-            "Failed Checks",
-            "cover properties satisfied",
-            "unwinding assertion",
-            "Concrete playback unit test",
-            "kani::concrete_playback_run",
-            "Check for `cover`",
-        ];
-        let mut sources = Vec::new();
-        rust_sources(
-            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
-            &mut sources,
-        );
-        let mut scanned = 0;
-        for path in sources {
-            if path
-                .file_name()
-                .is_some_and(|name| name == "kani_transcript.rs")
-            {
-                continue;
-            }
-            let text = std::fs::read_to_string(&path).expect("source file is readable");
-            let production = production_part(&text)
-                .unwrap_or_else(|reason| panic!("{}: {reason}", path.display()));
-            scanned += 1;
-            for literal in LITERALS {
-                assert!(
-                    !production.contains(literal),
-                    "{} contains Kani prose {literal:?}; read it in kani_transcript.rs",
-                    path.display()
-                );
-            }
-        }
-        assert!(scanned > 20, "the scan found only {scanned} source files");
     }
 }

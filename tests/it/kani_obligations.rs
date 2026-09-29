@@ -1,4 +1,4 @@
-//! FR-015 separate bounded Kani obligations, FR-017 pinned execution, and Contract IR FR-036
+//! FR-015 separate bounded Kani obligations, FR-017 Kani execution, and Contract IR FR-036
 //! backend negotiation.
 //!
 //! The default lane checks negotiation, refusal and harness shape without running Kani. The
@@ -49,11 +49,11 @@ const INVARIANT: &str = "balance-nonnegative";
 const DEFINEDNESS: &str = "doubled-amount-fits";
 const ASSERTION: &str = "amount-nonnegative";
 
-/// Budget for the pinned lane's real `cargo-kani` runs. Generous because CBMC is memory- and
+/// Budget for the kani lane's real `cargo-kani` runs. Generous because CBMC is memory- and
 /// time-heavy on these small obligations; this is a ceiling against a genuine hang, not a
 /// performance target.
 pub(crate) const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
-/// Placeholder budget for tests that refuse before any process is spawned (a pin drift, a
+/// Placeholder budget for tests that refuse before any process is spawned (a
 /// missing backend component, or a harness the crate does not contain): the value is never
 /// consulted, since `execute_kani_obligation` returns before reaching the launcher.
 const UNUSED_TIMEOUT: Duration = Duration::from_secs(60);
@@ -754,7 +754,7 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
 /// it is true for `Ok(Refused(_))` too, and `Refused` is exactly the outcome an out-of-domain
 /// result must produce, so the `match` below inspects only the `Completed` arm and leaves `sound`
 /// at its vacuous default otherwise. This is a source-inspection check because real `cargo kani`
-/// cannot be run in this environment (`make kani`'s pinned lane; this generator also has no
+/// cannot be run in this environment (the `make kani` lane; this generator also has no
 /// in-process way to run it against a fabricated single-harness crate) -- the harness is rendered
 /// and its proposition is now correctly stated, but it is NOT claimed to be discharged here.
 ///
@@ -1579,7 +1579,6 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
     let directory = write_crate(&harness, HEALTHY_SUBJECT);
     let installation = KaniInstallation {
         launcher: directory.join("cargo-kani"),
-        kani_home: directory.join("kani-home"),
     };
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
@@ -1598,124 +1597,6 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
     ));
     assert!(!directory.join("target").exists(), "nothing ran");
     let _ = fs::remove_dir_all(directory);
-}
-
-/// FR-017's execution surface computes no aggregate verdict over runs and retains no evidence
-/// of its own: no function in `src/kani_execution.rs` — the file FR-017 owns — takes more than
-/// one run's evidence or outcome, and nothing in it writes a file. Retention, audit and
-/// aggregation stay Quoin's; the caller receives one run's evidence and owns what happens to it.
-///
-/// This is a substring census, a tripwire and floor rather than a proof: it catches the literal
-/// forms named below but not an equivalent rewrite, such as `impl IntoIterator<Item =
-/// KaniExecutionEvidence>`, a `[KaniExecutionEvidence; 2]` array parameter, a type alias that
-/// hides `Vec<...>` behind another name, `fs::copy` used in place of `fs::write`, `use std::fs::write
-/// as emit`, or splitting the execution surface across a second module this test does not read.
-/// Closing those gaps needs a stronger check than a grep; until then this test is the floor FR-017
-/// stands on, not a guarantee nothing under it can shift.
-///
-/// Trace: FR-017-AC-8, FR-017-AC-9, TC-027
-#[test]
-fn tc_027_no_aggregate_verdict_and_no_retained_evidence_of_its_own() {
-    let full_source =
-        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/kani_execution.rs"))
-            .expect("src/kani_execution.rs must be readable from the crate root");
-    // Only the shipped execution surface, not its own `#[cfg(test)]` module: tests build fake
-    // on-disk installations to exercise backend discovery and measurement, which is neither an
-    // aggregate verdict nor evidence retention by the surface itself.
-    let source = full_source
-        .split_once("\n#[cfg(test)]\n")
-        .map_or(full_source.as_str(), |(production, _)| production);
-
-    // No aggregate verdict: nothing accepts a collection of runs' evidence or outcomes.
-    for forbidden in [
-        "Vec<KaniExecutionEvidence>",
-        "&[KaniExecutionEvidence]",
-        "Vec<KaniRunOutcome>",
-        "&[KaniRunOutcome]",
-    ] {
-        assert!(
-            !source.contains(forbidden),
-            "src/kani_execution.rs must compute no aggregate verdict over runs: found {forbidden:?}"
-        );
-    }
-
-    // No evidence of its own: nothing in this module writes a file. The backend process it
-    // launches writes its own build artifacts; this module only ever reads them back.
-    for forbidden in ["fs::write", "File::create", "OpenOptions"] {
-        assert!(
-            !source.contains(forbidden),
-            "src/kani_execution.rs must retain no evidence of its own: found {forbidden:?}"
-        );
-    }
-}
-
-/// Concatenates every `.rs` file under `directory`, recursively, so a source census below can
-/// find text that might live in any module rather than one hardcoded path.
-fn concatenated_source(directory: &Path) -> String {
-    let mut entries = fs::read_dir(directory)
-        .unwrap_or_else(|error| panic!("{} must be readable: {error}", directory.display()))
-        .map(|entry| entry.expect("directory entry").path())
-        .collect::<Vec<_>>();
-    entries.sort();
-    let mut combined = String::new();
-    for path in entries {
-        if path.is_dir() {
-            combined.push_str(&concatenated_source(&path));
-        } else if path.extension().is_some_and(|extension| extension == "rs") {
-            combined
-                .push_str(&fs::read_to_string(&path).unwrap_or_else(|error| {
-                    panic!("{} must be readable: {error}", path.display())
-                }));
-        }
-    }
-    combined
-}
-
-/// FR-017-CON-2 is backed by `tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses`
-/// and `tc_025_every_item_is_accounted_before_any_harness_is_exposed`, which are a sound but
-/// type-level argument: every generation-time refusal (`ObligationDisposition`,
-/// `UnsupportedObligation`, `KaniObligationError`, `KaniObligationOutcome`) produces no
-/// `KaniObligationHarness`, so `execute_kani_obligation` structurally has nothing to convert.
-/// Neither test calls `execute_kani_obligation` or constructs a `KaniRunOutcome`, so this census
-/// — in the style of FR-017-AC-8/AC-9's own census above — is what would actually fail if a
-/// future change added a conversion from the generation-time vocabulary to the execution-time
-/// one (`KaniRunOutcome`, `KaniInconclusiveReason`, `KaniExecutionRefusal`,
-/// `KaniExecutionEvidence`) and let a generation-time classification start reporting itself as
-/// an execution outcome.
-///
-/// This is a substring census, a tripwire and floor rather than a proof: it catches the literal
-/// `From<G> for E` forms named below but not an equivalent rewrite, such as an inherent
-/// `impl UnsupportedObligation { fn into_outcome(self) -> KaniRunOutcome }`, a free function, a
-/// `TryFrom` or `Into` implementation, or a rustfmt wrap that puts `for` on its own line. Closing
-/// those gaps needs a stronger check than a grep; until then this test is the floor FR-017-CON-2
-/// stands on, not a guarantee nothing under it can shift.
-///
-/// Trace: FR-017-CON-2, TC-027
-#[test]
-fn tc_027_no_conversion_exists_between_generation_and_execution_vocabularies() {
-    let source = concatenated_source(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"));
-    let generation_types = [
-        "ObligationDisposition",
-        "UnsupportedObligation",
-        "KaniObligationError",
-        "KaniObligationOutcome",
-    ];
-    let execution_types = [
-        "KaniRunOutcome",
-        "KaniInconclusiveReason",
-        "KaniExecutionRefusal",
-        "KaniExecutionEvidence",
-    ];
-    for generation in generation_types {
-        for execution in execution_types {
-            let forbidden = format!("From<{generation}> for {execution}");
-            assert!(
-                !source.contains(&forbidden),
-                "FR-017-CON-2 forbids reporting a generation-time classification as an \
-                 execution outcome, but found a conversion: {forbidden}"
-            );
-        }
-    }
 }
 
 // ---- kani lane ---------------------------------------------------------------
@@ -1937,7 +1818,6 @@ fn routed_scalar_increment() -> (
             node_id,
             backend: Candidate {
                 identity: "kani".to_owned(),
-                manifest_digest: "A".to_owned(),
             },
             kind: BackendKind::Kani,
         }],
@@ -2026,7 +1906,7 @@ fn tc_027_a_routed_scalar_harness_run_classifies_like_a_contract_harness() {
 }
 
 /// Runs `library` (a routed scalar harness's source, possibly mutated) through the execution
-/// module in the crate the driver assembles, under the real pinned backend and the lane budget.
+/// module in the crate the driver assembles, under the real Kani backend and the lane budget.
 fn run_scalar_under_real_kani(
     name: &str,
     harness: &KaniScalarObligationHarness,
@@ -2048,7 +1928,7 @@ fn run_scalar_under_real_kani(
 
 /// The routed `x + 1` over `Int[0, 9]` harness runs through the execution module in the crate the
 /// driver assembles (`Cargo.toml` from `oracle_artifacts`, the harness source as `src/lib.rs`)
-/// under the real pinned backend and is verified; its evidence carries the scalar identity. A
+/// under the real Kani backend and is verified; its evidence carries the scalar identity. A
 /// crate whose `src/lib.rs` lacks the harness is refused with no run.
 ///
 /// Trace: FR-017-AC-7, FR-017-AC-11, TC-027

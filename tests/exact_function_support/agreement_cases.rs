@@ -21,9 +21,11 @@
 //! (see `src/exact_function.rs`'s module doc). This file's agreement legs
 //! are exactly two: the generated oracle and a direct Contract Runtime call.
 
-/// The generated main-corpus crate under test.
+/// The generated main-corpus crate under test. `names.rs`, written beside the scratch crate's
+/// manifest at test time, re-exports each executed oracle as `oracle_<function>`.
 mod generated {
     pub use quire_exact_function_oracles::*;
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
 }
 
 /// The generator's output for the nested-call chain corpus, written beside the
@@ -223,7 +225,7 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
         let direct_result = call_debug(&direct, "add_fn", args.clone());
         let mut meter = rt::Meter::new(UNLIMITED);
         let generated_result =
-            generated::oracle_call_6141d15f9113111379a033944cc53f96db7ccf41f9d711ab5229fcb700ab34b2(
+            generated::oracle_add_fn(
                 &generated, args, &objects, &mut meter,
             );
         assert_eq!(
@@ -242,7 +244,7 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
         let direct_result = call_debug(&direct, "eq_fn", args.clone());
         let mut meter = rt::Meter::new(UNLIMITED);
         let generated_result =
-            generated::oracle_call_0b785af390f267bfde0c1bc2ff92bb5128447fc32879a587d531baa5167501ab(
+            generated::oracle_eq_fn(
                 &generated, args, &objects, &mut meter,
             );
         assert_eq!(
@@ -264,7 +266,7 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
         let direct_result = call_debug(&direct, "call_fn", args.clone());
         let mut meter = rt::Meter::new(UNLIMITED);
         let generated_result =
-            generated::oracle_call_3caf643272fc58436ac5fa1922284792462c74d866b0b261101e04cd0b46a05d(
+            generated::oracle_call_fn(
                 &generated, args, &objects, &mut meter,
             );
         assert_eq!(
@@ -286,7 +288,7 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
 /// `exact_function_generation.rs`'s AC-1 test), so it is driven here
 /// directly against `CheckedPackage::call`, the same entry point every
 /// generated oracle itself delegates to unchanged. `::DanglingReference` is
-/// not exercised: the pinned runtime's `validate_arguments`
+/// not exercised: the runtime's `validate_arguments`
 /// (`quire-contract-runtime/src/exact/expression.rs`) checks
 /// `value_type.admits(argument)` -- `WrongValueKind` -- before it ever
 /// walks a value for a dangling reference, and a `Value::Reference`
@@ -304,7 +306,7 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
     {
         let mut meter = rt::Meter::new(UNLIMITED);
         let result =
-            generated::oracle_call_6141d15f9113111379a033944cc53f96db7ccf41f9d711ab5229fcb700ab34b2(
+            generated::oracle_add_fn(
                 &generated,
                 vec![rt::Value::Integer(1i64.into())],
                 &objects,
@@ -324,7 +326,7 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
     {
         let mut meter = rt::Meter::new(UNLIMITED);
         let result =
-            generated::oracle_call_6141d15f9113111379a033944cc53f96db7ccf41f9d711ab5229fcb700ab34b2(
+            generated::oracle_add_fn(
                 &generated,
                 vec![rt::Value::Boolean(true), rt::Value::Integer(1i64.into())],
                 &objects,
@@ -349,7 +351,7 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
             rt::ObjectIdentity::new(b"object").expect("object identity"),
         );
         let result =
-            generated::oracle_call_6141d15f9113111379a033944cc53f96db7ccf41f9d711ab5229fcb700ab34b2(
+            generated::oracle_add_fn(
                 &generated,
                 vec![
                     rt::Value::Reference(dangling),
@@ -388,7 +390,7 @@ fn tc_031_ac5_arity_is_decided_before_value_kind() {
     let objects = empty_objects();
     let mut meter = rt::Meter::new(UNLIMITED);
     let result =
-        generated::oracle_call_6141d15f9113111379a033944cc53f96db7ccf41f9d711ab5229fcb700ab34b2(
+        generated::oracle_add_fn(
             &generated,
             vec![rt::Value::Boolean(true)], // wrong arity AND wrong kind
             &objects,
@@ -416,7 +418,7 @@ fn tc_031_ac9_denial_at_function_call_yields_incomplete_with_no_charge_applied()
     };
     let mut meter = rt::Meter::new(UNLIMITED).with_injected_denial(denial);
     let result =
-        generated::oracle_call_6141d15f9113111379a033944cc53f96db7ccf41f9d711ab5229fcb700ab34b2(
+        generated::oracle_add_fn(
             &generated,
             vec![
                 rt::Value::Integer(1i64.into()),

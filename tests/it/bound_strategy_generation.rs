@@ -1436,36 +1436,13 @@ fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
 /// Trace: TC-022, FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4, FR-013-AC-5
 #[test]
 fn tc_022_bundle_is_typed_rust_with_bound_identity() {
-    let package = decode(&version_projection());
     let generated = generate(BoundStrategyPopulation::Broad);
     assert!(generated.rust.path.ends_with(".rs"));
     assert!(!generated.rust.path.contains("schema"));
-    let digest = package.digest().to_string();
-    assert!(generated.rust.contents.contains(&digest));
     assert!(generated
         .rust
         .contents
         .contains("test/version-strategy/FR-034@9/VersionUnchanged"));
-
-    let mut changed_package_value = version_projection();
-    changed_package_value["bindings"][0]["expression"]["values"][0]["value_type"]["maximum"] =
-        json!(999);
-    let changed_package = decode(&changed_package_value);
-    let changed_package_bundle = generate_bound_strategy(&BoundStrategyRequest {
-        package: &changed_package,
-        clause: &clause_ref(),
-        population: BoundStrategyPopulation::Broad,
-        minimum_accepted_cases: 1,
-        minimum_rejected_cases: 0,
-        maximum_discarded_cases: 0,
-    })
-    .unwrap();
-    assert_ne!(changed_package.digest(), package.digest());
-    assert_ne!(changed_package_bundle.rust.path, generated.rust.path);
-    assert!(changed_package_bundle
-        .rust
-        .contents
-        .contains(&changed_package.digest().to_string()));
 
     let mut two_clause_value = version_projection();
     let mut second_clause = two_clause_value["package"]["requirements"][0]["clauses"][0].clone();

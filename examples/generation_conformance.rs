@@ -29,10 +29,6 @@ use quire_contract_ir::{
 };
 use serde::Serialize;
 
-/// The protocol this producer publishes. Named, so a consumer that transcribes
-/// it can refuse anything else rather than guess.
-const PROTOCOL: &str = "codegen.generation-conformance/v1";
-
 /// One corpus case's report.
 ///
 /// `outcome` uses the shared producer vocabulary the adapter enumerates. The
@@ -43,7 +39,6 @@ const PROTOCOL: &str = "codegen.generation-conformance/v1";
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Row {
-    protocol: &'static str,
     symbol: String,
     outcome: &'static str,
     /// The Interface-001 terminal state the generator actually reached.
@@ -56,7 +51,6 @@ struct Row {
     /// How many had to hold for the case to be a pass.
     floor: usize,
     detail: Vec<String>,
-    trace_ids: Vec<&'static str>,
 }
 
 // ---------------------------------------------------------------------------
@@ -203,12 +197,11 @@ struct Case {
     expected_terminal_state: Option<GenerationTerminalState>,
     diagnostic_code: Option<String>,
     expected_diagnostic_code: Option<&'static str>,
-    trace_ids: Vec<&'static str>,
     failures: Vec<String>,
 }
 
 impl Case {
-    fn new(symbol: &str, floor: usize, trace_ids: Vec<&'static str>) -> Self {
+    fn new(symbol: &str, floor: usize) -> Self {
         Self {
             symbol: symbol.to_owned(),
             checks: Vec::new(),
@@ -217,7 +210,6 @@ impl Case {
             expected_terminal_state: None,
             diagnostic_code: None,
             expected_diagnostic_code: None,
-            trace_ids,
             failures: Vec::new(),
         }
     }
@@ -249,7 +241,6 @@ impl Case {
         let mut detail = self.checks;
         detail.extend(self.failures.iter().map(|item| format!("FAILED: {item}")));
         Row {
-            protocol: PROTOCOL,
             symbol: self.symbol,
             outcome,
             terminal_state: self.terminal_state,
@@ -259,7 +250,6 @@ impl Case {
             checks_discharged: discharged,
             floor: self.floor,
             detail,
-            trace_ids: self.trace_ids,
         }
     }
 }
@@ -310,18 +300,7 @@ fn record_oracle_rejection(
 /// TC-001: a supported Boolean clause lowers to a deterministic, traceable,
 /// SPDX-identified oracle whose source map parses as the declared region list.
 fn oracle_generated() -> Case {
-    let mut case = Case::new(
-        "generation::boolean-oracle",
-        5,
-        vec![
-            "FR-001",
-            "FR-001-AC-1",
-            "FR-001-AC-3",
-            "NFR-001-AC-1",
-            "NFR-002-AC-2",
-            "TC-001",
-        ],
-    );
+    let mut case = Case::new("generation::boolean-oracle", 5);
     case.expected_terminal_state = Some(GenerationTerminalState::Generated);
     let owner = requirement("FR-001", 7);
     let environment = boolean_environment(owner, &[("enabled", ValueDeclarationKind::Input)]);
@@ -400,11 +379,7 @@ fn oracle_generated() -> Case {
 /// TC-004: a typed pre/postcondition pair lowers to a tri-state harness with a
 /// proptest adapter.
 fn harness_generated() -> Case {
-    let mut case = Case::new(
-        "generation::tristate-harness",
-        3,
-        vec!["FR-002", "FR-002-AC-1", "NFR-002-AC-2", "TC-004"],
-    );
+    let mut case = Case::new("generation::tristate-harness", 3);
     case.expected_terminal_state = Some(GenerationTerminalState::Generated);
     let owner = requirement("FR-002", 1);
     let environment = boolean_environment(
@@ -498,11 +473,7 @@ fn harness_generated() -> Case {
 
 /// TC-004: a bounded inclusive range lowers to a shaped proptest strategy.
 fn strategy_generated() -> Case {
-    let mut case = Case::new(
-        "generation::i64-strategy",
-        2,
-        vec!["FR-002", "FR-002-AC-2", "NFR-002-AC-2", "TC-004"],
-    );
+    let mut case = Case::new("generation::i64-strategy", 2);
     case.expected_terminal_state = Some(GenerationTerminalState::Generated);
     let owner = requirement("FR-002", 1);
     let request = StrategyRequest {
@@ -553,11 +524,7 @@ fn strategy_generated() -> Case {
 /// construct. The two states have different meanings for a caller and this case
 /// pins which one this input reaches.
 fn oracle_rejects_non_boolean_root() -> Case {
-    let mut case = Case::new(
-        "rejection::non-boolean-root",
-        2,
-        vec!["FR-001", "FR-001-AC-4", "NFR-002-AC-3", "TC-003"],
-    );
+    let mut case = Case::new("rejection::non-boolean-root", 2);
     case.expected_terminal_state = Some(GenerationTerminalState::InvalidInput);
     case.expected_diagnostic_code = Some("non_boolean_root");
     let owner = requirement("FR-001", 7);
@@ -590,17 +557,7 @@ fn oracle_rejects_non_boolean_root() -> Case {
 /// `FR-001:48`, `interface-001:114` and FR-003-AC-3 still require arithmetic to
 /// refuse. This case follows the code, and the divergence is IR-235's.
 fn oracle_rejects_unsupported_expression() -> Case {
-    let mut case = Case::new(
-        "rejection::unsupported-expression",
-        2,
-        vec![
-            "FR-001",
-            "FR-001-AC-4",
-            "FR-003-AC-3",
-            "NFR-002-AC-3",
-            "TC-003",
-        ],
-    );
+    let mut case = Case::new("rejection::unsupported-expression", 2);
     case.expected_terminal_state = Some(GenerationTerminalState::Unsupported);
     case.expected_diagnostic_code = Some("unsupported_expression");
     let owner = requirement("FR-001", 7);
@@ -669,11 +626,7 @@ fn harness_rejects_invalid_input(duplicate_clause: bool) -> Case {
             GenerationTerminalState::Unsupported,
         )
     };
-    let mut case = Case::new(
-        symbol,
-        3,
-        vec!["FR-002", "FR-002-AC-4", "NFR-002-AC-3", "TC-004"],
-    );
+    let mut case = Case::new(symbol, 3);
     case.expected_terminal_state = Some(expected_state);
     case.expected_diagnostic_code = Some(if duplicate_clause {
         "duplicate_clause_identity"
@@ -778,11 +731,7 @@ fn harness_rejects_invalid_input(duplicate_clause: bool) -> Case {
 
 /// TC-004: a reversed range is invalid input.
 fn strategy_rejects_invalid_range() -> Case {
-    let mut case = Case::new(
-        "rejection::invalid-range",
-        3,
-        vec!["FR-002", "FR-002-AC-4", "NFR-002-AC-3", "TC-004"],
-    );
+    let mut case = Case::new("rejection::invalid-range", 3);
     case.expected_terminal_state = Some(GenerationTerminalState::InvalidInput);
     case.expected_diagnostic_code = Some("invalid_range");
     let owner = requirement("FR-002", 1);
@@ -835,11 +784,7 @@ fn strategy_rejects_invalid_range() -> Case {
 /// producing one of them falls below the floor and the row reads `vacuous`,
 /// which is not `pass`.
 fn diagnostic_census(rows: &[Row]) -> Case {
-    let mut case = Case::new(
-        "census::diagnostic-vocabulary",
-        9,
-        vec!["FR-001-AC-4", "NFR-002-AC-3", "TC-003", "TC-006"],
-    );
+    let mut case = Case::new("census::diagnostic-vocabulary", 9);
     // Only a case that passed demonstrates anything. A case that failed and
     // produced a diagnostic on the way out produced it by accident, and counting
     // it would let a broken corpus inflate its own census — which is the exact
@@ -1045,7 +990,6 @@ mod tests {
     /// carry.
     fn row(outcome: &'static str) -> Row {
         Row {
-            protocol: PROTOCOL,
             symbol: "test-row".to_owned(),
             outcome,
             terminal_state: None,
@@ -1055,7 +999,6 @@ mod tests {
             checks_discharged: 0,
             floor: 0,
             detail: Vec::new(),
-            trace_ids: Vec::new(),
         }
     }
 

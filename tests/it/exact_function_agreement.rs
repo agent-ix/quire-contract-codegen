@@ -51,12 +51,39 @@ fn tc_031_generated_function_crate_agrees_with_direct_runtime() {
         .iter()
         .find(|artifact| artifact.path == "src/lib.rs")
         .expect("the chain corpus generates src/lib.rs");
+    let aliases = ["add_fn", "eq_fn", "call_fn"]
+        .into_iter()
+        .map(|function| {
+            let symbol = main
+                .claim_map
+                .items
+                .iter()
+                .find_map(|claim| match &claim.result {
+                    quire_contract_codegen::ClaimDisposition::Generated(generated)
+                        if generated.function == function =>
+                    {
+                        Some(generated.oracle_symbol.clone())
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{function} has no generated oracle"));
+            (symbol, format!("oracle_{function}"))
+        })
+        .collect::<Vec<_>>();
+    let names = super::exact_scalar_agreement::names_file(
+        quire_contract_codegen::EXACT_FUNCTION_CRATE_NAME,
+        &aliases,
+        "",
+    );
     run_agreement_cases(
         "exact-function-agreement",
         main.artifacts
             .iter()
             .map(|artifact| (artifact.path.as_str(), artifact.contents.as_str())),
-        &[("chain/lib.rs", chain_source.contents.as_str())],
+        &[
+            ("chain/lib.rs", chain_source.contents.as_str()),
+            ("names.rs", names.as_str()),
+        ],
         "tests/exact_function_support/agreement_cases.rs",
     );
 }

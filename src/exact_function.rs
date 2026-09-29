@@ -111,40 +111,32 @@
 //! is not reachable from this V1's body vocabulary, and `spec/test-matrix.md`
 //! records AC-15 accordingly rather than as fully covered. The dynamic half
 //! -- `Evaluation.location`/`.losses` becoming non-empty at a specific call
-//! -- is Out of Scope per FR-021 itself: the pinned runtime's `Body` return
+//! -- is Out of Scope per FR-021 itself: the runtime's `Body` return
 //! type is `Outcome<Value>`, structurally incapable of carrying one, and
 //! this generator does not attempt it (AC-16: those two fields are simply
 //! discarded by every emitted oracle).
 //!
 //! ## AC-18 (three-way authority agreement): not implemented
 //!
-//! FR-021-AC-18 is recorded in `spec/functional/complete-v1/FR-021-function-application-oracles.md`
-//! as "🚧 Planned, pending the `quire-spec-language` re-pin named in
-//! Dependencies". IR-254 repointed this repository's QSL pin, but not onto
-//! `quire_spec_language::value::expression`: that value-level API is gone
-//! from the revision this repository now pins, and QSL arch-lint T12-A
-//! confines this repository to `qsl-replay`'s public API (one
-//! source-recompiling proof-witness replay executor) instead, which AC-18's
-//! direct-expression-call shape cannot reach without a new source-level test
-//! harness. No test in this module's suite asserts agreement against a QSL
-//! authority; AC-2's two legs (generated oracle, direct runtime call) are
-//! implemented and tested in full.
+//! No test in this module's suite asserts agreement against a QSL authority: this repository
+//! depends only on `qsl-replay`'s public API (QSL arch-lint T12-A), which AC-18's
+//! direct-expression-call shape cannot reach. AC-2's two legs (generated oracle, direct runtime
+//! call) are implemented and tested in full.
 
 use crate::composite_equality::EqualityOperatorKind;
 use crate::exact_scalar::IntegerOperator;
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-use crate::oracle::{Artifact, MAX_GENERATED_SOURCE_BYTES, ORACLE_KANI_METADATA, RUNTIME_REVISION};
+use crate::oracle::{
+    bounded_readable_component, Artifact, MAX_GENERATED_SOURCE_BYTES, ORACLE_KANI_METADATA,
+    RUNTIME_REVISION,
+};
 use quire_contract_ir::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
 use quire_contract_runtime::exact as rt;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
-
-/// Version of the emitted claim map.
-pub const EXACT_FUNCTION_CLAIM_MAP_VERSION: &str = "quire.codegen.exact-function-claim-map/v1";
 
 /// Work budget for lowering one requested function body or call node.
 pub const EXACT_FUNCTION_LOWERING_WORK_LIMIT: u64 = 65_536;
@@ -1021,7 +1013,9 @@ pub fn generate_exact_function_oracles(
 
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(by_key.len());
-    for ((key, item), record) in by_key.into_iter().zip(&call_lowering.records) {
+    for (position, ((key, item), record)) in
+        by_key.into_iter().zip(&call_lowering.records).enumerate()
+    {
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
         let result = if duplicate {
             ClaimDisposition::Refused {
@@ -1036,7 +1030,7 @@ pub fn generate_exact_function_oracles(
                 &function_index,
                 &package_refusal,
                 lowering.package.source_package_id(),
-                &key,
+                position,
                 item,
                 record,
             ) {
@@ -1058,13 +1052,11 @@ pub fn generate_exact_function_oracles(
     }
 
     let claim_map = ClaimMap {
-        version: EXACT_FUNCTION_CLAIM_MAP_VERSION,
         package_id: lowering.package.source_package_id().clone(),
-        runtime_revision: RUNTIME_REVISION,
         blocked: Vec::new(),
         items: claims,
     };
-    let lib = source.finish(&classified, lowering.package.source_package_id());
+    let lib = source.finish(&classified);
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(OracleGenerationError::SourceTooLarge { bytes: lib.len() });
     }
@@ -1106,7 +1098,7 @@ fn item_disposition(
     function_index: &BTreeMap<&CheckedNodeId, usize>,
     package_refusal: &Option<String>,
     package_id: &CheckedSemanticId,
-    key: &ItemKey,
+    position: usize,
     item: &ExactFunctionItem,
     record: &CompleteLoweringRecordV2,
 ) -> Result<(String, GeneratedExactFunctionClaim), ExactFunctionRefusal> {
@@ -1160,7 +1152,13 @@ fn item_disposition(
             cause: cause.clone(),
         });
     }
-    let symbol = format!("call_{}", key.digest());
+    // The applied function's name and the item's position in key order, which alone keeps the
+    // name unique within one generation: two items sharing one `call` node but naming different
+    // functions render as two distinct Rust functions.
+    let symbol = format!(
+        "call_{}_{position}",
+        bounded_readable_component(&declaration.name)
+    );
     Ok((
         symbol.clone(),
         GeneratedExactFunctionClaim {
@@ -1209,45 +1207,6 @@ impl ItemKey {
             argument_node_ids: item.argument_node_ids.clone(),
         }
     }
-
-    /// A digest over exactly this key -- the call node id, the applied
-    /// function's declaring node id (or its absence), then each argument
-    /// operand's source node id, in key order -- used as the emitted
-    /// symbol's disambiguator. Two items sharing one `call` node id but
-    /// naming different functions (a real, valid request shape: one `call`
-    /// expression's node identity says nothing about which function an
-    /// item declares it applies) therefore always render as two distinct
-    /// Rust functions; deriving the symbol from `call_node_id` alone would
-    /// make them collide into one duplicate `pub fn` definition, which
-    /// would not even compile.
-    fn digest(&self) -> String {
-        let mut hasher = Sha256::new();
-        hash_node_id(&mut hasher, &self.call_node_id);
-        hash_optional_node_id(&mut hasher, self.function_node_id.as_ref());
-        hasher.update((self.argument_node_ids.len() as u64).to_le_bytes());
-        for argument in &self.argument_node_ids {
-            hash_node_id(&mut hasher, argument);
-        }
-        let digest = hasher.finalize();
-        digest.iter().map(|byte| format!("{byte:02x}")).collect()
-    }
-}
-
-fn hash_node_id(hasher: &mut Sha256, node_id: &CheckedNodeId) {
-    hasher.update((node_id.domain.len() as u64).to_le_bytes());
-    hasher.update(node_id.domain.as_bytes());
-    hasher.update((node_id.digest.len() as u64).to_le_bytes());
-    hasher.update(node_id.digest.as_bytes());
-}
-
-fn hash_optional_node_id(hasher: &mut Sha256, node_id: Option<&CheckedNodeId>) {
-    match node_id {
-        None => hasher.update([0_u8]),
-        Some(node_id) => {
-            hasher.update([1_u8]);
-            hash_node_id(hasher, node_id);
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1263,7 +1222,7 @@ const SOURCE_HEADER: &str = "\
 // same admission this generator already ran once at generation time.
 // Every oracle function below calls `CheckedPackage::call` with an
 // already-checked package and returns its `Outcome<Value>` unchanged; it
-// never reads `Evaluation.location` or `.losses`, since the pinned runtime
+// never reads `Evaluation.location` or `.losses`, since the runtime
 // never populates either field. No charge amount and no literal `Outcome`/
 // `Value` constant standing in for a runtime result appears in this source:
 // every charge and every result comes from the runtime.
@@ -1301,17 +1260,12 @@ impl SourceBuilder {
     /// Render `checked_package()` from every surviving function's own
     /// classified shape (declaration plus resolved operand kinds), in
     /// assembled order.
-    fn finish(
-        self,
-        classified: &[ClassifiedFunction<'_>],
-        package_id: &CheckedSemanticId,
-    ) -> String {
+    fn finish(self, classified: &[ClassifiedFunction<'_>]) -> String {
         let mut declarations = String::new();
         for function in classified {
             declarations.push_str(&render_function_declaration(function));
         }
-        let mut source = format!("// Source package: {}\n", package_id.digest);
-        source.push_str(SOURCE_HEADER);
+        let mut source = SOURCE_HEADER.to_owned();
         source.push_str(&format!(
             "\npub fn checked_package() -> Result<rt::CheckedPackage, Vec<rt::CheckRefusal>> {{\n    \
              let types = rt::TypeEnvironment::new(Vec::new(), core::iter::empty::<rt::ObjectTypeDeclaration>())\n        \
@@ -1423,11 +1377,5 @@ fn manifest() -> String {
 }
 
 fn artifact(path: &str, contents: String) -> Artifact {
-    let digest = Sha256::digest(contents.as_bytes());
-    let sha256 = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-    Artifact {
-        path: path.to_owned(),
-        contents,
-        sha256,
-    }
+    Artifact::new(path, contents)
 }

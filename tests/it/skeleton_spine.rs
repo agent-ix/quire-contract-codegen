@@ -5,7 +5,7 @@
 //!
 //! What the input passes through, in ADR-011 terms: the clause enters at the Contract IR side as
 //! a hand-written `BoundPackage` projection (no contract is compiled, so E1 to E4 and the
-//! contract-to-IR step do not run), CG generates the Kani obligation from it (E7), the pinned
+//! contract-to-IR step do not run), CG generates the Kani obligation from it (E7), the installed
 //! prover proves and falsifies it (E8), and the decoded counterexample is replayed by
 //! `qsl_replay::replay` (E9), which recompiles QSL source and evaluates the function. The QSL
 //! source here is a hand-mirrored native twin of the subject and clause, tied to the Rust side
@@ -348,7 +348,7 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
     assert!(matches!(wrong_arm, Err(SpineReplayError::WrongArm)));
 }
 
-/// Runs `subject` under the pinned prover with `harness`, returning the classified outcome.
+/// Runs `subject` under the installed prover with `harness`, returning the classified outcome.
 fn prove(harness: &KaniObligationHarness, subject: &str) -> KaniRunOutcome {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let directory = write_crate(harness, subject);
@@ -376,6 +376,18 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
     let harness = supported_contract_harnesses(&package, SUBJECT_PATH).remove(1);
 
     assert_eq!(prove(&harness, HEALTHY_SUBJECT), KaniRunOutcome::Verified);
+
+    // Mutation control inside the generated obligation module: the ensures bound is tightened
+    // past what the subject satisfies at zero, so the same healthy subject is falsified.
+    let mut mutated = harness.clone();
+    let bound = "*post_state >= 0_i64";
+    assert_eq!(mutated.rust.contents.matches(bound).count(), 1);
+    mutated.rust.contents = mutated.rust.contents.replace(bound, "*post_state >= 1_i64");
+    let outcome = prove(&mutated, HEALTHY_SUBJECT);
+    assert!(
+        matches!(outcome, KaniRunOutcome::Falsified { .. }),
+        "the tightened ensures must be falsified: {outcome:?}"
+    );
 
     // The injected violation: the subject credits instead of debiting.
     let violating = HEALTHY_SUBJECT.replace(

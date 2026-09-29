@@ -106,7 +106,7 @@ pub struct RoutedGeneration {
     pub claim_map: Option<ClaimMap<ExactScalarClaim>>,
     /// The FR-014 oracle crate the Kani arm generated for its group: `Cargo.toml`, `src/lib.rs`
     /// and `claim-map.json`, byte-identical to `generate_exact_scalar_oracles`'s artifacts over the
-    /// group's derived items. Every `Generated` claim's `oracle_<digest>` symbol is defined in its
+    /// group's derived items. Every `Generated` claim's oracle symbol is defined in its
     /// `src/lib.rs`. `None` when no Kani group ran.
     pub oracle_artifacts: Option<Vec<Artifact>>,
 }

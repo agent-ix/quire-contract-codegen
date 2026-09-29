@@ -53,8 +53,6 @@ pub enum KaniTool {
     Launcher,
     /// The generated crate's `src/lib.rs`, checked for the harness's generated source.
     Library,
-    /// The Kani home directory.
-    KaniHome,
 }
 
 /// Why the installed backend could not be located or started.
@@ -76,20 +74,6 @@ pub enum KaniToolError {
         /// Underlying error.
         error: io::Error,
     },
-    /// The component ran and exited unsuccessfully.
-    Failed {
-        /// Component.
-        tool: KaniTool,
-        /// Exit code, when the process was not killed by a signal.
-        exit_code: Option<i32>,
-    },
-    /// The component's output was not the shape this module reads.
-    UnexpectedOutput {
-        /// Component.
-        tool: KaniTool,
-        /// Its trimmed output.
-        output: String,
-    },
 }
 
 impl fmt::Display for KaniToolError {
@@ -101,50 +85,39 @@ impl fmt::Display for KaniToolError {
             Self::Io { tool, path, error } => {
                 write!(formatter, "{tool:?} at {}: {error}", path.display())
             }
-            Self::Failed { tool, exit_code } => {
-                write!(formatter, "{tool:?} exited unsuccessfully: {exit_code:?}")
-            }
-            Self::UnexpectedOutput { tool, output } => {
-                write!(formatter, "{tool:?} printed unexpected output: {output}")
-            }
         }
     }
 }
 
 impl std::error::Error for KaniToolError {}
 
-/// Where the Kani launcher and its release live.
+/// Where the Kani launcher lives.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KaniInstallation {
     /// The `cargo-kani` executable that is invoked directly.
     pub launcher: PathBuf,
-    /// The Kani home directory holding `kani-<version>/`.
-    pub kani_home: PathBuf,
 }
 
 impl KaniInstallation {
     /// Locates the launcher the way Cargo resolves a subcommand — `$CARGO_HOME/bin`
-    /// (default `$HOME/.cargo/bin`) first, then `PATH` — and the Kani home as
-    /// `$KANI_HOME`, else `$HOME/.kani`.
+    /// (default `$HOME/.cargo/bin`) first, then `PATH`.
     pub fn discover() -> Result<Self, KaniToolError> {
         Self::discover_from(
             env::var_os("HOME"),
             env::var_os("CARGO_HOME"),
-            env::var_os("KANI_HOME"),
             env::var_os("PATH"),
         )
     }
 
     /// `discover`'s resolution logic, taking each environment variable as an explicit argument
     /// instead of reading the process environment. `discover` is the only caller in this crate;
-    /// tests call this directly so every `HOME`/`CARGO_HOME`/`KANI_HOME`/`PATH` combination is
+    /// tests call this directly so every `HOME`/`CARGO_HOME`/`PATH` combination is
     /// exercised as a pure function of its arguments, never by mutating process-wide state with
     /// `env::set_var`/`env::remove_var`, which races with any other thread reading `environ` —
     /// including a concurrently spawned child process snapshotting the environment at fork/exec.
     fn discover_from(
         home: Option<OsString>,
         cargo_home: Option<OsString>,
-        kani_home_var: Option<OsString>,
         path: Option<OsString>,
     ) -> Result<Self, KaniToolError> {
         let home = home.map(PathBuf::from);
@@ -166,17 +139,7 @@ impl KaniInstallation {
                 tool: KaniTool::Launcher,
                 path: PathBuf::from(&launcher_name),
             })?;
-        let kani_home = kani_home_var
-            .map(PathBuf::from)
-            .or_else(|| home.map(|home| home.join(".kani")))
-            .ok_or_else(|| KaniToolError::Missing {
-                tool: KaniTool::KaniHome,
-                path: PathBuf::from("$HOME/.kani"),
-            })?;
-        Ok(Self {
-            launcher,
-            kani_home,
-        })
+        Ok(Self { launcher })
     }
 }
 
@@ -945,62 +908,59 @@ mod tests {
         path
     }
 
-    /// `discover_from` is a pure function of its arguments, so every `HOME`/`CARGO_HOME`/
-    /// `KANI_HOME` combination is exercised directly here with no process environment
-    /// mutation. `discover`'s previous test mutated `$HOME`/`$KANI_HOME` with
-    /// `env::remove_var`/`env::set_var`, which races with any other thread reading `environ` —
-    /// including a concurrently spawned child process snapshotting the environment at
-    /// fork/exec — even when the mutating test restores the values before returning.
+    /// `discover_from` is a pure function of its arguments, so every `HOME`/`CARGO_HOME`/`PATH`
+    /// combination is exercised directly here with no process environment mutation.
     ///
     /// Trace: FR-017-AC-2, TC-027
     #[test]
-    fn tc_027_kani_home_is_refused_when_neither_kani_home_nor_home_is_set() {
-        let directory = discover_scratch("kani-home-missing");
+    fn tc_027_the_launcher_resolves_through_cargo_home_then_path() {
+        let directory = discover_scratch("launcher");
         let cargo_home = directory.join("cargo-home");
+        let on_path = directory.join("on-path");
         fs::create_dir_all(cargo_home.join("bin")).unwrap();
-        fs::write(cargo_home.join("bin/cargo-kani"), b"").unwrap();
+        fs::create_dir_all(&on_path).unwrap();
+        let launcher_name = format!("cargo-kani{}", env::consts::EXE_SUFFIX);
 
-        // The launcher resolves through `cargo_home` alone, proving the refusal below is really
-        // about `KaniHome` and not a `Launcher` refusal in disguise; neither `home` nor
-        // `kani_home_var` is supplied.
+        // Nothing to find: refused as a missing launcher.
         let error = KaniInstallation::discover_from(
             None,
             Some(cargo_home.clone().into_os_string()),
-            None,
-            None,
+            Some(on_path.clone().into_os_string()),
         )
         .unwrap_err();
         assert!(
             matches!(
                 error,
                 KaniToolError::Missing {
-                    tool: KaniTool::KaniHome,
+                    tool: KaniTool::Launcher,
                     ..
                 }
             ),
             "got {error}"
         );
 
-        // `$HOME/.kani` is used when `KANI_HOME` is absent but `HOME` is supplied.
+        // Only on PATH: found there, and HOME need not be set.
+        fs::write(on_path.join(&launcher_name), b"").unwrap();
         let installation = KaniInstallation::discover_from(
-            Some(directory.clone().into_os_string()),
+            None,
             Some(cargo_home.clone().into_os_string()),
-            None,
-            None,
+            Some(on_path.clone().into_os_string()),
         )
         .unwrap();
-        assert_eq!(installation.kani_home, directory.join(".kani"));
+        assert_eq!(installation.launcher, on_path.join(&launcher_name));
 
-        // `KANI_HOME` wins over `$HOME/.kani` when both are supplied.
-        let kani_home = directory.join("explicit-kani-home");
+        // `$CARGO_HOME/bin` wins over PATH.
+        fs::write(cargo_home.join("bin").join(&launcher_name), b"").unwrap();
         let installation = KaniInstallation::discover_from(
-            Some(directory.clone().into_os_string()),
-            Some(cargo_home.into_os_string()),
-            Some(kani_home.clone().into_os_string()),
             None,
+            Some(cargo_home.clone().into_os_string()),
+            Some(on_path.into_os_string()),
         )
         .unwrap();
-        assert_eq!(installation.kani_home, kani_home);
+        assert_eq!(
+            installation.launcher,
+            cargo_home.join("bin").join(&launcher_name)
+        );
 
         let _ = fs::remove_dir_all(directory);
     }
@@ -1197,7 +1157,7 @@ mod tests {
     /// Regression coverage for the polling/draining plumbing `run_launcher_with_timeout` added:
     /// a process that exits within its budget still reports its real exit status and combined
     /// output, unchanged from what `Command::output()` used to hand back directly. No criterion
-    /// traces this specifically — the pinned lane's real `cargo-kani` runs
+    /// traces this specifically — the Kani lane's real `cargo-kani` runs
     /// (`tests/kani_obligations.rs`) already exercise this completed path end to end; this is
     /// only faster, hermetic coverage of the same plumbing.
     #[test]

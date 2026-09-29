@@ -72,8 +72,13 @@ fn register_code(code: u32, digest: String) {
     }
 }
 
+/// The base package's enum declaration node key.
+pub fn enum_type_digest() -> String {
+    base_node_ids().enum_type
+}
+
 pub fn enum_type_id() -> CheckedNodeId {
-    id(ENUM_TYPE_DIGEST)
+    id(&enum_type_digest())
 }
 
 pub fn id(digest: &str) -> CheckedNodeId {
@@ -248,8 +253,8 @@ pub fn binary_body_with_result(left_type: u32, right_type: u32, result_type: u32
 }
 
 /// [`binary_body`] for an operand type not registered through
-/// [`PackageBuilder::code`] -- the vendored `Example.Status` enum node,
-/// named by its own digest rather than a placeholder `key(code)`.
+/// [`PackageBuilder::code`] -- the base package's `Example.Phase` enum node,
+/// named by its own node key rather than a placeholder `key(code)`.
 pub fn binary_body_digest(left_digest: &str, right_digest: &str) -> Value {
     application(
         "binary",
@@ -810,7 +815,7 @@ pub fn corpus_package() -> PackageBuilder {
         .application_code(
             E_ENUM,
             "binary",
-            binary_body_digest(ENUM_TYPE_DIGEST, ENUM_TYPE_DIGEST),
+            binary_body_digest(&enum_type_digest(), &enum_type_digest()),
         )
         .application_code(E_DUP, "binary", binary_body(R_DUP, R_DUP))
         // Same (T_TEXT, T_TEXT) operand-reference pair as E_TEXT: a distinct

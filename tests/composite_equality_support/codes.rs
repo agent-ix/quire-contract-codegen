@@ -7,12 +7,6 @@
 
 #![allow(dead_code)] // Each consumer uses a different subset.
 
-/// The vendored fixture's admitted `scalar_type`/`enum` node (`Example.Status`,
-/// members `READY`/`DONE`): reused rather than re-derived, since its nominal
-/// identity preimage's digest must equal its own node id.
-pub const ENUM_TYPE_DIGEST: &str =
-    "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562";
-
 /// A readable node key: the code, zero-padded to a 64-digit digest.
 pub fn key(code: u32) -> String {
     format!("{code:0>64}")

@@ -95,8 +95,92 @@ pub(super) fn run_agreement_cases<'a>(
     );
 }
 
+/// The `names.rs` a scratch crate's agreement cases `include!` into their `generated` module:
+/// `pub use` of each generated item of crate `crate_name` under the name the cases call it by, then
+/// `extra` verbatim. Generated names are readable plus a positional counter, so the cases never
+/// spell one; the harness maps them from the claim map here.
+pub(super) fn names_file(crate_name: &str, aliases: &[(String, String)], extra: &str) -> String {
+    let crate_ident = crate_name.replace('-', "_");
+    let mut names = String::new();
+    for (generated, alias) in aliases {
+        writeln!(names, "pub use {crate_ident}::{generated} as {alias};").expect("write to String");
+    }
+    names.push_str(extra);
+    names
+}
+
+/// Each corpus node the scalar agreement cases execute, by fixture code, and the name they call
+/// its generated oracle by.
+const SCALAR_ORACLE_NAMES: &[(u32, &str)] = &[
+    (1001, "integer_add"),
+    (1002, "integer_negate"),
+    (1003, "integer_subtract"),
+    (1004, "integer_multiply"),
+    (1011, "divide_truncating"),
+    (1012, "divide_floor"),
+    (1013, "divide_euclidean"),
+    (1014, "divide_bounded"),
+    (1021, "modulo_bounded"),
+    (1031, "rational_add"),
+    (1032, "rational_divide"),
+    (1033, "integer_divide"),
+    (1034, "rational_subtract"),
+    (1035, "rational_multiply"),
+    (1036, "rational_negate"),
+    (1041, "integer_less"),
+    (1042, "decimal_at_most"),
+    (1043, "rational_greater"),
+    (1044, "integer_at_most"),
+    (1045, "integer_at_least"),
+    (1051, "decimal_add"),
+    (1052, "decimal_divide"),
+    (1053, "decimal_round"),
+    (1054, "decimal_subtract"),
+    (1055, "decimal_multiply"),
+    (1056, "decimal_negate"),
+    (1061, "binary32_add"),
+    (1062, "binary64_divide"),
+    (1063, "binary64_total_order"),
+    (1064, "narrow_to_binary32"),
+    (1065, "binary32_subtract"),
+    (1066, "binary64_multiply"),
+    (1067, "binary32_numeric_equal"),
+    (1068, "binary64_bit_identical"),
+    (1071, "admit_nfc"),
+    (1072, "text_less"),
+    (1073, "enum_less"),
+    (1074, "admit_unicode_scalars"),
+    (1075, "admit_nfd"),
+    (1076, "admit_nfkc"),
+    (1077, "admit_nfkd"),
+    (1078, "admit_binary_utf8"),
+    (1081, "quantity_add"),
+    (1082, "quantity_multiply"),
+    (1083, "quantity_power"),
+    (1084, "quantity_less"),
+    (1086, "convert_decimal"),
+    (1087, "convert_integer"),
+    (1088, "quantity_subtract"),
+    (1089, "quantity_divide"),
+    (1111, "text_equal"),
+    (1112, "text_not_equal"),
+    (1113, "text_at_most"),
+    (1114, "text_greater"),
+    (1115, "text_at_least"),
+    (1121, "enum_equal"),
+    (1122, "enum_not_equal"),
+    (1123, "enum_at_most"),
+    (1124, "enum_greater"),
+    (1125, "enum_at_least"),
+    (1131, "quantity_equal"),
+    (1132, "quantity_not_equal"),
+    (1133, "quantity_at_most"),
+    (1134, "quantity_greater"),
+    (1135, "quantity_at_least"),
+];
+
 /// Trace: FR-014-AC-6, FR-014-AC-9, TC-024. The crate the generator emits now
-/// for the corpus request compiles against the pinned runtime, and every
+/// for the corpus request compiles against the runtime, and every
 /// agreement case in `tests/exact_scalar_support/agreement_cases.rs` passes
 /// against it: each generated oracle equals the direct runtime call in outcome,
 /// admitted charges, consumed counters and single-charge denials, and a width
@@ -104,13 +188,27 @@ pub(super) fn run_agreement_cases<'a>(
 #[test]
 fn tc_024_generated_scalar_crate_agrees_with_direct_runtime() {
     let oracles = super::exact_scalar_generation::corpus_oracles();
+    let aliases = SCALAR_ORACLE_NAMES
+        .iter()
+        .map(|(code, alias)| {
+            (
+                super::exact_scalar_generation::symbol(&oracles, *code),
+                (*alias).to_owned(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let names = names_file(
+        quire_contract_codegen::EXACT_SCALAR_CRATE_NAME,
+        &aliases,
+        "",
+    );
     run_agreement_cases(
         "exact-scalar-agreement",
         oracles
             .artifacts
             .iter()
             .map(|artifact| (artifact.path.as_str(), artifact.contents.as_str())),
-        &[],
+        &[("names.rs", names.as_str())],
         "tests/exact_scalar_support/agreement_cases.rs",
     );
 }

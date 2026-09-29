@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use quire_contract_ir::{BoundPackage, CanonicalDigest, ClauseRef};
+use quire_contract_ir::{BoundPackage, ClauseRef};
 
 use crate::{
     generate_boolean_oracle,
@@ -21,19 +21,13 @@ pub enum BoundOracleGeneration {
     NoExecutable(NoExecutableOracles),
 }
 
-/// Identity of a valid package with no executable work.
+/// A valid package with no executable work.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NoExecutableOracles {
-    bound_digest: CanonicalDigest,
     informational: Vec<ClauseRef>,
 }
 
 impl NoExecutableOracles {
-    /// Canonical public IR binding identity.
-    #[must_use]
-    pub fn bound_digest(&self) -> CanonicalDigest {
-        self.bound_digest
-    }
     /// Complete ordered informational population, excluded from executable work.
     #[must_use]
     pub fn informational(&self) -> &[ClauseRef] {
@@ -45,8 +39,6 @@ impl NoExecutableOracles {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BoundOracleClause {
     identity: ClauseRef,
-    declaration_digest: CanonicalDigest,
-    expression_digest: CanonicalDigest,
     bundle: OracleArtifactBundle,
 }
 
@@ -55,16 +47,6 @@ impl BoundOracleClause {
     #[must_use]
     pub fn identity(&self) -> &ClauseRef {
         &self.identity
-    }
-    /// Canonical identity of the validated declaration environment.
-    #[must_use]
-    pub fn declaration_digest(&self) -> CanonicalDigest {
-        self.declaration_digest
-    }
-    /// Canonical identity of the validated typed expression.
-    #[must_use]
-    pub fn expression_digest(&self) -> CanonicalDigest {
-        self.expression_digest
     }
     /// Source and source map for this clause.
     #[must_use]
@@ -76,18 +58,12 @@ impl BoundOracleClause {
 /// Immutable complete executable population and independently publishable artifact set.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedBoundOracles {
-    bound_digest: CanonicalDigest,
     clauses: Vec<BoundOracleClause>,
     informational: Vec<ClauseRef>,
     bundle: ArtifactBundle,
 }
 
 impl GeneratedBoundOracles {
-    /// Canonical public IR binding identity.
-    #[must_use]
-    pub fn bound_digest(&self) -> CanonicalDigest {
-        self.bound_digest
-    }
     /// Every executable clause, exactly once and ordered by full clause reference.
     #[must_use]
     pub fn clauses(&self) -> &[BoundOracleClause] {
@@ -134,7 +110,6 @@ pub fn generate_bound_oracles(
 ) -> Result<BoundOracleGeneration, BoundGenerationError> {
     if package.clauses().is_empty() {
         return Ok(BoundOracleGeneration::NoExecutable(NoExecutableOracles {
-            bound_digest: package.digest(),
             informational: package.informational().to_vec(),
         }));
     }
@@ -159,14 +134,11 @@ pub fn generate_bound_oracles(
         }
         clauses.push(BoundOracleClause {
             identity: identity.clone(),
-            declaration_digest: clause.declaration_digest(),
-            expression_digest: clause.expression_digest(),
             bundle,
         });
     }
     let bundle = ArtifactBundle::new(artifacts).map_err(BoundGenerationError::Bundle)?;
     Ok(BoundOracleGeneration::Generated(GeneratedBoundOracles {
-        bound_digest: package.digest(),
         clauses,
         informational: package.informational().to_vec(),
         bundle,
@@ -182,7 +154,6 @@ fn preflight(package: &BoundPackage) -> Result<(), BoundGenerationError> {
         let id = clause.identity();
         let owner = id.requirement();
         if !symbols.insert(oracle_symbol(
-            owner.package().as_str(),
             owner.requirement().as_str(),
             owner.revision().get(),
             id.clause().as_str(),

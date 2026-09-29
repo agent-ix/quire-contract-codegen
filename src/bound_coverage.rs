@@ -4,12 +4,11 @@ use std::io::{self, Write};
 
 use quire_contract_ir::{BooleanOperator, BoundPackage, ClauseRef, Expression, ExpressionKind};
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 
 use crate::{
-    classify_clause, parse_llvm_coverage, publication, vacuity::normalize_path,
-    BoundOracleGeneration, ClauseCoverage, CoverageDiagnostic, CoverageErrorCode,
-    GeneratedBoundOracles, LlvmCoverage, SourceRegion, MAX_COVERAGE_BYTES,
+    classify_clause, generate_bound_oracles, parse_llvm_coverage, publication,
+    vacuity::normalize_path, BoundOracleGeneration, ClauseCoverage, CoverageDiagnostic,
+    CoverageErrorCode, GeneratedBoundOracles, LlvmCoverage, SourceRegion, MAX_COVERAGE_BYTES,
 };
 
 /// Domain observation format, not a native-run result or attestation format.
@@ -21,7 +20,7 @@ pub const BOUND_COVERAGE_SCHEMA: &str =
 pub const MAX_ANALYSIS_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SOURCE_ROOT_BYTES: usize = 4096;
 
-/// Borrowed untrusted artifact bytes. The analyzer recomputes their identity.
+/// Borrowed untrusted artifact bytes. The analyzer compares them with the generation.
 pub struct ArtifactBytes<'a> {
     /// Exact bundle-relative path; publication aliases are not alternate identities.
     pub path: &'a str,
@@ -56,10 +55,9 @@ pub enum BoundAnalysisState {
 }
 
 #[derive(Clone, Debug, Serialize)]
-struct ArtifactIdentity {
+struct ArtifactObservation {
     path: String,
     bytes: usize,
-    sha256: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -71,8 +69,6 @@ struct Consequent {
 #[derive(Clone, Debug, Serialize)]
 struct ClauseObservation {
     identity: ClauseRef,
-    expression_sha256: String,
-    declaration_sha256: String,
     expected_consequents: usize,
     evaluation_count: Option<u64>,
     consequents: Vec<Consequent>,
@@ -84,18 +80,15 @@ struct ClauseObservation {
 struct ObservationBody {
     format: &'static str,
     state: BoundAnalysisState,
-    provenance: &'static str,
     population: &'static str,
-    bound_sha256: String,
-    export_sha256: Option<String>,
     source_root: Option<String>,
     informational: Vec<ClauseRef>,
-    artifacts: Vec<ArtifactIdentity>,
+    artifacts: Vec<ArtifactObservation>,
     clauses: Vec<ClauseObservation>,
     diagnostics: Vec<CoverageDiagnostic>,
 }
 
-/// Immutable complete-package domain observations; always unqualified provenance.
+/// Immutable complete-package domain observations.
 ///
 /// Only the analyzer constructs this type. The sole wire producer is bounded serialization;
 /// there is no public Deserialize, mutable report body, or native qualification constructor.
@@ -128,15 +121,10 @@ fn diag(code: CoverageErrorCode, message: &str) -> CoverageDiagnostic {
     }
 }
 
-fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 /// Analyze every executable clause against its independently expected generated inventory.
 ///
 /// Global population/artifact/map failures erase all measured classifications. Observation
 /// gaps retain the complete expected clause population with unavailable counts as null.
-/// Complete observations, including all-exercised observations, remain unqualified.
 /// Trace: TC-006, FR-004-AC-3, FR-004-AC-5, FR-004-AC-7, FR-004-AC-9
 pub fn analyze_bound_coverage(
     package: &BoundPackage,
@@ -146,10 +134,7 @@ pub fn analyze_bound_coverage(
     let mut body = ObservationBody {
         format: BOUND_COVERAGE_FORMAT,
         state: BoundAnalysisState::InvalidInput,
-        provenance: "unqualified",
         population: "not_emitted",
-        bound_sha256: package.digest().to_string(),
-        export_sha256: None,
         source_root: None,
         informational: package.informational().to_vec(),
         artifacts: Vec::new(),
@@ -211,19 +196,16 @@ fn analyze_inner(
                 "LLVM JSON exceeds 16 MiB",
             ));
         }
-        body.export_sha256 = Some(sha(bytes));
+    }
+    // The generation binds to the package when generating from the package reproduces it.
+    if generate_bound_oracles(package).ok().as_ref() != Some(generated) {
+        return Err(diag(
+            CoverageErrorCode::BindingMismatch,
+            "generation differs from the bound package's own generation",
+        ));
     }
     let generated = match generated {
-        BoundOracleGeneration::NoExecutable(no_work) => {
-            if !package.clauses().is_empty()
-                || no_work.bound_digest() != package.digest()
-                || no_work.informational() != package.informational()
-            {
-                return Err(diag(
-                    CoverageErrorCode::BindingMismatch,
-                    "no-executable generation differs from package",
-                ));
-            }
+        BoundOracleGeneration::NoExecutable(_) => {
             if !inputs.artifacts.is_empty() || inputs.llvm_export.is_some() {
                 return Err(diag(
                     CoverageErrorCode::ArtifactMismatch,
@@ -236,7 +218,6 @@ fn analyze_inner(
         }
         BoundOracleGeneration::Generated(g) => g,
     };
-    check_binding(package, generated)?;
     check_artifacts(generated, inputs.artifacts, body)?;
     let maps = check_maps(package, generated)?;
     let coverage = inputs
@@ -267,32 +248,6 @@ fn analyze_inner(
             body.state = BoundAnalysisState::Incomplete;
         }
         body.clauses.push(row);
-    }
-    Ok(())
-}
-
-fn check_binding(
-    package: &BoundPackage,
-    generated: &GeneratedBoundOracles,
-) -> Result<(), CoverageDiagnostic> {
-    if generated.bound_digest() != package.digest()
-        || generated.informational() != package.informational()
-        || generated.clauses().len() != package.clauses().len()
-        || package.clauses().is_empty()
-        || generated
-            .clauses()
-            .iter()
-            .zip(package.clauses())
-            .any(|(a, b)| {
-                a.identity() != b.identity()
-                    || a.expression_digest() != b.expression_digest()
-                    || a.declaration_digest() != b.declaration_digest()
-            })
-    {
-        return Err(diag(
-            CoverageErrorCode::BindingMismatch,
-            "immutable generated population differs from bound package",
-        ));
     }
     Ok(())
 }
@@ -340,17 +295,15 @@ fn check_artifacts(
                 "missing or foreign artifact path",
             )
         })?;
-        let digest = sha(bytes);
-        if *bytes != artifact.contents.as_bytes() || digest != artifact.sha256 {
+        if *bytes != artifact.contents.as_bytes() {
             return Err(diag(
                 CoverageErrorCode::ArtifactMismatch,
                 "artifact bytes differ from immutable generation",
             ));
         }
-        body.artifacts.push(ArtifactIdentity {
+        body.artifacts.push(ArtifactObservation {
             path: artifact.path.clone(),
             bytes: bytes.len(),
-            sha256: digest,
         });
     }
     Ok(())
@@ -481,8 +434,6 @@ fn observe_clause(
 ) -> ClauseObservation {
     let mut row = ClauseObservation {
         identity: clause.identity().clone(),
-        expression_sha256: clause.expression_digest().to_string(),
-        declaration_sha256: clause.declaration_digest().to_string(),
         expected_consequents: implication_census(clause.expression().expression()).len(),
         evaluation_count: None,
         consequents: Vec::new(),

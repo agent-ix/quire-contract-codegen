@@ -10,13 +10,12 @@ use quire_contract_ir::{
     SourceSpan, StateObservation, TypedExpression,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 
 use crate::{
     generate_boolean_oracle,
     oracle::{
-        length_delimited_identity, oracle_symbol, typed_dependency_parameters, DependencyParameter,
-        RustValueType,
+        bounded_readable_component, oracle_symbol, typed_dependency_parameters,
+        DependencyParameter, RustValueType,
     },
     Artifact, GenerationErrorCode, GenerationTerminalState, OracleRequest,
     MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
@@ -60,19 +59,6 @@ pub enum ProofReadiness {
     Conditional,
     /// A required proof is missing or failed.
     Incomplete,
-}
-
-impl ProofReadiness {
-    /// Stable machine label for this readiness, written verbatim into generated provenance and
-    /// proof-graph text. Kept next to the enum so a caller that renders the label by hand cannot
-    /// drift from the serde `rename_all = "snake_case"` spelling above (ir#80 review finding F4).
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Ready => "ready",
-            Self::Conditional => "conditional",
-            Self::Incomplete => "incomplete",
-        }
-    }
 }
 
 /// Position of one primitive dependency in the generated subject ABI.
@@ -136,7 +122,7 @@ pub struct KaniSubjectBinding {
     pub source_spans: Vec<SourceSpan>,
 }
 
-/// Supported solver choice for the first pinned adapter.
+/// Supported solver choice for the Kani adapter.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KaniSolver {
@@ -356,18 +342,18 @@ pub fn generate_kani_bundle(
     let contract_symbol = format!("{symbol}_contract");
     let harness_symbol = format!("{symbol}_proof");
     let module_symbol = format!("{symbol}_module");
-    let precondition_symbol = oracle_symbol(
-        request.requirement.package().as_str(),
-        requirement,
-        revision,
-        request.precondition_clause.as_str(),
-    );
-    let postcondition_symbol = oracle_symbol(
-        request.requirement.package().as_str(),
-        requirement,
-        revision,
-        request.postcondition_clause.as_str(),
-    );
+    let precondition_symbol =
+        oracle_symbol(requirement, revision, request.precondition_clause.as_str());
+    let postcondition_symbol =
+        oracle_symbol(requirement, revision, request.postcondition_clause.as_str());
+    // Distinct clause ids with one readable name would emit one oracle function twice.
+    if precondition_symbol == postcondition_symbol {
+        return Err(single_diagnostic(
+            KaniErrorCode::InvalidIdentity,
+            "clauses",
+            "precondition and postcondition clauses must have distinct generated names",
+        ));
+    }
     let precondition_arguments = predicate_arguments(&precondition_parameters, &abi, false)?;
     let postcondition_arguments = predicate_arguments(&postcondition_parameters, &abi, true)?;
     let exact_harness = format!("{module_symbol}::{harness_symbol}");
@@ -1034,41 +1020,24 @@ fn single_diagnostic(code: KaniErrorCode, path: &str, message: &str) -> Vec<Kani
     }]
 }
 
+/// The generated module, contract and proof name stem, read from the requirement, revision and
+/// proof id. Kani synthesizes contract symbols and object-file names from these names, so each
+/// readable component is bounded; the complete identity remains in framing and the graph.
 fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
-    let readable_requirement = readable_component(requirement);
-    let readable_proof = readable_component(proof_id);
-    let revision_text = revision.to_string();
-    let identity = length_delimited_identity(&[requirement, &revision_text, proof_id]);
-    // Kani synthesizes contract symbols from these names. Keep the Rust symbol bounded so those
-    // derived object-file names remain below common filesystem component limits; the complete
-    // identity remains in framing and the graph.
-    let digest_prefix = sha256(identity.as_bytes())
-        .chars()
-        .take(32)
-        .collect::<String>();
     format!(
-        "kani_{readable_requirement}_{revision}_{readable_proof}_id_{}",
-        digest_prefix
+        "kani_{}_{revision}_{}",
+        bounded_readable_component(requirement),
+        bounded_readable_component(proof_id)
     )
 }
 
+/// `value` as a readable snake-case name component of at most 12 characters.
 pub(crate) fn readable_component(value: &str) -> String {
-    let mut result = String::with_capacity(value.len().min(12));
-    for byte in value.bytes().take(12) {
-        if byte.is_ascii_alphanumeric() {
-            result.push(char::from(byte.to_ascii_lowercase()));
-        } else {
-            result.push('_');
-        }
-    }
-    if result.is_empty() || result.as_bytes()[0].is_ascii_digit() {
-        result.insert(0, '_');
-    }
-    result
+    crate::oracle::readable_name_component(value, 12)
 }
 
 fn dependency_site(kind: &str, proof_id: &str) -> String {
-    format!("{kind}:{}", sha256(proof_id.as_bytes()))
+    format!("{kind}:{proof_id}")
 }
 
 // `?Sized` so an unsized `[T]` slice (e.g. `&[ProofDependencyEdge]`) can be passed directly, with
@@ -1081,17 +1050,5 @@ pub(crate) fn deterministic_json(value: &(impl Serialize + ?Sized)) -> Result<St
 }
 
 fn artifact(path: String, contents: String) -> Artifact {
-    Artifact {
-        sha256: sha256(contents.as_bytes()),
-        path,
-        contents,
-    }
-}
-
-pub(crate) fn sha256(bytes: &[u8]) -> String {
-    let mut result = String::with_capacity(64);
-    for byte in Sha256::digest(bytes) {
-        let _ = write!(result, "{byte:02x}");
-    }
-    result
+    Artifact::new(path, contents)
 }

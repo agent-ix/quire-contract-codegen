@@ -22,15 +22,13 @@ use quire_contract_codegen::{
     RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_ir::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CompleteLoweringProfileV2,
-    CompleteLoweringRecordV2,
+    CheckedNodeTag, CheckedPackageV2, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
 use quire_contract_runtime::exact::{
     CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration, CompositeShape,
     FieldDeclaration, IeeeWidth, NodeKey, ObjectTypeDeclaration, Presence, TypeEnvironment,
     ValueType,
 };
-use sha2::{Digest, Sha256};
 
 // package.rs holds a process-global `application_registry()` static keyed by small integer
 // fixture codes that this file and `composite_equality_agreement.rs` each pick independently,
@@ -41,50 +39,6 @@ use sha2::{Digest, Sha256};
 mod package;
 
 use package::*;
-
-/// Independently recomputed `DescriptorKey::digest` (FR-018-AC-11): a SHA-256
-/// over the expression node id, the operator's rank, then each operand's
-/// source and conversion-target node ids, mirroring `hash_node_id` and
-/// `hash_optional_node_id` byte for byte, and over no rendered name. Kept
-/// deliberately independent of `src/composite_equality.rs` (no `pub` symbol
-/// there is reused) so a generator mutation to the real digest cannot also
-/// mutate this check.
-fn recomputed_symbol_digest(
-    node_id: &CheckedNodeId,
-    operator: EqualityOperatorKind,
-    left_source: &CheckedNodeId,
-    left_target: Option<&CheckedNodeId>,
-    right_source: &CheckedNodeId,
-    right_target: Option<&CheckedNodeId>,
-) -> String {
-    fn hash_node_id(hasher: &mut Sha256, node_id: &CheckedNodeId) {
-        hasher.update((node_id.domain.len() as u64).to_le_bytes());
-        hasher.update(node_id.domain.as_bytes());
-        hasher.update((node_id.digest.len() as u64).to_le_bytes());
-        hasher.update(node_id.digest.as_bytes());
-    }
-    fn hash_optional_node_id(hasher: &mut Sha256, node_id: Option<&CheckedNodeId>) {
-        match node_id {
-            None => hasher.update([0_u8]),
-            Some(node_id) => {
-                hasher.update([1_u8]);
-                hash_node_id(hasher, node_id);
-            }
-        }
-    }
-    let mut hasher = Sha256::new();
-    hash_node_id(&mut hasher, node_id);
-    hasher.update([operator as u8]);
-    hash_node_id(&mut hasher, left_source);
-    hash_optional_node_id(&mut hasher, left_target);
-    hash_node_id(&mut hasher, right_source);
-    hash_optional_node_id(&mut hasher, right_target);
-    hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
-}
 
 struct TemporaryDirectory(PathBuf);
 
@@ -625,6 +579,56 @@ fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
 
 /// The generator's current output for the whole corpus request, which
 /// `composite_equality_agreement` builds and executes.
+/// The `names.rs` the composite agreement cases `include!`: each executed oracle and environment
+/// under `{oracle,environment}_{code}_{operator}`, and the base package's enum declaration key.
+pub(super) fn agreement_names(oracles: &CompositeEqualityOracles) -> String {
+    let executed: &[(u32, &str, &str)] = &[
+        (E_RECORD, "equal", "e_record_equal"),
+        (E_TUPLE, "equal", "e_tuple_equal"),
+        (E_OPTION, "equal", "e_option_equal"),
+        (E_COLLECTION, "equal", "e_collection_equal"),
+        (E_SELF, "equal", "e_self_equal"),
+        (E_PAIR_OF_POINTS, "equal", "e_pair_of_points_equal"),
+        (E_RECORD, "not_equal", "e_record_not_equal"),
+        (E_TEXT, "equal", "e_text_equal"),
+        (E_ENUM, "equal", "e_enum_equal"),
+        (E_CONV, "equal", "e_conv_equal"),
+        (E_CONV_CHARGE, "equal", "e_conv_charge_equal"),
+        (E_CONV_RAT_RAT, "equal", "e_conv_rat_rat_equal"),
+        (E_CONV_RAT_INT, "equal", "e_conv_rat_int_equal"),
+        (E_CONV_DEC_RAT, "equal", "e_conv_dec_rat_equal"),
+        (E_CONV_DEC_DEC, "equal", "e_conv_dec_dec_equal"),
+        (E_CONV_DEC_INT, "equal", "e_conv_dec_int_equal"),
+    ];
+    let mut aliases = Vec::new();
+    for (code, operator, alias) in executed {
+        let identity = format!("equality.{operator}");
+        let generated = oracles
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| claim.node_id == code_id(*code) && claim.operation.identity == identity)
+            .and_then(|claim| match &claim.result {
+                ClaimDisposition::Generated(generated) => Some(generated),
+                ClaimDisposition::Refused { .. } => None,
+            })
+            .unwrap_or_else(|| panic!("node {code} {operator} is not generated"));
+        aliases.push((generated.oracle_symbol.clone(), format!("oracle_{alias}")));
+        aliases.push((
+            generated.environment_symbol.clone(),
+            format!("environment_{alias}"),
+        ));
+    }
+    super::exact_scalar_agreement::names_file(
+        quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME,
+        &aliases,
+        &format!(
+            "pub const ENUM_TYPE_DIGEST: &str = {:?};\n",
+            enum_type_digest()
+        ),
+    )
+}
+
 pub(super) fn corpus_oracles() -> CompositeEqualityOracles {
     generate(&corpus_package().admit(), &golden_items())
 }
@@ -667,25 +671,6 @@ fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_d
         generated(equal).environment_symbol,
         generated(not_equal).environment_symbol
     );
-    // The symbol itself is that digest (TC-029 step 7), not merely distinct
-    // from its sibling: a symbol derived from a request ordinal plus the
-    // operator would also pass the two `assert_ne!`s above without being
-    // this digest.
-    for claim in [equal, not_equal] {
-        let descriptor = &generated(claim).descriptor;
-        let expected = format!(
-            "oracle_{}",
-            recomputed_symbol_digest(
-                &claim.node_id,
-                descriptor.operator,
-                &descriptor.left_source_type,
-                descriptor.left_conversion_target.as_ref(),
-                &descriptor.right_source_type,
-                descriptor.right_conversion_target.as_ref(),
-            )
-        );
-        assert_eq!(generated(claim).oracle_symbol, expected);
-    }
     for claim in &claims {
         assert_eq!(
             claim.operation.provenance,
@@ -743,7 +728,7 @@ fn tc_029_ac12_integer_helper_omitted_when_unreached() {
 
 /// Trace: FR-018-AC-12, TC-029.
 #[test]
-fn tc_029_ac12_manifest_is_unpublished_pinned_and_charge_free() {
+fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     let oracles = generate(&corpus_package().admit(), &golden_items());
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains(&format!("name = \"{COMPOSITE_EQUALITY_CRATE_NAME}\"")));

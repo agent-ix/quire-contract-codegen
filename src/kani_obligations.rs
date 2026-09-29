@@ -62,12 +62,11 @@ use crate::{
     },
     generate_boolean_oracle,
     kani::{
-        adapter_options, i64_literal, readable_component, sha256, KaniBindingRole,
-        KaniIntegerBounds, KaniPrimitiveType, KaniSolver,
+        adapter_options, i64_literal, readable_component, KaniBindingRole, KaniIntegerBounds,
+        KaniPrimitiveType, KaniSolver,
     },
     oracle::{
-        length_delimited_identity, reference_identifier, typed_dependency_parameters,
-        DependencyParameter, RustValueType,
+        reference_identifier, typed_dependency_parameters, DependencyParameter, RustValueType,
     },
     Artifact, ClaimDerivationRefusal, ClaimDisposition, ClaimMap, ExactScalarClaim,
     ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode, OperationProvenance,
@@ -589,7 +588,12 @@ pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
-    let mut states = request.items.iter().map(classify).collect::<Vec<_>>();
+    let mut states = request
+        .items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| classify(index, item))
+        .collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
     resolve_assumptions(&mut states);
     let rejected = states
@@ -780,18 +784,24 @@ struct Symbols {
     contract: String,
 }
 
-fn classify<'a>(item: &ObligationItem<'a>) -> ItemState<'a> {
+/// Classifies the item at `index` in the request; `index` is the counter that keeps its generated
+/// names unique within one request.
+fn classify<'a>(index: usize, item: &ObligationItem<'a>) -> ItemState<'a> {
     match *item {
-        ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
+        ObligationItem::BoundClause { package, clause } => classify_clause(package, clause, index),
         ObligationItem::ScalarClaim {
             package,
             claim_map,
             node_id,
-        } => classify_node(package, claim_map, node_id),
+        } => classify_node(package, claim_map, node_id, index),
     }
 }
 
-fn classify_clause<'a>(package: &'a BoundPackage, clause_ref: &ClauseRef) -> ItemState<'a> {
+fn classify_clause<'a>(
+    package: &'a BoundPackage,
+    clause_ref: &ClauseRef,
+    index: usize,
+) -> ItemState<'a> {
     let package_digest = package.digest().to_string();
     let identity = Some(ItemIdentity::Clause {
         package: package_digest,
@@ -842,7 +852,7 @@ fn classify_clause<'a>(package: &'a BoundPackage, clause_ref: &ClauseRef) -> Ite
                         package,
                         clause,
                         kind,
-                        symbols: symbols(clause_ref, kind),
+                        symbols: symbols(clause_ref, index),
                         oracle,
                         assumed: Vec::new(),
                         signature: Vec::new(),
@@ -927,25 +937,15 @@ fn oracle_function_symbol(source: &str) -> Option<String> {
     })
 }
 
-fn symbols(clause: &ClauseRef, kind: ObligationKind) -> Symbols {
+/// The harness names of the clause at request position `index`: its readable requirement,
+/// revision and clause, then the position, which alone keeps names unique within one request.
+/// Kani derives object-file names from these symbols, so the readable components are bounded.
+fn symbols(clause: &ClauseRef, index: usize) -> Symbols {
     let requirement = clause.requirement();
-    let revision = requirement.revision().get().to_string();
-    let kind_text = kind_name(kind);
-    let identity = length_delimited_identity(&[
-        requirement.package().as_str(),
-        requirement.requirement().as_str(),
-        &revision,
-        clause.clause().as_str(),
-        kind_text,
-    ]);
-    // Kani derives object-file names from these symbols; keep them bounded.
-    let digest = sha256(identity.as_bytes())
-        .chars()
-        .take(32)
-        .collect::<String>();
     let base = format!(
-        "kob_{}_{revision}_{}_{digest}",
+        "kob_{}_{}_{}_{index}",
         readable_component(requirement.requirement().as_str()),
+        requirement.revision().get(),
         readable_component(clause.clause().as_str()),
     );
     Symbols {
@@ -968,6 +968,7 @@ fn classify_node<'a>(
     package: &CheckedPackageV2,
     claim_map: &ClaimMap<ExactScalarClaim>,
     node_id: &CheckedNodeId,
+    index: usize,
 ) -> ItemState<'a> {
     let graph_node = package
         .graph()
@@ -1000,7 +1001,7 @@ fn classify_node<'a>(
             .find(|claim| &claim.node_id == node_id)
         {
             None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
-            Some(claim) => classify_claim(package, claim),
+            Some(claim) => classify_claim(package, claim, index),
         }
     };
     let outcome = refuse_unknown_node_kind(graph_node, kind, outcome);
@@ -1058,7 +1059,11 @@ fn refuse_unknown_node_kind<'a>(
     })
 }
 
-fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> Outcome<'a> {
+fn classify_claim<'a>(
+    package: &CheckedPackageV2,
+    claim: &ExactScalarClaim,
+    index: usize,
+) -> Outcome<'a> {
     let graph = |id: &CheckedNodeId| {
         package
             .graph()
@@ -1106,7 +1111,7 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                 }
                 OperationProvenance::IrConfirmed => {
                     let operand_ranges = operand_ranges(package, &claim.node_id);
-                    match lower_scalar_claim(claim, generated, &derived, &operand_ranges) {
+                    match lower_scalar_claim(claim, generated, &derived, &operand_ranges, index) {
                         Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
                         Err(ScalarLoweringRefusal::NoRenderer) => {
                             Outcome::Unsupported(UnsupportedObligation::OperationNotRendered {
@@ -1270,6 +1275,7 @@ fn lower_scalar_claim(
     generated: &GeneratedScalarClaim,
     derived: &[DerivedDomain],
     operand_ranges: &[OperandRange],
+    index: usize,
 ) -> Result<LoweredScalarClaim, ScalarLoweringRefusal> {
     let arity = scalar_arity(&claim.operation.identity).ok_or(ScalarLoweringRefusal::NoRenderer)?;
     let Some(bound_id) = generated.checked_bounds.first() else {
@@ -1333,11 +1339,15 @@ fn lower_scalar_claim(
             reachable_upper: reachable_upper.to_string(),
         });
     }
-    // The node's own QSL id is already a fixed-length lowercase hex string, so it names the
-    // harness directly.
-    let node = &claim.node_id.digest;
-    let module_symbol = format!("kob_scalar_{node}_module");
-    let harness_symbol = format!("kob_scalar_{node}_proof");
+    // Named by the confirmed operation and the request position, which alone keeps the name
+    // unique within one request.
+    let operation = &claim.operation.identity;
+    let base = format!(
+        "kob_scalar_{}_{index}",
+        readable_component(operation.strip_prefix("quire.op.").unwrap_or(operation))
+    );
+    let module_symbol = format!("{base}_module");
+    let harness_symbol = format!("{base}_proof");
     Ok(LoweredScalarClaim {
         node_id: claim.node_id.clone(),
         operation_identity: claim.operation.identity.clone(),
@@ -1777,6 +1787,16 @@ fn render(
     let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
     let mut embedded = vec![&lowered.oracle];
     embedded.extend(&lowered.assumed);
+    // Oracle names are readable, so two distinct clauses can share one; one file cannot hold both.
+    let mut names = BTreeSet::new();
+    if !embedded
+        .iter()
+        .all(|oracle| names.insert(oracle.symbol.as_str()))
+    {
+        return Err(UnsupportedObligation::ClauseLowering {
+            generation_code: GenerationErrorCode::NameCollision,
+        });
+    }
     let oracle_sources = embedded
         .iter()
         .map(|oracle| oracle.source.as_str())
@@ -2016,11 +2036,7 @@ fn record<T: Serialize>(
 }
 
 fn artifact(path: String, contents: String) -> Artifact {
-    Artifact {
-        sha256: sha256(contents.as_bytes()),
-        path,
-        contents,
-    }
+    Artifact::new(path, contents)
 }
 
 /// `kani::any()` for every argument, constrained only by its IR integer bounds.
@@ -2402,7 +2418,7 @@ mod tests {
             lower: lower.clone(),
             upper: upper.clone(),
         }];
-        match lower_scalar_claim(&claim, generated, &derived, &[]) {
+        match lower_scalar_claim(&claim, generated, &derived, &[], 0) {
             Err(ScalarLoweringRefusal::BoundNotI64 {
                 lower: got_lower,
                 upper: got_upper,
@@ -2489,7 +2505,7 @@ mod tests {
     /// Real, legitimately-lowered `LoweredClause` for the probe package's one precondition, with
     /// its embedded oracle source intact for the caller to mutate.
     fn render_probe_lowered<'a>(item: &ObligationItem<'a>) -> Box<LoweredClause<'a>> {
-        let Outcome::Lowered(lowered) = classify(item).outcome else {
+        let Outcome::Lowered(lowered) = classify(0, item).outcome else {
             panic!("render-probe precondition must lower to a harness");
         };
         lowered

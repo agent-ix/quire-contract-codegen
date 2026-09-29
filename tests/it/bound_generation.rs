@@ -123,12 +123,9 @@ fn complete_public_binding_preserves_identity_population_and_derivation() {
     assert_eq!(result.clauses().len(), 3);
     assert_eq!(result.informational().len(), 1);
     assert_eq!(result.bundle().artifacts().len(), 6);
-    assert_eq!(result.bound_digest(), bound.digest());
     assert_eq!(result.informational(), bound.informational());
     for (output, clause) in result.clauses().iter().zip(bound.clauses()) {
         assert_eq!(output.identity(), clause.identity());
-        assert_eq!(output.expression_digest(), clause.expression_digest());
-        assert_eq!(output.declaration_digest(), clause.declaration_digest());
         let bundle = output.bundle();
         let map: Vec<SourceRegion> = serde_json::from_str(&bundle.source_map.contents).unwrap();
         for region in &map {
@@ -149,23 +146,6 @@ fn complete_public_binding_preserves_identity_population_and_derivation() {
         .unwrap()
         .reverse();
     assert_eq!(result, generated(&reordered));
-}
-
-/// TC-001
-/// FR-001-AC-7
-#[test]
-fn distinct_packages_never_alias_oracle_paths_or_symbols() {
-    let first = generated(&projection("test/first", 1, false));
-    let second = generated(&projection("test/second", 1, false));
-    assert_ne!(first.bound_digest(), second.bound_digest());
-    assert_ne!(
-        first.clauses()[0].bundle().rust.path,
-        second.clauses()[0].bundle().rust.path
-    );
-    assert_ne!(
-        first.clauses()[0].bundle().rust.contents,
-        second.clauses()[0].bundle().rust.contents
-    );
 }
 
 /// TC-002
@@ -198,7 +178,6 @@ fn empty_and_informational_only_are_explicit_non_artifact_results() {
         else {
             panic!("must not publish an empty package")
         };
-        assert_eq!(result.bound_digest(), bound.digest());
         assert_eq!(result.informational().len(), usize::from(info));
         assert_eq!(result.informational(), bound.informational());
     }
@@ -241,28 +220,9 @@ fn batch_artifact_count_is_preflighted_before_lowering() {
 }
 
 /// TC-001
-/// FR-001-AC-7
-#[test]
-fn declaration_identity_changes_move_the_bound_digest_even_when_source_is_unchanged() {
-    let original = projection("test/declarations", 1, false);
-    let mut changed = original.clone();
-    changed["bindings"][0]["expression"]["values"] = json!([{
-        "name":"unused_input","kind":"input","value_type":{"kind":"boolean"},
-        "source":span()}]);
-    let first = generated(&original);
-    let second = generated(&changed);
-    let left = &first.clauses()[0];
-    let right = &second.clauses()[0];
-    assert_eq!(left.bundle().rust, right.bundle().rust);
-    assert_eq!(left.expression_digest(), right.expression_digest());
-    assert_ne!(left.declaration_digest(), right.declaration_digest());
-    assert_ne!(first.bound_digest(), second.bound_digest());
-}
-
-/// TC-001
 /// FR-001-AC-6
 #[test]
-fn actual_bound_outputs_publish_then_compile_and_execute_against_pinned_runtime() {
+fn actual_bound_outputs_publish_then_compile_and_execute_against_the_runtime() {
     use std::{
         fs,
         process::Command,

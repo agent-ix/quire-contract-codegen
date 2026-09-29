@@ -1,20 +1,86 @@
 // The base CheckedPackage V2 document the exact-scalar and composite-equality package builders
-// start from. `include!`d by both, so it defines one function and nothing else.
+// start from. `include!`d by both.
 
-/// The base CheckedPackage V2 wire document: an ordered enum `Example.Status { READY, DONE }`, its
-/// `READY` member, a `Length` dimension and a `metre` unit of it, each keyed by the digest of its
+/// The node ids of the base package's four nominal nodes. Each is the digest Contract IR itself
+/// computes over the node's nominal identity preimage (`NominalIdentityPreimage::digest`), so the
+/// ids are derived here, never written down.
+struct BaseNodeIds {
+    enum_type: String,
+    enum_member: String,
+    unit: String,
+    dimension: String,
+}
+
+const BASE_NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
+
+fn base_node_ref(digest: &str) -> serde_json::Value {
+    serde_json::json!({"domain": BASE_NODE_DOMAIN, "digest": digest})
+}
+
+fn base_owner() -> serde_json::Value {
+    serde_json::json!({"kind": "definition", "authority": "agent-ix", "identity": "example-model"})
+}
+
+fn base_enum_declaration_preimage() -> serde_json::Value {
+    serde_json::json!({
+        "version": "quire.enum-declaration-node/v1", "owner": base_owner(),
+        "qualified_declaration": ["Example", "Phase"],
+        "ordered": true, "members": ["OPEN", "SHUT"],
+    })
+}
+
+fn base_enum_member_preimage(enum_type: &str) -> serde_json::Value {
+    serde_json::json!({
+        "version": "quire.enum-member-node/v1",
+        "declaration_node_id": base_node_ref(enum_type), "case": "OPEN",
+    })
+}
+
+fn base_dimension_preimage() -> serde_json::Value {
+    serde_json::json!({
+        "version": "quire.dimension-node/v1", "owner": base_owner(),
+        "qualified_declaration": ["Example", "Distance"], "terms": [],
+    })
+}
+
+fn base_unit_preimage(dimension: &str) -> serde_json::Value {
+    serde_json::json!({
+        "version": "quire.unit-node/v1", "owner": base_owner(),
+        "qualified_declaration": ["Example", "pace"],
+        "dimension_node_id": base_node_ref(dimension), "target_unit_node_id": null,
+        "scale": {"numerator": "1", "denominator": "1"},
+        "offset": {"numerator": "0", "denominator": "1"},
+    })
+}
+
+/// Contract IR's own digest of one nominal identity preimage.
+fn base_preimage_digest(preimage: serde_json::Value) -> String {
+    serde_json::from_value::<quire_contract_ir::NominalIdentityPreimage>(preimage)
+        .expect("a well-formed nominal identity preimage")
+        .digest()
+        .expect("a nominal identity preimage digests")
+}
+
+fn base_node_ids() -> BaseNodeIds {
+    let enum_type = base_preimage_digest(base_enum_declaration_preimage());
+    let dimension = base_preimage_digest(base_dimension_preimage());
+    BaseNodeIds {
+        enum_member: base_preimage_digest(base_enum_member_preimage(&enum_type)),
+        unit: base_preimage_digest(base_unit_preimage(&dimension)),
+        enum_type,
+        dimension,
+    }
+}
+
+/// The base CheckedPackage V2 wire document: an ordered enum `Example.Phase { OPEN, SHUT }`, its
+/// `OPEN` member, a `Distance` dimension and a `pace` unit of it, each keyed by the digest of its
 /// nominal identity preimage. The builder appends its own nodes and re-derives
 /// `identity_preimage.identity_projection` and `package_id` from the finished graph (`wire()`), so
 /// both start empty here.
 fn base_package() -> serde_json::Value {
-    const NODE: &str = "quire.checked-semantic-node/v1";
     const GRAPH: &str = "quire.checked-semantic-graph/v2";
-    const ENUM_MEMBER: &str = "42ba51e7e622d99f292a5e6dcc196bd216efb98b33755910e54af4d65078d032";
-    const ENUM_TYPE: &str = "7928f1e1b570335b404c8d21c66da8a3b8e37e434b0ebc622f80285488811562";
-    const UNIT: &str = "79637623a46d29e884b62c6fa292aeb29d41e4ecc4e800b4d7ee910a3eaf23a4";
-    const DIMENSION: &str = "b6cc14ab93b670cb0fc74a80dd18131ef7b06e3eee6a730e5ca092266314e22b";
-
-    let node_ref = |digest: &str| serde_json::json!({"domain": NODE, "digest": digest});
+    let ids = base_node_ids();
+    let node_ref = |digest: &str| base_node_ref(digest);
     let artifact = |identity: &str, namespace: &str, domain: &str, digest: char| {
         serde_json::json!({
             "authority": "agent-ix",
@@ -30,64 +96,47 @@ fn base_package() -> serde_json::Value {
     });
     let model = artifact("example-model", "git", "quire.definition.bytes/v1", '4');
     let source = artifact("example", "git", "quire.source.bytes/v1", '2');
-    let owner = serde_json::json!({"kind": "definition", "authority": "agent-ix", "identity": "example-model"});
     let aggregate = serde_json::json!({"term": "aggregate", "members": []});
     let declared = serde_json::json!([{"role": "declaration", "ordinal": 0}]);
 
     let nodes = vec![
         serde_json::json!({
-            "node_id": node_ref(ENUM_MEMBER), "schema_version": GRAPH,
+            "node_id": node_ref(&ids.enum_member), "schema_version": GRAPH,
             "node_tag": "value", "semantic_form": "enum_value",
-            "semantic_type": node_ref(ENUM_TYPE), "dependencies": [node_ref(ENUM_TYPE)],
+            "semantic_type": node_ref(&ids.enum_type), "dependencies": [node_ref(&ids.enum_type)],
             "occurrences": declared,
-            "nominal_identity_preimage": {
-                "version": "quire.enum-member-node/v1",
-                "declaration_node_id": node_ref(ENUM_TYPE), "case": "READY",
-            },
-            "body": {"term": "literal", "type": node_ref(ENUM_TYPE), "value_kind": "enum", "value": "READY"},
+            "nominal_identity_preimage": base_enum_member_preimage(&ids.enum_type),
+            "body": {"term": "literal", "type": node_ref(&ids.enum_type), "value_kind": "enum", "value": "OPEN"},
         }),
         serde_json::json!({
-            "node_id": node_ref(ENUM_TYPE), "schema_version": GRAPH,
+            "node_id": node_ref(&ids.enum_type), "schema_version": GRAPH,
             "node_tag": "scalar_type", "semantic_form": "enum",
-            "semantic_type": node_ref(ENUM_TYPE),
-            "declaration": {"qualified_name": ["Example", "Status"]},
+            "semantic_type": node_ref(&ids.enum_type),
+            "declaration": {"qualified_name": ["Example", "Phase"]},
             "dependencies": [], "occurrences": declared,
-            "nominal_identity_preimage": {
-                "version": "quire.enum-declaration-node/v1", "owner": owner,
-                "qualified_declaration": ["Example", "Status"],
-                "ordered": true, "members": ["READY", "DONE"],
-            },
+            "nominal_identity_preimage": base_enum_declaration_preimage(),
             "body": aggregate,
         }),
         serde_json::json!({
-            "node_id": node_ref(UNIT), "schema_version": GRAPH,
+            "node_id": node_ref(&ids.unit), "schema_version": GRAPH,
             "node_tag": "scalar_type", "semantic_form": "unit",
-            "semantic_type": node_ref(DIMENSION),
-            "declaration": {"qualified_name": ["Example", "metre"]},
-            "dependencies": [node_ref(DIMENSION)], "occurrences": declared,
-            "nominal_identity_preimage": {
-                "version": "quire.unit-node/v1", "owner": owner,
-                "qualified_declaration": ["Example", "metre"],
-                "dimension_node_id": node_ref(DIMENSION), "target_unit_node_id": null,
-                "scale": {"numerator": "1", "denominator": "1"},
-                "offset": {"numerator": "0", "denominator": "1"},
-            },
+            "semantic_type": node_ref(&ids.dimension),
+            "declaration": {"qualified_name": ["Example", "pace"]},
+            "dependencies": [node_ref(&ids.dimension)], "occurrences": declared,
+            "nominal_identity_preimage": base_unit_preimage(&ids.dimension),
             "body": aggregate,
         }),
         serde_json::json!({
-            "node_id": node_ref(DIMENSION), "schema_version": GRAPH,
+            "node_id": node_ref(&ids.dimension), "schema_version": GRAPH,
             "node_tag": "scalar_type", "semantic_form": "dimension",
-            "semantic_type": node_ref(DIMENSION),
-            "declaration": {"qualified_name": ["Example", "Length"]},
+            "semantic_type": node_ref(&ids.dimension),
+            "declaration": {"qualified_name": ["Example", "Distance"]},
             "dependencies": [], "occurrences": declared,
-            "nominal_identity_preimage": {
-                "version": "quire.dimension-node/v1", "owner": owner,
-                "qualified_declaration": ["Example", "Length"], "terms": [],
-            },
+            "nominal_identity_preimage": base_dimension_preimage(),
             "body": aggregate,
         }),
     ];
-    let source_map = [ENUM_MEMBER, ENUM_TYPE, UNIT, DIMENSION]
+    let source_map = [&ids.enum_member, &ids.enum_type, &ids.unit, &ids.dimension]
         .iter()
         .enumerate()
         .map(|(start, digest)| {

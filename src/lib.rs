@@ -70,8 +70,8 @@ pub use exact_scalar::{
     DecimalOperator, ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
     ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator, IntegerOperator,
     OperationClaim, OperationProvenance, OrderingOperandKind, QuantityOperator, RationalOperator,
-    ScalarForm, EXACT_SCALAR_CLAIM_MAP_VERSION, EXACT_SCALAR_CRATE_NAME,
-    SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
+    ScalarForm, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS,
+    SCALAR_LOWERING_WORK_LIMIT,
 };
 pub use finite_reference_graphs::prepare_finite_graph_reaches;
 pub use generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
@@ -81,16 +81,15 @@ pub use composite_equality::{
     CompositeEqualityOracles, CompositeEqualityRefusal, CompositeOperationClaim,
     CompositeOperationProvenance, DeclarationRefusalCause, EqualityOperandDescriptor,
     EqualityOperatorKind, GeneratedCompositeEqualityClaim, IllTypedCauseKind, RecordedDescriptor,
-    RecordedSchedule, RecursionEdgesKind, COMPOSITE_EQUALITY_CLAIM_MAP_VERSION,
-    COMPOSITE_EQUALITY_CRATE_NAME, COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT,
+    RecordedSchedule, RecursionEdgesKind, COMPOSITE_EQUALITY_CRATE_NAME,
+    COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT,
 };
 
 pub use exact_function::{
     generate_exact_function_oracles, CallPointKind, ExactFunctionBody, ExactFunctionClaim,
     ExactFunctionDeclaration, ExactFunctionItem, ExactFunctionOracles, ExactFunctionRefusal,
     FunctionParameter, GeneratedExactFunctionClaim, LocationMapEntry, RecordedLocation,
-    RecordedOrigin, EXACT_FUNCTION_CLAIM_MAP_VERSION, EXACT_FUNCTION_CRATE_NAME,
-    EXACT_FUNCTION_LOWERING_WORK_LIMIT,
+    RecordedOrigin, EXACT_FUNCTION_CRATE_NAME, EXACT_FUNCTION_LOWERING_WORK_LIMIT,
 };
 
 pub use bound_coverage::{
@@ -111,7 +110,7 @@ pub use bound::{
 pub use capability::{
     negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
     Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
-    ItemSettlement, Mode, RequestItem, RequestedKind, RoutedItem, BACKEND_PROVIDER_CONTRACT,
+    ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
     CAPABILITY_VOCABULARY,
 };
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
@@ -153,5 +152,5 @@ pub use strategy::{
 pub use oracle::{
     generate_boolean_oracle, Artifact, GeneratedArtifactBundle, GenerationDiagnostic,
     GenerationErrorCode, GenerationTerminalState, OracleArtifactBundle, OracleRequest, SourceProbe,
-    SourceRegion, IR_CANDIDATE_REVISION, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    SourceRegion, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
 };

@@ -1491,6 +1491,7 @@ dependencies = [
  "qsl-replay 0.1.0 (git+https://github.com/agent-ix/quire-spec-language?rev=1a368fa40412fa6fe475bdb2b294dd61a5498bff)",
  "quire-contract-ir",
  "quire-contract-runtime",
+ "quire-verification-contracts 0.1.0 (git+https://github.com/agent-ix/quire-verification-contracts?rev=61f4a44d76d51cc53b2dfe7ed10aba7b23cfa6ef)",
  "serde",
  "serde_json",
  "sha2",

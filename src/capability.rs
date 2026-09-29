@@ -162,13 +162,11 @@ pub struct ExtentClassification {
     pub finite_bound_available: bool,
 }
 
-/// A registered backend: the pair that identifies it, and what it advertises.
+/// A registered backend: its identity, and what it advertises.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BackendDescriptor {
     /// Backend identity, unique within a registry.
     pub identity: String,
-    /// Digest of the manifest this descriptor was read from.
-    pub manifest_digest: String,
     /// Advertised (kind, mode) pairs.
     pub advertised: Vec<(CapabilityKind, Mode)>,
 }
@@ -188,13 +186,11 @@ impl BackendDescriptor {
     }
 }
 
-/// A candidate: the pair (backend identity, manifest digest) of a registered backend.
+/// A candidate: the identity of a registered backend.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct Candidate {
     /// Backend identity.
     pub identity: String,
-    /// Manifest digest.
-    pub manifest_digest: String,
 }
 
 /// An item's `candidates` value.
@@ -203,7 +199,7 @@ pub struct Candidate {
 /// identity the request named so the refusal can name it back.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Candidates {
-    /// The candidate set the registry computed, ordered by identity then digest.
+    /// The candidate set the registry computed, ordered by identity.
     Set(Vec<Candidate>),
     /// The request named a backend that is not registered.
     UnknownBackend(String),
@@ -605,16 +601,14 @@ fn descriptor<'a>(
     manifest: &'a [BackendDescriptor],
     candidate: &Candidate,
 ) -> Option<&'a BackendDescriptor> {
-    manifest.iter().find(|backend| {
-        backend.identity == candidate.identity
-            && backend.manifest_digest == candidate.manifest_digest
-    })
+    manifest
+        .iter()
+        .find(|backend| backend.identity == candidate.identity)
 }
 
 /// Route the single candidate to its arm.
 ///
-/// Every function that constructs a [`Disposition`] is named `negotiate_*`, and
-/// TC-030's source gate is what holds that true as the module grows.
+/// Every function that constructs a [`Disposition`] is named `negotiate_*`.
 fn negotiate_single_candidate(
     manifest: &[BackendDescriptor],
     candidate: &Candidate,
@@ -681,48 +675,5 @@ fn negotiate_kani(
                 backend: backend.identity.clone(),
             },
         },
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Routing
-// ---------------------------------------------------------------------------
-
-/// A `supported` item that has been routed to exactly one backend.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RoutedItem {
-    /// The item's index in the request.
-    pub request_index: usize,
-    /// The claim's kind.
-    pub kind: CapabilityKind,
-    /// The routed backend's identity.
-    pub backend: String,
-}
-
-impl ItemSettlement {
-    /// The routed item, when this settlement routed one.
-    ///
-    /// Only a `supported` item routes. An item settled `requires-bound`,
-    /// `unsupported` or `invalid-request` has no backend to route to.
-    #[must_use]
-    pub fn routed(&self, manifest: &[BackendDescriptor]) -> Option<RoutedItem> {
-        let Disposition::Supported { backend } = &self.disposition else {
-            return None;
-        };
-        let kind = self.kind?;
-        // FR-290 makes a repeated identity a registry-level refusal
-        // (`duplicate-backend`), so this answers `None` rather than choosing.
-        let mut matching = manifest
-            .iter()
-            .filter(|descriptor| descriptor.identity == *backend);
-        let descriptor = matching.next()?;
-        if matching.next().is_some() {
-            return None;
-        }
-        Some(RoutedItem {
-            request_index: self.request_index,
-            kind,
-            backend: descriptor.identity.clone(),
-        })
     }
 }
