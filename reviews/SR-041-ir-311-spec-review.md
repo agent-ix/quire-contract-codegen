@@ -307,3 +307,41 @@ Gates (log directory: `logs/p186r4`):
 ### Round 4 verdict
 
 FND-021 and FND-023 to FND-025 are fixed, and the code diff is comment-only. Not mergeable: FND-026 makes the coverage export claim nine planned V2 criteria are backed by V1-path tests. Fix it by dropping those tags rather than retagging them.
+
+### Round 5
+
+Reviewed at a5ace39ec9f894106c3370c8af15bdbbae07fe87 against main fc99f61 (log dir `logs/p186r5`).
+
+| Gate | Head a5ace39 | Main fc99f61 |
+| --- | --- | --- |
+| `make spec` | EXIT 0 | EXIT 0 |
+| `make test` | EXIT 0 (80 / 213 passed, 5 ignored / 0) | EXIT 0 (same counts) |
+| `quire coverage --strict` | EXIT 1, 177/269 backed, 56 unbacked rows | EXIT 1, 198/265 backed, 31 unbacked rows |
+
+`status_lies` is 0 on both sides.
+
+No criterion that was backed on main is unbacked at head. Every id that is newly unbacked was added by this PR, and the matrix marks each one 🚧 Planned. They are:
+- FR-014-AC-35..37, at test-matrix.md:42
+- FR-015-AC-19..25, at :50
+- FR-025-AC-7/8, at :71
+- FR-026-AC-1/4, FR-028-AC-1..9 and FR-029-AC-1..6, at :72-74
+- TC-037, TC-039 and TC-040
+
+The newly backed criteria are FR-017-AC-12 and AC-13.
+
+FR-014-AC-1/4/5 are backed by the V2 tests in tests/it/exact_scalar_generation.rs and tests/exact_scalar_support/package.rs. FR-015-AC-3/9/10/11 are backed by tests/it/kani_obligations.rs, and AC-3 also by routed_generation.rs.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-026 | fixed | a5ace39: every V1-path tag is dropped, and the nine planned criteria (FR-014-AC-35/36/37, FR-015-AC-19/20/22/23/24/25) are unbacked, which matches their 🚧 Planned rows |
+| FND-027 | fixed | a5ace39: the two loose retags went with the dropped V1 tags |
+
+## New findings (disposition pass 5)
+
+| ID      | Severity | Summary | Refs |
+| ------- | -------- | ------- | ---- |
+| FND-028 | medium | The src/lib.rs change is not comment-only. Dropping the `// Implements:` comments let rustfmt reorder the `mod` declarations. That leaves `// Implements: FR-016`, which main puts above `mod spine_replay`, above `mod bounded_collections`, so the FR-016 native-replay adapter module is now untagged and a V1 corpus module claims FR-016. The reorder changes no behaviour, since `mod` order has no semantics. The misplaced tag is still a wrong trace. Fix: move `// Implements: FR-016` back above `mod spine_replay`. | src/lib.rs:24-31 |
+
+### Round 5 verdict
+
+FND-026 and FND-027 are fixed. The coverage change is honest: no built or ✅ Covered criterion lost its backing. Not mergeable until FND-028, a one-line comment move, is fixed.
