@@ -1204,10 +1204,10 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
 #[test]
 fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
     let mut builder = corpus_package();
-    let codes = 10_000..13_000;
+    let codes = 10_000..14_000;
     for code in codes.clone() {
         // Both operands are `code`-keyed literals, not `reference(ENUM_MEMBER)`
-        // twice over: every one of these 3,000 nodes would otherwise share
+        // twice over: every one of these 4,000 nodes would otherwise share
         // one preimage (same tag/form/type/body) and collide on a single
         // `node_id`. A literal operand also bypasses IR's operand-family
         // check entirely, so `enum.eq`'s `enum_kind` expectation is never

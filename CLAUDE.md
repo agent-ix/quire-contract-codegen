@@ -16,7 +16,6 @@ make clean            # cargo clean
 make deny             # all configured cargo-deny lanes
 make audit-unsafe     # check that every unsafe block has a // SAFETY: comment
 make rustdoc          # build warning-free API documentation
-make conformance      # run the bounded generation conformance corpus
 make ci               # every local gate above except build and clean
 ```
 
@@ -35,7 +34,6 @@ Backported from `agent-ix/ecaz`:
 
 ```
 src/lib.rs                 # crate root
-examples/                  # the bounded generation conformance corpus
 tests/it/main.rs           # the merged integration test binary; each former tests/*.rs file is a mod here
 schemas/                   # domain output contracts included by their owning library producers
 spec/                      # requirements artifacts, the test matrix, the suite registry

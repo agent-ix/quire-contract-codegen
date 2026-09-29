@@ -31,3 +31,28 @@ These rows went away cleanly because the requirements were deleted: FR-023 (4 ro
 | FND-008 | high | FR-022 and TC-033 still describe `KaniToolPins`, `AttestationContext` and an `UnpinnedBackend` refusal, none of which exists any more. The matrix marks FR-022 `✅ Covered`. | spec/functional/complete-v1/FR-022-routed-generation.md:60; spec/functional/complete-v1/FR-022-routed-generation.md:226; spec/test/complete-v1/TC-033-routed-generation.md:115 |
 | FND-009 | high | FR-014-AC-4 ("match the committed golden output") and FR-018-AC-10 ("committed golden crate… re-blessed golden") still require goldens that were all deleted. Both are marked `✅ Covered`. TC-024 and TC-029 were updated, but these FRs were not. | spec/functional/complete-v1/FR-014-exact-scalar-oracles.md:286; spec/functional/complete-v1/FR-018-composite-equality-oracles.md:203 |
 | FND-010 | medium | FR-016 has no remaining test that shows the generated obligation `ensures` is load-bearing: the spine mutation control was removed (SR-042 FND-003). FR-015's routed scalar lane no longer verifies with real Kani (SR-042 FND-001). | tests/it/skeleton_spine.rs:374; tests/it/kani_obligations.rs:2057 |
+
+## Dispositions
+
+Round 1, reviewed at c0cc093bb657a92d280159e16424518e5440fd83. `quire coverage --strict`: head 202/274, main 232/297; both exit 1. Where the spec file is outside this PR, the matrix row is corrected here and the text fix is deferred to #186.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | deferred | matrix fixed in d82ac87 (FR-017-AC-1/3 are Planned at spec/test-matrix.md:71); the FR-017 text is #186 |
+| FND-002 | deferred | matrix fixed in d82ac87 (AC-6/11 Planned); the FR-017 text is #186 |
+| FND-003 | fixed | d82ac87: NFR-002-AC-1 now reads "header names the generator and the requirement, revision and clause"; NFR-002 rows are Planned |
+| FND-004 | deferred | matrix fixed in d82ac87 (FR-019-AC-5/6 Planned, no `record_tool_probe`); the FR-019 text is #186 |
+| FND-005 | deferred | matrix fixed in d82ac87 (FR-015-AC-2 Planned); the FR-015 text is #186 |
+| FND-006 | fixed | d82ac87: FR-003-AC-4 now requires the option vector, subject ABI and domain bounds, with no version or digest |
+| FND-007 | fixed | d82ac87: FR-001-AC-3/7 and FR-013-AC-4 rewritten, FR-013-AC-3 deleted. See FND-012 for the dangling tag |
+| FND-008 | deferred | TC-033 fixed in d82ac87; FR-022 is #186 |
+| FND-009 | deferred | matrix fixed in d82ac87 (FR-014-AC-4 and FR-018-AC-10 Partial); the FR text is #186 |
+| FND-010 | fixed | 87963e9: spine mutation control restored; routed scalar Kani passes |
+
+## New findings (disposition pass 1)
+
+| ID      | Severity | Summary | Refs |
+| ------- | -------- | ------- | ---- |
+| FND-011 | high | The matrix still marks FR-017-AC-8 and AC-9 `✅ Covered`, but their only test (the source census) was deleted in 87963e9 and nothing traces them now. Its prose at :142-144 still names that census. Mark them Planned or delete the ACs. | spec/test-matrix.md:69; spec/test-matrix.md:142-144 |
+| FND-012 | high | TC-028 still names `tests/it/interface_001.rs` as its implementation, but the file was deleted, and the matrix marks interface-001-AC-4 and TC-028 `✅ Covered`. `GenerationTerminalState::ALL` is now tested by nothing. Either delete TC-028 and those ACs, or back AC-4 with a plain unit test. | spec/test/complete-v1/TC-028-interface-001-declared-surface.md:33; spec/test-matrix.md:224-225; spec/test-matrix.md:259; spec/test-matrix.md:311; spec/interface/interface-001-codegen-api.md:363-373; spec/index.md:82 |
+| FND-013 | medium | A test still traces FR-013-AC-3, which was deleted. | tests/it/bound_strategy_generation.rs:1436 |

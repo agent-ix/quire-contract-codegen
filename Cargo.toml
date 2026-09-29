@@ -13,14 +13,6 @@ repository = "https://github.com/agent-ix/quire-contract-codegen"
 name = "quire_contract_codegen"
 path = "src/lib.rs"
 
-# Explicit so `test = true` can be set: this is what lets `cargo test` run the
-# `#[cfg(test)] mod tests` declared inside the example (issue #125). Edition
-# 2021 keeps autodiscovery on for every other target.
-[[example]]
-name = "generation_conformance"
-path = "examples/generation_conformance.rs"
-test = true
-
 [dependencies]
 quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "48ab5dc29213c3975a5fe8f04ecbb3d1c2b345bb" }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "ed0a04b482216b79d3559a6ac59e6e260c5591cf", features = ["exact"] }
@@ -31,7 +23,6 @@ quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-i
 qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "1a368fa40412fa6fe475bdb2b294dd61a5498bff" }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"
-sha2 = "=0.10.9"
 syn = { version = "=2.0.119", features = ["full", "visit"] }
 
 [dev-dependencies]
@@ -41,6 +32,7 @@ quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-i
 # The home of the checked-operation catalog Contract IR validates against; tests select law
 # definitions from it instead of copying them.
 quire-verification-contracts = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-verification-contracts", rev = "61f4a44d76d51cc53b2dfe7ed10aba7b23cfa6ef" }
+sha2 = "=0.10.9"
 
 [profile.release]
 lto = "thin"

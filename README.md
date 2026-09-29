@@ -15,8 +15,8 @@ make ci
 ```
 
 This runs formatting, specification/plan validation, Clippy, the test suite under the minimum
-supported Rust version, license and source checks, the unsafe-code audit, the API documentation
-build, and the generation conformance corpus. CI workflows are manual-only.
+supported Rust version, license and source checks, the unsafe-code audit, and the API documentation
+build. CI workflows are manual-only.
 
 ## Generated artifacts
 

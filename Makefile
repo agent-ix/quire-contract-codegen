@@ -26,7 +26,6 @@ help:
 	@echo "  make clean            - cargo clean"
 	@echo "  make deny             - Run all configured cargo-deny checks"
 	@echo "  make audit-unsafe     - Enforce // SAFETY: comments on unsafe blocks"
-	@echo "  make conformance      - Run the bounded generation conformance corpus"
 	@echo "  make rustdoc          - Build warning-free API documentation"
 	@echo "  make ci               - All local CI gates"
 
@@ -114,17 +113,9 @@ rustdoc:
 	RUSTDOCFLAGS=-Dwarnings $(CARGO) doc --locked --no-deps
 
 # =============================================================================
-# Generation conformance
-# =============================================================================
-
-.PHONY: conformance
-conformance:
-	$(CARGO) run --quiet --example generation_conformance
-
-# =============================================================================
 # Composite
 # =============================================================================
 
 .NOTPARALLEL: ci
 .PHONY: ci
-ci: fmt-check spec lint msrv deny audit-unsafe rustdoc conformance test
+ci: fmt-check spec lint msrv deny audit-unsafe rustdoc test

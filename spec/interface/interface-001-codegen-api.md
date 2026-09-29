@@ -349,9 +349,8 @@ The interface's features in declaration order: every operation the contract abov
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| interface-001-AC-1 | Every public function the crate exposes — each `pub fn` and `pub use` function at the crate root and everything reachable through a `pub mod`, named by its shortest public path — is exactly the set of `operations` entries this contract declares without a `status: planned` caveat: a public function no entry declares, or a declared entry the crate does not expose, fails. | Test (TC-028) |
-| interface-001-AC-2 | Every `operations` entry this contract marks `status: planned` — `generate_bundle`, `analyze_coverage`, `cli_generate` — is absent from the public API, so an implementation cannot silently outrun the status this contract declares for it. | Test (TC-028) |
-| interface-001-AC-4 | `diagnostics.terminal_states` names exactly the six `GenerationTerminalState` variants, and no seventh state exists for `implemented_mapping` to omit. | Test (TC-028) |
+| interface-001-AC-1 | Every public function the crate exposes — each `pub fn` and `pub use` function at the crate root and everything reachable through a `pub mod`, named by its shortest public path — is exactly the set of `operations` entries this contract declares without a `status: planned` caveat: a public function no entry declares, or a declared entry the crate does not expose, fails. | Test |
+| interface-001-AC-2 | Every `operations` entry this contract marks `status: planned` — `generate_bundle`, `analyze_coverage`, `cli_generate` — is absent from the public API, so an implementation cannot silently outrun the status this contract declares for it. | Test |
 
 ## Open items
 
@@ -360,17 +359,6 @@ The interface's features in declaration order: every operation the contract abov
   for an operation this contract itself says is not implemented would be written to be satisfied by
   nothing. Criteria for their real semantics belong with the requirement that implements them, once
   one exists.
-- `tests/it/interface_001.rs` parses this document's own fenced YAML block and compares
-  `diagnostics.terminal_states` with the wire forms of `GenerationTerminalState::ALL`, per TC-028.
-- The active `spec-artifacts-process` module declares matrix-mining archetypes for `FR`, `NFR`,
-  `StR`, `TestMatrix`, `SuiteRegistry` and `Inspections`, but none for `interface` documents, so
-  `quire coverage` cannot mine this document at all: `interface-001-AC-1`, `AC-2` and `AC-4`
-  resolve to no declared row for any archetype to check, and the
-  `## Interface Requirement Coverage` row in `spec/test-matrix.md` is never cross-checked against
-  this file's acceptance-criteria table. The `/// Trace:` comments in `tests/it/interface_001.rs`
-  cite both `interface-001-AC-N` and `TC-028`, so `quire coverage --strict` reports them as dangling
-  traces until `spec-artifacts-process` gains an interface archetype. Tracked as
-  agent-ix/quire-contract-codegen#70.
 - The remaining prose fields this contract's slices carry — admission order, refusal vocabulary,
   domain and campaign rules, and so on — are the executable half of the FR that owns each slice
   (FR-008 through FR-013 for `bound_strategy_slice`, FR-003 for `kani_slice`, FR-017 for

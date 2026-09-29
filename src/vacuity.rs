@@ -15,8 +15,6 @@ const MAX_SEGMENTS: usize = 250_000;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CoverageErrorCode {
-    /// Bound package and immutable generated population differ.
-    BindingMismatch,
     /// Supplied artifact inventory or bytes differ from the generated bundle.
     ArtifactMismatch,
     /// Generated map does not match independently derived typed clause semantics.

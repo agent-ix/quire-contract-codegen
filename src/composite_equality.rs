@@ -76,7 +76,9 @@ use crate::exact_scalar::{
     read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
 };
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-use crate::oracle::{Artifact, MAX_GENERATED_SOURCE_BYTES, ORACLE_KANI_METADATA, RUNTIME_REVISION};
+use crate::oracle::{
+    unique_names, Artifact, MAX_GENERATED_SOURCE_BYTES, ORACLE_KANI_METADATA, RUNTIME_REVISION,
+};
 use quire_contract_ir::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
@@ -568,7 +570,10 @@ pub fn generate_composite_equality_oracles(
 
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(by_key.len());
-    for (index, ((key, item), record)) in by_key.into_iter().zip(&lowering.records).enumerate() {
+    // Generated claims as (claim position, key, item, checked item), rendered once every
+    // generated oracle is named.
+    let mut pending = Vec::new();
+    for ((key, item), record) in by_key.into_iter().zip(&lowering.records) {
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
         let result = if duplicate {
             ClaimDisposition::Refused {
@@ -577,27 +582,26 @@ pub fn generate_composite_equality_oracles(
         } else {
             match check_item(&graph, &bounds_by_type, record, item) {
                 Ok(generated) => {
-                    // The operator and the item's position in key order, which alone keeps the
-                    // name unique within one generation.
-                    let symbol = format!("{}_{index}", item.operator.identity().replace('.', "_"));
-                    source.item(&symbol, item, &generated);
-                    ClaimDisposition::Generated(Box::new(GeneratedCompositeEqualityClaim {
-                        environment_symbol: format!("environment_{symbol}"),
-                        oracle_symbol: format!("oracle_{symbol}"),
-                        ir_id: generated.node.ir_id.clone(),
-                        package_id: lowering.package.source_package_id().clone(),
-                        semantic_type: generated.node.semantic_type.clone(),
-                        source_map: generated.node.source_map.clone(),
-                        claims: generated.node.claims.clone(),
-                        descriptor: recorded_descriptor(item),
-                        declaration_keys: generated.declaration_keys.clone(),
-                        declaration_runtime_keys: generated
-                            .declaration_keys
-                            .iter()
-                            .map(|id| id.digest.to_lowercase())
-                            .collect(),
-                        schedule: generated.checked.schedule().into(),
-                    }))
+                    let claim =
+                        ClaimDisposition::Generated(Box::new(GeneratedCompositeEqualityClaim {
+                            environment_symbol: String::new(),
+                            oracle_symbol: String::new(),
+                            ir_id: generated.node.ir_id.clone(),
+                            package_id: lowering.package.source_package_id().clone(),
+                            semantic_type: generated.node.semantic_type.clone(),
+                            source_map: generated.node.source_map.clone(),
+                            claims: generated.node.claims.clone(),
+                            descriptor: recorded_descriptor(item),
+                            declaration_keys: generated.declaration_keys.clone(),
+                            declaration_runtime_keys: generated
+                                .declaration_keys
+                                .iter()
+                                .map(|id| id.digest.to_lowercase())
+                                .collect(),
+                            schedule: generated.checked.schedule().into(),
+                        }));
+                    pending.push((claims.len(), key, item, generated));
+                    claim
                 }
                 Err(refusal) => ClaimDisposition::Refused { refusal },
             }
@@ -612,6 +616,21 @@ pub fn generate_composite_equality_oracles(
             },
             result,
         });
+    }
+    // Each oracle is named by its operator; oracles sharing one are numbered in key order, so a
+    // refused or differently requested sibling never renames one.
+    let names = unique_names(
+        pending
+            .iter()
+            .map(|(_, key, item, _)| (item.operator.identity().replace('.', "_"), key.clone()))
+            .collect(),
+    );
+    for ((claim, _, item, generated), symbol) in pending.into_iter().zip(names) {
+        source.item(&symbol, item, &generated);
+        if let ClaimDisposition::Generated(claim) = &mut claims[claim].result {
+            claim.environment_symbol = format!("environment_{symbol}");
+            claim.oracle_symbol = format!("oracle_{symbol}");
+        }
     }
 
     let claim_map = ClaimMap {
@@ -1332,15 +1351,15 @@ impl SourceBuilder {
         ));
 
         self.functions.push_str(&format!(
-            "\n/// Node `{}`: `{}`. Its operation identity is caller-declared: CheckedPackage V2 carries\n\
+            "\n/// `{}`. Its operation identity is caller-declared: CheckedPackage V2 carries\n\
              /// an operator class, not this operator law.\n\
              pub fn environment_{symbol}() -> Result<rt::TypeEnvironment, rt::InvalidDeclaration> {{\n\
              \x20   rt::TypeEnvironment::new(composites_{symbol}(), core::iter::empty::<rt::ObjectTypeDeclaration>())\n}}\n",
-            item.node_id.digest, item.operator.identity()
+            item.operator.identity()
         ));
 
         self.functions.push_str(&format!(
-            "\n/// Node `{}`, environment-checked oracle for `{}`.\npub fn oracle_{symbol}(\n    environment: &rt::TypeEnvironment,\n    left: &rt::Value,\n    right: &rt::Value,\n    meter: &mut rt::Meter,\n) -> rt::Outcome<bool> {{\n\
+            "\n/// Environment-checked oracle for `{}`.\npub fn oracle_{symbol}(\n    environment: &rt::TypeEnvironment,\n    left: &rt::Value,\n    right: &rt::Value,\n    meter: &mut rt::Meter,\n) -> rt::Outcome<bool> {{\n\
              \x20   let left_target = left_target_{symbol}();\n\
              \x20   let left_comparison = left_target.clone().unwrap_or_else(left_source_{symbol});\n\
              \x20   if environment.check_type(&left_comparison).is_err() {{\n\
@@ -1359,7 +1378,6 @@ impl SourceBuilder {
              \x20       Ok(checked) => checked,\n\
              \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
              \x20   checked.evaluate(left, right, meter)\n}}\n",
-            item.node_id.digest,
             item.operator.identity(),
             item.operator.path()
         ));

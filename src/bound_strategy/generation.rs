@@ -842,15 +842,6 @@ fn relation_diagnostic(
 
 fn map_oracle_error(requested: &ClauseRef, error: BoundGenerationError) -> StrategyDiagnostic {
     match error {
-        BoundGenerationError::NameCollision(identity) => bound_diagnostic(
-            StrategyErrorCode::UnsupportedClause,
-            GenerationTerminalState::InvalidInput,
-            Some(GenerationErrorCode::NameCollision),
-            &identity,
-            None,
-            "expression.dependencies",
-            "bound oracle generation found a dependency or symbol collision",
-        ),
         BoundGenerationError::Clause {
             identity,
             diagnostics,

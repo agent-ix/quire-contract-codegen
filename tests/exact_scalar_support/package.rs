@@ -53,8 +53,8 @@ pub fn unit_type() -> String {
     base_node_ids().unit
 }
 
-/// `validate_application_keys`'s own preimage version tag (quire-contract-ir
-/// dfd8bd78, crates/quire-contract-model/src/checked_package/v2/operations.rs).
+/// `validate_application_keys`'s own preimage version tag (Contract IR
+/// crates/quire-contract-model/src/checked_package/v2/operations.rs).
 const APPLICATION_NODE_VERSION: &str = "quire.application-node/v1";
 
 /// A readable node key: the code, zero-padded to a 64-digit digest.
@@ -146,7 +146,7 @@ pub fn reference(digest: &str) -> Value {
     json!({"term": "reference", "target": node_ref(digest)})
 }
 
-/// Contract IR (a606059, FR-208 `DeclarationTagRules`/`DeclarationOccurrenceRule`)
+/// Contract IR (FR-208 `DeclarationTagRules`/`DeclarationOccurrenceRule`)
 /// forbids `declaration` on `expression`/`relation`/`state`/`temporal`/
 /// `correspondence` nodes and on `value`/`enum_value` nodes (and, measured
 /// against the reader, on `value`/`parameter` nodes, which QSL emits with no
@@ -168,12 +168,10 @@ fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
     }
 }
 
-/// Contract IR (a606059, FR-038-AC-17) requires `application.operation`
-/// and `application.result_type` as members; IR-216's `validate_operations`
-/// (quire-contract-ir dfd8bd78) checks `operation` against the closed
-/// 135-entry `quire.checked-operation-catalog/v1`
-/// (`tests/fixtures/checked-package/checked-package-v2/operation-catalog.json`),
-/// so `operation` must name a real catalogued identity with a conformant
+/// Contract IR (FR-038-AC-17) requires `application.operation`
+/// and `application.result_type` as members; Contract IR's `validate_operations`
+/// checks `operation` against the checked-operation catalog
+/// `quire-verification-contracts` publishes, so `operation` must name a real catalogued identity with a conformant
 /// `operator`/`laws`/`mode`/`member`, not an opaque placeholder. This crate's
 /// own generators still classify a body by `term`/`operator`/`arguments`
 /// (never by `operation`), but for an exact-scalar claim the *confirmation*
@@ -293,7 +291,7 @@ pub fn law(role: &str, definition: Value) -> Value {
 /// An `operation.mode` member: `{"kind", "value"}`. `value` is never
 /// checked against the catalog's closed `modes` vocabulary by IR (only
 /// `kind` is, and by a type-pin lookup this module's types never carry --
-/// see `check_mode_type` in quire-contract-ir dfd8bd78's
+/// see `check_mode_type` in Contract IR's
 /// `checked_package/v2/operations.rs`), so any readable string works.
 pub fn mode_kv(kind: &str, value: &str) -> Value {
     json!({"kind": kind, "value": value})
@@ -355,7 +353,7 @@ fn aggregate() -> Value {
 }
 
 /// The corpus's own scalar-type node for a literal `value_kind`. Contract IR
-/// (a606059) requires `literal.type` as a member and validates only that it
+/// requires `literal.type` as a member and validates only that it
 /// resolves to a real node (FR-038-AC-17); it does not require the target to
 /// equal the containing node's own `semantic_type`, and most hand-written
 /// corpus fixtures that type themselves by kind rather than by a bound do
@@ -531,8 +529,8 @@ impl PackageBuilder {
     /// Registers one application-bodied node with the real `node_id`
     /// IR-216's `validate_application_keys` re-derives: the SHA-256 digest
     /// of `{version, node_tag, semantic_form, semantic_type, declaration,
-    /// recursion, body}` over sorted-key JSON bytes (quire-contract-ir
-    /// dfd8bd78, `crates/quire-contract-model/src/checked_package/v2/
+    /// recursion, body}` over sorted-key JSON bytes (Contract IR
+    /// `crates/quire-contract-model/src/checked_package/v2/
     /// operations.rs`). `digest` is not known until `declaration` -- itself
     /// part of the preimage -- is built, so `declaration` is derived from
     /// `code` (via `declaration_for`'s `label` parameter) rather than from
@@ -890,11 +888,11 @@ impl PackageBuilder {
     }
 
     /// Registers `definition` in `lock.definition_selections` (deduplicated),
-    /// so `validate_operations`'s law-selection check (quire-contract-ir
-    /// dfd8bd78 `checked_package/v2/operations.rs`) finds it selected for
+    /// so `validate_operations`'s law-selection check (Contract IR
+    /// `checked_package/v2/operations.rs`) finds it selected for
     /// any node whose `operation.laws` names it. Mirrors the same push into
     /// `identity_preimage.definition_selections`: `validate_lock`'s
-    /// `same_non_graph_lock` (quire-contract-ir dfd8bd78
+    /// `same_non_graph_lock` (Contract IR
     /// `checked_package/v2/mod.rs`) refuses `StaleDependency` at `"lock"`
     /// unless the preimage and the lock agree field-for-field, and this is
     /// the one field this fixture builder mutates after construction.
@@ -913,7 +911,7 @@ impl PackageBuilder {
     /// Registers `definition` under `role` in `lock.profile_selections`
     /// (deduplicated), the clause/profile-role analogue of
     /// [`Self::select_definition`]: `validate_operations`'s check for a
-    /// `temporal_profile`/`protocol_profile` law (quire-contract-ir dfd8bd78
+    /// `temporal_profile`/`protocol_profile` law (Contract IR
     /// `checked_package/v2/operations.rs`) accepts any published definition
     /// of that role exactly when the lock selected it under this role --
     /// there is no fixed catalogued list for a profile role the way there is
@@ -1155,7 +1153,7 @@ impl Bound {
         result_type(self.bounded_form())
     }
 
-    /// Contract IR (a606059, FR-038-AC-17) requires `literal.type`, so every
+    /// Contract IR (FR-038-AC-17) requires `literal.type`, so every
     /// numeric or text literal embedded in a bound's own body — not just the
     /// value it bounds — is a real graph edge: `CheckedPackageV2::lower`
     /// walks it and, with `require_bounds`, refuses any reachable
@@ -1937,7 +1935,7 @@ fn integer_pair_for_operand(code: u32, operand_ref: &str) -> Value {
 
 /// The catalogued `body.operator`/`operation` pair for one corpus
 /// expression, matched on its own [`ExactScalarOperation`] descriptor
-/// against quire-contract-ir dfd8bd78's 135-entry operation catalog.
+/// against the checked-operation catalog.
 /// `operation` is not read by this crate's own generators -- they classify
 /// a body by `term`/`operator`/`arguments` and the request item's own
 /// descriptor -- so which catalogued identity denotes a given expression is
@@ -2461,7 +2459,7 @@ pub fn corpus_package() -> PackageBuilder {
         }
         // No node this corpus builds has a `resolve_family` path to
         // `ordered_enum` (the enum type's own `scalar_type` form resolves
-        // only to `enum`; see quire-contract-ir dfd8bd78's `resolve_family`
+        // only to `enum`; see Contract IR's `resolve_family`
         // in `checked_package/v2/operations.rs`), so `enum.lt/le/gt/ge`'s
         // `ordered_enum` operand family can never be satisfied by a
         // `reference` argument here. Substituting literals for exactly the
@@ -2632,7 +2630,7 @@ pub fn corpus_package() -> PackageBuilder {
             // `validate_application_keys`/`validate_operations` only ever
             // re-derive/check a node whose own top-level `body` is an
             // application term, never a nested application inside
-            // `body.arguments[*]` (quire-contract-ir dfd8bd78's module doc,
+            // `body.arguments[*]` (Contract IR's module doc,
             // `checked_package/v2/operations.rs`), so this nested blob's own
             // placeholder-shaped `operation` is never itself validated. Its
             // own embedded `reference` is still picked up by
@@ -2848,7 +2846,7 @@ pub fn corpus_package() -> PackageBuilder {
             // IR's. `argument_family` only ever resolves a family for
             // `reference`/`binding` arguments (a `literal` always resolves
             // to `None`, per its own match arms in quire-contract-ir
-            // dfd8bd78's `checked_package/v2/operations.rs`), so a literal
+            // Contract IR's `checked_package/v2/operations.rs`), so a literal
             // operand bypasses that admission-time check entirely while
             // CG's `check_operand` still classifies it by its own
             // `value_kind` and refuses the same `OperandTypeMismatch
@@ -2902,7 +2900,7 @@ pub fn corpus_package() -> PackageBuilder {
     // always empty and TC-024 never exercised it (measured on origin/main:
     // zero `"node_tag": "claim"` occurrences anywhere in this file). These
     // two nodes are genuine `claim` nodes -- `CLAIM`'s `operation`/`body`
-    // shape is adapted from quire-contract-ir dfd8bd78's own admitted
+    // shape is adapted from Contract IR's own admitted
     // conformance fixture
     // (`tests/fixtures/checked-package/checked-package-v2/fixtures/
     // positive-all-families.json`, node index 11), which IR's own `admit()`

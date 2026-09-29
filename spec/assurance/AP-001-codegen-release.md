@@ -15,7 +15,7 @@ impact_assessments:
       stochastic_dependency: none
     detect_before_harm:
       expected: true
-      control_ref: ix://agent-ix/quire-contract-codegen/CAC-001
+      control_ref: ix://agent-ix/quire-contract-codegen/TC-007
 review_policy:
   mode: require
   operations: [code-review, gap-analysis]

@@ -41,7 +41,7 @@
     },
     "diagnostic": {
       "type": "object", "additionalProperties": false, "required": ["code", "message"],
-      "properties": {"code": {"enum": ["binding_mismatch", "artifact_mismatch", "map_mismatch", "foreign_generated_file", "resource_limit_exceeded", "malformed_export", "unsupported_profile", "invalid_path", "duplicate_file", "unavailable_observation", "population_mismatch", "inconsistent_observation"]}, "message": {"type": "string", "minLength": 1}}
+      "properties": {"code": {"enum": ["artifact_mismatch", "map_mismatch", "foreign_generated_file", "resource_limit_exceeded", "malformed_export", "unsupported_profile", "invalid_path", "duplicate_file", "unavailable_observation", "population_mismatch", "inconsistent_observation"]}, "message": {"type": "string", "minLength": 1}}
     },
     "consequent": {
       "type": "object", "additionalProperties": false, "required": ["ordinal", "count"],

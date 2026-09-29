@@ -12,10 +12,9 @@ use quire_contract_ir::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    generate_boolean_oracle,
     oracle::{
-        bounded_readable_component, oracle_symbol, typed_dependency_parameters,
-        DependencyParameter, RustValueType,
+        bounded_readable_component, generate_named_boolean_oracle, oracle_symbol,
+        typed_dependency_parameters, unique_pair, DependencyParameter, RustValueType,
     },
     Artifact, GenerationErrorCode, GenerationTerminalState, OracleRequest,
     MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
@@ -327,33 +326,36 @@ pub fn generate_kani_bundle(
         clause: request.postcondition_clause,
         expression: request.postcondition,
     };
-    let precondition = generate_boolean_oracle(&precondition_request)
+    let requirement = request.requirement.requirement().as_str();
+    let revision = request.requirement.revision().get();
+    let (precondition_clause, postcondition_clause) = (
+        request.precondition_clause.as_str(),
+        request.postcondition_clause.as_str(),
+    );
+    let (precondition_symbol, postcondition_symbol) = unique_pair(
+        (
+            oracle_symbol(requirement, revision, precondition_clause),
+            precondition_clause,
+        ),
+        (
+            oracle_symbol(requirement, revision, postcondition_clause),
+            postcondition_clause,
+        ),
+    );
+    let precondition = generate_named_boolean_oracle(&precondition_request, &precondition_symbol)
         .map_err(|values| map_clause_diagnostics("precondition", values))?;
-    let postcondition = generate_boolean_oracle(&postcondition_request)
-        .map_err(|values| map_clause_diagnostics("postcondition", values))?;
+    let postcondition =
+        generate_named_boolean_oracle(&postcondition_request, &postcondition_symbol)
+            .map_err(|values| map_clause_diagnostics("postcondition", values))?;
     let precondition_parameters = typed_dependency_parameters(&precondition_request)
         .map_err(|values| map_clause_diagnostics("precondition", values))?;
     let postcondition_parameters = typed_dependency_parameters(&postcondition_request)
         .map_err(|values| map_clause_diagnostics("postcondition", values))?;
     let abi = derive_subject_abi(&precondition_parameters, &postcondition_parameters)?;
-    let requirement = request.requirement.requirement().as_str();
-    let revision = request.requirement.revision().get();
     let symbol = kani_symbol(requirement, revision, request.proof_id);
     let contract_symbol = format!("{symbol}_contract");
     let harness_symbol = format!("{symbol}_proof");
     let module_symbol = format!("{symbol}_module");
-    let precondition_symbol =
-        oracle_symbol(requirement, revision, request.precondition_clause.as_str());
-    let postcondition_symbol =
-        oracle_symbol(requirement, revision, request.postcondition_clause.as_str());
-    // Distinct clause ids with one readable name would emit one oracle function twice.
-    if precondition_symbol == postcondition_symbol {
-        return Err(single_diagnostic(
-            KaniErrorCode::InvalidIdentity,
-            "clauses",
-            "precondition and postcondition clauses must have distinct generated names",
-        ));
-    }
     let precondition_arguments = predicate_arguments(&precondition_parameters, &abi, false)?;
     let postcondition_arguments = predicate_arguments(&postcondition_parameters, &abi, true)?;
     let exact_harness = format!("{module_symbol}::{harness_symbol}");

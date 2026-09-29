@@ -311,14 +311,28 @@ impl SourceBuilder {
 pub fn generate_boolean_oracle(
     request: &OracleRequest<'_>,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
+    let symbol = oracle_symbol(
+        request.requirement.requirement().as_str(),
+        request.requirement.revision().get(),
+        request.clause.as_str(),
+    );
+    generate_named_boolean_oracle(request, &symbol)
+}
+
+/// [`generate_boolean_oracle`] with the oracle function named `symbol`, for generators that name
+/// several oracles together through [`unique_names`].
+pub(crate) fn generate_named_boolean_oracle(
+    request: &OracleRequest<'_>,
+    symbol: &str,
+) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     if request.expression.nodes().len() < 128 {
-        return generate_boolean_oracle_inner(request);
+        return generate_boolean_oracle_inner(request, symbol);
     }
     std::thread::scope(|scope| {
         let handle = std::thread::Builder::new()
             .name("contract-oracle-generation".to_owned())
             .stack_size(16 * 1024 * 1024)
-            .spawn_scoped(scope, || generate_boolean_oracle_inner(request))
+            .spawn_scoped(scope, || generate_boolean_oracle_inner(request, symbol))
             .map_err(|error| {
                 single_diagnostic(
                     request,
@@ -340,6 +354,7 @@ pub fn generate_boolean_oracle(
 
 fn generate_boolean_oracle_inner(
     request: &OracleRequest<'_>,
+    symbol_text: &str,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     if request.expression.value_type() != &ValueType::Boolean {
         return Err(expression_diagnostic(
@@ -380,7 +395,6 @@ fn generate_boolean_oracle_inner(
     let requirement = request.requirement.requirement().as_str();
     let revision = request.requirement.revision().get();
     let clause = request.clause.as_str();
-    let symbol_text = oracle_symbol(requirement, revision, clause);
     let identity_symbol = format!("{}_IDENTITY", symbol_text.to_ascii_uppercase());
     let clause_symbol = format!("{}_CLAUSE", symbol_text.to_ascii_uppercase());
     let requirement_literal = format!("{requirement:?}");
@@ -1050,9 +1064,43 @@ pub(crate) fn upper_camel(value: &str) -> String {
         .collect()
 }
 
-/// The generated function name of one clause's oracle, read from its requirement, revision and
-/// clause. Two clauses whose readable forms coincide get the same name; every generator that puts
-/// more than one oracle in one crate or file refuses that as a name collision.
+/// The final names of the items one generation emits side by side. Each item offers a readable
+/// `stem` and its full identity `key`. A stem held by one item is that item's name. Items sharing a
+/// stem are named `{stem}_{ordinal}`, numbered from 1 in ascending `key` order, so a name depends on
+/// the item and on which siblings share its stem, never on request order. Suffixing repeats until
+/// every name is distinct, since a suffixed name can meet another item's stem.
+pub(crate) fn unique_names<K: Ord>(items: Vec<(String, K)>) -> Vec<String> {
+    let (mut names, keys): (Vec<String>, Vec<K>) = items.into_iter().unzip();
+    loop {
+        let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for (index, name) in names.iter().enumerate() {
+            groups.entry(name.clone()).or_default().push(index);
+        }
+        if groups.values().all(|group| group.len() == 1) {
+            return names;
+        }
+        for (stem, mut group) in groups {
+            if group.len() > 1 {
+                group.sort_by(|left, right| keys[*left].cmp(&keys[*right]).then(left.cmp(right)));
+                for (ordinal, index) in group.into_iter().enumerate() {
+                    names[index] = format!("{stem}_{}", ordinal + 1);
+                }
+            }
+        }
+    }
+}
+
+/// [`unique_names`] for exactly two items.
+pub(crate) fn unique_pair<K: Ord>(first: (String, K), second: (String, K)) -> (String, String) {
+    let mut names = unique_names(vec![first, second]).into_iter();
+    let first = names.next().unwrap_or_default();
+    let second = names.next().unwrap_or_default();
+    (first, second)
+}
+
+/// The readable stem of one clause's oracle name: its requirement, revision and clause. Two
+/// clauses can share a stem; generators emitting several oracles together name them through
+/// [`unique_names`].
 pub(crate) fn oracle_symbol(requirement: &str, revision: u64, clause: &str) -> String {
     format!(
         "oracle_{}_{revision}_{}",
@@ -1190,4 +1238,74 @@ fn diagnostic(
         source_span,
         message: message.into(),
     }]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{oracle_symbol, unique_names};
+
+    /// Items sharing a stem are numbered in key order, whatever order they arrive in; an item
+    /// with a stem of its own keeps it.
+    ///
+    /// Trace: FR-022-AC-9, TC-033
+    #[test]
+    fn equal_stems_take_ordinals_in_key_order_not_arrival_order() {
+        let forward = unique_names(vec![
+            ("oracle_add".to_owned(), "node-a"),
+            ("oracle_sub".to_owned(), "node-b"),
+            ("oracle_add".to_owned(), "node-c"),
+        ]);
+        let reversed = unique_names(vec![
+            ("oracle_add".to_owned(), "node-c"),
+            ("oracle_sub".to_owned(), "node-b"),
+            ("oracle_add".to_owned(), "node-a"),
+        ]);
+        assert_eq!(forward, ["oracle_add_1", "oracle_sub", "oracle_add_2"]);
+        assert_eq!(reversed, ["oracle_add_2", "oracle_sub", "oracle_add_1"]);
+    }
+
+    /// A suffixed name that meets another item's own stem is suffixed again, so every name is
+    /// distinct.
+    ///
+    /// Trace: FR-022-AC-9, TC-033
+    #[test]
+    fn a_suffixed_name_meeting_another_stem_is_disambiguated_again() {
+        let names = unique_names(vec![
+            ("x".to_owned(), 1),
+            ("x".to_owned(), 2),
+            ("x_1".to_owned(), 3),
+        ]);
+        assert_eq!(names, ["x_1_1", "x_2", "x_1_2"]);
+    }
+
+    /// Two clause identities whose readable forms coincide get distinct names: a requirement,
+    /// revision and clause split differently, and two clause ids equal in their first 24
+    /// characters.
+    ///
+    /// Trace: FR-022-AC-9, TC-033
+    #[test]
+    fn readable_stems_that_coincide_still_yield_distinct_names() {
+        let split = [("fr-1", 2, "c"), ("fr", 1, "2-c")];
+        let long = [
+            ("FR-001", 7, "a-very-long-shared-clause-prefix-one"),
+            ("FR-001", 7, "a-very-long-shared-clause-prefix-two"),
+        ];
+        for pair in [split, long] {
+            let stems = pair.map(|(requirement, revision, clause)| {
+                oracle_symbol(requirement, revision, clause)
+            });
+            assert_eq!(stems[0], stems[1], "the readable stems coincide");
+            let names = unique_names(
+                pair.iter()
+                    .zip(&stems)
+                    .map(|(identity, stem)| (stem.clone(), *identity))
+                    .collect(),
+            );
+            assert_ne!(names[0], names[1]);
+            assert_eq!(
+                names[0],
+                format!("{}_{}", stems[0], 2 - usize::from(pair[0] < pair[1]))
+            );
+        }
+    }
 }

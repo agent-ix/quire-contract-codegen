@@ -785,6 +785,34 @@ fn tc_004_invalid_campaign_inputs_fail_before_clause_generation() {
     assert_eq!(invalid_policy[0].path, "minimum_accepted_cases");
 }
 
+/// Two clause ids equal in their first 24 characters share a readable oracle stem; the harness
+/// still generates, naming the two oracles by clause order rather than refusing.
+///
+/// Trace: TC-004, FR-022-AC-9
+#[test]
+fn tc_004_clauses_sharing_a_readable_stem_get_distinct_oracle_names() {
+    let (environment, precondition_expression, postcondition_expression) = typed_clauses();
+    let precondition = ClauseId::new("a-very-long-shared-clause-prefix-pre").unwrap();
+    let postcondition = ClauseId::new("a-very-long-shared-clause-prefix-post").unwrap();
+    let bundle = generate_tristate_harness(&HarnessRequest {
+        requirement: environment.owner(),
+        precondition_clause: &precondition,
+        postcondition_clause: &postcondition,
+        precondition: &precondition_expression,
+        postcondition: &postcondition_expression,
+        execution_point: "handler:update",
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 0,
+    })
+    .expect("coinciding readable stems are named apart, not refused");
+    let source = &bundle.rust.contents;
+    // "...-post" sorts before "...-pre", so the postcondition's oracle takes ordinal 1.
+    let stem = "oracle_fr_002_1_a_very_long_shared_claus";
+    assert!(source.contains(&format!("pub fn {stem}_1(")), "{source}");
+    assert!(source.contains(&format!("pub fn {stem}_2(")), "{source}");
+}
+
 /// TC-003, TC-004.
 #[test]
 fn tc_004_multiple_state_bindings_fail_closed() {

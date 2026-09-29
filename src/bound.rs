@@ -1,12 +1,9 @@
 //! Complete-package oracle lowering through the public IR binding boundary.
 
-use std::collections::BTreeSet;
-
 use quire_contract_ir::{BoundPackage, ClauseRef};
 
 use crate::{
-    generate_boolean_oracle,
-    oracle::oracle_symbol,
+    oracle::{generate_named_boolean_oracle, oracle_symbol, unique_names},
     publication::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
     ArtifactBundle, GenerationDiagnostic, OracleArtifactBundle, OracleRequest,
     PublicationDiagnostic,
@@ -86,8 +83,6 @@ impl GeneratedBoundOracles {
 pub enum BoundGenerationError {
     /// Shared publication artifact-count or byte limits would be exceeded.
     ResourceLimitExceeded,
-    /// Two distinct clauses claim one generated symbol.
-    NameCollision(ClauseRef),
     /// A fully identified executable clause could not be lowered without approximation.
     Clause {
         /// Complete identity of the failing clause.
@@ -113,20 +108,43 @@ pub fn generate_bound_oracles(
             informational: package.informational().to_vec(),
         }));
     }
-    preflight(package)?;
+    if package.clauses().len() > MAX_ARTIFACTS / 2 {
+        return Err(BoundGenerationError::ResourceLimitExceeded);
+    }
+    let names = unique_names(
+        package
+            .clauses()
+            .iter()
+            .map(|clause| {
+                let id = clause.identity();
+                let owner = id.requirement();
+                let (requirement, revision, name) = (
+                    owner.requirement().as_str(),
+                    owner.revision().get(),
+                    id.clause().as_str(),
+                );
+                (
+                    oracle_symbol(requirement, revision, name),
+                    (requirement, revision, name),
+                )
+            })
+            .collect(),
+    );
     let mut clauses = Vec::with_capacity(package.clauses().len());
     let mut artifacts = Vec::with_capacity(package.clauses().len() * 2);
     let mut total_bytes = 0usize;
-    for clause in package.clauses() {
+    for (clause, symbol) in package.clauses().iter().zip(&names) {
         let identity = clause.identity();
-        let bundle = generate_boolean_oracle(&OracleRequest {
+        let request = OracleRequest {
             requirement: identity.requirement(),
             clause: identity.clause(),
             expression: clause.expression(),
-        })
-        .map_err(|diagnostics| BoundGenerationError::Clause {
-            identity: identity.clone(),
-            diagnostics,
+        };
+        let bundle = generate_named_boolean_oracle(&request, symbol).map_err(|diagnostics| {
+            BoundGenerationError::Clause {
+                identity: identity.clone(),
+                diagnostics,
+            }
         })?;
         for artifact in [&bundle.rust, &bundle.source_map] {
             reserve_bytes(&mut total_bytes, artifact.contents.len())?;
@@ -143,25 +161,6 @@ pub fn generate_bound_oracles(
         informational: package.informational().to_vec(),
         bundle,
     }))
-}
-
-fn preflight(package: &BoundPackage) -> Result<(), BoundGenerationError> {
-    if package.clauses().len() > MAX_ARTIFACTS / 2 {
-        return Err(BoundGenerationError::ResourceLimitExceeded);
-    }
-    let mut symbols = BTreeSet::new();
-    for clause in package.clauses() {
-        let id = clause.identity();
-        let owner = id.requirement();
-        if !symbols.insert(oracle_symbol(
-            owner.requirement().as_str(),
-            owner.revision().get(),
-            id.clause().as_str(),
-        )) {
-            return Err(BoundGenerationError::NameCollision(id.clone()));
-        }
-    }
-    Ok(())
 }
 
 fn reserve_bytes(total: &mut usize, bytes: usize) -> Result<(), BoundGenerationError> {

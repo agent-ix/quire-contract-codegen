@@ -62,9 +62,8 @@ results. A human release owner alone decides source release suitability.
 
 ## Requirements Architecture
 
-StR-001 is the one stakeholder requirement. Every functional requirement except FR-006 satisfies
-it. NFR-001 and NFR-002 constrain it, and NFR-004 constrains FR-008 to FR-013. FR-006 runs the
-bounded generation conformance corpus.
+StR-001 is the one stakeholder requirement. Every functional requirement satisfies it. NFR-001 and
+NFR-002 constrain it, and NFR-004 constrains FR-008 to FR-013.
 `interface-001` defines the serialized input, the library and CLI operations, the artifact bundle,
 the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
 Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 hold the questions the owner has not ruled
@@ -73,17 +72,16 @@ on. `test-matrix.md` maps every criterion to its test case.
 | Area | Requirements | Test cases |
 |---|---|---|
 | V1 oracles, strategies and Kani lowering | FR-001 to FR-005, FR-007 | TC-001 to TC-007, TC-014, TC-023 |
-| Generation conformance corpus | FR-006 | TC-032 |
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI | TC-025, TC-027, TC-036 |
 | Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope | TC-026, TC-035 |
 | Capability settlement and routing | FR-019 settlement, FR-022 routed generation | TC-030, TC-033 |
-| Declared API surface | interface-001 | TC-028 |
 
 FR-020 is reserved for temporal and protocol oracles and is unwritten. FR-018 and FR-014 refuse the
 model graph, relation, temporal and protocol families with typed blockers. Function application is
-FR-021's. FR-023, NFR-003, TC-008 to TC-013, TC-015, TC-016 and TC-034 are unassigned.
+FR-021's. FR-006, FR-023, NFR-003, TC-008 to TC-013, TC-015, TC-016, TC-028, TC-032 and TC-034
+are unassigned.
 
 ### Subsystem layout
 
@@ -93,9 +91,9 @@ the directory carries the subsystem.
 | Subsystem | Directory | Artifacts |
 |---|---|---|
 | Strategies and harness campaigns | `functional/strategies/`, `nonfunctional/strategies/`, `test/strategies/` | FR-008 to FR-013, NFR-004, TC-017 to TC-022 |
-| Complete-V1 generation, execution and replay | `functional/complete-v1/`, `test/complete-v1/` | FR-014 to FR-019, FR-021, FR-022, FR-024, FR-025, TC-024 to TC-031, TC-033, TC-035, TC-036 |
+| Complete-V1 generation, execution and replay | `functional/complete-v1/`, `test/complete-v1/` | FR-014 to FR-019, FR-021, FR-022, FR-024, FR-025, TC-024 to TC-027, TC-029 to TC-031, TC-033, TC-035, TC-036 |
 | Architecture decisions | `decisions/` | ADR-001 to ADR-004 |
-| Everything else | the flat `functional/`, `nonfunctional/`, `test/`, `stakeholder/` directories | FR-001 to FR-007, NFR-001, NFR-002, StR-001, the remaining TCs |
+| Everything else | the flat `functional/`, `nonfunctional/`, `test/`, `stakeholder/` directories | FR-001 to FR-005, FR-007, NFR-001, NFR-002, StR-001, the remaining TCs |
 
 ## References
 

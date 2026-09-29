@@ -47,7 +47,7 @@ would exceed the tool's authority and hide consuming-project responsibilities.
 ## Verification
 
 TC-001 validates the generated header identity and licensing; TC-003 validates explicit diagnostic
-states. NFR-002-AC-3 is also exercised by the generation conformance corpus's rejection rows.
+states.
 
 ## Dependencies
 

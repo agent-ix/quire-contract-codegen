@@ -462,7 +462,7 @@ fn complete_population_is_measured_but_never_run_qualified() {
 
 /// Trace: TC-006, FR-004-AC-4, FR-004-AC-5, FR-004-AC-7
 #[test]
-fn exact_whole_inventory_and_foreign_binding_fail_without_classifications() {
+fn inexact_artifact_inventory_fails_without_classifications() {
     let value = projection("coverage/first", &expressions(), true);
     let (package, generated) = generate(&value);
     let original = inventory(&generated);
@@ -499,27 +499,6 @@ fn exact_whole_inventory_and_foreign_binding_fail_without_classifications() {
         assert_eq!(report["state"], "invalid_input");
         assert!(report["clauses"].as_array().unwrap().is_empty());
     }
-    let mut without_info = value;
-    without_info["package"]["requirements"][0]["clauses"]
-        .as_array_mut()
-        .unwrap()
-        .pop();
-    let (other, _) = generate(&without_info);
-    let (foreign, foreign_generation) =
-        generate(&projection("coverage/other", &expressions(), true));
-    for owner in [&other, &foreign] {
-        let report = analyze(owner, &generated, &original, Some(&bytes));
-        assert_eq!(report["state"], "invalid_input");
-        assert!(report["clauses"].as_array().unwrap().is_empty());
-    }
-    let report = analyze(
-        &package,
-        &foreign_generation,
-        &inventory(&foreign_generation),
-        Some(&serde_json::to_vec(&export(&foreign_generation)).unwrap()),
-    );
-    assert_eq!(report["state"], "invalid_input");
-    assert!(report["clauses"].as_array().unwrap().is_empty());
 }
 
 /// Trace: TC-006, FR-004-AC-5, FR-004-AC-9
@@ -576,15 +555,6 @@ fn informational_only_is_no_executable_not_invalid_or_exercised() {
             report["informational"].as_array().unwrap().len(),
             usize::from(info)
         );
-        assert!(report["clauses"].as_array().unwrap().is_empty());
-        let (_, foreign_generation) = generate(&projection("coverage/info", &expressions(), info));
-        let report = analyze(
-            &package,
-            &foreign_generation,
-            &inventory(&foreign_generation),
-            None,
-        );
-        assert_eq!(report["state"], "invalid_input");
         assert!(report["clauses"].as_array().unwrap().is_empty());
     }
 }

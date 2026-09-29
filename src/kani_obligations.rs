@@ -66,7 +66,8 @@ use crate::{
         KaniPrimitiveType, KaniSolver,
     },
     oracle::{
-        reference_identifier, typed_dependency_parameters, DependencyParameter, RustValueType,
+        generate_named_boolean_oracle, reference_identifier, typed_dependency_parameters,
+        unique_names, DependencyParameter, RustValueType,
     },
     Artifact, ClaimDerivationRefusal, ClaimDisposition, ClaimMap, ExactScalarClaim,
     ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode, OperationProvenance,
@@ -588,13 +589,9 @@ pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
-    let mut states = request
-        .items
-        .iter()
-        .enumerate()
-        .map(|(index, item)| classify(index, item))
-        .collect::<Vec<_>>();
+    let mut states = request.items.iter().map(classify).collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
+    assign_names(&mut states);
     resolve_assumptions(&mut states);
     let rejected = states
         .iter()
@@ -784,24 +781,133 @@ struct Symbols {
     contract: String,
 }
 
-/// Classifies the item at `index` in the request; `index` is the counter that keeps its generated
-/// names unique within one request.
-fn classify<'a>(index: usize, item: &ObligationItem<'a>) -> ItemState<'a> {
+/// Classifies one request item. Its generated names are its readable stems until
+/// [`assign_names`] settles them across the request.
+fn classify<'a>(item: &ObligationItem<'a>) -> ItemState<'a> {
     match *item {
-        ObligationItem::BoundClause { package, clause } => classify_clause(package, clause, index),
+        ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
             package,
             claim_map,
             node_id,
-        } => classify_node(package, claim_map, node_id, index),
+        } => classify_node(package, claim_map, node_id),
     }
 }
 
-fn classify_clause<'a>(
-    package: &'a BoundPackage,
-    clause_ref: &ClauseRef,
-    index: usize,
-) -> ItemState<'a> {
+/// The full identity a generated name is ordered by when several items share its readable stem.
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+enum NameKey {
+    Clause(String, u64, String),
+    Node(CheckedNodeId),
+}
+
+fn clause_key(clause: &ClauseRef) -> NameKey {
+    let requirement = clause.requirement();
+    NameKey::Clause(
+        requirement.requirement().as_str().to_owned(),
+        requirement.revision().get(),
+        clause.clause().as_str().to_owned(),
+    )
+}
+
+/// Settles every lowered item's generated names across the request with [`unique_names`]: clause
+/// oracle functions (any may be embedded beside another as an assumed precondition), then the
+/// module and harness names of every clause and scalar obligation. A name depends on its item and
+/// on the siblings sharing its readable stem, never on the item's request position.
+fn assign_names(states: &mut [ItemState<'_>]) {
+    let oracle_slots = states
+        .iter()
+        .enumerate()
+        .filter_map(|(index, state)| match &state.outcome {
+            Outcome::Lowered(lowered) => Some((
+                index,
+                (
+                    lowered.oracle.symbol.clone(),
+                    clause_key(&lowered.oracle.clause),
+                ),
+            )),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let oracle_names = unique_names(oracle_slots.iter().map(|(_, slot)| slot.clone()).collect());
+    for ((index, (stem, _)), name) in oracle_slots.into_iter().zip(oracle_names) {
+        if name == stem {
+            continue;
+        }
+        let renamed = match &states[index].outcome {
+            Outcome::Lowered(lowered) => named_oracle_source(lowered.clause, &name),
+            _ => continue,
+        };
+        match renamed {
+            Ok(source) => {
+                if let Outcome::Lowered(lowered) = &mut states[index].outcome {
+                    lowered.oracle.symbol = name;
+                    lowered.oracle.source = source;
+                }
+            }
+            Err(reason) => states[index].outcome = Outcome::Unsupported(reason),
+        }
+    }
+
+    let module_slots = states
+        .iter()
+        .enumerate()
+        .filter_map(|(index, state)| match &state.outcome {
+            Outcome::Lowered(lowered) => Some((
+                index,
+                (
+                    clause_stem(lowered.clause.identity()),
+                    clause_key(lowered.clause.identity()),
+                ),
+            )),
+            Outcome::LoweredScalar(lowered) => Some((
+                index,
+                (
+                    scalar_stem(&lowered.operation_identity),
+                    NameKey::Node(lowered.node_id.clone()),
+                ),
+            )),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let module_names = unique_names(module_slots.iter().map(|(_, slot)| slot.clone()).collect());
+    for ((index, _), name) in module_slots.into_iter().zip(module_names) {
+        match &mut states[index].outcome {
+            Outcome::Lowered(lowered) => lowered.symbols = symbols(&name),
+            Outcome::LoweredScalar(lowered) => {
+                lowered.module_symbol = format!("{name}_module");
+                lowered.harness_symbol = format!("{name}_proof");
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The source of `clause`'s oracle with its function named `symbol`.
+fn named_oracle_source(
+    clause: &BoundClause,
+    symbol: &str,
+) -> Result<String, UnsupportedObligation> {
+    let identity = clause.identity();
+    generate_named_boolean_oracle(
+        &OracleRequest {
+            requirement: identity.requirement(),
+            clause: identity.clause(),
+            expression: clause.expression(),
+        },
+        symbol,
+    )
+    .map(|bundle| bundle.rust.contents)
+    .map_err(|diagnostics| UnsupportedObligation::ClauseLowering {
+        generation_code: diagnostics
+            .first()
+            .map_or(GenerationErrorCode::UnsupportedExpression, |diagnostic| {
+                diagnostic.code
+            }),
+    })
+}
+
+fn classify_clause<'a>(package: &'a BoundPackage, clause_ref: &ClauseRef) -> ItemState<'a> {
     let package_digest = package.digest().to_string();
     let identity = Some(ItemIdentity::Clause {
         package: package_digest,
@@ -852,7 +958,7 @@ fn classify_clause<'a>(
                         package,
                         clause,
                         kind,
-                        symbols: symbols(clause_ref, index),
+                        symbols: symbols(&clause_stem(clause_ref)),
                         oracle,
                         assumed: Vec::new(),
                         signature: Vec::new(),
@@ -937,17 +1043,28 @@ fn oracle_function_symbol(source: &str) -> Option<String> {
     })
 }
 
-/// The harness names of the clause at request position `index`: its readable requirement,
-/// revision and clause, then the position, which alone keeps names unique within one request.
-/// Kani derives object-file names from these symbols, so the readable components are bounded.
-fn symbols(clause: &ClauseRef, index: usize) -> Symbols {
+/// The readable stem of a clause obligation's names: its requirement, revision and clause. Kani
+/// derives object-file names from these symbols, so the readable components are bounded.
+fn clause_stem(clause: &ClauseRef) -> String {
     let requirement = clause.requirement();
-    let base = format!(
-        "kob_{}_{}_{}_{index}",
+    format!(
+        "kob_{}_{}_{}",
         readable_component(requirement.requirement().as_str()),
         requirement.revision().get(),
         readable_component(clause.clause().as_str()),
-    );
+    )
+}
+
+/// The readable stem of a scalar obligation's names: its confirmed operation.
+fn scalar_stem(operation: &str) -> String {
+    format!(
+        "kob_scalar_{}",
+        readable_component(operation.strip_prefix("quire.op.").unwrap_or(operation))
+    )
+}
+
+/// The module, harness and contract names built on one settled name.
+fn symbols(base: &str) -> Symbols {
     Symbols {
         module: format!("{base}_module"),
         harness: format!("{base}_proof"),
@@ -968,7 +1085,6 @@ fn classify_node<'a>(
     package: &CheckedPackageV2,
     claim_map: &ClaimMap<ExactScalarClaim>,
     node_id: &CheckedNodeId,
-    index: usize,
 ) -> ItemState<'a> {
     let graph_node = package
         .graph()
@@ -1001,7 +1117,7 @@ fn classify_node<'a>(
             .find(|claim| &claim.node_id == node_id)
         {
             None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
-            Some(claim) => classify_claim(package, claim, index),
+            Some(claim) => classify_claim(package, claim),
         }
     };
     let outcome = refuse_unknown_node_kind(graph_node, kind, outcome);
@@ -1059,11 +1175,7 @@ fn refuse_unknown_node_kind<'a>(
     })
 }
 
-fn classify_claim<'a>(
-    package: &CheckedPackageV2,
-    claim: &ExactScalarClaim,
-    index: usize,
-) -> Outcome<'a> {
+fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> Outcome<'a> {
     let graph = |id: &CheckedNodeId| {
         package
             .graph()
@@ -1111,7 +1223,7 @@ fn classify_claim<'a>(
                 }
                 OperationProvenance::IrConfirmed => {
                     let operand_ranges = operand_ranges(package, &claim.node_id);
-                    match lower_scalar_claim(claim, generated, &derived, &operand_ranges, index) {
+                    match lower_scalar_claim(claim, generated, &derived, &operand_ranges) {
                         Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
                         Err(ScalarLoweringRefusal::NoRenderer) => {
                             Outcome::Unsupported(UnsupportedObligation::OperationNotRendered {
@@ -1275,7 +1387,6 @@ fn lower_scalar_claim(
     generated: &GeneratedScalarClaim,
     derived: &[DerivedDomain],
     operand_ranges: &[OperandRange],
-    index: usize,
 ) -> Result<LoweredScalarClaim, ScalarLoweringRefusal> {
     let arity = scalar_arity(&claim.operation.identity).ok_or(ScalarLoweringRefusal::NoRenderer)?;
     let Some(bound_id) = generated.checked_bounds.first() else {
@@ -1339,13 +1450,8 @@ fn lower_scalar_claim(
             reachable_upper: reachable_upper.to_string(),
         });
     }
-    // Named by the confirmed operation and the request position, which alone keeps the name
-    // unique within one request.
-    let operation = &claim.operation.identity;
-    let base = format!(
-        "kob_scalar_{}_{index}",
-        readable_component(operation.strip_prefix("quire.op.").unwrap_or(operation))
-    );
+    // The readable stem; `assign_names` settles the final name across the request.
+    let base = scalar_stem(&claim.operation.identity);
     let module_symbol = format!("{base}_module");
     let harness_symbol = format!("{base}_proof");
     Ok(LoweredScalarClaim {
@@ -1785,18 +1891,9 @@ fn render(
     let abi = abi(&contexts)?;
     let exact_harness = format!("{}::{}", lowered.symbols.module, lowered.symbols.harness);
     let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
+    // `assign_names` gave every clause oracle in the request a distinct name.
     let mut embedded = vec![&lowered.oracle];
     embedded.extend(&lowered.assumed);
-    // Oracle names are readable, so two distinct clauses can share one; one file cannot hold both.
-    let mut names = BTreeSet::new();
-    if !embedded
-        .iter()
-        .all(|oracle| names.insert(oracle.symbol.as_str()))
-    {
-        return Err(UnsupportedObligation::ClauseLowering {
-            generation_code: GenerationErrorCode::NameCollision,
-        });
-    }
     let oracle_sources = embedded
         .iter()
         .map(|oracle| oracle.source.as_str())
@@ -1984,10 +2081,9 @@ mod {module} {{\n\
     let mut source = format!(
         "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // Generated by quire-contract-codegen {}; DO NOT EDIT.\n\
-// Obligation: exact-scalar node {}/{}\n\n",
+// Obligation: exact-scalar `{}`\n\n",
         env!("CARGO_PKG_VERSION"),
-        lowered.node_id.domain,
-        lowered.node_id.digest,
+        lowered.operation_identity,
     );
     source.push_str(&lowered.oracle_source);
     source.push('\n');
@@ -2321,7 +2417,7 @@ mod tests {
             }))
             .expect("node")
         };
-        // FR-322 shape: each bound member is a `binding` carrying its literal.
+        // The QSL-emitted shape: each bound member is a `binding` carrying its literal.
         let member = |name: &str, kind: &str, value: &str| {
             serde_json::json!({"term":"binding","name":name,"value":
                 {"term":"literal","value_kind":kind,"value":value}})
@@ -2418,7 +2514,7 @@ mod tests {
             lower: lower.clone(),
             upper: upper.clone(),
         }];
-        match lower_scalar_claim(&claim, generated, &derived, &[], 0) {
+        match lower_scalar_claim(&claim, generated, &derived, &[]) {
             Err(ScalarLoweringRefusal::BoundNotI64 {
                 lower: got_lower,
                 upper: got_upper,
@@ -2505,7 +2601,7 @@ mod tests {
     /// Real, legitimately-lowered `LoweredClause` for the probe package's one precondition, with
     /// its embedded oracle source intact for the caller to mutate.
     fn render_probe_lowered<'a>(item: &ObligationItem<'a>) -> Box<LoweredClause<'a>> {
-        let Outcome::Lowered(lowered) = classify(0, item).outcome else {
+        let Outcome::Lowered(lowered) = classify(item).outcome else {
             panic!("render-probe precondition must lower to a harness");
         };
         lowered

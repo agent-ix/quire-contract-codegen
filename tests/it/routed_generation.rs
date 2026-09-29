@@ -419,6 +419,65 @@ fn tc_033_output_is_deterministic_and_independent_of_the_request_index() {
     assert_eq!(high.items[0].backend, kani_backend());
 }
 
+/// The harness of the item at `position` in `generation`, which must render.
+fn harness_at(generation: &RoutedGeneration, position: usize) -> &KaniScalarObligationHarness {
+    kani_parts(&generation.items[position].output)
+        .1
+        .expect("the node renders")
+}
+
+/// A node routed alone and the same node routed among siblings of other operations get
+/// byte-identical harnesses: a name depends only on siblings that share its readable stem.
+///
+/// Trace: FR-022-AC-9, TC-033
+#[test]
+fn tc_033_a_node_gets_identical_bytes_whatever_its_differently_named_siblings() {
+    let fixture = fixture();
+    let alone = generate_step_one(&fixture, &[route(0, &fixture.rendered[0])]);
+    let among = generate_step_one(
+        &fixture,
+        &[
+            route(3, &fixture.rendered[1]),
+            route(0, &fixture.rendered[0]),
+            route(7, &fixture.rendered[2]),
+        ],
+    );
+    assert_eq!(among.items[0].request_index, 0);
+    assert_eq!(harness_at(&alone, 0), harness_at(&among, 0));
+}
+
+/// Two nodes of one operation share a readable stem and take ordinals in node-id order, so
+/// swapping their request positions leaves each node's harness byte-identical.
+///
+/// Trace: FR-022-AC-9, TC-033
+#[test]
+fn tc_033_nodes_sharing_a_stem_take_stable_ordinals_in_node_order() {
+    let package = package::two_parameter_package().admit();
+    let mut same_operation = [
+        package::code_id(package::TWO_PARAMETER_SUM),
+        package::code_id(package::TWO_PARAMETER_LITERAL),
+    ];
+    same_operation.sort();
+    let [lower, higher] = &same_operation;
+    let generate = |routed: &[RoutedGenerationItem]| {
+        generate_routed(&package, routed, &kani_context("crate::subject", 1))
+            .expect("routed generation succeeds")
+    };
+    let forward = generate(&[route(0, lower), route(1, higher)]);
+    let swapped = generate(&[route(0, higher), route(1, lower)]);
+    assert_eq!(
+        harness_at(&forward, 0).identity.operation_identity,
+        harness_at(&forward, 1).identity.operation_identity
+    );
+    assert_eq!(harness_at(&forward, 0), harness_at(&swapped, 1));
+    assert_eq!(harness_at(&forward, 1), harness_at(&swapped, 0));
+    let lower_symbol = &harness_at(&forward, 0).identity.harness_symbol;
+    let higher_symbol = &harness_at(&forward, 1).identity.harness_symbol;
+    assert_ne!(lower_symbol, higher_symbol);
+    assert!(lower_symbol.ends_with("_1_proof"), "{lower_symbol}");
+    assert!(higher_symbol.ends_with("_2_proof"), "{higher_symbol}");
+}
+
 /// `x + 1` over `Int[0, 9]`, QSL's shape (a parameter typed by an `integer_range`
 /// `bounded_domain` with binding-shaped `min`/`max` members), routes to Kani and is Supported
 /// with a scalar harness ranging `x` over the inclusive `[0, 9]` domain (IR-297 with IR-296) and

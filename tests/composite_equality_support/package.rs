@@ -33,8 +33,8 @@ pub use codes::*;
 
 pub const NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
 
-/// `validate_application_keys`'s own preimage version tag (quire-contract-ir
-/// dfd8bd78, crates/quire-contract-model/src/checked_package/v2/operations.rs).
+/// `validate_application_keys`'s own preimage version tag (Contract IR
+/// crates/quire-contract-model/src/checked_package/v2/operations.rs).
 const APPLICATION_NODE_VERSION: &str = "quire.application-node/v1";
 
 /// Every code this module ever builds a node for, mapped to its real node
@@ -139,7 +139,7 @@ pub fn aggregate(members: Vec<Value>) -> Value {
 }
 
 /// The corpus's own scalar-type node for a literal `value_kind`. Contract IR
-/// (a606059) requires `literal.type` as a member and validates only that it
+/// requires `literal.type` as a member and validates only that it
 /// resolves to a real node (FR-038-AC-17); every literal this module builds
 /// types itself by kind, matching the base package's convention
 /// (`literal.type` == the node's own `semantic_type`).
@@ -165,12 +165,10 @@ pub fn integer_literal(value: i64) -> Value {
     literal("integer", &value.to_string())
 }
 
-/// Contract IR (a606059, FR-038-AC-17) requires `application.operation`
-/// and `application.result_type` as members; IR-216's
-/// `validate_operations` (quire-contract-ir dfd8bd78) checks `operation`
-/// against the closed 135-entry `quire.checked-operation-catalog/v1`
-/// (`tests/fixtures/checked-package/checked-package-v2/operation-catalog.json`),
-/// so `operation` must name a real catalogued identity, not an opaque
+/// Contract IR (FR-038-AC-17) requires `application.operation`
+/// and `application.result_type` as members; Contract IR's
+/// `validate_operations` checks `operation` against the checked-operation
+/// catalog `quire-verification-contracts` publishes, so `operation` must name a real catalogued identity, not an opaque
 /// placeholder. `operation` is still not read by this crate's own
 /// generators (they classify a body by `term`/`operator`/`arguments` and the
 /// request item's own descriptor, never by `operation`), so which
@@ -271,7 +269,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-/// Contract IR (a606059, FR-208 `DeclarationTagRules`/`DeclarationOccurrenceRule`)
+/// Contract IR (FR-208 `DeclarationTagRules`/`DeclarationOccurrenceRule`)
 /// forbids `declaration` on `expression`/`relation`/`state`/`temporal`/
 /// `correspondence` nodes and on `value`/`enum_value` nodes, and otherwise
 /// requires it exactly when the node carries a `declaration`-role occurrence
@@ -397,7 +395,7 @@ impl PackageBuilder {
     /// `node_id` IR-216's `validate_application_keys` re-derives: the
     /// SHA-256 digest of `{version, node_tag, semantic_form, semantic_type,
     /// declaration, recursion, body}` over sorted-key JSON bytes
-    /// (quire-contract-ir dfd8bd78,
+    /// (Contract IR,
     /// crates/quire-contract-model/src/checked_package/v2/operations.rs).
     /// `digest` is not known until `declaration` -- itself part of the
     /// preimage -- is built, so `declaration` is derived from `code` (via

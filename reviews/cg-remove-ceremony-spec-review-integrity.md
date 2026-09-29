@@ -30,3 +30,27 @@ This reviews the PR's spec edits: deleting FR-023, TC-034, the old FR-006, TC-00
 | FND-008 | low | The spec index is stale. Line 60 says "Reviewers inspect proof attestations" and line 79 says "FR-017 pinned execution". The skipped-numbers note at line 86 omits FR-023, TC-008 to TC-010, TC-012, TC-013 and TC-034. Line 96, "FR-014 to FR-025 … TC-033 to TC-036", spans ids that no longer exist. | spec/index.md:60; spec/index.md:79; spec/index.md:86; spec/index.md:96 |
 | FND-009 | low | The new FR-006 specifies the exit-code contract of the conformance example, which is test tooling rather than a product capability. It is the old FR-006-AC-8 to AC-11 without the census, kept so TC-032 has something to trace to. It declares `implements interface-001`, but interface-001 has no conformance operation. The owner should decide whether a requirement for test tooling is wanted. | spec/functional/FR-006-generation-conformance.md |
 | FND-010 | low | CLAUDE.md says "rust-toolchain.toml pins to stable", but it pins 1.98.1. | CLAUDE.md:32 |
+
+## Dispositions
+
+Round 1, reviewed at c0cc093bb657a92d280159e16424518e5440fd83. `make spec` exits 0 at head; main exits 2 on AP-001/MP-001, which this PR fixed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | d82ac87: StR-001-VC-4 now reads "generated for its routed backend" |
+| FND-002 | deferred | TC-027 retitled and its pins procedure removed in d82ac87; FR-017's title and body are #186 |
+| FND-003 | fixed | d82ac87: NFR-002 qualification narrative removed |
+| FND-004 | deferred | MP-001, AA-001, AP-001 and CAC-001 cleaned in d82ac87; AD-001 is #186. See FND-012 |
+| FND-005 | deferred | ADR-001, ADR-002 and ADR-003 are #186 |
+| FND-006 | fixed | d82ac87: FR-008-CON-1, FR-001 and FR-003 have no pins |
+| FND-007 | fixed | d82ac87: no cargo-llvm-cov versions, no tool-version column, no goldens in NFR-001 |
+| FND-008 | fixed | d82ac87: index.md lines 60, 79, 86 and 96 updated |
+| FND-009 | still-open | FR-006 still declares `implements interface-001`, and interface-001 has no conformance operation. Waiting on an owner decision |
+| FND-010 | fixed | d82ac87: CLAUDE.md now says the toolchain file selects 1.98.1 |
+| FND-011 | fixed | d82ac87: no attestation wording left in FR-002, FR-005, TC-003, TC-006 or TC-007 |
+
+## New findings (disposition pass 1)
+
+| ID      | Severity | Summary | Refs |
+| ------- | -------- | ------- | ---- |
+| FND-012 | low | Stale lines in assurance documents this PR touched. MP-001:63 still prints `codegen.generation-conformance/v1`, although `PROTOCOL` is gone. MP-001:87-88 says `make msrv` is read from `build-finished`, which was chain behaviour. CAC-001:13-14 keeps `version_pins: rust-msrv`. | spec/assurance/MP-001-codegen-measurements.md:63; spec/assurance/MP-001-codegen-measurements.md:87-88; spec/assurance/CAC-001-codegen-contract.md:13-14 |

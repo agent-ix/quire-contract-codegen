@@ -1433,7 +1433,7 @@ fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
     );
 }
 
-/// Trace: TC-022, FR-013-AC-1, FR-013-AC-2, FR-013-AC-3, FR-013-AC-4, FR-013-AC-5
+/// Trace: TC-022, FR-013-AC-1, FR-013-AC-2, FR-013-AC-4, FR-013-AC-5
 #[test]
 fn tc_022_bundle_is_typed_rust_with_bound_identity() {
     let generated = generate(BoundStrategyPopulation::Broad);

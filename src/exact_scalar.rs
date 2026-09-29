@@ -47,8 +47,8 @@
 
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{
-    bounded_readable_component, Artifact, MAX_GENERATED_SOURCE_BYTES, ORACLE_KANI_METADATA,
-    RUNTIME_REVISION,
+    bounded_readable_component, unique_names, Artifact, MAX_GENERATED_SOURCE_BYTES,
+    ORACLE_KANI_METADATA, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
@@ -396,7 +396,7 @@ pub enum OperationProvenance {
     /// This generator successfully lowered the claim's node and checked it
     /// against the descriptor's shape, then read the node's own catalogued
     /// operation identity from `body.operation.identity` -- confirmed by
-    /// quire-contract-ir dfd8bd78's `validate_operations` against the closed
+    /// Contract IR's `validate_operations` against the closed
     /// `quire.checked-operation-catalog/v1` at package admission, before
     /// this generator ever saw the package. A consumer may treat the
     /// operation identity as checked.
@@ -635,16 +635,12 @@ pub fn generate_exact_scalar_oracles(
 
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(requests.len());
-    // Counts generated oracles only, so a refused sibling never renames a generated one.
-    let mut generated_count = 0_usize;
+    // Generated claims, rendered once every generated oracle is named.
+    let mut pending: Vec<PendingOracle<'_>> = Vec::new();
     for ((node_id, operations), record) in requests.into_iter().zip(&lowering.records) {
         let operation_claim = match operations.as_slice() {
             [operation] => match check_item(&graph, record, operation) {
                 Ok((node, checked_bounds)) => {
-                    // The operation and the oracle's position among the generated ones in node
-                    // order, which alone keeps the name unique within one generation.
-                    let symbol = format!("oracle_{}_{generated_count}", operation_name(operation));
-                    generated_count += 1;
                     // This node was lowered from an admitted package, so IR-216's
                     // `validate_operations` already confirmed `body.operation.identity`
                     // against the closed catalog before this generator ever saw it. That
@@ -677,34 +673,29 @@ pub fn generate_exact_scalar_oracles(
                     match confirmed_identity {
                         Err(refusal) => refused_claim(operation_identity(operation), refusal),
                         Ok(maybe_identity) => {
-                            let (identity, provenance, oracle_source) = match maybe_identity {
-                                Some(identity) => {
-                                    source.oracle(&symbol, node_id, &identity, operation);
-                                    let oracle_source = standalone_oracle_source(
-                                        &symbol, node_id, &identity, operation,
-                                    );
-                                    (identity, OperationProvenance::IrConfirmed, oracle_source)
-                                }
-                                None => {
-                                    let identity = operation_identity(operation);
-                                    source.oracle(&symbol, node_id, &identity, operation);
-                                    (
-                                        identity,
-                                        OperationProvenance::CallerDeclared {
-                                            blocked_on:
-                                                UpstreamBlocker::OperationIdentityNotConsumed,
-                                        },
-                                        String::new(),
-                                    )
-                                }
+                            let confirmed = maybe_identity.is_some();
+                            let (identity, provenance) = match maybe_identity {
+                                Some(identity) => (identity, OperationProvenance::IrConfirmed),
+                                None => (
+                                    operation_identity(operation),
+                                    OperationProvenance::CallerDeclared {
+                                        blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+                                    },
+                                ),
                             };
+                            pending.push(PendingOracle {
+                                claim: claims.len(),
+                                identity: identity.clone(),
+                                confirmed,
+                                operation,
+                            });
                             (
                                 OperationClaim {
                                     identity,
                                     provenance,
                                 },
                                 ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
-                                    symbol,
+                                    symbol: String::new(),
                                     ir_id: node.ir_id.clone(),
                                     semantic_form: node.node.semantic_form.to_string(),
                                     semantic_type: node.semantic_type.clone(),
@@ -713,7 +704,7 @@ pub fn generate_exact_scalar_oracles(
                                     bounds: node.bounds.clone(),
                                     checked_bounds,
                                     dependencies: node.dependencies.clone(),
-                                    oracle_source,
+                                    oracle_source: String::new(),
                                 })),
                             )
                         }
@@ -744,6 +735,29 @@ pub fn generate_exact_scalar_oracles(
             operation: claim_operation,
             result,
         });
+    }
+    // Each generated oracle is named by its operation; oracles sharing an operation are numbered
+    // in node-id order, so a refused or differently requested sibling never renames one.
+    let names = unique_names(
+        pending
+            .iter()
+            .map(|oracle| {
+                (
+                    format!("oracle_{}", operation_name(oracle.operation)),
+                    claims[oracle.claim].node_id.clone(),
+                )
+            })
+            .collect(),
+    );
+    for (oracle, symbol) in pending.iter().zip(names) {
+        source.oracle(&symbol, &oracle.identity, oracle.operation);
+        if let ClaimDisposition::Generated(generated) = &mut claims[oracle.claim].result {
+            if oracle.confirmed {
+                generated.oracle_source =
+                    standalone_oracle_source(&symbol, &oracle.identity, oracle.operation);
+            }
+            generated.symbol = symbol;
+        }
     }
 
     let claim_map = ClaimMap {
@@ -1672,7 +1686,7 @@ impl Shape {
     /// The `body_operator: "call"` half is grounded in the catalog: the
     /// operation-catalog's three IEEE-comparison identities
     /// (`quire.op.ieee.numeric_equal`, `.total_order`, `.bit_identical`) are
-    /// all `call`-operator entries, and quire-contract-ir dfd8bd78's
+    /// all `call`-operator entries, and Contract IR's
     /// `validate_operations` refuses any package whose `body.operator`
     /// disagrees with its catalogued `operation.identity`'s own `operator`,
     /// so a real, admitted IEEE comparison node's `body.operator` is always
@@ -1831,7 +1845,7 @@ fn refused_claim(
 /// member IR admission is supposed to guarantee is absent. `check_item`
 /// having returned this node `Ok` already establishes that its `body` is an
 /// `application` term (`application_arguments` requires `term ==
-/// "application"`), and quire-contract-ir dfd8bd78's `validate_operations`
+/// "application"`), and Contract IR's `validate_operations`
 /// requires `identity` on every such node's `operation` member before the
 /// package that contains it is ever admitted -- so this generator should
 /// never receive a node for which this member is absent. It is another
@@ -2113,13 +2127,22 @@ fn operation_confirmed(node: &CompleteContractNodeV2, operation: &ExactScalarOpe
 /// across separate harness files that each embed a different oracle.
 fn standalone_oracle_source(
     symbol: &str,
-    node_id: &CheckedNodeId,
     identity: &str,
     operation: &ExactScalarOperation,
 ) -> String {
     let mut builder = SourceBuilder::default();
-    builder.oracle(symbol, node_id, identity, operation);
+    builder.oracle(symbol, identity, operation);
     builder.finish()
+}
+
+/// A generated claim whose oracle is named and rendered after every claim is checked.
+struct PendingOracle<'o> {
+    /// Its position in the claim list.
+    claim: usize,
+    identity: String,
+    /// Whether the node confirmed its operation, which alone gets a standalone oracle source.
+    confirmed: bool,
+    operation: &'o ExactScalarOperation,
 }
 
 /// The readable operation family of `operation`, such as `integer_add`, for generated names.
@@ -2356,13 +2379,7 @@ struct SourceBuilder {
 }
 
 impl SourceBuilder {
-    fn oracle(
-        &mut self,
-        symbol: &str,
-        node_id: &CheckedNodeId,
-        identity: &str,
-        operation: &ExactScalarOperation,
-    ) {
+    fn oracle(&mut self, symbol: &str, identity: &str, operation: &ExactScalarOperation) {
         let body = self.body(operation);
         let parameters = body
             .parameters
@@ -2370,8 +2387,8 @@ impl SourceBuilder {
             .map(|(name, ty)| format!("{name}: {ty}, "))
             .collect::<String>();
         self.functions.push_str(&format!(
-            "\n/// Node `{}`: `{}`.\npub fn {symbol}({parameters}meter: &mut rt::Meter) -> Result<rt::Outcome<{}>, OracleStop> {{\n",
-            node_id.digest, identity, body.output
+            "\n/// `{}`.\npub fn {symbol}({parameters}meter: &mut rt::Meter) -> Result<rt::Outcome<{}>, OracleStop> {{\n",
+            identity, body.output
         ));
         for line in body.prelude {
             self.functions.push_str("    ");

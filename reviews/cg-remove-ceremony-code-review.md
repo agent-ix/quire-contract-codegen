@@ -47,3 +47,46 @@ Clean, and recorded as examined:
 | FND-017 | high | Remaining assurance-chain leftovers (case 4): the conformance example keeps a `PROTOCOL` identifier and per-row `trace_ids` built for the deleted Quoin intake. CI still pins `quoin@0.23.1` and `ix-flow@0.0.4` and cites the deleted `assurance/pins.json` and `check_shared_pins.py`. The workflow was not touched, and editing it needs owner clearance. | examples/generation_conformance.rs:32-38; examples/generation_conformance.rs:59; .github/workflows/ci.yml:36-50 |
 | FND-018 | high | Remaining pins and counts (case 3): the Makefile comment "selects exactly the 20 tests … 19 default-lane plus this one" is stale, since `kani_obligations` now holds 21 tests and 3 ignored. `MSRV := 1.98.1` and the `msrv` lane repeat `rust-toolchain.toml`, which also says 1.98.1. Cargo.toml says "exactly one file under examples/". deny.toml carries Rust 1.75/1.88 advisory prose. | Makefile:11; Makefile:57-64; Cargo.toml:16-22; deny.toml:62-65; CLAUDE.md:13 |
 | FND-019 | high | README "Generated artifacts" still says every artifact carries a Quoin `ProofAttestationV1` that "Quoin seals". Attestations were removed by this PR. It also says "The two documents under schemas/", and there are 8. Remaining README lines ask for remote runs to be "retained when used as evidence". | README.md:18-31 |
+
+## Dispositions
+
+Round 1, reviewed at c0cc093bb657a92d280159e16424518e5440fd83. Gates at that head:
+- `cargo fmt --check` 0, `make lint` 0, `make test` 0 (77 / 209 passed with 5 ignored / 7).
+- Kani lane: `tc_027_a_routed_scalar_harness_verifies` ok, `tc_027_..._violating_its_bound_is_falsified` ok, `kani_witness_join` tc_026 ok (it fails on main), spine tc_026 ok.
+- `tc_025_real_kani` fails with `Inconclusive{VacuousProof}` on the precondition, the same way on main 6e0c518, so it predates this PR.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 87963e9: `kob_scalar_{op12}_{index}` (src/kani_obligations.rs:1345); both routed scalar Kani tests pass at c0cc093 |
+| FND-002 | fixed | 87963e9: node ids come from `quire_contract_ir::NominalIdentityPreimage::digest` (tests/checked_package_support/base.rs:57-62); the copied enum digest is gone from codes.rs. See FND-020 |
+| FND-003 | fixed | 87963e9: tests/it/skeleton_spine.rs:380-390 tightens `ensures` to `>= 1_i64` and asserts `Falsified`; passes under Kani |
+| FND-004 | fixed | 87963e9: `KaniToolError::Failed`/`UnexpectedOutput`, `KaniHome` and `kani_home` removed |
+| FND-005 | fixed | 87963e9: tests/it/oracle_generation.rs:442-456 compiles and runs the oracle (`f(false)`, `!f(true)`) |
+| FND-006 | fixed | 87963e9: `RoutedItem` and `ItemSettlement::routed` deleted |
+| FND-007 | fixed | 87963e9: no pin or attestation wording left in src/ doc comments |
+| FND-008 | fixed | PR body gates now match the measured 77/209/7 |
+| FND-009 | fixed | 87963e9: source-reading and count tests removed, including all of interface_001.rs |
+| FND-010 | fixed | 87963e9: catalog read from `quire_verification_contracts::operation_catalog::CHECKED_OPERATION_CATALOG_V1` (tests/exact_scalar_support/package.rs:324-336) |
+| FND-011 | fixed | 87963e9: `IR_CANDIDATE_REVISION` removed |
+| FND-012 | fixed | 87963e9: orphan schemas deleted |
+| FND-013 | fixed | 87963e9: bound coverage digests and provenance removed; the schema has no digest fields. See FND-022 |
+| FND-014 | fixed | 87963e9: corpus `.provenance` removed; the identity preimage is replaced by a counter |
+| FND-015 | fixed | 87963e9: `manifest_digest`, ClaimMap `version`/`runtime_revision` removed |
+| FND-016 | fixed | 87963e9, by owner ruling: `Artifact.sha256`/`bundleSha256` and the ownership marker removed; symbols are readable text plus a counter |
+| FND-017 | fixed | 87963e9: `PROTOCOL`/`trace_ids` removed; ci.yml pins and the `pins.json` comment removed |
+| FND-018 | fixed | d82ac87: Makefile count, Cargo.toml count and deny.toml prose removed |
+| FND-019 | fixed | d82ac87: README describes the schemas without attestations |
+
+## New findings (disposition pass 1)
+
+| ID      | Severity | Summary | Refs |
+| ------- | -------- | ------- | ---- |
+| FND-020 | high | The test support re-implements Contract IR's private identity algorithms. It computes `package_id` as sha256 of `identity_preimage`, builds the identity projection by dropping `occurrences`, and hashes application-node preimages. IR has no public API for any of these (`digest_json` is `pub(super)`, `application_preimage` is private). This is two implementations of one rule. The fix belongs in IR: expose these helpers and call them from here. | tests/exact_scalar_support/package.rs:1000-1014; tests/exact_scalar_support/package.rs:566-577; tests/composite_equality_support/package.rs:414-424; tests/composite_equality_support/package.rs:476 |
+| FND-021 | medium | Generated source writes node-id digests into comments nothing reads. The kani obligation header has `// Obligation: exact-scalar node {domain}/{digest}`. Oracle doc comments have ``/// Node `{digest}` ``. The `.call(...)` key in exact_function is `declaration.name`, not the digest, so only the doc comment carries the digest there. Also, 9 generator headers stamp `Generated by quire-contract-codegen {CARGO_PKG_VERSION}`, a version string nothing reads (low). | src/kani_obligations.rs:1987-1990; src/exact_scalar.rs:2373-2374; src/composite_equality.rs:1335; src/composite_equality.rs:1343; src/exact_function.rs:1246-1256 |
+| FND-022 | high | Owner ruling, remove (self-equality): `generate_bound_oracles(package) != generated` compares a function's output with a second run of the same function on the same input. The analyzer has no callers outside tests. Remove the check, `CoverageErrorCode::BindingMismatch`, and their tests. | src/bound_coverage.rs:200-206 |
+| FND-023 | medium | Routed harness names now depend on request position (`kob_scalar_{op}_{index}`, where the index is the position in the Kani group). FR-022 (line 214, AC-9) requires a harness whose bytes are "independent of the item's request index". Scenario: node N routed with a sibling M gets `_1` or `_0` depending on M's index. `tests/it/routed_generation.rs:394` only routes a node alone, so it cannot catch this. Fix the code or the FR in #186. | src/kani_obligations.rs:594; src/kani_obligations.rs:1345; spec/functional/complete-v1/FR-022-routed-generation.md:214 |
+| FND-024 | medium | Cutting readable names to 24 or 12 characters, and joining with `_`, makes distinct ids collide, and the collision refuses the whole package. Example: clause ids equal in their first 24 characters. Another: (req `fr-1`, rev 2, clause `c`) and (req `fr`, rev 1, clause `2-c`) both give `oracle_fr_1_2_c`. No test exercises `NameCollision` or `readable_name_component`. | src/oracle.rs:1019-1062; src/bound.rs:156; src/kani_obligations.rs:943 |
+| FND-025 | low | exact_scalar increments `generated_count` before the `catalogued_operation_identity` refusal, so a refused sibling still uses up a number. That contradicts the comment at :638, "a refused sibling never renames a generated one". | src/exact_scalar.rs:638-677 |
+| FND-026 | low | `sha2` is still in `[dependencies]` but src/ no longer uses it; only tests do. Move it to `[dev-dependencies]`. | Cargo.toml:34 |
+| FND-027 | low | In-repo duplication: `harness.rs` `to_upper_camel` duplicates the new `oracle::upper_camel`. | src/harness.rs:1066; src/oracle.rs:1040 |
+| FND-028 | low | Stale test comments: a deleted fixture path, a "135-entry" count, and IR commit `dfd8bd78`. | tests/composite_equality_support/package.rs:171-172; tests/exact_scalar_support/package.rs:56 |

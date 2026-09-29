@@ -8,9 +8,9 @@ use quire_contract_ir::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    generate_boolean_oracle,
     oracle::{
-        bounded_readable_component, dependency_parameters, oracle_symbol, reference_identifier,
+        bounded_readable_component, dependency_parameters, generate_named_boolean_oracle,
+        oracle_symbol, reference_identifier, unique_pair, upper_camel,
     },
     Artifact, GeneratedArtifactBundle, GenerationDiagnostic, GenerationErrorCode,
     GenerationTerminalState, OracleRequest, MAX_GENERATED_SOURCE_BYTES,
@@ -134,18 +134,27 @@ pub fn generate_tristate_harness(
     }
     let requirement = request.requirement.requirement().as_str();
     let revision = request.requirement.revision().get();
-    let precondition_symbol =
-        oracle_symbol(requirement, revision, request.precondition_clause.as_str());
-    let postcondition_symbol =
-        oracle_symbol(requirement, revision, request.postcondition_clause.as_str());
-    // Identical clause ids, or distinct ids with one readable name, would emit one function twice.
-    if precondition_symbol == postcondition_symbol {
+    let (precondition_clause, postcondition_clause) = (
+        request.precondition_clause.as_str(),
+        request.postcondition_clause.as_str(),
+    );
+    if precondition_clause == postcondition_clause {
         return Err(vec![direct_harness_diagnostic(
             DirectHarnessFailure::DuplicateClauseIdentity,
             "clauses",
-            "precondition and postcondition clauses must have distinct generated names",
+            "precondition and postcondition clauses must be distinct",
         )]);
     }
+    let (precondition_symbol, postcondition_symbol) = unique_pair(
+        (
+            oracle_symbol(requirement, revision, precondition_clause),
+            precondition_clause,
+        ),
+        (
+            oracle_symbol(requirement, revision, postcondition_clause),
+            postcondition_clause,
+        ),
+    );
     let shell_request = HarnessShellRequest {
         requirement: request.requirement,
         precondition_clause: request.precondition_clause,
@@ -163,10 +172,12 @@ pub fn generate_tristate_harness(
         clause: request.postcondition_clause,
         expression: request.postcondition,
     };
-    let precondition = generate_boolean_oracle(&precondition_request)
-        .map_err(|diagnostics| map_clause_diagnostics("precondition", diagnostics))?;
-    let postcondition = generate_boolean_oracle(&postcondition_request)
-        .map_err(|diagnostics| map_clause_diagnostics("postcondition", diagnostics))?;
+    let precondition =
+        generate_named_boolean_oracle(&precondition_request, &precondition_symbol)
+            .map_err(|diagnostics| map_clause_diagnostics("precondition", diagnostics))?;
+    let postcondition =
+        generate_named_boolean_oracle(&postcondition_request, &postcondition_symbol)
+            .map_err(|diagnostics| map_clause_diagnostics("postcondition", diagnostics))?;
     let precondition_parameters = dependency_parameters(&precondition_request)
         .map_err(|diagnostics| map_clause_diagnostics("precondition", diagnostics))?;
     let postcondition_parameters = dependency_parameters(&postcondition_request)
@@ -187,10 +198,10 @@ pub fn generate_tristate_harness(
     let accepted_case_symbol = format!("{base_symbol}_accepted_case");
     let rejected_case_symbol = format!("{base_symbol}_rejected_case");
     let discarded_case_symbol = format!("{base_symbol}_discarded_case");
-    let summary_type = format!("{}CampaignSummary", to_upper_camel(&base_symbol));
-    let outcome_error_type = format!("{}CampaignError", to_upper_camel(&base_symbol));
-    let case_type = format!("{}CampaignCase", to_upper_camel(&base_symbol));
-    let disposition_type = format!("{}CampaignDisposition", to_upper_camel(&base_symbol));
+    let summary_type = format!("{}CampaignSummary", upper_camel(&base_symbol));
+    let outcome_error_type = format!("{}CampaignError", upper_camel(&base_symbol));
+    let case_type = format!("{}CampaignCase", upper_camel(&base_symbol));
+    let disposition_type = format!("{}CampaignDisposition", upper_camel(&base_symbol));
     let minimum_accepted_symbol = format!(
         "{}_MINIMUM_ACCEPTED_CASES",
         base_symbol.to_ascii_uppercase()
@@ -1061,20 +1072,6 @@ fn harness_symbol(
         bounded_readable_component(precondition),
         bounded_readable_component(postcondition)
     )
-}
-
-fn to_upper_camel(value: &str) -> String {
-    value
-        .split('_')
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let mut characters = part.chars();
-            match characters.next() {
-                Some(first) => first.to_ascii_uppercase().to_string() + characters.as_str(),
-                None => String::new(),
-            }
-        })
-        .collect()
 }
 
 fn artifact(path: String, contents: String) -> Artifact {

@@ -127,8 +127,8 @@ use crate::composite_equality::EqualityOperatorKind;
 use crate::exact_scalar::IntegerOperator;
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{
-    bounded_readable_component, Artifact, MAX_GENERATED_SOURCE_BYTES, ORACLE_KANI_METADATA,
-    RUNTIME_REVISION,
+    bounded_readable_component, unique_names, Artifact, MAX_GENERATED_SOURCE_BYTES,
+    ORACLE_KANI_METADATA, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
@@ -1013,9 +1013,10 @@ pub fn generate_exact_function_oracles(
 
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(by_key.len());
-    for (position, ((key, item), record)) in
-        by_key.into_iter().zip(&call_lowering.records).enumerate()
-    {
+    // Generated claims as (claim position, readable stem, key, declaration), rendered once
+    // every generated function is named.
+    let mut pending = Vec::new();
+    for ((key, item), record) in by_key.into_iter().zip(&call_lowering.records) {
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
         let result = if duplicate {
             ClaimDisposition::Refused {
@@ -1030,16 +1031,15 @@ pub fn generate_exact_function_oracles(
                 &function_index,
                 &package_refusal,
                 lowering.package.source_package_id(),
-                position,
                 item,
                 record,
             ) {
-                Ok((symbol, claim)) => {
+                Ok((stem, claim)) => {
                     let declaration = survivors
                         .iter()
                         .find(|declaration| declaration.name == item.function)
                         .expect("item_disposition only returns Ok for a surviving function");
-                    source.item(&symbol, item, declaration);
+                    pending.push((claims.len(), stem, key.clone(), *declaration));
                     ClaimDisposition::Generated(Box::new(claim))
                 }
                 Err(refusal) => ClaimDisposition::Refused { refusal },
@@ -1049,6 +1049,20 @@ pub fn generate_exact_function_oracles(
             node_id: item.call_node_id.clone(),
             result,
         });
+    }
+    // Each function is named by the function it applies; items applying one function are
+    // numbered in key order, so a refused or differently requested sibling never renames one.
+    let names = unique_names(
+        pending
+            .iter()
+            .map(|(_, stem, key, _)| (stem.clone(), key.clone()))
+            .collect(),
+    );
+    for ((claim, _, _, declaration), symbol) in pending.into_iter().zip(names) {
+        source.item(&symbol, declaration);
+        if let ClaimDisposition::Generated(generated) = &mut claims[claim].result {
+            generated.oracle_symbol = format!("oracle_{symbol}");
+        }
     }
 
     let claim_map = ClaimMap {
@@ -1098,7 +1112,6 @@ fn item_disposition(
     function_index: &BTreeMap<&CheckedNodeId, usize>,
     package_refusal: &Option<String>,
     package_id: &CheckedSemanticId,
-    position: usize,
     item: &ExactFunctionItem,
     record: &CompleteLoweringRecordV2,
 ) -> Result<(String, GeneratedExactFunctionClaim), ExactFunctionRefusal> {
@@ -1152,17 +1165,12 @@ fn item_disposition(
             cause: cause.clone(),
         });
     }
-    // The applied function's name and the item's position in key order, which alone keeps the
-    // name unique within one generation: two items sharing one `call` node but naming different
-    // functions render as two distinct Rust functions.
-    let symbol = format!(
-        "call_{}_{position}",
-        bounded_readable_component(&declaration.name)
-    );
+    // The readable stem: the applied function's name. The caller settles the final name.
+    let stem = format!("call_{}", bounded_readable_component(&declaration.name));
     Ok((
-        symbol.clone(),
+        stem,
         GeneratedExactFunctionClaim {
-            oracle_symbol: format!("oracle_{symbol}"),
+            oracle_symbol: String::new(),
             ir_id: node.ir_id.clone(),
             package_id: package_id.clone(),
             semantic_type: node.semantic_type.clone(),
@@ -1236,14 +1244,9 @@ struct SourceBuilder {
 }
 
 impl SourceBuilder {
-    fn item(
-        &mut self,
-        symbol: &str,
-        item: &ExactFunctionItem,
-        declaration: &ExactFunctionDeclaration,
-    ) {
+    fn item(&mut self, symbol: &str, declaration: &ExactFunctionDeclaration) {
         self.functions.push_str(&format!(
-            "\n/// Node `{}`: applies `{}`.\n\
+            "\n/// Applies `{}`.\n\
              pub fn oracle_{symbol}(\n    \
              package: &rt::CheckedPackage,\n    \
              arguments: Vec<rt::Value>,\n    \
@@ -1253,7 +1256,7 @@ impl SourceBuilder {
              package\n        \
              .call({:?}, arguments, objects, meter)\n        \
              .map(|evaluation| evaluation.outcome)\n}}\n",
-            item.call_node_id.digest, declaration.name, declaration.name
+            declaration.name, declaration.name
         ));
     }
 

@@ -10,7 +10,6 @@ type: SuiteRegistry
 
 | ID | Name | Command | Tool | Evidence Kind |
 |---|---|---|---|---|
-| SUITE-001 | Bounded generation conformance corpus | `cargo run --quiet --example generation_conformance` | quire-contract-codegen / rustc | Integration |
 | SUITE-003 | Strict specification validation | `quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'` | quire | Analysis |
 | SUITE-004 | Static specification and coverage export | `quire coverage --scope . --json` | quire | Static |
 | SUITE-007 | Minimum supported Rust version build | `make msrv` | rustc | Static |
@@ -19,9 +18,6 @@ type: SuiteRegistry
 | SUITE-011 | Kani obligation execution | `make kani` | cargo-kani / rustc | Analysis |
 
 ## Notes
-
-SUITE-001 is the bounded generation corpus over the oracle, harness and strategy slices, with the
-rejection cases that keep the Interface-001 terminal states apart.
 
 SUITE-008 exists for the implemented FR-003 draft. It validates both output
 schemas, checks every dependency classification and source-site edge, compares

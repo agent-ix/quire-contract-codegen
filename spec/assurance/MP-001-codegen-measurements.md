@@ -59,18 +59,9 @@ endpoints, immediately outside values, dependency-readiness states, and healthy/
 
 ## Collection Procedure
 
-`make conformance` runs `cargo run --example generation_conformance`, which walks the bounded
-generation corpus and prints `codegen.generation-conformance/v1`: one row per case, carrying the
-case's outcome, the Interface-001 terminal state it reached, the diagnostic code it produced, the
-number of declared checks that held, and the floor those checks must meet. A case that holds every
-check it ran but runs fewer than its floor is `vacuous`, not `pass`, so a corpus cannot go green by
-getting smaller. The corpus covers the oracle, harness and strategy slices and the rejection cases
-that keep `unsupported` and `invalid-input` apart, and a census row reports how many distinct
-diagnostics and terminal states the corpus reached. The harness source-limit case must observe
-`resource_limit_exceeded` and `unsupported`. Campaign outcome controls execute in TC-004's generated
-crate tests. The library-only public bound-package consumer additionally has synthetic-projection
-tests and a byte-accounting unit control, including actual publication and native execution of
-generated sources.
+Campaign outcome controls execute in TC-004's generated crate tests. The library-only public
+bound-package consumer has synthetic-projection tests and a byte-accounting unit control, including
+actual publication and native execution of generated sources.
 
 `cargo test --locked --target-dir target-codex-backends --test it kani_generation -- --test-threads=1`
 is SUITE-008. It validates the v2 Rust/graph schemas, compiles the generated `publish = false`

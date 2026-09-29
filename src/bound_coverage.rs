@@ -6,9 +6,9 @@ use quire_contract_ir::{BooleanOperator, BoundPackage, ClauseRef, Expression, Ex
 use serde::Serialize;
 
 use crate::{
-    classify_clause, generate_bound_oracles, parse_llvm_coverage, publication,
-    vacuity::normalize_path, BoundOracleGeneration, ClauseCoverage, CoverageDiagnostic,
-    CoverageErrorCode, GeneratedBoundOracles, LlvmCoverage, SourceRegion, MAX_COVERAGE_BYTES,
+    classify_clause, parse_llvm_coverage, publication, vacuity::normalize_path,
+    BoundOracleGeneration, ClauseCoverage, CoverageDiagnostic, CoverageErrorCode,
+    GeneratedBoundOracles, LlvmCoverage, SourceRegion, MAX_COVERAGE_BYTES,
 };
 
 /// Domain observation format, not a native-run result or attestation format.
@@ -196,13 +196,6 @@ fn analyze_inner(
                 "LLVM JSON exceeds 16 MiB",
             ));
         }
-    }
-    // The generation binds to the package when generating from the package reproduces it.
-    if generate_bound_oracles(package).ok().as_ref() != Some(generated) {
-        return Err(diag(
-            CoverageErrorCode::BindingMismatch,
-            "generation differs from the bound package's own generation",
-        ));
     }
     let generated = match generated {
         BoundOracleGeneration::NoExecutable(_) => {
