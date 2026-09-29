@@ -169,10 +169,10 @@ in the `NODE_KEY_DOMAIN` domain.
   and `PartialEq` and no `Ord`, `EqualityOperator` derives no `Ord`, and the
   runtime publishes no canonical encoding of a `ValueType`, while `NodeKey`
   derives `Ord`.
-- Each generated symbol shall be built from its operator's readable stem.
-- A stem held by one item shall be used bare.
-- Items sharing a stem shall be suffixed `_{n}`, numbered from 1 in ascending
-  descriptor-key order.
+- The generator shall build each symbol from its operator's readable stem.
+- The generator shall use a stem that one item holds bare.
+- The generator shall suffix items that share a stem with `_{n}`, numbered from 1
+  in ascending descriptor-key order.
 - If the generated source exceeds its size ceiling, then the generator shall
   return a typed error and no partial output.
 
