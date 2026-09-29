@@ -622,7 +622,7 @@ mod tests {
         })
     }
 
-    /// Trace: FR-015-AC-23, FR-015-AC-10, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_generates_deterministic_complete_artifacts_for_every_supported_family() {
         let (profile, dispatch, input) = fixture();
@@ -691,7 +691,7 @@ mod tests {
     /// A declared `Required` dependency must actually reach the emitted graph, not be silently
     /// dropped (ir#80).
     ///
-    /// Trace: FR-015-AC-10, FR-015-AC-22, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_declared_required_dependency_appears_in_the_graph() {
         let (profile, dispatch, input) = fixture();
@@ -724,7 +724,7 @@ mod tests {
 
     /// A declared `Required` dependency whose state is not `Passed` makes the case `Incomplete`.
     ///
-    /// Trace: FR-015-AC-10, FR-015-AC-22, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_missing_required_dependency_yields_incomplete_readiness() {
         let (profile, dispatch, input) = fixture();
@@ -753,7 +753,7 @@ mod tests {
     /// A declared census with a duplicate proof identity is refused by the shared dependency
     /// rules, and the refusal consumes no case number: the next accepted case is still case 0.
     ///
-    /// Trace: FR-015-AC-22, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_duplicate_dependency_identity_is_refused_and_consumes_no_case_number() {
         let (profile, dispatch, input) = fixture();
@@ -792,7 +792,7 @@ mod tests {
     /// `kani::assume`, and no `#[kani::stub]`, so a declared `Assumed` dependency must be refused
     /// (ir#80 review finding F1), consuming no case number.
     ///
-    /// Trace: FR-015-AC-22, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_assumed_dependency_kind_is_refused_and_consumes_no_case_number() {
         let (profile, dispatch, input) = fixture();
@@ -827,7 +827,7 @@ mod tests {
         assert_eq!(retry.artifacts.oracle.path, "corpus/arithmetic_0.oracle.rs");
     }
 
-    /// Trace: FR-015-AC-23, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_non_success_emits_no_partial_artifacts_or_boolean_claim() {
         let (profile, dispatch, input) = fixture();
@@ -849,7 +849,7 @@ mod tests {
         assert_eq!(error.boolean_claim(), None);
     }
 
-    /// Trace: FR-015-AC-23, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_false_case_retains_a_replayable_counterexample_packet() {
         let (profile, dispatch, input) = fixture();
@@ -882,7 +882,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-015-AC-10, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_admitted_zero_arithmetic_is_a_proof_not_a_false_verdict() {
         let (profile, dispatch, input) = fixture();
@@ -909,7 +909,7 @@ mod tests {
     /// Regression for the PR #101 review finding: a provable request with an operand outside
     /// `i64`'s range must not be refused over an assignment no packet will ever carry.
     ///
-    /// Trace: FR-015-AC-23, FR-015-AC-10, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_provable_arithmetic_with_an_out_of_i64_range_operand_still_generates() {
         let (profile, dispatch, input) = fixture();
@@ -937,7 +937,7 @@ mod tests {
         assert!(generated.counterexample.is_none());
     }
 
-    /// Trace: FR-015-AC-10, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_collection_oracle_evaluates_the_selected_ordered_population() {
         let (profile, dispatch, input) = fixture();

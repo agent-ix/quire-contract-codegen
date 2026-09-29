@@ -3,15 +3,12 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-// Implements: FR-014
-mod oracle;
-// Implements: FR-014
 mod bound;
+mod oracle;
 // Implements: FR-005, NFR-001
 mod publication;
 // Implements: FR-002
 mod harness;
-// Implements: FR-015
 mod kani;
 // Implements: FR-015
 mod kani_obligations;
@@ -25,19 +22,13 @@ mod kani_transcript;
 // IR-211: joins a real Kani witness to the generator's own persisted obligation schema.
 mod kani_witness_join;
 // Implements: FR-016
-mod spine_replay;
-// Implements: FR-015
-mod bounded_kani_profile;
-// Implements: FR-015
-mod definedness_arithmetic;
-// Implements: FR-015
 mod bounded_collections;
-// Implements: FR-015
-mod finite_reference_graphs;
-// Implements: FR-015
-mod bounded_kani_replay;
-// Implements: FR-015
 mod bounded_kani_corpus;
+mod bounded_kani_profile;
+mod bounded_kani_replay;
+mod definedness_arithmetic;
+mod finite_reference_graphs;
+mod spine_replay;
 // Implements: FR-002
 mod strategy;
 // Shared generation-result and claim vocabulary (FR-014, FR-018, FR-021).

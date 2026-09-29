@@ -307,7 +307,6 @@ impl SourceBuilder {
 /// Generates one deterministic Boolean oracle or diagnostics with no partial bundle.
 ///
 /// Trace: TC-001, TC-003
-// Implements: FR-014
 pub fn generate_boolean_oracle(
     request: &OracleRequest<'_>,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {

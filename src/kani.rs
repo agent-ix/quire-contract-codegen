@@ -311,7 +311,6 @@ struct KaniSource<'a> {
 }
 
 /// Generates one bounded Kani contract/proof bundle or structured diagnostics with no partial output.
-// Implements: FR-015
 pub fn generate_kani_bundle(
     request: &KaniRequest<'_>,
 ) -> Result<KaniArtifactBundle, Vec<KaniDiagnostic>> {

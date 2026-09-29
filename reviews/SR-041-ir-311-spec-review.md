@@ -273,3 +273,37 @@ These checks are clean:
 - There are no dangling spec references to deleted ids, except FR-020 (FND-024).
 
 Not mergeable. FND-023 is high: 99 code and test tags point at the deleted FR-001, FR-003 and FR-007. FND-021 is still open for the index.md GitHub links. FND-024 and FND-025 are low.
+
+### Round 4
+
+Reviewed at edbd1b5cdcae77b70fb4adcdc5b54ff68a40871c, rebased on main fc99f61.
+
+Gates (log directory: `logs/p186r4`):
+
+| Gate | Head | Main |
+| --- | --- | --- |
+| `make spec` | EXIT 0 | EXIT 0 |
+| `make test` | EXIT 0 (80 / 213 passed, 5 ignored / 0) | EXIT 0 (same counts) |
+| `quire coverage --strict` | EXIT 1, 186/269 rows backed | EXIT 1, 198/265 rows backed |
+
+- `make spec` reports the same two FR-014 EARS warnings on both sides.
+- `status_lies` is 0.
+- The src/ and tests/ diff against main touches only comment lines; no code line changed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-021 | fixed | edbd1b5: spec/ outside reviews/ has no github.com or `/issues/` link |
+| FND-023 | fixed | edbd1b5: no `Implements:`/`Trace:` tag in src/ or tests/ names an id missing from this repo's spec. The only FR-001/FR-003 hits are fixture strings (`RequirementId::new("FR-001")`, `"FR-003"`) and the `oracle.rs` unit-test tuples. See FND-026 for how the retagged ids map. |
+| FND-024 | fixed | edbd1b5: no FR-020 mention is left; FR-025's "not yet decided" line is restated |
+| FND-025 | fixed | edbd1b5: the matrix row at spec/test-matrix.md:54 marks FR-017-AC-12/13 `✅ Covered`, and the vacuous-proof test traces FR-017-AC-13 (src/kani_execution.rs:802) |
+
+## New findings (disposition pass 4)
+
+| ID      | Severity | Summary | Refs |
+| ------- | -------- | ------- | ---- |
+| FND-026 | high | The retag binds V1-path tests to V2 criteria they do not verify, so quire now reports planned, unbuilt criteria as backed. Newly backed at head: FR-014-AC-35, AC-36, AC-37 and FR-015-AC-19, AC-20, AC-22, AC-23, AC-24, AC-25. The matrix itself says these are unbuilt. `test-matrix.md:42` records FR-014-AC-35..37 as "Planned; Boolean and integer eq/ne nodes are refused as OperationNotDerivable". Example: `tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_model` (tests/it/oracle_generation.rs:870-872) runs the V1 `BoundPackage` comparison oracle against a plain model. Yet it traces FR-014-AC-35 (`ir_confirmed` descriptors from CheckedPackageV2 nodes calling `evaluate_boolean`) and FR-014-AC-37 (charges, counters and QSL value authority). Likewise, the bounded Kani corpus and profile tests (`CapabilityEntry` Supported/Refused/Inconclusive, timed-out/exhausted) now trace FR-015-AC-23, whose vocabulary is `ObligationDisposition` (supported/requires-bound/unsupported/invalid-request) and has no inconclusive state. The kani_generation tests for `generate_kani_bundle` now trace FR-015-AC-19/20/24/25, which are about `negotiate_kani_obligations` harnesses. The retags that match the criterion text are `FR-007-AC-7`→`FR-015-AC-22` (census validation) and the transcript retags. The V1 tests elsewhere name behaviour no surviving criterion states, so drop their tags the way the FR-001-AC-6/7 and FR-007-AC-5/6 tags were dropped. The same applies to the module-level `// Implements: FR-014` / `FR-015` on src/oracle.rs, src/bound.rs, src/kani.rs and the corpus modules. | tests/it/oracle_generation.rs:870; tests/it/kani_generation.rs; tests/it/bounded_kani_corpus.rs; src/bounded_kani_profile.rs; src/bounded_kani_corpus.rs; src/lib.rs; spec/test-matrix.md:42 |
+| FND-027 | low | Two retags are loose even allowing for the V1/V2 split. `FR-003-AC-3` (definedness, arithmetic and indirect-read refusals) became `FR-015-AC-3` (unbounded or non-finite refusal). `FR-001-AC-3` (requirement ids in symbols, failures and source maps) became `FR-014-AC-5` (claim-map entry fields). | tests/it/kani_generation.rs; tests/it/oracle_generation.rs |
+
+### Round 4 verdict
+
+FND-021 and FND-023 to FND-025 are fixed, and the code diff is comment-only. Not mergeable: FND-026 makes the coverage export claim nine planned V2 criteria are backed by V1-path tests. Fix it by dropping those tags rather than retagging them.

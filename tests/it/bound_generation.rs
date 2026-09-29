@@ -147,8 +147,6 @@ fn complete_public_binding_preserves_identity_population_and_derivation() {
 }
 
 /// TC-002
-/// FR-014-AC-37
-/// FR-014-AC-35
 #[test]
 fn public_bound_state_scalar_projection_generates_typed_observation_parameters() {
     let value = state_integer_projection();
