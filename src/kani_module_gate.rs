@@ -105,9 +105,9 @@ mod tests {
     /// A module with a `SUCCESS` check is discharged; a cover's `SATISFIED` and an `UNREACHABLE`
     /// check discharge nothing, and a module absent from the transcript is unreached.
     ///
-    /// Trace: FR-017-AC-1
+    /// Trace: FR-023-AC-1, FR-023-AC-2, TC-034
     #[test]
-    fn tc_027_only_success_checks_inside_a_module_discharge_it() {
+    fn tc_034_only_success_checks_inside_a_module_discharge_it() {
         assert_eq!(
             claimed_module_gate(&["subject"], &KaniRunOutcome::Verified, TRANSCRIPT).unwrap(),
             [ClaimedModuleReport {
@@ -130,9 +130,9 @@ mod tests {
 
     /// A claim on `sub` does not match `subject`'s checks: modules match whole path segments.
     ///
-    /// Trace: FR-017-AC-1
+    /// Trace: FR-023-AC-4, TC-034
     #[test]
-    fn tc_027_a_module_claim_matches_whole_path_segments() {
+    fn tc_034_a_module_claim_matches_whole_path_segments() {
         assert_eq!(
             claimed_module_gate(&["sub"], &KaniRunOutcome::Verified, TRANSCRIPT),
             Err(ModuleGateFailure::Unreached(vec!["sub".to_owned()]))
@@ -141,9 +141,9 @@ mod tests {
 
     /// A run that did not verify, or a gate with no claims, is red however many checks succeed.
     ///
-    /// Trace: FR-017-AC-1
+    /// Trace: FR-023-AC-1, FR-023-AC-4, TC-034
     #[test]
-    fn tc_027_an_unverified_run_or_an_empty_claim_list_is_red() {
+    fn tc_034_an_unverified_run_or_an_empty_claim_list_is_red() {
         let falsified = KaniRunOutcome::Falsified {
             counterexample: String::new(),
         };

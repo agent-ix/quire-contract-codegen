@@ -285,10 +285,10 @@ fn prove(harness: &KaniObligationHarness, subject: &str) -> (KaniRunOutcome, Str
 /// into the subject module, and another into the generated obligation module, each turn the gate
 /// red; and the subject's counterexample replays through QSL to the same violation.
 ///
-/// Trace: FR-016-AC-9, FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, TC-026
+/// Trace: FR-016-AC-9, FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, TC-026, TC-034
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
-fn tc_026_one_boolean_clause_goes_from_contract_through_kani_to_native_replay() {
+fn tc_034_one_boolean_clause_goes_from_contract_through_kani_to_native_replay() {
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, &pins(), SUBJECT_PATH).remove(1);
     let claimed = claimed();
