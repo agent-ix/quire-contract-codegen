@@ -27,3 +27,9 @@ alter dependency readiness.
 Only complete successful dependency closure can support a complete proof; every assumption,
 option, typed domain bound, and non-success state remains visible. Generation always reports
 `proofExecutionState: not_run`; a ready graph is not a completed Kani proof.
+
+## Status
+
+Retired with [FR-003](../functional/FR-003-kani-lowering.md). Its tests stay until the code retires
+the V1 path. The proof-dependency readiness FR-003 carried is FR-015-AC-22, verified by
+[TC-025](./complete-v1/TC-025-bounded-kani-obligations.md).

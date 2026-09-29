@@ -25,9 +25,10 @@ argument has the Rust type its family's row below states, and each argument reac
 oracle widened into the complete-V1 value type without loss.
 
 The ascending order, the binding to a parameter node id and declared domain, and lossless widening
-are what AD-016 arrow 5 and QSL ADR-013 O-25 decide. The Rust-type table is this generator's own
-choice. The design questions this requirement does not settle are in
-[ADR-004](../../decisions/ADR-004-generated-subject-abi-open-decisions.md).
+are what AD-016 arrow 5 and QSL ADR-013 O-25 decide. The Rust-type table, the by-reference state
+argument and the frame disposition are
+[ADR-004](../../decisions/ADR-004-generated-subject-abi-open-decisions.md)'s decisions. A family
+gets a row in the table only when its witness decodes into the complete-V1 value type without loss.
 
 ## Inputs
 
@@ -55,13 +56,19 @@ choice. The design questions this requirement does not settle are in
   | Boolean | `bool` | the same `bool` |
   | Bounded integer | `i64`, assumed inside its declared domain | `rt::Integer::from(i64)`, passed to the oracle by reference |
 
+- If an argument's family has no row in that table, then the generator shall account the
+  obligation `unsupported` with a typed reason naming the family and emit no harness.
+- When an obligation reads state, the generator shall pass each state value to the subject by
+  `&mut` reference to a value the harness owns, so that `kani::modifies` can name it, and shall
+  keep the pre-state by copying that value before the call.
 - The generator shall widen an `i64` argument into `rt::Integer` without narrowing, wrapping or
   saturating, including at `i64::MIN` and `i64::MAX`.
 - If an argument's domain has no declared finite bound, then the generator shall emit no harness
   for the obligation, rather than narrowing the domain implicitly. That disposition is
   `requires-bound` at settlement ([FR-019](./FR-019-capability-settlement.md)).
 - If an obligation is a frame obligation, then the generator shall account it `unsupported` with a
-  typed reason and emit no harness.
+  typed reason and emit no harness. The frame harness is written over AD-016's frame subject once
+  QSpec decides how a frame node lowers into a Kani form, which it has not yet decided.
 
 ## Acceptance Criteria
 
@@ -73,6 +80,8 @@ choice. The design questions this requirement does not settle are in
 | FR-025-AC-4 | An argument whose domain has no declared finite bound yields no harness and is never narrowed to a machine range. | Test (TC-036) |
 | FR-025-AC-5 | A frame obligation is accounted `unsupported` with a typed reason and no harness. | Test (TC-036) |
 | FR-025-AC-6 | A binding that names no parameter of the selected function, and a parameter of that function with no binding, are each refused at generation with a typed reason and no harness. | Test (TC-036) |
+| FR-025-AC-7 | An argument of a family with no row in the Rust-type table (rational, decimal, IEEE, text, enum, composite, collection or function) is accounted `unsupported` with a typed reason naming the family, and no harness is emitted. | Test (TC-036) |
+| FR-025-AC-8 | A harness over a state-reading obligation passes each state value to the subject as `&mut` to a harness-owned value and copies it before the call; the pre-state the harness asserts over is the copy, and the post-state is the value after the call. | Test (TC-036) |
 
 ## Dependencies
 

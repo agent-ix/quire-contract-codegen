@@ -99,7 +99,7 @@ failure is reported.
 - The generator shall replay through QSL's layer-6 `replay` facade
   (`qsl_replay::replay`). The caller supplies the complete request: the proved
   package's `package_id`, the selected function's qualified name, the limits, and
-  the byte provision holding the proved unit's source under its digest; the
+  the byte provision holding the proved unit's source; the
   generator reads no path. The generator supplies the request's replay source,
   the decoded values as a backend-witness transcript keyed by parameter node id,
   and calls `replay`. QSL recompiles the source and evaluates the selected
@@ -129,7 +129,7 @@ failure is reported.
 ## Dependencies
 
 - **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md); QSL's
-  `qsl-replay` crate at the revision `Cargo.toml` names, the only QSL crate this
+  `qsl-replay` crate, the only QSL crate this
   repository depends on. The spine test takes a compiled unit's package id and
   parameter node ids from `qsl_replay::call_site`, and the request's types from
   `qsl-replay`'s re-exports.

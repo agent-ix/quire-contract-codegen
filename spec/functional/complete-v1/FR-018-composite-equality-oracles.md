@@ -23,7 +23,7 @@ relationships:
 When a caller supplies an admitted `quire.checked-package/v2` package and a set
 of equality expression nodes, the code generator shall emit a deterministic Rust
 oracle crate whose functions decide each node by reconstructing the item's
-`TypeEnvironment` and calling the pinned Contract Runtime
+`TypeEnvironment` and calling the Contract Runtime
 `TypeEnvironment::check_equality` and `CheckedEquality::evaluate` with a
 caller-supplied `Meter`. It never compares two values structurally, and never
 copies a resource charge or a planned pair count.
@@ -38,22 +38,14 @@ own entry point through `CheckedPackage::call`. This requirement's entry point
 admits no `call` node and refuses the function family with the typed blocker
 whose wire value is `agent-ix/quire-contract-runtime#34`.
 
-Two upstream re-pins are prerequisites of this requirement, not consequences of
-it, and both are satisfied. This repository pins Contract Runtime `4e33052` and
-quire-spec-language `21c507e`, which is what makes the composite, collection and
-equality surface this requirement calls visible here at all, and what gives
-AC-2's third leg a `quire_spec_language::value` publishing `check_equality`,
-`CheckedEquality` and `plan_equality` to agree with. At the revisions this
-repository pinned before agent-ix/quire-contract-codegen#75 neither surface
-existed, so no item of this requirement could have been generated and AC-2 could
-not have been discharged at all.
-
 The runtime carries no structural equality on `Value`: the FR-149 relation
 reached through `check_equality`, `plan_equality` and `CheckedEquality::evaluate`
 is the only equality, and it is the only relation that is metered, that is
 correct for signed zero, for decimal values retained at differing scales and for
-cross-universe references, and that the pinned quire-spec-language authority
+cross-universe references, and that the quire-spec-language authority
 decides. Generated oracles therefore call it and decide nothing themselves.
+[FR-014](./FR-014-exact-scalar-oracles.md) owns the integer and Boolean `eq`
+and `ne` nodes and emits this same relation for them.
 
 A `CheckedEquality` has no public constructor: it is obtained only from
 `TypeEnvironment::check_equality`. The static stage therefore runs twice — once
@@ -86,7 +78,7 @@ rather than a formality.
   `composite_type` nodes of form `record`, `tuple`, `option`, `sequence`, `set`,
   `bag` and `ordered_set`, their `scalar_type` leaves, and the `bounded_domain`
   nodes those types need.
-- The pinned Contract Runtime revision with the `exact` feature.
+- Contract Runtime with the `exact` feature, as this repository's `Cargo.toml` names it.
 
 As in FR-014, the V2 transport carries each application term's `operation`
 member — its catalogued identity, its laws and its mode — so the IR does say
@@ -107,13 +99,13 @@ A declaration is read from the `composite_type` node's body. Its body is an
 | `sequence`, `set`, `bag`, `ordered_set` | a `reference` to the element type node, then a `reference` to the `collection_bounds` domain node |
 | `collection_bounds` | two `binding` members, `min` and `max`, each carrying a canonical decimal `integer` literal |
 
-The runtime `NodeKey` of a declaration is `NodeKey::from_hex` of its V2 node id
-digest, whose domain is `NODE_KEY_DOMAIN`.
+The runtime `NodeKey` of a declaration is `NodeKey::from_hex` of its V2 node id,
+in the `NODE_KEY_DOMAIN` domain.
 
 ## Outputs
 
-- A generated crate: `Cargo.toml` (`publish = false`, runtime pinned by revision
-  with the `exact` feature) and `src/lib.rs` holding, per generated item, one
+- A generated crate: `Cargo.toml` (`publish = false`, the Contract Runtime
+  dependency this repository's `Cargo.toml` names, with the `exact` feature) and `src/lib.rs` holding, per generated item, one
   environment constructor returning `Result<TypeEnvironment, InvalidDeclaration>`
   and one oracle function
   `(&TypeEnvironment, &Value, &Value, &mut Meter) -> Outcome<bool>`.
@@ -173,15 +165,14 @@ digest, whose domain is `NODE_KEY_DOMAIN`.
   is the sequence: the expression node's id, then the operator's rank (`Equal`
   before `NotEqual`), then the V2 node ids of the left operand's source type and
   conversion target, then the right's, an absent conversion target ranking before
-  every present one. Every node id in the key is compared by digest domain, then
-  digest — the same rule this requirement already uses for node ids, and the only
+  every present one. Every node id in the key is compared in node-id order — the
+  same rule this requirement already uses for node ids, and the only
   total order available: the runtime's `ValueType` derives `Clone`, `Debug`, `Eq`
   and `PartialEq` and no `Ord`, `EqualityOperator` derives no `Ord`, and the
   runtime publishes no canonical encoding of a `ValueType`, while `NodeKey`
-  derives `Ord` over its digest.
+  derives `Ord`.
 - Each generated symbol shall be disambiguated by that same descriptor key: the
-  symbol carries a digest over the key's node id digests and operator rank, in
-  key order. It is never derived from a declaration name, a field name or any
+  symbol is derived from the key's node ids and operator rank, in key order. It is never derived from a declaration name, a field name or any
   other rendered label, because two distinct items can share every name they
   display.
 - If the generated source exceeds its size ceiling, then the generator shall
@@ -192,7 +183,7 @@ digest, whose domain is `NODE_KEY_DOMAIN`.
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-018-AC-1 | Every requested item receives exactly one generated or typed-refused disposition; a refused item contributes no function, no environment constructor and no symbol to the generated crate, while its siblings are generated unchanged. | Test (TC-029) |
-| FR-018-AC-2 | On every vector of the composite-equality corpus, the generated oracle's `Outcome<bool>`, its admitted charge sequence and its consumed counters are equal to those of `quire_contract_runtime::exact::TypeEnvironment::check_equality` plus `CheckedEquality::evaluate` invoked directly on an independently constructed environment, operands and fresh `Meter`, and equal to `quire_spec_language::value` under the pinned authority. | Test (TC-029) |
+| FR-018-AC-2 | On every vector of the composite-equality corpus, the generated oracle's `Outcome<bool>`, its admitted charge sequence and its consumed counters are equal to those of `quire_contract_runtime::exact::TypeEnvironment::check_equality` plus `CheckedEquality::evaluate` invoked directly on an independently constructed environment, operands and fresh `Meter`, and equal to `quire_spec_language::value`. | Test (TC-029) |
 | FR-018-AC-3 | Each generated item's claim-map entry records the descriptor the request supplied — operator, both operand source types and both conversion targets — and it is equal to the request's, so the independent native run of AC-2 is driven from the request and never read back out of the generated crate. | Test (TC-029) |
 | FR-018-AC-4 | Each generated item's claim-map entry records an `EqualitySchedule` equal to `CheckedEquality::schedule()` of the `CheckedEquality` its descriptor admits, for a top-level text, enum and quantity pair and for each `Plan`-schedule composite and collection shape. | Test (TC-029) |
 | FR-018-AC-5 | A descriptor with a `convert<T>` operand outside `admits_equality_conversion`, distinct text profiles, distinct enum declarations, incompatible dimensions, distinct units, or no common type is refused at generation time with its `IllTypedCause`, emits no code, and admits no charge on any `Meter`. | Test (TC-029) |
@@ -200,10 +191,10 @@ digest, whose domain is `NODE_KEY_DOMAIN`.
 | FR-018-AC-7 | A `reference` composite form or an operand reaching one, and model and relation nodes, are refused as blocked on quire-spec-language#120; function nodes and `call` expressions as blocked on quire-contract-runtime#34; state, temporal and protocol nodes as blocked on quire-spec-language#121 — each with its own distinct typed blocker, and none reported as generated. | Test (TC-029) |
 | FR-018-AC-8 | A declaration closure `TypeEnvironment::new` refuses is refused at generation time carrying that `DeclarationCause`, including both recursion passes and a duplicate record field; and each generated oracle calls `TypeEnvironment::check_type` on both operand comparison types before `check_equality`, so calling it with an empty environment, one omitting a key its operand types reach, or one declaring that closure under a different key, yields `Outcome::Refused(Refusal::CheckedInvariant)` with no charge admitted, rather than a panic or a completed Boolean. | Test (TC-029) |
 | FR-018-AC-9 | Every generated oracle function returns `Outcome<bool>`, never `bool`: with a denial injected at each of `equality.plan-form`, `equality.plan`, `equality.pair`, `equality.result-retain` and each conversion charge point in turn, the oracle yields `Outcome::Incomplete` naming that point, the denied charge is not applied — every counter equals those of the same run stopped immediately before that point — and never a completed Boolean. | Test (TC-029) |
-| FR-018-AC-10 | Generated bytes are identical across repeated runs and across permutations of the request order, including a request carrying two descriptors over one node id, and claim-map entries are ordered by the descriptor key — expression node id, operator rank, then each operand's source-type and conversion-target node ids, every node id compared by digest domain then digest; the committed golden crate is compiled and executed under AC-2 against a native run driven from the request's own descriptor (AC-3), so a re-blessed golden that changed an emitted operator, operand order or descriptor fails AC-2 rather than passing. | Test (TC-029) |
-| FR-018-AC-11 | Every claim marks its operation `caller_declared`, the claim map carries the blocked item "operation identity not consumed by codegen's generators", and two items over one node differing only in `EqualityOperator` both generate with that mark, under distinct symbols, each a digest over its descriptor key's node id digests and operator rank and over no rendered name, and produce complementary outcomes on a vector whose operands differ. | Test (TC-029) |
-| FR-018-AC-12 | The generated crate declares `publish = false`, pins the runtime revision with the `exact` feature, contains no charge amount and no planned pair count (every charge and every pair comes from runtime metering), and compiles. | Test (TC-029) |
-| FR-018-AC-13 | Every claim-map entry carries the node id, IR id, package id, source map, claims, reconstructed declaration keys and selected schedule of its item, and its declaration keys equal `NodeKey::from_hex` of the V2 node id digests its operand types reach. | Test (TC-029) |
+| FR-018-AC-10 | Generated bytes are identical across repeated runs and across permutations of the request order, including a request carrying two descriptors over one node id, and claim-map entries are ordered by the descriptor key — expression node id, operator rank, then each operand's source-type and conversion-target node ids, every node id compared in node-id order; the generated crate is compiled and executed under AC-2 against a native run driven from the request's own descriptor (AC-3), so a generated crate with a changed emitted operator, operand order or descriptor fails AC-2. | Test (TC-029) |
+| FR-018-AC-11 | Every claim marks its operation `caller_declared`, the claim map carries the blocked item "operation identity not consumed by codegen's generators", and two items over one node differing only in `EqualityOperator` both generate with that mark, under distinct symbols, each derived from its descriptor key's node ids and operator rank and from no rendered name, and produce complementary outcomes on a vector whose operands differ. | Test (TC-029) |
+| FR-018-AC-12 | The generated crate declares `publish = false`, names the Contract Runtime dependency this repository's `Cargo.toml` names with the `exact` feature, contains no charge amount and no planned pair count (every charge and every pair comes from runtime metering), and compiles. | Test (TC-029) |
+| FR-018-AC-13 | Every claim-map entry carries the node id, IR id, package id, source map, claims, reconstructed declaration keys and selected schedule of its item, and its declaration keys equal `NodeKey::from_hex` of the V2 node ids its operand types reach. | Test (TC-029) |
 | FR-018-AC-14 | The `bounded_domain` nodes an operand type reaches (`integer_range`, `rational_range`, `decimal_range`, `text_bounds`, `collection_bounds`) are read from `binding` members looked up by name as FR-014 lists them, in any order; a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
@@ -228,11 +219,11 @@ without one is not written.
 | FR-018-AC-6 | Check `contains_ieee` only at the top level, so a nested `float64` field generates. |
 | FR-018-AC-7 | Collapse the three blockers into one "unsupported" reason, or generate an oracle over a `reference` operand. |
 | FR-018-AC-8 | Emit only `check_equality`, omitting the `check_type` calls; `check_equality` consults the environment solely through `contains_ieee`, which returns `false` for an absent composite key, so an empty environment completes with a Boolean instead of refusing. Or emit `.expect(..)`, which panics instead. |
-| FR-018-AC-9 | Emit closures returning plain `bool`, as `src/oracle.rs` does for Boolean connectives; a denial then has no representable result. |
-| FR-018-AC-10 | Order claim-map entries by the expression node id alone, which ties the two items of one node and lets a permuted request permute them; or bless a golden whose emitted operator was changed while the native leg reads its descriptor from that same golden; or swap which operand's runtime value or conversion target is evaluated as left versus right; or swap the emitted `left_source`/`right_source` descriptor itself. |
+| FR-018-AC-9 | Emit closures returning plain `bool`; a denial then has no representable result. |
+| FR-018-AC-10 | Order claim-map entries by the expression node id alone, which ties the two items of one node and lets a permuted request permute them; or change the operator one oracle emits; or swap which operand's runtime value or conversion target is evaluated as left versus right; or swap the emitted `left_source`/`right_source` descriptor itself. |
 | FR-018-AC-11 | Mark the operation checked rather than `caller_declared`; refuse the second descriptor as a duplicate; or derive both symbols from the node's declaration name, so the two items collide. |
 | FR-018-AC-12 | Emit the plan's pair count or a charge amount as a literal constant in the generated source. |
-| FR-018-AC-13 | Key declarations by request ordinal instead of by the V2 node id digest. |
+| FR-018-AC-13 | Key declarations by request ordinal instead of by the V2 node id. |
 | FR-018-AC-14 | Read bound members by position, or accept a bare literal in place of a `binding` member, so a QSL-shaped or wrongly named bound is read as some other range. |
 
 ## Dependencies
@@ -240,13 +231,7 @@ without one is not written.
 - **Upstream**: [FR-001](../FR-001-deterministic-oracles.md),
   [FR-014](./FR-014-exact-scalar-oracles.md), Contract IR FR-036/FR-038
   (CheckedPackage V2 lowering), Contract Runtime FR-008 (composite, collection
-  and equality families), quire-spec-language at the runtime's pinned authority.
-- **Prerequisite, satisfied**: agent-ix/quire-contract-codegen#75, merged as
-  `e74d592`, which re-pinned Contract Runtime `a04bd47` to `4e33052` and
-  quire-spec-language `d9d5273` to `21c507e`. The first makes the equality
-  surface this requirement calls visible from this repository; the second makes
-  AC-2's third leg — agreement with `quire_spec_language::value` — a check with
-  something to call.
+  and equality families), the quire-spec-language value authority.
 - **Downstream**: [TC-029](../../test/complete-v1/TC-029-composite-equality-oracles.md).
 
 ## Out of Scope

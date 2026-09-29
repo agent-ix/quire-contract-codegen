@@ -20,92 +20,93 @@ relationships:
 
 ## Status
 
-Proposed. Each question below is open until the owner rules. The recommendations are the author's
-and decide nothing.
+Accepted. The owner ruled on Q1, Q2 and Q3 as the Decision states.
 
 ## Context
 
-The generator has three Kani generation requirements, two scalar oracle generators and two input
-models. Each pair or triple overlaps in what it claims. Each one is specified, implemented and
-tested on its own, so no gate reports the overlap. This record states each overlap as measured at
-this revision.
+The generator had three Kani generation requirements, two scalar oracle generators and two input
+models. Each pair or triple overlapped in what it claimed. Each was specified, implemented and
+tested on its own, so no gate reported the overlap. The table states each overlap as it was
+measured when the question was raised.
 
 | Surface | Requirement | Source | Input | Profile or schema |
 |---|---|---|---|---|
-| Boolean and numeric/state Kani lowering | [FR-003](../functional/FR-003-kani-lowering.md) | `src/kani.rs` | V1 `BoundPackage` clauses | `kani-0.67.0-function-contracts-v2`, caller-supplied solver, optional stubbing, proof graph with `not_run` |
+| Boolean and numeric/state Kani lowering | [FR-003](../functional/FR-003-kani-lowering.md) | `src/kani.rs` | V1 `BoundPackage` clauses | caller-supplied solver, optional stubbing, proof graph with `not_run` |
 | Bounded Kani profile corpus | [FR-007](../functional/FR-007-bounded-kani-profile-corpus.md) | `src/bounded_kani_corpus.rs`, `src/bounded_kani_profile.rs`, `src/bounded_kani_replay.rs` | Contract IR `kani-bounded/1` profile | Contract IR `KaniOutcome` and `ReplaySource`, native replay through an injected closure |
-| Separate complete-V1 obligations | [FR-015](../functional/complete-v1/FR-015-bounded-kani-obligations.md) | `src/kani_obligations.rs` | `ObligationItem::BoundClause` over `BoundPackage` and `ObligationItem::ScalarClaim` over `CheckedPackageV2` | `kani-0.67.0-separate-obligations-v1`, `cadical`, no stubbing |
+| Separate complete-V1 obligations | [FR-015](../functional/complete-v1/FR-015-bounded-kani-obligations.md) | `src/kani_obligations.rs` | `ObligationItem::BoundClause` over `BoundPackage` and `ObligationItem::ScalarClaim` over `CheckedPackageV2` | `cadical`, no stubbing |
 | V1 oracles | [FR-001](../functional/FR-001-deterministic-oracles.md) | `src/oracle.rs` | V1 `BoundPackage` | Boolean and bounded-integer comparison grammar |
 | Exact scalar oracles | [FR-014](../functional/complete-v1/FR-014-exact-scalar-oracles.md) | `src/exact_scalar.rs` | `CheckedPackageV2` | complete-V1 exact scalar families through `quire_contract_runtime::exact` |
 
 FR-015 is the Kani arm that routed generation calls (FR-022). Its harnesses embed FR-014 oracles
 for `ScalarClaim` items and FR-001 clause oracles for `BoundClause` items.
 
+The evidence that decided each question:
+
+- FR-015 is the only Kani generator that routed generation calls, that runs under FR-017's
+  execution and that feeds QSL's replay facade.
+- FR-007 replays through a caller-supplied closure (`src/bounded_kani_replay.rs`), which QSL
+  ADR-011 FB-07 does not count as replay evidence.
+- FR-003's optional stubbing flag contradicts FR-015's no-stubbing rule for the same backend.
+- `CheckedPackageV2` is the model QSL emits and the one QSL's replay facade recompiles against, so
+  an obligation over the V1 model cannot be replayed through QSL.
+
 ## Decision
 
-Nothing is decided here. The owner rules on each question below.
+### Q1: FR-015 is the Kani backend's one generator
 
-### Q1: Which Kani generation requirement is the Kani backend's generator?
+FR-015 is the only Kani generation requirement. FR-003 and FR-007 are retired, and every
+behaviour of theirs that FR-015 lacked is carried into FR-015 as its own criterion:
 
-Options:
+- from FR-003: the bounded state transition, with its state bound by `&mut` reference as ADR-004 Q2
+  decides; the plain comparison falsified through concrete playback; the post-state-in-precondition
+  refusal; the proof-dependency census and its readiness; and embedding the byte-identical oracle;
+- from FR-007: one disposition per construct with its source identity kept, the case-derived proof
+  symbol and the declared-census validation.
 
-1. **FR-015 only.** FR-003's function-contract lowering and FR-007's corpus are withdrawn. Any
-   behaviour of theirs that FR-015 lacks moves into FR-015 as new criteria first, for example the
-   FR-003 post-state result binding and the FR-007 finite object, reference, graph and collection
-   constructs.
-2. **FR-015 plus FR-007.** FR-003 is withdrawn. FR-007 stays as a separate corpus generator over
-   the Contract IR profile.
-3. **All three stay.** Each gets a stated, disjoint domain, and FR-022 names which one each routed
-   kind reaches.
+FR-003's caller-supplied solver and its optional stubbing are not carried. FR-015 lowers against
+`cadical`, and FR-015-AC-9's ban on every stubbing option stands. FR-007's replay through an
+injected closure is not carried. A counterexample replays only through QSL's replay facade
+([FR-024](../functional/complete-v1/FR-024-counterexample-envelope-intake.md)).
 
-Recommendation: option 1. FR-015 is the only generator that routed generation calls, that runs
-under FR-017's pinned execution and that feeds the QSL replay facade. FR-007's replay path runs
-native replay through a caller-supplied closure (`src/bounded_kani_replay.rs`), which QSL ADR-011
-FB-07 does not count as replay evidence. FR-007-AC-4 now states QSL's replay facade as its
-target and is planned until that path is built. FR-003's optional stubbing flag contradicts FR-015's
-no-stubbing rule for the same backend. Carrying the unique FR-003 and FR-007 behaviours into FR-015
-first keeps the working path until its replacement works.
+Each retired requirement keeps its file and its criterion numbers, marked retired, with each
+criterion naming the criterion that now carries it.
 
-### Q2: Which oracle generator owns the Boolean and bounded-integer comparison family?
+### Q2: FR-014 is the one oracle generator for the families it covers
 
-Options:
+FR-014 generates the oracle of every family it covers, the Boolean connectives and the
+bounded-integer comparisons included. FR-001, the V1 oracle generator, is retired with the V1
+model. FR-001's coverage-probe source map is carried into FR-014 as FR-014's own criterion.
 
-1. **FR-014 only.** FR-001's comparison grammar is expressed as FR-014 claims over
-   `CheckedPackageV2`, and FR-001 keeps only its attestation and source-map obligations.
-2. **Both, split by input model.** FR-001 serves the V1 package and FR-014 serves the V2 package.
-   This decision follows Q3.
-3. **Both, split by family.** FR-001 keeps the comparison grammar for every input, and FR-014
-   refuses it.
+### Q3: `CheckedPackageV2` is the one input model
 
-Recommendation: option 2 now, becoming option 1 when Q3 retires the V1 package. The split by input
-model is what the code does today. Deciding Q3 then decides this question.
-
-### Q3: Does the V1 `BoundPackage` input model stay beside `CheckedPackageV2`?
-
-Options:
-
-1. **Retire the V1 model.** Every generator reads `CheckedPackageV2`. The `BoundClause` arm of
-   `ObligationItem`, FR-001's and FR-003's V1 inputs and FR-007's profile input move to V2 or are
-   withdrawn.
-2. **Keep both, with a stated boundary.** The V1 model serves the FR-008 to FR-013 strategy
-   campaigns and the FR-003 proof graph, and the V2 model serves every complete-V1 surface. No
-   single request mixes them. FR-015 already refuses a mixed V1 request as `MixedBoundPackages`
-   and would refuse a mixed V1/V2 request too.
-3. **Keep both, unbounded.** Any generator may read either model.
-
-Recommendation: option 1, done in stages so that each V1 path is removed only after its V2
-replacement is green. `CheckedPackageV2` is the model QSL emits and the one the replay facade
-recompiles against, so a V1-only obligation cannot be replayed through QSL at all. Option 3
-recommends nothing, because it leaves the overlap as it is.
+The V1 `BoundPackage` input model is retired. Every generator reads an admitted
+`quire.checked-package/v2` package through Contract IR's `CheckedPackageV2`. The generator has no
+second input path and no adapter between the two models. An obligation that exists only over the
+V1 model cannot be replayed through QSL, and it is not kept.
 
 ## Consequences
 
-Until the owner rules, each overlapping requirement keeps its own criteria and coverage rows, and
-no new criterion is added to more than one of them. A ruling becomes spec changes to the named
-requirements and the test matrix, and code follows the spec.
+- FR-001, FR-003 and FR-007 are retired. Their criteria keep their numbers, and the test matrix
+  marks each retired row with the criterion that carries it.
+- FR-014 and FR-015 gain the carried criteria. Each one stays planned until code and a test back it.
+- Code replaces each V1 path with its V2 equivalent and deletes the V1 path in the same change, so
+  that each step leaves the repository green.
+- FR-002, FR-004, FR-005, FR-008 to FR-013, NFR-004 and interface-001 still state the V1
+  `BoundPackage` as their input, and their test cases (TC-004, TC-006, TC-017 to TC-022, and TC-028)
+  build V1 fixtures. Those texts contradict this decision until a separate spec change
+  restates them over `CheckedPackageV2`. Until then their matrix rows record coverage of their
+  current V1 text only.
 
 ## Alternatives Considered
 
-- **Leave the overlaps implicit.** Each path is green on its own, and the overlap stays invisible
-  to every gate. Rejected, because an unstated overlap is how FR-003's optional stubbing and
-  FR-015's no-stubbing rule ended up applying to the same backend.
+- **FR-015 plus FR-007.** FR-007 would stay a separate corpus generator over the Contract IR
+  profile. Rejected, because FR-007's replay runs through an injected closure and its input is not
+  the model QSL replays against.
+- **All three Kani generators stay, each with a disjoint domain.** Rejected, because two of them
+  read a model QSL cannot replay, and FR-003's stubbing contradicts FR-015's ban.
+- **Two oracle generators, split by input model or by family.** Rejected, because one input model
+  leaves nothing to split by model, and a split by family keeps two generators for one family set.
+- **Keep both input models, with or without a stated boundary.** Rejected, because every surface
+  the V1 model serves has a V2 equivalent, and a V1-only obligation cannot replay through QSL.
+- **Leave the overlaps implicit.** Rejected, because an unstated overlap is how FR-003's optional
+  stubbing and FR-015's no-stubbing rule ended up applying to the same backend.

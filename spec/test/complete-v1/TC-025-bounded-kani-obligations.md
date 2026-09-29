@@ -61,22 +61,40 @@ postcondition and invariant harnesses, falsifies a seeded postcondition defect
 with a concrete counterexample, and reports a contract harness with jointly
 unsatisfiable requires as `cover_unsatisfied`.
 
+## Carried criteria
+
+These steps verify the criteria FR-015 carries from the retired FR-003 and FR-007. They are planned.
+
+1. Generate a zero-input transition over one bounded-integer state value, run it for an identity
+   subject and for a subject that changes the value. The identity subject verifies, and the
+   changing subject is falsified with a concrete counterexample (FR-015-AC-19).
+2. Generate a harness for each Boolean connective and each integer comparison claim, and compare
+   the embedded oracle with the FR-014 crate's function byte for byte. They are identical
+   (FR-015-AC-20).
+3. Request a precondition that reads a post-state value. It is refused naming the node, with no
+   harness (FR-015-AC-21).
+4. Request obligations with a declared census that is empty-identity, duplicate-identity,
+   kind/state/path-inconsistent or non-`Required`. Each is refused with no harness (FR-015-AC-22).
+5. Request items that settle `supported`, `requires-bound` and `unsupported` together. Each has
+   exactly one `ObligationDisposition`, and each item that is not `supported` keeps its source
+   identity and reason with no harness and no assumption (FR-015-AC-23).
+6. Run a falsifiable plain bounded-integer comparison harness. The falsified run prints a concrete
+   playback (FR-015-AC-24).
+7. Request obligations with valid censuses whose dependencies are all passed, one missing and one
+   failed. Each folds into the identity with readiness `ready`, `incomplete` and `incomplete`, and
+   every harness records execution `not_run` (FR-015-AC-25).
+
 ## Blocked
 
-- Frame harnesses: not constructible from the merged IR. V1 `ClauseKind` has no
-  frame kind, FR-014 refuses V2 `state` nodes as `NoFiniteEncoding`, and
-  by-value harness arguments cannot express `kani::modifies`. A typed IR frame
-  item is required first.
+- Frame harnesses: FR-025 accounts every frame obligation `unsupported` until QSpec decides how a
+  frame node lowers into a Kani form (ADR-004).
 - V2 scalar harnesses outside `IntegerArithmetic`: an IR-confirmed claim over
-  one of the four `quire.op.integer.{add,sub,mul,negate}` identities is not
-  refused on operation identity, and reaches a real harness
-  unless a ground independent of the operation (an i64-unrepresentable
-  endpoint, the source ceiling) displaces it. Every other confirmed family
-  (every family but `IntegerArithmetic`) is refused as `OperationNotRendered`,
-  an unbuilt renderer in this generator, not an upstream block. A claim this
-  generator lowered but whose operation it did not confirm against the node's
-  own catalogued identity, mode or law definition is refused as
-  `CallerDeclaredOperation` (see `OperationProvenance::CallerDeclared`, the
-  authoritative enumeration of those cases).
+  one of the four `quire.op.integer.{add,sub,mul,negate}` identities reaches a
+  real harness unless a ground independent of the operation (an
+  i64-unrepresentable endpoint, the source ceiling) displaces it. Every other
+  confirmed family is refused as `OperationNotRendered`, an unbuilt renderer in
+  this generator, not an upstream block. A claim this generator lowered but
+  whose operation it did not confirm against the node's own catalogued
+  identity, mode or law definition is refused as `CallerDeclaredOperation`.
 - Model and graph bounds: refused as blocked until
   agent-ix/quire-spec-language#120 lands.

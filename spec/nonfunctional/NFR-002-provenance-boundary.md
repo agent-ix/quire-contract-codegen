@@ -24,7 +24,7 @@ Generated source, diagnostics, source maps, proof graphs, and reports.
 
 ## Rationale
 
-Opaque derivation or licensing prevents independent audit, while automated qualification claims
+Opaque licensing prevents independent audit, while automated qualification claims
 would exceed the tool's authority and hide consuming-project responsibilities.
 
 ## Measurement and Evaluation
@@ -51,4 +51,4 @@ states.
 
 ## Dependencies
 
-- **Upstream**: PGM-01 and [FR-001](../functional/FR-001-deterministic-oracles.md).
+- **Upstream**: [FR-001](../functional/FR-001-deterministic-oracles.md).

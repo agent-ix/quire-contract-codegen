@@ -21,5 +21,5 @@ platform execution; compare artifact names, bytes, and source maps.
 
 ## Expected Results
 
-Bundles are byte-identical, identities and SPDX headers are complete, and no environmental path or
+Bundles are byte-identical, SPDX headers are complete, and no environmental path or
 nondeterministic order enters the output.

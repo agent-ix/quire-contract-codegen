@@ -15,7 +15,7 @@ relationships:
 Verify that every counterexample reaches QSL as QSL's counterexample envelope keyed by QSL's
 obligation identity, that out-of-domain and incomplete counterexamples are refused before any
 replay, that corpus and frame counterexamples take their own arms, that minimization keeps only
-failure-preserving linked revisions, and that the generator holds no copy of QSL's replay types.
+failure-preserving envelopes, and that the generator holds no copy of QSL's replay types.
 
 ## Test Procedure
 
@@ -26,10 +26,8 @@ failure-preserving linked revisions, and that the generator holds no copy of QSL
    values and parameter bindings, and pass the rendered transcript to `qsl_replay::Witness::parse`.
 3. For a parameter with declared domain `[lo, hi]`, submit counterexamples with the value at `lo`,
    `hi`, `lo - 1` and `hi + 1`, and record whether `replay` was called.
-4. Build one `WitnessPacket` per member (obligation identity, occurrence key, clause node,
-   selected function, `package_id`, package contract version, source digests, profile selections,
-   run limits, declared domains, backend, trace position, source, family payload), each missing
-   only that member, and submit each. Then submit a complete packet whose trace position is
+4. Build one `WitnessPacket` per member QSL defines, each missing only that member, and submit
+   each. Then submit a complete packet whose trace position is
    present with the value none.
 5. Submit a corpus counterexample that agrees with native execution.
 6. Submit a frame counterexample through `replay_frame`, and read back the clause, frame, anchor and
@@ -54,8 +52,8 @@ failure-preserving linked revisions, and that the generator holds no copy of QSL
    `reproduced-without-witness`, and no `Witness` was built (FR-024-AC-5).
 6. Each identity QSL reports equals the one submitted (FR-024-AC-6).
 7. Only the failure-preserving candidate is retained (FR-024-AC-7, FR-024-AC-9). The `Witness`-arm
-   revision links to its parent and carries its own re-run's transcript (FR-024-AC-8), and the
-   `Input`-arm revision is an `Input`-arm envelope linked to its parent.
+   envelope carries its own re-run's transcript (FR-024-AC-8), and the retained `Input`-arm
+   candidate is an `Input`-arm envelope.
 8. Every value is QSL's own `qsl_replay` type and is accepted by `qsl_replay` unchanged
    (FR-024-AC-10).
 

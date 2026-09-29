@@ -1,95 +1,56 @@
 ---
 id: FR-001
-title: "Generate deterministic Rust oracles"
+title: "Generate deterministic Rust oracles (retired)"
 type: FR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/StR-001
     type: satisfies
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
+    type: references
+  - target: ix://agent-ix/quire-contract-codegen/ADR-001
+    type: references
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
 ---
-# FR-001: Generate deterministic Rust oracles
+# FR-001: Generate deterministic Rust oracles (retired)
 
 ## Description
 
-When a validated contract package is supplied, the generator shall emit a separately named Boolean
-oracle for every executable clause in the supported Boolean and bounded-integer comparison grammar.
-The generator shall also emit a source map for each generated oracle.
+FR-001 is retired with the V1 `BoundPackage` model it read.
+[FR-014](./complete-v1/FR-014-exact-scalar-oracles.md) is the one oracle generator for every family
+it covers, the Boolean connectives and the bounded-integer comparisons included, and it reads only
+an admitted `quire.checked-package/v2` package
+([ADR-001](../decisions/ADR-001-overlapping-generators-and-input-models.md) Q2 and Q3). FR-001
+generated a Boolean oracle for each executable V1 clause in the Boolean and bounded-integer
+comparison grammar, with its source map.
+
+Every FR-001 behaviour that FR-014 did not already state is an FR-014 criterion.
 
 ## Inputs
 
-- An immutable public IR `BoundPackage` decoded from the versioned derived executable projection.
-  Normal authored sources remain the validated frontend/model pipeline; synthetic projections used
-  in tests do not establish frontend coverage. The low-level single-clause API remains available
-  but does not establish complete package binding.
-- Backend configuration and declared customer type bindings.
-- Direct Boolean and bounded-integer input or state dependencies, including current, pre-state and
-  post-state observations carried by the typed expression.
+None. The requirement is retired.
 
 ## Outputs
 
-- Rust oracle source, source-region map, and diagnostics. Each generated artifact is a path and
-  its contents.
+None. The requirement is retired.
 
 ## Behavior
 
-- Generated signatures shall contain exactly the clause dependency set in deterministic order,
-  preserving current, pre-state, and post-state observations in caller-facing parameter names and
-  using `bool` for Boolean dependencies and `i64` for bounded-integer dependencies.
-- The supported bounded-integer grammar shall contain integer literals, direct input/state value
-  references, and all six comparison operators as Boolean expression nodes.
-- The generated comparison shall preserve authored operand order and Rust `i64` comparison
-  semantics for equal, not-equal, less, less-equal, greater and greater-equal.
-- The generator shall accept only a Boolean clause root.
-- The generator shall not emit a scalar-valued oracle.
-- The generator shall reject every typed expression carrying a definedness obligation until a
-  versioned non-Boolean invalid-result API exists in the IR and runtime.
-- The generator shall reject every numeric arithmetic and numeric-negation node in this slice,
-  whether or not the typed expression carries a definedness obligation. Until a versioned result
-  API distinguishes invalid from false, no checked runtime result may be unwrapped, defaulted, or
-  otherwise converted into a Boolean oracle result.
-- An implication consequent shall occupy its own coverable source region.
-- Each oracle shall carry exactly one evaluation-entry probe on its function-entry line, disjoint
-  from every consequent region. Every consequent shall carry a single-line entry-token probe inside
-  its exact expression region. Probe columns are one-based byte offsets with an exclusive end.
-- The clause envelope shall declare its expected consequent count derived from the typed expression,
-  independent of the emitted region list. Dropped or duplicate regions cannot redefine that count.
-- The generator shall render source in linear space and reject it before exceeding 1,048,576 bytes per clause.
-- Oracle symbols and Rust and source-map paths shall be readable names built from the requirement
-  identifier, revision and clause identifier plus a positional counter, so distinct clauses never
-  share a name, and no individual filename component shall exceed 255 bytes.
-- Expression refusals shall retain an exact IR `SourceSpan`: the clause root for a non-Boolean root,
-  the first unsupported node in authored preorder for an unsupported expression or dependency, and
-  the first retained obligation in IR order for definedness obligations. No refusal shall produce a
-  falsely complete artifact.
-- `generate_bound_oracles` shall consume every executable clause through public `BoundPackage` and
-  `BoundClause` accessors, without private wire structures, a codegen-owned input schema, clause
-  selection, or inferred pre/post pairing. An unsupported executable clause shall fail the entire
-  batch, preserving its complete ClauseRef and diagnostics and returning no publishable artifact.
-- An empty or informational-only executable population shall return `NoExecutable`, preserving
-  the informational references. It is neither invalid IR nor an unsupported clause, and it shall
-  carry no publishable artifact.
-- Every source-map row shall retain the complete ClauseRef through required `packageId`,
-  `requirementId`, `requirementRevision`, and `clauseId` fields.
-- A generated bound batch shall retain its ordered clause identities and informational references.
-  Generation success shall not imply campaign execution or coverage sufficiency.
-- Batch collection shall preflight the publisher's artifact-count limit and generated names, and
-  enforce its byte limits incrementally before constructing the final `ArtifactBundle`. Existing
-  per-clause source-size and stack guards remain active. Publication is a separate explicit call.
+None. The criteria below keep their numbers, and each names the criterion that carries it.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-001-AC-1 | Repeated generation from identical inputs is byte-identical. | Test (TC-001) |
-| FR-001-AC-2 | A differential corpus covering every supported Boolean operator and all six bounded-integer comparisons compiles with only the runtime and matches an independent evaluator. | Test (TC-002) |
-| FR-001-AC-3 | Requirement IDs and revisions appear in symbols, failures, and source maps. | Test (TC-001) |
-| FR-001-AC-4 | No construct, obligation, name collision, or bounded-resource failure is silently dropped, approximated, or marked complete after a diagnostic; unsupported nodes and obligations retain their exact IR source span. | Test (TC-003) |
-| FR-001-AC-5 | Every oracle map declares the typed-expression consequent census, one disjoint evaluation-entry probe, and an exact entry-token probe for every consequent; generated-oracle LLVM controls distinguish observed entry from zero consequent execution. | Test (TC-001, TC-006) |
-| FR-001-AC-6 | The public bound-package consumer returns every executable clause exactly once, preserves information separately, fails the whole batch for unsupported executable content, and gives an explicit non-publishable NoExecutable result for empty populations. | Test (TC-001, TC-002) |
-| FR-001-AC-7 | Every source-map row carries the full ClauseRef, including its package identity, and two clauses with equal requirement, revision and clause names generate distinct symbols and paths. | Test (TC-001) |
-| FR-001-AC-8 | Obligation-free integer-ir/v1 and state-scalar-ir/v1 clauses generate deterministic Boolean oracles whose `bool`/`i64` dependency signatures preserve current, pre-state and post-state identity and whose verdicts agree with the independently evaluated bounded corpus. | Test (TC-002) |
+| FR-001-AC-1 | Retired. Byte-identical regeneration is carried by FR-014-AC-4. | Test (TC-001) |
+| FR-001-AC-2 | Retired. The differential corpus over every Boolean connective and the integer comparisons is carried by FR-014-AC-35 and FR-014-AC-37. | Test (TC-002) |
+| FR-001-AC-3 | Retired. Identities in names and refusals are carried by FR-014-AC-5. | Test (TC-001) |
+| FR-001-AC-4 | Retired. One typed disposition per item with nothing dropped is carried by FR-014-AC-1. | Test (TC-003) |
+| FR-001-AC-5 | Retired. The consequent census and its probes are carried by FR-014-AC-36. | Test (TC-001, TC-006) |
+| FR-001-AC-6 | Retired. The V1 bound-package consumer has no successor, because the V1 model is retired. | Test (TC-001, TC-002) |
+| FR-001-AC-7 | Retired. Package identity in names is carried by FR-014-AC-38. | Test (TC-001) |
+| FR-001-AC-8 | Retired. The Boolean and bounded-integer comparison oracles are carried by FR-014-AC-35. | Test (TC-002) |
 
 ## Dependencies
 
-- **Upstream**: [StR-001](../stakeholder/StR-001-traceable-generation.md), IR issue #10, and runtime issue #3.
+- **Carried by**: [FR-014](./complete-v1/FR-014-exact-scalar-oracles.md).

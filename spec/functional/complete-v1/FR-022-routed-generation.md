@@ -34,11 +34,11 @@ backend's artifact.
 The router's results are inputs and are taken as given:
 
 - that the item settled `supported` (only `supported` items route, FR-019-AC-10);
-- which backend, by identity and manifest digest, the item routed to;
+- which backend the item routed to;
 - that backend's closed backend kind;
 - the extent and advertised-mode settlement FR-019 made for the item.
 
-This generator does not receive a manifest, a candidate set, an extent or a
+This generator does not receive a backend registry, a candidate set, an extent or a
 capability kind on this path, so it cannot recompute any of them. It
 constructs no FR-019 `Disposition` here, so FR-019-AC-5's source scan covers
 this entry point unchanged.
@@ -56,9 +56,7 @@ item is never handed to another backend kind's arm instead.
 
 ### How the existing Kani generator composes
 
-`negotiate_kani_obligations` selects no backend. Its request-level check of
-`KaniToolPins` against the committed pins is generation identity, not
-settlement, and its per-item dispositions are FR-015's lowering accounting
+`negotiate_kani_obligations` selects no backend. Its per-item dispositions are FR-015's lowering accounting
 under the Contract IR FR-036 vocabulary. So nothing in it re-runs FR-019, and
 it is not split. The Kani generation arm calls it unchanged, once, with one
 FR-015 `ObligationItem::ScalarClaim` per routed Kani item in ascending
@@ -69,7 +67,7 @@ entry point for callers that are not the driver.
 ### Where the input type lives
 
 The routed-item type is this crate's. It carries the backend as this crate's
-`Candidate` (the FR-331 `backend{identity, manifest_digest}` wire strings),
+`Candidate` (the FR-331 `backend` wire value),
 the kind as this crate's `BackendKind`, and the node as the IR
 `CheckedNodeId`. The driver converts its own routed value into it, as it
 already does for the FR-331 envelope.
@@ -94,15 +92,13 @@ already does for the FR-331 envelope.
   - `request_index`: the item's index in the driver's request, as FR-019's
     `ItemSettlement::request_index` numbered it;
   - `node_id`: the IR `CheckedNodeId` of the item's checked node. The driver
-    reads it from its own request item at that index; the wire digest is the
-    same;
+    reads it from its own request item at that index;
   - `backend`: the routed `Candidate`;
   - `kind`: the routed `BackendKind`.
 - `GenerationContexts`: one optional field per `BackendKind` variant, holding
   that kind's generation context. Today that is one field, `kani`, holding a
   `KaniGenerationContext`:
-  - `subject_path`, `pins` (`KaniToolPins`), `unwind` and `attestation`
-    (`AttestationContext`), with FR-015's meanings.
+  - `subject_path` and `unwind`, with FR-015's meanings.
 
   The caller supplies every context. Adding a `BackendKind` variant without an
   arm in the generation dispatch and in `GenerationContexts::has` does not
@@ -122,13 +118,13 @@ already does for the FR-331 envelope.
   - `oracle_artifacts`: `Some` when a Kani group ran, holding the FR-014 oracle
     crate (`Cargo.toml`, `src/lib.rs`, `claim-map.json`) that
     `generate_exact_scalar_oracles` returned for the group's derived items,
-    and `None` otherwise. A `Generated` claim's `oracle_<digest>` symbol is
+    and `None` otherwise. A `Generated` claim's oracle symbol is
     defined in that `src/lib.rs`, which is the standalone FR-014 oracle crate
     source. Each harness embeds its own oracle's source (FR-015), including
-    the `oracle_<digest>` definition and a `use quire_contract_runtime::exact
+    that oracle's definition and a `use quire_contract_runtime::exact
     as rt;` line, so it needs a crate that depends on `quire-contract-runtime`.
     The load-bearing returned artifact is `Cargo.toml`, which carries that
-    dependency (`rev` = the runtime revision, `features = ["exact"]`) and
+    dependency (with `features = ["exact"]`) and
     `[workspace]`. To run a harness the driver writes the returned `Cargo.toml`
     and the harness's `rust.contents` as `src/lib.rs`, because
     `execute_kani_obligation` refuses with `HarnessNotInCrate` unless the
@@ -159,7 +155,7 @@ already does for the FR-331 envelope.
   generation arm fails to compile.
 - The generator shall take each item's backend and backend kind from its
   routed input.
-- The generator shall compute no candidate set, read no manifest, settle no
+- The generator shall compute no candidate set, read no backend registry, settle no
   disposition and choose no backend.
 - If an item's routed `kind` is not the kind `BackendKind::from_identity`
   returns for its routed backend's identity, then the generator shall refuse
@@ -193,8 +189,8 @@ already does for the FR-331 envelope.
   `negotiate_kani_obligations` exactly once, with one
   `ObligationItem::ScalarClaim` per routed Kani item in ascending
   `request_index` order, over the package, the claim map so built and the
-  item's `node_id`, and with the context's subject path, pins, unwind and
-  attestation. The caller supplies no claim map.
+  item's `node_id`, and with the context's subject path and unwind. The caller
+  supplies no claim map.
 - If `negotiate_kani_obligations` refuses the Kani group as a whole, then the
   generator shall refuse the whole call with `Kani`, carrying that
   `KaniObligationError` unchanged, with nothing generated.
@@ -212,7 +208,7 @@ already does for the FR-331 envelope.
 - The generator shall return byte-identical output for equal inputs,
   whatever the order of the routed-item slice.
 - The generator shall render a harness whose bytes and identity are
-  independent of the item's request index and its backend's manifest digest.
+  independent of the item's request index and of which candidate of its backend routed it.
 
 ## Acceptance Criteria
 
@@ -220,18 +216,18 @@ already does for the FR-331 envelope.
 |----|----------|--------------|
 | FR-022-AC-1 | Generation dispatches one arm per variant of the closed `BackendKind` through an exhaustive `match` with no catch-all, and `GenerationContexts` has one field per variant, so a variant added without an arm in the dispatch or in `GenerationContexts::has` does not compile. | Analysis |
 | FR-022-AC-2 | For a set of routed Kani items, each record and harness in the output equals what `negotiate_kani_obligations` returns for the same items in ascending request-index order with the same context. The one difference is that every index inside a record is the driver's request index, and each harness is paired with the record whose `harness_symbol` names it. | Test (TC-033) |
-| FR-022-AC-3 | The entry point accepts no manifest, candidate set, extent or capability kind, and constructs no FR-019 `Disposition`. The FR-019-AC-5 source scan reads its module and stays green. | Test (TC-033) |
+| FR-022-AC-3 | The entry point accepts no backend registry, candidate set, extent or capability kind, and constructs no FR-019 `Disposition`. The FR-019-AC-5 source scan reads its module and stays green. | Test (TC-033) |
 | FR-022-AC-4 | A routed item whose backend identity has no CG kind, or converts to a kind other than the routed one, refuses the whole call as `BackendKindDisagrees`, naming the request index, backend, routed kind and converted kind or its absence, and no artifact is returned. | Test (TC-033) |
 | FR-022-AC-5 | Two routed items with one request index refuse as `DuplicateRequestIndex` naming it. A routed kind with no context refuses as `MissingKindContext` naming the kind. Each returns no artifact. | Test (TC-033) |
-| FR-022-AC-6 | A Kani group-level refusal (for example unpinned tool pins, an unwind outside `1..=1024`, or an unparsable subject path) is returned as `Kani` carrying the unchanged `KaniObligationError`, with no artifact. | Test (TC-033) |
+| FR-022-AC-6 | A Kani group-level refusal (for example an unwind outside `1..=1024`, or an unparsable subject path) is returned as `Kani` carrying the unchanged `KaniObligationError`, with no artifact. | Test (TC-033) |
 | FR-022-AC-7 | A Kani group containing an `invalid_request` item is listed in `rejected`, and every Kani item's record is returned with no harness. A `DuplicateItem`'s `first_index` names the driver's request index of the first occurrence. | Test (TC-033) |
 | FR-022-AC-8 | Every routed item appears exactly once in `items`, in ascending request index, under its routed backend and the `KindOutput` variant of its routed kind. An item the arm refuses at lowering keeps its typed FR-015 refusal and no harness. An empty routed set returns an empty result. | Test (TC-033) |
-| FR-022-AC-9 | Regeneration from equal inputs is byte-identical, a permutation of the routed-item slice yields an identical result, and the same node routed at a different request index or under another manifest digest yields a byte-identical harness. | Test (TC-033) |
+| FR-022-AC-9 | Regeneration from equal inputs is byte-identical, a permutation of the routed-item slice yields an identical result, and the same node routed at a different request index or under another candidate of the same backend yields a byte-identical harness. | Test (TC-033) |
 | FR-022-AC-10 | The Kani arm derives each item's operation and domain from the package alone; the caller supplies no claim map, and `x + 1` over a parameter `Int[0, 9]` routes to a supported `quire.op.integer.add` harness with arguments `[0, 9]` and `[1, 1]` (the literal at its own value, FR-015-AC-16). | Test (TC-033) |
 | FR-022-AC-11 | An item with no derivable descriptor keeps its typed refusal and no harness, and its siblings' records and harnesses are unaffected. A node absent from the graph is `invalid_request` and rejects the group; a node that does not lower or has a refused bound keeps the FR-015 disposition it has when its claim is generated by FR-014 (`requires_bound`, `blocked_on_upstream`, `unsatisfiable_bound`); a node routed twice is one claim and one `duplicate_item`. | Test (TC-033) |
 | FR-022-AC-12 | `RoutedGeneration.claim_map` is `Some` after a Kani group and equals the FR-014 claim map over the derived items, with one refused claim, of provenance `underived`, per underivable node, ordered by node id. | Test (TC-033) |
 | FR-022-AC-13 | The Kani arm routes an integer node over bounded parameters to a supported harness whose arguments are one range per operand and whose result assertion uses the result bound: `a + b` over `[0, 9]` and `[10, 20]` with result `[0, 29]` has arguments `[0, 9]` and `[10, 20]`; `-e` over `[1, 9]` with result `[-9, -1]` and `e * f` over `[1, 9]` and `[100, 200]` with result `[100, 1800]` are supported; a node with a plain-typed `reference` operand beside bounded typing (FR-014-AC-25) settles `requires_bound` and has no harness. | Test (TC-033) |
-| FR-022-AC-14 | `RoutedGeneration.oracle_artifacts` is `Some` after a Kani group and `None` when nothing is routed. It equals, byte for byte, the artifacts `generate_exact_scalar_oracles` returns over the derived items, so a group with no derivable node returns that call's artifacts for an empty item set. For `x + 1` over a parameter `Int[0, 9]`, each `Generated` claim's `oracle_<digest>` symbol is defined in the returned `src/lib.rs` and appears in the supported harness's Rust source. | Test (TC-033) |
+| FR-022-AC-14 | `RoutedGeneration.oracle_artifacts` is `Some` after a Kani group and `None` when nothing is routed. It equals, byte for byte, the artifacts `generate_exact_scalar_oracles` returns over the derived items, so a group with no derivable node returns that call's artifacts for an empty item set. For `x + 1` over a parameter `Int[0, 9]`, each `Generated` claim's oracle symbol is defined in the returned `src/lib.rs` and appears in the supported harness's Rust source. | Test (TC-033) |
 | FR-022-AC-15 | The Kani arm routes the packages QSL emits for `x + 1` over `x: Int[0, 9]` into `Int[0, 10]`, `x + y` over `Int[0, 9]` and `Int[10, 20]` into `Int[10, 29]`, and `-z` over `Int[0, 9]` into `Int[-9, 0]` (a literal as a reference to its own `value` node, the declared bound on a narrowing `conversion` consuming the plain-typed arithmetic node) to supported harnesses with arguments `[0, 9]` and `[1, 1]`; `[0, 9]` and `[10, 20]`; and `[0, 9]`, each asserting the result against the conversion's bound (`[0, 10]`, `[10, 29]`, `[-9, 0]`). In that shape a plain-Integer parameter beside a bounded one, and a reference to a `value` node whose body is not a literal, settle `requires_bound`, and a node narrowed to two distinct bounds is `oracle_refused` `AmbiguousBound`, none with a harness. | Test (TC-033) |
 
 ## Dependencies
@@ -248,14 +244,13 @@ already does for the FR-331 envelope.
 
 - Backend kinds other than Kani. `BackendKind` has one variant, `Kani`, and
   that is the registry's measured state (see the FR-019 matrix notes). The
-  crate's other generators (FR-001 Boolean and bound oracles, FR-002
-  tri-state harnesses and strategies, FR-008 to FR-013 bound strategies,
-  FR-014, FR-018 and FR-021 oracles, and the FR-003 and FR-007 Kani bundles)
-  are not selected by a backend kind. Callers invoke them directly, and this
-  requirement does not route them. A new backend kind adds a `BackendKind`
-  variant, its FR-019 `negotiate_*` arm, its generation arm here and its
-  context field, and each of these is a compile error until it exists.
-- V1 `BoundClause` items. The driver path carries v2 packages only.
+  crate's other generators (FR-002 tri-state harnesses and strategies, FR-008
+  to FR-013 bound strategies, and the FR-014, FR-018 and FR-021 oracles) are
+  not selected by a backend kind. Callers invoke them directly, and this
+  requirement does not route them. A new backend kind registers as
+  [FR-026](./FR-026-backend-adapter-contract.md) states: a `BackendKind`
+  variant, its FR-019 `negotiate_*` arm, its generation arm here, its context
+  field and its adapter, and each of these is a compile error until it exists.
 - Running a harness, and probing its tool. Those are FR-017 and FR-019.
 - Verifying the package's identity against the driver's expected
   `package_id`. That is the IR reader's (E5).
@@ -277,9 +272,9 @@ already does for the FR-331 envelope.
    ADR-012 §5 cites it as one. *Recommendation:* leave the name in this
    ticket. A rename is churn and needs the owner's go-ahead. *Blocks:*
    nothing.
-4. **Where the driver gets the Kani context values** (subject path, unwind,
-   pins, attestation). *Recommendation:* they are driver or command inputs
-   (AGE-394 renders the command), with `KaniToolPins::pinned()` as the pins.
+4. **Where the driver gets the Kani context values** (subject path and
+   unwind). *Recommendation:* they are driver or command inputs
+   (AGE-394 renders the command).
    *Blocks:* the QSL-1 step 7 wiring, not this crate.
 5. **Follow-up tickets.** Linear IR-295 tracks FR-019's Kani settlement
    reading the IR form (open item 2; QSL ADR-012 §7.2 step 3). Linear IR-298

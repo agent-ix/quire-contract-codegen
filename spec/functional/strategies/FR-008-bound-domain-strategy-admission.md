@@ -115,7 +115,7 @@ integer declaration ([quire-contract-ir FR-013](ix://agent-ix/quire-contract-ir/
 
 | ID | Constraint | Type | Validation |
 |----|------------|------|------------|
-| FR-008-CON-1 | The generator SHALL read domain bounds only through the public `quire_contract_ir` API at the revision `Cargo.toml` names, with no private decoder or local copy of the IR wire shape. | Interface | Inspection |
+| FR-008-CON-1 | The generator SHALL read domain bounds only through the public `quire_contract_ir` API, with no private decoder or local copy of the IR wire shape. | Interface | Inspection |
 | FR-008-CON-2 | The generator SHALL decide strategy admission before rendering strategy, population, census, or runner source; bound-oracle admission renders only its private candidate while applying the shared admission path, and a refusal returns no source artifact or partial bundle. | Integrity | Test (TC-017) |
 
 ## Acceptance Criteria

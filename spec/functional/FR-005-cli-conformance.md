@@ -38,7 +38,6 @@ atomically and shall retain differential and cross-backend semantic-parity resul
   before any staging or destination I/O begins.
 - Supported platforms shall produce reproducible generated files.
 - Every differential discrepancy shall become a fixture or documented semantic difference.
-- The Assurance Argument shall cite completed conformance evidence without closing the human claim.
 
 ## Acceptance Criteria
 

@@ -9,12 +9,8 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/FR-011
     type: depends_on
-  - target: ix://agent-ix/quire-contract-codegen/NFR-002
-    type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
-  - target: ix://agent-ix/quire-contract-ir/FR-023
-    type: depends_on
   - target: ix://agent-ix/quire-spec-language/FR-034
     type: references
 ---
@@ -75,8 +71,7 @@ require any serialized case format or schema owned by this repository for that c
 
 ## Dependencies
 
-- **Upstream**: [FR-010](./FR-010-domain-boundary-campaigns.md),
-  [FR-011](./FR-011-numeric-harness-campaigns.md),
-  [NFR-002](../../nonfunctional/NFR-002-provenance-boundary.md).
+- **Upstream**: [FR-010](./FR-010-domain-boundary-campaigns.md) and
+  [FR-011](./FR-011-numeric-harness-campaigns.md).
 - **Downstream**: the consumer planned in agent-ix/quire-spec-language#84;
   [TC-022](../../test/strategies/TC-022-it010-consumable-output.md).
