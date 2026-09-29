@@ -65,10 +65,10 @@ use crate::{
         KaniIntegerBounds, KaniPrimitiveType, KaniSolver,
     },
     oracle::{
-        attestation_context_is_valid, generate_oracle_with_derivation, length_delimited_identity,
+        length_delimited_identity,
         reference_identifier, typed_dependency_parameters, DependencyParameter, RustValueType,
     },
-    Artifact, AttestationContext, ClaimDerivationRefusal, ClaimDisposition, ClaimMap,
+    generate_boolean_oracle, Artifact, ClaimDerivationRefusal, ClaimDisposition, ClaimMap,
     ExactScalarClaim, ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode,
     OperationProvenance, OracleRequest, UpstreamBlocker, MAX_GENERATED_SOURCE_BYTES,
 };
@@ -123,8 +123,6 @@ pub struct KaniObligationRequest<'a> {
     pub subject_path: &'a str,
     /// Loop unwind bound, `1..=MAX_OBLIGATION_UNWIND`.
     pub unwind: u32,
-    /// Binding for the embedded clause oracles' generation identity.
-    pub attestation: AttestationContext<'a>,
 }
 
 /// A request that cannot be negotiated at all; no item is accounted.
@@ -144,8 +142,6 @@ pub enum KaniObligationError {
         /// The requested bound.
         unwind: u32,
     },
-    /// The attestation binding is malformed.
-    InvalidAttestationContext,
 }
 
 /// The IR item a record is about.
@@ -589,7 +585,7 @@ pub fn negotiate_kani_obligations(
     let mut states = request
         .items
         .iter()
-        .map(|item| classify(request, item))
+        .map(classify)
         .collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
     resolve_assumptions(&mut states);
@@ -661,9 +657,6 @@ fn validate_request(request: &KaniObligationRequest<'_>) -> Result<(), KaniOblig
         return Err(KaniObligationError::InvalidUnwind {
             unwind: request.unwind,
         });
-    }
-    if !attestation_context_is_valid(&request.attestation) {
-        return Err(KaniObligationError::InvalidAttestationContext);
     }
     Ok(())
 }
@@ -784,10 +777,10 @@ struct Symbols {
     contract: String,
 }
 
-fn classify<'a>(request: &KaniObligationRequest<'_>, item: &ObligationItem<'a>) -> ItemState<'a> {
+fn classify<'a>(item: &ObligationItem<'a>) -> ItemState<'a> {
     match *item {
         ObligationItem::BoundClause { package, clause } => {
-            classify_clause(request, package, clause)
+            classify_clause(package, clause)
         }
         ObligationItem::ScalarClaim {
             package,
@@ -798,13 +791,12 @@ fn classify<'a>(request: &KaniObligationRequest<'_>, item: &ObligationItem<'a>) 
 }
 
 fn classify_clause<'a>(
-    request: &KaniObligationRequest<'_>,
     package: &'a BoundPackage,
     clause_ref: &ClauseRef,
 ) -> ItemState<'a> {
     let package_digest = package.digest().to_string();
     let identity = Some(ItemIdentity::Clause {
-        package: package_digest.clone(),
+        package: package_digest,
         clause: clause_ref.clone(),
     });
     let Some(clause) = package
@@ -831,7 +823,7 @@ fn classify_clause<'a>(
         None => Outcome::Unsupported(UnsupportedObligation::ClauseKindNotObligation {
             kind: clause.kind(),
         }),
-        Some(kind) => match lower_clause(request, &package_digest, clause, kind) {
+        Some(kind) => match lower_clause(clause, kind) {
             Ok(oracle) => {
                 let standalone = match kind {
                     ObligationKind::Precondition => {
@@ -881,8 +873,6 @@ const fn obligation_kind(kind: ClauseKind) -> Option<ObligationKind> {
 }
 
 fn lower_clause(
-    request: &KaniObligationRequest<'_>,
-    package_digest: &str,
     clause: &BoundClause,
     kind: ObligationKind,
 ) -> Result<ClauseOracle, UnsupportedObligation> {
@@ -895,7 +885,6 @@ fn lower_clause(
         requirement: identity.requirement(),
         clause: identity.clause(),
         expression: clause.expression(),
-        attestation: request.attestation,
     };
     let first_code =
         |diagnostics: Vec<crate::GenerationDiagnostic>| UnsupportedObligation::ClauseLowering {
@@ -906,8 +895,7 @@ fn lower_clause(
                 }),
         };
     let parameters = typed_dependency_parameters(&oracle_request).map_err(first_code)?;
-    let bundle = generate_oracle_with_derivation(&oracle_request, Some(package_digest))
-        .map_err(first_code)?;
+    let bundle = generate_boolean_oracle(&oracle_request).map_err(first_code)?;
     let symbol =
         oracle_function_symbol(&bundle.rust.contents).ok_or(UnsupportedObligation::RenderFailed)?;
     Ok(ClauseOracle {
@@ -2463,17 +2451,11 @@ mod tests {
 
     fn render_probe_request<'a>(
         items: &'a [ObligationItem<'a>],
-        pins: &'a KaniToolPins,
     ) -> KaniObligationRequest<'a> {
         KaniObligationRequest {
             items,
             subject_path: "render_probe::subject",
-            pins,
             unwind: 4,
-            attestation: AttestationContext {
-                record_digest: "0000000000000000000000000000000000000000000000000000000000000000",
-                candidate_revision: IR_CANDIDATE_REVISION,
-            },
         }
     }
 
@@ -2483,7 +2465,7 @@ mod tests {
         request: &KaniObligationRequest<'a>,
         item: &ObligationItem<'a>,
     ) -> Box<LoweredClause<'a>> {
-        let Outcome::Lowered(lowered) = classify(request, item).outcome else {
+        let Outcome::Lowered(lowered) = classify(item).outcome else {
             panic!("render-probe precondition must lower to a harness");
         };
         lowered

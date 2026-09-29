@@ -5,10 +5,10 @@ use std::collections::BTreeSet;
 use quire_contract_ir::{BoundPackage, CanonicalDigest, ClauseRef};
 
 use crate::{
-    oracle::{generate_oracle_with_derivation, oracle_symbol},
+    oracle::oracle_symbol,
     publication::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
-    ArtifactBundle, AttestationContext, GenerationDiagnostic, OracleArtifactBundle, OracleRequest,
-    PublicationDiagnostic,
+    generate_boolean_oracle, ArtifactBundle, GenerationDiagnostic, OracleArtifactBundle,
+    OracleRequest, PublicationDiagnostic,
 };
 
 /// Complete generation result, distinct from a native execution or coverage result.
@@ -20,7 +20,7 @@ pub enum BoundOracleGeneration {
     NoExecutable(NoExecutableOracles),
 }
 
-/// Identity of a valid package with no executable work; never an attestation.
+/// Identity of a valid package with no executable work.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NoExecutableOracles {
     bound_digest: CanonicalDigest,
@@ -65,7 +65,7 @@ impl BoundOracleClause {
     pub fn expression_digest(&self) -> CanonicalDigest {
         self.expression_digest
     }
-    /// Source, map, and source-generation attestation bodies for this clause.
+    /// Source and source map for this clause.
     #[must_use]
     pub fn bundle(&self) -> &OracleArtifactBundle {
         &self.bundle
@@ -82,7 +82,7 @@ pub struct GeneratedBoundOracles {
 }
 
 impl GeneratedBoundOracles {
-    /// Canonical public IR binding identity used in every generation attestation.
+    /// Canonical public IR binding identity.
     #[must_use]
     pub fn bound_digest(&self) -> CanonicalDigest {
         self.bound_digest
@@ -130,7 +130,6 @@ pub enum BoundGenerationError {
 // Implements: FR-001
 pub fn generate_bound_oracles(
     package: &BoundPackage,
-    attestation: AttestationContext<'_>,
 ) -> Result<BoundOracleGeneration, BoundGenerationError> {
     if package.clauses().is_empty() {
         return Ok(BoundOracleGeneration::NoExecutable(NoExecutableOracles {
@@ -139,31 +138,21 @@ pub fn generate_bound_oracles(
         }));
     }
     preflight(package)?;
-    let digest = package.digest().to_string();
     let mut clauses = Vec::with_capacity(package.clauses().len());
-    let mut artifacts = Vec::with_capacity(package.clauses().len() * 4);
+    let mut artifacts = Vec::with_capacity(package.clauses().len() * 2);
     let mut total_bytes = 0usize;
     for clause in package.clauses() {
         let identity = clause.identity();
-        let bundle = generate_oracle_with_derivation(
-            &OracleRequest {
-                requirement: identity.requirement(),
-                clause: identity.clause(),
-                expression: clause.expression(),
-                attestation,
-            },
-            Some(&digest),
-        )
+        let bundle = generate_boolean_oracle(&OracleRequest {
+            requirement: identity.requirement(),
+            clause: identity.clause(),
+            expression: clause.expression(),
+        })
         .map_err(|diagnostics| BoundGenerationError::Clause {
             identity: identity.clone(),
             diagnostics,
         })?;
-        for artifact in [
-            &bundle.rust,
-            &bundle.source_map,
-            &bundle.rust_attestation,
-            &bundle.source_map_attestation,
-        ] {
+        for artifact in [&bundle.rust, &bundle.source_map] {
             reserve_bytes(&mut total_bytes, artifact.contents.len())?;
             artifacts.push(artifact.clone());
         }
@@ -184,7 +173,7 @@ pub fn generate_bound_oracles(
 }
 
 fn preflight(package: &BoundPackage) -> Result<(), BoundGenerationError> {
-    if package.clauses().len() > MAX_ARTIFACTS / 4 {
+    if package.clauses().len() > MAX_ARTIFACTS / 2 {
         return Err(BoundGenerationError::ResourceLimitExceeded);
     }
     let mut symbols = BTreeSet::new();

@@ -21,7 +21,7 @@ use quire_contract_ir::{CheckedNodeId, CheckedPackageV2};
 
 use crate::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, negotiate_kani_obligations, Artifact,
-    AttestationContext, BackendKind, Candidate, ClaimMap, ExactScalarClaim, ExactScalarOracles,
+    BackendKind, Candidate, ClaimMap, ExactScalarClaim, ExactScalarOracles,
     InvalidObligationItem, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
     KaniScalarObligationHarness, ObligationDisposition, ObligationItem,
     ObligationRecord, OracleGenerationError,
@@ -50,8 +50,6 @@ pub struct KaniGenerationContext<'a> {
     pub subject_path: &'a str,
     /// Loop unwind bound.
     pub unwind: u32,
-    /// Binding for the generation identity.
-    pub attestation: AttestationContext<'a>,
 }
 
 /// One optional generation context per [`BackendKind`] variant.
@@ -262,7 +260,6 @@ fn generate_kani(
         items: &items,
         subject_path: context.subject_path,
         unwind: context.unwind,
-        attestation: context.attestation,
     })
     .map_err(RoutedGenerationError::Kani)?;
 

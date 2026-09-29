@@ -83,13 +83,9 @@ struct ClauseObservation {
 #[derive(Debug, Serialize)]
 struct ObservationBody {
     format: &'static str,
-    schema_sha256: String,
     state: BoundAnalysisState,
     provenance: &'static str,
     population: &'static str,
-    analyzer_revision: &'static str,
-    analyzer_source_state: &'static str,
-    analyzer_implementation_sha256: String,
     bound_sha256: String,
     export_sha256: Option<String>,
     source_root: Option<String>,
@@ -149,17 +145,9 @@ pub fn analyze_bound_coverage(
 ) -> BoundCoverageAnalysis {
     let mut body = ObservationBody {
         format: BOUND_COVERAGE_FORMAT,
-        schema_sha256: sha(BOUND_COVERAGE_SCHEMA.as_bytes()),
         state: BoundAnalysisState::InvalidInput,
         provenance: "unqualified",
         population: "not_emitted",
-        analyzer_revision: crate::GENERATOR_SOURCE_REVISION,
-        analyzer_source_state: if crate::generator_source_is_dirty() {
-            "dirty"
-        } else {
-            "clean"
-        },
-        analyzer_implementation_sha256: implementation_digest(),
         bound_sha256: package.digest().to_string(),
         export_sha256: None,
         source_root: None,
@@ -579,19 +567,6 @@ fn check_output_size(body: &ObservationBody, limit: usize) -> Result<(), Coverag
     })
 }
 
-fn implementation_digest() -> String {
-    let mut digest = Sha256::new();
-    for source in [
-        include_bytes!("bound_coverage.rs").as_slice(),
-        include_bytes!("vacuity.rs").as_slice(),
-        include_bytes!("../Cargo.lock").as_slice(),
-        BOUND_COVERAGE_SCHEMA.as_bytes(),
-    ] {
-        digest.update((source.len() as u64).to_le_bytes());
-        digest.update(source);
-    }
-    format!("{:x}", digest.finalize())
-}
 
 #[cfg(test)]
 mod tests {

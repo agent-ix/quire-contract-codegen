@@ -15,10 +15,9 @@ use sha2::{Digest as _, Sha256};
 use crate::{
     generate_boolean_oracle,
     oracle::{
-        attestation_context_is_valid, length_delimited_identity, oracle_symbol,
-        typed_dependency_parameters, DependencyParameter, RustValueType,
+        length_delimited_identity, oracle_symbol, typed_dependency_parameters, DependencyParameter, RustValueType,
     },
-    Artifact, AttestationContext, GenerationErrorCode, GenerationTerminalState, OracleRequest,
+    Artifact, GenerationErrorCode, GenerationTerminalState, OracleRequest,
     MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
 };
 
@@ -189,8 +188,6 @@ pub struct KaniRequest<'a> {
     pub solver: KaniSolver,
     /// Complete caller-owned dependency census.
     pub dependencies: &'a [ProofDependencyRequest<'a>],
-    /// Caller-owned binding passed to the embedded clause oracles.
-    pub attestation: AttestationContext<'a>,
 }
 
 /// Stable reason a Kani bundle could not be generated.
@@ -207,8 +204,6 @@ pub enum KaniErrorCode {
     ClauseGenerationFailed,
     /// The explicit unwind value is zero or exceeds the first-slice bound.
     InvalidUnwind,
-    /// Caller attestation context is invalid.
-    InvalidAttestationContext,
     /// Generated Rust did not parse.
     InvalidGeneratedSyntax,
     /// A deterministic graph could not be serialized.
@@ -224,8 +219,7 @@ impl KaniErrorCode {
         match self {
             Self::InvalidIdentity
             | Self::InvalidDependency
-            | Self::InvalidUnwind
-            | Self::InvalidAttestationContext => GenerationTerminalState::InvalidInput,
+            | Self::InvalidUnwind => GenerationTerminalState::InvalidInput,
             Self::UnsupportedBinding | Self::ResourceLimitExceeded => {
                 GenerationTerminalState::Unsupported
             }
@@ -340,13 +334,11 @@ pub fn generate_kani_bundle(
         requirement: request.requirement,
         clause: request.precondition_clause,
         expression: request.precondition,
-        attestation: request.attestation,
     };
     let postcondition_request = OracleRequest {
         requirement: request.requirement,
         clause: request.postcondition_clause,
         expression: request.postcondition,
-        attestation: request.attestation,
     };
     let precondition = generate_boolean_oracle(&precondition_request)
         .map_err(|values| map_clause_diagnostics("precondition", values))?;
@@ -489,13 +481,6 @@ fn validate_request(request: &KaniRequest<'_>) -> Result<(), Vec<KaniDiagnostic>
             KaniErrorCode::InvalidUnwind,
             "unwind",
             &format!("unwind must be between 1 and {MAX_OBLIGATION_UNWIND}"),
-        ));
-    }
-    if !attestation_context_is_valid(&request.attestation) {
-        return Err(single_diagnostic(
-            KaniErrorCode::InvalidAttestationContext,
-            "attestation.context",
-            "the Kani attestation binding is invalid",
         ));
     }
     validate_dependencies(request.dependencies, request.proof_id)?;
@@ -1055,7 +1040,7 @@ fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
     let identity = length_delimited_identity(&[requirement, &revision_text, proof_id]);
     // Kani synthesizes contract symbols from these names. Keep the Rust symbol bounded so those
     // derived object-file names remain below common filesystem component limits; the complete
-    // identity and full artifact digests remain in framing, graph, and attestation records.
+    // identity remains in framing and the graph.
     let digest_prefix = sha256(identity.as_bytes())
         .chars()
         .take(32)
