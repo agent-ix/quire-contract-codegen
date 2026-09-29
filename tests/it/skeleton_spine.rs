@@ -1,26 +1,38 @@
-//! FR-016 and FR-023: one Boolean clause goes from contract to Contract IR to a generated Kani
-//! obligation, is proved, falsified by an injected violation, and the counterexample is replayed
-//! natively through QSL's layer-6 `replay` facade, which settles the same violation.
+//! FR-016 and FR-023: the skeleton spine over one Boolean clause. A Kani obligation is generated
+//! from a hand-built bound package, proved, falsified by an injected violation, and the
+//! counterexample is replayed natively through QSL's layer-6 `replay` facade, which settles the
+//! same violation.
 //!
-//! The clause is `balance_post <= balance_pre` over `withdraw`. Its native twin is a QSL
-//! function of the same arguments that computes the post balance the way the subject does. The
-//! proving run's package identity and parameter node ids come from compiling that QSL source,
-//! because the replay request names them; the replay itself is `qsl_replay::replay`, which
-//! recompiles the source and evaluates the function.
+//! What the input passes through, in ADR-011 terms: the clause enters at the Contract IR side as
+//! a hand-written `BoundPackage` projection (no contract is compiled, so E1 to E4 and the
+//! contract-to-IR step do not run), CG generates the Kani obligation from it (E7), the pinned
+//! prover proves and falsifies it (E8), and the decoded counterexample is replayed by
+//! `qsl_replay::replay` (E9), which recompiles QSL source and evaluates the function. The QSL
+//! source here is a hand-mirrored native twin of the subject and clause, tied to the Rust side
+//! only by the clause and its argument names. The replay request's limits are unlimited
+//! stand-ins, because no proving run carries limits.
+//!
+//! Test-only exception, expiring: this file calls `qsl_replay::spine::compile` and depends on
+//! `qsl-foundation` and `quire-exact`, which QSL's FB-05 and arch-lint T12-A keep out of CG.
+//! It does so because `qsl-replay` re-exports neither the types a request needs
+//! (`quire_exact::Identifier`, `quire_exact::ScalarLimits`, `WireNodeId`, `SourceIdentity`) nor
+//! the package id and parameter node ids of a compiled unit. The exception ends, and the
+//! `spine` calls and both dev-dependencies are removed, when `qsl-replay` exposes those through
+//! its facade.
 //!
 //! The default lane covers the replay adapter against QSL and the gate's own logic. The `kani`
-//! lane (`make kani`, `#[ignore]` here) runs the real prover.
+//! lane (`make kani`, `#[ignore]` here, not part of `make ci`) runs the real prover.
 
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use qsl_foundation::{
-    digest::{ByteDigest, DigestDomain, DigestRecord},
+    digest::{ByteDigest, DigestDomain, DigestRecord, WireNodeId},
     SourceIdentity,
 };
 use qsl_replay::{
     spine::{compile, DependencyInput, SpineLimits},
-    ProofCategory, QualifiedName, ReplayRequestWire, ReplaySource, StageLimits, StateEnvironment,
-    WitnessSettlement, MAX_ENCODED_BYTES,
+    CanonicalAssignment, ProofCategory, QualifiedName, ReplayRequestWire, ReplaySource,
+    StageLimits, StateEnvironment, Verdict, WitnessSettlement, MAX_ENCODED_BYTES,
 };
 use quire_contract_codegen::{
     claimed_module_gate, decode_falsification, execute_kani_obligation_with_transcript,
@@ -59,14 +71,16 @@ fn native_source(post_balance: &str) -> String {
     )
 }
 
-/// What the proving run would carry for one compiled source: the package identity and each
-/// parameter's node id.
-struct Proved {
+/// The package identity and each parameter's node id of one compiled QSL source, which the
+/// replay request names.
+struct Compiled {
+    function: &'static str,
     package_id: String,
     parameters: Vec<(String, String)>,
 }
 
-fn prove_identity(source: &str) -> Proved {
+/// Compiles the hand-mirrored native twin `source` and reads `function`'s identity from it.
+fn compile_native_twin(source: &str, function: &'static str) -> Compiled {
     let compiled = compile(
         SourceIdentity::new(AUTHORITY, IDENTITY, NAMESPACE, REVISION),
         IDENTITY,
@@ -77,7 +91,7 @@ fn prove_identity(source: &str) -> Proved {
     )
     .expect("the native twin compiles");
     let graph = compiled.package.graph();
-    let callable = graph.callable(FUNCTION).expect("the function is declared");
+    let callable = graph.callable(function).expect("the function is declared");
     let nodes = graph
         .semantic_graph()
         .node(callable.identity)
@@ -89,7 +103,8 @@ fn prove_identity(source: &str) -> Proved {
         .zip(nodes)
         .map(|((name, _), node)| (name.clone(), node.to_string()))
         .collect();
-    Proved {
+    Compiled {
+        function,
         package_id: compiled.emitted.package_id().hex(),
         parameters,
     }
@@ -115,11 +130,11 @@ fn source_digest(bytes: &[u8]) -> DigestRecord {
     )
 }
 
-/// The replay request for the proving run: the package reference and limits are the run's, the
-/// source is digest-addressed in the byte provision.
+/// The replay request for the compiled twin: the source is digest-addressed in the byte
+/// provision, and the limits are unlimited stand-ins.
 fn request(
     source: &str,
-    proved: &Proved,
+    proved: &Compiled,
     backend: &KaniToolPins,
     counterexample: &str,
     replay_source: ReplaySource,
@@ -148,7 +163,8 @@ fn request(
             digest.hex(),
         )],
         dependencies: Vec::new(),
-        selected_function: QualifiedName::new(vec![Identifier::new(FUNCTION).unwrap()]).unwrap(),
+        selected_function: QualifiedName::new(vec![Identifier::new(proved.function).unwrap()])
+            .unwrap(),
         source: replay_source,
         originating_counterexample_identity: Sha256::digest(counterexample.as_bytes()).into(),
         backend: (
@@ -172,7 +188,7 @@ fn request(
     }
 }
 
-fn replay_parameters(proved: &Proved) -> Vec<ReplayParameter<'_>> {
+fn replay_parameters(proved: &Compiled) -> Vec<ReplayParameter<'_>> {
     proved
         .parameters
         .iter()
@@ -180,12 +196,12 @@ fn replay_parameters(proved: &Proved) -> Vec<ReplayParameter<'_>> {
         .collect()
 }
 
-/// Replays `values` against `native`, the QSL source proved and recompiled.
+/// Replays `values` against `native`, the QSL source compiled and recompiled.
 fn replay_against(
     native: &str,
     values: &[(String, WitnessValue)],
 ) -> Result<qsl_replay::WitnessArmResult, SpineReplayError> {
-    let proved = prove_identity(native);
+    let proved = compile_native_twin(native, FUNCTION);
     replay_falsification(
         "module::proof",
         "balance-never-grows",
@@ -202,18 +218,27 @@ fn values(amount: i64, balance: i64) -> Vec<(String, WitnessValue)> {
     ]
 }
 
-/// A falsifying input replays through QSL's `replay` and settles the same violation: the native
-/// twin that carries the injected violation evaluates the clause to false at the input. QSL
-/// evaluated it; nothing here supplies the verdict.
+const VIOLATING_TWIN: &str = "balance_pre + amount_current";
+const HEALTHY_TWIN: &str = "balance_pre - amount_current";
+
+fn violation() -> Verdict {
+    Verdict::from_category(ProofCategory::Violation)
+}
+
+fn success() -> Verdict {
+    Verdict::from_category(ProofCategory::Success)
+}
+
+/// A falsifying input that satisfies the proved precondition (`amount <= balance`) replays
+/// through QSL's `replay` and settles the same violation: the twin carrying the injected
+/// violation evaluates the clause to false at the input. QSL evaluated it; nothing here
+/// supplies the verdict.
 ///
 /// Trace: FR-016-AC-9, TC-026
 #[test]
 fn tc_026_a_falsifying_input_replays_through_qsl_to_the_same_violation() {
-    let result = replay_against(
-        &native_source("balance_pre + amount_current"),
-        &values(1, 0),
-    )
-    .expect("the replay settles");
+    let result =
+        replay_against(&native_source(VIOLATING_TWIN), &values(1, 5)).expect("the replay settles");
     assert_eq!(
         result.settlement(),
         WitnessSettlement::ReproducedWithEvaluatedWitness
@@ -226,34 +251,126 @@ fn tc_026_a_falsifying_input_replays_through_qsl_to_the_same_violation() {
     );
 }
 
-/// The same input against the healthy twin holds the clause, so QSL settles `inconclusive` with
-/// both verdicts named: replay never repairs a disagreement into a reproduction.
+/// The verdict is QSL's evaluation at the witness point: the same twin holds the clause at
+/// `amount = 0`, so a witness that is not a counterexample settles `inconclusive` with the
+/// proved violation and the replayed success both named.
 ///
-/// Trace: FR-016-AC-4, FR-016-AC-9, TC-026
+/// Trace: FR-016-AC-9, FR-016-AC-10, TC-026
 #[test]
-fn tc_026_a_healthy_native_twin_does_not_reproduce_the_violation() {
-    let result = replay_against(
-        &native_source("balance_pre - amount_current"),
-        &values(1, 0),
-    )
-    .expect("the replay settles");
+fn tc_026_the_replayed_verdict_depends_on_the_witness_value() {
+    let result =
+        replay_against(&native_source(VIOLATING_TWIN), &values(0, 5)).expect("the replay settles");
     assert_eq!(result.settlement(), WitnessSettlement::Inconclusive);
-    assert!(result.disagreement().is_some());
+    let cause = result.disagreement().expect("both verdicts are named");
+    assert_eq!((cause.proved(), cause.replayed()), (violation(), success()));
 }
 
-/// A decoded value no replay parameter binds is refused, and a Boolean replays as 0 or 1.
+/// The healthy twin holds the clause at a real counterexample's input, so QSL settles
+/// `inconclusive` naming both verdicts: replay never repairs a disagreement into a
+/// reproduction.
 ///
-/// Trace: FR-016-AC-8, TC-026
+/// Trace: FR-016-AC-4, FR-016-AC-10, TC-026
+#[test]
+fn tc_026_a_healthy_native_twin_does_not_reproduce_the_violation() {
+    let result =
+        replay_against(&native_source(HEALTHY_TWIN), &values(1, 5)).expect("the replay settles");
+    assert_eq!(result.settlement(), WitnessSettlement::Inconclusive);
+    let cause = result.disagreement().expect("both verdicts are named");
+    assert_eq!((cause.proved(), cause.replayed()), (violation(), success()));
+}
+
+/// A decoded value no replay parameter binds is refused before any call.
+///
+/// Trace: FR-016-AC-11, TC-026
 #[test]
 fn tc_026_a_value_with_no_parameter_is_refused() {
-    let mut extra = values(1, 0);
-    extra.push(("stray".to_owned(), WitnessValue::Boolean(true)));
-    let refusal = replay_against(&native_source("balance_pre + amount_current"), &extra)
+    let mut extra = values(1, 5);
+    extra.push(("stray".to_owned(), WitnessValue::Integer(1)));
+    let refusal = replay_against(&native_source(VIOLATING_TWIN), &extra)
         .expect_err("`stray` names no parameter");
     assert!(
         matches!(&refusal, SpineReplayError::UnboundArgument { argument } if argument == "stray"),
         "{refusal}"
     );
+}
+
+/// A Boolean value replays as the integer 1 or 0: `flag(b) = b` is false for `false`, which
+/// reproduces the violation, and true for `true`, which does not.
+///
+/// Trace: FR-016-AC-9, TC-026
+#[test]
+fn tc_026_a_boolean_value_replays_as_zero_or_one() {
+    let source = format!(
+        "language \"ix:native\" edition \"1-draft\";\n{PROFILE}\
+         function flag using v(b: Boolean): Boolean pure {{ b }}\n"
+    );
+    let compiled = compile_native_twin(&source, "flag");
+    let replay = |value: bool| {
+        replay_falsification(
+            "module::proof",
+            "flag",
+            &[("b".to_owned(), WitnessValue::Boolean(value))],
+            &replay_parameters(&compiled),
+            |witness| request(&source, &compiled, &pins(), "flag", witness),
+        )
+        .expect("the replay settles")
+    };
+    assert_eq!(
+        replay(false).settlement(),
+        WitnessSettlement::ReproducedWithEvaluatedWitness
+    );
+    assert_eq!(replay(true).settlement(), WitnessSettlement::Inconclusive);
+}
+
+/// Every refusal the adapter has is its own typed error: a delimiter in a transcript field, a
+/// node id that makes the transcript inadmissible, a request QSL refuses, and a request whose
+/// source is not a witness.
+///
+/// Trace: FR-016-AC-11, TC-026
+#[test]
+fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
+    let native = native_source(VIOLATING_TWIN);
+    let compiled = compile_native_twin(&native, FUNCTION);
+    let parameters = replay_parameters(&compiled);
+    let build = |witness| request(&native, &compiled, &pins(), "x", witness);
+
+    let delimiter = replay_falsification("a|b", "c", &values(1, 5), &parameters, build);
+    assert!(matches!(delimiter, Err(SpineReplayError::FieldDelimiter)));
+
+    let bad_node = [ReplayParameter {
+        argument: "amount_current",
+        node_id: "x>>>y",
+    }];
+    let transcript = replay_falsification(
+        "h",
+        "c",
+        &[("amount_current".to_owned(), WitnessValue::Integer(1))],
+        &bad_node,
+        build,
+    );
+    assert!(matches!(transcript, Err(SpineReplayError::Transcript(_))));
+
+    let stale = compile_native_twin(&native_source(HEALTHY_TWIN), FUNCTION);
+    let refused = replay_falsification("h", "c", &values(1, 5), &parameters, |witness| {
+        let mut wire = request(&native, &compiled, &pins(), "x", witness);
+        wire.package_id.1 = stale.package_id.clone();
+        wire
+    });
+    assert!(matches!(refused, Err(SpineReplayError::Refused(_))));
+
+    let wrong_arm = replay_falsification("h", "c", &values(1, 5), &parameters, |_| {
+        let input = compiled
+            .parameters
+            .iter()
+            .zip([1_i64, 5])
+            .map(|((_, node), value)| CanonicalAssignment {
+                parameter: WireNodeId::from_hex(node).expect("a node id"),
+                value,
+            })
+            .collect();
+        request(&native, &compiled, &pins(), "x", ReplaySource::Input(input))
+    });
+    assert!(matches!(wrong_arm, Err(SpineReplayError::WrongArm)));
 }
 
 fn claimed() -> Vec<&'static str> {
@@ -280,15 +397,15 @@ fn prove(harness: &KaniObligationHarness, subject: &str) -> (KaniRunOutcome, Str
     (evidence.outcome, transcript.expect("the run concluded"))
 }
 
-/// The spine. The healthy subject verifies and the gate is green with a discharged check in
+/// The spine over the hand-built bound package. The healthy subject verifies and the gate is green with a discharged check in
 /// every claimed module; an unclaimed-by-the-proof module is `unreached`; a violation injected
 /// into the subject module, and another into the generated obligation module, each turn the gate
 /// red; and the subject's counterexample replays through QSL to the same violation.
 ///
-/// Trace: FR-016-AC-9, FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, TC-026, TC-034
+/// Trace: FR-016-AC-9, FR-016-AC-10, FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, TC-026, TC-034
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
-fn tc_034_one_boolean_clause_goes_from_contract_through_kani_to_native_replay() {
+fn tc_034_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_replay() {
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, &pins(), SUBJECT_PATH).remove(1);
     let claimed = claimed();
@@ -355,8 +472,16 @@ fn tc_034_one_boolean_clause_goes_from_contract_through_kani_to_native_replay() 
         counterexample,
     )
     .expect("the counterexample decodes");
-    let native = native_source("balance_pre + amount_current");
-    let proved = prove_identity(&native);
+    let get = |name: &str| match decoded.iter().find(|(n, _)| n == name) {
+        Some((_, WitnessValue::Integer(value))) => *value,
+        other => panic!("{name} decodes to an integer, got {other:?}"),
+    };
+    assert!(
+        get("amount_current") <= get("balance_pre"),
+        "the counterexample satisfies the proved precondition"
+    );
+    let native = native_source(VIOLATING_TWIN);
+    let proved = compile_native_twin(&native, FUNCTION);
     let result = replay_falsification(
         &format!(
             "{}::{}",
@@ -375,8 +500,8 @@ fn tc_034_one_boolean_clause_goes_from_contract_through_kani_to_native_replay() 
     assert_eq!(result.category(), ProofCategory::Violation);
 
     // The same counterexample against the healthy twin does not reproduce.
-    let healthy = native_source("balance_pre - amount_current");
-    let proved = prove_identity(&healthy);
+    let healthy = native_source(HEALTHY_TWIN);
+    let proved = compile_native_twin(&healthy, FUNCTION);
     let result = replay_falsification(
         "module::proof",
         "balance-never-grows",
@@ -386,4 +511,6 @@ fn tc_034_one_boolean_clause_goes_from_contract_through_kani_to_native_replay() 
     )
     .expect("QSL settles the replay");
     assert_eq!(result.settlement(), WitnessSettlement::Inconclusive);
+    let cause = result.disagreement().expect("both verdicts are named");
+    assert_eq!((cause.proved(), cause.replayed()), (violation(), success()));
 }

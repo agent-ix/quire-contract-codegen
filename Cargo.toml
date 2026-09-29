@@ -37,9 +37,11 @@ sha2 = "=0.10.9"
 syn = { version = "=2.0.119", features = ["full", "visit"] }
 
 [dev-dependencies]
-# The spine test recompiles its own QSL source to learn the package identity and parameter node
-# ids a proving run would carry, and builds the replay request's typed limits and digests. Same
-# QSL rev as qsl-replay.
+# Test-only exception to QSL's T12-A, expiring: the spine test compiles its own QSL source
+# (qsl_replay::spine) to learn the package id and parameter node ids, and builds the request's
+# typed limits and digests. Both dev-dependencies and that use go when qsl-replay re-exports
+# quire_exact::Identifier and ScalarLimits, WireNodeId and SourceIdentity and exposes a compiled
+# unit's package id and parameter node ids. Same QSL rev as qsl-replay.
 qsl-foundation = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "20ba521b8767b2faf5fda06ca163b50549a1a51f" }
 quire-exact = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "20ba521b8767b2faf5fda06ca163b50549a1a51f" }
 jsonschema = { version = "=0.17.1", default-features = false, features = ["draft202012"] }

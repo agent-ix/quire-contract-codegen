@@ -53,9 +53,10 @@ it claims, which is why the count is per claimed module.
   many checks succeeded.
 - If no module is claimed, then the gate shall fail, because it would discharge
   nothing.
-- A violation injected inside a claimed module shall turn the gate red. The
-  spine's test injects one inside each claimed module and applies the gate to
-  the run it produces.
+- A violation injected inside a claimed module shall turn the gate red.
+
+The spine applies this gate in a `make kani` test, which is an ignored test
+outside `make ci`; the gate's own logic is tested in the default suite.
 
 ## Acceptance Criteria
 

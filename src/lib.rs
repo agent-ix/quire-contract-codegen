@@ -24,7 +24,7 @@ mod kani_execution;
 mod kani_transcript;
 // IR-211: joins a real Kani witness to the generator's own persisted obligation schema.
 mod kani_witness_join;
-// Implements: FR-017
+// Implements: FR-023
 mod kani_module_gate;
 // Implements: FR-016
 mod spine_replay;

@@ -39,11 +39,14 @@ mismatch and unavailable results respectively.
 
 ## Status
 
-Partial. FR-016-AC-9 is implemented and tested: a falsifying input replays through
-`qsl_replay::replay` and settles the violation, the healthy native twin settles
-`inconclusive`, and an unbound value is refused, all in the default suite
-(`tests/it/skeleton_spine.rs`); the ignored Kani lane replays a real prover
-counterexample the same way.
+Partial. FR-016-AC-9 through AC-11 are implemented and tested in the default suite
+(`tests/it/skeleton_spine.rs`): a falsifying input replays through
+`qsl_replay::replay` and settles the violation, a witness at which the function
+holds and a healthy twin settle `inconclusive` naming both verdicts, and each
+adapter refusal is its own typed error. The ignored Kani lane (`make kani`, not
+part of `make ci`) replays a real prover counterexample the same way. The native
+twin is hand-mirrored QSL source and the input package is hand-built, so the
+contract-to-Contract-IR step does not run.
 
 FR-016-AC-8 is implemented and tested in the default suite: schema
 order and naming by position (`src/kani_witness_join.rs` unit tests) and the

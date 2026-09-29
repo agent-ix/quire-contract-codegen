@@ -25,7 +25,15 @@ a violation injected inside each claimed module turns it red.
    compiles and never calls.
 3. Run the same harness with the subject's operation changed to credit rather
    than debit, and with the generated ensures bound tightened past what the
-   subject satisfies, and apply the gate to each run.
+   subject satisfies, and apply the gate to each run. Decode the credit run's
+   counterexample and replay it through QSL.
+
+The input is a hand-built `BoundPackage` projection: no contract is compiled, so
+the contract-to-Contract-IR step does not run. It passes through CG's Kani
+obligation generation and the pinned prover, and the decoded counterexample
+through `qsl_replay::replay`. The native twin is hand-mirrored QSL source tied to
+the Rust side only by the clause and its argument names, and the request's limits
+are unlimited stand-ins.
 
 ## Expected Results
 
@@ -38,6 +46,6 @@ red.
 
 ## Status
 
-Covered. Steps 1 is in the default suite (`src/kani_module_gate.rs` unit tests);
+Covered. Step 1 is in the default suite (`src/kani_module_gate.rs` unit tests);
 steps 2 and 3 run in the ignored Kani lane
-(`tests/it/skeleton_spine.rs`, `make kani`).
+(`tests/it/skeleton_spine.rs`, `make kani`), which `make ci` does not include.
