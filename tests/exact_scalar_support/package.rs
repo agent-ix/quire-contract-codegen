@@ -152,7 +152,9 @@ pub fn reference(digest: &str) -> Value {
 /// against the reader, on `value`/`parameter` nodes, which QSL emits with no
 /// declaration), and otherwise
 /// requires it exactly when the node carries a `declaration`-role occurrence
-/// — which every node built by this module does. The qualified name is not
+/// — which every node built by this module does except `value`/`parameter`
+/// (role `expression`) and `state`/`frame` (role `generated`), both of which
+/// the rule above already leaves without a declaration. The qualified name is not
 /// cross-checked against anything else the reader validates (only that each
 /// segment is a nonempty ASCII identifier), so a name derived from the
 /// node's own digest is sufficient and stays unique by construction.

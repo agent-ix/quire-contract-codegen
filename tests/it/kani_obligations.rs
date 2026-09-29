@@ -393,7 +393,7 @@ const UNSATISFIABLE: u32 = 3001;
 /// A frame clause.
 const FRAME: u32 = 3002;
 /// The object type `FRAME` frames.
-const FRAMED_OBJECT: u32 = 3003;
+const FRAMED_OBJECT: u32 = 3004;
 
 pub(crate) fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>) {
     let mut builder = corpus_package();
