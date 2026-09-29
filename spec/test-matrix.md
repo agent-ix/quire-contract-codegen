@@ -159,29 +159,26 @@ name; adding timed-out to that enumeration is codegen#55.
 
 FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6 and FR-018-AC-10 through FR-018-AC-14 are `✅ Covered`:
 the composite/structural equality slice of codegen#48 that TC-029 backs with a passing test for every
-clause those criteria name. Generation lives in `src/composite_equality.rs`; the committed golden
-crate under `tests/fixtures/composite_equality/` is the crate TC-029 step 4 compiles and executes,
-over all 11 of its oracles — both `EqualityOperator` variants on the record node, and the tuple,
-text, enum, option, collection, self-recursive and nested-composite shapes — plus two
-`converted`-operand vectors, one of which admits real `Decimal*` conversion charges — in
-`tests/composite_equality_agreement.rs`'s `agree3!` macro. Each of these criteria's own
+clause those criteria name. Generation lives in `src/composite_equality.rs`; TC-029 step 4 generates
+the corpus crate at test time and compiles and executes it, over all 11 of its oracles — both
+`EqualityOperator` variants on the record node, and the tuple, text, enum, option, collection,
+self-recursive and nested-composite shapes — plus two `converted`-operand vectors, one of which
+admits real `Decimal*` conversion charges — in `tests/composite_equality_support/agreement_cases.rs`'s
+`agree2!` macro, run by `tests/it/composite_equality_agreement.rs`. Each of these criteria's own
 FR-018 mutation was applied, confirmed to turn its test red, and reverted, including AC-2's
 conversion-ordering row (swapping which operand's `convert<T>` target the emitted code applies) and
 all four of AC-10's: ordering claim-map entries by expression node id alone (which ties two descriptors
-on one node and lets a permuted request permute them); the circularity check — blessing a golden whose
-emitted operator was corrupted while the native leg reads its descriptor from that same golden; swapping
+on one node and lets a permuted request permute them); corrupting the emitted operator of the record
+node's `not_equal` oracle, which the AC-2 agreement over that oracle turns red; swapping
 which operand's runtime value or conversion target is evaluated as left versus right
 (`checked.evaluate(left, right, meter)` and `check_equality(op, left_operand, right_operand)`, each
 swapped independently); and swapping the emitted `left_source`/`right_source` descriptor itself. The
-circularity mutation is the one that tests whether the golden defence holds rather than merely exists:
-with the corrupted golden re-blessed, the byte-comparison test passes by construction, but the AC-2
-three-way agreement over the record node's `not_equal` oracle — the one the corruption reaches — still
-goes red. The two operand-order/descriptor mutations are caught only because `E_CONV_CHARGE`
+two operand-order/descriptor mutations are caught only because `E_CONV_CHARGE`
 (FR-018-AC-9) is the corpus's first vector with an asymmetric operand pair — every other vector's left
 and right share an identical descriptor, so equality over identical types is symmetric and a swap is
-undetectable there; re-blessing under either swap with `E_CONV_CHARGE` in the corpus turns
+undetectable there; under either swap, with `E_CONV_CHARGE` in the corpus,
 `tc_029_ac2_a_converted_operand_agrees` and `tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges`
-red.
+go red.
 
 That coverage had a hard prerequisite, now satisfied: agent-ix/quire-contract-codegen#75, merged as
 `e74d592`, re-pinned Contract Runtime `a04bd47`→`4e33052` and quire-spec-language

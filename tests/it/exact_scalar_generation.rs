@@ -33,9 +33,6 @@ mod package;
 
 use package::*;
 
-/// Set to regenerate the committed golden files instead of comparing them.
-const BLESS: &str = "QUIRE_CODEGEN_BLESS";
-
 struct TemporaryDirectory(PathBuf);
 
 impl TemporaryDirectory {
@@ -92,28 +89,42 @@ fn symbol(code: u32) -> String {
     format!("oracle_{}", code_id(code).digest)
 }
 
+/// The generator's current output for the whole corpus request, which
+/// `exact_scalar_agreement` builds and executes.
+pub(super) fn corpus_oracles() -> ExactScalarOracles {
+    generate(&corpus_package().admit(), &golden_items())
+}
+
 /// Trace: FR-014-AC-4, TC-024.
+///
+/// The corpus crate is exactly `Cargo.toml`, `src/lib.rs` and `claim-map.json`;
+/// the claim map on disk is the serialized in-memory claim map; every
+/// generated claim's oracle symbol is defined in `src/lib.rs`; and each
+/// artifact records the SHA-256 of its own contents.
 #[test]
-fn tc_024_generation_matches_the_committed_golden_files() {
-    let oracles = generate(&corpus_package().admit(), &golden_items());
-    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/exact_scalar");
-    for (artifact, golden) in [
-        ("Cargo.toml", "Cargo.toml.golden"),
-        ("src/lib.rs", "lib.rs.golden"),
-        ("claim-map.json", "claim-map.json.golden"),
-    ] {
-        let path = fixtures.join(golden);
-        if std::env::var_os(BLESS).is_some() {
-            fs::write(&path, contents(&oracles, artifact)).expect("write golden");
+fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
+    let oracles = corpus_oracles();
+    let paths = oracles
+        .artifacts
+        .iter()
+        .map(|artifact| artifact.path.as_str())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        paths,
+        BTreeSet::from(["Cargo.toml", "claim-map.json", "src/lib.rs"])
+    );
+    let on_disk: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).unwrap();
+    assert_eq!(on_disk, serde_json::to_value(&oracles.claim_map).unwrap());
+    let lib = contents(&oracles, "src/lib.rs");
+    let mut generated = 0_usize;
+    for claim in &oracles.claim_map.items {
+        if let ClaimDisposition::Generated(_) = &claim.result {
+            let symbol = format!("pub fn oracle_{}(", claim.node_id.digest);
+            assert!(lib.contains(&symbol), "{symbol} is not defined");
+            generated += 1;
         }
-        let expected = fs::read_to_string(&path)
-            .unwrap_or_else(|error| panic!("{}: {error}; set {BLESS}=1", path.display()));
-        assert_eq!(
-            contents(&oracles, artifact),
-            expected,
-            "{artifact} drifted from {golden}"
-        );
     }
+    assert!(generated > 60, "the corpus generates every family");
     for artifact in &oracles.artifacts {
         assert_eq!(
             artifact.sha256,

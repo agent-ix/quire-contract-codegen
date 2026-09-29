@@ -47,8 +47,7 @@ change.
    expression node applying an admitted function, with a duplicate copy of the same node id under
    the same binding; (f) one or more `call` nodes over model, relation, state, temporal and protocol
    forms; and (g) a nested-`call` chain deep enough to reach `MAX_CALL_DEPTH` when executed.
-2. Generate twice and with a permuted request; compare bytes with each other and with the committed
-   golden, and inspect claim-map ordering by the `call` node id, then the applied function's
+2. Generate twice and with a permuted request; compare bytes with each other, and inspect claim-map ordering by the `call` node id, then the applied function's
    declaring node id, then each argument operand's source node id, every node id compared by digest
    domain then digest.
 3. Inspect each refusal: its typed cause, that the item's symbols are absent from the generated
@@ -63,7 +62,8 @@ change.
    index, charge-amount literal, or literal `Outcome`/`Value` constant standing in for a runtime
    result, and that the crate manifest declares `publish = false` and the pinned runtime revision
    with the `exact` feature.
-4. Compile the golden oracle crate into the test crate and execute its generated oracle for each
+4. Generate the main and chain corpus crates at test time, compile them with the agreement cases as
+   their integration test, and execute the generated oracle for each
    admitted `call` item on the corpus vectors. For each vector compare the `Outcome<Value>`, the
    admitted charge sequence and the consumed counters against a direct call to
    `CheckedPackage::call` on a package, arguments and fresh `Meter` constructed independently in the

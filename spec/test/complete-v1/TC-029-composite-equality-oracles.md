@@ -18,12 +18,11 @@ every non-generated item with its own typed reason, are byte-deterministic, and
 agree — outcome, admitted charges and consumed counters — with direct runtime
 execution and with the pinned quire-spec-language value authority.
 
-The discriminating evidence is the three-way agreement of step 4, not the
-committed golden. The golden is blessable with `QUIRE_CODEGEN_BLESS=1`, so it
-pins nothing on its own; it earns its place only because the golden crate is the
-crate step 4 compiles and executes against independently constructed native
-runs whose descriptor comes from the request. A blessed golden whose emitted
-operator, operand order or descriptor changed fails step 4.
+The discriminating evidence is the agreement of step 4. No generated output is
+committed: step 4 generates the corpus crate at test time and executes it
+against independently constructed native runs whose descriptor comes from the
+request, so a generator change to an emitted operator, operand order or
+descriptor fails step 4.
 
 This test depends on the re-pin agent-ix/quire-contract-codegen#75 merged as
 `e74d592`: Contract Runtime `4e33052` and quire-spec-language `21c507e`. At the
@@ -48,8 +47,7 @@ here and `quire_spec_language::value` published no `check_equality`,
    operand types, one node id repeated under one descriptor, and a request that
    exceeds the lowering work limit.
 2. Generate twice and with a permuted request that includes both descriptors of
-   step 7 over one node id; compare bytes with each other and with the committed
-   golden, and inspect claim-map ordering by the descriptor key — expression node
+   step 7 over one node id; compare bytes with each other, and inspect claim-map ordering by the descriptor key — expression node
    id, operator rank, then each operand's source-type and conversion-target node
    ids, every node id compared by digest domain then digest; the expression node
    id alone ties those two entries — reconstructed declaration keys against
@@ -66,8 +64,8 @@ here and `quire_spec_language::value` published no `check_equality`,
    the generated source contains no `unwrap`, `expect`, panicking index or
    charge or pair-count literal, and that the crate manifest declares
    `publish = false` and the pinned runtime revision with the `exact` feature.
-4. Compile the golden oracle crate into the test crate and execute it on the
-   corpus vectors. For each vector compare the `Outcome<bool>`, the admitted
+4. Generate the corpus crate at test time, compile it with the agreement cases
+   as its integration test, and execute it on the corpus vectors. For each vector compare the `Outcome<bool>`, the admitted
    charge sequence and the consumed counters against (a) a direct call to
    `TypeEnvironment::check_equality` and `CheckedEquality::evaluate` on an
    environment, operands **and descriptor** constructed in the test from the
