@@ -2,6 +2,16 @@
 
 Deterministic Rust, property-test, proof, and evidence generation from Quire contracts.
 
+## Hash / digest / pin antipattern: present, slated for removal
+
+This repository still contains hashes, digests, SHAs, pins, checksum catalogs and
+records that track files, versions or tools. That is an antipattern and it is slated
+for removal. Do not introduce any new use of it. When you touch code or specs that
+contain one, remove it as part of the change. The only hash that stays is a canonical
+identity digest that binds a proof to the exact content it proved. Package versions
+live in Cargo.toml / package.json and their lockfiles only; reports name the app
+version they ran.
+
 ## Commands
 
 ```bash
@@ -21,14 +31,11 @@ make ci               # every local gate above except build and clean
 
 ## Safety scaffolding
 
-Backported from `agent-ix/ecaz`:
-
-- `clippy.toml` sets MSRV to `1.98.1` and caps cognitive complexity / arg count
+- `clippy.toml` caps cognitive complexity / arg count
 - `deny.toml` allow-lists licenses and denies unknown registries/git sources
 - `scripts/check_unsafe_comments.sh` runs in CI and locally via `make audit-unsafe`. Every `unsafe {` block must have a `// SAFETY:` comment within the 3 preceding lines, or be listed in `scripts/unsafe_comment_baseline.txt`. A line whose every occurrence is written `"unsafe {`, the token immediately preceded by a double quote, is a mention rather than a block and is not audited: this repository generates Rust and asserts properties of the generated text, so `"unsafe {"` appears as data in the tests that forbid unsafe code in generated output. The test is quote-prefixing, not string-literal membership, and only the exact spelling `"unsafe {` counts: a mention with a leading space, one mid-literal, or one inside a multi-line expected-output fixture is still audited and needs a baseline entry. Update the baseline with `bash scripts/check_unsafe_comments.sh --update-baseline`. A tree with no Rust source roots, or a scan that fails, exits 2 as inconclusive rather than printing "unsafe audit passed"; the earlier version reported success when it had nothing to audit.
 - This unsafe-audit script intentionally strengthens the shared seven-repository version by scanning tests, benches, and examples and emitting a positive completion marker; the shared policy owner should upstream those differences.
 - `rustfmt.toml` uses stable rustfmt settings with a 100-char width. CI fails on drift.
-- `rust-toolchain.toml` selects the Rust 1.98.1 toolchain (minimal profile) with rustfmt and clippy.
 
 ## Layout
 
