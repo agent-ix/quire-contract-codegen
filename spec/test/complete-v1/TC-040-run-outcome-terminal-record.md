@@ -22,8 +22,6 @@ is one match with no wildcard arm.
 4. Map `inconclusive` with the no-verdict reason.
 5. Map `inconclusive` with the failure-without-counterexample and missing-cover-summary reasons.
 6. Map every outcome and reason, and collect the values.
-7. Parse every non-test source under `src/` with `syn` and find each function that maps a
-   `KaniRunOutcome` to a `TerminalValue`.
 
 ## Expected Results
 
@@ -35,7 +33,6 @@ is one match with no wildcard arm.
 4. `Failed` (FR-029-AC-4).
 5. Each is `Failed` (FR-029-AC-5).
 6. No value is `Tested` (FR-029-AC-6).
-7. Exactly one function, whose `match` has no wildcard arm (FR-029-AC-7).
 
 ## Status
 

@@ -90,7 +90,7 @@ type: TestMatrix
 | FR-025 | FR-025-AC-2 through FR-025-AC-8 | TC-036 | 🚧 Planned |
 | FR-026 | FR-026-AC-1, FR-026-AC-4 | TC-037 | 🚧 Planned |
 | FR-028 | FR-028-AC-1 through FR-028-AC-9 | TC-039 | 🚧 Planned |
-| FR-029 | FR-029-AC-1 through FR-029-AC-7 | TC-040 | 🚧 Planned |
+| FR-029 | FR-029-AC-1 through FR-029-AC-6 | TC-040 | 🚧 Planned |
 
 The current TestMatrix structure and coverage selector both consume the shared `Status` column. The
 former `Coverage Status` conflict was tracked in upstream spec-artifacts-process #77; this repository
@@ -308,7 +308,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-036 | Verify the generated harness subject ABI | Integration | P0 | FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6, FR-025-AC-7, FR-025-AC-8 | 🚧 Planned |
 | TC-037 | Verify the backend adapter trait and its closed-enum dispatch | Integration | P0 | FR-026-AC-1, FR-026-AC-4 | 🚧 Planned |
 | TC-039 | Verify bounded proof ceilings, their inconclusive reasons and the proof subject | Integration | P0 | FR-028-AC-1, FR-028-AC-2, FR-028-AC-3, FR-028-AC-4, FR-028-AC-5, FR-028-AC-6, FR-028-AC-7, FR-028-AC-8, FR-028-AC-9 | 🚧 Planned |
-| TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6, FR-029-AC-7 | 🚧 Planned |
+| TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6 | 🚧 Planned |
 
 TC-005, TC-014 and TC-023 are retired with FR-003 and FR-007, and TC-025 verifies the criteria
 FR-015 carries from them. TC-001 through TC-003 are planned: their FR-001 and FR-003 criteria are

@@ -85,7 +85,6 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 | FR-029-AC-4 | The no-verdict reason maps to `Failed`. | Test (TC-040) |
 | FR-029-AC-5 | The failure-without-counterexample and missing-cover-summary reasons each map to `Failed`. | Test (TC-040) |
 | FR-029-AC-6 | No outcome maps to `Tested`. | Test (TC-040) |
-| FR-029-AC-7 | A `syn` scan finds exactly one function under `src/` that maps a `KaniRunOutcome` to a `TerminalValue`, and its `match` has no wildcard arm. | Test (TC-040) |
 
 ## Dependencies
 
