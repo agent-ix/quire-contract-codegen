@@ -795,18 +795,11 @@ mod tests {
         }
     }
 
-    /// FR-017-AC-4 does not yet name the `** <failed> of <total> failed` checks line, so this
-    /// test binds itself to no criterion rather than claim one it does not establish — mirroring
-    /// `agent-ix/quire-contract-ir`'s own deliberately-untraced
-    /// `a_proved_run_with_zero_success_checks_settles_inconclusive_as_vacuous`, which this test
-    /// is the execution-path counterpart of.
+    /// A transcript reporting zero total checks (`** 0 of 0 failed`) alongside a satisfied 1-of-1
+    /// cover and `VERIFICATION:- SUCCESSFUL` is `Inconclusive` under the `VacuousProof` reason,
+    /// never `Verified`.
     ///
-    /// Before this change, `classify_kani_run` read only the cover-properties line, so a transcript
-    /// reporting zero total checks (`** 0 of 0 failed`: no check in the obligation ran at all)
-    /// alongside a satisfied 1-of-1 cover and `VERIFICATION:- SUCCESSFUL` classified `Verified`
-    /// — a proof backed by zero checks, reported as proved. Routed through
-    /// `KaniOutcome::proved_from_checks` (agent-ix/quire-contract-codegen#99), the same
-    /// transcript is `Inconclusive` under the new `VacuousProof` reason instead.
+    /// Trace: FR-017-AC-13, TC-027
     #[test]
     fn a_zero_total_checks_summary_is_inconclusive_not_verified_even_with_every_cover_satisfied() {
         let vacuous_by_checks = "SUMMARY:\n ** 0 of 0 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
@@ -978,14 +971,6 @@ mod tests {
     /// walking `/proc` at all, which is why that version of this test stayed green when
     /// `kill_process_tree` was disabled outright (confirmed by disabling it: this version goes
     /// red, that one did not) and is not evidence the tree-walking kill does anything.
-    ///
-    /// This assertion binds to no criterion. FR-007-AC-3 names a timed-out state on the corpus
-    /// path (`KaniOutcomeKind`), which `src/bounded_kani_corpus.rs` demonstrates; that is a
-    /// different enum from this module's own `KaniInconclusiveReason`, and FR-017-CON-2 forbids
-    /// converting between them, so this execution-path test cannot claim FR-007-AC-3 for itself.
-    /// No criterion in this repository names a timed-out state on the execution path today —
-    /// adding one is agent-ix/quire-contract-codegen#55 — so this test binds to nothing rather
-    /// than claim one it does not establish.
     ///
     /// The budget below is not one fixed guess: [`GRANDCHILD_KILL_TIMEOUT_LADDER`] is tried in
     /// increasing order until the grandchild is confirmed both timed out and killed. A single

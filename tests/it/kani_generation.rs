@@ -391,10 +391,10 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
 }
 
 /// TC-014
-/// FR-003-AC-2
-/// FR-003-AC-4
-/// FR-003-AC-5
-/// FR-003-AC-8
+/// FR-015-AC-20
+/// FR-015-AC-9
+/// FR-015-AC-11
+/// FR-015-AC-10
 #[test]
 fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
     let bounded = integer_type(0, 1000);
@@ -593,9 +593,9 @@ fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
 }
 
 /// TC-014
-/// FR-003-AC-2
-/// FR-003-AC-5
-/// FR-003-AC-7
+/// FR-015-AC-20
+/// FR-015-AC-11
+/// FR-015-AC-24
 #[test]
 fn every_integer_comparison_supports_a_zero_result_bounded_subject() {
     let bounded = integer_type(0, 1000);
@@ -669,9 +669,9 @@ fn every_integer_comparison_supports_a_zero_result_bounded_subject() {
 
 /// TC-007
 /// TC-014
-/// FR-003-AC-2
-/// FR-003-AC-5
-/// FR-003-AC-7
+/// FR-015-AC-20
+/// FR-015-AC-11
+/// FR-015-AC-24
 #[test]
 fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
     let bounded = integer_type(0, 1000);
@@ -785,8 +785,8 @@ fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
 }
 
 /// TC-014
-/// FR-003-AC-2
-/// FR-003-AC-8
+/// FR-015-AC-20
+/// FR-015-AC-10
 #[test]
 fn declaration_and_dependency_order_do_not_change_the_normalized_bundle() {
     let bounded = integer_type(0, 1000);
@@ -869,10 +869,10 @@ fn declaration_and_dependency_order_do_not_change_the_normalized_bundle() {
 }
 
 /// TC-014
-/// FR-003-AC-2
-/// FR-003-AC-5
-/// FR-003-AC-6
-/// FR-003-AC-7
+/// FR-015-AC-20
+/// FR-015-AC-11
+/// FR-015-AC-19
+/// FR-015-AC-24
 #[test]
 fn kani_proves_identity_and_prints_numeric_counterexamples() {
     let version = Command::new("cargo")
@@ -1047,7 +1047,7 @@ fn kani_proves_identity_and_prints_numeric_counterexamples() {
 }
 
 /// TC-005
-/// FR-003-AC-1
+/// FR-015-AC-25
 #[test]
 fn proof_dependency_graph_derives_readiness_and_preserves_source_sites() {
     let missing = [ProofDependencyRequest {
@@ -1129,7 +1129,7 @@ fn proof_dependency_graph_derives_readiness_and_preserves_source_sites() {
 }
 
 /// TC-003
-/// FR-003-AC-3
+/// FR-015-AC-3
 #[test]
 fn invalid_kani_requests_return_structured_non_generated_states() {
     let environment = environment();

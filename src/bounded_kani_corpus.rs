@@ -22,13 +22,13 @@ use crate::{
 
 /// Stable schema identity for [`CorpusProofDependencyGraph`].
 ///
-/// Deliberately distinct from FR-003's `quire.kani-proof-graph/v2`
+/// Deliberately distinct from `src/kani.rs`'s `quire.kani-proof-graph/v2`
 /// ([`crate::kani::ProofDependencyGraph`], validated against
 /// `schemas/kani-proof-graph-v2.schema.json`): that schema requires a Contract-IR `requirementId`/
 /// `requirementRevision` this corpus's finite-ABI input has no analogue for, and requires a
 /// cargo-kani CLI `options` array of at least fifteen entries that this generator never builds
 /// (`corpus`'s harnesses are plain `#[kani::proof]`, not `#[kani::proof_for_contract]`, and no
-/// unwind/solver/harness-filter option vector is ever assembled for them). Reusing FR-003's exact
+/// unwind/solver/harness-filter option vector is ever assembled for them). Reusing that exact
 /// envelope here would mean fabricating those fields; this schema instead carries only what
 /// [`generate_bounded_kani_corpus_case`] actually derives (ir#80).
 pub const CORPUS_PROOF_GRAPH_SCHEMA: &str = "quire.kani-corpus-proof-graph/v1";
@@ -111,7 +111,7 @@ pub struct BoundedCorpusArtifacts {
 /// `#[kani::proof]` symbol, its semantic family/construct, its case name (the same name its
 /// sibling artifact paths carry), the derived readiness, and the sorted declared
 /// dependency census. See [`CORPUS_PROOF_GRAPH_SCHEMA`] for why this is a distinct envelope from
-/// FR-003's `quire.kani-proof-graph/v2`.
+/// `src/kani.rs`'s `quire.kani-proof-graph/v2`.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CorpusProofDependencyGraph {
@@ -179,9 +179,9 @@ pub struct BoundedCorpusCase {
 /// outcome and this function emits no artifact.  Generated Kani source uses a concrete case and
 /// intentionally contains no `kani::assume` call.
 ///
-/// `dependencies` is the caller-declared proof-dependency census for this exact case (FR-007
-/// Inputs: "declared proof dependency census"). It is validated with the same rules FR-003's
-/// `generate_kani_bundle` applies to its own census (`crate::kani::validate_dependencies`, ir#80),
+/// `dependencies` is the caller-declared proof-dependency census for this exact case. It is
+/// validated with the same rules `generate_kani_bundle` applies to its own census
+/// (`crate::kani::validate_dependencies`),
 /// plus a Required-only rule this corpus adds on top: the corpus's generated harnesses are
 /// self-contained by construction (literal operands/edges baked in at generation time, no external
 /// call, no `// proof-dependency-site:` marker, no `kani::assume`, no `#[kani::stub]`), so any
@@ -219,7 +219,7 @@ pub fn generate_bounded_kani_corpus_case(
     // and the single normalized form computed here is the one the emitted proof-dependency-graph
     // artifact (`render_artifacts`) carries.
     //
-    // Validation is two layers. First, FR-003's shared rules (`crate::kani::validate_dependencies`)
+    // Validation is two layers. First, the shared rules (`crate::kani::validate_dependencies`)
     // -- non-empty and unique declared identities, and a closed kind/state/path shape per entry.
     // Second, this corpus's own Required-only rule (ir#80 review finding F1): the corpus's
     // generated harnesses are self-contained by construction -- rendering no
@@ -622,7 +622,7 @@ mod tests {
         })
     }
 
-    /// Trace: FR-007-AC-1, FR-007-AC-2, FR-007-AC-5, TC-023.
+    /// Trace: FR-015-AC-23, FR-015-AC-10, TC-023.
     #[test]
     fn tc_023_generates_deterministic_complete_artifacts_for_every_supported_family() {
         let (profile, dispatch, input) = fixture();
@@ -691,7 +691,7 @@ mod tests {
     /// A declared `Required` dependency must actually reach the emitted graph, not be silently
     /// dropped (ir#80).
     ///
-    /// Trace: FR-007-AC-2, FR-007-AC-7, TC-023.
+    /// Trace: FR-015-AC-10, FR-015-AC-22, TC-023.
     #[test]
     fn tc_023_declared_required_dependency_appears_in_the_graph() {
         let (profile, dispatch, input) = fixture();
@@ -724,7 +724,7 @@ mod tests {
 
     /// A declared `Required` dependency whose state is not `Passed` makes the case `Incomplete`.
     ///
-    /// Trace: FR-007-AC-2, FR-007-AC-7, TC-023.
+    /// Trace: FR-015-AC-10, FR-015-AC-22, TC-023.
     #[test]
     fn tc_023_missing_required_dependency_yields_incomplete_readiness() {
         let (profile, dispatch, input) = fixture();
@@ -750,10 +750,10 @@ mod tests {
         assert_eq!(graph.readiness, ProofReadiness::Incomplete);
     }
 
-    /// A declared census with a duplicate proof identity is refused by FR-003's shared dependency
+    /// A declared census with a duplicate proof identity is refused by the shared dependency
     /// rules, and the refusal consumes no case number: the next accepted case is still case 0.
     ///
-    /// Trace: FR-007-AC-7, TC-023.
+    /// Trace: FR-015-AC-22, TC-023.
     #[test]
     fn tc_023_duplicate_dependency_identity_is_refused_and_consumes_no_case_number() {
         let (profile, dispatch, input) = fixture();
@@ -792,7 +792,7 @@ mod tests {
     /// `kani::assume`, and no `#[kani::stub]`, so a declared `Assumed` dependency must be refused
     /// (ir#80 review finding F1), consuming no case number.
     ///
-    /// Trace: FR-007-AC-7, TC-023.
+    /// Trace: FR-015-AC-22, TC-023.
     #[test]
     fn tc_023_assumed_dependency_kind_is_refused_and_consumes_no_case_number() {
         let (profile, dispatch, input) = fixture();
@@ -827,7 +827,7 @@ mod tests {
         assert_eq!(retry.artifacts.oracle.path, "corpus/arithmetic_0.oracle.rs");
     }
 
-    /// Trace: FR-007-AC-3, TC-023.
+    /// Trace: FR-015-AC-23, TC-023.
     #[test]
     fn tc_023_non_success_emits_no_partial_artifacts_or_boolean_claim() {
         let (profile, dispatch, input) = fixture();
@@ -849,7 +849,7 @@ mod tests {
         assert_eq!(error.boolean_claim(), None);
     }
 
-    /// Trace: FR-007-AC-3, TC-023.
+    /// Trace: FR-015-AC-23, TC-023.
     #[test]
     fn tc_023_false_case_retains_a_replayable_counterexample_packet() {
         let (profile, dispatch, input) = fixture();
@@ -882,7 +882,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-007-AC-2, TC-023.
+    /// Trace: FR-015-AC-10, TC-023.
     #[test]
     fn tc_023_admitted_zero_arithmetic_is_a_proof_not_a_false_verdict() {
         let (profile, dispatch, input) = fixture();
@@ -909,7 +909,7 @@ mod tests {
     /// Regression for the PR #101 review finding: a provable request with an operand outside
     /// `i64`'s range must not be refused over an assignment no packet will ever carry.
     ///
-    /// Trace: FR-007-AC-1, FR-007-AC-2, TC-023.
+    /// Trace: FR-015-AC-23, FR-015-AC-10, TC-023.
     #[test]
     fn tc_023_provable_arithmetic_with_an_out_of_i64_range_operand_still_generates() {
         let (profile, dispatch, input) = fixture();
@@ -937,7 +937,7 @@ mod tests {
         assert!(generated.counterexample.is_none());
     }
 
-    /// Trace: FR-007-AC-2, TC-023.
+    /// Trace: FR-015-AC-10, TC-023.
     #[test]
     fn tc_023_collection_oracle_evaluates_the_selected_ordered_population() {
         let (profile, dispatch, input) = fixture();
@@ -971,7 +971,7 @@ mod tests {
     /// case names, artifact paths and `#[kani::proof]` symbols, and each symbol carries the case
     /// name its own artifact path carries (#61, ir#73).
     ///
-    /// Trace: FR-007-AC-6, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_cases_in_one_run_get_distinct_names_paths_and_proof_symbols() {
         let (profile, dispatch, input) = fixture();
@@ -1062,7 +1062,7 @@ mod tests {
     /// A case refused at the last fallible step (assignment conversion) consumes no case number,
     /// and a retry reports the same error (ir#57 review finding F1).
     ///
-    /// Trace: FR-007-AC-6, TC-023.
+    /// Trace: TC-023.
     #[test]
     fn tc_023_retry_after_assignment_out_of_range_reports_the_real_error() {
         let (profile, dispatch, input) = fixture();

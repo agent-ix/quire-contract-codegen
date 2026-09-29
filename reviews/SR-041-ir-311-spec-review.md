@@ -230,3 +230,46 @@ Reviewed at 9450154718f000239b83078136153fde09df15b5, against main 6f4beea.
 - **Dangling references:** FR-006, TC-032, TC-028, SUITE-001, FR-017-AC-8/9, FR-019-AC-5, FR-026-AC-2/3, FR-029-AC-7, FR-027 and TC-038 have none. FR-017-AC-10 does (FND-017).
 
 Not mergeable. FND-014, FND-015 and FND-016 are high.
+
+### Round 3
+
+Reviewed at 08848c040738dae9b7aa7008c54670ca4210ea02, against main fc99f61.
+- `make spec` exits 0 on both. The only warning is the existing FR-014 EARS warning, now at line 278.
+- The FR-018 rewrite raises no EARS warning.
+- `quire coverage --strict` exits 1 on both: main backs 198 of 265 rows, head 176 of 269, and `status_lies` is 0.
+- 23 backed rows disappeared with their deleted criteria: FR-001-AC-1..8, FR-003-AC-1..8, FR-007-AC-1..3 and AC-5..7, and FR-017-AC-10. FR-017-AC-12 is newly backed. No defined row lost its backing.
+- The branch is behind main (base 6f4beea), and GitHub reports it MERGEABLE.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-014 | fixed | 515b83e: FR-001, FR-003 and FR-007 are deleted. So are the retired matrix rows, the index.md retired row, and the "retired, carried by" text in TC-005, TC-014 and TC-023, which now verify FR-015. ADR-001 states Q1-Q3 as decisions only. No spec file outside reviews/ references FR-001, FR-003 or FR-007; the remaining hits are Contract Runtime and quire-driver ids. |
+| FND-015 | fixed | 515b83e: spec/ no longer points active requirements at the deleted FRs: FR-002, FR-004, FR-005, FR-008, StR-001, NFR-001, NFR-002, TC-001..003 and interface-001 depends_on are all updated. AD-001 "Current state" (:188-206) names the V1 paths that code still carries. The code's trace tags are FND-023. |
+| FND-016 | fixed | 4391774: FR-018 now says "build each symbol from its operator's readable stem", "use a stem that one item holds bare", and "suffix items that share a stem with `_{n}`, numbered from 1 in ascending descriptor-key order", which matches `oracle::unique_names`. AC-11 and its mutation row are restated, and interface-001:207 matches. No `NameCollision` remains in spec/. |
+| FND-017 | fixed | 515b83e and 08848c0: FR-017-AC-12 (capture parse and classify, playback verbatim) and FR-017-AC-13 (zero successful checks gives vacuous-proof inconclusive) exist, with a matrix row (:56), TC-027 steps (:29, :66, :70) and the TC-027 list (:162). The ten `src/kani_transcript.rs` tests trace FR-017-AC-12. See FND-025. |
+| FND-018 | fixed | 515b83e: FR-014-AC-38 and TC-024's two-package aliasing step are gone. |
+| FND-019 | fixed | 515b83e: ADR-001..004 now carry Status, Context, Decision (Q-rulings) and Consequences only, with no history tables, rejected alternatives, "not carried" text or open questions. AD-001 keeps a labelled Current-state section. |
+| FND-020 | fixed | 515b83e: FR-017 Inputs names the caller's `KaniExecutionRequest::timeout` and "no memory ceiling"; the vacuous-proof classification is FR-017-AC-13. |
+| FND-021 | still-open | The evidence-registry prose and SR-016/SR-017 history are gone from the matrix and suites.md, and the only issue ids left in the requirement texts are the three `UpstreamBlocker` wire values (src/generation.rs:18-25). But spec/index.md keeps GitHub issue links: frontmatter :10-11 and :17-20 (`ix://…/issues/10`, `…/issues/3`) and the list at :100-105 (github.com/agent-ix/…/issues/1, 3, 10, 3, 7). |
+| FND-022 | fixed | 515b83e: the FR-003 lane and TC-007 text are gone. The interface-001 positional-counter and batch `NameCollision` text is restated. |
+
+## New findings (disposition pass 3)
+
+| ID      | Severity | Summary | Refs |
+| ------- | -------- | ------- | ---- |
+| FND-023 | high | Deleting FR-001, FR-003 and FR-007 left 99 code and test trace tags pointing at ids that no longer exist (`// Implements: FR-001/003/007`, `Trace: FR-00x-AC-n`), in 16 files. The counts are: src/bounded_kani_corpus.rs 19, tests/it/kani_generation.rs 19, tests/it/oracle_generation.rs 11, tests/it/bound_generation.rs 11, src/lib.rs 9, tests/it/bounded_kani_corpus.rs 7, src/bounded_kani_profile.rs 5, and 1-3 each in bound.rs, bounded_collections.rs, definedness_arithmetic.rs, kani.rs, kani_execution.rs, kani_obligations.rs, oracle.rs, tests/it/bound_coverage.rs and tests/it/kani_obligations.rs. This PR already retags src/kani_transcript.rs, so retagging these (or dropping tags whose criterion was not carried) is a comment-only change that fits here. The code these tags mark is still public, and interface-001 declares it with no owning FR. | src/lib.rs:6; src/bounded_kani_corpus.rs; tests/it/kani_generation.rs; tests/it/oracle_generation.rs |
+| FND-024 | low | FR-018 Out of Scope says "Temporal and protocol oracles, which FR-020 will own". FR-020 does not exist, so this is a dangling id and a roadmap statement. FR-025:71 says QSpec "has not yet decided" frame lowering, which states what isn't. | spec/functional/complete-v1/FR-018-composite-equality-oracles.md:240; spec/functional/complete-v1/FR-025-generated-subject-abi.md:71 |
+| FND-025 | low | The matrix marks FR-017-AC-12 and AC-13 `🚧 Planned`, but AC-12 is backed by ten passing unit tests. The vacuous-proof test `a_zero_total_checks_summary_is_inconclusive_not_verified_even_with_every_cover_satisfied` still says it "binds itself to no criterion" because FR-017-AC-4 does not cover the case; it should now trace FR-017-AC-13. | spec/test-matrix.md:56; src/kani_execution.rs:798-811 |
+
+### Round 3 verdict
+
+These checks are clean:
+- Naming text matches `oracle::unique_names`.
+- `NameCollision` is gone from spec/.
+- FR-017-AC-12/13 are in place with the tests retagged.
+- FR-014-AC-38 is gone.
+- The ADRs state decisions only.
+- interface-001 is consistent.
+- The FR-018 rewrite passes EARS.
+- There are no dangling spec references to deleted ids, except FR-020 (FND-024).
+
+Not mergeable. FND-023 is high: 99 code and test tags point at the deleted FR-001, FR-003 and FR-007. FND-021 is still open for the index.md GitHub links. FND-024 and FND-025 are low.

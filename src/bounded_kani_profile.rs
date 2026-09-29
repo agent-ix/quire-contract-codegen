@@ -22,12 +22,12 @@ impl BoundedKaniProfile {
     /// Returns the complete ordered disposition census for every encountered construct.
     ///
     /// Every requested construct receives exactly one disposition -- `Supported`, `Refused`, or
-    /// `Inconclusive` -- as its own [`CapabilityEntry`] (FR-007-AC-1). The upstream profile
+    /// `Inconclusive` -- as its own [`CapabilityEntry`] (FR-015-AC-23). The upstream profile
     /// matrix already builds that complete per-construct census; this method returns it as-is
     /// rather than walking it and bailing out with a single [`KaniOutcome`] on the first
     /// `Refused` or `Inconclusive` entry, which discarded every disposition after it. A caller
     /// that needs to know whether every entry was supported inspects the returned census
-    /// (FR-007-AC-3's typed non-Boolean dispositions are the `Refused`/`Inconclusive` entries
+    /// (FR-015-AC-23's typed non-Boolean dispositions are the `Refused`/`Inconclusive` entries
     /// inside it, not an early-exit error).
     ///
     /// `Err` is reserved for a request the upstream matrix cannot classify at all: an empty or
@@ -115,11 +115,11 @@ mod tests {
         ]
     }
 
-    /// Trace: FR-007-AC-1, FR-007-AC-3, TC-023.
+    /// Trace: FR-015-AC-23, TC-023.
     ///
     /// An early `Refused` disposition must not discard the dispositions of constructs
     /// encountered after it, and a later `Inconclusive` disposition must not discard a
-    /// `Supported` one between it and the refusal: FR-007-AC-1 requires one exact disposition
+    /// `Supported` one between it and the refusal: FR-015-AC-23 requires one exact disposition
     /// for every selected construct, not just the ones before the first non-supported entry.
     ///
     /// The matrix (`superset_matrix`) contains a fourth construct, `extra.unrequested`, that
@@ -182,7 +182,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-007-AC-1, TC-023.
+    /// Trace: FR-015-AC-23, TC-023.
     ///
     /// A request naming a construct absent from the profile's matrix is a malformed request, not
     /// a disposition: `classify` must reject it with `Err` carrying the `kani_capability_missing`

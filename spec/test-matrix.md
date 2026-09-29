@@ -51,9 +51,8 @@ type: TestMatrix
 | FR-016 | FR-016-AC-8 through FR-016-AC-11 | TC-026 | ✅ Covered |
 | FR-016 | FR-016-AC-1, FR-016-AC-5 | TC-026 | ⚠️ Partially covered; the witness join (`witness_schema`, `decode_falsification`) decodes a matching transcript and refuses the harness-identity, arity, width, schema, Boolean-byte and comment cases, but reports every refusal as a `KaniOutcome` refusal code rather than FR-016's malformed-witness result, so neither criterion is backed and neither carries a trace tag |
 | FR-016 | FR-016-AC-2 through FR-016-AC-4, FR-016-AC-6, FR-016-AC-7, FR-016-AC-12, FR-016-AC-13 | TC-026 | 🚧 Planned |
-| FR-017 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-CON-2 | TC-027 | ✅ Covered |
+| FR-017 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-12, FR-017-AC-13, FR-017-CON-2 | TC-027 | ✅ Covered |
 | FR-017 | FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-CON-1 | TC-027 | 🚧 Planned |
-| FR-017 | FR-017-AC-12, FR-017-AC-13 | TC-027 | 🚧 Planned |
 | FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-11 through FR-018-AC-14 | TC-029 | ✅ Covered |
 | FR-018 | FR-018-AC-10 | TC-029 | ⚠️ Partially covered; byte identity across repeated runs and request permutations, the descriptor-key order, and the generated crate compiled and executed at test time under AC-2 are asserted; the criterion's remaining clause has no test |
 | FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |

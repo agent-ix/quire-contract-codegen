@@ -3,15 +3,15 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-// Implements: FR-001
+// Implements: FR-014
 mod oracle;
-// Implements: FR-001
+// Implements: FR-014
 mod bound;
 // Implements: FR-005, NFR-001
 mod publication;
 // Implements: FR-002
 mod harness;
-// Implements: FR-003
+// Implements: FR-015
 mod kani;
 // Implements: FR-015
 mod kani_obligations;
@@ -26,17 +26,17 @@ mod kani_transcript;
 mod kani_witness_join;
 // Implements: FR-016
 mod spine_replay;
-// Implements: FR-007
+// Implements: FR-015
 mod bounded_kani_profile;
-// Implements: FR-007
+// Implements: FR-015
 mod definedness_arithmetic;
-// Implements: FR-007
+// Implements: FR-015
 mod bounded_collections;
-// Implements: FR-007
+// Implements: FR-015
 mod finite_reference_graphs;
-// Implements: FR-007
+// Implements: FR-015
 mod bounded_kani_replay;
-// Implements: FR-007
+// Implements: FR-015
 mod bounded_kani_corpus;
 // Implements: FR-002
 mod strategy;

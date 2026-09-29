@@ -235,7 +235,7 @@ fn source_symbol(source: &str) -> &str {
         .unwrap()
 }
 
-/// Trace: TC-001, TC-006, FR-001-AC-5
+/// Trace: TC-001, TC-006, FR-014-AC-36
 #[test]
 fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     use quire_contract_codegen::{
@@ -407,7 +407,7 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     }
 }
 
-/// Trace: TC-001, FR-001-AC-1, FR-001-AC-3
+/// Trace: TC-001, FR-014-AC-4, FR-014-AC-5
 #[test]
 fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     let environment = boolean_environment(&["enabled"]);
@@ -867,8 +867,8 @@ fn run_generated_program(crate_name: &str, program: &str) {
 }
 
 /// TC-002
-/// FR-001-AC-2
-/// FR-001-AC-8
+/// FR-014-AC-37
+/// FR-014-AC-35
 #[test]
 fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_model() {
     let value_type =
@@ -1006,7 +1006,7 @@ fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_
 }
 
 /// TC-001
-/// FR-001-AC-5
+/// FR-014-AC-36
 #[test]
 fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
     let environment = boolean_environment(&["a", "b", "implies_short_circuit"]);
@@ -1088,7 +1088,7 @@ fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
 }
 
 /// TC-003
-/// FR-001-AC-4
+/// FR-014-AC-1
 #[test]
 fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
     let integer =
@@ -1199,7 +1199,7 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
 }
 
 /// TC-003
-/// FR-001-AC-4
+/// FR-014-AC-1
 #[test]
 fn tc_003_unsupported_dependency_reports_the_first_reference_span() {
     let rational = RationalType::new(-10, 10, 10).unwrap();
@@ -1287,7 +1287,7 @@ fn tc_003_dependency_normalization_is_injective_and_artifact_names_are_bounded()
 }
 
 /// TC-003
-/// FR-001-AC-4
+/// FR-014-AC-1
 #[test]
 fn tc_023_native_proven_numeric_obligations_render_without_assumptions() {
     let integer = IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Reject).unwrap();

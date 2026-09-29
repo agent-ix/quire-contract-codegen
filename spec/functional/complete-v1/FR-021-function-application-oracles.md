@@ -38,17 +38,6 @@ This is the function-application slice of complete-V1 oracle generation. Its sca
 composite-equality siblings are [FR-014](./FR-014-exact-scalar-oracles.md) and
 [FR-018](./FR-018-composite-equality-oracles.md).
 
-This requirement is numbered FR-021 rather than FR-020 because FR-018's Out of Scope section made
-two forward reservations and exactly one of them still holds. It reserved FR-019 for model-graph
-oracles; that reservation did not hold, and the file now at
-`spec/functional/complete-v1/FR-019-capability-settlement.md` is an unrelated, already-shipped
-requirement. It also reserved FR-020 for temporal and protocol oracles; that reservation is still
-live and uncontradicted — FR-020 is unwritten, and `spec/test-matrix.md` records it as such. FR-020
-is therefore left free for its reserved owner, and this requirement takes the next number. Because
-the FR-019 reservation is the one that failed, this requirement predicts no FR number for the
-model/relation family it excludes, naming it by its blocking upstream issue instead; it neither
-repeats nor withdraws FR-018's surviving FR-020 reservation, which is FR-018's to keep.
-
 FR-018-AC-7 refuses `call` expressions and function-family nodes as blocked on
 `agent-ix/quire-contract-runtime#34`. This requirement generates the function family. FR-018's criterion is
 neither restated nor weakened here: it governs FR-018's own composite-equality entry point, which
@@ -283,12 +272,8 @@ written.
 - **Counterexample replay.** This requirement generates the oracle and its static location map; consuming either to
   explain a falsified proof's counterexample is a different requirement's job, not designed here
   even at a spec level.
-- Model graph, identity and reachability oracles. This requirement
-  reserves no FR number for them, for the reason given in the Description: FR-018's FR-019
-  reservation for exactly this family did not survive.
-- Temporal and protocol oracles. FR-018 reserved FR-020 for these and that
-  reservation still stands; this requirement neither renews nor withdraws it, and leaves FR-020 free
-  for its owner.
+- Model graph, identity and reachability oracles.
+- Temporal and protocol oracles.
 - Function *declaration* construction from scratch by a caller who supplies no body at all —
   every function this requirement's package assembles must have a lowerable body in the request;
   declaring an uninterpreted function signature with no callable body is not a complete-V1 need this

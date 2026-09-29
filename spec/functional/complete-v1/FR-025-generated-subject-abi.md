@@ -67,8 +67,7 @@ gets a row in the table only when its witness decodes into the complete-V1 value
   for the obligation, rather than narrowing the domain implicitly. That disposition is
   `requires-bound` at settlement ([FR-019](./FR-019-capability-settlement.md)).
 - If an obligation is a frame obligation, then the generator shall account it `unsupported` with a
-  typed reason and emit no harness. The frame harness is written over AD-016's frame subject once
-  QSpec decides how a frame node lowers into a Kani form, which it has not yet decided.
+  typed reason and emit no harness.
 
 ## Acceptance Criteria
 

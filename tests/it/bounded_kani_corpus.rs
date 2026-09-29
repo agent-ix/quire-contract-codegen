@@ -143,7 +143,7 @@ impl Drop for TemporaryDirectory {
     }
 }
 
-/// Trace: FR-007-AC-1, FR-007-AC-2, FR-007-AC-3, FR-007-AC-5, TC-023.
+/// Trace: FR-015-AC-23, FR-015-AC-10, TC-023.
 #[test]
 fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     let (profile, dispatch, input) = fixture();
@@ -239,7 +239,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     );
 }
 
-/// Trace: FR-007-AC-2, FR-007-AC-5, TC-023.
+/// Trace: FR-015-AC-10, TC-023.
 #[test]
 fn tc_023_kani_executes_the_generated_arithmetic_harness() {
     let (profile, dispatch, input) = fixture();
@@ -291,7 +291,7 @@ fn tc_023_kani_executes_the_generated_arithmetic_harness() {
     );
 }
 
-/// Trace: FR-007-AC-2, FR-007-AC-5, TC-023.
+/// Trace: FR-015-AC-10, TC-023.
 #[test]
 fn tc_023_kani_executes_the_generated_graph_harness() {
     let (profile, dispatch, input) = fixture();
@@ -342,7 +342,7 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
     );
 }
 
-/// Trace: FR-007-AC-2, TC-023.
+/// Trace: FR-015-AC-10, TC-023.
 #[test]
 fn tc_023_kani_counterexample_replays_through_contract_ir() {
     let (profile, dispatch, input) = fixture();
@@ -462,10 +462,10 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
 /// Every supported family's emitted `proof_graph` artifact is a real `CORPUS_PROOF_GRAPH_SCHEMA`
 /// document -- not merely a JSON blob this crate's own `CorpusProofDependencyGraph` type happens
 /// to deserialize -- validated against the published schema file the same way
-/// `tests/it/kani_generation.rs` validates FR-003's `quire.kani-proof-graph/v2` graphs against
+/// `tests/it/kani_generation.rs` validates `quire.kani-proof-graph/v2` graphs against
 /// `schemas/kani-proof-graph-v2.schema.json`.
 ///
-/// Trace: FR-007-AC-2, TC-023.
+/// Trace: FR-015-AC-10, TC-023.
 #[test]
 fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();
@@ -522,7 +522,7 @@ fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
 /// A declared `Required` dependency's edge must also validate against the published schema, not
 /// only the empty-census shape the test above exercises.
 ///
-/// Trace: FR-007-AC-2, FR-007-AC-6, TC-023.
+/// Trace: FR-015-AC-10, TC-023.
 #[test]
 fn tc_023_proof_graph_with_a_declared_dependency_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();

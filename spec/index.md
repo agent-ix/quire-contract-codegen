@@ -7,17 +7,9 @@ implementation_language: rust
 tags: [contract-codegen, rust, proptest, kani, assurance]
 depends_on:
   - ix://agent-ix/quire-contract-ir/PGM-01
-  - ix://agent-ix/quire-contract-ir/issues/10
-  - ix://agent-ix/quire-contract-runtime/issues/3
 standards_alignment: [iso-iec-ieee-29148]
 relationships:
   - target: ix://agent-ix/quire-contract-ir/PGM-01
-    type: depends_on
-    cardinality: "1:1"
-  - target: ix://agent-ix/quire-contract-ir/issues/10
-    type: depends_on
-    cardinality: "1:1"
-  - target: ix://agent-ix/quire-contract-runtime/issues/3
     type: depends_on
     cardinality: "1:1"
 security_critical: false
@@ -79,7 +71,7 @@ generators, the input model, the backend adapter, Kani tractability and the gene
 | Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope | TC-026, TC-035 |
 | Capability settlement and routing | FR-019 settlement, FR-022 routed generation | TC-030, TC-033 |
 
-FR-020 is reserved for temporal and protocol oracles and is unwritten. FR-018 and FR-014 refuse the
+FR-018 and FR-014 refuse the
 model graph, relation, temporal and protocol families with typed blockers. Function application is
 FR-021's.
 
@@ -97,9 +89,5 @@ the directory carries the subsystem.
 
 ## References
 
-- [Program umbrella](https://github.com/agent-ix/quire-contract-ir/issues/1).
-- [PGM-01 governance gate](https://github.com/agent-ix/quire-contract-ir/issues/3), identified as
-  `ix://agent-ix/quire-contract-ir/PGM-01`; this specification does not redefine it.
-- [IR schema and corpus gate](https://github.com/agent-ix/quire-contract-ir/issues/10).
-- [Runtime helper gate](https://github.com/agent-ix/quire-contract-runtime/issues/3).
-- [Codegen epic](https://github.com/agent-ix/quire-contract-codegen/issues/7).
+- PGM-01 governance gate, identified as `ix://agent-ix/quire-contract-ir/PGM-01`; this
+  specification does not redefine it.

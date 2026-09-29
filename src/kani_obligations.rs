@@ -243,14 +243,14 @@ pub enum UnsupportedObligation {
     RenderFailed,
     /// The generated harness source exceeds [`MAX_GENERATED_SOURCE_BYTES`], the same
     /// bounded-resource ceiling every other generator in this crate enforces. Distinct from
-    /// [`Self::InvalidGeneratedSyntax`]: a resource ceiling is not a generator defect (FR-001-AC-4).
+    /// [`Self::InvalidGeneratedSyntax`]: a resource ceiling is not a generator defect (FR-014-AC-1).
     ResourceLimitExceeded {
         /// The generated source's length in bytes.
         bytes: usize,
     },
     /// The generated harness source is within the size ceiling but failed `syn::parse_file` --
     /// invalid Rust rather than a resource ceiling. Distinct from [`Self::ResourceLimitExceeded`]
-    /// for the same reason (FR-001-AC-4).
+    /// for the same reason (FR-014-AC-1).
     ///
     /// Known narrowing: the analogous [`crate::KaniErrorCode::InvalidGeneratedSyntax`] is
     /// classified `Inconclusive` by its `terminal_state` (a generator defect, not an honest
@@ -353,7 +353,7 @@ pub enum UnsupportedObligation {
     /// absent from the graph entirely is refused instead as [`InvalidObligationItem::UnknownNode`]
     /// (see `refuse_unknown_node_kind`), a distinct code from this one -- but would otherwise have
     /// been accounted with a null `kind` and no typed reason naming what was unrecognized
-    /// (FR-001-AC-4). `generate_exact_scalar_oracles` already refuses every node whose own tag is
+    /// (FR-014-AC-1). `generate_exact_scalar_oracles` already refuses every node whose own tag is
     /// not `expression` before it could reach a successful claim, so this ground is a second,
     /// independent gate against the same drift: an IR revision that adds a node kind this
     /// generator has not been taught, or a claim map assembled by another caller, is refused by

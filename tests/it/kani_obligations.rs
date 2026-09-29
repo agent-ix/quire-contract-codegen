@@ -1690,14 +1690,6 @@ fn run(
 ///
 /// Trace: FR-015-AC-1, FR-015-AC-4, TC-025, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7,
 /// FR-017-CON-1, FR-017-CON-2, TC-027
-///
-/// The timed-out case below carries no trace id. No test in this repository exercises a
-/// timed-out state under FR-007-AC-3: that criterion names the corpus path's own
-/// `KaniOutcomeKind` vocabulary, distinct from this module's `KaniInconclusiveReason`, which
-/// FR-017-CON-2 forbids converting between. FR-017's own acceptance criteria (AC-4, AC-5)
-/// enumerate the inconclusive reasons they cover by name, and timed-out is not among them;
-/// adding it is agent-ix/quire-contract-codegen#55, and until it exists this assertion binds to
-/// no criterion rather than claim one it does not establish.
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect() {

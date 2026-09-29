@@ -237,7 +237,7 @@ without one is not written.
   [FR-021](./FR-021-function-application-oracles.md) generates through its own
   entry point.
 - Model graph, identity and reachability oracles, which no requirement owns.
-- Temporal and protocol oracles, which FR-020 will own.
+- Temporal and protocol oracles.
 - `Refusal::ForeignReference`. It is the runtime's one substantive equality
   refusal — a reference pair whose universes differ, refused at plan time — and
   because the reference exclusion above is total, no operand this requirement
