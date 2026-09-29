@@ -579,6 +579,16 @@ pub struct KaniExecutionEvidence {
 pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+    execute_kani_obligation_with_transcript(request).map(|(evidence, _)| evidence)
+}
+
+/// [`execute_kani_obligation`], also returning the prover transcript the outcome was classified
+/// from (stdout and stderr, newline-joined), or `None` when the run was killed at its budget and
+/// printed nothing to classify. A gate that reads which checks the prover discharged needs the
+/// text itself, which the evidence record does not retain.
+pub fn execute_kani_obligation_with_transcript(
+    request: &KaniExecutionRequest<'_>,
+) -> Result<(KaniExecutionEvidence, Option<String>), KaniExecutionRefusal> {
     let harness = request.harness.view();
     // The harness identity's pins are known from the harness alone, without touching the
     // backend, so a drifted identity refuses with zero processes started rather than after
@@ -619,13 +629,17 @@ pub fn execute_kani_obligation(
             path: request.installation.launcher.clone(),
             error,
         })?;
+    let transcript = match &launch {
+        LaunchOutcome::Completed { text, .. } => Some(text.clone()),
+        LaunchOutcome::TimedOut => None,
+    };
     let (cargo_lock_sha256, outcome, exit_code) = launch_evidence(launch, || {
         file_sha256(
             KaniTool::Lockfile,
             &request.crate_directory.join("Cargo.lock"),
         )
     });
-    Ok(KaniExecutionEvidence {
+    let evidence = KaniExecutionEvidence {
         schema: KANI_EXECUTION_SCHEMA,
         obligation_identity_sha256: harness.identity_sha256.to_owned(),
         kind: harness.kind,
@@ -641,7 +655,8 @@ pub fn execute_kani_obligation(
         solver: harness.solver.to_owned(),
         exit_code,
         outcome,
-    })
+    };
+    Ok((evidence, transcript))
 }
 
 /// Builds the exact argument vector and [`Command`] [`execute_kani_obligation`] launches for

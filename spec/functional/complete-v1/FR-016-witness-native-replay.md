@@ -65,6 +65,17 @@ failure is reported. This is issue #50.
   charges, equal consumed counters, and equal limits.
 - If native replay disagrees or cannot run, then the generator shall report a
   typed mismatch or unavailable result instead of a failure.
+- The generator shall replay through QSL's layer-6 `replay` facade
+  (`qsl_replay::replay`). The caller supplies the complete request: the proved
+  package's `package_id`, the selected function's qualified name, the limits, and
+  the byte provision holding the proved unit's source under its digest; the
+  generator reads no path. The generator supplies the request's replay source,
+  the decoded values as a backend-witness transcript keyed by parameter node id,
+  and calls `replay`. QSL recompiles the source and evaluates the selected
+  function, so the replayed verdict is QSL's evaluation and never a value this
+  generator supplies. A settlement of `reproduced-with-evaluated-witness` with
+  category `violation` is the reproduced failure, a settlement of `inconclusive`
+  is a mismatch, and an executor refusal is returned with its own cause.
 
 ## Acceptance Criteria
 
@@ -78,8 +89,18 @@ failure is reported. This is issue #50.
 | FR-016-AC-6 | A witness over the decode size limit is reported as malformed without decoding past the limit. | Test (TC-026) |
 | FR-016-AC-7 | A native replay that matches the harness value but differs in admitted charges, consumed counters or limits yields a typed mismatch. | Test (TC-026) |
 | FR-016-AC-8 | A witness schema binds the obligation's persisted argument bindings, in the order the obligation persists them, position for position to the harness's symbolic arguments, and each decoded value is named by the binding at its position; a binding that is not an argument is refused with a typed schema refusal that reports no failure and is none of the five replay results. | Test (TC-026) |
+| FR-016-AC-9 | A decoded falsification whose witness makes the native function evaluate the clause to false settles as `reproduced-with-evaluated-witness` with category `violation`; the verdict depends on the witness value, so a witness at which the function holds does not settle so. | Test (TC-026) |
+| FR-016-AC-10 | A decoded falsification at which the native function evaluates the clause to true settles `inconclusive` with the proved violation and the replayed success both named. | Test (TC-026) |
+| FR-016-AC-11 | The adapter refuses, with a distinct typed error each, a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript QSL does not admit, a request QSL refuses (returned with its cause), and a witness-sourced request that settles on the input arm. | Test (TC-026) |
 
 ## Dependencies
 
-- **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md).
+- **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md); QSL's
+  `qsl-replay` crate at the revision `Cargo.toml` names, the only QSL crate `src/`
+  calls. The spine test carries a test-only exception: it also calls
+  `qsl_replay::spine::compile` and depends on `qsl-foundation` and `quire-exact`
+  as dev-dependencies, because `qsl-replay` re-exports neither the request's
+  types (`quire_exact::Identifier`, `quire_exact::ScalarLimits`, `WireNodeId`,
+  `SourceIdentity`) nor a compiled unit's package id and parameter node ids. The
+  exception (Linear IR-309) ends when `qsl-replay` exposes those through its facade.
 - **Downstream**: [TC-026](../../test/complete-v1/TC-026-witness-native-replay.md).
