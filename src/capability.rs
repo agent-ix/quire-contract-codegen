@@ -171,8 +171,6 @@ pub struct BackendDescriptor {
     pub manifest_digest: String,
     /// Advertised (kind, mode) pairs.
     pub advertised: Vec<(CapabilityKind, Mode)>,
-    /// The tool identity the adapter probes after routing.
-    pub pinned_tool: String,
 }
 
 impl BackendDescriptor {
@@ -301,18 +299,6 @@ pub enum Cause {
         /// The backend the request named, when it named one.
         backend: Option<String>,
     },
-    /// The routed backend's pinned tool is absent, is another identity, errored,
-    /// or exceeded the probe's limit.
-    ToolUnavailable {
-        /// The claim's kind.
-        kind: CapabilityKind,
-        /// The routed backend.
-        backend: String,
-        /// The tool identity the manifest pins.
-        expected: String,
-        /// The identity the probe found, absent when it found no tool at all.
-        actual: Option<String>,
-    },
     /// An unbounded extent against a bounded-only advertisement, with no finite
     /// bound available.
     UnboundedExtent {
@@ -335,8 +321,7 @@ impl Cause {
             | Self::InconsistentCandidates { .. }
             | Self::AmbiguousBackend { .. } => "invalid_capability",
             Self::UnsupportedRequestedCapability { .. }
-            | Self::UnboundedExtent { .. }
-            | Self::ToolUnavailable { .. } => "unsupported_projection",
+            | Self::UnboundedExtent { .. } => "unsupported_projection",
         }
     }
 }
@@ -403,21 +388,6 @@ impl ItemSettlement {
                     "{backend} advertises {} bounded only and no finite bound is available",
                     kind.label()
                 ),
-                Cause::ToolUnavailable {
-                    kind,
-                    backend,
-                    expected,
-                    actual,
-                } => match actual {
-                    Some(actual) => format!(
-                        "{backend} pins {expected} for {} and the probe found {actual}",
-                        kind.label()
-                    ),
-                    None => format!(
-                        "{backend} pins {expected} for {} and the probe found no tool",
-                        kind.label()
-                    ),
-                },
                 // Exhaustive on purpose. A catch-all here would give the next
                 // cause a warning that names neither the kind nor the backend
                 // FR-290 requires it to name, with nothing failing to say so.
@@ -714,14 +684,10 @@ fn negotiate_kani(
 }
 
 // ---------------------------------------------------------------------------
-// The pinned-tool probe, after routing
+// Routing
 // ---------------------------------------------------------------------------
 
 /// A `supported` item that has been routed to exactly one backend.
-///
-/// The probe takes one of these rather than an item, which is how "no probe runs
-/// before routing" is held: there is no way to name a tool to probe until
-/// settlement has already chosen the single backend that pins it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RoutedItem {
     /// The item's index in the request.
@@ -730,65 +696,19 @@ pub struct RoutedItem {
     pub kind: CapabilityKind,
     /// The routed backend's identity.
     pub backend: String,
-    /// The tool identity that backend's manifest pins.
-    pub pinned_tool: String,
-}
-
-/// What the adapter found when it probed the routed backend's pinned tool.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ToolObservation {
-    /// The probe read this tool identity.
-    Identity(String),
-    /// The probe found no tool: absent, unreadable, errored, or over its limit.
-    Absent,
-}
-
-/// When the tool identity was observed, relative to the run.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ProbePhase {
-    /// After routing and before the run.
-    BeforeRun,
-    /// After a passing probe, while the run was in flight.
-    DuringRun,
-}
-
-/// The FR-331 result an item records.
-///
-/// Only the results this module can reach are modelled. A verdict the backend
-/// produces is not one of them: nothing here converts a negotiation disposition
-/// into a verification result.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case", tag = "result")]
-pub enum ItemResult {
-    /// The pinned tool was absent or another identity when the probe ran.
-    Unsupported {
-        /// Always a `tool-unavailable` cause.
-        cause: Cause,
-    },
-    /// The tool changed after a passing probe and before the run completed.
-    ///
-    /// The result, not the cause, is what distinguishes this from absence found
-    /// at probe time; both carry `tool-unavailable`.
-    Failed {
-        /// Always a `tool-unavailable` cause.
-        cause: Cause,
-    },
 }
 
 impl ItemSettlement {
     /// The routed item, when this settlement routed one.
     ///
     /// Only a `supported` item routes. An item settled `requires-bound`,
-    /// `unsupported` or `invalid-request` has no backend to probe, and answering
-    /// `None` is what keeps a probe from running for it.
+    /// `unsupported` or `invalid-request` has no backend to route to.
     #[must_use]
     pub fn routed(&self, manifest: &[BackendDescriptor]) -> Option<RoutedItem> {
         let Disposition::Supported { backend } = &self.disposition else {
             return None;
         };
         let kind = self.kind?;
-        // Settlement matched identity *and* digest; matching identity alone here
-        // would hand the probe the pinned tool of a different manifest entry.
         // FR-290 makes a repeated identity a registry-level refusal
         // (`duplicate-backend`), so this answers `None` rather than choosing.
         let mut matching = manifest
@@ -802,39 +722,6 @@ impl ItemSettlement {
             request_index: self.request_index,
             kind,
             backend: descriptor.identity.clone(),
-            pinned_tool: descriptor.pinned_tool.clone(),
         })
     }
-}
-
-/// Record the result of probing a routed item's pinned tool.
-///
-/// The item keeps its `supported` disposition either way: the disposition says
-/// what was negotiated, and the result says what the tool was. Collapsing the
-/// two would lose the difference between a claim no backend can discharge and a
-/// claim whose backend was not installed.
-///
-/// Trace: TC-030
-// Implements: FR-019
-#[must_use]
-pub fn record_tool_probe(
-    routed: &RoutedItem,
-    phase: ProbePhase,
-    observed: &ToolObservation,
-) -> Option<ItemResult> {
-    let actual = match observed {
-        ToolObservation::Identity(identity) if *identity == routed.pinned_tool => return None,
-        ToolObservation::Identity(identity) => Some(identity.clone()),
-        ToolObservation::Absent => None,
-    };
-    let cause = Cause::ToolUnavailable {
-        kind: routed.kind,
-        backend: routed.backend.clone(),
-        expected: routed.pinned_tool.clone(),
-        actual,
-    };
-    Some(match phase {
-        ProbePhase::BeforeRun => ItemResult::Unsupported { cause },
-        ProbePhase::DuringRun => ItemResult::Failed { cause },
-    })
 }

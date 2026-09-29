@@ -1,10 +1,6 @@
-//! Pinned execution of one generated Kani obligation harness (FR-017).
+//! Execution of one generated Kani obligation harness (FR-017).
 //!
-//! The backend is pinned by committed values ([`KaniToolPins::pinned`]). Before
-//! anything runs, the harness identity's pins and the pins re-measured from the
-//! installed backend are both compared with them: any differing Kani version,
-//! launcher, driver, CBMC, toolchain or target is a typed refusal and no proof is
-//! attempted. For every outcome but one, the run outcome is read from the
+//! For every outcome but one, the run outcome is read from the
 //! backend's own output -- read into a typed transcript by [`crate::kani_transcript`], the only
 //! place Kani's prose is parsed -- and is never defaulted: a harness this module did not
 //! observe verifying is not `verified`. The one exception is
@@ -38,10 +34,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::{
-    kani::{sha256, KANI_BACKEND_VERSION},
     kani_obligations::{KaniObligationHarness, KaniScalarObligationHarness, ObligationKind},
     kani_transcript::{
         KaniBanner, KaniCoverSummary, KaniFailedCheck, KaniPlaybackTarget, KaniTranscript,
@@ -50,121 +45,19 @@ use crate::{
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
-/// Execution evidence schema identity.
-pub const KANI_EXECUTION_SCHEMA: &str = "quire.codegen.kani-execution/v1";
-
-/// The installed-backend identity a harness is generated against and run under.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct KaniToolPins {
-    /// `cargo-kani --version` without its program prefix, for example `0.67.0`.
-    pub kani_version: String,
-    /// Lowercase SHA-256 of the `cargo-kani` launcher executable that is invoked.
-    pub launcher_sha256: String,
-    /// Lowercase SHA-256 of the `kani-driver` executable the launcher dispatches to.
-    pub driver_sha256: String,
-    /// `cbmc --version` of the CBMC bundled with that Kani release.
-    pub cbmc_version: String,
-    /// Rust toolchain Kani compiles with, as recorded by the Kani release.
-    pub rust_toolchain: String,
-    /// Host target triple of that toolchain.
-    pub target_triple: String,
-}
-
-/// One pinned field of [`KaniToolPins`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KaniPinField {
-    /// [`KaniToolPins::kani_version`].
-    KaniVersion,
-    /// [`KaniToolPins::launcher_sha256`].
-    LauncherSha256,
-    /// [`KaniToolPins::driver_sha256`].
-    DriverSha256,
-    /// [`KaniToolPins::cbmc_version`].
-    CbmcVersion,
-    /// [`KaniToolPins::rust_toolchain`].
-    RustToolchain,
-    /// [`KaniToolPins::target_triple`].
-    TargetTriple,
-}
-
-/// The one installed backend this adapter is pinned to: the values measured by
-/// [`KaniInstallation::observe`] from the Kani 0.67.0 installation the kani lane was recorded
-/// against on x86_64 Linux. A backend with any other value is refused before a harness is
-/// generated and again before one runs.
-const PINNED_LAUNCHER_SHA256: &str =
-    "7f143a251d11c7e6e232bbf2cbccf56f9ce66a5f0107eeb3008698e6715f55d9";
-const PINNED_DRIVER_SHA256: &str =
-    "683f3ad1216e67686a39b2fcd6dc661f5090574f55fde9dd407966dca42cbfad";
-const PINNED_CBMC_VERSION: &str = "6.8.0 (cbmc-6.8.0)";
-const PINNED_RUST_TOOLCHAIN: &str = "nightly-2025-11-21-x86_64-unknown-linux-gnu";
-const PINNED_TARGET_TRIPLE: &str = "x86_64-unknown-linux-gnu";
-
-impl KaniToolPins {
-    /// The committed backend pins: Kani [`KANI_BACKEND_VERSION`], its launcher and driver
-    /// digests, CBMC 6.8.0, toolchain `nightly-2025-11-21` and target `x86_64-unknown-linux-gnu`.
-    #[must_use]
-    pub fn pinned() -> Self {
-        Self {
-            kani_version: KANI_BACKEND_VERSION.to_owned(),
-            launcher_sha256: PINNED_LAUNCHER_SHA256.to_owned(),
-            driver_sha256: PINNED_DRIVER_SHA256.to_owned(),
-            cbmc_version: PINNED_CBMC_VERSION.to_owned(),
-            rust_toolchain: PINNED_RUST_TOOLCHAIN.to_owned(),
-            target_triple: PINNED_TARGET_TRIPLE.to_owned(),
-        }
-    }
-
-    /// The first field that differs from `expected`, with the expected and actual values.
-    pub(crate) fn first_difference(
-        &self,
-        expected: &Self,
-    ) -> Option<(KaniPinField, String, String)> {
-        self.fields()
-            .into_iter()
-            .zip(expected.fields())
-            .find(|((_, actual), (_, wanted))| actual != wanted)
-            .map(|((field, actual), (_, wanted))| (field, wanted.to_owned(), actual.to_owned()))
-    }
-
-    /// Every field with its value, in declaration order.
-    #[must_use]
-    pub fn fields(&self) -> [(KaniPinField, &str); 6] {
-        [
-            (KaniPinField::KaniVersion, &self.kani_version),
-            (KaniPinField::LauncherSha256, &self.launcher_sha256),
-            (KaniPinField::DriverSha256, &self.driver_sha256),
-            (KaniPinField::CbmcVersion, &self.cbmc_version),
-            (KaniPinField::RustToolchain, &self.rust_toolchain),
-            (KaniPinField::TargetTriple, &self.target_triple),
-        ]
-    }
-}
-
-/// A backend component this module measures.
+/// A backend component this module locates or reads.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KaniTool {
     /// The `cargo-kani` launcher.
     Launcher,
-    /// The `kani-driver` of the launcher's release.
-    Driver,
-    /// The bundled `cbmc`.
-    Cbmc,
-    /// The release's recorded Rust toolchain.
-    RustToolchain,
-    /// The release's `rustc`, asked for its host triple.
-    Rustc,
     /// The generated crate's `src/lib.rs`, checked for the harness's generated source.
     Library,
-    /// The generated crate's `Cargo.lock`, written by the run.
-    Lockfile,
     /// The Kani home directory.
     KaniHome,
 }
 
-/// Why the installed backend could not be measured.
+/// Why the installed backend could not be located or started.
 #[derive(Debug)]
 pub enum KaniToolError {
     /// The component is absent at the path it was looked for.
@@ -285,57 +178,12 @@ impl KaniInstallation {
             kani_home,
         })
     }
-
-    /// Measures every pin from the installed files and processes.
-    pub fn observe(&self) -> Result<KaniToolPins, KaniToolError> {
-        let version_output = run(KaniTool::Launcher, &self.launcher, &["kani", "--version"])?;
-        let kani_version = version_output
-            .strip_prefix("cargo-kani ")
-            .filter(|version| !version.is_empty() && !version.contains(char::is_whitespace))
-            .ok_or_else(|| KaniToolError::UnexpectedOutput {
-                tool: KaniTool::Launcher,
-                output: version_output.clone(),
-            })?
-            .to_owned();
-        let release = self.kani_home.join(format!("kani-{kani_version}"));
-        let driver = release
-            .join("bin")
-            .join(format!("kani-driver{}", env::consts::EXE_SUFFIX));
-        let cbmc = release
-            .join("bin")
-            .join(format!("cbmc{}", env::consts::EXE_SUFFIX));
-        let toolchain_file = release.join("rust-toolchain-version");
-        let rustc = release
-            .join("toolchain")
-            .join("bin")
-            .join(format!("rustc{}", env::consts::EXE_SUFFIX));
-        let rust_toolchain = read_file(KaniTool::RustToolchain, &toolchain_file)
-            .map(|bytes| String::from_utf8_lossy(&bytes).trim().to_owned())?;
-        let rustc_output = run(KaniTool::Rustc, &rustc, &["-vV"])?;
-        let target_triple = rustc_output
-            .lines()
-            .find_map(|line| line.strip_prefix("host: "))
-            .map(str::to_owned)
-            .ok_or_else(|| KaniToolError::UnexpectedOutput {
-                tool: KaniTool::Rustc,
-                output: rustc_output.clone(),
-            })?;
-        Ok(KaniToolPins {
-            launcher_sha256: file_sha256(KaniTool::Launcher, &self.launcher)?,
-            driver_sha256: file_sha256(KaniTool::Driver, &driver)?,
-            cbmc_version: run(KaniTool::Cbmc, &cbmc, &["--version"])?,
-            kani_version,
-            rust_toolchain,
-            target_triple,
-        })
-    }
 }
 
 /// A generated harness of either kind this module can run.
 ///
 /// The two kinds carry their own identity types but share every fact execution reads, so
-/// `view()` projects those facts once and the pin check, the
-/// byte-for-byte source check, the launch and the classification stay one code path (FR-017).
+/// `view()` projects those facts once and the byte-for-byte source check, the launch and the classification stay one code path (FR-017).
 #[derive(Clone, Copy, Debug)]
 pub enum KaniExecutableHarness<'a> {
     /// A V1 frozen-clause contract harness (FR-015).
@@ -358,12 +206,8 @@ impl<'a> From<&'a KaniScalarObligationHarness> for KaniExecutableHarness<'a> {
 
 /// Exactly what execution reads from a harness, whichever kind it is.
 struct HarnessView<'a> {
-    pins: &'a KaniToolPins,
-    identity_sha256: &'a str,
     rust: &'a Artifact,
     kind: Option<ObligationKind>,
-    oracle_digest: &'a str,
-    runtime_revision: &'a str,
     unwind: u32,
     solver: &'a str,
     options: &'a [String],
@@ -375,12 +219,8 @@ impl<'a> KaniExecutableHarness<'a> {
             Self::Contract(harness) => {
                 let identity = &harness.identity;
                 HarnessView {
-                    pins: &identity.pins,
-                    identity_sha256: &harness.identity_sha256,
                     rust: &harness.rust,
                     kind: Some(identity.kind),
-                    oracle_digest: &identity.oracle_digest,
-                    runtime_revision: identity.runtime_revision,
                     unwind: identity.unwind,
                     solver: &identity.solver,
                     options: &identity.options,
@@ -389,12 +229,8 @@ impl<'a> KaniExecutableHarness<'a> {
             Self::Scalar(harness) => {
                 let identity = &harness.identity;
                 HarnessView {
-                    pins: &identity.pins,
-                    identity_sha256: &harness.identity_sha256,
                     rust: &harness.rust,
                     kind: None,
-                    oracle_digest: &identity.oracle_sha256,
-                    runtime_revision: identity.runtime_revision,
                     unwind: identity.unwind,
                     solver: &identity.solver,
                     options: &identity.options,
@@ -406,9 +242,9 @@ impl<'a> KaniExecutableHarness<'a> {
 
 /// One execution of one harness in a crate the caller wrote.
 pub struct KaniExecutionRequest<'a> {
-    /// Backend to measure and invoke.
+    /// Backend to invoke.
     pub installation: &'a KaniInstallation,
-    /// The generated harness; its identity carries the pins to hold the backend to.
+    /// The generated harness.
     pub harness: KaniExecutableHarness<'a>,
     /// Crate root whose `src/lib.rs` contains the harness source byte-for-byte.
     pub crate_directory: &'a Path,
@@ -424,18 +260,8 @@ pub struct KaniExecutionRequest<'a> {
 /// Why a harness was not run.
 #[derive(Debug)]
 pub enum KaniExecutionRefusal {
-    /// The installed backend could not be measured.
+    /// The installed backend could not be located or started.
     Tool(KaniToolError),
-    /// The harness identity, or else the installed backend, differs from the committed pins
-    /// ([`KaniToolPins::pinned`]).
-    PinDrift {
-        /// The differing field.
-        field: KaniPinField,
-        /// The committed pin.
-        expected: String,
-        /// The harness's value, or the installed value when the harness matches.
-        observed: String,
-    },
     /// The crate's `src/lib.rs` does not contain the harness source.
     HarnessNotInCrate {
         /// The generated artifact path.
@@ -447,14 +273,6 @@ impl fmt::Display for KaniExecutionRefusal {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tool(error) => write!(formatter, "{error}"),
-            Self::PinDrift {
-                field,
-                expected,
-                observed,
-            } => write!(
-                formatter,
-                "{field:?} drifted: pinned {expected:?}, found {observed:?}"
-            ),
             Self::HarnessNotInCrate { harness_path } => {
                 write!(formatter, "the crate does not contain {harness_path}")
             }
@@ -529,40 +347,19 @@ pub enum KaniRunOutcome {
     },
 }
 
-/// Pinned identity and backend-reported outcome of one harness run.
+/// What ran and the backend-reported outcome of one harness run.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KaniExecutionEvidence {
-    /// [`KANI_EXECUTION_SCHEMA`].
-    pub schema: &'static str,
-    /// Identity digest of the harness that ran.
-    pub obligation_identity_sha256: String,
     /// Contract role of a contract harness; `None` for an exact-scalar harness, whose claim
     /// has no contract role.
     pub kind: Option<ObligationKind>,
     /// Generated harness path.
     pub harness_path: String,
-    /// Generated harness source digest.
-    pub harness_sha256: String,
-    /// Backend pins measured immediately before the run; equal to the harness pins.
-    pub observed_pins: KaniToolPins,
     /// Invoked launcher path.
     pub launcher_path: String,
     /// Complete argument vector after the launcher.
     pub arguments: Vec<String>,
-    /// SHA-256 of the generated crate's `Cargo.lock` after the run, or `None` for either of two
-    /// distinct reasons `outcome` — not this field alone — is what tells apart: the run
-    /// concluded but the lockfile could not be read afterward, or the run was killed before
-    /// concluding ([`KaniInconclusiveReason::TimedOut`]) and no lockfile was ever attempted. For
-    /// every outcome but `TimedOut`, a lockfile read failure is missing evidence about a run
-    /// that occurred, not grounds to discard the backend's own verdict, so `outcome` there is
-    /// always `classify_kani_run`'s classification of what the backend printed, whether or not the
-    /// lockfile digest is available.
-    pub cargo_lock_sha256: Option<String>,
-    /// Digest of the oracle sources the harness embeds.
-    pub oracle_digest: String,
-    /// Contract Runtime revision the generated crate depends on.
-    pub runtime_revision: String,
     /// Loop unwind bound.
     pub unwind: u32,
     /// Solver.
@@ -574,33 +371,11 @@ pub struct KaniExecutionEvidence {
     pub outcome: KaniRunOutcome,
 }
 
-/// Measures the backend, refuses on any pin drift, runs the harness, and reports
-/// the backend's own outcome.
+/// Runs the harness and reports the backend's own outcome.
 pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let harness = request.harness.view();
-    // The harness identity's pins are known from the harness alone, without touching the
-    // backend, so a drifted identity refuses with zero processes started rather than after
-    // `observe()` has already spawned `cargo-kani kani --version`, `cbmc --version` and
-    // `rustc -vV`.
-    if let Some((field, expected, observed)) =
-        harness.pins.first_difference(&KaniToolPins::pinned())
-    {
-        return Err(KaniExecutionRefusal::PinDrift {
-            field,
-            expected,
-            observed,
-        });
-    }
-    let observed = request.installation.observe()?;
-    if let Some((field, expected, observed)) = observed.first_difference(&KaniToolPins::pinned()) {
-        return Err(KaniExecutionRefusal::PinDrift {
-            field,
-            expected,
-            observed,
-        });
-    }
     let library_path = request.crate_directory.join("src").join("lib.rs");
     let library = read_file(KaniTool::Library, &library_path).map_err(|_| {
         KaniExecutionRefusal::HarnessNotInCrate {
@@ -619,24 +394,12 @@ pub fn execute_kani_obligation(
             path: request.installation.launcher.clone(),
             error,
         })?;
-    let (cargo_lock_sha256, outcome, exit_code) = launch_evidence(launch, || {
-        file_sha256(
-            KaniTool::Lockfile,
-            &request.crate_directory.join("Cargo.lock"),
-        )
-    });
+    let (outcome, exit_code) = launch_evidence(launch);
     Ok(KaniExecutionEvidence {
-        schema: KANI_EXECUTION_SCHEMA,
-        obligation_identity_sha256: harness.identity_sha256.to_owned(),
         kind: harness.kind,
         harness_path: harness.rust.path.clone(),
-        harness_sha256: harness.rust.sha256.clone(),
-        observed_pins: observed,
         launcher_path: request.installation.launcher.display().to_string(),
         arguments,
-        cargo_lock_sha256,
-        oracle_digest: harness.oracle_digest.to_owned(),
-        runtime_revision: harness.runtime_revision.to_owned(),
         unwind: harness.unwind,
         solver: harness.solver.to_owned(),
         exit_code,
@@ -645,13 +408,8 @@ pub fn execute_kani_obligation(
 }
 
 /// Builds the exact argument vector and [`Command`] [`execute_kani_obligation`] launches for
-/// `request`, without spawning it. Kept separate from `execute_kani_obligation` and exposed
-/// alongside [`run_launcher_with_timeout`] and [`launch_evidence`] so a caller that needs to
-/// mutate `request.crate_directory` between "the launcher process concluded" and "the post-run
-/// `Cargo.lock` digest is read" — which happen inside one call in `execute_kani_obligation` and
-/// so cannot be interleaved from outside it — can run that exact sequence itself instead of a
-/// hand-copied approximation of it that can drift from what `execute_kani_obligation` actually
-/// invokes.
+/// `request`, without spawning it, so a caller driving [`run_launcher_with_timeout`] itself
+/// launches exactly what `execute_kani_obligation` does.
 pub fn kani_launch_command(request: &KaniExecutionRequest<'_>) -> (Vec<String>, Command) {
     let mut arguments = vec!["kani".to_owned()];
     arguments.extend(request.harness.view().options.iter().cloned());
@@ -841,50 +599,17 @@ fn parent_pid(pid: u32) -> Option<u32> {
     after_comm.split_whitespace().nth(1)?.parse().ok()
 }
 
-/// Combines the post-run `Cargo.lock` digest with the backend's own classification of what it
-/// printed. The two are independent: a lockfile that cannot be read once the backend has
-/// already run is missing evidence about that run, never grounds to discard its verdict, so
-/// `outcome` is always `classify_kani_run`'s classification of `text` regardless of whether
-/// `lockfile` succeeded.
-fn run_evidence(
-    exited_successfully: bool,
-    text: &str,
-    lockfile: Result<String, KaniToolError>,
-) -> (Option<String>, KaniRunOutcome) {
-    (lockfile.ok(), classify_kani_run(exited_successfully, text))
-}
-
-/// Maps a concluded [`LaunchOutcome`] to the `(cargo_lock_sha256, outcome, exit_code)` triple
-/// [`KaniExecutionEvidence`] stores, exactly as `execute_kani_obligation` does with its own
-/// pinned, process-spawning launcher. Kept as its own pure function, tested directly with a
-/// value rather than a real subprocess, because pinning a real backend well enough to reach this
-/// mapping through `execute_kani_obligation` needs an installation whose measured pins already
-/// equal the committed ones — the real `cargo-kani` this crate is pinned to, not a hermetic
-/// stand-in — so the pinned lane is the only place that path is exercised; this function is
-/// what makes the mapping itself visible under `make ci` regardless.
-///
-/// `lockfile` is a closure rather than an already-computed `Result` so that a timed-out launch,
-/// which reads no lockfile at all, never has to compute or discard one just to call this, and so
-/// a caller driving [`run_launcher_with_timeout`] itself can mutate the crate directory after the
-/// launch has concluded but before `lockfile` is ever invoked here.
-pub fn launch_evidence(
-    launch: LaunchOutcome,
-    lockfile: impl FnOnce() -> Result<String, KaniToolError>,
-) -> (Option<String>, KaniRunOutcome, Option<i32>) {
+/// Maps a concluded [`LaunchOutcome`] to the `(outcome, exit_code)` pair
+/// [`KaniExecutionEvidence`] stores, exactly as `execute_kani_obligation` does. Kept as its own
+/// pure function so the mapping is tested directly with a value rather than a real subprocess.
+pub fn launch_evidence(launch: LaunchOutcome) -> (KaniRunOutcome, Option<i32>) {
     match launch {
         LaunchOutcome::Completed {
             exited_successfully,
             exit_code,
             text,
-        } => {
-            let (cargo_lock_sha256, outcome) = run_evidence(exited_successfully, &text, lockfile());
-            (cargo_lock_sha256, outcome, exit_code)
-        }
-        // No verdict was ever printed and the process was killed mid-run, so there is no
-        // completed run to read a lockfile digest about: retaining one here would present a
-        // build artifact from an interrupted run as if it corresponded to a concluded one.
+        } => (classify_kani_run(exited_successfully, &text), exit_code),
         LaunchOutcome::TimedOut => (
-            None,
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::TimedOut,
             },
@@ -978,30 +703,6 @@ fn classify_transcript(exited_successfully: bool, transcript: &KaniTranscript) -
     }
 }
 
-fn run(tool: KaniTool, program: &Path, arguments: &[&str]) -> Result<String, KaniToolError> {
-    if !program.is_file() {
-        return Err(KaniToolError::Missing {
-            tool,
-            path: program.to_path_buf(),
-        });
-    }
-    let output = Command::new(program)
-        .args(arguments)
-        .output()
-        .map_err(|error| KaniToolError::Io {
-            tool,
-            path: program.to_path_buf(),
-            error,
-        })?;
-    if !output.status.success() {
-        return Err(KaniToolError::Failed {
-            tool,
-            exit_code: output.status.code(),
-        });
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
-}
-
 fn read_file(tool: KaniTool, path: &Path) -> Result<Vec<u8>, KaniToolError> {
     if !path.is_file() {
         return Err(KaniToolError::Missing {
@@ -1014,13 +715,6 @@ fn read_file(tool: KaniTool, path: &Path) -> Result<Vec<u8>, KaniToolError> {
         path: path.to_path_buf(),
         error,
     })
-}
-
-/// Exposed alongside [`run_launcher_with_timeout`] and [`launch_evidence`] so a caller building
-/// the digest-read closure it hands to `launch_evidence` from outside this module reads
-/// `Cargo.lock` the identical way `execute_kani_obligation` does.
-pub fn file_sha256(tool: KaniTool, path: &Path) -> Result<String, KaniToolError> {
-    read_file(tool, path).map(|bytes| sha256(&bytes))
 }
 
 #[cfg(test)]
@@ -1234,68 +928,6 @@ mod tests {
             "Check 1: f.unwind.1\n\t - Status: SUCCESS\n\t - Description: \"unwinding assertion loop 0\"\n ** 1 of 1 cover properties satisfied\nVERIFICATION:- SUCCESSFUL\n{COVER_PLAYBACK}"
         );
         assert_eq!(classify_kani_run(true, &listed), KaniRunOutcome::Verified);
-    }
-
-    /// Only the committed pins pass; each field is compared.
-    ///
-    /// Trace: FR-017-AC-1, FR-017-AC-3, TC-027
-    #[test]
-    fn tc_027_pins_are_compared_field_by_field_against_the_committed_backend() {
-        let pinned = KaniToolPins::pinned();
-        assert_eq!(pinned.kani_version, "0.67.0");
-        assert_eq!(pinned.cbmc_version, "6.8.0 (cbmc-6.8.0)");
-        assert_eq!(
-            pinned.rust_toolchain,
-            "nightly-2025-11-21-x86_64-unknown-linux-gnu"
-        );
-        assert_eq!(pinned.target_triple, "x86_64-unknown-linux-gnu");
-        assert_eq!(pinned.first_difference(&KaniToolPins::pinned()), None);
-        let mut other = KaniToolPins::pinned();
-        other.target_triple = "aarch64-unknown-linux-gnu".to_owned();
-        assert_eq!(
-            other.first_difference(&pinned),
-            Some((
-                KaniPinField::TargetTriple,
-                "x86_64-unknown-linux-gnu".to_owned(),
-                "aarch64-unknown-linux-gnu".to_owned()
-            ))
-        );
-    }
-
-    /// A lockfile read failure after the backend already ran must not discard the backend's own
-    /// verdict: this reproduces the defect directly — `run_evidence` given a falsifying run's
-    /// text and a failed lockfile read must still return the falsified outcome with its
-    /// concrete playback, not `Inconclusive { reason: NoVerdict }`, and `cargo_lock_sha256`
-    /// must be `None` only because the read itself failed.
-    ///
-    /// Trace: FR-017-AC-5, FR-017-AC-6, TC-027
-    #[test]
-    fn tc_027_a_falsifying_run_keeps_its_verdict_when_the_lockfile_is_unreadable() {
-        let falsified = format!(
-            "SUMMARY:\n ** 1 of 43 failed\nFailed Checks: |post_state: &i64| *post_state <= 5\n\n ** 1 of 1 cover properties satisfied\n\nVERIFICATION:- FAILED\n{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"
-        );
-        let unreadable_lockfile = Err(KaniToolError::Missing {
-            tool: KaniTool::Lockfile,
-            path: PathBuf::from("Cargo.lock"),
-        });
-        let (cargo_lock_sha256, outcome) = run_evidence(false, &falsified, unreadable_lockfile);
-        assert!(
-            matches!(
-                &outcome,
-                KaniRunOutcome::Falsified { counterexample }
-                    if counterexample.contains("Check for `assertion`")
-                        && !counterexample.contains("Check for `cover`")
-            ),
-            "a falsifying run must keep its own verdict, not be discarded: {outcome:?}"
-        );
-        assert_eq!(cargo_lock_sha256, None);
-
-        // The same falsifying text with a readable lockfile carries the digest unchanged: the
-        // outcome does not depend on whether the lockfile read succeeded.
-        let (cargo_lock_sha256, readable_outcome) =
-            run_evidence(false, &falsified, Ok("digest".to_owned()));
-        assert_eq!(outcome, readable_outcome);
-        assert_eq!(cargo_lock_sha256, Some("digest".to_owned()));
     }
 
     /// A scratch directory unique to this process and this call, so parallel tests never
@@ -1549,18 +1181,10 @@ mod tests {
         );
     }
 
-    /// The mapping `execute_kani_obligation` applies to a timed-out launch — no lockfile digest,
-    /// no exit code, `Inconclusive { reason: TimedOut }` — needs no real pinned backend to cover,
-    /// because it is a pure function of a [`LaunchOutcome`] value. `lockfile` panics if called at
-    /// all: a timed-out launch must not attempt to read a lockfile a run that never concluded
-    /// could not have meaningfully produced.
+    /// A timed-out launch maps to no exit code and `Inconclusive { reason: TimedOut }`.
     #[test]
-    fn a_timed_out_launch_carries_no_lockfile_digest_and_no_exit_code_into_the_evidence() {
-        let (cargo_lock_sha256, outcome, exit_code) =
-            launch_evidence(LaunchOutcome::TimedOut, || {
-                panic!("a timed-out launch must never read a lockfile")
-            });
-        assert_eq!(cargo_lock_sha256, None);
+    fn a_timed_out_launch_carries_no_exit_code_into_the_evidence() {
+        let (outcome, exit_code) = launch_evidence(LaunchOutcome::TimedOut);
         assert_eq!(exit_code, None);
         assert_eq!(
             outcome,

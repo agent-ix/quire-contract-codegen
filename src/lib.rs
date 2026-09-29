@@ -109,24 +109,23 @@ pub use bound::{
 };
 
 pub use capability::{
-    negotiate_backend_provider, record_tool_probe, BackendDescriptor, BackendKind,
-    BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause, Disposition,
-    EnvelopeRefusal, ExtentClassification, ItemResult, ItemSettlement, Mode, ProbePhase,
-    RequestItem, RequestedKind, RoutedItem, ToolObservation, BACKEND_PROVIDER_CONTRACT,
-    CAPABILITY_VOCABULARY,
+    negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope,
+    Candidate, Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal,
+    ExtentClassification, ItemSettlement, Mode, RequestItem, RequestedKind, RoutedItem,
+    BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
 };
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
 pub use kani::{
     generate_kani_bundle, KaniArtifactBundle, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
     KaniIntegerBounds, KaniPrimitiveType, KaniRequest, KaniSolver, KaniSubjectBinding,
     ProofDependencyEdge, ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest,
-    ProofDependencyState, ProofReadiness, KANI_ADAPTER_PROFILE, KANI_BACKEND_VERSION,
+    ProofDependencyState, ProofReadiness,
 };
 pub use kani_execution::{
-    classify_kani_run, execute_kani_obligation, file_sha256, kani_launch_command, launch_evidence,
+    classify_kani_run, execute_kani_obligation, kani_launch_command, launch_evidence,
     run_launcher_with_timeout, KaniExecutableHarness, KaniExecutionEvidence, KaniExecutionRefusal,
-    KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniPinField, KaniRunOutcome,
-    KaniTool, KaniToolError, KaniToolPins, LaunchOutcome, KANI_EXECUTION_SCHEMA,
+    KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniRunOutcome, KaniTool,
+    KaniToolError, LaunchOutcome,
 };
 pub use routed_generation::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
@@ -138,9 +137,7 @@ pub use kani_obligations::{
     KaniObligationError, KaniObligationHarness, KaniObligationIdentity, KaniObligationOutcome,
     KaniObligationRequest, KaniScalarObligationHarness, ObligationBinding, ObligationDisposition,
     ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, ScalarObligationArgument,
-    ScalarObligationIdentity, UnsupportedObligation, KANI_OBLIGATION_PROFILE,
-    KANI_OBLIGATION_SCHEMA, KANI_SCALAR_OBLIGATION_SCHEMA, MAX_OBLIGATION_ITEMS,
-    MAX_OBLIGATION_UNWIND,
+    ScalarObligationIdentity, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 pub use kani_witness_join::{decode_falsification, witness_schema, WitnessSchemaError};
 pub use publication::{

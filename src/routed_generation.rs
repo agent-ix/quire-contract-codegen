@@ -23,7 +23,7 @@ use crate::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, negotiate_kani_obligations, Artifact,
     AttestationContext, BackendKind, Candidate, ClaimMap, ExactScalarClaim, ExactScalarOracles,
     InvalidObligationItem, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
-    KaniScalarObligationHarness, KaniToolPins, ObligationDisposition, ObligationItem,
+    KaniScalarObligationHarness, ObligationDisposition, ObligationItem,
     ObligationRecord, OracleGenerationError,
 };
 
@@ -48,8 +48,6 @@ pub struct RoutedGenerationItem {
 pub struct KaniGenerationContext<'a> {
     /// Rust path of the customer subject.
     pub subject_path: &'a str,
-    /// The backend identity harnesses are generated for.
-    pub pins: &'a KaniToolPins,
     /// Loop unwind bound.
     pub unwind: u32,
     /// Binding for the generation identity.
@@ -263,7 +261,6 @@ fn generate_kani(
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
         items: &items,
         subject_path: context.subject_path,
-        pins: context.pins,
         unwind: context.unwind,
         attestation: context.attestation,
     })
