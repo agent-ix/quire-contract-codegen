@@ -160,6 +160,21 @@ the two work-package tokens redacted to `WP<n>`.
 | FND-014 | fixed d8fc593 | FR-024-AC-2 is a single claim. AC-7 is split into AC-7 and AC-8 (the old AC-8 and AC-9 are now AC-9 and AC-10). FR-025-AC-2 is split into AC-2 and AC-6. The matrix, TC-035 and TC-036 match. |
 | FND-015 | fixed d8fc593 | "Linear IR-309" is removed and the AD-001 no-convergence statement is restored. FR-018 drops "yet". The remaining "no requirement owns" is an Out of Scope fact, not a requirement statement. |
 
+Round 2, reviewed at `55e37de99c0cb5fbd09b4be674a9a2c76d4d0a08` (fix commit `55e37de`).
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-016 | fixed 55e37de | `git diff 49e797b 55e37de -- src tests` changes exactly six `/// Trace:` doc-comment lines and nothing else. No `FR-007-AC-4` tag remains under `src/` or `tests/`. `quire coverage` now reports FR-007-AC-4 `backed: false`, which matches the matrix row marking it Planned. `cargo fmt --check` and `cargo clippy --locked --all-targets -D warnings` both exit 0. |
+| FND-017 | fixed 55e37de | FR-016 adds a partition row and FR-016-AC-13: a `Witness` arm settling `reproduced-with-evaluated-witness` with any category other than `violation` is a mismatch. At `20ba521`, `WitnessSettlement` has two variants (`ReproducedWithEvaluatedWitness`, `Inconclusive`), and `settle` takes `category` as an independent input. The ordered rows now cover every `Err` and `Ok` return of `replay`, so each condition gives exactly one outcome. The matrix and TC-026 carry AC-13. |
+| FND-018 | fixed 55e37de | FR-024, FR-007 and AD-001 no longer carry the ruling date, `QSL-317` or "unassigned". They cite the `qsl-replay` API and AD-001, and say the upstream amendment is pending. The dated ruling appears only in ADR-002 (Context, and a pointer from Status), which is a decision record. The remaining Linear ids under `spec/` (FR-022, the test matrix, ADR-003's IR-241) are on `main` or are cited evidence, and this fix round did not add them. |
+
+### Round 2 verdict
+
+All 18 findings are fixed, and none has a latest outcome of still-open. This round adds no new
+finding. `make spec` is byte-identical to `origin/main` (both exit 2 from AP-001/MP-001).
+`status_lies` is empty. `grep -rE 'WP[0-9]' spec reviews src tests` finds nothing. The committed
+SR-040 equals the round-1 reviewer copy, with line 62 still redacted. Mergeable.
+
 ## New findings (disposition pass 1)
 
 | ID | Severity | Summary | Refs |
