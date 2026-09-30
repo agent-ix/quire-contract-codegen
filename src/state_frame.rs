@@ -153,8 +153,7 @@ enum Side {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum StateFrameProperty {
-    /// `left <op> right` between the named observations of one field, inside `[minimum,
-    /// maximum]`.
+    /// `left <op> right` between the named observations of one field.
     Postcondition {
         /// The one integer field the condition reads.
         field: String,
@@ -162,10 +161,6 @@ pub enum StateFrameProperty {
         comparison: StateComparison,
         /// Whether the left operand is the field's pre-state value (else its post-state value).
         left_is_pre: bool,
-        /// Inclusive lower bound the IR carries for the field.
-        minimum: i64,
-        /// Inclusive upper bound the IR carries for the field.
-        maximum: i64,
     },
     /// Every `checked` field is unchanged; the `granted` fields may change.
     Frame {
@@ -174,6 +169,18 @@ pub enum StateFrameProperty {
         /// Every other state field: the forbidden effects, each asserted unchanged.
         checked: Vec<String>,
     },
+}
+
+/// The inclusive integer range the IR carries for one state field. Every harness assumes it of
+/// the symbolic pre-state, so a counterexample is a state the model admits.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct StateFieldDomain {
+    /// The state field.
+    pub field: String,
+    /// Inclusive lower bound.
+    pub minimum: i64,
+    /// Inclusive upper bound.
+    pub maximum: i64,
 }
 
 /// The operation a harness is scoped to. Two harnesses with different scopes are never the same
@@ -199,6 +206,8 @@ pub struct StateFrameIdentity {
     pub scope: StateFrameScope,
     /// The property proved.
     pub property: StateFrameProperty,
+    /// The IR range assumed of each state field that has one, in `state_fields` order.
+    pub domains: Vec<StateFieldDomain>,
     /// Rust path of the state struct.
     pub state_path: String,
     /// Rust path of the operation subject.
@@ -420,7 +429,7 @@ pub fn generate_state_frame_obligations(
     let shape = ClauseShape::read(&graph, request.clause)?;
     let granted = shape.frame_grants(&graph)?;
     let condition = shape.condition(&graph, request.clause)?;
-    let (minimum, maximum) = single_integer_range(&graph, &lowered.bounds)?;
+    let clause_range = single_integer_range(&graph, &lowered.bounds)?;
     let known = request
         .state_fields
         .iter()
@@ -448,21 +457,28 @@ pub fn generate_state_frame_obligations(
             frame: shape.scope.frame.clone(),
         });
     }
+    let domains = state_domains(
+        &graph,
+        &shape.scope.object,
+        &condition.field,
+        clause_range,
+        request,
+    );
     let postcondition = render(
         request,
         &shape.scope,
+        &domains,
         StateFrameProperty::Postcondition {
             field: condition.field,
             comparison: condition.comparison,
             left_is_pre: condition.left == Side::Pre,
-            minimum,
-            maximum,
         },
         &format!("post_{}", short(&request.clause.digest)),
     )?;
     let frame = render(
         request,
         &shape.scope,
+        &domains,
         StateFrameProperty::Frame {
             granted: granted.into_iter().collect(),
             checked,
@@ -610,9 +626,10 @@ impl ClauseShape {
             });
         }
         let body = &node.body;
-        let arguments = application(body, "state_clause", "quire.op.state.clause")
-            .filter(|arguments| arguments.len() == 3)
-            .ok_or_else(malformed)?;
+        let [parameters, anchor, condition] =
+            application(body, "state_clause", "quire.op.state.clause")
+                .and_then(|arguments| <&[Value; 3]>::try_from(arguments).ok())
+                .ok_or_else(malformed)?;
         let kind = body
             .get("operation")
             .and_then(|operation| operation.get("member"))
@@ -624,7 +641,7 @@ impl ClauseShape {
                 clause: kind.to_owned(),
             });
         }
-        let parameters = arguments[0]
+        let parameters = parameters
             .get("members")
             .and_then(Value::as_array)
             .ok_or_else(malformed)?
@@ -633,10 +650,10 @@ impl ClauseShape {
             .collect::<Option<Vec<_>>>()
             .ok_or_else(malformed)?;
         let anchor = graph
-            .follow(&arguments[1], clause)
+            .follow(anchor, clause)
             .and_then(|anchor| anchor.node)
             .ok_or_else(malformed)?;
-        let condition = graph.follow(&arguments[2], clause).ok_or_else(malformed)?;
+        let condition = graph.follow(condition, clause).ok_or_else(malformed)?;
         Ok(Self {
             parameters,
             scope: read_scope(graph, anchor).ok_or_else(malformed)?,
@@ -866,6 +883,50 @@ fn integer_range(body: &Value) -> Option<(i64, i64)> {
     ))
 }
 
+/// The range of each state field: the clause's own field takes the one range the clause reaches;
+/// every other field takes the `integer_range` its member of the framed object's body references,
+/// when the object declares one.
+fn state_domains(
+    graph: &Graph<'_>,
+    object: &CheckedNodeId,
+    clause_field: &str,
+    clause_range: (i64, i64),
+    request: &StateFrameRequest<'_>,
+) -> Vec<StateFieldDomain> {
+    let members = graph
+        .nodes
+        .get(object)
+        .and_then(|node| node.body.get("members")?.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let declared = |field: &str| {
+        let member = members
+            .iter()
+            .find(|member| member.get("name").and_then(Value::as_str) == Some(field))?;
+        let target = node_id(member.get("value")?.get("target")?)?;
+        let bound = graph.nodes.get(&target)?;
+        (&*bound.semantic_form == "integer_range")
+            .then(|| integer_range(&bound.body))
+            .flatten()
+    };
+    request
+        .state_fields
+        .iter()
+        .filter_map(|field| {
+            let range = if *field == clause_field {
+                Some(clause_range)
+            } else {
+                declared(field)
+            };
+            range.map(|(minimum, maximum)| StateFieldDomain {
+                field: (*field).to_owned(),
+                minimum,
+                maximum,
+            })
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
@@ -873,6 +934,7 @@ fn integer_range(body: &Value) -> Option<(i64, i64)> {
 fn render(
     request: &StateFrameRequest<'_>,
     scope: &StateFrameScope,
+    domains: &[StateFieldDomain],
     property: StateFrameProperty,
     module: &str,
 ) -> Result<StateFrameHarness, StateFrameRefusal> {
@@ -887,25 +949,26 @@ fn render(
             field,
             comparison,
             left_is_pre,
-            minimum,
-            maximum,
         } => postcondition_body(
             request,
             scope,
+            domains,
             &Postcondition {
                 field,
                 comparison: *comparison,
                 left_is_pre: *left_is_pre,
             },
-            (*minimum, *maximum),
             module,
         ),
-        StateFrameProperty::Frame { checked, .. } => frame_body(request, scope, checked, module),
+        StateFrameProperty::Frame { checked, .. } => {
+            frame_body(request, scope, domains, checked, module)
+        }
     };
     let identity = StateFrameIdentity {
         clause: request.clause.clone(),
         scope: scope.clone(),
         property,
+        domains: domains.to_vec(),
         state_path: request.state_path.to_owned(),
         subject_path: request.subject_path.to_owned(),
         module_symbol: module.to_owned(),
@@ -952,16 +1015,32 @@ struct RecordView<'a> {
     rust_path: &'a str,
 }
 
-/// `let pre: S = S { a: kani::any(), ... };`.
-fn symbolic_state(request: &StateFrameRequest<'_>) -> String {
+/// `let pre: S = S { a: kani::any(), ... };` and an assumption of each field's IR range.
+fn symbolic_state(request: &StateFrameRequest<'_>, domains: &[StateFieldDomain]) -> String {
     let fields = request
         .state_fields
         .iter()
         .map(|field| format!("{field}: kani::any()"))
         .collect::<Vec<_>>()
         .join(", ");
+    let assumptions = domains
+        .iter()
+        .map(
+            |StateFieldDomain {
+                 field,
+                 minimum,
+                 maximum,
+             }| {
+                format!(
+                    "        kani::assume(pre.{field} >= {} && pre.{field} <= {});\n",
+                    i64_literal(*minimum),
+                    i64_literal(*maximum)
+                )
+            },
+        )
+        .collect::<String>();
     format!(
-        "        let pre: {state} = {state} {{ {fields} }};\n",
+        "        let pre: {state} = {state} {{ {fields} }};\n{assumptions}",
         state = request.state_path
     )
 }
@@ -978,8 +1057,8 @@ struct Postcondition<'a> {
 fn postcondition_body(
     request: &StateFrameRequest<'_>,
     scope: &StateFrameScope,
+    domains: &[StateFieldDomain],
     condition: &Postcondition<'_>,
-    (minimum, maximum): (i64, i64),
     module: &str,
 ) -> String {
     let Postcondition {
@@ -1001,10 +1080,8 @@ fn postcondition_body(
         )
     );
     format!(
-        "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        kani::assume(pre.{field} >= {lower} && pre.{field} <= {upper});\n        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"state bounds hold and the operation returns\");\n        assert!(\n            {left}.{field} {operator} {right}.{field},\n            {message}\n        );\n    }}\n}}\n",
-        state = symbolic_state(request),
-        lower = i64_literal(minimum),
-        upper = i64_literal(maximum),
+        "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"state bounds hold and the operation returns\");\n        assert!(\n            {left}.{field} {operator} {right}.{field},\n            {message}\n        );\n    }}\n}}\n",
+        state = symbolic_state(request, domains),
         subject = request.subject_path,
     )
 }
@@ -1012,6 +1089,7 @@ fn postcondition_body(
 fn frame_body(
     request: &StateFrameRequest<'_>,
     scope: &StateFrameScope,
+    domains: &[StateFieldDomain],
     checked: &[String],
     module: &str,
 ) -> String {
@@ -1030,7 +1108,7 @@ fn frame_body(
         .collect::<String>();
     format!(
         "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"the operation returns\");\n{assertions}    }}\n}}\n",
-        state = symbolic_state(request),
+        state = symbolic_state(request, domains),
         subject = request.subject_path,
     )
 }

@@ -140,9 +140,9 @@ pub use spine_replay::{
     SpineReplayError,
 };
 pub use state_frame::{
-    generate_state_frame_obligations, StateComparison, StateFrameHarness, StateFrameIdentity,
-    StateFrameObligations, StateFrameProperty, StateFrameRefusal, StateFrameRequest,
-    StateFrameScope, UnsupportedFrameEffect,
+    generate_state_frame_obligations, StateComparison, StateFieldDomain, StateFrameHarness,
+    StateFrameIdentity, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
+    StateFrameRequest, StateFrameScope, UnsupportedFrameEffect,
 };
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,

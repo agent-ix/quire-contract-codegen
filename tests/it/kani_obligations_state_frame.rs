@@ -9,24 +9,36 @@
 //! declares its own fields, so IR admits the field reads without a domain package.
 //!
 //! The default lane measures the generated source, identity and refusals. The `kani` lane
-//! (`#[ignore]` here, run serially by `make kani`) proves the harnesses with the installed
-//! backend: a healthy subject verifies, each seeded defect is falsified for the intended
-//! property, and regenerating the frame from a mutated package turns a green proof red.
+//! (`#[ignore]` here, run serially by `make kani`, whose `kani_obligations` filter this module's
+//! name matches) proves the harnesses with the installed backend: a healthy subject verifies,
+//! each seeded defect is falsified for the intended property, and regenerating the frame from a
+//! mutated package turns a green proof red.
 
+#[path = "../state_frame_support/native_twin.rs"]
+mod native_twin;
 #[path = "../exact_scalar_support/package.rs"]
 #[allow(clippy::duplicate_mod)]
 mod package;
+#[path = "../state_frame_support/subject.rs"]
+// The Kani crates run every subject variant; the test binary executes only some natively.
+#[allow(dead_code)]
+mod subject;
 
 use std::{fs, path::PathBuf, time::Duration};
 
+use native_twin::Twin;
 use package::{
     application, code_id, corpus_package, key, literal, member, op, op_full, parameter_body,
     reference, Bound, PackageBuilder, NODE_DOMAIN, T_BOOLEAN,
 };
+use qsl_replay::{
+    DisagreementCause, FrameChange, ProofCategory, ReplayResult, Verdict, WitnessSettlement,
+};
 use quire_contract_codegen::{
     execute_kani_obligation, generate_state_frame_obligations, KaniExecutionRequest,
-    KaniInstallation, KaniRunOutcome, StateComparison, StateFrameHarness, StateFrameObligations,
-    StateFrameProperty, StateFrameRefusal, StateFrameRequest, UnsupportedFrameEffect,
+    KaniInstallation, KaniRunOutcome, StateComparison, StateFieldDomain, StateFrameHarness,
+    StateFrameObligations, StateFrameProperty, StateFrameRefusal, StateFrameRequest,
+    UnsupportedFrameEffect,
 };
 use quire_contract_ir::{CheckedNodeId, CheckedPackageV2, CompleteLoweringRecordV2};
 use serde_json::{json, Value};
@@ -43,16 +55,7 @@ const PRE_BALANCE: u32 = 4008;
 const STATE_FIELDS: [&str; 2] = ["balance", "audit"];
 const STATE_PATH: &str = "crate::subject::Account";
 const SUBJECT_PATH: &str = "crate::subject::deposit";
-
-/// What the operation's state looks like to the subject.
-const STATE_TYPE: &str =
-    "#[derive(Clone)]\npub struct Account {\n    pub balance: i64,\n    pub audit: i64,\n}\n";
-/// Credits one unit to `balance`, the field the frame grants.
-const DEPOSIT: &str = "pub fn deposit(account: &mut Account) {\n    if account.balance < 1000 {\n        account.balance += 1;\n    }\n}\n";
-/// Seeded defect: also rewrites `audit`, which the frame does not grant.
-const DEPOSIT_TOUCHING_AUDIT: &str = "pub fn deposit(account: &mut Account) {\n    if account.balance < 1000 {\n        account.balance += 1;\n    }\n    account.audit = account.audit.wrapping_add(1);\n}\n";
-/// Seeded defect: debits instead of crediting.
-const DEPOSIT_DEBITING: &str = "pub fn deposit(account: &mut Account) {\n    account.balance = account.balance.wrapping_sub(1);\n}\n";
+const SUBJECT_SOURCE: &str = include_str!("../state_frame_support/subject.rs");
 
 /// One variant of the fixture. Each variant owns its node codes, because the test binary's
 /// fixture registry refuses one code bound to two different bodies.
@@ -328,10 +331,24 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
             field: "balance".to_owned(),
             comparison: StateComparison::Ge,
             left_is_pre: false,
-            minimum: 0,
-            maximum: 1000,
         }
     );
+    // Every field the object's IR bounds is assumed in range, so a counterexample is a state
+    // the model admits.
+    let domain = |field: &str| StateFieldDomain {
+        field: field.to_owned(),
+        minimum: 0,
+        maximum: 1000,
+    };
+    for harness in [&generated.postcondition, &generated.frame] {
+        assert_eq!(
+            harness.identity.domains,
+            vec![domain("balance"), domain("audit")]
+        );
+        let source = &harness.rust.contents;
+        assert!(source.contains("kani::assume(pre.balance >= 0_i64 && pre.balance <= 1000_i64);"));
+        assert!(source.contains("kani::assume(pre.audit >= 0_i64 && pre.audit <= 1000_i64);"));
+    }
     assert_eq!(
         generated.frame.identity.property,
         StateFrameProperty::Frame {
@@ -341,7 +358,6 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
     );
 
     let post = &generated.postcondition.rust.contents;
-    assert!(post.contains("kani::assume(pre.balance >= 0_i64 && pre.balance <= 1000_i64);"));
     assert!(post.contains("let mut post = pre.clone();"));
     assert!(post.contains("crate::subject::deposit(&mut post);"));
     assert!(post.contains("post.balance >= pre.balance"));
@@ -545,14 +561,24 @@ fn scratch(name: &str) -> PathBuf {
     path
 }
 
-/// Runs `harness` over `subject` with the real prover.
-fn prove(harness: &StateFrameHarness, subject: &str) -> KaniRunOutcome {
+/// The obligations of `fixture` over the subject function named `subject` in `subject.rs`.
+fn generate_over(fixture: &Fixture, subject: &str) -> StateFrameObligations {
+    let subject_path = format!("crate::subject::{subject}");
+    generate_state_frame_obligations(&StateFrameRequest {
+        subject_path: &subject_path,
+        ..request(fixture, &STATE_FIELDS)
+    })
+    .unwrap_or_else(|refusal| panic!("the fixture must generate: {refusal}"))
+}
+
+/// Runs `harness` with the real prover over the subject module every generated harness names.
+fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let directory = scratch("crate");
     fs::write(
         directory.join("src/lib.rs"),
         format!(
-            "//! Generated obligation check crate.\n\n{}\npub mod subject {{\n{STATE_TYPE}{subject}}}\n",
+            "//! Generated obligation check crate.\n\n{}\npub mod subject {{\n{SUBJECT_SOURCE}}}\n",
             harness.rust.contents
         ),
     )
@@ -579,7 +605,8 @@ fn prove(harness: &StateFrameHarness, subject: &str) -> KaniRunOutcome {
     evidence.outcome
 }
 
-fn falsified(outcome: KaniRunOutcome, reason: &str) {
+/// The counterexample of a falsified proof, which must name `reason`.
+fn falsified(outcome: KaniRunOutcome, reason: &str) -> String {
     let KaniRunOutcome::Falsified { counterexample } = outcome else {
         panic!("expected a falsified proof for `{reason}`, got {outcome:?}");
     };
@@ -587,6 +614,30 @@ fn falsified(outcome: KaniRunOutcome, reason: &str) {
         counterexample.contains(reason),
         "the counterexample must name `{reason}`:\n{counterexample}"
     );
+    counterexample
+}
+
+/// The `(balance, audit)` values Kani's concrete playback assigns the harness's two symbolic
+/// `i64` fields, in the order the harness declares them.
+fn playback_state(counterexample: &str) -> (i64, i64) {
+    let values = counterexample
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("vec![") && !line.contains("concrete_vals"))
+        .map(|line| {
+            let bytes = line
+                .trim_start_matches("vec![")
+                .trim_end_matches("],")
+                .split(',')
+                .map(|byte| byte.trim().parse::<u8>().expect("a playback byte"))
+                .collect::<Vec<_>>();
+            i64::from_le_bytes(bytes.try_into().expect("eight bytes per i64"))
+        })
+        .collect::<Vec<_>>();
+    let [balance, audit] = values[..] else {
+        panic!("two symbolic fields in the playback, found {values:?}");
+    };
+    (balance, audit)
 }
 
 /// The operation contract verifies for a healthy subject and is falsified, for the postcondition
@@ -596,13 +647,13 @@ fn falsified(outcome: KaniRunOutcome, reason: &str) {
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifies_it() {
-    let generated = generate(&fixture(&Shape::HEALTHY));
+    let fixture = fixture(&Shape::HEALTHY);
     assert_eq!(
-        prove(&generated.postcondition, DEPOSIT),
+        prove(&generate_over(&fixture, "deposit").postcondition),
         KaniRunOutcome::Verified
     );
     falsified(
-        prove(&generated.postcondition, DEPOSIT_DEBITING),
+        prove(&generate_over(&fixture, "deposit_debiting").postcondition),
         "postcondition `post.balance >= pre.balance` failed",
     );
 }
@@ -615,22 +666,97 @@ fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifi
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_frame_falsifies() {
-    let generated = generate(&fixture(&Shape::HEALTHY));
+    let fixture = fixture(&Shape::HEALTHY);
     // ALLOWED: only `balance` changes, and the frame grants it.
-    assert_eq!(prove(&generated.frame, DEPOSIT), KaniRunOutcome::Verified);
+    assert_eq!(
+        prove(&generate_over(&fixture, "deposit").frame),
+        KaniRunOutcome::Verified
+    );
     // FORBIDDEN: `audit` changes too.
     falsified(
-        prove(&generated.frame, DEPOSIT_TOUCHING_AUDIT),
+        prove(&generate_over(&fixture, "deposit_touching_audit").frame),
         "changed `audit`, which its frame does not modify",
     );
     // MUTATION CONTROL: the same allowed subject against a frame that grants nothing.
-    let emptied = generate(&fixture(&Shape {
+    let emptied = self::fixture(&Shape {
         variant: 1,
         modifies: &[],
         ..Shape::HEALTHY
-    }));
+    });
     falsified(
-        prove(&emptied.frame, DEPOSIT),
+        prove(&generate_over(&emptied, "deposit").frame),
         "changed `balance`, which its frame does not modify",
     );
+}
+
+/// The forbidden frame counterexample Kani finds is executed natively, then replayed through
+/// QSL's `replay_frame`, which reproduces the violation on the forbidden field; the allowed
+/// effect's run replays as a frame the invocation respects.
+///
+/// Trace: FR-015-AC-28, TC-025
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
+    let fixture = fixture(&Shape::HEALTHY);
+    let twin = Twin::compile();
+
+    let forbidden = generate_over(&fixture, "deposit_touching_audit");
+    let counterexample = falsified(
+        prove(&forbidden.frame),
+        "changed `audit`, which its frame does not modify",
+    );
+    let (balance, audit) = playback_state(&counterexample);
+    let mut account = subject::Account { balance, audit };
+    subject::deposit_touching_audit(&mut account);
+    assert_ne!(
+        account.audit, audit,
+        "the native run reproduces the forbidden write"
+    );
+    let invocation = twin.invocation(
+        "account",
+        (balance, audit),
+        (account.balance, account.audit),
+    );
+    let result = twin
+        .replay(&invocation, "account", "audit")
+        .expect("the replay settles");
+    let ReplayResult::Witness(arm) = result.result() else {
+        panic!("a witness-sourced replay settles on the witness arm");
+    };
+    assert_eq!(
+        arm.settlement(),
+        WitnessSettlement::ReproducedWithEvaluatedWitness
+    );
+    assert_eq!(arm.category(), ProofCategory::Violation);
+    let Some(FrameChange::FieldWrite { object, field, .. }) =
+        result.found().map(|found| &found.change)
+    else {
+        panic!("the replay found a field write: {:?}", result.found());
+    };
+    assert_eq!((object.as_str(), field.as_str()), ("account", "audit"));
+
+    // ALLOWED: the granted write proves, and its run is a frame the invocation respects.
+    let allowed = generate_over(&fixture, "deposit");
+    assert_eq!(prove(&allowed.frame), KaniRunOutcome::Verified);
+    let mut account = subject::Account {
+        balance: 5,
+        audit: 0,
+    };
+    subject::deposit(&mut account);
+    let invocation = twin.invocation("account", (5, 0), (account.balance, account.audit));
+    let result = twin
+        .replay(&invocation, "account", "balance")
+        .expect("the replay settles");
+    let ReplayResult::Witness(arm) = result.result() else {
+        panic!("a witness-sourced replay settles on the witness arm");
+    };
+    assert_eq!(arm.settlement(), WitnessSettlement::Inconclusive);
+    assert_eq!(
+        arm.disagreement(),
+        Some(DisagreementCause::Verdicts {
+            proved: Verdict::from_category(ProofCategory::Violation),
+            replayed: Verdict::from_category(ProofCategory::Success),
+        })
+    );
+    assert!(result.found().is_none());
 }

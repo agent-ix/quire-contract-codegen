@@ -32,6 +32,19 @@ search each harness source for a loop bound; and submit a request with no
 items, with more items than the ceiling, with an unparsable subject path, and
 with an unwind bound on each side of the admissible range.
 
+State clauses: generate the operation-contract and frame-effect harnesses of one
+`postcondition` clause over one integer field; read each identity's scope, field
+ranges, granted and forbidden fields and cover count; and submit a clause that is
+a precondition, one comparing two reads of the same side, one comparing two
+fields, a frame that creates an object, an object whose fields carry two ranges,
+a state without the clause's field, a frame granting every field, and an
+unparsable path and an out-of-range unwind bound. Run the installed Kani backend
+over a healthy subject, a subject mutated to debit, a subject writing a granted
+field, a subject also writing an ungranted field, and the allowed subject against
+a frame regenerated from a package whose `modifies` is emptied; then execute the
+forbidden counterexample natively and replay it, and the allowed run, through
+QSL's `replay_frame`.
+
 ## Expected Results
 
 Four distinct harnesses carry their bounds; no assumption
@@ -53,7 +66,8 @@ accounted.
 
 ## Implementation
 
-`tests/it/kani_obligations.rs`. The default lane negotiates every item before
+`tests/it/kani_obligations.rs`, and for state clauses `tests/it/kani_obligations_state_frame.rs`,
+whose module name `make kani`'s `kani_obligations` filter selects. The default lane negotiates every item before
 any harness is exposed and checks separate harnesses, IR-derived bounds,
 assumptions and every refusal. `make kani` runs the ignored lane serially under
 a host lock against the installed Kani backend: it verifies the precondition,
@@ -81,11 +95,21 @@ unsatisfiable requires as `cover_unsatisfied`.
 7. Request obligations with valid censuses whose dependencies are all passed, one missing and one
    failed. Each folds into the identity with readiness `ready`, `incomplete` and `incomplete`, and
    every harness records execution `not_run` (FR-015-AC-25).
+8. Generate the operation-contract and frame-effect harnesses of one `postcondition` state clause
+   over one integer field. Each carries one cover, an identity scoped to the operation, anchor,
+   frame and object, and the IR range of each state field (FR-015-AC-26). Each clause or frame
+   shape outside that encoding is refused by name with no harness (FR-015-AC-27). The installed
+   backend verifies the healthy subject, falsifies the debiting subject, verifies the granted write,
+   falsifies the ungranted write naming its field, falsifies the allowed subject against a frame
+   regenerated with nothing granted, and QSL's `replay_frame` reproduces the forbidden write and
+   finds the allowed run inside its frame (FR-015-AC-28).
 
 ## Blocked
 
-- Frame harnesses: FR-025 accounts every frame obligation `unsupported` until QSpec decides how a
-  frame node lowers into a Kani form (ADR-004).
+- Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
+  `unsupported` there until QSpec decides how a frame node lowers into a Kani form (ADR-004). The
+  frame of a `postcondition` state clause over one integer field is instead generated with that
+  clause by `generate_state_frame_obligations` (FR-015-AC-26 to FR-015-AC-28).
 - V2 scalar harnesses outside `IntegerArithmetic`: an IR-confirmed claim over
   one of the four `quire.op.integer.{add,sub,mul,negate}` identities reaches a
   real harness unless a ground independent of the operation (an
