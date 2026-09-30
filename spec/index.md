@@ -5,13 +5,7 @@ org: agent-ix
 component_type: rust-library
 implementation_language: rust
 tags: [contract-codegen, rust, proptest, kani, assurance]
-depends_on:
-  - ix://agent-ix/quire-contract-ir/PGM-01
 standards_alignment: [iso-iec-ieee-29148]
-relationships:
-  - target: ix://agent-ix/quire-contract-ir/PGM-01
-    type: depends_on
-    cardinality: "1:1"
 security_critical: false
 ---
 # Master Requirements Specification
@@ -89,5 +83,4 @@ the directory carries the subsystem.
 
 ## References
 
-- PGM-01 governance gate, identified as `ix://agent-ix/quire-contract-ir/PGM-01`; this
-  specification does not redefine it.
+- ISO/IEC/IEEE 29148 (requirements engineering), per `standards_alignment`.
