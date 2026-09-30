@@ -48,6 +48,7 @@ use crate::{
         KaniBanner, KaniCoverSummary, KaniFailedCheck, KaniPlaybackTarget, KaniTranscript,
     },
     oracle::Artifact,
+    state_frame::StateFrameHarness,
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
@@ -159,6 +160,8 @@ pub enum KaniExecutableHarness<'a> {
     Contract(&'a KaniObligationHarness),
     /// A V2 exact-scalar harness, as `generate_routed` returns it (FR-022).
     Scalar(&'a KaniScalarObligationHarness),
+    /// A V2 state-clause operation-contract or frame-effect harness (IR-412).
+    StateFrame(&'a StateFrameHarness),
 }
 
 impl<'a> From<&'a KaniObligationHarness> for KaniExecutableHarness<'a> {
@@ -170,6 +173,12 @@ impl<'a> From<&'a KaniObligationHarness> for KaniExecutableHarness<'a> {
 impl<'a> From<&'a KaniScalarObligationHarness> for KaniExecutableHarness<'a> {
     fn from(harness: &'a KaniScalarObligationHarness) -> Self {
         Self::Scalar(harness)
+    }
+}
+
+impl<'a> From<&'a StateFrameHarness> for KaniExecutableHarness<'a> {
+    fn from(harness: &'a StateFrameHarness) -> Self {
+        Self::StateFrame(harness)
     }
 }
 
@@ -196,6 +205,16 @@ impl<'a> KaniExecutableHarness<'a> {
                 }
             }
             Self::Scalar(harness) => {
+                let identity = &harness.identity;
+                HarnessView {
+                    rust: &harness.rust,
+                    kind: None,
+                    unwind: identity.unwind,
+                    solver: &identity.solver,
+                    options: &identity.options,
+                }
+            }
+            Self::StateFrame(harness) => {
                 let identity = &harness.identity;
                 HarnessView {
                     rust: &harness.rust,

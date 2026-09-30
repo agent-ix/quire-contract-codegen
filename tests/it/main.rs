@@ -56,5 +56,6 @@ mod kani_witness_join;
 mod oracle_generation;
 mod routed_generation;
 mod skeleton_spine;
+mod state_frame;
 mod strategy_generation;
 mod vacuity_primitives;

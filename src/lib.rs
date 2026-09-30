@@ -21,6 +21,8 @@ mod kani_obligations;
 mod capability;
 // Implements: FR-022
 mod routed_generation;
+// Implements: FR-015 (IR-412: state-clause operation contract and frame effects).
+mod state_frame;
 // Implements: FR-017
 mod kani_execution;
 mod kani_transcript;
@@ -136,6 +138,11 @@ pub use spine_replay::{
     replay_counterexample, replay_falsification, DependencyLock, EvidenceFailureCause,
     LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict,
     SpineReplayError,
+};
+pub use state_frame::{
+    generate_state_frame_obligations, StateComparison, StateFrameHarness, StateFrameIdentity,
+    StateFrameObligations, StateFrameProperty, StateFrameRefusal, StateFrameRequest,
+    StateFrameScope, UnsupportedFrameEffect,
 };
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,

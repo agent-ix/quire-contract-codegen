@@ -518,6 +518,7 @@ struct ClassifiedFunction<'r> {
 fn lowering_profile() -> CompleteLoweringProfileV2 {
     CompleteLoweringProfileV2 {
         supported_tags: BTreeSet::from([
+            CheckedNodeTag::State,
             CheckedNodeTag::ScalarType,
             CheckedNodeTag::CompositeType,
             CheckedNodeTag::BoundedDomain,

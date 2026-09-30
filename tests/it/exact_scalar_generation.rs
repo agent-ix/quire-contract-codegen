@@ -670,6 +670,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     // either list changing without the other now fails here, while the lowering profile below
     // still never calls `scalar_profile()`.
     let claim_supported_tags: BTreeSet<quire_contract_ir::CheckedNodeTag> = [
+        quire_contract_ir::CheckedNodeTag::State,
         quire_contract_ir::CheckedNodeTag::ScalarType,
         quire_contract_ir::CheckedNodeTag::BoundedDomain,
         quire_contract_ir::CheckedNodeTag::Value,

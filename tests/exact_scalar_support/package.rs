@@ -469,6 +469,8 @@ impl PackageBuilder {
         let role = match (tag, form) {
             ("value", "parameter") => "expression",
             ("state", "frame") => "generated",
+            ("state", "operation_anchor") => "anchor",
+            ("state", "state_clause") => "claim",
             _ => "declaration",
         };
         let nodes = self.value["semantic_graph"]["nodes"]

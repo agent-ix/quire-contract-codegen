@@ -72,6 +72,11 @@ pub const EXACT_SCALAR_CRATE_NAME: &str = "quire-exact-scalar-oracles";
 
 /// The `CheckedNodeTag` families `scalar_profile`'s `CompleteLoweringProfileV2` admits.
 ///
+/// `CheckedNodeTag::State` is admitted because IR's `lower` refuses a node whose dependency
+/// closure holds a tag outside the profile, so a scalar claim that reaches a `state` node (an
+/// operation anchor or frame) is lowered and then refused by name as not an expression, instead of
+/// being refused as an unsupported family. No `state` node is ever itself an oracle.
+///
 /// `CheckedNodeTag::Correspondence` (cg#133) is deliberately absent: its four closed forms
 /// (`source_locus`, `model_correspondence`, `binding_role`, `profile_correspondence`) are
 /// provenance/binding metadata tying the checked graph back to an external source, model or
@@ -87,7 +92,8 @@ pub const EXACT_SCALAR_CRATE_NAME: &str = "quire-exact-scalar-oracles";
 /// `tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item` can assert its own,
 /// independently-constructed lowering profile's tag list against this one without calling
 /// `scalar_profile` itself -- which would make that cross-check circular.
-pub const SCALAR_LOWERING_SUPPORTED_TAGS: [CheckedNodeTag; 5] = [
+pub const SCALAR_LOWERING_SUPPORTED_TAGS: [CheckedNodeTag; 6] = [
+    CheckedNodeTag::State,
     CheckedNodeTag::ScalarType,
     CheckedNodeTag::BoundedDomain,
     CheckedNodeTag::Value,
