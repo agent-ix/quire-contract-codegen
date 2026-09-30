@@ -418,12 +418,13 @@ fn kani_concrete_playback_synthetic() {{\n\
                 &arguments,
                 &[("amount".to_owned(), WitnessValue::Integer(value))],
             )
+            .map(str::to_owned)
         };
         for inside in [0, 1, 999, 1000] {
             assert_eq!(check(inside), None, "{inside}");
         }
         for outside in [-1, 1001, i64::MIN, i64::MAX] {
-            assert_eq!(check(outside), Some("amount"), "{outside}");
+            assert_eq!(check(outside).as_deref(), Some("amount"), "{outside}");
         }
         assert_eq!(
             first_out_of_domain(
