@@ -28,10 +28,22 @@ use std::{
     ffi::OsString,
     fmt, fs, io,
     io::Read,
+    os::fd::{AsFd, OwnedFd},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread,
     time::{Duration, Instant},
+};
+
+use rustix::{
+    event::{poll, PollFd, PollFlags},
+    io::Errno,
+    process::{pidfd_open, pidfd_send_signal, Pid, PidfdFlags, Signal},
+    time::Timespec,
 };
 
 use serde::Serialize;
@@ -404,18 +416,26 @@ pub enum LaunchOutcome {
     TimedOut,
 }
 
-/// Polling interval while waiting for the launcher to exit within its budget. Short enough that
-/// a tight caller-declared timeout in a test is still observed promptly, long enough not to spin.
+/// Polling interval while waiting for the launcher to exit within its budget, and the longest a
+/// capture thread goes between looking at its stop flag. Short enough that a tight caller-declared
+/// timeout in a test is still observed promptly, long enough not to spin.
 const LAUNCHER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
+/// Most bytes kept from each of the launcher's stdout and stderr. Kani prints its verdict, check
+/// summary, cover summary and playback last, so when a stream is longer its tail is what is kept.
+/// A stream is always drained to the end so the child never blocks on a full pipe; only what is
+/// retained is bounded.
+const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
+
 /// Runs `command` to completion or kills what it can still find of it once `timeout` elapses,
-/// whichever happens first — but always **returns** within `timeout` plus a small constant
-/// either way; that bound does not depend on whether the kill actually reached everything.
+/// whichever happens first, and **returns** within `timeout` plus a small constant either way;
+/// that bound does not depend on whether the kill reached everything. A `timeout` too large to
+/// add to the current instant never elapses.
 ///
 /// Kani's launcher forks `kani-driver`, which forks CBMC, so on a timeout `child.kill()` alone
 /// would leave CBMC — the actual solver, and the one most likely to be the non-terminating
 /// process a budget exists to bound — orphaned and still running past the deadline it just
-/// exceeded. `kill_process_tree` finds and signals every live descendant it can still see by
+/// exceeded. [`kill_process_tree`] finds and signals every live descendant it can still see by
 /// its own pid instead of relying on a process-group-wide signal: a negative-pid group kill is
 /// the textbook fix, but it is deliberately not used here, because it was measured to escape its
 /// own group on the sandbox this crate was developed in — killing a freshly spawned child's
@@ -423,107 +443,147 @@ const LAUNCHER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// minimal standalone program before this function was written this way. Signalling only
 /// positive, individually discovered pids cannot exhibit that failure mode.
 ///
-/// That walk is one `/proc` snapshot, so it is inherently unable to see a process forked after
-/// it, or one that reparented away from the launcher before it (a double fork, `setsid`, or
-/// simply an orphan whose original parent already exited) — either keeps its own copy of the
-/// inherited stdout/stderr pipe write end open, which is why this function does not wait for the
-/// reader threads to see EOF on a timeout: doing so would block on that copy until whatever
-/// holds it happens to exit on its own, which can be arbitrarily long and would make this
-/// function's own return time unbounded — the defect this exists to remove, in a new place. See
-/// the `None` arm below for that reasoning in full, and the module's own top-level doc comment
-/// for the guarantee this leaves in place versus the one it does not.
-///
 /// Stdout and stderr are drained on their own threads as soon as the process is spawned, the same
 /// way `Command::output()` drains them internally: a full pipe buffer would otherwise stall the
 /// child while this function is only polling `try_wait`, turning a bounded run into a hang of its
-/// own.
+/// own. Each thread keeps at most [`CAPTURE_LIMIT`] bytes and polls its pipe rather than blocking
+/// in `read`, so once the launcher is gone this function tells both threads to stop and joins
+/// them: a descendant the tree walk could not see (forked after the snapshot, or already
+/// reparented away) may still hold the pipe's write end open, and the threads stop regardless,
+/// after taking whatever was written before the launcher ended.
 pub fn run_launcher_with_timeout(
     mut command: Command,
     timeout: Duration,
 ) -> io::Result<LaunchOutcome> {
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn()?;
-    let pid = child.id();
-    let mut stdout = child.stdout.take().expect("stdout was piped at spawn");
-    let mut stderr = child.stderr.take().expect("stderr was piped at spawn");
-    let stdout_reader = thread::spawn(move || {
-        let mut buffer = Vec::new();
-        let _ = stdout.read_to_end(&mut buffer);
-        buffer
-    });
-    let stderr_reader = thread::spawn(move || {
-        let mut buffer = Vec::new();
-        let _ = stderr.read_to_end(&mut buffer);
-        buffer
-    });
+    let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(io::Error::other("a piped standard stream was not captured"));
+    };
+    let stop = Arc::new(AtomicBool::new(false));
+    let stdout_reader = spawn_capture(stdout, &stop);
+    let stderr_reader = spawn_capture(stderr, &stop);
 
-    let deadline = Instant::now() + timeout;
-    let status = loop {
+    let deadline = Instant::now().checked_add(timeout);
+    let waited = wait_until(&mut child, deadline);
+    if !matches!(waited, Ok(Some(_))) {
+        kill_process_tree(&mut child);
+        let _ = child.wait();
+    }
+    stop.store(true, Ordering::Release);
+    let stdout_bytes = stdout_reader.join().unwrap_or_default();
+    let stderr_bytes = stderr_reader.join().unwrap_or_default();
+
+    match waited? {
+        Some(status) => Ok(LaunchOutcome::Completed {
+            exited_successfully: status.success(),
+            exit_code: status.code(),
+            text: format!(
+                "{}\n{}",
+                String::from_utf8_lossy(&stdout_bytes),
+                String::from_utf8_lossy(&stderr_bytes)
+            ),
+        }),
+        None => Ok(LaunchOutcome::TimedOut),
+    }
+}
+
+/// Polls `child` until it exits (`Some`) or `deadline` passes (`None`). A `deadline` of `None`
+/// never passes.
+fn wait_until(child: &mut Child, deadline: Option<Instant>) -> io::Result<Option<ExitStatus>> {
+    loop {
         if let Some(status) = child.try_wait()? {
-            break Some(status);
+            return Ok(Some(status));
         }
-        if Instant::now() >= deadline {
-            break None;
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            return Ok(None);
         }
         thread::sleep(LAUNCHER_POLL_INTERVAL);
+    }
+}
+
+/// Starts a thread that reads `pipe` to its end, or until `stop` is set and nothing more is
+/// waiting in it.
+fn spawn_capture<R>(pipe: R, stop: &Arc<AtomicBool>) -> thread::JoinHandle<Vec<u8>>
+where
+    R: Read + AsFd + Send + 'static,
+{
+    let stop = Arc::clone(stop);
+    thread::spawn(move || capture_tail(pipe, &stop, CAPTURE_LIMIT))
+}
+
+/// Reads `pipe` until EOF, or until `stop` was already set when a poll found nothing waiting,
+/// returning its last `limit` bytes at most.
+fn capture_tail<R: Read + AsFd>(mut pipe: R, stop: &AtomicBool, limit: usize) -> Vec<u8> {
+    let mut kept = Vec::new();
+    let mut chunk = [0_u8; 64 * 1024];
+    let interval = Timespec {
+        tv_sec: 0,
+        tv_nsec: i64::try_from(LAUNCHER_POLL_INTERVAL.as_nanos()).unwrap_or(0),
     };
+    loop {
+        // Read the flag before polling: data written before the flag was set is then already in
+        // the pipe, so an empty poll after seeing the flag means the pipe is drained.
+        let stopping = stop.load(Ordering::Acquire);
+        let mut fds = [PollFd::new(&pipe, PollFlags::IN)];
+        match poll(&mut fds, Some(&interval)) {
+            Ok(0) if stopping => break,
+            Ok(0) => continue,
+            Ok(_) => {}
+            Err(Errno::INTR) => continue,
+            Err(_) => break,
+        }
+        match pipe.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(read) => {
+                kept.extend_from_slice(&chunk[..read]);
+                if kept.len() > limit.saturating_mul(2) {
+                    kept.drain(..kept.len() - limit);
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(_) => break,
+        }
+    }
+    if kept.len() > limit {
+        kept.drain(..kept.len() - limit);
+    }
+    kept
+}
 
-    match status {
-        Some(status) => {
-            let stdout_bytes = stdout_reader.join().unwrap_or_default();
-            let stderr_bytes = stderr_reader.join().unwrap_or_default();
-            Ok(LaunchOutcome::Completed {
-                exited_successfully: status.success(),
-                exit_code: status.code(),
-                text: format!(
-                    "{}\n{}",
-                    String::from_utf8_lossy(&stdout_bytes),
-                    String::from_utf8_lossy(&stderr_bytes)
-                ),
-            })
-        }
-        None => {
-            kill_process_tree(pid);
-            // Belt-and-suspenders repeat targeted at the direct child alone, in case `pid` had
-            // already exited between the last `try_wait` and the tree walk above and so was
-            // absent from it (`kill_process_tree` reads `/proc` at one instant; it cannot see a
-            // process that exited before that read).
-            let _ = child.kill();
-            let _ = child.wait();
-            // The reader threads are deliberately NOT joined here. `kill_process_tree` only
-            // reaches what its one `/proc` snapshot could still see: a process the launcher
-            // forked in the instant between that snapshot and the kill, or one that reparented
-            // away from the launcher before either (a double fork, `setsid`, or simply a plain
-            // orphan whose parent already exited), keeps its inherited copy of the pipes' write
-            // end open and is never touched by this call. Joining here would block
-            // `read_to_end` on that copy until whatever holds it happens to exit on its own,
-            // making this function's own return time unbounded on exactly the kind of process a
-            // caller-declared budget exists to bound (agent-ix/quire-contract-codegen#58) — the
-            // defect returning wearing the correct typed result. A timed-out run carries no
-            // captured text at all (`LaunchOutcome::TimedOut` has none), so nothing this call
-            // needs is lost by leaving the readers running in the background, unjoined, for as
-            // long as whatever they are still attached to keeps them alive.
-            Ok(LaunchOutcome::TimedOut)
-        }
+/// Kills `child` and every process descended from it, discovered by walking `/proc`'s live
+/// parent/child relationships at one instant. See [`run_launcher_with_timeout`] for why this
+/// walks the tree instead of sending one signal to a process group.
+///
+/// A pid read from a snapshot can be reused before it is signalled, so each descendant is first
+/// opened as a pidfd and its parent re-read: a pidfd names that one process for good, and a
+/// parent still in the tree means the process is a descendant. The launcher is stopped before the
+/// descendants are signalled, so it forks no more, and the descendants are signalled through
+/// their pidfds only after that.
+fn kill_process_tree(child: &mut Child) {
+    let targets: Vec<OwnedFd> = descendants(child.id())
+        .into_iter()
+        .filter_map(|(pid, parent)| {
+            let pidfd = pidfd_open(
+                Pid::from_raw(i32::try_from(pid).ok()?)?,
+                PidfdFlags::empty(),
+            )
+            .ok()?;
+            (parent_pid(pid) == Some(parent)).then_some(pidfd)
+        })
+        .collect();
+    let _ = child.kill();
+    for pidfd in &targets {
+        let _ = pidfd_send_signal(pidfd, Signal::KILL);
     }
 }
 
-/// Kills `root` and every process descended from it, discovered by walking `/proc`'s live
-/// parent/child relationships at one instant and signalling each by its own positive pid. See
-/// [`run_launcher_with_timeout`] for why this walks the tree instead of sending one signal to a
-/// process group.
-fn kill_process_tree(root: u32) {
-    for pid in descendants_including_self(root) {
-        let _ = Command::new("kill")
-            .args(["-KILL", &pid.to_string()])
-            .status();
-    }
-}
-
-/// `root` followed by every live process transitively parented by it, in discovery order.
-/// Built from one snapshot of `/proc`, so a process forked after the snapshot is not included —
-/// the same inherent limitation any tree-walking killer has, standard practice for this problem.
-fn descendants_including_self(root: u32) -> Vec<u32> {
+/// Every live process transitively parented by `root`, as `(pid, parent)` in discovery order,
+/// `root` itself excluded. Built from one snapshot of `/proc`, so a process forked after the
+/// snapshot is not included — the same inherent limitation any tree-walking killer has.
+fn descendants(root: u32) -> Vec<(u32, u32)> {
     let mut children_of: HashMap<u32, Vec<u32>> = HashMap::new();
     if let Ok(entries) = fs::read_dir("/proc") {
         for entry in entries.flatten() {
@@ -539,14 +599,12 @@ fn descendants_including_self(root: u32) -> Vec<u32> {
             }
         }
     }
-    let mut order = vec![root];
+    let mut order = Vec::new();
     let mut frontier = vec![root];
-    while let Some(pid) = frontier.pop() {
-        if let Some(children) = children_of.get(&pid) {
-            for &child in children {
-                order.push(child);
-                frontier.push(child);
-            }
+    while let Some(parent) = frontier.pop() {
+        for &pid in children_of.get(&parent).into_iter().flatten() {
+            order.push((pid, parent));
+            frontier.push(pid);
         }
     }
     order
@@ -705,6 +763,8 @@ fn read_file(tool: KaniTool, path: &Path) -> Result<Vec<u8>, KaniToolError> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
 
     const COVER_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `cover`: \"contract assumptions are jointly satisfiable\"\n\n#[test]\nfn kani_concrete_playback_h_1() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![0, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
@@ -1241,5 +1301,67 @@ mod tests {
             }
             LaunchOutcome::TimedOut => panic!("a fast process must not be reported as timed out"),
         }
+    }
+
+    /// A stream longer than the capture limit is drained to its end but only its tail is kept,
+    /// because Kani prints its verdict last; the launcher's own memory is bounded by the limit,
+    /// not by what the child prints.
+    #[test]
+    fn a_stream_longer_than_the_capture_limit_keeps_only_its_tail() {
+        let (reader, mut writer) = io::pipe().unwrap();
+        let producer = thread::spawn(move || {
+            for _ in 0..100 {
+                writer.write_all(&[b'x'; 1000]).unwrap();
+            }
+            writer.write_all(b"VERIFICATION:- SUCCESSFUL").unwrap();
+        });
+        let kept = capture_tail(reader, &AtomicBool::new(false), 4096);
+        producer.join().unwrap();
+        assert_eq!(kept.len(), 4096);
+        assert!(kept.ends_with(b"VERIFICATION:- SUCCESSFUL"));
+    }
+
+    /// The capture thread stops when told to even though a write end is still open, so a
+    /// descendant holding the pipe cannot keep the launcher from joining it; bytes written before
+    /// the stop are still returned.
+    #[test]
+    fn a_capture_thread_stops_on_request_while_the_pipe_is_still_open() {
+        let (reader, mut writer) = io::pipe().unwrap();
+        writer.write_all(b"written before stop").unwrap();
+        let kept = capture_tail(reader, &AtomicBool::new(true), CAPTURE_LIMIT);
+        assert_eq!(kept, b"written before stop");
+        drop(writer);
+    }
+
+    /// A launcher that prints far more than the capture limit and then exits still reports its
+    /// real exit status and the end of its output, with the retained text bounded.
+    #[test]
+    fn a_launcher_printing_more_than_the_limit_completes_with_bounded_text() {
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(format!(
+            "head -c {} /dev/zero | tr '\\0' x; printf '\\nVERIFICATION:- SUCCESSFUL'",
+            3 * CAPTURE_LIMIT
+        ));
+        let LaunchOutcome::Completed {
+            exit_code, text, ..
+        } = run_launcher_with_timeout(command, Duration::from_secs(60)).unwrap()
+        else {
+            panic!("the launcher exits on its own within its budget");
+        };
+        assert_eq!(exit_code, Some(0));
+        assert!(text.len() <= CAPTURE_LIMIT + 2);
+        assert!(text.contains("VERIFICATION:- SUCCESSFUL"));
+    }
+
+    /// A timeout too large to add to the current instant means no deadline, not a panic.
+    #[test]
+    fn a_timeout_of_duration_max_never_elapses_and_does_not_panic() {
+        let mut command = Command::new("sh");
+        command.arg("-c").arg("printf done");
+        let outcome = run_launcher_with_timeout(command, Duration::MAX).unwrap();
+        assert!(matches!(
+            outcome,
+            LaunchOutcome::Completed { exit_code: Some(0), ref text, .. } if text.contains("done")
+        ));
     }
 }

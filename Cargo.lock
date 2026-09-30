@@ -1362,6 +1362,7 @@ dependencies = [
  "quire-contract-ir",
  "quire-contract-runtime",
  "quire-verification-contracts",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",

@@ -38,7 +38,8 @@ the run and everything read back from it.
   hands it, through one borrowed view, rather than owning two execution
   paths.
 - A Kani installation: the `cargo-kani` launcher to invoke.
-- The caller's wall-clock timeout, `KaniExecutionRequest::timeout`. The run has no memory ceiling.
+- The caller's wall-clock timeout, `KaniExecutionRequest::timeout`. The run has no memory ceiling;
+  what the generator keeps of the launcher's stdout and stderr is bounded to the last 8 MiB of each.
 - The crate directory whose library source contains that harness's generated
   source byte for byte, and the Cargo target directory the run builds into.
 
