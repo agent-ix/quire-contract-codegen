@@ -323,11 +323,17 @@ impl Twin {
             DigestDomain::PackageSemanticV2,
             *self.compiled.emitted.package_id().as_bytes(),
         );
-        let (_, frame) = self
-            .compiled
-            .package
-            .graph()
-            .operation_frame("Bank::Account", "deposit")
+        let graph = self.compiled.package.graph();
+        let identifier = |name| Identifier::new(name).expect("identifier");
+        let selection = graph
+            .resolve_operation(
+                &identifier("Bank"),
+                &identifier("Account"),
+                &identifier("deposit"),
+            )
+            .expect("Bank::Account resolves against the twin's model");
+        let (_, frame) = graph
+            .operation_frame(&selection)
             .expect("deposit is named by BalanceNeverDrops");
         let payload = FrameCounterexample {
             operation: FrameOperation {
