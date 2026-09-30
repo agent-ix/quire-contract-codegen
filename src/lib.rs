@@ -7,7 +7,6 @@ mod bound;
 mod bounded_collections;
 mod bounded_kani_corpus;
 mod bounded_kani_profile;
-mod bounded_kani_replay;
 mod definedness_arithmetic;
 mod finite_reference_graphs;
 mod kani;
@@ -54,7 +53,6 @@ pub use bounded_kani_corpus::{
     CORPUS_PROOF_GRAPH_SCHEMA,
 };
 pub use bounded_kani_profile::{classify_bounded_kani_profile, BoundedKaniProfile};
-pub use bounded_kani_replay::replay_codegen_counterexample;
 pub use definedness_arithmetic::prepare_checked_arithmetic;
 pub use exact_scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,

@@ -90,10 +90,6 @@ operations:
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
     output: BoundedCorpusCase | KaniOutcome
     semantics: one bounded Kani corpus case and its proof dependency graph; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts
-  - name: replay_codegen_counterexample
-    inputs: [Contract IR CounterexamplePacket, native executor over the finite input]
-    output: ReplayAgreement | KaniOutcome
-    semantics: replays a Kani counterexample natively; packet and population validation and the requirement for a native false result stay Contract IR-owned, and a disagreement is never repaired into a proof
   - name: generate_exact_scalar_oracles
     inputs: [admitted CheckedPackageV2, ExactScalarItem list]
     output: ExactScalarOracles | OracleGenerationError
@@ -329,7 +325,6 @@ The interface's features in declaration order: every operation the contract abov
 | prepare_bounded_collection_query | operation |
 | prepare_finite_graph_reaches | operation |
 | generate_bounded_kani_corpus_case | operation |
-| replay_codegen_counterexample | operation |
 | generate_exact_scalar_oracles | operation |
 | derive_exact_scalar_items | operation |
 | negotiate_kani_obligations | operation |

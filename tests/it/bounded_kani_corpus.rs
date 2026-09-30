@@ -16,10 +16,9 @@ use std::{
 
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    classify_kani_run, generate_bounded_kani_corpus_case, replay_codegen_counterexample,
-    BoundedCorpusRequest, CorpusProofDependencyGraph, EmittedCorpusIdentities, KaniRunOutcome,
-    ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness,
-    CORPUS_PROOF_GRAPH_SCHEMA,
+    classify_kani_run, generate_bounded_kani_corpus_case, BoundedCorpusRequest,
+    CorpusProofDependencyGraph, EmittedCorpusIdentities, KaniRunOutcome, ProofDependencyKind,
+    ProofDependencyRequest, ProofDependencyState, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::{
     kani::{
@@ -207,36 +206,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
         &mut emitted,
     )
     .unwrap();
-    let packet = counterexample
-        .counterexample
-        .expect("a generated false collection case retains its packet");
-    let agreement = replay_codegen_counterexample(packet, |native_input| {
-        quire_contract_ir::kani::KaniOutcome::counterexample(
-            native_input.source_id.clone(),
-            native_input.profile.revision.clone(),
-        )
-    })
-    .expect("the retained false classification replays through Contract IR");
-    let quire_contract_ir::kani::ReplayAgreement::Input(agreement) = agreement else {
-        panic!("a corpus-generated packet must settle as an Input replay agreement");
-    };
-    assert_eq!(agreement.native().boolean_claim(), Some(false));
-    // The settled `Input`-arm agreement's own assignment content, not merely that it settled:
-    // exactly the ordered population's two values, never `max_items` or the query's `expected`
-    // oracle target (see the `arithmetic_assignments`/`collection_assignments` unit tests).
-    assert_eq!(
-        agreement.input(),
-        &std::collections::BTreeMap::from([
-            (
-                "value_0".to_owned(),
-                quire_contract_ir::kani::WitnessValue::Integer(2)
-            ),
-            (
-                "value_1".to_owned(),
-                quire_contract_ir::kani::WitnessValue::Integer(2)
-            ),
-        ])
-    );
+    assert_eq!(counterexample.outcome.boolean_claim(), Some(false));
 }
 
 /// Trace: TC-023.
@@ -344,7 +314,7 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
 
 /// Trace: TC-023.
 #[test]
-fn tc_023_kani_counterexample_replays_through_contract_ir() {
+fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
     let (profile, dispatch, input) = fixture();
     let generated = generate_bounded_kani_corpus_case(
         &profile,
@@ -360,10 +330,6 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
-    let packet = generated
-        .counterexample
-        .clone()
-        .expect("false corpus case must retain a replay packet");
     let directory = TemporaryDirectory::new();
     fs::write(
         directory.0.join("src/lib.rs"),
@@ -430,32 +396,6 @@ fn tc_023_kani_counterexample_replays_through_contract_ir() {
          nonzero exit or a VERIFICATION:- FAILED banner, either of which an inconclusive run \
          (a harness-filter mismatch, CBMC out-of-memory, or an exhausted unwind bound) also \
          produces; got:\n{text}"
-    );
-    let agreement = replay_codegen_counterexample(packet, |native_input| {
-        quire_contract_ir::kani::KaniOutcome::counterexample(
-            native_input.source_id.clone(),
-            native_input.profile.revision.clone(),
-        )
-    })
-    .expect("the retained Kani counterexample must replay as native false");
-    let quire_contract_ir::kani::ReplayAgreement::Input(agreement) = agreement else {
-        panic!("a corpus-generated packet must settle as an Input replay agreement");
-    };
-    assert_eq!(agreement.native().boolean_claim(), Some(false));
-    // Same assignment-content check as `tc_023_public_corpus_uses_the_validated_profile_boundary`,
-    // against the Kani-executed harness's own retained packet rather than a freshly generated one.
-    assert_eq!(
-        agreement.input(),
-        &std::collections::BTreeMap::from([
-            (
-                "value_0".to_owned(),
-                quire_contract_ir::kani::WitnessValue::Integer(2)
-            ),
-            (
-                "value_1".to_owned(),
-                quire_contract_ir::kani::WitnessValue::Integer(2)
-            ),
-        ])
     );
 }
 

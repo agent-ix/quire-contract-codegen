@@ -190,13 +190,13 @@ success fallback, and no requirement converts one into another.
 The views and decisions above state the target. At this revision:
 
 - `src/kani_witness_join.rs` decodes the playback through Contract IR's `Witness`.
-  `src/bounded_kani_corpus.rs` imports Contract IR's `ReplaySource`. `src/bounded_kani_replay.rs`
-  replays through Contract IR's `replay_counterexample` with a caller-supplied native evaluator,
-  and its test module imports Contract IR's `ReplaySource`.
+  The bounded-Kani corpus (`src/bounded_kani_corpus.rs`) generates and classifies cases and
+  retains no counterexample packet and claims no replay: every caller of the retired replay
+  passed a constant closure as its native evaluator, so the verdict was predetermined.
 - Step 2 of the replay view, the domain check before replay, is not built. No `WitnessEnvelope` is
   built, and only the skeleton spine renders a QSL transcript (`src/spine_replay.rs`).
 - The V1 paths are still present: `src/oracle.rs`, `src/kani.rs`, `src/bounded_kani_corpus.rs`,
-  `src/bounded_kani_profile.rs` and `src/bounded_kani_replay.rs`, and the `BoundClause` arm of
+  `src/bounded_kani_profile.rs`, and the `BoundClause` arm of
   FR-015's `ObligationItem`. The FR-002 and FR-008 to FR-013
   strategy generators still read the V1 `BoundPackage`.
 - No adapter trait exists, a run is held to a caller-declared wall-clock budget with no memory
