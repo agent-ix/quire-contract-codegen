@@ -29,12 +29,9 @@ exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "quire-observation" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-protocol" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-verification-contracts" },
-    # Two copies are in the graph and they declare different expressions: rev
-    # 21c507e, a direct dependency, is AGPL-3.0-or-later; rev f1700a9, reached
-    # via quire-contract-ir and quire-protocol, is AGPL-3.0-only. cargo-deny
-    # collapses them by name and version and evaluates only one, so naming a
-    # single expression here leaves whichever copy it did not pick unchecked.
-    { allow = ["AGPL-3.0-only", "AGPL-3.0-or-later"], crate = "quire-spec-language" },
+    # quire-spec-language is reached through quire-contract-ir and quire-protocol and
+    # declares AGPL-3.0-or-later, the same first-party decision as above.
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-spec-language" },
     { allow = ["AGPL-3.0-only"], crate = "agent-ix-baseline-producer" },
     # IR-254: qsl-replay (the only QSL crate this repository may depend on, per
     # QSL arch-lint T12-A) and its own transitive closure -- all first-party
