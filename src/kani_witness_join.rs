@@ -154,6 +154,30 @@ pub fn decode_falsification(
     witness.decode(&schema)
 }
 
+/// The first decoded value outside its argument's declared integer domain, as the argument's
+/// name. A Boolean has no domain narrower than its type, and a value no binding names is left to
+/// the replay adapter to refuse.
+pub(crate) fn first_out_of_domain<'a>(
+    arguments: &[ObligationBinding],
+    values: &'a [(String, WitnessValue)],
+) -> Option<&'a str> {
+    values.iter().find_map(|(name, value)| {
+        let bounds = arguments
+            .iter()
+            .find(|binding| binding.identifier == *name)?
+            .integer_bounds
+            .as_ref()?;
+        match value {
+            WitnessValue::Integer(integer)
+                if !(bounds.minimum..=bounds.maximum).contains(integer) =>
+            {
+                Some(name.as_str())
+            }
+            WitnessValue::Integer(_) | WitnessValue::Boolean(_) => None,
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use quire_contract_ir::{IntegerDomain, OverflowPolicy};
@@ -378,6 +402,44 @@ fn kani_concrete_playback_synthetic() {{\n\
                 ("amount".to_owned(), WitnessValue::Integer(42)),
                 ("flag".to_owned(), WitnessValue::Boolean(true)),
             ]
+        );
+    }
+
+    /// The integer domain is inclusive at both ends: the minimum and maximum are in domain, and
+    /// the values one past either end and the extremes of `i64` are not. A value with no
+    /// bounded binding, and a Boolean, are never out of domain.
+    ///
+    /// Trace: FR-016-AC-2, TC-026
+    #[test]
+    fn first_out_of_domain_is_inclusive_at_both_bounds() {
+        let arguments = vec![argument("amount", KaniPrimitiveType::I64)];
+        let check = |value: i64| {
+            first_out_of_domain(
+                &arguments,
+                &[("amount".to_owned(), WitnessValue::Integer(value))],
+            )
+            .map(str::to_owned)
+        };
+        for inside in [0, 1, 999, 1000] {
+            assert_eq!(check(inside), None, "{inside}");
+        }
+        for outside in [-1, 1001, i64::MIN, i64::MAX] {
+            assert_eq!(check(outside).as_deref(), Some("amount"), "{outside}");
+        }
+        assert_eq!(
+            first_out_of_domain(
+                &arguments,
+                &[
+                    ("unbound".to_owned(), WitnessValue::Integer(i64::MAX)),
+                    ("amount".to_owned(), WitnessValue::Integer(5)),
+                ]
+            ),
+            None
+        );
+        let flag = vec![argument("flag", KaniPrimitiveType::Boolean)];
+        assert_eq!(
+            first_out_of_domain(&flag, &[("flag".to_owned(), WitnessValue::Boolean(true))]),
+            None
         );
     }
 }

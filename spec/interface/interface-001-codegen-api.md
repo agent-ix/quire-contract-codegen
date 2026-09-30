@@ -154,6 +154,14 @@ operations:
     inputs: [harness symbol, check text, named WitnessValue list, ReplayParameter list (argument name, node id), a function from the witness ReplaySource to the complete ReplayRequestWire]
     output: the qsl-replay WitnessArmResult | SpineReplayError (UnboundArgument{argument} | FieldDelimiter | Transcript(MalformedTranscript) | Refused(ReplayRefusal) | WrongArm)
     semantics: builds the backend-witness transcript keyed by parameter node id and calls qsl_replay::replay, returning QSL's own settlement; a Boolean value is replayed as 1 or 0 (FR-016)
+  - name: ReplayPackage::new
+    inputs: [ReplayInputs (proved unit LockedSource, DependencyLock list, function name, backend manifest digest, accounting and stage limits)]
+    output: ReplayPackage | ReplayPackageError (InvalidFunction{function} | DuplicateDependency{identity} | CallSite(CallSiteRefusal))
+    semantics: compiles the proved unit through qsl_replay::call_site and keeps the package id and each parameter's node id; ReplayPackage::request builds the complete ReplayRequestWire, filling package.dependencies with one entry per lock dependency selection in ascending identity order (identity, version, package_id, the dependency's own sources); every source's bytes, the unit's and each dependency's, are provided by digest; the unit compiles standalone, so QSL nonetheless refuses a request naming a dependency the unit does not select (FR-016)
+  - name: replay_counterexample
+    inputs: [KaniObligationIdentity, Kani playback transcript, ReplayPackage]
+    output: ReplayVerdict (Reproduced | EvidenceFailure(Decode(DecodeFailure) | Domain | Verdict)) | SpineReplayError
+    semantics: decodes the transcript, checks every integer value against its argument's declared bounds before any replay, replays natively, and reports a decode, domain or verdict mismatch as the one EvidenceFailure verdict, never as a clause success or failure; Boolean and i64 values only (FR-016)
   - name: bound_strategy::census::compute_census
     inputs: [Relation, Domain]
     output: BoundaryCensus | StrategyDiagnostic

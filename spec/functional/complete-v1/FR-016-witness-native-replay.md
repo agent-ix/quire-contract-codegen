@@ -32,9 +32,12 @@ failure is reported.
 
 ## Outputs
 
-- A typed replay result: reproduced failure, malformed witness, mismatch,
-  out-of-domain witness, or replay unavailable, carried as a FR-333 method
-  result.
+- A typed replay result: reproduced failure, evidence failure, or replay
+  unavailable, carried as a FR-333 method result. Evidence failure is one verdict
+  with a typed cause: a malformed witness (decode cause), an out-of-domain witness
+  (domain cause) or a mismatch (verdict cause). This document's "malformed
+  witness", "out-of-domain witness" and "mismatch" name those three causes, and
+  none of them is ever reported as a clause success or failure.
 
 ## Behavior
 
@@ -130,7 +133,7 @@ failure is reported.
 
 - **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md); QSL's
   `qsl-replay` crate, the only QSL crate this
-  repository depends on. The spine test takes a compiled unit's package id and
+  repository depends on. The replay package takes a compiled unit's package id and
   parameter node ids from `qsl_replay::call_site`, and the request's types from
   `qsl-replay`'s re-exports.
 - **Downstream**: [TC-026](../../test/complete-v1/TC-026-witness-native-replay.md),
