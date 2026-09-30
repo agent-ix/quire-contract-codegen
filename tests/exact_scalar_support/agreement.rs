@@ -1,7 +1,7 @@
 //! Agreement support: direct Contract Runtime execution and generated
 //! oracles.
 //!
-//! Adapted from Contract Runtime 4e33052
+//! Adapted from Contract Runtime
 //! `conformance/qsl-agreement/tests/support/mod.rs`.
 //! A vector body is written once. [`agree2!`] evaluates the direct call with
 //! `quire_contract_runtime::exact` in scope and evaluates the generated

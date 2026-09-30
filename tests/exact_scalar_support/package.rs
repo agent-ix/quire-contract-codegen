@@ -3343,7 +3343,7 @@ pub fn wrong_base_bound() -> Bound {
 
 /// [`corpus_package`] plus integer nodes in the shape QSL emits into a checked package for
 /// `function inc using v(x: Int[0, 9]): Int[0, 10] pure { x + 1 }` and its siblings `add` and
-/// `negate` (read from QSL a553b7c1's emitted package, not copied from it):
+/// `negate` (read from QSL's emitted package, not copied from it):
 ///
 /// - a parameter is a `value` node of form `parameter` whose body is [`parameter_body`] and whose
 ///   type is its `bounded_domain`;
