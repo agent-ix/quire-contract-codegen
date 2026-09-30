@@ -57,14 +57,21 @@ order and naming by position (`src/kani_witness_join.rs` unit tests) and the
 harness emission order (`tests/it/kani_argument_order.rs`); the real-backend
 decode runs in the ignored Kani lane (`tests/it/kani_witness_join.rs`).
 
-FR-016-AC-1 and FR-016-AC-5 are planned. The witness join reports every one of
-its refusals as a `KaniOutcome` refusal code rather than as FR-016's
-malformed-witness replay result, which does not exist yet. That covers the
-harness-identity refusal (`cg_witness_harness_identity_mismatch`, kind
-`Refused`), the arity and width refusals, the schema refusal, and the
-Boolean-byte and comment refusals (kind `InvalidInput`); the arity and width
-refusals are tested in the default suite and against a real falsification in
-the ignored lane, and the others are tested only by quire-contract-ir's own
-`Witness::decode` tests. Binding to the harness identity (AC-5), the decode size
-limit (AC-6), domain validation (AC-2) and native replay (AC-3, AC-4, AC-7,
-AC-12, AC-13) are also planned.
+FR-016-AC-1 through AC-5 and AC-13 are implemented and tested in the default suite
+through `replay_counterexample`: a transcript that decodes to nothing, has the wrong
+value count or byte width, or names another harness is a decode evidence failure
+carrying the decoder's cause code and is never replayed (AC-1, AC-5); a value one
+past either end of its argument's bounds, or at an `i64` extreme, is a domain
+evidence failure (AC-2, `src/kani_witness_join.rs` unit tests); an in-domain
+counterexample the native twin falsifies is reproduced (AC-3); a twin that holds
+the clause, or any settlement other than a reproduced violation, is a verdict
+evidence failure (AC-4, AC-13, `src/spine_replay.rs` unit tests). Decode, domain
+and verdict mismatches are one evidence-failure verdict with a typed cause. The
+decode size limit (AC-6), the charge, counter and limit comparison (AC-7) and the
+unavailable result for an executor fault (AC-12) are planned.
+
+Filling the replay request's `package.dependencies` from the proved lock is
+implemented (`ReplayPackage::request`) and its wire shape is tested, but no replay
+of a unit that imports a locked dependency is reachable: `qsl_replay::call_site`
+compiles a standalone unit, so QSL refuses a request naming a dependency as
+unselected, which `tests/it/skeleton_spine.rs` asserts.

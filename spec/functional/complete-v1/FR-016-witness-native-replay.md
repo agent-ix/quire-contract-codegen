@@ -32,9 +32,12 @@ failure is reported.
 
 ## Outputs
 
-- A typed replay result: reproduced failure, malformed witness, mismatch,
-  out-of-domain witness, or replay unavailable, carried as a FR-333 method
-  result.
+- A typed replay result: reproduced failure, evidence failure, or replay
+  unavailable, carried as a FR-333 method result. Evidence failure is one verdict
+  with a typed cause: a malformed witness (decode cause), an out-of-domain witness
+  (domain cause) or a mismatch (verdict cause). This document's "malformed
+  witness", "out-of-domain witness" and "mismatch" name those three causes, and
+  none of them is ever reported as a clause success or failure.
 
 ## Behavior
 
