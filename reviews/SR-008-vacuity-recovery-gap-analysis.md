@@ -18,7 +18,7 @@ spec repairs are implemented. Bound aggregate analysis remains dependent on IR #
 producer/run-result ownership. Quoin owns retention/integrity; Quire owns static facts; attributed
 human decisions remain outside automatic coverage classification.
 
-The old `f553dca` implementation was inspected but not cherry-picked: it mixed a superseded local
+The old implementation was inspected but not cherry-picked: it mixed a superseded local
 evidence framework with seven-state classification, suffix path matching, loose tuple shape,
 intersection/max-count inference and unbounded final spans. No old evidence is revived.
 
@@ -37,7 +37,7 @@ intersection/max-count inference and unbounded final spans. No old evidence is r
 
 Additional review dispositions: exact u64-to-canonical-decimal runtime revision normalization,
 outcome axes, native toolchain/target/profile and accounting consistency are now specified but await
-aggregate implementation. REV-008 collided with Kani work and is now REV-014. FR-004 gains its
+aggregate implementation. FR-004 gains its
 stakeholder relationship and one matrix row per criterion; these rows remain planned. The live
 source-map schema changes because this slice now implements the producer fields, not spec alone.
 Package identity is still absent from the historical generated source map and must be added when

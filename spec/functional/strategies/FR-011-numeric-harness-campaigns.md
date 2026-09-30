@@ -114,7 +114,7 @@ until specified.
 ## Dependencies
 
 - **Upstream**: [FR-002](../FR-002-tristate-proptest.md) campaign policy and conclusions;
-  quire-contract-runtime FR-001, FR-003, FR-004, and interface-001 at `8a4d02b`;
+  quire-contract-runtime FR-001, FR-003, FR-004, and interface-001;
   [FR-009](./FR-009-constructive-correlated-populations.md),
   [FR-010](./FR-010-domain-boundary-campaigns.md).
 - **Constrained by**:

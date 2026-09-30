@@ -36,7 +36,7 @@ before the bounded-integer oracle grammar lands.
 - [x] Prevent `Broad` shrinking from crossing its initially drawn relation side.
 - [x] Emit the in-domain, out-of-domain, and unrepresentable-edge census arrays.
 - [x] Verify the six operators across small domains and `i64::MIN..=i64::MAX`.
-- [x] Complete Rust review, gap analysis, pinned-toolchain gates, and matrix reconciliation.
+- [x] Complete Rust review, gap analysis, gates, and matrix reconciliation.
 
 ## Deliverables
 

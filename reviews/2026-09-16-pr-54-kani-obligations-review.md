@@ -55,11 +55,6 @@ both covers satisfied. `classify_run` reports all three as `Verified`.
 - **Assumptions.** Only `kani::assume` on argument ranges from the IR value types. Result ranges
   sit on the `ensures` side, so a subject whose result is out of range fails. No assumption touches
   results or state after the call (tested in tc_025_assumptions_constrain_only_arguments_to_their_ir_bounds).
-- **Runtime pin a04bd47 vs 2d2dd41.** Not a finding for this PR. The a04bd47..2d2dd41 compare
-  touches only `src/exact/*` in the runtime (the metered-charges code that FR-014 V2 oracles use).
-  The V1 oracles that the verified harnesses embed call only `ContractIdentity`, `ClauseId` and
-  `operators::*`, and no V2 harness is emitted. The bump belongs to FR-014 and `RUNTIME_REVISION`
-  on main (src/oracle.rs:17 is not changed by this diff).
 - **Operation identity of the verified items.** The three verified items are fixture clauses
   FR-200@1 `amount-within-balance` (precondition, `compare less_equal`), `balance-never-grows`
   (postcondition, `compare less_equal`) and `balance-nonnegative` (invariant,
@@ -87,7 +82,7 @@ both covers satisfied. `classify_run` reports all three as `Verified`.
 
 ## Round 2
 
-Re-review of the fix commits 36486e9..6a27607 (4a5da4f, 33b9f5e) only, with code review, Rust
+Re-review of the fix commits only, with code review, Rust
 review and gap analysis applied to that diff.
 
 **Verdict: PASS.** All five findings are closed and the fixes add no new defect.

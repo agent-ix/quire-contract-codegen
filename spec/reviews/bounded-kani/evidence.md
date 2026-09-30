@@ -11,7 +11,7 @@ review_set: all
 ## Summary
 
 TC-023 is the declared integration evidence for all five FR-007 acceptance
-criteria and requires real native, oracle, strategy, Kani, provenance, and
+criteria and requires real native, oracle, strategy, Kani, and
 replay observations. The installed Quoin advisor could not read the available
 Quire CLI version contract, so no unsupported automated recommendation is
 claimed.

@@ -15,8 +15,8 @@ relationships:
 
 ## Summary
 
-Reviewed Task-009's admission, generated campaigns, consumer surface, and attestation integration at
-`4228611`, including every authored refusal class, clause-kind path, population, campaign size,
+Reviewed Task-009's admission, generated campaigns, consumer surface, and attestation integration,
+including every authored refusal class, clause-kind path, population, campaign size,
 counter edge, shrinking replay, identity input, and generated-consumer boundary. Five findings were
 repaired before this closing record; no blocking finding remains in the numeric-strategy slice.
 
@@ -38,11 +38,11 @@ repaired before this closing record; no blocking finding remains in the numeric-
 
 | Finding | Disposition | Evidence |
 | --- | --- | --- |
-| FND-1601 | **FIXED** | `4228611`; the generated consumer executes every required 256/10,000-case matrix cell with `max_global_rejects: 0`, exact rate/counter assertions, ordered census instrumentation, and structured mismatch shrinking. |
-| FND-1602 | **FIXED** | `4228611`; independent digest and ClauseRef mutations produce distinct source and attestation identities. |
-| FND-1603 | **FIXED** | `4228611`; TC-017 now covers all authored syntax, obligation, relation, kind, span, and diagnostic-order refusals. |
-| FND-1604 | **FIXED** | `4228611`; the generated path contains no `expect` or `unreachable` invariant escape and returns `UnsupportedClauseKind` if its admitted kind cannot be rendered. |
-| FND-1605 | **FIXED** | `4228611`; TC-022 and FR-013 now agree on inspection of the full-digest naming rule. |
+| FND-1601 | **FIXED** | the generated consumer executes every required 256/10,000-case matrix cell with `max_global_rejects: 0`, exact rate/counter assertions, ordered census instrumentation, and structured mismatch shrinking. |
+| FND-1602 | **FIXED** | independent digest and ClauseRef mutations produce distinct source and attestation identities. |
+| FND-1603 | **FIXED** | TC-017 now covers all authored syntax, obligation, relation, kind, span, and diagnostic-order refusals. |
+| FND-1604 | **FIXED** | the generated path contains no `expect` or `unreachable` invariant escape and returns `UnsupportedClauseKind` if its admitted kind cannot be rendered. |
+| FND-1605 | **FIXED** | TC-022 and FR-013 now agree on inspection of the full-digest naming rule. |
 
 ## Review evidence
 

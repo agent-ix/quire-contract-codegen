@@ -2,7 +2,7 @@
 id: "SR-035"
 title: "IR-303 code review (incl. rust-review lane): routed scalar Kani harness verifies"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen; src/exact_scalar.rs, src/oracle.rs, Cargo.toml, Cargo.lock, tests/it/kani_obligations.rs, spec/test/complete-v1/TC-027-pinned-kani-execution-evidence.md, tests/fixtures/{composite_equality,exact_function,exact_scalar}/{Cargo.toml.golden,claim-map.json.golden}"
+scope: "agent-ix/quire-contract-codegen; src/exact_scalar.rs, src/oracle.rs, Cargo.toml, Cargo.lock, tests/it/kani_obligations.rs, spec/test/complete-v1/TC-027-kani-execution-evidence.md"
 relationships: []
 ---
 
@@ -11,11 +11,10 @@ relationships: []
 ## Summary
 
 Ticket: IR-303 ("CG: routed scalar Kani harness does not verify (unwind, RT layout, kani
-flags)"). PR: agent-ix/quire-contract-codegen#183, branch `ir-303-routed-scalar-verifies`, head
-`ccd4edc`, base `origin/main` `7b9677a`.
+flags)"). PR: agent-ix/quire-contract-codegen#183, branch `ir-303-routed-scalar-verifies`.
 
-The PR bumps `RUNTIME_REVISION` to RT `ed0a04b` (explicit tags, boxed payloads, `i128`
-small-integer paths per RT #79), raises the routed scalar harness's generated unwind from 2 to 3,
+The PR moves to the runtime's explicit tags, boxed payloads and `i128`
+small-integer paths (RT #79), raises the routed scalar harness's generated unwind from 2 to 3,
 and adds `[package.metadata.kani] flags = { cbmc-args = ["--max-field-sensitivity-array-size",
 "1024"] }` to the exact-scalar oracle crate's `manifest()`. `tests/it/kani_obligations.rs` is
 refactored to share a `run_scalar_under_real_kani` helper between a renamed verifying test
@@ -27,7 +26,7 @@ mutates) untouched.
 
 ## Method
 
-Read the full diff (`git diff origin/main...HEAD`) against `origin/main` (`7b9677a`). Traced the
+Read the full diff (`git diff origin/main...HEAD`) against `origin/main`. Traced the
 mutation target (`rt::Integer::from(9_i64))`) back through `src/kani_obligations.rs::render_scalar`
 to confirm it is the *checked-domain* literal used only by the harness's own `assert!(sound, ...)`
 construction, not the oracle's runtime bound enforcement, so the negative test is a real
@@ -37,10 +36,8 @@ every oracle crate kind Kani can verify. Diffed all six touched golden fixtures 
 source functions for consistency. Read `spec/test/complete-v1/TC-027-...md` against the actual
 test names/assertions. Confirmed via already-run logs (not re-run by this review, per the
 dispatching brief) that both `#[ignore]` kani-lane tests pass under real Kani:
-`/tmp/claude-1000/-home-peter-dev/1c021523-1315-469a-97b0-cc0762694a67/scratchpad/ir303-verify-run1.log`
-(`tc_027_a_routed_scalar_harness_verifies ... ok`, 288.87s) and
-`.../ir303-negative-run1.log` (`tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified ...
-ok`, 216.44s).
+`tc_027_a_routed_scalar_harness_verifies ... ok` (288.87s) and
+`tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified ... ok` (216.44s).
 
 ## Findings
 
@@ -77,12 +74,8 @@ helper the three call) before the next oracle kind gets a real-Kani lane.
   soundness assertion. The oracle's actual enforced bound is compiled into the generated oracle
   body from `lowered.upper` at oracle-generation time and is untouched by this string replace, so
   narrowing the assertion window to `[0, 5]` while the oracle still legitimately produces values up
-  to 9 is a genuine bound violation, confirmed by the real `Falsified` outcome in the pinned log.
-- **Goldens.** All three oracle kinds' `Cargo.toml.golden`/`claim-map.json.golden` pairs pick up the
-  `RUNTIME_REVISION` bump consistently; only `exact_scalar`'s golden gains the new
-  `[package.metadata.kani]` block, matching its source (see FND-001 for the asymmetry itself, not a
-  golden/source mismatch).
-- **Spec text (TC-027).** `spec/test/complete-v1/TC-027-pinned-kani-execution-evidence.md`'s routed
+  to 9 is a genuine bound violation, confirmed by the real `Falsified` outcome in the run log.
+- **Spec text (TC-027).** `spec/test/complete-v1/TC-027-kani-execution-evidence.md`'s routed
   scalar paragraph now says "generated with unwind 3", "confirm it is `Verified`", and "narrow the
   same harness's checked domain to `[0, 5]`... confirm the run is `Falsified` with a counterexample"
   — matches `tc_027_a_routed_scalar_harness_verifies` and
@@ -102,10 +95,9 @@ helper the three call) before the next oracle kind gets a real-Kani lane.
 
 ## Gates run by this review
 
-| Gate | Command | Exit | Log |
-| --- | --- | --- | --- |
-| Format check | `cargo fmt --check` | 0 | /tmp/claude-1000/-home-peter-dev/1c021523-1315-469a-97b0-cc0762694a67/scratchpad/reviewer-fmt-check.log |
-| Upstream pin identity | `make upstream-identity` | 0 | /tmp/claude-1000/-home-peter-dev/1c021523-1315-469a-97b0-cc0762694a67/scratchpad/reviewer-upstream-identity.log |
+| Gate | Command | Exit |
+| --- | --- | --- |
+| Format check | `cargo fmt --check` | 0 |
 
 Not re-run (already measured by the lead, logs read and confirmed above): both real-Kani
 `#[ignore]` tests, `make test` (345 passed, 0 failed), `make lint`.

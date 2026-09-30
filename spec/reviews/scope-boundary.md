@@ -24,7 +24,7 @@ absorbed into issue #4.
 | --- | --- | --- | --- |
 | Typed expression, node types, obligations, dependency identities, and SourceSpan | quire-contract-ir | guaranteed by public Rust API | - |
 | Boolean operators and generated consumer surface | quire-contract-runtime | guaranteed by generated-source compilation | - |
-| Boolean/i64 signature, comparison rendering, diagnostics, source maps, attestations | quire-contract-codegen | core, in scope | FR-001 and interface-001 |
+| Boolean/i64 signature, comparison rendering, diagnostics, source maps | quire-contract-codegen | core, in scope | FR-001 and interface-001 |
 | Native source lowering and runtime parity | quire-spec-language | external follow-up | epic #83 and issue #84 |
 | Model-domain proptest strategies | quire-contract-codegen issue #3 owner | external sibling | consume after merge; do not edit its branch/files |
 | Numeric/state Kani harnesses | quire-contract-codegen issue #2 | external next slice | begins only after issue #4 |

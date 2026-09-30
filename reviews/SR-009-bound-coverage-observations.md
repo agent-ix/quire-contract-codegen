@@ -3,7 +3,7 @@ id: REV-018
 title: "Complete bound coverage observation implementation"
 type: SpecReview
 analysis: gap-analysis
-scope: "Coordinator-approved REV-017 phase A; no native run qualification"
+scope: "Bound coverage phase A; no native run qualification"
 review_set: subset
 ---
 
@@ -12,8 +12,8 @@ review_set: subset
 ## Summary
 
 Base is published PR #27.
-The design was committed as `5104b3b` and explicitly approved for phase A only.
-Four initial aggregate controls were banked at `d34823b` before the new API existed;
+The design was explicitly approved for phase A only.
+Four initial aggregate controls were written before the new API existed;
 their first run failed at the absent imports, not by passing a smaller population.
 Additional native/schema/resource controls accompany the implementation.
 
@@ -70,7 +70,7 @@ bring-up. Initial broader runs correctly refused the dirty source tree in the ex
 oracle attestation control (`source_dirty`); that gate is unchanged. Full clean-head
 regression and independent review are required before publication.
 
-Implementation `333c49e` subsequently passed all 48 selected tests on both stable and
+The implementation subsequently passed all 48 selected tests on both stable and
 Rust 1.75.0: 9 unit, 7 aggregate, 7 bound generation, 5 harness, 10 oracle, 5 strategy,
 and 5 primitive tests. Both actual LLVM fixtures ran on the explicitly qualified stable
 toolchain, including when the outer library suite used MSRV. The clean-source guard passed.
@@ -78,7 +78,7 @@ Final self-review added the normalized source-root mapping parameter to the doma
 and a 4096-byte root preflight, with alias, relative, traversal, and over-limit controls;
 this closes an observation-reproducibility omission without authenticating the root or run.
 Empty, slash-only, relative, traversing and oversized roots have bounded refusal controls.
-The coordinator's 1/2 count witness was banked in `5f8d4d4` against a healthy 1/1 control;
+The coordinator's 1/2 count witness was written against a healthy 1/1 control;
 before the aggregate fix it failed as expected because the output was `complete`, not
 `incomplete`. The stronger rule belongs only to the exact generated Boolean aggregate.
 The native fixture additionally mutates the actual LLVM span for its measured 1/1 exercised
@@ -114,7 +114,4 @@ cargo test --locked --offline --lib --test bound_coverage --test bound_generatio
   --test vacuity_primitives
 ```
 
-The owned stable target was `target/contract-agent-core-build`; the MSRV target
-was `/tmp/contract-core-codegen-bound-msrv`. Independent review used
-`/tmp/codegen-bound-review-target`. Native producer qualification remains Rust
-1.94.1 / cargo-llvm-cov 0.9.0 / LLVM JSON 3.0.1, separately from library MSRV.
+Native producer qualification remains separate from library MSRV.

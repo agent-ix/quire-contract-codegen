@@ -49,7 +49,7 @@ no such item exists.
 
 ## Coverage
 
-- Reconciliation: quire coverage (`quire 0.32.0`, engine 0.46.0@a874fb64), `--scope` set to the
+- Reconciliation: quire coverage (`quire 0.32.0`), `--scope` set to the
   worktree root. All eight rows FR-014-AC-1 to AC-8 are backed by TC-024 tests. TC-024 is backed.
   FR-014-CON-1 and CON-2 tags are unmatched (FND-008).
 - Tasks done: not applicable. PLAN-001 has no task for #48.
@@ -57,7 +57,7 @@ no such item exists.
 - Untraced behaviours and stubs: 0 stubs. The dead `RequiresBound` path is FND-002.
 - Semantic review: ran for FR-014 (descriptor authority, refusal taxonomy, determinism, claim map,
   agreement independence). The agreement counts are real: the loops assert their counts, and the
-  runtime-only rows are justified because QSL d9d5273 has no integer, rational or ordering operator.
+  runtime-only rows are justified because QSL has no integer, rational or ordering operator.
   Agreement cannot catch FND-001, because the direct side restates the same descriptor parameters.
 - Gates: `cargo +1.98.1 test --locked --test exact_scalar_generation --test exact_scalar_agreement
   --target-dir target-codex-backends` passed 13/13. `make lint` and `make fmt-check` are clean.

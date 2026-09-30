@@ -15,8 +15,8 @@ relationships:
 
 ## Summary
 
-Reviewed the independently buildable relation, population, shrinking, and boundary-census core at
-`fa1b682`, including every public item, generated-Rust path, refusal, extreme-domain branch, traced
+Reviewed the independently buildable relation, population, shrinking, and boundary-census core,
+including every public item, generated-Rust path, refusal, extreme-domain branch, traced
 test, and repository gate. Three review findings were repaired before this closing record; no
 blocking finding remains in Task-008's scope.
 
@@ -37,15 +37,15 @@ runner, consumer bundle, or attestation work blocked on codegen #4.
 
 | Finding | Disposition | Evidence |
 | --- | --- | --- |
-| FND-1401 | **FIXED** | `be2df91`; callers use `Relation::with_literal` or `Relation::between_reads`, and all 14 focused tests pass on stable and Rust 1.75. |
-| FND-1402 | **FIXED** | `be2df91`; the comment now matches the measured 20-case maximum and the accepted NFR. |
-| FND-1403 | **FIXED** | `fa1b682`; FR-012, TC-021, and `walk_every_path` agree with the pinned `ValueTree` contract. |
+| FND-1401 | **FIXED** | callers use `Relation::with_literal` or `Relation::between_reads`, and all 14 focused tests pass on stable and Rust 1.75. |
+| FND-1402 | **FIXED** | the comment now matches the measured 20-case maximum and the accepted NFR. |
+| FND-1403 | **FIXED** | FR-012, TC-021, and `walk_every_path` agree with the `ValueTree` contract. |
 
-## Gates at fa1b682
+## Gates
 
 | Gate | Result |
 | --- | --- |
-| `make ci` | **exit 0** on the committed tree, with `CARGO_TARGET_DIR=/tmp/quire-codegen-target-e-numeric-strategies-20260912` |
+| `make ci` | **exit 0** on the committed tree |
 | Rust tests | **79 passed, 0 failed, 0 ignored** on stable and again on Rust 1.75.0 |
 | Focused tests | TC-018/TC-021 6/6 and TC-019 8/8 on stable and Rust 1.75.0 |
 | Format and lint | rustfmt clean; all-target Clippy with denied warnings clean |

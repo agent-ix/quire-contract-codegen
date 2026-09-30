@@ -16,8 +16,7 @@ relationships:
 
 ## Summary
 
-SR-004 asked whether each FR-006 criterion had a test that would fail if the criterion stopped
-holding. This document asks a narrower and more dangerous question: after deleting 2,220 files, does
+This document asks: after deleting 2,220 files, does
 any criterion still have a test that *passes without checking what it claims to check*.
 
 Two did, and both were caught before merge — one by the independent adversarial review and one by
@@ -31,7 +30,7 @@ The gate is not "zero unbacked rows" — most rows in this repository are unback
 FR-003 and FR-004 are specified and unimplemented. The gate is that **no row becomes unbacked as a
 side effect**.
 
-| | Before (`bbd5e67`) | After | Delta |
+| | Before | After | Delta |
 |---|---|---|---|
 | backed | 18 | 16 | −2 |
 | total | 56 | 53 | −3 |
@@ -160,8 +159,6 @@ acceptance criterion:
 | `CAC-001` | "retained evidence" in the controls surface list | removed |
 | `AA-001` | "complete evidence" in Reasoning, and "retained measurements" in the Sufficiency Decision | de-referenced; the Sufficiency Decision now says explicitly that no retained tree exists to review |
 | `AD-001` | the evidence-verifier surface in the present tense | rewritten to past tense; the boundary observation kept |
-| `planning/release-decision.md` | "retained measurement/evidence manifests" in an **open human decision** | struck, with nothing substituted — adding review obligations to a pending decision is not an agent's to do |
-| `planning/foundation-gap-analysis.md` | present-tense references to `evidence/ANCHORS` | **left unchanged**. It is a dated historical record and delete-never-rewrite forbids editing it |
 
 ## Findings
 
@@ -185,7 +182,7 @@ acceptance criterion:
 | FND-601 | **FIXED**. Measured per state and per source on the pre-deletion tree, then both affected states withdrawn and asserted absent. The first attempt manufactured a demonstration for `malformed` and was itself withdrawn — SR-005 FND-003 |
 | FND-602 | **FIXED**. The tag moved to `tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid`, which is the test NFR-002's own table has always declared as AC-1's verification method. NFR-002 stays 2/5 and no row became unbacked |
 | FND-603 | **FIXED**. The TC-011 sentence is struck and no weaker substitute is put in its place |
-| FND-604 | **FIXED** in all five. `planning/foundation-gap-analysis.md` is **ACCEPTED** unchanged as a dated historical record |
+| FND-604 | **FIXED** |
 | FND-605 | **FIXED**. The load-bearing clause is the live-schema assertion over three present files, plus a reference census over 31 tracked files; the absence clause corroborates rather than carries |
 | FND-606 | **FIXED**. Floor re-derived at `>= 27` against a measured 31, plus a directory-set guard and per-directory floors. The first per-directory guard read its floors from a hardcoded list and could not catch that list shrinking; it was probed, found green on a deleted entry, and rebuilt on discovery — SR-005 FND-522. Every figure was taken from the walk, with both sides on the same deny-list filter: 45 − 14 + 0 = 31, and the census counts 31 |
 | FND-609 | **FIXED**. `collect_sources` was changed to see the Makefile, and has since become a deny-list that subsumes the extensionless and `.yaml` cases. Reproduced before fixing: the deleted target appended to the `Makefile` left the census green |

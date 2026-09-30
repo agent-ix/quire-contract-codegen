@@ -8,8 +8,6 @@ review_set: all
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-006
     type: reviews
-  - target: ix://agent-ix/quire-contract-codegen/SR-003
-    type: references
 ---
 
 # SR-005: Drop legacy evidence code review
@@ -36,7 +34,7 @@ relabelling, and the review caught it.
 ## The measurement that drove the design
 
 The brief required a state census taken from the **pre-deletion** tree, per state and per source,
-rather than a check that the surviving path still reaches twelve. Taken at `bbd5e67`:
+rather than a check that the surviving path still reaches twelve. Taken before the change:
 
 | Source | States demonstrated |
 |---|---|
@@ -111,7 +109,7 @@ against the tree at the final head; every one exists. No include site was orphan
 
 ## Findings
 
-Fourteen from the independent adversarial review of `00aa054`, plus three raised by the campaign
+Fourteen from the independent adversarial review, plus three raised by the campaign
 coordinator against the *fix* rather than the deletion, plus two this repository found in its own
 correction.
 
@@ -133,7 +131,6 @@ the first round's fixes had themselves introduced defects. It found two blockers
 | FND-505 | high | `unsupported` and `malformed` were treated asymmetrically, with gate preservation as the stated motive in six files | `spec/functional/FR-006-shared-assurance-intake.md`, `tests/shared_assurance.rs` | wrong-requirement |
 | FND-506 | high | the sealed record kept `issue-13` at revision 1 with a null parent while carrying content for a different change under a different authority; `subject.scope` never named `evidence`, so a 2,205-file deletion sat outside the declared subject and in no entry | `assurance/change-assurance.json` | correct-requirement-no-evidence |
 | FND-507 | medium | `spec/test-matrix.md` still titled TC-012 "twelve" | `spec/test-matrix.md` | correct-requirement-no-evidence |
-| FND-508 | medium | review obligations were added to an open human decision document | `planning/release-decision.md` | wrong-requirement |
 | FND-509 | low | the deleted-artifact census listed three basenames and exempted `shared_assurance.rs` wholesale — which is how FND-501 survived it | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-510 | low | `suites.md` mapped four concerns onto three suites | `spec/evidence/suites.md` | correct-requirement-no-evidence |
 | FND-511 | low | the TC-001 trace claimed an assertion on manifest `inputs` that is only a schema requirement | `tests/oracle_generation.rs` | correct-requirement-no-evidence |
@@ -163,7 +160,6 @@ the first round's fixes had themselves introduced defects. It found two blockers
 | FND-708 | low | the TC-001 trace comment and SR-006 claimed "both output schema digests"; only the first output's is asserted | `tests/oracle_generation.rs`, `reviews/SR-006-…` | correct-requirement-no-evidence |
 | FND-709 | low | the census probe was not removed when the loop panicked, and was not gitignored — a failing gate littering the tree with a file `git add -A` would commit | `tests/shared_assurance.rs`, `.gitignore` | correct-requirement-no-evidence |
 | FND-710 | medium | SR-005 and SR-006 carried a stale claim boundary and superseded measurements | `reviews/SR-005-…`, `reviews/SR-006-…` | wrong-requirement |
-| FND-711 | low | AA-001's Sufficiency Decision **redefined** "retained measurements" onto a weaker referent while `planning/release-decision.md` struck the identical item, and neither disclosed the inconsistency | `spec/assurance/AA-001-codegen-argument.md` | wrong-requirement |
 | FND-801 | high | one non-UTF-8 byte made a file invisible to the census *and* to the count. `read_to_string` returned `Err` and the loop `continue`d — an unnamed silent exclusion that no deny-list entry covers, already dropping three `__pycache__` files, and eroding the floors at the same time | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-802 | high | `gone` named the reader by filename, so a Python import of the same module — the most likely form of reintroduction — spelled it without the suffix and passed | `tests/shared_assurance.rs` | correct-requirement-no-evidence |
 | FND-803 | high | the undecodable-row probe pinned rows 1 and 2 of a nine-row stream, so an adapter enforcing only `number <= 2` and dropping the rest passed all eight probes while silently transcribing 8 entries from 9 | `scripts/assurance_chain.py` | correct-requirement-no-evidence |
@@ -193,8 +189,7 @@ the first round's fixes had themselves introduced defects. It found two blockers
 | FND-502 | **FIXED**. `5` → `4` |
 | FND-503, FND-504, FND-505 | **FIXED**. The scenario, its control and `derive_malformed_stream` are removed and `malformed` is withdrawn alongside `unsupported`. FR-006-AC-5 requires ten. Not repaired — deleted, because a probe that cannot fail and a probe that is absent are the same check, and the absent one does not also make a claim |
 | FND-506 | **FIXED**. The record is `quire-contract-codegen/issue-16`, `evidence` is in `subject.scope`, and `PRESERVE-no-retained-evidence` declares the deletion and its authority. `revision` stays 1 with a null parent because this is a new record whose predecessor was sealed only into an ignored store under `target/` and never persisted; no lineage digest is invented |
-| FND-507, FND-510, FND-511, FND-512 | **FIXED**. `planning/foundation-gap-analysis.md` is **ACCEPTED** unchanged within FND-512: it is a dated historical record and delete-never-rewrite forbids editing it |
-| FND-508 | **FIXED**. The unsatisfiable item is struck and nothing is substituted for it |
+| FND-507, FND-510, FND-511, FND-512 | **FIXED** |
 | FND-509 | **FIXED**. Nine names rather than three, and the exemption is the byte range of the test's own declarations rather than the file that holds them |
 | FND-513 | **ACCEPTED**. An artifact of the uncommitted tree at review time, not of the change. The gate is revision-bound and is green on the committed tree |
 | FND-514 | **FIXED**. Not claimed closed. The epic records that it closes as moot once the campaign repositories have dropped their records, and it names four |
@@ -218,7 +213,6 @@ the first round's fixes had themselves introduced defects. It found two blockers
 | FND-707 | **FIXED**. The unimplemented clause is removed rather than left declared. Adding an independence requirement immediately after a finding about a control that could not fail independently was the wrong direction, and implementing it was not in scope for this change |
 | FND-708 | **FIXED** in both places |
 | FND-709 | **FIXED**. An RAII drop guard removes the probe even when the loop panics, and `.gitignore` names it. Verified: after a deliberately failing run the file is absent |
-| FND-711 | **FIXED**. AA-001 now strikes the item exactly as `planning/release-decision.md` does, and says so |
 | FND-801 | **FIXED**. Files are read as bytes and decoded with `from_utf8_lossy`; a file the filter admitted but that cannot be *read* now panics rather than being skipped. Probed: the same reader invocation with one `\xe9` in a comment is red |
 | FND-802 | **FIXED**. `gone` carries the module **stem**, which subsumes the suffixed spelling. Probed: a Python import of the stem is red |
 | FND-803 | **FIXED**. The probe truncates **every** row in turn — nine runs — and requires each refusal to name that row and no other. Probed: an adapter enforcing only rows 1–2 now reports 2/9 and the chain goes red; so does a fixed wrong row |
@@ -290,9 +284,7 @@ without its subject.
 ## The replacement probe, and why it is not the one that was deleted
 
 The coordinator's warning is that finding a gap and filling it with something unfalsifiable reads
-identically to filling it properly. This repository has form: SR-003 FND-303 found that the
-twelve-state census counted `kind`, a free-text label nothing cross-checked, and the check found a
-live mislabel in the shipped tree.
+identically to filling it properly.
 
 `attested-malformed` was that failure again, and it was deleted rather than repaired. What replaced
 it is not a state demonstration at all:
@@ -347,7 +339,7 @@ last, line by line, against every claim corrected elsewhere. Three were stale:
 |---|---|---|
 | `PRESERVE-planned-matrix` | "The rows this change adds for FR-006 are the only rows it claims" | This change adds no row. It **removes two** — the FR-006-AC-4 row and the TC-011 row — and says so |
 | `UNKNOWN-stacked-branch-divergence` | "This change supersedes PRs #9, #10 and #12 … machinery this change deletes" | **Removed.** It was an accepted disposition of the issue-13 migration record. Once the record id moved to issue-16 its "this change" named the wrong change, and carrying it forward would have sealed a false claim |
-| `UNKNOWN-make-is-not-a-trust-root` | "Measured on this repository **at this candidate revision**" | attributed to the revision it was actually measured at (`bbd5e67`, issue #13), with the reason the counts still describe this tree: `ci` keeps the same eleven prerequisites and none of the seven that failed |
+| `UNKNOWN-make-is-not-a-trust-root` | "Measured on this repository **at this candidate revision**" | attributed to issue #13, where it was actually measured, with the reason the counts still describe this tree: `ci` keeps the same eleven prerequisites and none of the seven that failed |
 
 The `#14` measurement itself is untouched and no execution-control guard was re-added, per the owner
 decision recorded there. Correcting who a measurement belongs to is not restating it.

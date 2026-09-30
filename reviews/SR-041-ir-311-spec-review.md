@@ -2,7 +2,7 @@
 id: "SR-041"
 title: "PR 186 spec review: ADR-001 to ADR-004 accepted, FR-001/FR-003/FR-007 retired, FR-026 to FR-029"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen; spec/assurance/AD-001-codegen-architecture.md, spec/decisions/ADR-001-overlapping-generators-and-input-models.md, spec/decisions/ADR-002-backend-adapter-boundary.md, spec/decisions/ADR-003-kani-tractability.md, spec/decisions/ADR-004-generated-subject-abi-open-decisions.md, spec/functional/FR-001-deterministic-oracles.md, spec/functional/FR-003-kani-lowering.md, spec/functional/FR-007-bounded-kani-profile-corpus.md, spec/functional/complete-v1/FR-014-exact-scalar-oracles.md, spec/functional/complete-v1/FR-015-bounded-kani-obligations.md, spec/functional/complete-v1/FR-017-pinned-kani-execution-evidence.md, spec/functional/complete-v1/FR-022-routed-generation.md, spec/functional/complete-v1/FR-024-counterexample-envelope-intake.md, spec/functional/complete-v1/FR-025-generated-subject-abi.md, spec/functional/complete-v1/FR-026-backend-adapter-contract.md, spec/functional/complete-v1/FR-027-single-version-profile.md, spec/functional/complete-v1/FR-028-bounded-proof-ceilings.md, spec/functional/complete-v1/FR-029-run-outcome-terminal-record.md, spec/index.md, spec/test-matrix.md, spec/test/TC-005-proof-dependencies.md, spec/test/TC-014-numeric-state-kani.md, spec/test/TC-023-bounded-kani-profile-corpus.md, spec/test/complete-v1/TC-024-exact-scalar-oracles.md, spec/test/complete-v1/TC-025-bounded-kani-obligations.md, spec/test/complete-v1/TC-036-generated-subject-abi.md, spec/test/complete-v1/TC-037-backend-adapter-contract.md, spec/test/complete-v1/TC-038-single-version-profile.md, spec/test/complete-v1/TC-039-bounded-proof-ceilings.md, spec/test/complete-v1/TC-040-run-outcome-terminal-record.md"
+scope: "agent-ix/quire-contract-codegen; spec/assurance/AD-001-codegen-architecture.md, spec/decisions/ADR-001-overlapping-generators-and-input-models.md, spec/decisions/ADR-002-backend-adapter-boundary.md, spec/decisions/ADR-003-kani-tractability.md, spec/decisions/ADR-004-generated-subject-abi-open-decisions.md, spec/functional/FR-001-deterministic-oracles.md, spec/functional/FR-003-kani-lowering.md, spec/functional/FR-007-bounded-kani-profile-corpus.md, spec/functional/complete-v1/FR-014-exact-scalar-oracles.md, spec/functional/complete-v1/FR-015-bounded-kani-obligations.md, spec/functional/complete-v1/FR-017-kani-execution-evidence.md, spec/functional/complete-v1/FR-022-routed-generation.md, spec/functional/complete-v1/FR-024-counterexample-envelope-intake.md, spec/functional/complete-v1/FR-025-generated-subject-abi.md, spec/functional/complete-v1/FR-026-backend-adapter-contract.md, spec/functional/complete-v1/FR-027-single-version-profile.md, spec/functional/complete-v1/FR-028-bounded-proof-ceilings.md, spec/functional/complete-v1/FR-029-run-outcome-terminal-record.md, spec/index.md, spec/test-matrix.md, spec/test/TC-005-proof-dependencies.md, spec/test/TC-014-numeric-state-kani.md, spec/test/TC-023-bounded-kani-profile-corpus.md, spec/test/complete-v1/TC-024-exact-scalar-oracles.md, spec/test/complete-v1/TC-025-bounded-kani-obligations.md, spec/test/complete-v1/TC-036-generated-subject-abi.md, spec/test/complete-v1/TC-037-backend-adapter-contract.md, spec/test/complete-v1/TC-038-single-version-profile.md, spec/test/complete-v1/TC-039-bounded-proof-ceilings.md, spec/test/complete-v1/TC-040-run-outcome-terminal-record.md"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/ADR-001
     type: reviews
@@ -21,7 +21,7 @@ relationships:
 ## Summary
 
 Ticket: IR-311 (primary), IR-312 (ADR-002, ADR-003 and ADR-004 parts). PR:
-agent-ix/quire-contract-codegen#186, head `a7c91f1`, base `23dcc3d`. Spec-only, 30 files under
+agent-ix/quire-contract-codegen#186. Spec-only, 30 files under
 `spec/`. Method: spec-review, with the integrity and EARS sub-analyses folded into this file, as
 SR-039 and SR-040 did.
 
@@ -39,11 +39,11 @@ checked the QSpec text myself at `quire-specification` `origin/main`,
 - FR-331-AC-8: a Kani proof run with zero SUCCESS checks records `inconclusive` with a typed
   vacuity cause, never `proved`.
 
-At the pinned `qsl-replay` rev `20ba521`, `qsl-replay/src/proof_result.rs:104-127`, `TerminalValue`
+In `qsl-replay/src/proof_result.rs:104-127`, `TerminalValue`
 has no inconclusive arm. It encodes vacuity as `Proved { success_checks: 0 }`, which is the
 conformance bug QSL is fixing on its side.
 
-Measured on this head (logs are in the reviewer scratchpad `cg186-review/logs/`):
+Measured on this head:
 
 - `quire coverage --scope . --strict` exits 1 on both sides. It reports 32 unbacked rows and 0
   contradicted on `origin/main`, and 59 unbacked and 0 contradicted on head. The +27 are the new
@@ -52,12 +52,8 @@ Measured on this head (logs are in the reviewer scratchpad `cg186-review/logs/`)
 - `make spec` exits 2 on both sides. The only errors are the existing AP-001 and MP-001
   frontmatter failures. The only warning is the existing FR-014 EARS warning, which moved from line
   267 to line 269.
-- Embedded spec files: `src/oracle.rs:39` includes FR-001 into `generator_implementation_digest()`,
-  and `tests/it/oracle_generation.rs:112` recomputes that digest from the same bytes. `build.rs:112`
-  only watches the file. `src/kani.rs:35` includes FR-003 into `kani_implementation_digest()`. No
-  golden file pins either digest. `cargo test --locked --test it oracle_generation` exits 0 (12
-  passed), and `cargo test --locked --test it kani` exits 0 (45 passed, 5 ignored). The edits change
-  runtime digests only.
+- `cargo test --locked --test it oracle_generation` exits 0 (12
+  passed), and `cargo test --locked --test it kani` exits 0 (45 passed, 5 ignored).
 - Ids: FR-026 to FR-029 and TC-037 to TC-040 are free on every remote branch, and #186 is the only
   open PR.
 - Public-repo rules: no private work-package tokens, no private research-repository path, no dates and no Linear ids in the added
@@ -145,24 +141,24 @@ editorial.
 
 Round 1. The rulings in force at this
 round: the IR-313 correction 2 comment keeps vacuous mapped to `Proved { success_checks: 0 }` and
-asks QSL for nothing. I checked this at `qsl-replay` `20ba521`. `TerminalValue::category()` returns
+asks QSL for nothing. I checked this against `qsl-replay`. `TerminalValue::category()` returns
 `Inconclusive` for `Proved { success_checks: 0 }`, and `vacuous_proof_cause()` returns
 `KaniVacuousProof`, which meets QSpec FR-331-AC-8. The capability-matrix `unsupported` disposition
 is settled at negotiation, with a warning naming the capability kind.
 
-| FND | outcome | sha/reason |
+| FND | outcome | reason |
 | --- | --- | --- |
-| FND-001 | fixed 52e5e2d | FR-029, ADR-002 Q3 and AD-001 map the vacuous-proof reason and `cover-unsatisfied` to `Proved { success_checks: 0 }`. Under the IR-313 correction 2 comment and at `qsl-replay` `20ba521`, QSL reads that value as category `inconclusive` with cause `KaniVacuousProof`, not as a substitute. FR-029 also states that an item settled `unsupported`, `requires-bound` or `invalid-request` at negotiation has no run and no terminal value, and that an `unsupported` item's warning names its `quire.capability-kind/v1` kind (FR-290). |
-| FND-002 | fixed 52e5e2d | Every O-24-pending sentence is gone from FR-029, ADR-002 Status and Q3, and AD-001's risks. Each inconclusive reason now has a decided row: unwind exhaustion maps to `Incomplete(ResourceExhausted)`, no-verdict maps to `Failed`, and two reasons map to typed absences, each with a stated reason. The blanket ban on `Failed` is lifted, and only `Tested` stays banned. The unwind row is correct: QSL ADR-013's O-16 row "incomplete (timeout, cancellation, bound exhaustion)" maps to `ResourceExhausted`, its bound table lists the Kani unwind as a backend tool budget, and `IncompleteCause::ResourceExhausted` is "exhausted a configured resource bound before completing". The residual is recorded as FND-012. |
-| FND-003 | fixed 52e5e2d | FR-015 Behavior and FR-015-AC-25 now require exactly one `ObligationDisposition` from the FR-331 set (`supported`, `requires-bound`, `unsupported`, `invalid-request`), matching `src/kani_obligations.rs:421-441`. TC-025 step 7 requests `supported`, `requires-bound` and `unsupported` items. |
-| FND-004 | fixed 52e5e2d | FR-014 now states that the integer and Boolean `eq`/`ne` oracles call `TypeEnvironment::check_equality` and then `CheckedEquality::evaluate`. Connectives call `exact::evaluate_boolean` or `exact::evaluate_boolean_short_circuit`, each returning `Outcome<bool>`. FR-018 names FR-014 as the owner of these nodes, and its mutation note no longer cites `src/oracle.rs`. At Contract Runtime `ed0a04b`, `evaluate_boolean`, `evaluate_boolean_short_circuit`, `BooleanConnective`, `ShortCircuitConnective`, `TypeEnvironment::check_equality` and `CheckedEquality::evaluate` all exist and are exported from `exact` (`src/exact/mod.rs`, `numeric.rs:383-432`, `equality.rs:108` and `:162`). |
-| FND-005 | fixed 52e5e2d | ADR-001's Consequences name FR-002, FR-004, FR-005, FR-008 to FR-013, NFR-004, interface-001 and their TCs as still stating the V1 input, and say they contradict the decision until restated. AD-001's generation view and the matrix prose say the same. Restating them is IR-364. |
-| FND-006 | fixed 52e5e2d | The tractability record is committed data the Kani adapter owns, beside its version profile, and each entry records which ceiling was exceeded. An entry applies only while the request does not raise that ceiling. The shadow applies only while the entry applies, so raising the ceiling means production. FR-028-AC-11 tests the case where only the other ceiling is raised. The missing Contract Runtime shadow requirement is named (IR-340). `41a25a8` rewrites the refusal line into EARS form. |
-| FND-007 | fixed 52e5e2d | TC-001, TC-002 and TC-003 are `🚧 Planned`, with the reasons in the row and in the prose. TC-007 no longer lists FR-003-AC-2, and its `verifies FR-003` edge is removed. |
-| FND-008 | fixed 52e5e2d | ADR-001 Q1 now says the bounded state transition is carried "with its state bound by `&mut` reference as ADR-004 Q2 decides". FR-015 defers state binding to FR-025, and FR-015-AC-19 no longer restates `&mut`, so FR-025-AC-8 is its only owner. |
-| FND-009 | fixed 52e5e2d | FR-007-CON-2, CON-4 and AC-5 now say "Not carried" with a reason. FR-007-AC-3 names FR-028-AC-2 and FR-028-AC-3, and the matrix agrees. |
-| FND-010 | fixed 52e5e2d | The compound criteria are split. FR-015-AC-20 and AC-22 split into AC-26 and AC-27. FR-028-AC-1, AC-6 and AC-8 split into AC-9, AC-10 and AC-12. FR-014-AC-35 and AC-37 split into AC-38 and AC-39. FR-029 goes from 3 ACs to 7. TC-024, TC-025, TC-039 and TC-040 follow. |
-| FND-011 | fixed 52e5e2d | The second-backend procedure is removed from FR-026 Behavior, and the Description points to ADR-002 Q4. |
+| FND-001 | fixed | FR-029, ADR-002 Q3 and AD-001 map the vacuous-proof reason and `cover-unsatisfied` to `Proved { success_checks: 0 }`. Under the IR-313 correction 2 comment and in `qsl-replay`, QSL reads that value as category `inconclusive` with cause `KaniVacuousProof`, not as a substitute. FR-029 also states that an item settled `unsupported`, `requires-bound` or `invalid-request` at negotiation has no run and no terminal value, and that an `unsupported` item's warning names its `quire.capability-kind/v1` kind (FR-290). |
+| FND-002 | fixed | Every O-24-pending sentence is gone from FR-029, ADR-002 Status and Q3, and AD-001's risks. Each inconclusive reason now has a decided row: unwind exhaustion maps to `Incomplete(ResourceExhausted)`, no-verdict maps to `Failed`, and two reasons map to typed absences, each with a stated reason. The blanket ban on `Failed` is lifted, and only `Tested` stays banned. The unwind row is correct: QSL ADR-013's O-16 row "incomplete (timeout, cancellation, bound exhaustion)" maps to `ResourceExhausted`, its bound table lists the Kani unwind as a backend tool budget, and `IncompleteCause::ResourceExhausted` is "exhausted a configured resource bound before completing". The residual is recorded as FND-012. |
+| FND-003 | fixed | FR-015 Behavior and FR-015-AC-25 now require exactly one `ObligationDisposition` from the FR-331 set (`supported`, `requires-bound`, `unsupported`, `invalid-request`), matching `src/kani_obligations.rs:421-441`. TC-025 step 7 requests `supported`, `requires-bound` and `unsupported` items. |
+| FND-004 | fixed | FR-014 now states that the integer and Boolean `eq`/`ne` oracles call `TypeEnvironment::check_equality` and then `CheckedEquality::evaluate`. Connectives call `exact::evaluate_boolean` or `exact::evaluate_boolean_short_circuit`, each returning `Outcome<bool>`. FR-018 names FR-014 as the owner of these nodes, and its mutation note no longer cites `src/oracle.rs`. In Contract Runtime, `evaluate_boolean`, `evaluate_boolean_short_circuit`, `BooleanConnective`, `ShortCircuitConnective`, `TypeEnvironment::check_equality` and `CheckedEquality::evaluate` all exist and are exported from `exact` (`src/exact/mod.rs`, `numeric.rs:383-432`, `equality.rs:108` and `:162`). |
+| FND-005 | fixed | ADR-001's Consequences name FR-002, FR-004, FR-005, FR-008 to FR-013, NFR-004, interface-001 and their TCs as still stating the V1 input, and say they contradict the decision until restated. AD-001's generation view and the matrix prose say the same. Restating them is IR-364. |
+| FND-006 | fixed | The tractability record is committed data the Kani adapter owns, beside its version profile, and each entry records which ceiling was exceeded. An entry applies only while the request does not raise that ceiling. The shadow applies only while the entry applies, so raising the ceiling means production. FR-028-AC-11 tests the case where only the other ceiling is raised. The missing Contract Runtime shadow requirement is named (IR-340). The refusal line is rewritten into EARS form. |
+| FND-007 | fixed | TC-001, TC-002 and TC-003 are `🚧 Planned`, with the reasons in the row and in the prose. TC-007 no longer lists FR-003-AC-2, and its `verifies FR-003` edge is removed. |
+| FND-008 | fixed | ADR-001 Q1 now says the bounded state transition is carried "with its state bound by `&mut` reference as ADR-004 Q2 decides". FR-015 defers state binding to FR-025, and FR-015-AC-19 no longer restates `&mut`, so FR-025-AC-8 is its only owner. |
+| FND-009 | fixed | FR-007-CON-2, CON-4 and AC-5 now say "Not carried" with a reason. FR-007-AC-3 names FR-028-AC-2 and FR-028-AC-3, and the matrix agrees. |
+| FND-010 | fixed | The compound criteria are split. FR-015-AC-20 and AC-22 split into AC-26 and AC-27. FR-028-AC-1, AC-6 and AC-8 split into AC-9, AC-10 and AC-12. FR-014-AC-35 and AC-37 split into AC-38 and AC-39. FR-029 goes from 3 ACs to 7. TC-024, TC-025, TC-039 and TC-040 follow. |
+| FND-011 | fixed | The second-backend procedure is removed from FR-026 Behavior, and the Description points to ADR-002 Q4. |
 
 ## New findings (disposition pass 1)
 
@@ -173,7 +169,7 @@ is settled at negotiation, with a warning naming the capability kind.
 
 ### Round 1 verdict
 
-All 11 original findings are fixed in `52e5e2d` and `41a25a8`, and none is still open. The round
+All 11 original findings are fixed, and none is still open. The round
 adds one MEDIUM finding (FND-012) and one LOW finding (FND-013).
 
 The author judged unwind-bound exhaustion to map to `Incomplete(ResourceExhausted)`. That is
@@ -203,10 +199,10 @@ Not mergeable until FND-012 is fixed or deferred with a reason. FND-013 is edito
 - `quire coverage --strict` exits 1 on both: main backs 198 of 265 rows, head 197 of 291.
 - The one row that lost backing is FR-017-AC-10, which was deleted (FND-017).
 
-| FND | outcome | sha/reason |
+| FND | outcome | reason |
 | --- | --- | --- |
-| FND-012 | fixed | 22ba92b: FR-029 maps the failure-without-counterexample and missing-cover-summary reasons to `Failed`, and states why (spec/functional/complete-v1/FR-029-run-outcome-terminal-record.md:60-72) |
-| FND-013 | fixed | 22ba92b: the "yet" status narration is gone from FR-028 |
+| FND-012 | fixed | FR-029 maps the failure-without-counterexample and missing-cover-summary reasons to `Failed`, and states why (spec/functional/complete-v1/FR-029-run-outcome-terminal-record.md:60-72) |
+| FND-013 | fixed | the "yet" status narration is gone from FR-028 |
 
 ## New findings (disposition pass 2)
 
@@ -235,19 +231,19 @@ Not mergeable. FND-014, FND-015 and FND-016 are high.
 - The FR-018 rewrite raises no EARS warning.
 - `quire coverage --strict` exits 1 on both: main backs 198 of 265 rows, head 176 of 269, and `status_lies` is 0.
 - 23 backed rows disappeared with their deleted criteria: FR-001-AC-1..8, FR-003-AC-1..8, FR-007-AC-1..3 and AC-5..7, and FR-017-AC-10. FR-017-AC-12 is newly backed. No defined row lost its backing.
-- The branch is behind main (base 6f4beea), and GitHub reports it MERGEABLE.
+- The branch is behind main, and GitHub reports it MERGEABLE.
 
-| FND | outcome | sha/reason |
+| FND | outcome | reason |
 | --- | --- | --- |
-| FND-014 | fixed | 515b83e: FR-001, FR-003 and FR-007 are deleted. So are the retired matrix rows, the index.md retired row, and the "retired, carried by" text in TC-005, TC-014 and TC-023, which now verify FR-015. ADR-001 states Q1-Q3 as decisions only. No spec file outside reviews/ references FR-001, FR-003 or FR-007; the remaining hits are Contract Runtime and quire-driver ids. |
-| FND-015 | fixed | 515b83e: spec/ no longer points active requirements at the deleted FRs: FR-002, FR-004, FR-005, FR-008, StR-001, NFR-001, NFR-002, TC-001..003 and interface-001 depends_on are all updated. AD-001 "Current state" (:188-206) names the V1 paths that code still carries. The code's trace tags are FND-023. |
-| FND-016 | fixed | 4391774: FR-018 now says "build each symbol from its operator's readable stem", "use a stem that one item holds bare", and "suffix items that share a stem with `_{n}`, numbered from 1 in ascending descriptor-key order", which matches `oracle::unique_names`. AC-11 and its mutation row are restated, and interface-001:207 matches. No `NameCollision` remains in spec/. |
-| FND-017 | fixed | 515b83e and 08848c0: FR-017-AC-12 (capture parse and classify, playback verbatim) and FR-017-AC-13 (zero successful checks gives vacuous-proof inconclusive) exist, with a matrix row (:56), TC-027 steps (:29, :66, :70) and the TC-027 list (:162). The ten `src/kani_transcript.rs` tests trace FR-017-AC-12. See FND-025. |
-| FND-018 | fixed | 515b83e: FR-014-AC-38 and TC-024's two-package aliasing step are gone. |
-| FND-019 | fixed | 515b83e: ADR-001..004 now carry Status, Context, Decision (Q-rulings) and Consequences only, with no history tables, rejected alternatives, "not carried" text or open questions. AD-001 keeps a labelled Current-state section. |
-| FND-020 | fixed | 515b83e: FR-017 Inputs names the caller's `KaniExecutionRequest::timeout` and "no memory ceiling"; the vacuous-proof classification is FR-017-AC-13. |
+| FND-014 | fixed | FR-001, FR-003 and FR-007 are deleted. So are the retired matrix rows, the index.md retired row, and the "retired, carried by" text in TC-005, TC-014 and TC-023, which now verify FR-015. ADR-001 states Q1-Q3 as decisions only. No spec file outside reviews/ references FR-001, FR-003 or FR-007; the remaining hits are Contract Runtime and quire-driver ids. |
+| FND-015 | fixed | spec/ no longer points active requirements at the deleted FRs: FR-002, FR-004, FR-005, FR-008, StR-001, NFR-001, NFR-002, TC-001..003 and interface-001 depends_on are all updated. AD-001 "Current state" (:188-206) names the V1 paths that code still carries. The code's trace tags are FND-023. |
+| FND-016 | fixed | FR-018 now says "build each symbol from its operator's readable stem", "use a stem that one item holds bare", and "suffix items that share a stem with `_{n}`, numbered from 1 in ascending descriptor-key order", which matches `oracle::unique_names`. AC-11 and its mutation row are restated, and interface-001:207 matches. No `NameCollision` remains in spec/. |
+| FND-017 | fixed | FR-017-AC-12 (capture parse and classify, playback verbatim) and FR-017-AC-13 (zero successful checks gives vacuous-proof inconclusive) exist, with a matrix row (:56), TC-027 steps (:29, :66, :70) and the TC-027 list (:162). The ten `src/kani_transcript.rs` tests trace FR-017-AC-12. See FND-025. |
+| FND-018 | fixed | FR-014-AC-38 and TC-024's two-package aliasing step are gone. |
+| FND-019 | fixed | ADR-001..004 now carry Status, Context, Decision (Q-rulings) and Consequences only, with no history tables, rejected alternatives, "not carried" text or open questions. AD-001 keeps a labelled Current-state section. |
+| FND-020 | fixed | FR-017 Inputs names the caller's `KaniExecutionRequest::timeout` and "no memory ceiling"; the vacuous-proof classification is FR-017-AC-13. |
 | FND-021 | still-open | The evidence-registry prose and SR-016/SR-017 history are gone from the matrix and suites.md, and the only issue ids left in the requirement texts are the three `UpstreamBlocker` wire values (src/generation.rs:18-25). But spec/index.md keeps GitHub issue links: frontmatter :10-11 and :17-20 (`ix://…/issues/10`, `…/issues/3`) and the list at :100-105 (github.com/agent-ix/…/issues/1, 3, 10, 3, 7). |
-| FND-022 | fixed | 515b83e: the FR-003 lane and TC-007 text are gone. The interface-001 positional-counter and batch `NameCollision` text is restated. |
+| FND-022 | fixed | the FR-003 lane and TC-007 text are gone. The interface-001 positional-counter and batch `NameCollision` text is restated. |
 
 ## New findings (disposition pass 3)
 
@@ -273,7 +269,7 @@ Not mergeable. FND-023 is high: 99 code and test tags point at the deleted FR-00
 
 ### Round 4
 
-Gates (log directory: `logs/p186r4`):
+Gates:
 
 | Gate | Head | Main |
 | --- | --- | --- |
@@ -285,12 +281,12 @@ Gates (log directory: `logs/p186r4`):
 - `status_lies` is 0.
 - The src/ and tests/ diff against main touches only comment lines; no code line changed.
 
-| FND | outcome | sha/reason |
+| FND | outcome | reason |
 | --- | --- | --- |
-| FND-021 | fixed | edbd1b5: spec/ outside reviews/ has no github.com or `/issues/` link |
-| FND-023 | fixed | edbd1b5: no `Implements:`/`Trace:` tag in src/ or tests/ names an id missing from this repo's spec. The only FR-001/FR-003 hits are fixture strings (`RequirementId::new("FR-001")`, `"FR-003"`) and the `oracle.rs` unit-test tuples. See FND-026 for how the retagged ids map. |
-| FND-024 | fixed | edbd1b5: no FR-020 mention is left; FR-025's "not yet decided" line is restated |
-| FND-025 | fixed | edbd1b5: the matrix row at spec/test-matrix.md:54 marks FR-017-AC-12/13 `✅ Covered`, and the vacuous-proof test traces FR-017-AC-13 (src/kani_execution.rs:802) |
+| FND-021 | fixed | spec/ outside reviews/ has no github.com or `/issues/` link |
+| FND-023 | fixed | no `Implements:`/`Trace:` tag in src/ or tests/ names an id missing from this repo's spec. The only FR-001/FR-003 hits are fixture strings (`RequirementId::new("FR-001")`, `"FR-003"`) and the `oracle.rs` unit-test tuples. See FND-026 for how the retagged ids map. |
+| FND-024 | fixed | no FR-020 mention is left; FR-025's "not yet decided" line is restated |
+| FND-025 | fixed | the matrix row at spec/test-matrix.md:54 marks FR-017-AC-12/13 `✅ Covered`, and the vacuous-proof test traces FR-017-AC-13 (src/kani_execution.rs:802) |
 
 ## New findings (disposition pass 4)
 
@@ -306,7 +302,7 @@ FND-021 and FND-023 to FND-025 are fixed, and the code diff is comment-only. Not
 ### Round 5
 
 
-| Gate | Head a5ace39 | Main fc99f61 |
+| Gate | Head | Main |
 | --- | --- | --- |
 | `make spec` | EXIT 0 | EXIT 0 |
 | `make test` | EXIT 0 (80 / 213 passed, 5 ignored / 0) | EXIT 0 (same counts) |
@@ -325,10 +321,10 @@ The newly backed criteria are FR-017-AC-12 and AC-13.
 
 FR-014-AC-1/4/5 are backed by the V2 tests in tests/it/exact_scalar_generation.rs and tests/exact_scalar_support/package.rs. FR-015-AC-3/9/10/11 are backed by tests/it/kani_obligations.rs, and AC-3 also by routed_generation.rs.
 
-| FND | outcome | sha/reason |
+| FND | outcome | reason |
 | --- | --- | --- |
-| FND-026 | fixed | a5ace39: every V1-path tag is dropped, and the nine planned criteria (FR-014-AC-35/36/37, FR-015-AC-19/20/22/23/24/25) are unbacked, which matches their 🚧 Planned rows |
-| FND-027 | fixed | a5ace39: the two loose retags went with the dropped V1 tags |
+| FND-026 | fixed | every V1-path tag is dropped, and the nine planned criteria (FR-014-AC-35/36/37, FR-015-AC-19/20/22/23/24/25) are unbacked, which matches their 🚧 Planned rows |
+| FND-027 | fixed | the two loose retags went with the dropped V1 tags |
 
 ## New findings (disposition pass 5)
 

@@ -25,8 +25,7 @@ relationships:
 
 Complete issue #2's numeric/state increment after Task-004: derive deterministic Boolean and bounded
 `i64` subject arguments and zero/one/multiple post-state result ABIs from the checked executable
-oracle dependencies. Emit exact inclusive model-domain assumptions, v2 graph/schema/attestation
-identity, and source-spanned explicit refusals without consuming issue #3's strategy interface.
+oracle dependencies. Emit exact inclusive model-domain assumptions, v2 graph and schema, and source-spanned explicit refusals without consuming issue #3's strategy interface.
 
 ## Completion Evidence
 

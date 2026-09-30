@@ -10,21 +10,21 @@ relationships: []
 
 ## Summary
 
-Ticket: IR-21. PR: agent-ix/quire-contract-codegen#184, head `d2987ef`, base `origin/main` `f2fd369`.
+Ticket: IR-21. PR: agent-ix/quire-contract-codegen#184.
 
 The PR adds `replay_falsification` (src/spine_replay.rs), a thin adapter that builds a
 backend-witness transcript and calls `qsl_replay::replay`. It adds `claimed_module_gate`
 (src/kani_module_gate.rs), which reads Kani's per-check `RESULTS:` listing through a new
 `KaniTranscript::checks` parser. It adds `execute_kani_obligation_with_transcript`, and a spine test
 that proves one postcondition, runs two mutation controls, decodes the counterexample and replays it
-through QSL. It moves the QSL pin to `20ba521` and adds two QSL dev-deps at the same rev.
+through QSL. It adds two QSL dev-deps.
 
 ## Method
 
 I read the full diff. The rust-review lane covered idioms, error envelopes, panics, trait seams,
 stubs and tautologies. I traced the replay path to confirm that no verdict comes from CG. I checked
 QSL `origin/main` for the T12-A and FB-05 rules (`tools/arch-lint/api_surface.rs`,
-`spec/functional/FR-060-*`, `qsl-replay/src/lib.rs` at `20ba521`). I compared the `write_crate`
+`spec/functional/FR-060-*`, `qsl-replay/src/lib.rs`). I compared the `write_crate`
 manifest with the generator's own `manifest()` functions. Then I ran the gates below in my own
 worktree.
 
@@ -48,7 +48,7 @@ DigestDomain, ByteDigest}`, `qsl_foundation::SourceIdentity` and `quire_exact::{
 Identifier}`, which are the new dev-deps. It learns the package id and parameter node ids from
 `qsl_replay::spine::compile`.
 
-At `20ba521`, `qsl-replay/src/lib.rs` says "`spine` is public only for `command`", and "CG reaches
+`qsl-replay/src/lib.rs` says "`spine` is public only for `command`", and "CG reaches
 this crate's public API and nothing else in QSL (ADR-011 FB-05)". FR-060's T12-A says any reference
 to `qsl_replay::spine` is a violation from any module. The arch-lint only scans `src/`
 (`Role::Cg => vec![scan_root.join("src")]`), so the test passes the lint because of the lint's
@@ -92,35 +92,29 @@ twin is hand-mirrored, and name which ADR-011 stages the spine covers.
   classification).
 - **Path-segment matching** (`module` or `module::`) and the RESULTS parser are unit-tested, and
   `tc_027_no_other_source_file_contains_kani_prose_literals` still passes.
-- **Pins.** `qsl-replay`, `qsl-foundation` and `quire-exact` are all at `20ba521`, an ancestor of QSL
-  main (main is now `30f0358`). The old `daa0178` is gone from Cargo.lock. The `9395be4` QSL rev
-  that stays comes in through quire-contract-ir and predates this PR. No QSL file is copied or
-  vendored.
+- **No vendoring.** No QSL file is copied or vendored.
 - **`write_crate` `features = ["exact"]`.** This matches the generator's own manifests
   (src/exact_function.rs:1421, src/composite_equality.rs:1573). The harness uses
   `quire_contract_runtime::exact`, and the prover run passes with it. The change is test-only and
   correct.
 - **Makefile `kani` target.** Both libtest filters after `--` select exactly the two modules.
-- **Coder's red-on-main claims.** `make spec` exits 2 on `f2fd369` too, with the same two documents
+- **Coder's red-on-main claims.** `make spec` exits 2 on main too, with the same two documents
   (AP-001, MP-001), and the PR adds no spec validation error. `cargo deny check` exits 12 on
-  `f2fd369` too (AGPL license rejections plus unlisted git sources). The PR adds one more AGPL
-  rejection of the same kind (`qsl-attrs@20ba521`). I did not re-measure tc_025.
+  main too (AGPL license rejections plus unlisted git sources). The PR adds one more AGPL
+  rejection of the same kind (`qsl-attrs`). I did not re-measure tc_025.
 
 ## Gates run by this review
 
-| Gate | Command | Exit | Log |
-| --- | --- | --- | --- |
-| Format | `cargo fmt --check` | 0 | logs/fmt.log |
-| Clippy | `cargo clippy --locked --all-targets -- -D warnings` | 0 | logs/clippy.log |
-| Unit (gate, transcript) | `cargo test --locked --lib -- kani_module_gate kani_transcript` | 0 (15 passed) | logs/unit.log |
-| Spine default lane | `cargo test --locked --test it -- skeleton_spine` | 0 (3 passed, 1 ignored) | logs/it-spine-default.log |
-| Spine prover lane | `cargo test --locked -j 4 --test it -- --ignored --test-threads=1 skeleton_spine` (stable toolchain, not +1.98.1) | 0 (1 passed, 107.94s) | logs/kani-spine.log |
-| interface-001 | `it interface_001` | 0 (6 passed) | logs/interface001.log |
-| Upstream identity | `make upstream-identity` | 0 | logs/upstream-identity.log |
-| Spec (head / main) | `make spec` | 2 / 2, same pre-existing docs | logs/spec-head.log, logs/spec-main.log |
-| Deny (head / main) | `cargo deny check` | 12 / 12, pre-existing classes | logs/deny-head.log, logs/deny-main.log |
-
-Logs are under `/tmp/claude-1000/-home-peter-dev/7460db9c-2787-438d-92ba-cee3b3bbc775/scratchpad/ir21-review/`.
+| Gate | Command | Exit |
+| --- | --- | --- |
+| Format | `cargo fmt --check` | 0 |
+| Clippy | `cargo clippy --locked --all-targets -- -D warnings` | 0 |
+| Unit (gate, transcript) | `cargo test --locked --lib -- kani_module_gate kani_transcript` | 0 (15 passed) |
+| Spine default lane | `cargo test --locked --test it -- skeleton_spine` | 0 (3 passed, 1 ignored) |
+| Spine prover lane | `cargo test --locked -j 4 --test it -- --ignored --test-threads=1 skeleton_spine` (stable toolchain, not +1.98.1) | 0 (1 passed, 107.94s) |
+| interface-001 | `it interface_001` | 0 (6 passed) |
+| Spec (head / main) | `make spec` | 2 / 2, same pre-existing docs |
+| Deny (head / main) | `cargo deny check` | 12 / 12, pre-existing classes |
 
 ## Verdict
 
@@ -132,17 +126,17 @@ built from src. Fix both, or disposition them with a ticket, before merge.
 
 Round 1.
 
-| FND | outcome | sha/reason |
+| FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | still-open | The test-only T12-A/FB-05 exception and its expiry condition are now written down (Cargo.toml:40-44, tests/it/skeleton_spine.rs:14-20, FR-016 Dependencies). No ticket tracks the expiry, though: none is cited, and Linear search finds no QSL/IR ticket for the qsl-replay re-exports or for exposing a compiled unit's ids. File one and cite its id in Cargo.toml and the test's module doc. |
-| FND-002 | fixed 728e431 | The module doc names the stages the input passes through (hand-built BoundPackage; E1-E4 and contract-to-IR do not run; E7, E8, E9 do). `prove_identity` is renamed `compile_native_twin`. The limits are documented as unlimited stand-ins. The test is renamed `..._from_a_bound_package_...`. TC-026/TC-034 say the same. |
-| FND-003 | fixed 728e431 | src/lib.rs:27 now reads `// Implements: FR-023`. |
-| FND-004 | fixed 728e431 | The witness is now (1,5), which satisfies amount<=balance. A new test replays (0,5) against the violating twin and expects inconclusive with proved=violation and replayed=success. Both healthy-twin replays (default and prover lane) now assert the named verdicts. The prover lane asserts that the decoded counterexample satisfies the precondition. |
-| FND-005 | fixed 728e431 | `tc_026_each_adapter_refusal_is_its_own_typed_error` covers FieldDelimiter, Transcript, Refused (stale package_id) and WrongArm. `tc_026_a_boolean_value_replays_as_zero_or_one` replays false (reproduced) and true (inconclusive). |
-| FND-006 | fixed 728e431 | The skeleton_spine module doc, FR-023 and TC-034 Status now state that the prover spine is an ignored `make kani` test outside `make ci`. |
+| FND-002 | fixed | The module doc names the stages the input passes through (hand-built BoundPackage; E1-E4 and contract-to-IR do not run; E7, E8, E9 do). `prove_identity` is renamed `compile_native_twin`. The limits are documented as unlimited stand-ins. The test is renamed `..._from_a_bound_package_...`. TC-026/TC-034 say the same. |
+| FND-003 | fixed | src/lib.rs:27 now reads `// Implements: FR-023`. |
+| FND-004 | fixed | The witness is now (1,5), which satisfies amount<=balance. A new test replays (0,5) against the violating twin and expects inconclusive with proved=violation and replayed=success. Both healthy-twin replays (default and prover lane) now assert the named verdicts. The prover lane asserts that the decoded counterexample satisfies the precondition. |
+| FND-005 | fixed | `tc_026_each_adapter_refusal_is_its_own_typed_error` covers FieldDelimiter, Transcript, Refused (stale package_id) and WrongArm. `tc_026_a_boolean_value_replays_as_zero_or_one` replays false (reproduced) and true (inconclusive). |
+| FND-006 | fixed | The skeleton_spine module doc, FR-023 and TC-034 Status now state that the prover spine is an ignored `make kani` test outside `make ci`. |
 
 Round 2.
 
-| FND | outcome | sha/reason |
+| FND | outcome | reason |
 | --- | --- | --- |
-| FND-001 | fixed 9e17876 | IR-309 now tracks the exception and names the expiry condition. It is cited in Cargo.toml:40, the tests/it/skeleton_spine.rs module doc (line 15) and FR-016 Dependencies. |
+| FND-001 | fixed | IR-309 now tracks the exception and names the expiry condition. It is cited in Cargo.toml:40, the tests/it/skeleton_spine.rs module doc (line 15) and FR-016 Dependencies. |

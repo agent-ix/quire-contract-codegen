@@ -3,7 +3,7 @@ id: SR-032
 title: "IR-84 bounded Kani profile census review"
 type: SpecReview
 analysis: code-review
-scope: "Working-tree diff on branch peter/ir-84-codegen60-defect-bounded-kani-profile-classification-returns (base origin/main f716300); src/bounded_kani_profile.rs only"
+scope: "Working-tree diff on branch peter/ir-84-codegen60-defect-bounded-kani-profile-classification-returns; src/bounded_kani_profile.rs only"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-007
@@ -21,9 +21,9 @@ One independent review of the uncommitted IR-84 change to `src/bounded_kani_prof
 insertions, 40 deletions, no other file touched), covering code review, Rust review and gap
 analysis. The change removes a wrapper loop that walked the upstream disposition census and
 returned a single `Err(KaniOutcome)` on the first `Refused` or `Inconclusive` entry, discarding
-every other construct's disposition. The core claim was verified against the pinned upstream
-source: `quire_contract_ir::kani::KaniProfile::classify` (rev `97f5065`,
-`src/kani/profile.rs:104-133`) already returns one `CapabilityEntry` per requested construct, in
+every other construct's disposition. The core claim was verified against the upstream
+source: `quire_contract_ir::kani::KaniProfile::classify`
+(`src/kani/profile.rs:104-133`) already returns one `CapabilityEntry` per requested construct, in
 request order, and reserves `Err` for an empty or duplicated construct name
 (`kani_capability_request_invalid`) or a construct absent from the matrix
 (`kani_capability_missing`). The deletion is correct and the defect was real.

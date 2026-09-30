@@ -10,14 +10,14 @@ review_set: subset
 
 ## Summary
 
-Reviewed `agent-e/codegen-3-numeric-strategies-spec` at `6f73e2d` against base `240fad8`. For each
+Reviewed `agent-e/codegen-3-numeric-strategies-spec`. For each
 requirement, the review listed how it can fail and checked that each failure has a detected,
 reported outcome and a test. It checked the text against:
 
 - base `src/strategy.rs`, `src/harness.rs` and `src/oracle.rs`;
-- `quire-contract-ir` at the pinned `04eb6f8` (`check_compare`, `check_value_reference`,
+- `quire-contract-ir` (`check_compare`, `check_value_reference`,
   `observation_allowed`, `ClauseKind::accepts`, `IntegerLiteral` checking, `TypedExpression`);
-- `quire-contract-runtime` at `8a4d02b` (`CampaignCounts`);
+- `quire-contract-runtime` (`CampaignCounts`);
 - `proptest` 1.5.0 (`Union` and `sample::select` shrinking).
 
 It does not repeat the scope-boundary findings in REV-022 (SR-013). Where a failure mode overlaps
@@ -72,7 +72,7 @@ The failure modes that escape fall into five groups:
 
 ## Resolution
 
-Verified against the uncommitted rework on top of `6f73e2d`. "partially resolved" rows name the
+Verified against the uncommitted rework. "partially resolved" rows name the
 remaining gap and stay open until the spec is amended.
 
 | Finding | Disposition | Evidence |

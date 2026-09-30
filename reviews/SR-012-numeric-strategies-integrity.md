@@ -10,7 +10,7 @@ review_set: subset
 
 ## Summary
 
-Reviewed `agent-e/codegen-3-numeric-strategies-spec` at `6f73e2d` against base `240fad8`. The review
+Reviewed `agent-e/codegen-3-numeric-strategies-spec`. The review
 checked internal consistency across FR-008 through FR-013, NFR-004, and TC-017 through TC-022. It also
 checked them against FR-001, FR-002, NFR-002, the interface-001 `harness_strategy_slice`,
 `diagnostics`, `identity_envelope`, and new `bound_strategy_slice` keys, the test matrix, the index,
@@ -65,7 +65,7 @@ vocabulary: terminal states, read ordering, Boolean reads, and the form of the c
 
 ## Resolution
 
-Verified against the uncommitted rework on top of `6f73e2d`. "partially resolved" rows name the
+Verified against the uncommitted rework. "partially resolved" rows name the
 remaining gap and stay open until the spec is amended.
 
 | Finding | Disposition | Evidence |
@@ -88,4 +88,4 @@ remaining gap and stay open until the spec is amended.
 | FND-21016 | resolved | FR-009-AC-2 (FR-009:64) and TC-018:22-25 add a 3-member domain and a literal at each member |
 | FND-21017 | resolved | interface-001:113 |
 | FND-21018 | resolved | assurance/change-assurance.json:341 now describes the one `Status` column and the remaining unchecked-contradiction gap |
-| FND-21019 | deferred | This predates the slice and lies outside it; CLAUDE.md is not edited here. `git log -S Fourteen` shows the count entering in 0f4df41 (#21) with no enumeration. interface-001:96-102 `not_carried` lists 12 items (the 4 named plus 8), so "the other ten" is inconsistent with that list, but the true count of dropped envelope fields cannot be established with certainty from repository history |
+| FND-21019 | deferred | This predates the slice and lies outside it; CLAUDE.md is not edited here. `git log -S Fourteen` shows the count entering in #21 with no enumeration. interface-001:96-102 `not_carried` lists 12 items (the 4 named plus 8), so "the other ten" is inconsistent with that list, but the true count of dropped envelope fields cannot be established with certainty from repository history |

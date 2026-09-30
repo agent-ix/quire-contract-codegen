@@ -5,9 +5,7 @@ type: Task
 status: done
 track: A
 priority: P0
-relationships:
-  - target: ix://agent-ix/quire-contract-codegen/MP-001
-    type: references
+relationships: []
 ---
 # Task-002: Foundation evidence and gap review
 

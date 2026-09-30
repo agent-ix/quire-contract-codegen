@@ -13,11 +13,9 @@
 //! itself and runs here.
 //!
 //! FR-021-AC-18 (three-way agreement with the QSL authority) is not
-//! implemented here: the spec records it "🚧 Planned, pending the
-//! quire-spec-language re-pin named in Dependencies". IR-254 repointed this
-//! repository's QSL pin, but onto `qsl-replay`'s public API rather than the
-//! `quire_spec_language::value::expression` API AC-18 was written against
-//! (see `src/exact_function.rs`'s module doc). The agreement legs are exactly
+//! implemented here: this repository reaches QSL only through `qsl-replay`'s
+//! public API, not the `quire_spec_language::value::expression` API AC-18
+//! was written against (see `src/exact_function.rs`'s module doc). The agreement legs are exactly
 //! two: the generated oracle and a direct Contract Runtime call.
 
 // Duplicated per consumer (also `exact_function_generation.rs`) for structural consistency with

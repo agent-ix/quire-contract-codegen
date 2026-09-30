@@ -14,11 +14,9 @@
 //! itself and stays in `tests/it/exact_function_agreement.rs`.
 //!
 //! FR-021-AC-18 (three-way agreement with the QSL authority) is not
-//! implemented here: the spec records it "🚧 Planned, pending the
-//! quire-spec-language re-pin named in Dependencies". IR-254 repointed this
-//! repository's QSL pin, but onto `qsl-replay`'s public API rather than the
-//! `quire_spec_language::value::expression` API AC-18 was written against
-//! (see `src/exact_function.rs`'s module doc). This file's agreement legs
+//! implemented here: this repository reaches QSL only through `qsl-replay`'s
+//! public API, not the `quire_spec_language::value::expression` API AC-18
+//! was written against (see `src/exact_function.rs`'s module doc). This file's agreement legs
 //! are exactly two: the generated oracle and a direct Contract Runtime call.
 
 /// The generated main-corpus crate under test. `names.rs`, written beside the scratch crate's

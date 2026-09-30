@@ -19,12 +19,12 @@ relationships:
 
 Task-008 and Task-009 are complete. Mechanical reconciliation reports every one of the 34 selected
 criteria and constraints backed. Independent semantic review found the implementation and evidence
-gaps recorded in SR-018; commit `1f49184` closes them with production fixes, public-pipeline and
+gaps recorded in SR-018; a fix commit closes them with production fixes, public-pipeline and
 generated-consumer regressions, independently measured oracles, and corrected requirement wording.
 
 ## Verdict
 
-**PASS** for the PR #30 numeric-strategy subset after `1f49184`. No known requirement,
+**PASS** for the PR #30 numeric-strategy subset after the fixes. No known requirement,
 implementation, semantic-evidence, reverse-traceability, resource-bound, or stub gap remains in the
 selected slice.
 

@@ -34,8 +34,8 @@ framing/binding/contract/harness regions, derives a complete dependency graph, a
 execution as `not_run`. Its next reviewed increment generalizes direct Boolean bindings to bounded
 `i64` current-input/current-state/pre-state arguments and post-state results. Inclusive assumptions
 come only from checked IR `IntegerType` domains; post-state results carry the same domain in the
-ensures contract. The v2 adapter and graph retain the complete typed ABI, bounds, cargo-kani 0.67.0
-identity/options and concrete-playback configuration while preserving v1 artifacts historically.
+ensures contract. The v2 adapter and graph retain the complete typed ABI, bounds, cargo-kani
+options and concrete-playback configuration while preserving v1 artifacts historically.
 
 ## PR #22 round 8 repair delta
 
@@ -49,22 +49,21 @@ execution supplies the focused campaign controls in this revision.
 
 Issue #5's reviewed spec is being repaired in a bounded coordinator-authorized slice: generated
 entry probes, a typed-IR implication census, strict LLVM reading, and measured classification
-primitives. Native fixtures use actual generator outputs. Aggregate analysis and coverage
-attestations await IR #50's bound population and a native producer/run-result contract; no private
-binding or counter model is introduced. REV-014 and REV-015 record the repair and residual work.
+primitives. Native fixtures use actual generator outputs. Aggregate analysis awaits IR #50's
+bound population and a native producer/run-result contract; no private
+binding or counter model is introduced. REV-015 records the repair and residual work.
 
 ## Guards
 
-Next bounded dispatch is proposed in REV-017 atop published PR #27: implement
-complete bound observation only after API approval, retaining unqualified provenance. A
+Implement complete bound observation only after API approval, retaining unqualified provenance. A
 runtime-owned campaign transport and an authorized native producer/shared verification join
-are separate ownership gates; no private counters or attestation/receipt framework fills them.
+are separate ownership gates.
 Every generated-source guard remains unchanged.
 
 The numeric/state Kani increment specified by FR-003 and TC-014 is complete. It consumes issue #4's
 executable-oracle analyzer and rendered predicates directly, derives its bounds only from checked IR
 domains, and proves the healthy Boolean/`i64` multi-result and ConfigVersion-style fixtures with the
-pinned Kani backend. It does not consume, change, or duplicate issue #3's model-domain strategy
+Kani backend. It does not consume, change, or duplicate issue #3's model-domain strategy
 interface; agent E retains ownership of that branch and file set. Native replay of printed
 counterexamples remains the downstream quire-spec-language IT-010 boundary.
 
@@ -80,7 +79,7 @@ counterexamples remains the downstream quire-spec-language IT-010 boundary.
 ## Numeric/state Kani completion evidence
 
 The issue #2 increment generates deterministic zero/one/multiple-result Boolean/`i64` subject ABIs,
-exact inclusive IR-domain assumptions, v2 proof graphs and attestations, and source-spanned explicit
+exact inclusive IR-domain assumptions, v2 proof graphs, and source-spanned explicit
 refusals. The local SUITE-008 run exercises cargo-kani 0.67.0: healthy mixed and ConfigVersion-style identity subjects prove, while changed-state and
 strict-comparison subjects print concrete counterexamples. TC-003, TC-005, and TC-014 are complete;
 the FR-003 portion of TC-007 is complete, while TC-007 overall stays planned for FR-005 parity.

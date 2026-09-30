@@ -29,7 +29,7 @@ checks are the named mitigations.
 | FR-003-AC-3 | medium | low | Unsupported typed shapes could fall through to unconstrained values | Closed grammar, stable refusal mapping, exact SourceSpan, negative mutation corpus, no partial bundle |
 | FR-003-AC-4/8 | medium | low | Typed binding order, options or schema identity can drift nondeterministically | Canonical dependency key/order, v2 schemas, full option vector, repeated byte comparison, preserve v1 files |
 | NFR-001-AC-1 | low | low | Additional tuple/domain metadata can perturb bytes | Normalized-order permutation and byte-identical regeneration |
-| NFR-002-AC-1/3 | medium | low | A ready graph or generation attestation could be mistaken for a proof result | Always retain `proofExecutionState: not_run`; keep execution observation and graph readiness distinct |
+| NFR-002-AC-1/3 | medium | low | A ready graph could be mistaken for a proof result | Always retain `proofExecutionState: not_run`; keep execution observation and graph readiness distinct |
 
 ## Top hazards
 

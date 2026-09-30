@@ -18,7 +18,7 @@ relationships:
 Task-009 is complete. All 34 selected acceptance criteria and constraints are backed, TC-017
 through TC-022 execute real production or generated-consumer paths, every public behavior in the
 numeric-strategy slice has an owning requirement, and no source or test stub was found. Semantic
-review of intent, tests, and code found the gaps recorded in SR-016; all were repaired at `4228611`.
+review of intent, tests, and code found the gaps recorded in SR-016; all were repaired.
 
 ## Verdict
 

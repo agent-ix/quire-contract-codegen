@@ -3,7 +3,7 @@ id: SR-015
 title: "Base review of numeric and state Kani lowering"
 type: SpecReview
 analysis: base
-scope: "FR-003, interface-001 kani_slice, TC-003/005/007/014, TM-001, AD-001, MP-001, SUITE-008"
+scope: "FR-003, interface-001 kani_slice, TC-003/005/007/014, TM-001, AD-001, SUITE-008"
 review_set: subset
 ---
 

@@ -21,11 +21,11 @@ An independent Rust and semantic review rechecked admission, population/census c
 generated runners, downstream consumption, failure precedence, resource bounds, public invariant
 surfaces, and requirement-to-test meaning across FR-008 through FR-013 and NFR-004. The review
 found two high-severity correctness defects, seven medium evidence or API defects, and four low
-hardening/documentation defects. Commit `1f49184` repairs every finding.
+hardening/documentation defects. A fix commit repairs every finding.
 
 ## Verdict
 
-**APPROVED** for the numeric-strategy slice after the repairs in `1f49184`.
+**APPROVED** for the numeric-strategy slice after the repairs.
 
 ## Findings
 
@@ -47,7 +47,7 @@ hardening/documentation defects. Commit `1f49184` repairs every finding.
 
 ## Dispositions
 
-All FND-1801 through FND-1813 are **FIXED** in `1f49184`. The repairs retain declaration kinds,
+All FND-1801 through FND-1813 are **FIXED**. The repairs retain declaration kinds,
 preserve identity failures, compare exact diagnostics, complete the refusal order and campaign
 matrix, independently count oracle calls, isolate ClauseRef identity, seal public invariants, bound
 census rendering, exercise public empty-side refusal, remove panic-style invariant handling,
