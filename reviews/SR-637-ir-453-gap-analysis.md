@@ -53,3 +53,11 @@ I also compared what each deleted test asserted with the assertions that remain:
 The spec side of the retirement is honest. It deletes no rows, backs no row with removed tests,
 leaves the unbacked set unchanged and invents no tags. Fix FND-001 in this PR. It is the same
 defect as SR-636 FND-001, seen from the evidence side.
+
+## Dispositions
+
+Round 1, reviewed at 75f4303 (origin/main is still bb8523f).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 75f4303: TC-023 again has a graph-family counterexample test (`tc_023_unreachable_graph_request_classifies_as_false`, traced `TC-023`), and the graph-arm mutant is now killed. Re-measured `quire coverage --strict` at 75f4303: 66 unbacked rows, the same set as main bb8523f, with 182 of 278 backed. |

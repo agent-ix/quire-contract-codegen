@@ -56,3 +56,12 @@ Note for PR #204: after both PRs merge, three current-state lines that this PR d
 stale. They say `src/kani_witness_join.rs` uses Contract IR's `Witness`:
 AD-001:192, FR-024:121 and TC-035:64. PR #204 moves that module to `qsl_replay::WitnessValue`
 and does not edit these files. That staleness belongs to #204, not to this PR.
+
+## Dispositions
+
+Round 1, reviewed at 75f4303 (origin/main is still bb8523f).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 75f4303: AD-001:194-195 now reads "every caller of the retired replay passed a constant closure as its native evaluator, so the verdict was predetermined." |
+| FND-002 | fixed | 75f4303: TC-035:65 now reads "so step 5 (FR-024-AC-5) has nothing to submit." |

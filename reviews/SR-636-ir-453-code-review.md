@@ -87,3 +87,11 @@ spec (`quire validate`; only the existing FR-014 EARS warnings), clippy `-D warn
 sources all ok), audit-unsafe, rustdoc, and test (77 and 221 passed, 5 ignored). The three real-Kani
 corpus tests ran in the default lane and passed, including
 `tc_023_kani_falsifies_the_generated_false_collection_harness`.
+
+## Dispositions
+
+Round 1, reviewed at 75f4303 (origin/main is still bb8523f).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 75f4303: `tc_023_unreachable_graph_request_classifies_as_false` (src/bounded_kani_corpus.rs:746-767) generates the unreachable `b -> a` request and asserts `KaniOutcomeKind::Counterexample` and `boolean_claim() == Some(false)`. I re-ran the mutation myself, replacing `lowered.reachable` with `true` at src/bounded_kani_corpus.rs:264. It now fails (10 passed, 1 failed, panic at :765). |
