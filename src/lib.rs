@@ -134,7 +134,11 @@ pub use publication::{
     write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
     PublicationErrorCode, PublishedBundleIdentity,
 };
-pub use spine_replay::{replay_falsification, ReplayParameter, SpineReplayError};
+pub use spine_replay::{
+    replay_counterexample, replay_falsification, DependencyLock, EvidenceFailureCause,
+    LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict,
+    SpineReplayError,
+};
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,

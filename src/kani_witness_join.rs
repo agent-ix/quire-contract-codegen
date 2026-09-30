@@ -154,6 +154,30 @@ pub fn decode_falsification(
     witness.decode(&schema)
 }
 
+/// The first decoded value outside its argument's declared integer domain, as the argument's
+/// name. A Boolean has no domain narrower than its type, and a value no binding names is left to
+/// the replay adapter to refuse.
+pub(crate) fn first_out_of_domain<'a>(
+    arguments: &[ObligationBinding],
+    values: &'a [(String, WitnessValue)],
+) -> Option<&'a str> {
+    values.iter().find_map(|(name, value)| {
+        let bounds = arguments
+            .iter()
+            .find(|binding| binding.identifier == *name)?
+            .integer_bounds
+            .as_ref()?;
+        match value {
+            WitnessValue::Integer(integer)
+                if !(bounds.minimum..=bounds.maximum).contains(integer) =>
+            {
+                Some(name.as_str())
+            }
+            WitnessValue::Integer(_) | WitnessValue::Boolean(_) => None,
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use quire_contract_ir::{IntegerDomain, OverflowPolicy};
