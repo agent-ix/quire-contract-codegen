@@ -63,7 +63,8 @@ unsuccessfully exited process, and the three unreadable cover summaries are
 inconclusive with their own reasons. The failed unwinding assertion is
 inconclusive as an exhausted bound and not falsified, and the succeeded
 unwinding check in a listing is verified. The run with zero successful checks is inconclusive
-with the vacuous-proof reason (FR-017-AC-13).
+with the vacuous-proof reason (FR-017-AC-13), unless it is a precondition harness, which its
+cover summary decides.
 
 Each capture parses to the expected typed transcript and classifies to verified, falsified with
 the assertion playback passed through verbatim, exhausted bound, cover-unsatisfied 0 of 1,

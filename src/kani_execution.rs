@@ -357,7 +357,7 @@ pub fn execute_kani_obligation(
             path: request.installation.launcher.clone(),
             error,
         })?;
-    let (outcome, exit_code) = launch_evidence(launch);
+    let (outcome, exit_code) = launch_evidence(launch, harness.kind);
     Ok(KaniExecutionEvidence {
         kind: harness.kind,
         harness_path: harness.rust.path.clone(),
@@ -563,15 +563,23 @@ fn parent_pid(pid: u32) -> Option<u32> {
 }
 
 /// Maps a concluded [`LaunchOutcome`] to the `(outcome, exit_code)` pair
-/// [`KaniExecutionEvidence`] stores, exactly as `execute_kani_obligation` does. Kept as its own
-/// pure function so the mapping is tested directly with a value rather than a real subprocess.
-pub fn launch_evidence(launch: LaunchOutcome) -> (KaniRunOutcome, Option<i32>) {
+/// [`KaniExecutionEvidence`] stores, exactly as `execute_kani_obligation` does. `kind` is the
+/// harness's contract role (`None` for an exact-scalar harness); see [`classify_kani_run`] for
+/// how it affects the zero-checks rule. Kept as its own pure function so the mapping is tested
+/// directly with a value rather than a real subprocess.
+pub fn launch_evidence(
+    launch: LaunchOutcome,
+    kind: Option<ObligationKind>,
+) -> (KaniRunOutcome, Option<i32>) {
     match launch {
         LaunchOutcome::Completed {
             exited_successfully,
             exit_code,
             text,
-        } => (classify_kani_run(exited_successfully, &text), exit_code),
+        } => (
+            classify_transcript(exited_successfully, &KaniTranscript::parse(&text), kind),
+            exit_code,
+        ),
         LaunchOutcome::TimedOut => (
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::TimedOut,
@@ -601,15 +609,30 @@ pub fn launch_evidence(launch: LaunchOutcome) -> (KaniRunOutcome, Option<i32>) {
 /// `pub` so a test asserting "this transcript proves falsification" can route through the same
 /// classifier production uses (IR-220), instead of re-implementing banner parsing that misreads
 /// an inconclusive run — CBMC out-of-memory among them — as a decided failure.
+///
+/// This entry point applies the zero-checks rule unconditionally, which is right for every
+/// harness that asserts something. A precondition harness asserts nothing: its one property is
+/// its non-vacuity cover, which Kani reports outside the `** <failed> of <total> failed` count,
+/// so a run that proved the cover satisfied always prints `0 of 0`. [`launch_evidence`] exempts
+/// that kind from the rule and lets the cover decide.
 pub fn classify_kani_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
-    classify_transcript(exited_successfully, &KaniTranscript::parse(text))
+    classify_transcript(exited_successfully, &KaniTranscript::parse(text), None)
 }
 
 /// The classification rule (codegen#55), over the typed transcript only. Kani's prose is read in
 /// [`crate::kani_transcript`] and nowhere else.
-fn classify_transcript(exited_successfully: bool, transcript: &KaniTranscript) -> KaniRunOutcome {
+fn classify_transcript(
+    exited_successfully: bool,
+    transcript: &KaniTranscript,
+    kind: Option<ObligationKind>,
+) -> KaniRunOutcome {
     if exited_successfully && transcript.banner == KaniBanner::Successful {
-        if let Some(summary) = transcript.checks_summary {
+        let checks_gate = if kind == Some(ObligationKind::Precondition) {
+            None
+        } else {
+            transcript.checks_summary
+        };
+        if let Some(summary) = checks_gate {
             let success_checks =
                 usize::try_from(summary.total.saturating_sub(summary.failed)).unwrap_or(usize::MAX);
             let checks_outcome = KaniOutcome::proved_from_checks(
@@ -825,6 +848,61 @@ mod tests {
         assert_eq!(
             classify_kani_run(true, no_checks_line),
             KaniRunOutcome::Verified
+        );
+    }
+
+    /// A precondition harness asserts nothing; its only property is its cover, which Kani keeps out
+    /// of the checks count. The same `0 of 0` transcript that is a vacuous proof for any other
+    /// harness therefore decides by the cover alone for a precondition harness.
+    ///
+    /// Trace: FR-017-AC-13, TC-027
+    #[test]
+    fn a_precondition_harness_with_no_checks_is_decided_by_its_cover_not_the_zero_checks_rule() {
+        let run = |kind: Option<ObligationKind>, cover: &str| {
+            let text =
+                format!("SUMMARY:\n ** 0 of 0 failed\n\n{cover}\n\n\nVERIFICATION:- SUCCESSFUL\n");
+            launch_evidence(
+                LaunchOutcome::Completed {
+                    exited_successfully: true,
+                    exit_code: Some(0),
+                    text,
+                },
+                kind,
+            )
+            .0
+        };
+        let satisfied = " ** 1 of 1 cover properties satisfied";
+        assert_eq!(
+            run(Some(ObligationKind::Precondition), satisfied),
+            KaniRunOutcome::Verified
+        );
+        assert_eq!(
+            run(Some(ObligationKind::Postcondition), satisfied),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::VacuousProof
+            }
+        );
+        assert_eq!(
+            run(None, satisfied),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::VacuousProof
+            }
+        );
+        assert_eq!(
+            run(
+                Some(ObligationKind::Precondition),
+                " ** 0 of 1 cover properties satisfied"
+            ),
+            KaniRunOutcome::CoverUnsatisfied {
+                satisfied: 0,
+                total: 1
+            }
+        );
+        assert_eq!(
+            run(Some(ObligationKind::Precondition), ""),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::MissingCoverSummary
+            }
         );
     }
 
@@ -1129,7 +1207,7 @@ mod tests {
     /// A timed-out launch maps to no exit code and `Inconclusive { reason: TimedOut }`.
     #[test]
     fn a_timed_out_launch_carries_no_exit_code_into_the_evidence() {
-        let (outcome, exit_code) = launch_evidence(LaunchOutcome::TimedOut);
+        let (outcome, exit_code) = launch_evidence(LaunchOutcome::TimedOut, None);
         assert_eq!(exit_code, None);
         assert_eq!(
             outcome,

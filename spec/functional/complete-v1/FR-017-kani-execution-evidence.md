@@ -72,7 +72,9 @@ the run and everything read back from it.
   playback printed for a satisfied cover witnesses reachability and shall never
   be taken as a counterexample.
 - If the process exited successfully and the backend reported success with zero successful
-  checks, then the generator shall classify the run as inconclusive with the vacuous-proof reason.
+  checks, then the generator shall classify the run as inconclusive with the vacuous-proof reason,
+  except for a precondition harness, whose only property is its non-vacuity cover and which the
+  cover alone decides.
 - If the run does not conclude within the caller's timeout, then the generator shall kill it and
   classify it as inconclusive with the timed-out reason.
 - If the backend reported a failed unwinding assertion, then the
@@ -119,7 +121,7 @@ the run and everything read back from it.
 | FR-017-AC-7 | A crate whose library source does not contain the harness source byte for byte is refused, and no backend runs. | Test (TC-027) |
 | FR-017-AC-11 | A routed FR-022/FR-014 exact-scalar harness (`KaniScalarObligationHarness`) runs through `execute_kani_obligation` and `kani_launch_command` the same way an FR-015 contract harness does: a crate whose library source lacks its generated source byte for byte is `HarnessNotInCrate`, its covers classify a run identically (all satisfied is verified, an unsatisfied one is cover-unsatisfied, none printed is inconclusive), and its evidence carries `None` for obligation kind, since an exact-scalar claim carries no contract role. | Test (TC-027) |
 | FR-017-AC-12 | Real Kani captures of a verified run, a falsified run with a playback, an exhausted unwind bound, an unreachable cover, a partly satisfied cover and a run with no cover summary each parse into the expected typed transcript of verdict banners, failed checks, check and cover summaries and playback tests, and classify to the expected outcome; the falsifying playback block passes through verbatim. | Test (TC-027) |
-| FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified. | Test (TC-027) |
+| FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified, except that a precondition harness, which asserts nothing beyond its cover, is decided by its cover summary. | Test (TC-027) |
 
 ## Dependencies
 
