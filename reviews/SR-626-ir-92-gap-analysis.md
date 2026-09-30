@@ -54,3 +54,14 @@ real but narrower than its tag. The AC-9 tag on the dependency test is a wrong b
 implemented but untested. Filling the dependencies (IR-290) is traced to no requirement and
 reaches no replay QSL admits. Not mergeable until FND-001 and FND-002 are fixed or given a
 disposition.
+
+## Dispositions
+
+Round 1 was reviewed at f4fff61ad01aed9857a210d0b31373c59120e727. The matrix now marks FR-016-AC-1 through AC-5, AC-8 through AC-11 and AC-13 Covered. Each of those rows has a real test, and I confirmed each test fails when the code is wrong: M1, M2, M3 and M13 are killed. AC-6, AC-7 and AC-12 stay Planned.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 36a9062: the dependency test carries only a TC-026 tag. A new test asserts QSL's `Unselected` refusal, and TC-026 (3e09e6b) states that filling is implemented while imported-dependency replay is unreachable until `call_site` accepts a dependency input. |
+| FND-002 | fixed | 36a9062: the `only_a_reproduced_violation_reproduces` unit test is tagged FR-016-AC-13. Mutant M3 is killed. |
+| FND-003 | fixed | 3e09e6b: spec/test-matrix.md rows 51-52 are rewritten to match the tags. |
+| FND-004 | fixed | 36a9062: the AC-1 test covers no playback block, an arity mismatch and a width mismatch, each asserting its decoder cause code. A separate FR-016-AC-5 test covers a transcript for another harness. The refusal is now FR-016's decode-cause evidence failure (FR-016 Outputs reworded in 3e09e6b). |

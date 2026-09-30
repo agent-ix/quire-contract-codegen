@@ -307,7 +307,10 @@ fn dependency_lock() -> DependencyLock {
 #[test]
 fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     let native = native_source(VIOLATING_TWIN);
-    let lock = dependency_lock();
+    // Minted under a domain other than the one QSL expects, so the wire must carry the record's
+    // own label rather than a fixed one.
+    let mut lock = dependency_lock();
+    lock.package_id = DigestRecord::mint(DigestDomain::VerificationJcs, [7; 32]);
     let mut earlier = dependency_lock();
     earlier.identity = "test/aaa".to_owned();
     earlier.sources = vec![
@@ -317,12 +320,9 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     let mut shared = dependency_lock();
     shared.identity = "test/mmm".to_owned();
     shared.sources = vec![locked("lib-mmm", b"shared dependency bytes")];
-    let package = ReplayPackage::new(inputs(
-        &native,
-        FUNCTION,
-        vec![lock.clone(), shared, earlier],
-    ))
-    .expect("the twin compiles");
+    let mut lock_inputs = inputs(&native, FUNCTION, vec![lock.clone(), shared, earlier]);
+    lock_inputs.backend_manifest = DigestRecord::mint(DigestDomain::VerificationJcs, [9; 32]);
+    let package = ReplayPackage::new(lock_inputs).expect("the twin compiles");
     let wire = package.request("counterexample", ReplaySource::Input(Vec::new()));
 
     let identities: Vec<_> = wire
@@ -331,7 +331,15 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
         .map(|d| d.identity.as_str())
         .collect();
     assert_eq!(identities, ["test/aaa", "test/mmm", "test/units"]);
+    assert_eq!(
+        wire.backend.1.as_deref(),
+        Some(DigestDomain::VerificationJcs.as_str())
+    );
     let entry = &wire.dependencies[2];
+    assert_eq!(
+        entry.package_id.0.as_deref(),
+        Some(DigestDomain::VerificationJcs.as_str())
+    );
     assert_eq!(entry.version, lock.version);
     assert_eq!(
         entry.package_id,
