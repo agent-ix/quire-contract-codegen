@@ -33,11 +33,11 @@ jobs:
       - name: Rust 1.98.1 compatibility
         run: cargo +1.98.1 check --locked --all-targets --message-format=json
 
-      - name: Validate specification and planning
+      - name: Validate specification
         run: |
-          npm install --global '@agent-ix/quire-cli@0.31.0' '@agent-ix/quoin'
+          npm install --global '@agent-ix/quire-cli' '@agent-ix/quoin'
           quoin module ensure-defaults
-          quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'
+          quire validate --scope . 'spec/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'
 
       - name: Unsafe audit
         # The selftest runs first and in this job, not only under
