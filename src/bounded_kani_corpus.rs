@@ -745,6 +745,29 @@ mod tests {
 
     /// Trace: TC-023.
     #[test]
+    fn tc_023_unreachable_graph_request_classifies_as_false() {
+        let (profile, dispatch, input) = fixture();
+        let generated = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            BoundedCorpusRequest::Graph(GraphRequest {
+                source_id: "source".to_owned(),
+                start_id: "b".to_owned(),
+                target_id: "a".to_owned(),
+                field_id: "next".to_owned(),
+                max_expansions: 2,
+            }),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        assert_eq!(generated.outcome.kind, KaniOutcomeKind::Counterexample);
+        assert_eq!(generated.outcome.boolean_claim(), Some(false));
+    }
+
+    /// Trace: TC-023.
+    #[test]
     fn tc_023_admitted_zero_arithmetic_is_a_proof_not_a_false_verdict() {
         let (profile, dispatch, input) = fixture();
         let generated = generate_bounded_kani_corpus_case(
