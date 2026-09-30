@@ -130,7 +130,7 @@ failure is reported.
 
 - **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md); QSL's
   `qsl-replay` crate, the only QSL crate this
-  repository depends on. The spine test takes a compiled unit's package id and
+  repository depends on. The replay package takes a compiled unit's package id and
   parameter node ids from `qsl_replay::call_site`, and the request's types from
   `qsl-replay`'s re-exports.
 - **Downstream**: [TC-026](../../test/complete-v1/TC-026-witness-native-replay.md),
