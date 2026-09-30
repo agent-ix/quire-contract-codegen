@@ -26,16 +26,14 @@ exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-ir" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-model" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-runtime" },
-    { allow = ["AGPL-3.0-or-later"], crate = "quire-observation" },
-    { allow = ["AGPL-3.0-or-later"], crate = "quire-protocol" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-verification-contracts" },
-    # quire-spec-language is reached through quire-contract-ir and quire-protocol and
+    # quire-spec-language is reached through quire-contract-ir and
     # declares AGPL-3.0-or-later, the same first-party decision as above.
     { allow = ["AGPL-3.0-or-later"], crate = "quire-spec-language" },
-    { allow = ["AGPL-3.0-only"], crate = "agent-ix-baseline-producer" },
     # IR-254: qsl-replay (the only QSL crate this repository may depend on, per
     # QSL arch-lint T12-A) and its own transitive closure -- all first-party
     # agent-ix crates under the same AGPL-3.0-or-later decision above.
+    { allow = ["AGPL-3.0-or-later"], crate = "qsl-attrs" },
     { allow = ["AGPL-3.0-or-later"], crate = "qsl-cst" },
     { allow = ["AGPL-3.0-or-later"], crate = "qsl-eval" },
     { allow = ["AGPL-3.0-or-later"], crate = "qsl-forms" },
