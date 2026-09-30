@@ -143,7 +143,7 @@ operations:
     output: named qsl-replay WitnessValue list | DecodeFailure (code, source_id, context)
     semantics: selects the one assertion playback block of a Kani run and types its concrete bytes with the harness's persisted obligation schema position for position with its kani::any() calls, refusing on a non-argument binding, transcript, harness-identity or decode mismatch (FR-016)
   - name: replay_falsification
-    inputs: [harness symbol, check text, named WitnessValue list, ReplayParameter list (argument name, node id), a function from the witness ReplaySource to the complete ReplayRequestWire]
+    inputs: [harness symbol, check text, named qsl-replay WitnessValue list, ReplayParameter list (argument name, node id), a function from the witness ReplaySource to the complete ReplayRequestWire]
     output: the qsl-replay WitnessArmResult | SpineReplayError (UnboundArgument{argument} | FieldDelimiter | Transcript(MalformedTranscript) | Refused(ReplayRefusal) | WrongArm)
     semantics: builds the backend-witness transcript keyed by parameter node id and calls qsl_replay::replay, returning QSL's own settlement; a Boolean value is replayed as 1 or 0 (FR-016)
   - name: ReplayPackage::new

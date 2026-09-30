@@ -12,6 +12,10 @@
 //! the emitted `kani::any()` calls, which is position *i* of the concrete bytes Kani's playback
 //! records.
 //!
+//! The block selection, the refusal codes and the comment cross-check are a behavioural port of
+//! `quire_contract_ir::kani::Witness`, which IR deletes; the code is rewritten, the behaviour is
+//! the same.
+//!
 //! The values come out as [`qsl_replay::WitnessValue`], the type QSL's replay envelope carries,
 //! so [`crate::spine_replay`] hands them to QSL without a conversion. The transcript grammar
 //! read here is Kani's; QSL's `Witness::decode` reads QSL's own transcript grammar and cannot
@@ -61,7 +65,7 @@ impl DecodeFailure {
 
 /// Why the generator's persisted argument schema could not be used to type a transcript.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum WitnessSchemaError {
+enum WitnessSchemaError {
     /// A binding in [`crate::kani_obligations::KaniObligationIdentity::arguments`] is not
     /// [`KaniBindingRole::Argument`].
     ///
@@ -177,19 +181,25 @@ enum CheckKind {
 
 /// The `Check for` line of `block`, found by its anchor rather than by searching the whole block
 /// (Kani appends caller-controlled contract text to the harness doc line, which may contain the
-/// same words): the check kind and the text after its closing backtick.
+/// same words): the check kind and the rest of the BLOCK after the kind's closing backtick.
+/// Kani prints a contract harness's check text across several lines, so the rest of the block,
+/// not of the line, is where the check text's closing quote is looked for.
 fn check_clause<'a>(
     block: &'a str,
     source_id: &str,
     context: &str,
 ) -> Result<(CheckKind, &'a str), DecodeFailure> {
     let missing = || DecodeFailure::new("kani_witness_check_missing", source_id, context);
-    let line = block
-        .lines()
-        .map(str::trim_start)
-        .find(|line| line.starts_with(CHECK_MARKER))
+    let mut offset = 0;
+    let line_start = block
+        .split_inclusive('\n')
+        .find_map(|line| {
+            let start = offset + (line.len() - line.trim_start().len());
+            offset += line.len();
+            line.trim_start().starts_with(CHECK_MARKER).then_some(start)
+        })
         .ok_or_else(missing)?;
-    let (kind, rest) = line[CHECK_MARKER.len()..]
+    let (kind, rest) = block[line_start + CHECK_MARKER.len()..]
         .split_once('`')
         .ok_or_else(missing)?;
     let kind = match kind {
@@ -599,10 +609,10 @@ fn kani_concrete_playback_synthetic() {{\n\
     }
 
     /// MUTATE (both directions): a transcript recorded for one harness must not decode silently
-    /// under a different harness's identity. `Witness::parse`/`Witness::decode` are purely
-    /// positional and never compare the harness symbol a caller declares against the one the
-    /// transcript actually names (see the module doc) — `decode_falsification` is the join that
-    /// adds that comparison, so this is the only place in the crate that can refuse it.
+    /// under a different harness's identity. The block reader and the byte decoder are
+    /// purely positional and never compare the harness symbol a caller declares against the one
+    /// the transcript actually names — `decode_falsification` adds that comparison, so this is
+    /// the only place in the crate that can refuse it.
     ///
     /// Trace: TC-026
     #[test]
@@ -745,6 +755,113 @@ fn kani_concrete_playback_synthetic() {{\n\
         assert_eq!(
             decode(block("cover", 1) + &block("assertion", 7)).expect("one assertion block"),
             vec![("value".to_owned(), WitnessValue::Integer(7))]
+        );
+    }
+
+    /// A contract harness's check text spans several lines; the closing quote is not on the
+    /// `Check for` line. It decodes, and its check text is the whole multi-line text.
+    ///
+    /// Trace: FR-016-AC-1, TC-026
+    #[test]
+    fn decode_falsification_reads_a_multi_line_check_text() {
+        let transcript = synthetic_transcript("mod::h", 42).replace(
+            "\"synthetic assertion\"",
+            "\"first line\n///   second line\n///   third line\"",
+        );
+        let block = read_block(&transcript, "h", "mod").expect("a multi-line check text reads");
+        assert_eq!(
+            block.check_text,
+            "first line\n///   second line\n///   third line"
+        );
+        assert_eq!(
+            decode_falsification(
+                "h",
+                "mod",
+                &[argument("v", KaniPrimitiveType::I64)],
+                &transcript
+            )
+            .expect("decodes"),
+            vec![("v".to_owned(), WitnessValue::Integer(42))]
+        );
+    }
+
+    /// Negative and extreme integers decode from their little-endian bytes.
+    ///
+    /// Trace: TC-026
+    #[test]
+    fn decode_falsification_decodes_negative_and_extreme_integers() {
+        for value in [-1, i64::MIN, i64::MAX] {
+            let transcript = synthetic_transcript("mod::h", value);
+            assert_eq!(
+                decode_falsification(
+                    "h",
+                    "mod",
+                    &[argument("v", KaniPrimitiveType::I64)],
+                    &transcript
+                )
+                .expect("decodes"),
+                vec![("v".to_owned(), WitnessValue::Integer(value))]
+            );
+        }
+    }
+
+    /// Every remaining refusal names its own code: each malformed transcript below breaks
+    /// exactly one rule, so a check that is relaxed, swallowed or re-coded turns one case red.
+    ///
+    /// Trace: TC-026
+    #[test]
+    fn decode_falsification_refuses_each_malformed_transcript_by_code() {
+        let good = synthetic_transcript("mod::h", 42);
+        let one = [argument("v", KaniPrimitiveType::I64)];
+        let code = |transcript: &str, arguments: &[ObligationBinding]| {
+            decode_falsification("h", "mod", arguments, transcript)
+                .expect_err(&format!("must refuse: {transcript}"))
+                .code
+        };
+        let cases: Vec<(String, &str)> = vec![
+            ("no playback".to_owned(), "kani_witness_harness_missing"),
+            (
+                good.replace("/// Check for `assertion`", "/// no clause"),
+                "kani_witness_check_missing",
+            ),
+            (
+                good.replace("`assertion`", "`other`"),
+                "kani_witness_check_kind_refused",
+            ),
+            (
+                good.replace("\"synthetic assertion\"", "no quoted text"),
+                "kani_witness_check_text_missing",
+            ),
+            (
+                good.replace("\"synthetic assertion\"", "\"unterminated"),
+                "kani_witness_check_text_missing",
+            ),
+            (
+                good.replace("let concrete_vals", "let other_vals"),
+                "kani_witness_concrete_vals_missing",
+            ),
+            (
+                good.replace("vec![\n// 42", "vec![\n// 42\nvec![1, 2"),
+                "kani_witness_concrete_vals_malformed",
+            ),
+            (good.replace("// 42\n", ""), "kani_witness_comment_missing"),
+            (
+                good.replace(", 0, 0, 0]", ", 999, 0]"),
+                "kani_witness_byte_invalid",
+            ),
+            (
+                good.replace("0, 0, 0, 0, 0, 0, 0]", "0, 0, 0, 0, 0, 0]"),
+                "kani_witness_width_mismatch",
+            ),
+        ];
+        for (transcript, expected) in &cases {
+            assert_eq!(code(transcript, &one), *expected, "{transcript}");
+        }
+        let mut result_binding = argument("post_state", KaniPrimitiveType::I64);
+        result_binding.role = KaniBindingRole::Result;
+        assert_eq!(
+            code(&good, &[result_binding]),
+            "cg_witness_schema_non_argument_binding"
         );
     }
 }

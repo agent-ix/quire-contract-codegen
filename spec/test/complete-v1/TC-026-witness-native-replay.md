@@ -17,9 +17,9 @@ natively before any failure is reported.
 
 ## Test Procedure
 
-Build a harness's witness schema from its persisted obligation arguments,
-including one non-argument binding, and compare the schema's order with the
-harness's emitted symbolic arguments. Decode a real falsifying transcript
+Read a harness's persisted obligation arguments as the decode schema, including
+one non-argument binding, and compare the schema's order with the harness's
+emitted symbolic arguments. Decode a real falsifying transcript
 against the persisted schema, then against that schema with a binding dropped
 and with a binding retyped. Then replay a reproducing witness, a malformed
 witness, a witness bound to another harness identity, a witness over the decode

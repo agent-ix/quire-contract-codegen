@@ -127,7 +127,7 @@ pub use kani_obligations::{
     ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, ScalarObligationArgument,
     ScalarObligationIdentity, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
-pub use kani_witness_join::{decode_falsification, DecodeFailure, WitnessSchemaError};
+pub use kani_witness_join::{decode_falsification, DecodeFailure};
 pub use publication::{
     write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
     PublicationErrorCode, PublishedBundleIdentity,
