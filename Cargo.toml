@@ -14,13 +14,12 @@ name = "quire_contract_codegen"
 path = "src/lib.rs"
 
 [dependencies]
-quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "a7e019a6d941170d252752e83af99eace7dfca76" }
-quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "ed0a04b482216b79d3559a6ac59e6e260c5591cf", features = ["exact"] }
+quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", branch = "main" }
+quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", branch = "main", features = ["exact"] }
 # qsl-replay is the only QSL crate this repository depends on (QSL arch-lint T12-A); the
 # replay adapter in src/spine_replay.rs goes through its `replay` entry, and the spine test
-# builds its requests from the facade's `call_site` and re-exported types. The rev is whatever
-# QSL main the build should resolve; nothing else reads it.
-qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "1a368fa40412fa6fe475bdb2b294dd61a5498bff" }
+# builds its requests from the current qsl-replay API. It tracks QSL `main`; Cargo.lock records the commit.
+qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", branch = "main" }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"
 syn = { version = "=2.0.119", features = ["full", "visit"] }
@@ -28,10 +27,10 @@ syn = { version = "=2.0.119", features = ["full", "visit"] }
 [dev-dependencies]
 jsonschema = { version = "=0.17.1", default-features = false, features = ["draft202012"] }
 proptest = { version = "=1.5.0", default-features = false, features = ["std"] }
-quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "ed0a04b482216b79d3559a6ac59e6e260c5591cf", features = ["proptest", "exact"] }
+quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", branch = "main", features = ["proptest", "exact"] }
 # The home of the checked-operation catalog Contract IR validates against; tests select law
 # definitions from it instead of copying them.
-quire-verification-contracts = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-verification-contracts", rev = "4c49706d5db3ba77f96088ddcbb2635046246e32" }
+quire-verification-contracts = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-verification-contracts", branch = "main" }
 sha2 = "=0.10.9"
 
 [profile.release]
