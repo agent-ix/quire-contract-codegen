@@ -11,11 +11,7 @@ review_set: subset
 
 ## Summary
 
-**PROPOSAL; coordinator approval required before implementation.** Base is published
-`cd345e1dc0199db9abeac9955fd1bfcc121cddc9`; keep its exact IR
-`93674480c572c237fe87c5d509b17206664bdd62` and runtime
-`e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3` pins in this first slice.
-No producer, schema, proof obligation, or passing coverage row is claimed by this packet.
+**PROPOSAL; coordinator approval required before implementation.** No producer, schema, proof obligation, or passing coverage row is claimed by this packet.
 
 Campaign checkpoint: the coordinator subsequently approved phase A exactly as complete
 unqualified observations. The implementation follows this proposal without promoting a

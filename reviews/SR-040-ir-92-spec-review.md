@@ -2,7 +2,7 @@
 id: "SR-040"
 title: "PR 185 spec review: FR-024, FR-025, ADR-001 to ADR-003, AD-001 rewrite, FR-016 AC split"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@ea19f1fef7317dfc6326ee6feb3785134a11393a; spec/assurance/AD-001-codegen-architecture.md, spec/assurance/MP-001-codegen-measurements.md, spec/decisions/ADR-001-overlapping-generators-and-input-models.md, spec/decisions/ADR-002-backend-adapter-boundary.md, spec/decisions/ADR-003-kani-tractability.md, spec/functional/FR-003-kani-lowering.md, spec/functional/FR-006-shared-assurance-intake.md, spec/functional/complete-v1/FR-016-witness-native-replay.md, spec/functional/complete-v1/FR-017-pinned-kani-execution-evidence.md, spec/functional/complete-v1/FR-018-composite-equality-oracles.md, spec/functional/complete-v1/FR-024-counterexample-envelope-intake.md, spec/functional/complete-v1/FR-025-generated-subject-abi.md, spec/index.md, spec/interface/interface-001-codegen-api.md, spec/stakeholder/StR-001-traceable-generation.md, spec/test-matrix.md, spec/test/complete-v1/TC-026-witness-native-replay.md, spec/test/complete-v1/TC-035-counterexample-envelope-intake.md, spec/test/complete-v1/TC-036-generated-subject-abi.md"
+scope: "agent-ix/quire-contract-codegen; spec/assurance/AD-001-codegen-architecture.md, spec/assurance/MP-001-codegen-measurements.md, spec/decisions/ADR-001-overlapping-generators-and-input-models.md, spec/decisions/ADR-002-backend-adapter-boundary.md, spec/decisions/ADR-003-kani-tractability.md, spec/functional/FR-003-kani-lowering.md, spec/functional/FR-006-shared-assurance-intake.md, spec/functional/complete-v1/FR-016-witness-native-replay.md, spec/functional/complete-v1/FR-017-pinned-kani-execution-evidence.md, spec/functional/complete-v1/FR-018-composite-equality-oracles.md, spec/functional/complete-v1/FR-024-counterexample-envelope-intake.md, spec/functional/complete-v1/FR-025-generated-subject-abi.md, spec/index.md, spec/interface/interface-001-codegen-api.md, spec/stakeholder/StR-001-traceable-generation.md, spec/test-matrix.md, spec/test/complete-v1/TC-026-witness-native-replay.md, spec/test/complete-v1/TC-035-counterexample-envelope-intake.md, spec/test/complete-v1/TC-036-generated-subject-abi.md"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-024
     type: reviews
@@ -138,9 +138,7 @@ repo (FND-007). All are text fixes inside this PR. The LOW findings are editoria
 
 ## Dispositions
 
-Round 1, reviewed at `49e797b5c80fd7f04389dc5a6116e56c26eb28b0`. The fix content is `d8fc593`.
-`49e797b` adds only this file, and it differs from the reviewer's copy in one line: line 62 has
-the two work-package tokens redacted to `WP<n>`.
+Round 1.
 
 | FND | outcome | sha/reason |
 | --- | --- | --- |
@@ -160,7 +158,7 @@ the two work-package tokens redacted to `WP<n>`.
 | FND-014 | fixed d8fc593 | FR-024-AC-2 is a single claim. AC-7 is split into AC-7 and AC-8 (the old AC-8 and AC-9 are now AC-9 and AC-10). FR-025-AC-2 is split into AC-2 and AC-6. The matrix, TC-035 and TC-036 match. |
 | FND-015 | fixed d8fc593 | "Linear IR-309" is removed and the AD-001 no-convergence statement is restored. FR-018 drops "yet". The remaining "no requirement owns" is an Out of Scope fact, not a requirement statement. |
 
-Round 2, reviewed at `55e37de99c0cb5fbd09b4be674a9a2c76d4d0a08` (fix commit `55e37de`).
+Round 2.
 
 | FND | outcome | sha/reason |
 | --- | --- | --- |

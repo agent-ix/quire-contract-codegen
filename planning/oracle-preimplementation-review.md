@@ -11,9 +11,9 @@ review_set: subset
 
 ## Summary
 
-FR-001, interface-001, TC-001 through TC-003, and Task-004 define the first semantic slice. Runtime
-revision `e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3` supplies allocation-free identities and Boolean
-operators. Accepted IR PR #19 merge revision `5c49ebfd1c87415f74420ad047392bd03b1bd202` supplies validated typed
+FR-001, interface-001, TC-001 through TC-003, and Task-004 define the first semantic slice. The runtime
+supplies allocation-free identities and Boolean
+operators. Accepted IR PR #19 supplies validated typed
 expressions, deterministic dependency identities, and the conformance corpus.
 
 ## Verdict

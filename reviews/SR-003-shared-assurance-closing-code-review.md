@@ -3,7 +3,7 @@ id: SR-003
 title: Shared assurance migration closing code review
 type: SpecReview
 analysis: code-review
-scope: "agent-ix/quire-contract-codegen#13 at efb04d3; the independent adversarial review of a63b387's parent, and the disposition of every SR-001 and adversarial finding"
+scope: "agent-ix/quire-contract-codegen#13; the independent adversarial review of a63b387's parent, and the disposition of every SR-001 and adversarial finding"
 review_set: all
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-006
@@ -46,7 +46,6 @@ inputs can produce a green run out of nothing, and for three of the five proofs 
 | MSRV | `rustup run 1.75.0 cargo check --locked --all-targets` clean |
 | Shared pins | 4/4 compatible; 0 artifact digest mismatches; 0 mirror references; **0 incompatible install pins** (was 1); acceptance state `pending_human_acceptance`, reported and not gated on |
 | Assurance chain | **14 scenarios, 6 controls, 7 adapter probes, all matched**; exit 0 |
-| Record digest | `824dcb39c3cce12956114ce66577beb8405f8eb463d85cdcb18de2fc8cb1ac6f` |
 | Receipt | `incomplete`, reason `decision_missing` + `unresolved_unknown`. Correct: no human decision exists and none was synthesized |
 | Compatibility census | **16/16 cases matched**; 44 retained envelopes, all `incompatible`; 2,205 evidence files read; 0 bytes moved; 0 uncommitted differences; floor 2,205/44 met |
 | Compatibility mutation probes | **7/7 detected** |

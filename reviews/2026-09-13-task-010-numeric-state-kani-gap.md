@@ -38,8 +38,7 @@ reverse gap, or stub remains.
   PLAN-001 bundle; spec root `spec/`; matrix `spec/test-matrix.md` (`TM-001`); identity prefix
   `ix://agent-ix/quire-contract-codegen`; implementation `src/oracle.rs`, `src/kani.rs`, and
   `src/lib.rs`; evidence tests `tests/kani_generation.rs`.
-- Reconciliation: `quire coverage --scope . --json` with quire-cli 0.31.0 / engine
-  `ca7362d4dacecb96f01d74d1d971327118c25917`.
+- Reconciliation: `quire coverage --scope . --json` with quire-cli 0.31.0.
 - Targeted tasks done: 1 / 1. PLAN-001 overall is 7 / 10 tasks done after integrating the merged
   strategy Task-008/009 work; Task-005, Task-006, and the human-owned Task-007 remain explicitly
   outside this ticket and are not claimed complete.

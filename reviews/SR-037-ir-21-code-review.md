@@ -2,7 +2,7 @@
 id: "SR-037"
 title: "IR-21 code review (incl. rust-review lane): skeleton spine through Kani to QSL replay"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@d2987efc51b1d34aabda0dbd909663e9b884feef; Cargo.toml, Cargo.lock, Makefile, src/kani_execution.rs, src/kani_module_gate.rs, src/kani_transcript.rs, src/lib.rs, src/spine_replay.rs, tests/fixtures/skeleton_spine/claimed-modules.txt, tests/it/kani_obligations.rs, tests/it/main.rs, tests/it/skeleton_spine.rs"
+scope: "agent-ix/quire-contract-codegen; Cargo.toml, Cargo.lock, Makefile, src/kani_execution.rs, src/kani_module_gate.rs, src/kani_transcript.rs, src/lib.rs, src/spine_replay.rs, tests/fixtures/skeleton_spine/claimed-modules.txt, tests/it/kani_obligations.rs, tests/it/main.rs, tests/it/skeleton_spine.rs"
 relationships: []
 ---
 
@@ -130,7 +130,7 @@ built from src. Fix both, or disposition them with a ticket, before merge.
 
 ## Dispositions
 
-Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546` (fix commit `728e431`).
+Round 1.
 
 | FND | outcome | sha/reason |
 | --- | --- | --- |
@@ -141,7 +141,7 @@ Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546` (fix commit `728
 | FND-005 | fixed 728e431 | `tc_026_each_adapter_refusal_is_its_own_typed_error` covers FieldDelimiter, Transcript, Refused (stale package_id) and WrongArm. `tc_026_a_boolean_value_replays_as_zero_or_one` replays false (reproduced) and true (inconclusive). |
 | FND-006 | fixed 728e431 | The skeleton_spine module doc, FR-023 and TC-034 Status now state that the prover spine is an ignored `make kani` test outside `make ci`. |
 
-Round 2, reviewed at `9e1787611dac0bf29bacec38dff4804e2f3c86ce` (fix commit `9e17876`).
+Round 2.
 
 | FND | outcome | sha/reason |
 | --- | --- | --- |

@@ -36,8 +36,7 @@ selected slice.
 
 ## Coverage
 
-- Reconciliation uses `quire coverage --scope . --json` with Quire CLI 0.31.0 / engine
-  `ca7362d4dacecb96f01d74d1d971327118c25917`.
+- Reconciliation uses `quire coverage --scope . --json` with Quire CLI 0.31.0.
 - Selected tasks done: 2 / 2 — Task-008 and Task-009.
 - Selected criteria and constraints backed: 34 / 34 — FR-008 7/7, FR-009 6/6, FR-010 5/5,
   FR-011 5/5, FR-012 4/4, FR-013 5/5, and NFR-004 2/2.

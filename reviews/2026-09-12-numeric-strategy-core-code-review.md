@@ -3,7 +3,7 @@ id: SR-014
 title: "Numeric strategy core closing code review"
 type: SpecReview
 analysis: code-review
-scope: "Task-008 at fa1b682: FR-009, FR-010, FR-012-AC-1 through FR-012-AC-3, and NFR-004-AC-2"
+scope: "Task-008: FR-009, FR-010, FR-012-AC-1 through FR-012-AC-3, and NFR-004-AC-2"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/Task-008

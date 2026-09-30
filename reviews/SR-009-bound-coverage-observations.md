@@ -11,7 +11,7 @@ review_set: subset
 
 ## Summary
 
-Base is published PR #27 `cd345e1dc0199db9abeac9955fd1bfcc121cddc9`.
+Base is published PR #27.
 The design was committed as `5104b3b` and explicitly approved for phase A only.
 Four initial aggregate controls were banked at `d34823b` before the new API existed;
 their first run failed at the absent imports, not by passing a smaller population.
@@ -91,7 +91,7 @@ adopted records are not rewritten into current execution claims by this phase.
 
 ## Exact-head review checkpoint
 
-At `ec5c38b4ca9b8e42eb2fc6a93ba5d39bb537fd99`, all 50 selected tests passed
+All 50 selected tests passed
 on stable and Rust 1.75.0: 9 unit, 9 aggregate, 7 bound generation, 5 harness,
 10 oracle, 5 strategy, and 5 primitive tests. Both actual LLVM fixtures ran in
 each suite. All-target Clippy, rustdoc with denied warnings, formatting, unsafe

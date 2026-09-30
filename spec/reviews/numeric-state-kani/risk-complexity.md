@@ -3,14 +3,14 @@ id: SR-019
 title: "Risk and complexity review of numeric and state Kani lowering"
 type: SpecReview
 analysis: risk-complexity
-scope: "StR-001, FR-003, NFR-001, NFR-002 and pinned Kani/IR/runtime boundaries"
+scope: "StR-001, FR-003, NFR-001, NFR-002 and Kani/IR/runtime boundaries"
 review_set: subset
 ---
 
 ## Summary
 
 FR-003's numeric/state increment is high technical risk and medium external-contract volatility: it
-introduces a generalized symbolic ABI on unstable pinned Kani syntax and must preserve exact oracle
+introduces a generalized symbolic ABI on unstable Kani syntax and must preserve exact oracle
 semantics. The narrow comparison grammar, v2 adapter, actual cargo-kani runs, and independent corpus
 checks are the named mitigations.
 
@@ -25,7 +25,7 @@ checks are the named mitigations.
 | Requirement | Technical risk | Volatility | Drivers | Mitigation |
 | --- | --- | --- | --- | --- |
 | StR-001-VC-2 | medium | low | Cross-backend semantic agreement can be tautological when renderers are shared | Reuse exact predicates but independently evaluate the bounded corpus and retain downstream native replay |
-| FR-003-AC-2/5/6/7 | high | medium | First generalized Boolean/i64 Kani ABI; function-contract and concrete-playback syntax is unstable | Pin cargo-kani 0.67.0 and executable digest, isolate v2 adapter, compile generated crates, run healthy and falsifying exact harnesses |
+| FR-003-AC-2/5/6/7 | high | medium | First generalized Boolean/i64 Kani ABI; function-contract and concrete-playback syntax is unstable | Isolate v2 adapter, compile generated crates, run healthy and falsifying exact harnesses |
 | FR-003-AC-3 | medium | low | Unsupported typed shapes could fall through to unconstrained values | Closed grammar, stable refusal mapping, exact SourceSpan, negative mutation corpus, no partial bundle |
 | FR-003-AC-4/8 | medium | low | Typed binding order, options or schema identity can drift nondeterministically | Canonical dependency key/order, v2 schemas, full option vector, repeated byte comparison, preserve v1 files |
 | NFR-001-AC-1 | low | low | Additional tuple/domain metadata can perturb bytes | Normalized-order permutation and byte-identical regeneration |

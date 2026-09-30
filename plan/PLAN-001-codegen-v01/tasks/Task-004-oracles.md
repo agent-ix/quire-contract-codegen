@@ -13,7 +13,7 @@ relationships:
 
 ## Scope
 
-Complete issue #4's numeric/state slice against the exact pinned IR revision: extend deterministic
+Complete issue #4's numeric/state slice: extend deterministic
 per-clause Rust Boolean oracles from the merged Boolean grammar to obligation-free bounded-integer
 comparisons over direct input and current/pre/post state observations. Preserve typed `bool`/`i64`
 dependency signatures, source maps, and one Quoin ProofAttestationV1 body per output.
@@ -32,9 +32,7 @@ dependency signatures, source maps, and one Quoin ProofAttestationV1 body per ou
 
 ## Guard
 
-Task-003 is complete. `main` pins IR revision
-`04eb6f849c03be23177d373549c6c272551f957d` and runtime revision
-`8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354`. The undefined-result ruling permits only Boolean-root
+Task-003 is complete. The undefined-result ruling permits only Boolean-root
 comparison clauses with no definedness obligations in this slice. The numeric/state acceptance
 criteria pass on stable and Rust 1.75.0, and exact-head Rust review plus gap analysis closed the
 slice without a retained implementation gap.

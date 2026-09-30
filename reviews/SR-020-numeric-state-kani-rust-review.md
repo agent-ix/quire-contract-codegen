@@ -3,7 +3,7 @@ id: SR-020
 title: "Numeric and state Kani Rust review"
 type: SpecReview
 analysis: code-review
-scope: "agent-ix/quire-contract-codegen#2 numeric/state slice integrated with origin/main@b3af1c6 through a8e5c13"
+scope: "agent-ix/quire-contract-codegen#2 numeric/state slice integrated with origin/main"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-003
@@ -58,14 +58,12 @@ on the clean integrated candidate.
   `CARGO_TARGET_DIR=target-codex-backends`: pass.
 - Stable `cargo test --locked` with the prescribed pinned assurance inputs: 94 passed, 0 failed.
 - Exact Rust 1.75.0 `cargo +1.75.0 test --locked`: 94 passed, 0 failed.
-- SUITE-008 actual backend: cargo-kani 0.67.0; executable SHA-256
-  `7f143a251d11c7e6e232bbf2cbccf56f9ce66a5f0107eeb3008698e6715f55d9`; healthy mixed and
+- SUITE-008 actual backend: cargo-kani 0.67.0; healthy mixed and
   ConfigVersion-style identity proofs pass; changed-state and strict-comparison subjects print
   concrete counterexamples.
 - Generated option identity: `-Z function-contracts`, optional `-Z stubbing`,
   `-Z concrete-playback`, exact harness, unwind, `cadical`, regular output, and printed playback.
-- Pinned local assurance tools: quire-cli 0.31.0 / engine
-  `ca7362d4dacecb96f01d74d1d971327118c25917`, Quoin 0.23.1, ix-flow 0.0.4, and Engineering
+- Local assurance tools: quire-cli 0.31.0, Quoin 0.23.1, ix-flow 0.0.4, and Engineering
   Assurance 0.2.0; the full shared-assurance suite passes outside the sandboxed process-spawn
   restriction.
 - `cargo deny check`: advisories, bans, licenses, and sources pass; only the existing unmatched

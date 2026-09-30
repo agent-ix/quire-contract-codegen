@@ -3,7 +3,7 @@ id: SR-004
 title: Shared assurance migration closing gap analysis
 type: SpecReview
 analysis: gap-analysis
-scope: "agent-ix/quire-contract-codegen#13 at efb04d3; FR-006 coverage after the adversarial review, and the honest reach of every claim this change makes"
+scope: "agent-ix/quire-contract-codegen#13; FR-006 coverage after the adversarial review, and the honest reach of every claim this change makes"
 review_set: all
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-006

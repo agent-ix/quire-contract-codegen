@@ -2,7 +2,7 @@
 id: "SR-035"
 title: "IR-303 code review (incl. rust-review lane): routed scalar Kani harness verifies"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@ccd4edc9773eaaab6402cc41ecc16eddcae755bb; src/exact_scalar.rs, src/oracle.rs, Cargo.toml, Cargo.lock, tests/it/kani_obligations.rs, spec/test/complete-v1/TC-027-pinned-kani-execution-evidence.md, tests/fixtures/{composite_equality,exact_function,exact_scalar}/{Cargo.toml.golden,claim-map.json.golden}"
+scope: "agent-ix/quire-contract-codegen; src/exact_scalar.rs, src/oracle.rs, Cargo.toml, Cargo.lock, tests/it/kani_obligations.rs, spec/test/complete-v1/TC-027-pinned-kani-execution-evidence.md, tests/fixtures/{composite_equality,exact_function,exact_scalar}/{Cargo.toml.golden,claim-map.json.golden}"
 relationships: []
 ---
 

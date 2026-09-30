@@ -2,7 +2,7 @@
 id: "SR-036"
 title: "IR-303 gap analysis: routed scalar Kani harness verifies"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@ccd4edc9773eaaab6402cc41ecc16eddcae755bb; src/exact_scalar.rs, src/oracle.rs, tests/it/kani_obligations.rs, spec/test/complete-v1/TC-027-pinned-kani-execution-evidence.md"
+scope: "agent-ix/quire-contract-codegen; src/exact_scalar.rs, src/oracle.rs, tests/it/kani_obligations.rs, spec/test/complete-v1/TC-027-pinned-kani-execution-evidence.md"
 relationships: []
 ---
 

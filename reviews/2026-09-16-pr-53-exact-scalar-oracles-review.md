@@ -3,7 +3,7 @@ id: SR-030
 title: "PR 53 exact scalar oracles review"
 type: SpecReview
 analysis: gap-analysis
-scope: "PR #53 at f10587897f0d46727b6eae9b0670264646626ec4; FR-014 and TC-024 (implementation); FR-015 and FR-016 (spec text only)"
+scope: "PR #53; FR-014 and TC-024 (implementation); FR-015 and FR-016 (spec text only)"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-014

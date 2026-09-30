@@ -3,7 +3,7 @@ id: SR-018
 title: "PR 30 numeric strategy Rust review"
 type: SpecReview
 analysis: code-review
-scope: "PR #30 at 1f49184: Task-008 and Task-009 numeric strategy slice"
+scope: "PR #30: Task-008 and Task-009 numeric strategy slice"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/Task-008

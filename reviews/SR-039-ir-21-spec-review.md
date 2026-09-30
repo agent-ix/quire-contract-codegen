@@ -2,7 +2,7 @@
 id: "SR-039"
 title: "IR-21 spec review: FR-016 AC-9, FR-023, TC-034, interface-001, matrix, index"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@d2987efc51b1d34aabda0dbd909663e9b884feef; spec/functional/complete-v1/FR-016-witness-native-replay.md, spec/functional/complete-v1/FR-023-claimed-module-proof-gate.md, spec/test/complete-v1/TC-026-witness-native-replay.md, spec/test/complete-v1/TC-034-claimed-module-proof-gate.md, spec/interface/interface-001-codegen-api.md, spec/test-matrix.md, spec/index.md"
+scope: "agent-ix/quire-contract-codegen; spec/functional/complete-v1/FR-016-witness-native-replay.md, spec/functional/complete-v1/FR-023-claimed-module-proof-gate.md, spec/test/complete-v1/TC-026-witness-native-replay.md, spec/test/complete-v1/TC-034-claimed-module-proof-gate.md, spec/interface/interface-001-codegen-api.md, spec/test-matrix.md, spec/index.md"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-023
     type: reviews
@@ -45,7 +45,7 @@ adapter does, or move request construction into the generator. The rest is minor
 
 ## Dispositions
 
-Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546`.
+Round 1.
 
 | FND | outcome | sha/reason |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546`.
 | FND-003 | fixed 728e431 | FR-016 Dependencies now names qsl-replay as the only QSL crate src/ calls, and describes the test-only exception, the qsl-foundation/quire-exact dev-deps and its end condition. |
 | FND-004 | fixed 728e431 | "Step 1 is" is fixed, the duplicate "AC-8 is backed" is removed, and the test procedure is removed from FR-023 Behavior. The TC-034 row move introduced a new defect, recorded as FND-005. |
 
-Round 2, reviewed at `9e1787611dac0bf29bacec38dff4804e2f3c86ce` (fix commit `9e17876`).
+Round 2.
 
 | FND | outcome | sha/reason |
 | --- | --- | --- |

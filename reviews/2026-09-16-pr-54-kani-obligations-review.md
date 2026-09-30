@@ -3,7 +3,7 @@ id: SR-031
 title: "PR 54 separate Kani obligations review"
 type: SpecReview
 analysis: gap-analysis
-scope: "PR #54 at 36486e90be4761e3e96e06c3d70d0cafb2a25a0c; FR-015 and TC-025 (slice A); Contract IR FR-036 ACs claimed"
+scope: "PR #54; FR-015 and TC-025 (slice A); Contract IR FR-036 ACs claimed"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-015

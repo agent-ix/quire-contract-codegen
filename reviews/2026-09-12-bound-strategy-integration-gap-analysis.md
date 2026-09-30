@@ -33,8 +33,7 @@ implementation, evidence, or specification gap remains.
 
 ## Coverage
 
-- Reconciliation: `quire coverage --scope . --json` with Quire CLI 0.31.0 / engine
-  `ca7362d4dacecb96f01d74d1d971327118c25917`.
+- Reconciliation: `quire coverage --scope . --json` with Quire CLI 0.31.0.
 - Task-009 tasks done: 1 / 1; numeric-strategy tasks done: 2 / 2.
 - Selected criteria and constraints backed: 34 / 34 — FR-008 7/7, FR-009 6/6, FR-010 5/5,
   FR-011 5/5, FR-012 4/4, FR-013 5/5, and NFR-004 2/2.

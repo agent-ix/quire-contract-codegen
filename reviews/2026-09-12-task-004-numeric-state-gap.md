@@ -36,8 +36,7 @@ stub remains in the Task-004 scope.
 - Target selection: PLAN-001 Task-004, the independently reviewable issue #4 increment. PLAN-001
   overall is 4/7 tasks done; Tasks 005–007 remain explicitly outside this ticket and are not claimed
   complete.
-- Reconciliation: `quire coverage` with quire-cli 0.31.0 / engine
-  `ca7362d4dacecb96f01d74d1d971327118c25917`.
+- Reconciliation: `quire coverage` with quire-cli 0.31.0.
 - Targeted tasks done: 1 / 1.
 - FR-001 acceptance criteria backed by bound Rust tests: 8 / 8.
 - Test Matrix test-case rows backed by bound Rust tests: 12 / 12; overall reconciled rows are 40 / 59

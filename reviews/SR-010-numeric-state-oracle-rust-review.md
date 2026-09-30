@@ -3,7 +3,7 @@ id: SR-010
 title: "Numeric and state oracle Rust review"
 type: SpecReview
 analysis: code-review
-scope: "agent-ix/quire-contract-codegen#4 numeric/state slice at 3bc7e60; origin/main..3bc7e60"
+scope: "agent-ix/quire-contract-codegen#4 numeric/state slice"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-001

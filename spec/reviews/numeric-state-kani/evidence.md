@@ -29,8 +29,7 @@ analysis methods provide solver evidence but do not replace the observable contr
 refusal, parity, and identity assertions in TC-003/005/007/014. Therefore the requirement methods
 remain `Test`, while SUITE-008 correctly records `Analysis` evidence for the actual cargo-kani runs.
 
-SUITE-008 pins cargo-kani 0.67.0, target directory, exact harness/options, executable digest, schemas,
-typed ABI/domains, proof success, proof failure, printed concrete playback, and independent oracle
+SUITE-008 covers harness options, schemas, typed ABI/domains, proof success, proof failure, printed concrete playback, and independent oracle
 checks. Its planned 0, 1000, -1, and 1001 cases cover both model endpoints and adjacent outside
 controls. TM-001 truthfully retains every numeric/state row as Planned; current Boolean test symbols
 do not discharge TC-014. Native `runtime::execute` replay remains downstream IT-010 evidence.

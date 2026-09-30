@@ -13,7 +13,7 @@ relationships:
 
 ## Statement
 
-- Every generated Rust file shall name the generator and the requirement, revision and clause it was
+- Every generated Rust file shall name the generator and the requirement and clause it was
   generated from.
 - Generated Rust shall carry `MIT OR Apache-2.0` SPDX identity.
 - No automated output shall claim project-specific validation, accreditation, certification, or human release approval.
@@ -39,7 +39,7 @@ would exceed the tool's authority and hide consuming-project responsibilities.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| NFR-002-AC-1 | Every generated Rust file's header names the generator and the requirement, revision and clause it was generated from. | Test (TC-001) |
+| NFR-002-AC-1 | Every generated Rust file's header names the generator and the requirement and clause it was generated from. | Test (TC-001) |
 | NFR-002-AC-2 | Every generated Rust file carries the `MIT OR Apache-2.0` SPDX identity. | Test (TC-001) |
 | NFR-002-AC-3 | Unsupported and inconclusive states remain explicit rather than silently succeeding. | Test (TC-003) |
 | NFR-002-AC-4 | Generated output makes no project-specific validation, accreditation, certification, or release-approval claim. | Inspection |

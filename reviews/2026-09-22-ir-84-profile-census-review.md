@@ -44,9 +44,7 @@ the strength of the new test and the accuracy of the surrounding documentation.
 its `review_policy` requires `code-review` and `gap-analysis`, both performed here, and its impact
 scenarios name "silent construct loss" and "pass/rejection conflation" — exactly the defect IR-84
 closes and the residual ambiguity FND-003 records. Evaluated source: working tree of
-`/Users/peter/dev/quire-contract-codegen/worktrees/ir-84-profile-census`, uncommitted, based on
-`origin/main` f716300; pinned upstream `quire-contract-ir` rev
-`97f50655c48f48be0bf5ab04dff5aac029c3745c` per `Cargo.toml` and `Cargo.lock`.
+`/Users/peter/dev/quire-contract-codegen/worktrees/ir-84-profile-census`, uncommitted.
 
 Unavailable context: no shared-assurance producer output was regenerated for this review, so no
 `make assurance-inputs` / `assurance-chain` evidence was examined; `make test`'s assurance-inputs

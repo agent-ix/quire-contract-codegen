@@ -3,7 +3,7 @@ id: "SR-033"
 title: "IR-301 code review and Rust review: routed scalar harness execution"
 type: SpecReview
 schema_version: "1.0"
-scope: "agent-ix/quire-contract-codegen@5f8dd9f; src/kani_execution.rs, src/lib.rs, tests/it/kani_obligations.rs, tests/it/kani_witness_join.rs, spec/functional/complete-v1/FR-017-pinned-kani-execution-evidence.md, spec/functional/complete-v1/FR-022-routed-generation.md, spec/test/complete-v1/TC-027-pinned-kani-execution-evidence.md, spec/test-matrix.md"
+scope: "agent-ix/quire-contract-codegen; src/kani_execution.rs, src/lib.rs, tests/it/kani_obligations.rs, tests/it/kani_witness_join.rs, spec/functional/complete-v1/FR-017-pinned-kani-execution-evidence.md, spec/functional/complete-v1/FR-022-routed-generation.md, spec/test/complete-v1/TC-027-pinned-kani-execution-evidence.md, spec/test-matrix.md"
 relationships: []
 ---
 

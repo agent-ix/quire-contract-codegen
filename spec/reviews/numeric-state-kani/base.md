@@ -28,7 +28,7 @@ FR-003 is directly covered by StR-001 and constrained by NFR-001 and NFR-002. Th
 no US artifacts, so the user-story checklist creates no missing local story edge. Every FR-003
 criterion maps to TC-003, TC-005, TC-007, or TC-014; TC-014 covers Boolean and all six integer
 comparisons, zero/one/multiple result shapes, direct current/pre/post observations, 0 and 1000 model
-endpoints, -1 and 1001 controls, proof success, falsifying playback, dependency states, exact pins,
+endpoints, -1 and 1001 controls, proof success, falsifying playback, dependency states,
 and unsupported inputs. Optional stubbing and non-stubbing configurations are both present.
 
 TC-014 and all numeric/state FR-003 matrix rows remain Planned. Quire reports no status lies for the

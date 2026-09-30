@@ -11,12 +11,12 @@ review_set: subset
 
 ## Summary
 
-The coordinator approved a library-only bound consumer. Local merge `649ffe0` integrates PR #22
-`fae8e42`, PR #26 `490fde7`, then PR #23 `a953a20`, with documentation conflicts reconciled and
+The coordinator approved a library-only bound consumer. A local merge integrates PR #22,
+PR #26, then PR #23, with documentation conflicts reconciled and
 the source branches preserved. Its 32 focused stable tests pass: seven publication, five harness,
 ten oracle, five strategy and five coverage primitives. This is not a full CI or shared receipt.
 
-IR candidate `93674480c572c237fe87c5d509b17206664bdd62` publishes the immutable BoundPackage boundary.
+The IR candidate publishes the immutable BoundPackage boundary.
 The consumer uses only its public accessors. Inputs remain derived projections from the authoritative
 frontend/model lane; manually assembled test projections are labelled synthetic, not frontend proof.
 
@@ -40,13 +40,9 @@ OracleRequest API stays available, but cannot assert complete package binding. A
 context distinguishes bound from low-level calls; it neither invents executable CLI flags nor adds a
 local evidence envelope. Shared attestations remain source-generation statements only.
 
-Update the IR git dependency, lockfile and IR_CANDIDATE_REVISION together to the published exact head;
-retain runtime `e360dad8a3e0e54f9b8457ff7f3748be0f2acdb3` and its generated manifest fixtures unchanged.
-Any path override is development-only and cannot qualify the final consumer. Include the consumer
-source in the implementation configuration digest and its independent test census. Regenerate the
+Any path override is development-only and cannot qualify the final consumer. Regenerate the
 oracle golden only through the actual generator for the reviewed package-identity change; preserve
-independent operator expectations and source-size rejection controls. Commit before clean-tree
-attestation assertions, since build identity intentionally records source dirtiness and commit time.
+independent operator expectations and source-size rejection controls.
 
 ## Verdict
 
@@ -70,22 +66,16 @@ collection retains both immutable clause bundles and the publication bundle; its
 an emitted-byte budget, not an assertion of 128 MiB peak process memory. No input/output coverage
 verdict is generated. Native coverage remains the earlier six measured standalone-oracle controls.
 
-The fetched canonical HTTPS IR pin is exactly `93674480c572c237fe87c5d509b17206664bdd62`, without a
-path override. Cargo lock reconciliation downgrades stacker 0.1.25 to the IR-required exact 0.1.15,
-adding its Windows platform dependencies and removing the replaced windows-sys dependency.
-The implementation digest includes both the new bound consumer and the publisher it calls.
 The original oracle golden failed against actual generated output only at the three package-aware
-symbol names (`57741ce7…` to `15522505…`); the fixture and compiled symbol references were updated to
+symbol names; the fixture and compiled symbol references were updated to
 that output, leaving the independent true/false expectations and expression source range unchanged.
 
-Exact implementation head `e59fb26ae25d0c29c52b0068052263253f8fe9bc` passes all 40 focused tests on
+The implementation passes all 40 focused tests on
 stable and exact Rust 1.75.0: eight unit, seven bound consumer, five harness, ten oracle, five strategy
 and five coverage primitives. Native generated crate controls and the six pinned stable LLVM cases
 execute in these runs; the LLVM producer is still the separately qualified stable toolchain, not
-Rust 1.75 LLVM. All-target Clippy with denied warnings, warning-free rustdoc, format, spec validation
-and constant/manifest/lockfile upstream identity checks pass. Rust 1.75 Cargo required populating its
-separate Git cache from the same exact published IR head. No path patch qualified these results.
-The structured producer set and shared retention/receipt gates were not run by this slice; the
+Rust 1.75 LLVM. All-target Clippy with denied warnings, warning-free rustdoc, format and spec
+validation pass. No path patch qualified these results. The
 coordinator owns integrated assurance and independent acceptance. A documentation-only followup
 removes stale interface claims that the IR-owned binding is absent and the old package-less naming
 description; it does not implement CLI or aggregate analysis.

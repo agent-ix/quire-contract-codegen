@@ -54,7 +54,6 @@ accounting, and emit the complete consumer bundle with its Quoin proof attestati
 
 ## Notes
 
-- Task-004's codegen #4 implementation landed as PR #29 at `e0be330`; this branch consumes that
-  merged revision and retains the matrix changes from both work streams.
+- Task-004's codegen #4 implementation landed as PR #29; this branch retains the matrix changes from both work streams.
 - Closing Rust review SR-016 and gap analysis SR-017 found and repaired incomplete TC-017,
   TC-020, and TC-022 controls before approving all 34 slice criteria.

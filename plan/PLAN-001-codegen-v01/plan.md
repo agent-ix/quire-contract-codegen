@@ -108,11 +108,9 @@ Task-004 -> Task-010 numeric/state Kani -> SL IT-010
 
 Task-003's dependency gate is complete. `main` now carries the shared-assurance migration, the
 deterministic oracle slice, the issue #3 harness/proptest remediation (PR #22), atomic publication
-(PR #26), the bounded vacuity observation primitives (PR #23) and the bounded Kani slice (PR #25),
-pinned against IR `04eb6f849c03be23177d373549c6c272551f957d` and runtime
-`8a4d02b9ff4633cf6d02fd8bdf6ee1b11ad76354`.
+(PR #26), the bounded vacuity observation primitives (PR #23) and the bounded Kani slice (PR #25).
 
-That IR revision binds executable expressions through the public API, so Task-006's
+The IR binds executable expressions through the public API, so Task-006's
 serialized-package generation is no longer blocked on the binding itself; what remains is the
 serialized CLI surface and cross-backend parity. Task-004 is complete, while Task-005 remains in
 progress until its remaining semantic acceptance criteria and current-head review findings close.

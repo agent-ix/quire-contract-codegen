@@ -2,7 +2,7 @@
 id: "SR-041"
 title: "PR 186 spec review: ADR-001 to ADR-004 accepted, FR-001/FR-003/FR-007 retired, FR-026 to FR-029"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@a7c91f13bfb1f68f91a88c7a6c83c9184fd251cd; spec/assurance/AD-001-codegen-architecture.md, spec/decisions/ADR-001-overlapping-generators-and-input-models.md, spec/decisions/ADR-002-backend-adapter-boundary.md, spec/decisions/ADR-003-kani-tractability.md, spec/decisions/ADR-004-generated-subject-abi-open-decisions.md, spec/functional/FR-001-deterministic-oracles.md, spec/functional/FR-003-kani-lowering.md, spec/functional/FR-007-bounded-kani-profile-corpus.md, spec/functional/complete-v1/FR-014-exact-scalar-oracles.md, spec/functional/complete-v1/FR-015-bounded-kani-obligations.md, spec/functional/complete-v1/FR-017-pinned-kani-execution-evidence.md, spec/functional/complete-v1/FR-022-routed-generation.md, spec/functional/complete-v1/FR-024-counterexample-envelope-intake.md, spec/functional/complete-v1/FR-025-generated-subject-abi.md, spec/functional/complete-v1/FR-026-backend-adapter-contract.md, spec/functional/complete-v1/FR-027-single-version-profile.md, spec/functional/complete-v1/FR-028-bounded-proof-ceilings.md, spec/functional/complete-v1/FR-029-run-outcome-terminal-record.md, spec/index.md, spec/test-matrix.md, spec/test/TC-005-proof-dependencies.md, spec/test/TC-014-numeric-state-kani.md, spec/test/TC-023-bounded-kani-profile-corpus.md, spec/test/complete-v1/TC-024-exact-scalar-oracles.md, spec/test/complete-v1/TC-025-bounded-kani-obligations.md, spec/test/complete-v1/TC-036-generated-subject-abi.md, spec/test/complete-v1/TC-037-backend-adapter-contract.md, spec/test/complete-v1/TC-038-single-version-profile.md, spec/test/complete-v1/TC-039-bounded-proof-ceilings.md, spec/test/complete-v1/TC-040-run-outcome-terminal-record.md"
+scope: "agent-ix/quire-contract-codegen; spec/assurance/AD-001-codegen-architecture.md, spec/decisions/ADR-001-overlapping-generators-and-input-models.md, spec/decisions/ADR-002-backend-adapter-boundary.md, spec/decisions/ADR-003-kani-tractability.md, spec/decisions/ADR-004-generated-subject-abi-open-decisions.md, spec/functional/FR-001-deterministic-oracles.md, spec/functional/FR-003-kani-lowering.md, spec/functional/FR-007-bounded-kani-profile-corpus.md, spec/functional/complete-v1/FR-014-exact-scalar-oracles.md, spec/functional/complete-v1/FR-015-bounded-kani-obligations.md, spec/functional/complete-v1/FR-017-pinned-kani-execution-evidence.md, spec/functional/complete-v1/FR-022-routed-generation.md, spec/functional/complete-v1/FR-024-counterexample-envelope-intake.md, spec/functional/complete-v1/FR-025-generated-subject-abi.md, spec/functional/complete-v1/FR-026-backend-adapter-contract.md, spec/functional/complete-v1/FR-027-single-version-profile.md, spec/functional/complete-v1/FR-028-bounded-proof-ceilings.md, spec/functional/complete-v1/FR-029-run-outcome-terminal-record.md, spec/index.md, spec/test-matrix.md, spec/test/TC-005-proof-dependencies.md, spec/test/TC-014-numeric-state-kani.md, spec/test/TC-023-bounded-kani-profile-corpus.md, spec/test/complete-v1/TC-024-exact-scalar-oracles.md, spec/test/complete-v1/TC-025-bounded-kani-obligations.md, spec/test/complete-v1/TC-036-generated-subject-abi.md, spec/test/complete-v1/TC-037-backend-adapter-contract.md, spec/test/complete-v1/TC-038-single-version-profile.md, spec/test/complete-v1/TC-039-bounded-proof-ceilings.md, spec/test/complete-v1/TC-040-run-outcome-terminal-record.md"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/ADR-001
     type: reviews
@@ -143,8 +143,7 @@ editorial.
 
 ## Dispositions
 
-Round 1, reviewed at `41a25a86e62b5833309787a0a73ce042a7622085`. The fix commits are `52e5e2d`
-and `41a25a8`, which only rewords one FR-028 line into EARS form. The rulings in force at this
+Round 1. The rulings in force at this
 round: the IR-313 correction 2 comment keeps vacuous mapped to `Proved { success_checks: 0 }` and
 asks QSL for nothing. I checked this at `qsl-replay` `20ba521`. `TerminalValue::category()` returns
 `Inconclusive` for `Proved { success_checks: 0 }`, and `vacuous_proof_cause()` returns
@@ -200,7 +199,6 @@ Not mergeable until FND-012 is fixed or deferred with a reason. FND-013 is edito
 
 ### Round 2
 
-Reviewed at 9450154718f000239b83078136153fde09df15b5, against main 6f4beea.
 - `make spec` exits 0 on both.
 - `quire coverage --strict` exits 1 on both: main backs 198 of 265 rows, head 197 of 291.
 - The one row that lost backing is FR-017-AC-10, which was deleted (FND-017).
@@ -233,7 +231,6 @@ Not mergeable. FND-014, FND-015 and FND-016 are high.
 
 ### Round 3
 
-Reviewed at 08848c040738dae9b7aa7008c54670ca4210ea02, against main fc99f61.
 - `make spec` exits 0 on both. The only warning is the existing FR-014 EARS warning, now at line 278.
 - The FR-018 rewrite raises no EARS warning.
 - `quire coverage --strict` exits 1 on both: main backs 198 of 265 rows, head 176 of 269, and `status_lies` is 0.
@@ -276,8 +273,6 @@ Not mergeable. FND-023 is high: 99 code and test tags point at the deleted FR-00
 
 ### Round 4
 
-Reviewed at edbd1b5cdcae77b70fb4adcdc5b54ff68a40871c, rebased on main fc99f61.
-
 Gates (log directory: `logs/p186r4`):
 
 | Gate | Head | Main |
@@ -310,7 +305,6 @@ FND-021 and FND-023 to FND-025 are fixed, and the code diff is comment-only. Not
 
 ### Round 5
 
-Reviewed at a5ace39ec9f894106c3370c8af15bdbbae07fe87 against main fc99f61 (log dir `logs/p186r5`).
 
 | Gate | Head a5ace39 | Main fc99f61 |
 | --- | --- | --- |

@@ -11,7 +11,7 @@ review_set: subset
 
 ## Summary
 
-PR #23 at `46285ad5da502f363782a22842d1bbb3c732db4e` was specification-only. The recovery
+PR #23 was specification-only. The recovery
 reproduces/adjudicates its review rather than treating every proposed fix as implementation authority.
 Only source probes, bounded LLVM reading, measured classification, native fixtures and unambiguous
 spec repairs are implemented. Bound aggregate analysis remains dependent on IR #50 and native

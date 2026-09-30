@@ -3,7 +3,7 @@ id: SR-016
 title: "Bound strategy integration closing code review"
 type: SpecReview
 analysis: code-review
-scope: "Task-009 at 4228611: FR-008 through FR-013 and NFR-004"
+scope: "Task-009: FR-008 through FR-013 and NFR-004"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/Task-009

@@ -2,7 +2,7 @@
 id: "SR-038"
 title: "IR-21 gap analysis: acceptance criteria to tests"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@d2987efc51b1d34aabda0dbd909663e9b884feef; src/spine_replay.rs, src/kani_module_gate.rs, src/kani_transcript.rs, src/kani_execution.rs, tests/it/skeleton_spine.rs, spec/functional/complete-v1/FR-016-witness-native-replay.md, spec/functional/complete-v1/FR-023-claimed-module-proof-gate.md, spec/test/complete-v1/TC-026-witness-native-replay.md, spec/test/complete-v1/TC-034-claimed-module-proof-gate.md"
+scope: "agent-ix/quire-contract-codegen; src/spine_replay.rs, src/kani_module_gate.rs, src/kani_transcript.rs, src/kani_execution.rs, tests/it/skeleton_spine.rs, spec/functional/complete-v1/FR-016-witness-native-replay.md, spec/functional/complete-v1/FR-023-claimed-module-proof-gate.md, spec/test/complete-v1/TC-026-witness-native-replay.md, spec/test/complete-v1/TC-034-claimed-module-proof-gate.md"
 relationships: []
 ---
 
@@ -45,7 +45,7 @@ the evidence-scope criterion (FND-001), which needs a statement, not code.
 
 ## Dispositions
 
-Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546`.
+Round 1.
 
 | FND | outcome | sha/reason |
 | --- | --- | --- |
