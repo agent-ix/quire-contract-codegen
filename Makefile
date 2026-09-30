@@ -23,6 +23,7 @@ help:
 	@echo "  make test             - cargo test"
 	@echo "  make build            - Release build"
 	@echo "  make kani             - Run the Kani obligation lane serially"
+	@echo "  make tools            - Install the host tools the tests drive (llvm-tools, cargo-llvm-cov, Kani)"
 	@echo "  make msrv             - Check the crate with Rust $(MSRV)"
 	@echo "  make spec             - Quire-validate the specification"
 	@echo "  make clean            - cargo clean"
@@ -63,6 +64,16 @@ test:
 # spine runs one Boolean clause through the real prover and native replay
 # through QSL. Both filters follow `--` because libtest accepts several; cargo's
 # own positional filter takes one.
+# The test suite drives real tools: the native-coverage tests run `cargo +stable
+# llvm-cov` and read llvm-cov/llvm-profdata from the stable sysroot, and the Kani
+# tests run `cargo kani`. Install them once per machine.
+.PHONY: tools
+tools:
+	rustup component add llvm-tools-preview --toolchain stable
+	$(CARGO) install --locked cargo-llvm-cov
+	$(CARGO) install --locked kani-verifier
+	$(CARGO) kani setup
+
 .PHONY: kani
 kani:
 	flock /tmp/agent-e-heavy-build.lock $(CARGO) +$(MSRV) test $(LOCKED) -j 4 \
