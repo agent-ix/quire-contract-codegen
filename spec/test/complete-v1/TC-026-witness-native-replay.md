@@ -31,7 +31,7 @@ a witness whose replay agrees in a category other than `violation`.
 
 The schema follows the persisted argument order, which is the emission
 order the harness uses, and refuses the non-argument binding with a typed
-schema refusal (`InvalidInput`, code `cg_witness_schema_non_argument_binding`) that
+schema refusal (code `cg_witness_schema_non_argument_binding`) that
 reports no failure and is none of the five replay results.
 The real transcript decodes to values named by their bindings, and the dropped
 and retyped schemas refuse by arity and width. Only the reproducing witness is

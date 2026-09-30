@@ -127,15 +127,15 @@ pub use kani_obligations::{
     ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, ScalarObligationArgument,
     ScalarObligationIdentity, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
-pub use kani_witness_join::{decode_falsification, witness_schema, WitnessSchemaError};
+pub use kani_witness_join::{decode_falsification, DecodeFailure, WitnessSchemaError};
 pub use publication::{
     write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
     PublicationErrorCode, PublishedBundleIdentity,
 };
 pub use spine_replay::{
-    replay_counterexample, replay_falsification, DecodeFailure, DependencyLock,
-    EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError,
-    ReplayParameter, ReplayVerdict, SpineReplayError,
+    replay_counterexample, replay_falsification, DependencyLock, EvidenceFailureCause,
+    LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict,
+    SpineReplayError,
 };
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,

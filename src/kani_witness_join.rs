@@ -1,47 +1,65 @@
-//! Joins a real Kani concrete-playback transcript to the generator's own persisted obligation
-//! schema (Linear IR-211).
+//! Reads a real Kani concrete-playback transcript against the generator's own persisted
+//! obligation schema (Linear IR-211, IR-92).
 //!
-//! [`quire_contract_ir::kani::Witness::decode`] needs a `&[WitnessBinding]` schema to type the
-//! untyped bytes a `cargo kani --concrete-playback print` transcript retains. The generator's own
-//! schema for one harness is [`crate::kani_obligations::KaniObligationIdentity::arguments`] — the
-//! bindings `src/kani_obligations.rs`'s `abi()` partitions into `role: KaniBindingRole::Argument`,
-//! in the exact order `symbolic_arguments` (same module) walks to emit one `kani::any()` call per
-//! binding. `render()` builds `identity.arguments` from that same `abi.arguments` slice and
-//! `symbolic_arguments` is called with that identical slice, so position *i* of
-//! `identity.arguments` is position *i* of the emitted `kani::any()` calls, which is position *i*
-//! of the concrete bytes Kani's playback records — not an assumption, but what those two call
-//! sites in `src/kani_obligations.rs` are read to say.
+//! A `cargo kani --concrete-playback print` block retains only the untyped bytes Kani handed to
+//! each `kani::any()` call, in call order. This module selects the one assertion playback block
+//! of a run, reads those bytes, and types them with
+//! [`crate::kani_obligations::KaniObligationIdentity::arguments`]: the bindings
+//! `src/kani_obligations.rs`'s `abi()` partitions into `role: KaniBindingRole::Argument`, in the
+//! exact order `symbolic_arguments` walks to emit one `kani::any()` call per binding. `render()`
+//! builds `identity.arguments` from that same `abi.arguments` slice and `symbolic_arguments` is
+//! called with that identical slice, so position *i* of `identity.arguments` is position *i* of
+//! the emitted `kani::any()` calls, which is position *i* of the concrete bytes Kani's playback
+//! records.
 //!
-//! Before this module, nothing in this crate ever built a [`WitnessBinding`] or called
-//! `Witness::decode`; every existing caller (`quire-contract-ir`'s own tests) used a hand-built
-//! schema. This module is the missing join, and nothing else: it does not call an executor, and
-//! it does not validate a decoded value against its IR domain or replay it natively (that is
-//! `cg#50`'s remaining, `QSL#243`-blocked leg). It ends with typed values in hand.
+//! The values come out as [`qsl_replay::WitnessValue`], the type QSL's replay envelope carries,
+//! so [`crate::spine_replay`] hands them to QSL without a conversion. The transcript grammar
+//! read here is Kani's; QSL's `Witness::decode` reads QSL's own transcript grammar and cannot
+//! read this one, so the playback bytes are decoded here.
 //!
-//! [`decode_falsification`] also checks the transcript's own claimed identity: [`Witness::parse`]
-//! extracts a harness symbol from the transcript but never compares it to anything (`source_id` is
-//! only ever used to label its own error outcomes — see `quire-contract-ir`'s `witness.rs`), so a
-//! transcript from a sibling obligation over the same operation (same union ABI, hence the same
-//! arity and byte widths) would otherwise decode cleanly under the wrong identity.
-//! `decode_falsification` re-derives [`Witness::harness_symbol`] and refuses
-//! (`cg_witness_harness_identity_mismatch`) when it disagrees with the caller's declared
-//! `{module_symbol}::{harness_symbol}` — the fully-qualified Rust path, matched against exactly
-//! that combined form because every harness this crate renders lives in
-//! `mod {module_symbol} { fn {harness_symbol}() }` and Kani's `Test generated for harness` line
-//! names a harness by its qualified path, never the module alone. There is no separate check for
-//! `module_symbol` in isolation because the transcript never encodes one in isolation either; it
-//! is still validated, as the qualified path's first component.
+//! [`decode_falsification`] also checks the transcript's own claimed identity: a transcript from
+//! a sibling obligation over the same operation (same union ABI, hence the same arity and byte
+//! widths) would otherwise decode cleanly under the wrong identity. It refuses
+//! (`cg_witness_harness_identity_mismatch`) when the harness the transcript names is not the
+//! caller's declared `{module_symbol}::{harness_symbol}`: every harness this crate renders lives
+//! in `mod {module_symbol} { fn {harness_symbol}() }` and Kani's `Test generated for harness`
+//! line names a harness by its qualified path.
+//!
+//! It does not validate a decoded value against its IR domain ([`first_out_of_domain`] does) or
+//! replay it ([`crate::spine_replay`] does).
 
-use quire_contract_ir::kani::{
-    KaniOutcome, KaniOutcomeKind, Witness, WitnessBinding, WitnessValue,
-};
+use qsl_replay::WitnessValue;
 
 use crate::{
     kani::{KaniBindingRole, KaniPrimitiveType},
     kani_obligations::ObligationBinding,
 };
 
-/// Why the generator's persisted argument schema could not be translated into a witness schema.
+const HARNESS_MARKER: &str = "/// Test generated for harness `";
+const CHECK_MARKER: &str = "/// Check for `";
+
+/// Why a transcript did not decode: the stable cause code and the identities the decoder named.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DecodeFailure {
+    /// Stable machine-readable cause code.
+    pub code: String,
+    /// The source or input identity that first caused the refusal.
+    pub source_id: String,
+    /// The profile and bound context of the refusal.
+    pub context: String,
+}
+
+impl DecodeFailure {
+    fn new(code: &str, source_id: &str, context: &str) -> Self {
+        Self {
+            code: code.to_owned(),
+            source_id: source_id.to_owned(),
+            context: context.to_owned(),
+        }
+    }
+}
+
+/// Why the generator's persisted argument schema could not be used to type a transcript.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WitnessSchemaError {
     /// A binding in [`crate::kani_obligations::KaniObligationIdentity::arguments`] is not
@@ -49,109 +67,350 @@ pub enum WitnessSchemaError {
     ///
     /// `identity.arguments` is built by `src/kani_obligations.rs`'s `abi()` partitioning on
     /// exactly this role, so every generator-emitted identity satisfies this already; this is a
-    /// named refusal rather than an unwrap, panic, or silent skip, because a witness schema built
-    /// from a non-argument binding would silently mistype a `kani::any()` position instead of
-    /// refusing to build one at all.
+    /// named refusal rather than an unwrap, panic, or silent skip, because a schema built from a
+    /// non-argument binding would silently mistype a `kani::any()` position instead of refusing
+    /// to build one at all.
     NonArgumentBinding {
         /// The offending binding's generated identifier.
         identifier: String,
     },
 }
 
-/// Maps the generator's own persisted argument schema
-/// ([`crate::kani_obligations::KaniObligationIdentity::arguments`]) to the schema
-/// `Witness::decode` needs, preserving
-/// order exactly: position *i* of `arguments` becomes position *i* of the returned schema, which
-/// is position *i* of the `kani::any()` calls `symbolic_arguments` emitted for this harness (see
-/// the module documentation for why that ordering holds).
-///
-/// Refuses with [`WitnessSchemaError::NonArgumentBinding`] rather than including a binding this
-/// module cannot confirm corresponds to a `kani::any()` call.
-pub fn witness_schema(
+/// The argument identifiers and primitive types of `arguments`, in order, refusing with
+/// [`WitnessSchemaError::NonArgumentBinding`] rather than including a binding that does not
+/// correspond to a `kani::any()` call.
+fn argument_types(
     arguments: &[ObligationBinding],
-) -> Result<Vec<WitnessBinding>, WitnessSchemaError> {
+) -> Result<Vec<(&str, KaniPrimitiveType)>, WitnessSchemaError> {
     arguments
         .iter()
         .map(|binding| {
-            if binding.role != KaniBindingRole::Argument {
-                return Err(WitnessSchemaError::NonArgumentBinding {
+            if binding.role == KaniBindingRole::Argument {
+                Ok((binding.identifier.as_str(), binding.primitive_type))
+            } else {
+                Err(WitnessSchemaError::NonArgumentBinding {
                     identifier: binding.identifier.clone(),
-                });
+                })
             }
-            Ok(WitnessBinding {
-                identifier: binding.identifier.clone(),
-                value_type: witness_value_type(binding.primitive_type),
-            })
         })
         .collect()
 }
 
-/// Total, compiler-enforced mapping from the generator's Rust primitive vocabulary to the IR's
-/// witness value-type vocabulary.
+/// The exact byte width Kani's concrete playback encodes for `primitive`.
 ///
-/// This match has no wildcard arm: adding a third [`KaniPrimitiveType`] variant without adding
-/// the matching [`quire_contract_ir::kani::WitnessValueType`] arm fails this function to compile,
-/// rather than falling through to a default or a guessed mapping. Today the two vocabularies are
-/// exactly parallel (`Boolean`/`Boolean`, `I64`/`I64`); there is nothing else to map.
-const fn witness_value_type(
-    primitive: KaniPrimitiveType,
-) -> quire_contract_ir::kani::WitnessValueType {
-    use quire_contract_ir::kani::WitnessValueType;
+/// The match has no wildcard arm: a third [`KaniPrimitiveType`] variant fails this function to
+/// compile instead of guessing a width.
+const fn byte_width(primitive: KaniPrimitiveType) -> usize {
     match primitive {
-        KaniPrimitiveType::Boolean => WitnessValueType::Boolean,
-        KaniPrimitiveType::I64 => WitnessValueType::I64,
+        KaniPrimitiveType::Boolean => 1,
+        KaniPrimitiveType::I64 => 8,
     }
 }
 
-/// Decodes one real `cargo kani --concrete-playback print` transcript — an obligation harness's
-/// [`crate::KaniRunOutcome::Falsified`] `counterexample` text — into typed values, using this
+/// Decodes one real `cargo kani --concrete-playback print` transcript -- an obligation harness's
+/// [`crate::KaniRunOutcome::Falsified`] `counterexample` text -- into typed values, using this
 /// obligation's own persisted argument schema.
 ///
 /// `harness_symbol`, `module_symbol` and `arguments` are the three fields of one
-/// [`crate::kani_obligations::KaniObligationIdentity`] this join actually needs; the function
-/// takes them directly rather than the whole identity so a caller holding only the generator's
-/// persisted `identity.{harnessSymbol,moduleSymbol,arguments}` JSON fields (there is no
-/// `Deserialize` path back to a typed `KaniObligationIdentity` — see `kani_obligations.rs`) can
-/// call it without hand-building an identity it cannot fully reconstruct.
+/// [`crate::kani_obligations::KaniObligationIdentity`] this join needs; the function takes them
+/// directly so a caller holding only the persisted `identity.{harnessSymbol,moduleSymbol,
+/// arguments}` JSON fields can call it.
 ///
-/// `transcript` is expected verbatim from the backend: this function neither trims caller
-/// assumptions into it nor repairs a disagreement. Every failure mode is a named
-/// [`KaniOutcome`]: a schema translation refusal from [`witness_schema`], a transcript that does
-/// not parse as a single selected assertion playback block ([`Witness::parse`]), a harness
-/// identity that does not match the caller's declared `module_symbol::harness_symbol`
-/// (`cg_witness_harness_identity_mismatch`), or a decode refusal (`kani_witness_arity_mismatch`,
-/// `kani_witness_width_mismatch`, `kani_witness_boolean_byte_invalid`,
-/// `kani_witness_comment_mismatch`) from [`Witness::decode`] itself.
+/// `transcript` is expected verbatim from the backend. Every failure is a named
+/// [`DecodeFailure`]: `cg_witness_schema_non_argument_binding`; a transcript that is not a
+/// single selected assertion playback block (`kani_witness_harness_missing`,
+/// `kani_witness_check_missing`, `kani_witness_check_text_missing`,
+/// `kani_witness_cover_refused`, `kani_witness_check_kind_refused`,
+/// `kani_witness_multiple_assertions_refused`, `kani_witness_concrete_vals_missing`,
+/// `kani_witness_concrete_vals_malformed`, `kani_witness_comment_missing`,
+/// `kani_witness_byte_invalid`); a harness that is not the declared one
+/// (`cg_witness_harness_identity_mismatch`); or bytes that do not fit the schema
+/// (`kani_witness_arity_mismatch`, `kani_witness_width_mismatch`,
+/// `kani_witness_boolean_byte_invalid`, `kani_witness_comment_mismatch`).
+///
+/// # Errors
+///
+/// The [`DecodeFailure`] named above.
 pub fn decode_falsification(
     harness_symbol: &str,
     module_symbol: &str,
     arguments: &[ObligationBinding],
     transcript: &str,
-) -> Result<Vec<(String, WitnessValue)>, KaniOutcome> {
-    let schema = witness_schema(arguments).map_err(|error| match error {
-        WitnessSchemaError::NonArgumentBinding { identifier } => KaniOutcome::non_success(
-            KaniOutcomeKind::InvalidInput,
+) -> Result<Vec<(String, WitnessValue)>, DecodeFailure> {
+    let schema = argument_types(arguments).map_err(|error| match error {
+        WitnessSchemaError::NonArgumentBinding { identifier } => DecodeFailure::new(
             "cg_witness_schema_non_argument_binding",
             harness_symbol,
-            identifier.as_str(),
+            &identifier,
         ),
     })?;
-    let witness = Witness::parse(harness_symbol, module_symbol, transcript)?;
-    // Kani names a harness by its fully-qualified Rust path in the `Test generated for harness`
-    // line `Witness::harness_symbol` re-derives from — every harness this crate renders lives in
-    // `mod {module_symbol} { fn {harness_symbol}() }` (`src/kani_obligations.rs`'s `render`), so
-    // the qualified form is `{module_symbol}::{harness_symbol}`, not `harness_symbol` alone.
-    let declared_harness_symbol = format!("{module_symbol}::{harness_symbol}");
-    let observed_harness_symbol = witness.harness_symbol()?;
-    if observed_harness_symbol != declared_harness_symbol {
-        return Err(KaniOutcome::non_success(
-            KaniOutcomeKind::Refused,
+    let block = select_assertion_block(transcript, harness_symbol, module_symbol)?;
+    let playback = read_block(block, harness_symbol, module_symbol)?;
+    let declared = format!("{module_symbol}::{harness_symbol}");
+    if playback.harness != declared {
+        return Err(DecodeFailure::new(
             "cg_witness_harness_identity_mismatch",
-            declared_harness_symbol.as_str(),
-            observed_harness_symbol.as_str(),
+            &declared,
+            playback.harness,
         ));
     }
-    witness.decode(&schema)
+    decode_values(&playback, &schema)
+}
+
+/// One selected assertion playback block, read.
+struct Playback<'a> {
+    harness: &'a str,
+    check_text: &'a str,
+    /// Kani's decoded-value comment and the untyped bytes, one per `kani::any()` call.
+    entries: Vec<(&'a str, Vec<u8>)>,
+}
+
+/// The check kind Kani names in a block's `Check for` clause.
+enum CheckKind {
+    /// The only kind that witnesses falsity.
+    Assertion,
+    /// A reached cover statement.
+    Cover,
+    /// Any other kind Kani reports.
+    Other,
+}
+
+/// The `Check for` line of `block`, found by its anchor rather than by searching the whole block
+/// (Kani appends caller-controlled contract text to the harness doc line, which may contain the
+/// same words): the check kind and the text after its closing backtick.
+fn check_clause<'a>(
+    block: &'a str,
+    source_id: &str,
+    context: &str,
+) -> Result<(CheckKind, &'a str), DecodeFailure> {
+    let missing = || DecodeFailure::new("kani_witness_check_missing", source_id, context);
+    let line = block
+        .lines()
+        .map(str::trim_start)
+        .find(|line| line.starts_with(CHECK_MARKER))
+        .ok_or_else(missing)?;
+    let (kind, rest) = line[CHECK_MARKER.len()..]
+        .split_once('`')
+        .ok_or_else(missing)?;
+    let kind = match kind {
+        "assertion" => CheckKind::Assertion,
+        "cover" => CheckKind::Cover,
+        _ => CheckKind::Other,
+    };
+    Ok((kind, rest))
+}
+
+/// The single assertion playback block of a run. A run may retain several blocks (a reached
+/// cover alongside a falsified contract is ordinary); none or more than one assertion block
+/// refuses rather than guessing which falsification is meant.
+fn select_assertion_block<'a>(
+    transcript: &'a str,
+    source_id: &str,
+    context: &str,
+) -> Result<&'a str, DecodeFailure> {
+    let starts: Vec<usize> = transcript
+        .match_indices(HARNESS_MARKER)
+        .map(|(start, _)| start)
+        .collect();
+    if starts.is_empty() {
+        return Err(DecodeFailure::new(
+            "kani_witness_harness_missing",
+            source_id,
+            context,
+        ));
+    }
+    let ends = starts
+        .iter()
+        .skip(1)
+        .copied()
+        .chain(std::iter::once(transcript.len()));
+    let mut assertion = None;
+    let (mut saw_cover, mut saw_other) = (false, false);
+    for (start, end) in starts.iter().copied().zip(ends) {
+        let block = &transcript[start..end];
+        match check_clause(block, source_id, context)?.0 {
+            CheckKind::Assertion if assertion.is_some() => {
+                return Err(DecodeFailure::new(
+                    "kani_witness_multiple_assertions_refused",
+                    source_id,
+                    context,
+                ));
+            }
+            CheckKind::Assertion => assertion = Some(block),
+            CheckKind::Cover => saw_cover = true,
+            CheckKind::Other => saw_other = true,
+        }
+    }
+    assertion.ok_or_else(|| {
+        let code = if saw_cover {
+            "kani_witness_cover_refused"
+        } else if saw_other {
+            "kani_witness_check_kind_refused"
+        } else {
+            "kani_witness_check_missing"
+        };
+        DecodeFailure::new(code, source_id, context)
+    })
+}
+
+/// Reads the harness symbol, check text and concrete entries of one assertion block.
+fn read_block<'a>(
+    block: &'a str,
+    source_id: &str,
+    context: &str,
+) -> Result<Playback<'a>, DecodeFailure> {
+    let harness = block[HARNESS_MARKER.len()..]
+        .split_once('`')
+        .map(|(harness, _)| harness)
+        .ok_or_else(|| DecodeFailure::new("kani_witness_harness_missing", source_id, context))?;
+    let (_, after_kind) = check_clause(block, source_id, context)?;
+    let no_text = || DecodeFailure::new("kani_witness_check_text_missing", source_id, context);
+    let after_colon = after_kind.split_once(':').ok_or_else(no_text)?.1;
+    let after_quote = after_colon.split_once('"').ok_or_else(no_text)?.1;
+    let check_text = &after_quote[..unescaped_quote(after_quote).ok_or_else(no_text)?];
+    let entries = concrete_entries(block, source_id, context)?;
+    Ok(Playback {
+        harness,
+        check_text,
+        entries,
+    })
+}
+
+/// The index of the first `"` in `text` not preceded by an odd number of backslashes.
+fn unescaped_quote(text: &str) -> Option<usize> {
+    let mut escaped = false;
+    text.char_indices().find_map(|(index, ch)| {
+        let quote = ch == '"' && !escaped;
+        escaped = ch == '\\' && !escaped;
+        quote.then_some(index)
+    })
+}
+
+/// The body of the `[` at the start of `text` and what follows its matching `]`.
+fn bracketed(text: &str) -> Option<(&str, &str)> {
+    let mut depth = 0usize;
+    for (index, ch) in text.char_indices() {
+        match ch {
+            '[' => depth += 1,
+            ']' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some((text.get(1..index)?, &text[index + 1..]));
+                }
+            }
+            _ if index == 0 => return None,
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The `let concrete_vals: Vec<Vec<u8>> = vec![ ... ];` section of `block` as `(decoded-value
+/// comment, untyped bytes)` pairs in declaration order. Each entry is found by its `vec![`, not
+/// by its comment, so a value with no comment refuses instead of being skipped. A harness with
+/// no `kani::any()` legitimately has no entries.
+fn concrete_entries<'a>(
+    block: &'a str,
+    source_id: &str,
+    context: &str,
+) -> Result<Vec<(&'a str, Vec<u8>)>, DecodeFailure> {
+    const VEC: &str = "vec![";
+    let failure = |code| DecodeFailure::new(code, source_id, context);
+    let after_marker = block
+        .split_once("let concrete_vals")
+        .ok_or_else(|| failure("kani_witness_concrete_vals_missing"))?
+        .1;
+    let outer = after_marker
+        .find(VEC)
+        .ok_or_else(|| failure("kani_witness_concrete_vals_missing"))?;
+    let (mut body, _) = bracketed(&after_marker[outer + VEC.len() - 1..])
+        .ok_or_else(|| failure("kani_witness_concrete_vals_malformed"))?;
+    let mut entries = Vec::new();
+    while let Some(entry) = body.find(VEC) {
+        let comment = body[..entry]
+            .rfind("//")
+            .map(|at| {
+                let scope = &body[at + 2..entry];
+                scope[..scope.find('\n').unwrap_or(scope.len())].trim()
+            })
+            .ok_or_else(|| failure("kani_witness_comment_missing"))?;
+        let (inner, rest) = bracketed(&body[entry + VEC.len() - 1..])
+            .ok_or_else(|| failure("kani_witness_concrete_vals_malformed"))?;
+        let bytes = inner
+            .split(',')
+            .map(str::trim)
+            .filter(|token| !token.is_empty())
+            .map(|token| {
+                token
+                    .parse::<u8>()
+                    .map_err(|_| failure("kani_witness_byte_invalid"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        entries.push((comment, bytes));
+        body = rest;
+    }
+    Ok(entries)
+}
+
+/// Joins the untyped entries with the schema, cross-checking every value against Kani's own
+/// decoded-value comment. A Boolean is never inferred from "any nonzero byte": Kani encodes
+/// `bool` as exactly `0` or `1`.
+fn decode_values(
+    playback: &Playback<'_>,
+    schema: &[(&str, KaniPrimitiveType)],
+) -> Result<Vec<(String, WitnessValue)>, DecodeFailure> {
+    let source = playback.harness;
+    if playback.entries.len() != schema.len() {
+        return Err(DecodeFailure::new(
+            "kani_witness_arity_mismatch",
+            source,
+            playback.check_text,
+        ));
+    }
+    schema
+        .iter()
+        .zip(&playback.entries)
+        .map(|(&(identifier, primitive), (comment, bytes))| {
+            let failure = |code| DecodeFailure::new(code, source, identifier);
+            if bytes.len() != byte_width(primitive) {
+                return Err(failure("kani_witness_width_mismatch"));
+            }
+            let (value, comment_agrees) = match (primitive, bytes.as_slice()) {
+                (KaniPrimitiveType::Boolean, [byte @ (0 | 1)]) => {
+                    let value = *byte == 1;
+                    (
+                        WitnessValue::Boolean(value),
+                        boolean_comment(comment) == Some(value),
+                    )
+                }
+                (KaniPrimitiveType::Boolean, _) => {
+                    return Err(failure("kani_witness_boolean_byte_invalid"))
+                }
+                (KaniPrimitiveType::I64, _) => {
+                    let mut buffer = [0u8; 8];
+                    buffer.copy_from_slice(bytes);
+                    let value = i64::from_le_bytes(buffer);
+                    (
+                        WitnessValue::Integer(value),
+                        comment.parse::<i64>().is_ok_and(|parsed| parsed == value),
+                    )
+                }
+            };
+            if !comment_agrees {
+                return Err(failure("kani_witness_comment_mismatch"));
+            }
+            Ok((identifier.to_owned(), value))
+        })
+        .collect()
+}
+
+/// Kani's decoded-value comment for a Boolean: `true`/`1` and `false`/`0` in any case.
+fn boolean_comment(comment: &str) -> Option<bool> {
+    match comment.to_ascii_lowercase().as_str() {
+        "true" | "1" => Some(true),
+        "false" | "0" => Some(false),
+        _ => None,
+    }
 }
 
 /// The first decoded value outside its argument's declared integer domain, as the argument's
@@ -203,34 +462,23 @@ mod tests {
         }
     }
 
-    /// The mapping is total and order-preserving: every `KaniPrimitiveType` this crate emits maps
-    /// to exactly one `WitnessValueType`, and the schema comes back in the same order as the
-    /// generator's own `arguments`.
+    /// The schema is order-preserving: every argument keeps its identifier and primitive type, in
+    /// the generator's own `arguments` order.
     ///
     /// Trace: FR-016-AC-8, TC-026
     #[test]
-    fn witness_schema_preserves_order_and_maps_every_primitive() {
+    fn argument_types_preserve_order_and_type() {
         let arguments = vec![
             argument("amount_current", KaniPrimitiveType::I64),
             argument("flag_current", KaniPrimitiveType::Boolean),
             argument("balance_pre", KaniPrimitiveType::I64),
         ];
-        let schema = witness_schema(&arguments).expect("every argument binding maps");
         assert_eq!(
-            schema,
+            argument_types(&arguments).expect("every argument binding maps"),
             vec![
-                WitnessBinding {
-                    identifier: "amount_current".to_owned(),
-                    value_type: quire_contract_ir::kani::WitnessValueType::I64,
-                },
-                WitnessBinding {
-                    identifier: "flag_current".to_owned(),
-                    value_type: quire_contract_ir::kani::WitnessValueType::Boolean,
-                },
-                WitnessBinding {
-                    identifier: "balance_pre".to_owned(),
-                    value_type: quire_contract_ir::kani::WitnessValueType::I64,
-                },
+                ("amount_current", KaniPrimitiveType::I64),
+                ("flag_current", KaniPrimitiveType::Boolean),
+                ("balance_pre", KaniPrimitiveType::I64),
             ]
         );
     }
@@ -241,12 +489,11 @@ mod tests {
     ///
     /// Trace: FR-016-AC-8, TC-026
     #[test]
-    fn witness_schema_refuses_a_non_argument_binding() {
+    fn argument_types_refuse_a_non_argument_binding() {
         let mut result_binding = argument("post_state", KaniPrimitiveType::I64);
         result_binding.role = KaniBindingRole::Result;
-        let error = witness_schema(&[result_binding]).unwrap_err();
         assert_eq!(
-            error,
+            argument_types(&[result_binding]).unwrap_err(),
             WitnessSchemaError::NonArgumentBinding {
                 identifier: "post_state".to_owned(),
             }
@@ -336,8 +583,7 @@ fn kani_concrete_playback_synthetic() {{\n\
 
     /// `decode_falsification` is a real join, not a signature that merely compiles: given a
     /// transcript whose qualified harness symbol matches the caller's declared identity, it
-    /// decodes the same value `witness_schema` + `Witness::parse` + `Witness::decode` would,
-    /// called separately.
+    /// decodes the value the transcript's bytes encode.
     ///
     /// Trace: TC-026
     #[test]
@@ -440,6 +686,65 @@ fn kani_concrete_playback_synthetic() {{\n\
         assert_eq!(
             first_out_of_domain(&flag, &[("flag".to_owned(), WitnessValue::Boolean(true))]),
             None
+        );
+    }
+
+    /// Kani's own `//` comment is a cross-check on the bytes, and a Boolean is exactly `0` or `1`:
+    /// a value whose comment disagrees, and a Boolean byte of `2`, each refuse by name.
+    ///
+    /// Trace: TC-026
+    #[test]
+    fn decode_falsification_refuses_a_disagreeing_comment_and_an_invalid_boolean_byte() {
+        let block = |comment: &str, byte: u8| {
+            format!(
+                "/// Test generated for harness `mod::h`\n\
+/// Check for `assertion`: \"a\"\n\
+#[test]\nfn t() {{\n    let concrete_vals: Vec<Vec<u8>> = vec![\n        // {comment}\n        vec![{byte}],\n    ];\n}}\n"
+            )
+        };
+        let flag = [argument("flag", KaniPrimitiveType::Boolean)];
+        let decode = |comment: &str, byte: u8| {
+            decode_falsification("h", "mod", &flag, &block(comment, byte))
+        };
+        assert_eq!(
+            decode("true", 1).expect("agreeing comment"),
+            vec![("flag".to_owned(), WitnessValue::Boolean(true))]
+        );
+        assert_eq!(
+            decode("false", 1).unwrap_err().code,
+            "kani_witness_comment_mismatch"
+        );
+        assert_eq!(
+            decode("true", 2).unwrap_err().code,
+            "kani_witness_boolean_byte_invalid"
+        );
+    }
+
+    /// Only a single assertion block is a witness: a run holding only a cover block, or two
+    /// assertion blocks, refuses rather than picking one; a cover beside one assertion selects
+    /// the assertion.
+    ///
+    /// Trace: TC-026
+    #[test]
+    fn decode_falsification_selects_exactly_one_assertion_block() {
+        let block = |kind: &str, value: i64| {
+            synthetic_transcript("mod::h", value).replace("`assertion`", &format!("`{kind}`"))
+        };
+        let argument = [argument("value", KaniPrimitiveType::I64)];
+        let decode = |transcript: String| decode_falsification("h", "mod", &argument, &transcript);
+        assert_eq!(
+            decode(block("cover", 1)).unwrap_err().code,
+            "kani_witness_cover_refused"
+        );
+        assert_eq!(
+            decode(block("assertion", 1) + &block("assertion", 2))
+                .unwrap_err()
+                .code,
+            "kani_witness_multiple_assertions_refused"
+        );
+        assert_eq!(
+            decode(block("cover", 1) + &block("assertion", 7)).expect("one assertion block"),
+            vec![("value".to_owned(), WitnessValue::Integer(7))]
         );
     }
 }

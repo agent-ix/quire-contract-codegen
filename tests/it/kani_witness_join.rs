@@ -23,6 +23,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use qsl_replay::WitnessValue;
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, negotiate_kani_obligations, write_bundle_atomic,
     ArtifactBundle, KaniBindingRole, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
@@ -31,8 +32,7 @@ use quire_contract_codegen::{
     RUNTIME_REVISION,
 };
 use quire_contract_ir::{
-    kani::WitnessValue, BoundPackage, ClauseId, ClauseRef, RequirementRef,
-    EXECUTABLE_PROJECTION_FORMAT,
+    BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
 

@@ -138,14 +138,10 @@ operations:
     inputs: [admitted CheckedPackageV2, ExactFunctionDeclaration list, ExactFunctionItem list]
     output: ExactFunctionOracles | OracleGenerationError
     semantics: function-application oracles over the declared functions, plus a typed claim map; per-item problems are refusals, and only a whole-generation failure is an error (FR-021)
-  - name: witness_schema
-    inputs: [ObligationBinding list of one harness]
-    output: WitnessBinding list | WitnessSchemaError
-    semantics: the witness schema for a harness's symbolic arguments, position for position with its kani::any() calls; a binding that is not a symbolic argument refuses (FR-016)
   - name: decode_falsification
     inputs: [harness symbol, module symbol, ObligationBinding list, Kani playback transcript]
-    output: named WitnessValue list | KaniOutcome
-    semantics: joins one Kani assertion-playback witness to the harness's persisted obligation schema, refusing on schema, transcript, harness-identity or decode mismatch (FR-016)
+    output: named qsl-replay WitnessValue list | DecodeFailure (code, source_id, context)
+    semantics: selects the one assertion playback block of a Kani run and types its concrete bytes with the harness's persisted obligation schema position for position with its kani::any() calls, refusing on a non-argument binding, transcript, harness-identity or decode mismatch (FR-016)
   - name: replay_falsification
     inputs: [harness symbol, check text, named WitnessValue list, ReplayParameter list (argument name, node id), a function from the witness ReplaySource to the complete ReplayRequestWire]
     output: the qsl-replay WitnessArmResult | SpineReplayError (UnboundArgument{argument} | FieldDelimiter | Transcript(MalformedTranscript) | Refused(ReplayRefusal) | WrongArm)
@@ -337,7 +333,6 @@ The interface's features in declaration order: every operation the contract abov
 | negotiate_backend_provider | operation |
 | generate_routed | operation |
 | generate_exact_function_oracles | operation |
-| witness_schema | operation |
 | decode_falsification | operation |
 | replay_falsification | operation |
 | bound_strategy::census::compute_census | operation |
