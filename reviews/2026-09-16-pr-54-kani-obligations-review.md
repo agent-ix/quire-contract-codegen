@@ -28,7 +28,8 @@ the invariant's pre-state, into `kani::requires`. Kani assumes those requires. T
 non-vacuity check is each precondition's own `kani::cover!`, run on its own. Nothing checks the
 conjunction the contract harness actually assumes. This was reproduced under Kani: two
 preconditions that are each satisfiable but contradict each other, plus a postcondition that is
-false for every input, gave three `VERIFICATION:- SUCCESSFUL` results with both covers satisfied. `classify_run` reports all three as `Verified`.
+false for every input, gave three `VERIFICATION:- SUCCESSFUL` results with both covers satisfied.
+`classify_run` reports all three as `Verified`.
 
 ## Verdict
 

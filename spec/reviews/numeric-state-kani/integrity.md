@@ -30,5 +30,6 @@ ambiguities were resolved without absorbing the sibling strategy work or the dow
 The supported interpretation is singular: the adapter reuses the executable-oracle analyzer and
 rendered predicates; direct current/pre values become ordered primitive arguments; direct post
 values become an ordered primitive result; and checked IR domains alone constrain integers. Model
-bounds are not proof dependency edges, and graph readiness is not proof execution. Agent E's strategy interface supplies no Kani range, and SL
-IT-010—not codegen—constructs and judges the native replay.
+bounds are not proof dependency edges, and graph readiness is not proof execution. Agent E's
+strategy interface supplies no Kani range, and SL IT-010—not codegen—constructs and judges the
+native replay.

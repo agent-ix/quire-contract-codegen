@@ -31,4 +31,5 @@ remain `Test`, while SUITE-008 correctly records `Analysis` evidence for the act
 SUITE-008 covers harness options, schemas, typed ABI/domains, proof success, proof failure,
 printed concrete playback, and independent oracle checks. Its planned 0, 1000, -1, and 1001 cases
 cover both model endpoints and adjacent outside controls. TM-001 truthfully retains every
-numeric/state row as Planned; current Boolean test symbols do not discharge TC-014. Native `runtime::execute` replay remains downstream IT-010 evidence.
+numeric/state row as Planned; current Boolean test symbols do not discharge TC-014. Native
+`runtime::execute` replay remains downstream IT-010 evidence.

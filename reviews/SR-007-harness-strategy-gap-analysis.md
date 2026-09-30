@@ -69,7 +69,8 @@ still required, and no assurance decision or matrix promotion is implied.
 Local repair verification: all five harness tests and all five strategy tests passed on stable and
 MSRV, including compilation and execution of the generated crates. All-target Clippy with denied
 warnings, rustfmt, and Quire document validation passed. Quire reported existing duplicate
-module/inverse-edge warnings. This is focused verification, not a claim that the complete `make ci` or strict coverage gate passed.
+module/inverse-edge warnings. This is focused verification, not a claim that the complete `make ci`
+or strict coverage gate passed.
 
 ## Remaining declared gaps
 

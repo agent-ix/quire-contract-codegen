@@ -18,9 +18,9 @@ relationships:
 
 ## Summary
 
-Ticket: IR-92 (primary), IR-93. PR: agent-ix/quire-contract-codegen#185. Spec-only, 19 files under `spec/`. Methods: spec-review with the integrity, EARS,
-evidence, dependency, scope-boundary, failure-domain and risk sub-analyses folded into this one
-file, following the SR-039 precedent.
+Ticket: IR-92 (primary), IR-93. PR: agent-ix/quire-contract-codegen#185. Spec-only, 19 files
+under `spec/`. Methods: spec-review with the integrity, EARS, evidence, dependency, scope-boundary,
+failure-domain and risk sub-analyses folded into this one file, following the SR-039 precedent.
 
 The PR was checked against the owner ruling for this session. QSL owns `Witness`, `ReplaySource`,
 the counterexample envelope, the FR-331 terminal record and `ObligationIdentity` in `qsl-replay`.
