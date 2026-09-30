@@ -14,7 +14,7 @@ name = "quire_contract_codegen"
 path = "src/lib.rs"
 
 [dependencies]
-quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "37c34de8c119d368369cb70abd74dbe0bc254bfd" }
+quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", rev = "a7e019a6d941170d252752e83af99eace7dfca76" }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "ed0a04b482216b79d3559a6ac59e6e260c5591cf", features = ["exact"] }
 # qsl-replay is the only QSL crate this repository depends on (QSL arch-lint T12-A); the
 # replay adapter in src/spine_replay.rs goes through its `replay` entry, and the spine test
@@ -31,7 +31,7 @@ proptest = { version = "=1.5.0", default-features = false, features = ["std"] }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", rev = "ed0a04b482216b79d3559a6ac59e6e260c5591cf", features = ["proptest", "exact"] }
 # The home of the checked-operation catalog Contract IR validates against; tests select law
 # definitions from it instead of copying them.
-quire-verification-contracts = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-verification-contracts", rev = "61f4a44d76d51cc53b2dfe7ed10aba7b23cfa6ef" }
+quire-verification-contracts = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-verification-contracts", rev = "4c49706d5db3ba77f96088ddcbb2635046246e32" }
 sha2 = "=0.10.9"
 
 [profile.release]
