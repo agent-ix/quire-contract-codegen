@@ -28,13 +28,14 @@ mod subject;
 
 use std::{fs, path::PathBuf, time::Duration};
 
-use native_twin::Twin;
+use native_twin::{Tamper, Twin};
 use package::{
     application, code_id, corpus_package, key, literal, member, op, op_full, parameter_body,
     reference, Bound, PackageBuilder, NODE_DOMAIN, T_BOOLEAN, T_INTEGER,
 };
 use qsl_replay::{
-    DisagreementCause, FrameChange, ProofCategory, ReplayResult, Verdict, WitnessSettlement,
+    DisagreementCause, FrameChange, FrameIdentityMismatch, ProofCategory, ReplayRefusal,
+    ReplayResult, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
     execute_kani_obligation, generate_state_frame_obligations, KaniExecutionRequest,
@@ -752,6 +753,33 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
         }),
         StateFrameRefusal::NotLowered { record }
             if matches!(*record, CompleteLoweringRecordV2::InvalidInput { .. })
+    ));
+}
+
+/// `replay_frame` refuses an envelope whose `clause_node` or `occurrence_key` is not its
+/// payload's, naming both; the same run with an agreeing envelope replays, so each refusal is the
+/// difference and not the run.
+///
+/// Trace: FR-015-AC-32, TC-025
+#[test]
+fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
+    let twin = Twin::compile();
+    let invocation = twin.invocation("account", (5, 0), (6, 0));
+    assert!(twin
+        .replay_tampered(&invocation, "account", "audit", Tamper::Nothing)
+        .is_ok());
+
+    let clause = twin.replay_tampered(&invocation, "account", "audit", Tamper::ClauseNode);
+    assert!(matches!(
+        clause,
+        Err(ReplayRefusal::FrameIdentity(mismatch))
+            if matches!(*mismatch, FrameIdentityMismatch::EnvelopeFrame { .. })
+    ));
+    let occurrence = twin.replay_tampered(&invocation, "account", "audit", Tamper::Occurrence);
+    assert!(matches!(
+        occurrence,
+        Err(ReplayRefusal::FrameIdentity(mismatch))
+            if matches!(*mismatch, FrameIdentityMismatch::EnvelopeOccurrence { .. })
     ));
 }
 

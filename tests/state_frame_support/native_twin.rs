@@ -222,6 +222,17 @@ fn unit_source(model_digest: &str) -> String {
     )
 }
 
+/// Which envelope identity a replay makes differ from the payload's.
+#[derive(Clone, Copy)]
+pub enum Tamper {
+    /// Neither: the envelope agrees with its payload.
+    Nothing,
+    /// The envelope's `clause_node`.
+    ClauseNode,
+    /// The envelope's `occurrence_key`.
+    Occurrence,
+}
+
 /// The compiled twin.
 pub struct Twin {
     unit: Vec<u8>,
@@ -328,6 +339,17 @@ impl Twin {
         account: &str,
         field: &str,
     ) -> Result<FrameReplayResult, ReplayRefusal> {
+        self.replay_tampered(invocation, account, field, Tamper::Nothing)
+    }
+
+    /// [`Self::replay`] with one envelope identity made to differ from the payload's.
+    pub fn replay_tampered(
+        &self,
+        invocation: &Invocation,
+        account: &str,
+        field: &str,
+        tamper: Tamper,
+    ) -> Result<FrameReplayResult, ReplayRefusal> {
         let package_id = DigestRecord::mint(
             DigestDomain::PackageSemanticV2,
             *self.compiled.emitted.package_id().as_bytes(),
@@ -368,7 +390,7 @@ impl Twin {
                 field: field.to_owned(),
             },
         };
-        let envelope = self.envelope(package_id, payload);
+        let envelope = self.envelope(package_id, payload, tamper);
         replay_frame(self.request(package_id, invocation), &envelope)
     }
 
@@ -391,7 +413,18 @@ impl Twin {
         &self,
         package_id: DigestRecord,
         payload: FrameCounterexample,
+        tamper: Tamper,
     ) -> WitnessEnvelope<FrameCounterexample> {
+        // The anchor node stands in for any node other than the frame.
+        let other = payload.anchor;
+        let occurrence = match tamper {
+            Tamper::Occurrence => OccurrenceKey::new(other, payload.occurrence.origin().clone()),
+            Tamper::Nothing | Tamper::ClauseNode => payload.occurrence.clone(),
+        };
+        let clause_node = match tamper {
+            Tamper::ClauseNode => other,
+            Tamper::Nothing | Tamper::Occurrence => payload.frame,
+        };
         let backend = (
             "kani-backend-1".to_owned(),
             Some(DigestDomain::ToolManifestJcsV1.as_str().to_owned()),
@@ -399,8 +432,8 @@ impl Twin {
         );
         WitnessEnvelope::reconstruct(WitnessPacket {
             obligation_identity: Some([1; 32]),
-            occurrence_key: Some(payload.occurrence.clone()),
-            clause_node: Some(payload.frame),
+            occurrence_key: Some(occurrence),
+            clause_node: Some(clause_node),
             selected_function: Some(
                 QualifiedName::new(vec![Identifier::new("deposit").expect("identifier")])
                     .expect("a qualified name"),
