@@ -522,17 +522,8 @@ fn capture_tail<R: Read + AsFd>(
 ) -> Vec<u8> {
     let mut kept = Vec::new();
     let mut chunk = [0_u8; 64 * 1024];
-    let interval = Timespec {
-        tv_sec: 0,
-        tv_nsec: LAUNCHER_POLL_INTERVAL
-            .subsec_nanos()
-            .try_into()
-            .unwrap_or(0),
-    };
-    let no_wait = Timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
+    let interval = Timespec::try_from(LAUNCHER_POLL_INTERVAL).unwrap_or_default();
+    let no_wait = Timespec::default();
     let mut drain_until: Option<Instant> = None;
     loop {
         if drain_until.is_none() && stop.load(Ordering::Acquire) {
