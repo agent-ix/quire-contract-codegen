@@ -425,23 +425,24 @@ const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
 /// straggler that keeps writing.
 const STOP_DRAIN_LIMIT: Duration = Duration::from_millis(100);
 
-/// Runs `command` to completion or kills what it can still find of it once `timeout` elapses,
-/// whichever happens first, and **returns** within `timeout` plus a small constant (the poll
-/// interval and `STOP_DRAIN_LIMIT`) either way; that bound does not depend on whether the kill
-/// reached everything. A `timeout` too large to
-/// add to the current instant never elapses.
+/// Runs `command` to completion or kills its process group once `timeout` elapses, whichever
+/// happens first, and **returns** within `timeout` plus a small constant (the poll interval and
+/// `STOP_DRAIN_LIMIT`) either way; that bound does not depend on whether the kill reached
+/// everything. A `timeout` too large to add to the current instant never elapses.
 ///
 /// The launcher runs as the leader of its own process group, so a timeout kills CBMC and
 /// every other descendant along with it instead of leaving them running past the budget; see
-/// `kill_process_tree`.
+/// `kill_process_tree`. The group is no longer the terminal's foreground group, so a Ctrl-C
+/// typed at the caller's terminal reaches the caller and not the launcher or its descendants:
+/// a caller that is interrupted and exits without returning from this function leaves them
+/// running until they finish on their own.
 ///
 /// Stdout and stderr are drained on their own threads as soon as the process is spawned, the same
 /// way `Command::output()` drains them internally: a full pipe buffer would otherwise stall the
 /// child while this function is only polling `try_wait`, turning a bounded run into a hang of its
 /// own. Each thread keeps at most `CAPTURE_LIMIT` bytes and polls its pipe rather than blocking
 /// in `read`, so once the launcher is gone this function tells both threads to stop and joins
-/// them: a descendant the tree walk could not see (forked after the snapshot, or already
-/// reparented away) may still hold the pipe's write end open. Each thread then reads what is
+/// them: a descendant that left the process group may still hold the pipe's write end open. Each thread then reads what is
 /// already in the pipe for at most `STOP_DRAIN_LIMIT` and returns, however fast a straggler
 /// keeps writing, so the join adds at most that limit plus one poll interval to the return time.
 pub fn run_launcher_with_timeout(
@@ -1072,6 +1073,8 @@ mod tests {
     /// The budget is tried up a ladder because a budget shorter than the time the OS takes to
     /// fork the grandchild ends the run before any grandchild exists; a grandchild that died
     /// before writing its pidfile counts as killed.
+    ///
+    /// Trace: FR-017-AC-17, TC-027
     #[cfg(target_os = "linux")]
     #[test]
     fn a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child() {
@@ -1189,6 +1192,8 @@ mod tests {
     /// outer shell, the direct child. Waiting for the capture threads to see EOF would block
     /// until the orphan's `sleep 45` ended on its own, which is unbounded; the call must return
     /// in about 200ms.
+    ///
+    /// Trace: FR-017-AC-16, TC-027
     #[test]
     fn a_process_orphaned_just_before_the_kill_does_not_block_this_calls_own_return() {
         let mut command = Command::new("sh");
@@ -1272,12 +1277,13 @@ mod tests {
     fn capture_within(
         reader: io::PipeReader,
         stop: &Arc<AtomicBool>,
+        drain_limit: Duration,
         within: Duration,
     ) -> Option<Vec<u8>> {
         let (sender, receiver) = std::sync::mpsc::channel();
         let stop = Arc::clone(stop);
         thread::spawn(move || {
-            let _ = sender.send(capture_tail(reader, &stop, CAPTURE_LIMIT, STOP_DRAIN_LIMIT));
+            let _ = sender.send(capture_tail(reader, &stop, CAPTURE_LIMIT, drain_limit));
         });
         receiver.recv_timeout(within).ok()
     }
@@ -1285,13 +1291,13 @@ mod tests {
     /// Bytes already in the pipe when the stop flag is seen are returned even though a write end
     /// is still open.
     ///
-    /// Trace: FR-017-AC-14, TC-027
+    /// Trace: FR-017-AC-16, TC-027
     #[test]
     fn a_capture_thread_told_to_stop_returns_what_is_already_in_the_pipe() {
         let (reader, mut writer) = io::pipe().unwrap();
         writer.write_all(b"written before stop").unwrap();
         let stop = Arc::new(AtomicBool::new(true));
-        let kept = capture_within(reader, &stop, Duration::from_secs(10));
+        let kept = capture_within(reader, &stop, STOP_DRAIN_LIMIT, Duration::from_secs(10));
         assert_eq!(kept.as_deref(), Some(&b"written before stop"[..]));
         drop(writer);
     }
@@ -1299,7 +1305,7 @@ mod tests {
     /// A capture thread that is idle in its poll, with a write end still open and nothing more
     /// coming, stops once the flag is set later.
     ///
-    /// Trace: FR-017-AC-14, TC-027
+    /// Trace: FR-017-AC-16, TC-027
     #[test]
     fn a_capture_thread_blocked_on_an_open_idle_pipe_stops_when_the_flag_is_set() {
         let (reader, writer) = io::pipe().unwrap();
@@ -1311,7 +1317,7 @@ mod tests {
                 stop.store(true, Ordering::Release);
             })
         };
-        let kept = capture_within(reader, &stop, Duration::from_secs(10));
+        let kept = capture_within(reader, &stop, STOP_DRAIN_LIMIT, Duration::from_secs(10));
         setter.join().unwrap();
         assert_eq!(kept, Some(Vec::new()), "the capture must stop on the flag");
         drop(writer);
@@ -1320,25 +1326,21 @@ mod tests {
     /// The drain after the stop flag ends at its limit even when bytes are still waiting: with a
     /// zero limit nothing is read.
     ///
-    /// Trace: FR-017-AC-14, TC-027
+    /// Trace: FR-017-AC-16, TC-027
     #[test]
     fn a_capture_thread_stops_reading_when_its_drain_limit_has_passed() {
         let (reader, mut writer) = io::pipe().unwrap();
         writer.write_all(b"waiting in the pipe").unwrap();
-        let kept = capture_tail(
-            reader,
-            &AtomicBool::new(true),
-            CAPTURE_LIMIT,
-            Duration::ZERO,
-        );
-        assert!(kept.is_empty(), "read {kept:?} past a zero drain limit");
+        let stop = Arc::new(AtomicBool::new(true));
+        let kept = capture_within(reader, &stop, Duration::ZERO, Duration::from_secs(10));
+        assert_eq!(kept, Some(Vec::new()), "read past a zero drain limit");
         drop(writer);
     }
 
     /// A straggler that writes without pause cannot hold the capture thread past the drain
     /// limit after the flag is set.
     ///
-    /// Trace: FR-017-AC-14, TC-027
+    /// Trace: FR-017-AC-16, TC-027
     #[test]
     fn a_capture_thread_stops_within_the_drain_limit_while_a_straggler_keeps_writing() {
         let (reader, mut writer) = io::pipe().unwrap();
@@ -1361,7 +1363,12 @@ mod tests {
                 stop.store(true, Ordering::Release);
             })
         };
-        let kept = capture_within(reader, &stop, STOP_DRAIN_LIMIT + Duration::from_secs(10));
+        let kept = capture_within(
+            reader,
+            &stop,
+            STOP_DRAIN_LIMIT,
+            STOP_DRAIN_LIMIT + Duration::from_secs(10),
+        );
         running.store(false, Ordering::Release);
         setter.join().unwrap();
         straggler.join().unwrap();
@@ -1392,7 +1399,7 @@ mod tests {
 
     /// A timeout too large to add to the current instant means no deadline, not a panic.
     ///
-    /// Trace: FR-017-AC-14, TC-027
+    /// Trace: FR-017-AC-15, TC-027
     #[test]
     fn a_timeout_of_duration_max_never_elapses_and_does_not_panic() {
         let mut command = Command::new("sh");

@@ -42,3 +42,19 @@ skip this rule and classify the run by its cover summary alone."
 
 FR-017-AC-13 and the TC-027 Expected Results agree with each other and with the code. The
 exception is sound: a precondition harness asserts nothing beyond its cover.
+
+## New findings (disposition pass 1)
+
+Reviewed at 5ef88a8a75a755f777e9ff774534d17748979fd1.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | FR-017-AC-14 is compound. It bundles four independent behaviours in one criterion: the 8 MiB tail, a `Duration::MAX` timeout, stop-and-join of the capture threads, and the group kill. So one failing clause fails the whole AC, and the matrix cannot mark a clause partial (the group-kill clause is Linux-only in test). | spec/functional/complete-v1/FR-017-kani-execution-evidence.md:134 |
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: "none of those steps branches on which kind it is, except that the classification applies the zero-checks rule to every harness but a precondition harness." |
+| FND-002 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: "for a precondition harness … the generator shall instead classify the run by its cover summary alone, as verified, cover-unsatisfied or inconclusive under the cover rules above." |
+| FND-003 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: a Behavior statement ("shall keep at most the last 8 MiB …") and FR-017-AC-14. |

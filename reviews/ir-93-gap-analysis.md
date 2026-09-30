@@ -42,3 +42,17 @@ Near-clean.
 - IR-353's "probes through the same timeout runner" and its "hung probe" test do not apply. No
   version probe exists under src/ at origin/main or at the head. The ticket's `.output()` claim is
   untrusted Linear text, and it is stale.
+
+## New findings (disposition pass 1)
+
+Reviewed at 5ef88a8a75a755f777e9ff774534d17748979fd1.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | `a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child` backs FR-017-AC-14's group-kill clause and TC-027 lists it, but it carries no `Trace:` line, unlike the other six AC-14 tests. It is also `cfg(target_os = "linux")`, so on macOS nothing tests that clause. | src/kani_execution.rs:1063-1077 |
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: FR-017-AC-14 plus a Behavior statement, test-matrix and TC-027 rows, and `Trace: FR-017-AC-14, TC-027` on the six launcher tests. |

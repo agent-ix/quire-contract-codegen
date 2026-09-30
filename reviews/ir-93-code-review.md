@@ -134,3 +134,44 @@ What is right:
   `forbid(unsafe_code)` `libc` is not an option.
 - `.gitignore:15` `target-*/` matches `target-codex-backends/` (checked with `git check-ignore -v`).
   The brief's claim that the lane's target directory is not ignored is incorrect.
+
+## New findings (disposition pass 1)
+
+Reviewed at 5ef88a8a75a755f777e9ff774534d17748979fd1 (fix commits 4af361b and 5ef88a8).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | `a_capture_thread_stops_reading_when_its_drain_limit_has_passed` calls `capture_tail` directly with the writer still open, so a mutation that ignores the stop flag hangs the suite instead of failing it. Measured: with `stop.load` forced false, libtest reported the test "running for over 60 seconds" until my 300 s timeout killed the run. The other three stop tests go through `capture_within` and fail properly. | src/kani_execution.rs:1325-1336 |
+| FND-008 | low | The `run_launcher_with_timeout` doc still describes the removed mechanism: "a descendant the tree walk could not see (forked after the snapshot, or already reparented away)". There is no tree walk or snapshot any more; the straggler is now a process that left the group. | src/kani_execution.rs:442-444 |
+| FND-009 | low | `process_group(0)` takes the launcher out of the terminal's foreground process group. So a Ctrl-C (SIGINT) to an interactive caller such as `cargo test` or `make kani` no longer reaches kani-driver or CBMC, and they keep running (CBMC can take more than 16 GB, IR-241) after the caller dies. Neither the code nor FR-017 mentions this. Reasoned, not measured. | src/kani_execution.rs:451-454 |
+
+### Mutations run at 5ef88a8 (kani_execution unit tests, restored after each)
+
+| Mutation | Result |
+| --- | --- |
+| baseline | 17 passed |
+| drain-limit check disabled | red: `a_capture_thread_stops_reading_when_its_drain_limit_has_passed` (the straggler test alone stays green, as the coder said) |
+| `kill_process_group` call removed | red: `a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child` |
+| `process_group(0)` removed (group kill left in place) | red: the grandchild test |
+| stop flag ignored | hang: the zero-drain-limit test never returns (FND-007) |
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9 (pidfd replaced by `kill_process_group`; `Timespec::try_from` in 5ef88a8a75a755f777e9ff774534d17748979fd1). rustix gates `kill` only against espidf/wasi, and `poll` and `Timespec` are available on macOS. The only `cfg(target_os = "linux")` items left are test-only. |
+| FND-002 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: the pidfd path is gone. The single group signal has no per-descendant open that can fail. |
+| FND-003 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: `STOP_DRAIN_LIMIT` (100 ms) bounds the drain after stop. Disabling the check turns the zero-limit test red. |
+| FND-004 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: replaced by tests joined through `recv_timeout`. The one remaining direct call is FND-007. |
+| FND-005 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: the module doc and the `kill_process_tree` doc were rewritten for the group kill. The leftover sentence in another doc is FND-008. |
+| FND-006 | accepted-no-change | `classify_kani_run` now documents that it is not for a precondition harness's run and names `launch_evidence` as the path for one. Its in-repo callers (the kani_transcript real-capture tests and the unit tests) feed no precondition transcript. Documenting the contract is enough for a prerelease pub helper, and the signature was kept deliberately. |
+
+### Round 1 verdict
+
+Every original finding is resolved: FND-001 to FND-005 are fixed, and FND-006 is accepted as
+documented. The three new findings are low. My own `make ci` at 5ef88a8 exited 0: fmt, spec,
+clippy, msrv and `make test` (88 lib and 213 `it` tests each, 5 ignored), deny, one-copy,
+audit-unsafe and rustdoc. I did not run `make kani`.
+
+The branch is behind origin/main (#201 merged) and `git merge-tree` reports a content conflict in
+spec/test-matrix.md, so it needs a rebase before it can merge.

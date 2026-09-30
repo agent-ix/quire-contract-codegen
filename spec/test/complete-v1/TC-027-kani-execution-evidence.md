@@ -70,7 +70,8 @@ The launcher, exercised with real short-lived processes: a run printing more tha
 with its real exit status and a bounded text that still ends with the verdict; a `Duration::MAX`
 timeout does not panic; a capture thread told to stop returns what is already in its pipe, stops
 while a write end is still open and idle, and stops within its drain limit while a straggler keeps
-writing; and a run that times out has a real grandchild killed with it (FR-017-AC-14).
+writing; and a run that times out has a real grandchild killed with it (FR-017-AC-14 through
+FR-017-AC-17).
 
 Each capture parses to the expected typed transcript and classifies to verified, falsified with
 the assertion playback passed through verbatim, exhausted bound, cover-unsatisfied 0 of 1,
@@ -100,7 +101,8 @@ not contain the harness is refused with no run.
 FR-017-AC-13, and the launcher tests (`a_stream_longer_than_the_capture_limit_keeps_only_its_tail`,
 `a_capture_thread_*`, `a_launcher_printing_more_than_the_limit_completes_with_bounded_text`,
 `a_timeout_of_duration_max_never_elapses_and_does_not_panic`,
-`a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`) for FR-017-AC-14;
+`a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`) for FR-017-AC-14
+through FR-017-AC-17;
 the `src/kani_transcript.rs` tests `tc_027_a_typed_transcript_reads_each_prose_element`,
 `tc_027_banners_and_absent_prose_are_distinguished`,
 `tc_027_a_cover_line_without_the_counts_shape_is_malformed_not_absent`,
