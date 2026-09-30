@@ -61,7 +61,7 @@ generators, the input model, the backend adapter, Kani tractability and the gene
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings | TC-025, TC-027, TC-036, TC-039 |
-| Backend adapter | FR-026 adapter trait and registration, FR-029 terminal-value map | TC-037, TC-040 |
+| Backend adapter | FR-026 adapter trait and registration, FR-029 and FR-030 terminal-value maps | TC-037, TC-040, TC-041 |
 | Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope | TC-026, TC-035 |
 | Capability settlement and routing | FR-019 settlement, FR-022 routed generation | TC-030, TC-033 |
 
@@ -77,7 +77,7 @@ the directory carries the subsystem.
 | Subsystem | Directory | Artifacts |
 |---|---|---|
 | Strategies and harness campaigns | `functional/strategies/`, `nonfunctional/strategies/`, `test/strategies/` | FR-008 to FR-013, NFR-004, TC-017 to TC-022 |
-| Complete-V1 generation, execution and replay | `functional/complete-v1/`, `test/complete-v1/` | FR-014 to FR-019, FR-021, FR-022, FR-024 to FR-026, FR-028, FR-029, TC-024 to TC-027, TC-029 to TC-031, TC-033, TC-035 to TC-037, TC-039, TC-040 |
+| Complete-V1 generation, execution and replay | `functional/complete-v1/`, `test/complete-v1/` | FR-014 to FR-019, FR-021, FR-022, FR-024 to FR-026, FR-028 to FR-030, TC-024 to TC-027, TC-029 to TC-031, TC-033, TC-035 to TC-037, TC-039 to TC-041 |
 | Architecture decisions | `decisions/` | ADR-001 to ADR-004 |
 | Everything else | the flat `functional/`, `nonfunctional/`, `test/`, `stakeholder/` directories | FR-002, FR-004, FR-005, NFR-001, NFR-002, StR-001, the remaining TCs |
 

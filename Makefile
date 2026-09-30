@@ -10,6 +10,8 @@ override BASH := /usr/bin/bash
 override CARGO := $(TRUSTED_HOME)/.cargo/bin/cargo
 override MSRV := 1.98.1
 override QUIRE := $(TRUSTED_HOME)/.npm-global/bin/quire
+# --locked only when no local patch is active: a patch rewrites the resolution.
+LOCKED ?= $(if $(wildcard .cargo/config.toml),,--locked)
 
 
 .PHONY: help
@@ -27,6 +29,8 @@ help:
 	@echo "  make deny             - Run all configured cargo-deny checks"
 	@echo "  make audit-unsafe     - Enforce // SAFETY: comments on unsafe blocks"
 	@echo "  make rustdoc          - Build warning-free API documentation"
+	@echo "  make use-local        - Patch first-party git deps to sibling checkouts (.cargo/config.toml)"
+	@echo "  make use-remote       - Remove the local patch file; build from GitHub"
 	@echo "  make ci               - All local CI gates"
 
 # =============================================================================
@@ -43,11 +47,11 @@ fmt-check:
 
 .PHONY: lint
 lint:
-	$(CARGO) clippy --locked --all-targets -- -D warnings
+	$(CARGO) clippy $(LOCKED) --all-targets -- -D warnings
 
 .PHONY: test
 test:
-	$(CARGO) test --locked
+	$(CARGO) test $(LOCKED)
 
 # The Kani lane (FR-015, TC-025). Kani and CBMC are memory-heavy, so the lane
 # holds a host-wide lock, runs one harness at a time, and builds in its own
@@ -61,17 +65,17 @@ test:
 # own positional filter takes one.
 .PHONY: kani
 kani:
-	flock /tmp/agent-e-heavy-build.lock $(CARGO) +$(MSRV) test --locked -j 4 \
+	flock /tmp/agent-e-heavy-build.lock $(CARGO) +$(MSRV) test $(LOCKED) -j 4 \
 		--test it --target-dir target-codex-backends \
 		-- --ignored --test-threads=1 kani_obligations skeleton_spine
 
 .PHONY: build
 build:
-	$(CARGO) build --locked --release
+	$(CARGO) build $(LOCKED) --release
 
 .PHONY: msrv
 msrv:
-	$(CARGO) +$(MSRV) test --locked
+	$(CARGO) +$(MSRV) test $(LOCKED)
 
 .PHONY: spec
 spec:
@@ -85,9 +89,12 @@ clean:
 # Supply chain & safety
 # =============================================================================
 
+# One copy of every agent-ix git crate in Cargo.lock; see the header of
+# scripts/check_one_copy.awk.
 .PHONY: deny
 deny:
 	$(CARGO) deny check
+	awk -F'"' -f scripts/check_one_copy.awk Cargo.lock
 
 .PHONY: cargo-audit
 cargo-audit:
@@ -109,7 +116,54 @@ audit-unsafe: audit-unsafe-selftest
 
 .PHONY: rustdoc
 rustdoc:
-	RUSTDOCFLAGS=-Dwarnings $(CARGO) doc --locked --no-deps
+	RUSTDOCFLAGS=-Dwarnings $(CARGO) doc $(LOCKED) --no-deps
+
+# =============================================================================
+# Local development against sibling checkouts
+#
+# `use-local` writes a gitignored .cargo/config.toml that patches each
+# first-party git dependency to its working tree at $(SIBLINGS)/<repo>, uncommitted
+# edits included. `use-remote` deletes it. Format: <repo>:<crate>:<crate-dir>;
+# entries of one repo must be adjacent (they share one [patch] table).
+# SIBLINGS is the directory holding the sibling clones: the parent of the main
+# checkout, so it is also right from a linked worktree. Override to relocate.
+# =============================================================================
+
+SIBLINGS ?= $(abspath $(shell git rev-parse --path-format=absolute --git-common-dir)/../..)
+LOCAL_PATCHES ?= quire-contract-ir:quire-contract-ir:. quire-contract-ir:quire-contract-model:crates/quire-contract-model \
+	quire-contract-runtime:quire-contract-runtime:. \
+	quire-verification-contracts:quire-verification-contracts:. \
+	quire-spec-language:qsl-attrs:qsl-attrs quire-spec-language:qsl-cst:qsl-cst quire-spec-language:qsl-eval:qsl-eval \
+	quire-spec-language:qsl-forms:qsl-forms quire-spec-language:qsl-foundation:qsl-foundation \
+	quire-spec-language:qsl-package:qsl-package quire-spec-language:qsl-replay:qsl-replay \
+	quire-spec-language:qsl-semantics:qsl-semantics quire-spec-language:quire-exact:quire-exact
+
+.PHONY: use-local
+use-local:
+	@set -e; mkdir -p .cargo; : > .cargo/config.toml; \
+	for spec in $(LOCAL_PATCHES); do \
+	  if [ "$$(printf '%s' "$$spec" | tr -cd ':' | wc -c)" != 2 ] || printf '%s' "$$spec" | grep -q '::\|^:\|:$$'; then \
+	    rm -f .cargo/config.toml; echo "use-local: malformed LOCAL_PATCHES entry '$$spec' (want repo:crate:dir)" >&2; exit 1; \
+	  fi; \
+	  repo=$${spec%%:*}; rest=$${spec#*:}; crate=$${rest%%:*}; dir=$${rest#*:}; \
+	  if [ ! -f "$(SIBLINGS)/$$repo/$$dir/Cargo.toml" ]; then \
+	    rm -f .cargo/config.toml; \
+	    echo "use-local: $(SIBLINGS)/$$repo is not cloned (no Cargo.toml at $(SIBLINGS)/$$repo/$$dir); clone agent-ix/$$repo next to this repo" >&2; exit 1; \
+	  fi; \
+	  if [ "$$repo" != "$$prev" ]; then \
+	    [ -z "$$prev" ] || printf '\n' >> .cargo/config.toml; \
+	    printf '[patch."https://github.com/agent-ix/%s"]\n' "$$repo" >> .cargo/config.toml; prev=$$repo; \
+	  fi; \
+	  printf '%s = { path = "%s/%s/%s" }\n' "$$crate" "$(SIBLINGS)" "$$repo" "$$dir" >> .cargo/config.toml; \
+	done; echo "wrote .cargo/config.toml"; \
+	if $(CARGO) metadata --format-version 1 2>&1 >/dev/null | grep -q 'patch .* was not used'; then \
+	  rm -f .cargo/config.toml; echo "use-local: a patch was not used; the sibling's version does not satisfy the requirement" >&2; exit 1; \
+	fi
+
+.PHONY: use-remote
+use-remote:
+	rm -f .cargo/config.toml
+	git checkout -- Cargo.lock
 
 # =============================================================================
 # Composite

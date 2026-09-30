@@ -52,6 +52,9 @@ exceptions = [
 multiple-versions = "allow"
 wildcards = "warn"
 
+# One copy of every first-party crate is enforced by scripts/check_one_copy.awk
+# (run from `make deny`), which reads Cargo.lock.
+
 [advisories]
 version = 2
 # RUSTSEC-2026-0009 is in `time`, reached through jsonschema; it is reachable only through an
