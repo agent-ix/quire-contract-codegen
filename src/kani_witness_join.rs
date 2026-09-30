@@ -404,4 +404,41 @@ fn kani_concrete_playback_synthetic() {{\n\
             ]
         );
     }
+
+    /// The integer domain is inclusive at both ends: the minimum and maximum are in domain, and
+    /// the values one past either end and the extremes of `i64` are not. A value with no
+    /// bounded binding, and a Boolean, are never out of domain.
+    ///
+    /// Trace: FR-016-AC-2, TC-026
+    #[test]
+    fn first_out_of_domain_is_inclusive_at_both_bounds() {
+        let arguments = vec![argument("amount", KaniPrimitiveType::I64)];
+        let check = |value: i64| {
+            first_out_of_domain(
+                &arguments,
+                &[("amount".to_owned(), WitnessValue::Integer(value))],
+            )
+        };
+        for inside in [0, 1, 999, 1000] {
+            assert_eq!(check(inside), None, "{inside}");
+        }
+        for outside in [-1, 1001, i64::MIN, i64::MAX] {
+            assert_eq!(check(outside), Some("amount"), "{outside}");
+        }
+        assert_eq!(
+            first_out_of_domain(
+                &arguments,
+                &[
+                    ("unbound".to_owned(), WitnessValue::Integer(i64::MAX)),
+                    ("amount".to_owned(), WitnessValue::Integer(5)),
+                ]
+            ),
+            None
+        );
+        let flag = vec![argument("flag", KaniPrimitiveType::Boolean)];
+        assert_eq!(
+            first_out_of_domain(&flag, &[("flag".to_owned(), WitnessValue::Boolean(true))]),
+            None
+        );
+    }
 }

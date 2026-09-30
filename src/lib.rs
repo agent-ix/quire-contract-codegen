@@ -135,9 +135,9 @@ pub use publication::{
     PublicationErrorCode, PublishedBundleIdentity,
 };
 pub use spine_replay::{
-    replay_counterexample, replay_falsification, DependencyLock, EvidenceFailureCause,
-    LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict,
-    SpineReplayError,
+    replay_counterexample, replay_falsification, DecodeFailure, DependencyLock,
+    EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError,
+    ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,

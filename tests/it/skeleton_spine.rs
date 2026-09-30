@@ -19,14 +19,15 @@
 use std::{fs, path::PathBuf};
 
 use qsl_replay::{
-    ByteDigest, CanonicalAssignment, DigestDomain, DigestRecord, ProofCategory, ReplaySource,
-    ScalarLimits, StageLimits, Verdict, WireNodeId, WitnessSettlement, MAX_ENCODED_BYTES,
+    ByteDigest, CanonicalAssignment, DependencySelectionsCause, DigestDomain, DigestRecord,
+    ProofCategory, ReplayRefusal, ReplaySource, ScalarLimits, StageLimits, Verdict, WireNodeId,
+    WitnessSettlement, MAX_ENCODED_BYTES,
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample, replay_falsification,
     DependencyLock, EvidenceFailureCause, KaniExecutionRequest, KaniInstallation,
     KaniObligationHarness, KaniRunOutcome, LockedSource, ReplayInputs, ReplayPackage,
-    ReplayParameter, ReplayVerdict, SpineReplayError,
+    ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 use quire_contract_ir::kani::WitnessValue;
 
@@ -298,24 +299,47 @@ fn dependency_lock() -> DependencyLock {
 }
 
 /// The request's package reference carries one `dependencies` entry per lock selection, copied
-/// field for field with the dependency's own sources, and each of those sources is in the byte
-/// provision.
+/// field for field with the dependency's own sources and labelled with each record's own digest
+/// domain, in ascending identity order whatever order the lock lists them in. A source shared
+/// by the unit and a dependency, or by two dependencies, is provided once.
 ///
-/// Trace: FR-016-AC-9, TC-026
+/// Trace: TC-026
 #[test]
 fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     let native = native_source(VIOLATING_TWIN);
     let lock = dependency_lock();
-    let package = ReplayPackage::new(inputs(&native, FUNCTION, vec![lock.clone()]))
-        .expect("the twin compiles");
+    let mut earlier = dependency_lock();
+    earlier.identity = "test/aaa".to_owned();
+    earlier.sources = vec![
+        locked("lib-shared", native.as_bytes()),
+        locked("lib-aaa", b"shared dependency bytes"),
+    ];
+    let mut shared = dependency_lock();
+    shared.identity = "test/mmm".to_owned();
+    shared.sources = vec![locked("lib-mmm", b"shared dependency bytes")];
+    let package = ReplayPackage::new(inputs(
+        &native,
+        FUNCTION,
+        vec![lock.clone(), shared, earlier],
+    ))
+    .expect("the twin compiles");
     let wire = package.request("counterexample", ReplaySource::Input(Vec::new()));
 
-    let [entry] = wire.dependencies.as_slice() else {
-        panic!("one lock selection is one entry: {:?}", wire.dependencies);
-    };
-    assert_eq!(entry.identity, lock.identity);
+    let identities: Vec<_> = wire
+        .dependencies
+        .iter()
+        .map(|d| d.identity.as_str())
+        .collect();
+    assert_eq!(identities, ["test/aaa", "test/mmm", "test/units"]);
+    let entry = &wire.dependencies[2];
     assert_eq!(entry.version, lock.version);
-    assert_eq!(entry.package_id.1, lock.package_id.hex());
+    assert_eq!(
+        entry.package_id,
+        (
+            Some(lock.package_id.domain().as_str().to_owned()),
+            lock.package_id.hex()
+        )
+    );
     let [source] = entry.sources.as_slice() else {
         panic!("the dependency's own lock sources: {:?}", entry.sources);
     };
@@ -328,9 +352,72 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
         .iter()
         .any(|(_, digest, bytes)| *digest == source.5 && bytes == b"a dependency source"));
 
+    // Three distinct byte strings across five source references: the unit's source (also
+    // listed by `test/aaa`), the shared bytes (listed by two dependencies), and `lib-units`.
+    let digests: Vec<_> = wire
+        .byte_provision
+        .iter()
+        .map(|(_, digest, _)| digest)
+        .collect();
+    assert_eq!(digests.len(), 3, "{digests:?}");
+
     let without = compile_native_twin(&native, FUNCTION)
         .request("counterexample", ReplaySource::Input(Vec::new()));
     assert!(without.dependencies.is_empty());
+}
+
+/// A lock that selects one library twice has no admitted request, so the package is refused
+/// rather than emitting an entry list QSL refuses.
+///
+/// Trace: TC-026
+#[test]
+fn tc_026_a_lock_repeating_a_dependency_is_refused() {
+    let refusal = ReplayPackage::new(inputs(
+        &native_source(VIOLATING_TWIN),
+        FUNCTION,
+        vec![dependency_lock(), dependency_lock()],
+    ))
+    .expect_err("the repeated identity is refused");
+    assert!(
+        matches!(&refusal, ReplayPackageError::DuplicateDependency { identity } if identity == "test/units"),
+        "{refusal}"
+    );
+}
+
+/// `ReplayPackage` compiles the unit through `qsl_replay::call_site`, which admits no dependency
+/// input, so the unit selects no library and QSL refuses a request naming a dependency as
+/// unselected. Replaying a unit that imports a locked dependency is unreachable through
+/// qsl-replay's public API until `call_site` accepts one.
+///
+/// Trace: TC-026
+#[test]
+fn tc_026_qsl_refuses_a_dependency_the_standalone_unit_does_not_select() {
+    let package = ReplayPackage::new(inputs(
+        &native_source(VIOLATING_TWIN),
+        FUNCTION,
+        vec![dependency_lock()],
+    ))
+    .expect("the twin compiles");
+    let refusal = replay_falsification(
+        "module::proof",
+        "balance-never-grows",
+        &values(1, 5),
+        &package.parameters(),
+        |source| package.request("counterexample", source),
+    )
+    .expect_err("QSL refuses the unselected dependency");
+    assert!(
+        matches!(
+            &refusal,
+            SpineReplayError::Refused(cause)
+                if matches!(
+                    cause.as_ref(),
+                    ReplayRefusal::DependencySelections(DependencySelectionsCause::Unselected { identity })
+                        if identity.as_str() == "test/units"
+                )
+        ),
+        "{refusal}"
+    );
 }
 
 /// The harness of the hand-built package, the obligation the synthetic transcripts name.
@@ -391,19 +478,54 @@ fn tc_026_an_out_of_domain_counterexample_is_evidence_failure() {
     );
 }
 
-/// A transcript that does not decode against the obligation's schema is evidence failure.
+/// Each class of malformed transcript is a decode evidence failure carrying the decoder's own
+/// cause code: no playback block, a playback block with too few values for the schema, and one
+/// whose value has the wrong byte width.
 ///
 /// Trace: FR-016-AC-1, TC-026
 #[test]
-fn tc_026_an_undecodable_counterexample_is_evidence_failure() {
+fn tc_026_each_malformed_counterexample_class_is_a_decode_evidence_failure() {
     let harness = spine_harness();
     let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
-    let verdict = replay_counterexample(&harness.identity, "not a playback block", &package)
-        .expect("the verdict is reached");
+    let one_value = playback(&harness, 1, 5).replacen(
+        "        // 5\n        vec![5, 0, 0, 0, 0, 0, 0, 0],\n",
+        "",
+        1,
+    );
+    let short_value =
+        playback(&harness, 1, 5).replacen("vec![5, 0, 0, 0, 0, 0, 0, 0]", "vec![5, 0]", 1);
+    for (transcript, code) in [
+        ("not a playback block".to_owned(), None),
+        (one_value, Some("kani_witness_arity_mismatch")),
+        (short_value, Some("kani_witness_width_mismatch")),
+    ] {
+        let verdict = replay_counterexample(&harness.identity, &transcript, &package)
+            .expect("the verdict is reached");
+        let ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(failure)) = &verdict else {
+            panic!("expected a decode failure for {transcript:?}: {verdict:?}");
+        };
+        if let Some(code) = code {
+            assert_eq!(failure.code, code, "{transcript:?}");
+        }
+    }
+}
+
+/// A transcript recorded for another harness is a decode evidence failure and is never
+/// replayed: the same values under the right harness reproduce.
+///
+/// Trace: FR-016-AC-5, TC-026
+#[test]
+fn tc_026_a_counterexample_for_another_harness_is_never_replayed() {
+    let harness = spine_harness();
+    let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
+    let other = playback(&harness, 1, 5).replace(&harness.identity.harness_symbol, "sibling");
+    let verdict =
+        replay_counterexample(&harness.identity, &other, &package).expect("the verdict is reached");
     assert!(
         matches!(
-            verdict,
-            ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(_))
+            &verdict,
+            ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(failure))
+                if failure.code == "cg_witness_harness_identity_mismatch"
         ),
         "{verdict:?}"
     );
@@ -496,37 +618,21 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         get("amount_current") <= get("balance_pre"),
         "the counterexample satisfies the proved precondition"
     );
-    let native = native_source(VIOLATING_TWIN);
-    let proved = compile_native_twin(&native, FUNCTION);
-    let result = replay_falsification(
-        &format!(
-            "{}::{}",
-            harness.identity.module_symbol, harness.identity.harness_symbol
-        ),
-        harness.identity.clause.clause().as_str(),
-        &decoded,
-        &proved.parameters(),
-        |source| proved.request(counterexample, source),
-    )
-    .expect("QSL settles the replay");
+    let violating_twin = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
     assert_eq!(
-        result.settlement(),
-        WitnessSettlement::ReproducedWithEvaluatedWitness
+        replay_counterexample(&harness.identity, counterexample, &violating_twin)
+            .expect("QSL settles the replay"),
+        ReplayVerdict::Reproduced
     );
-    assert_eq!(result.category(), ProofCategory::Violation);
 
     // The same counterexample against the healthy twin does not reproduce.
-    let healthy = native_source(HEALTHY_TWIN);
-    let proved = compile_native_twin(&healthy, FUNCTION);
-    let result = replay_falsification(
-        "module::proof",
-        "balance-never-grows",
-        &decoded,
-        &proved.parameters(),
-        |source| proved.request(counterexample, source),
-    )
-    .expect("QSL settles the replay");
-    assert_eq!(result.settlement(), WitnessSettlement::Inconclusive);
-    let cause = result.disagreement().expect("both verdicts are named");
-    assert_eq!((cause.proved(), cause.replayed()), (violation(), success()));
+    let healthy_twin = compile_native_twin(&native_source(HEALTHY_TWIN), FUNCTION);
+    assert_eq!(
+        replay_counterexample(&harness.identity, counterexample, &healthy_twin)
+            .expect("QSL settles the replay"),
+        ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
+            settlement: WitnessSettlement::Inconclusive,
+            category: ProofCategory::Success,
+        })
+    );
 }

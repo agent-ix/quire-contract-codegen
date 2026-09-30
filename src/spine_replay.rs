@@ -7,7 +7,7 @@
 //! request's digest-addressed source and evaluates the selected function itself, so the verdict
 //! is QSL's, not a value this crate supplies.
 
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
     call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DependencyEntryWire, DigestDomain,
@@ -15,7 +15,7 @@ use qsl_replay::{
     ReplayRequestWire, ReplayResult, ReplaySource, ScalarLimits, SourceIdentity, StageLimits,
     StateEnvironment, Witness, WitnessArmResult, WitnessSettlement,
 };
-use quire_contract_ir::kani::{KaniOutcome, WitnessValue};
+use quire_contract_ir::kani::WitnessValue;
 
 use crate::{
     kani_obligations::KaniObligationIdentity, kani_witness_join::decode_falsification,
@@ -204,6 +204,11 @@ pub enum ReplayPackageError {
         /// The rejected name.
         function: String,
     },
+    /// Two dependency selections name the same library; QSL admits each identity once.
+    DuplicateDependency {
+        /// The repeated library identity.
+        identity: String,
+    },
     /// QSL could not locate the function in the compiled unit.
     CallSite(Box<CallSiteRefusal>),
 }
@@ -213,6 +218,12 @@ impl fmt::Display for ReplayPackageError {
         match self {
             Self::InvalidFunction { function } => {
                 write!(f, "`{function}` is not a valid function identifier")
+            }
+            Self::DuplicateDependency { identity } => {
+                write!(
+                    f,
+                    "the lock selects the dependency `{identity}` more than once"
+                )
             }
             Self::CallSite(refusal) => write!(f, "the call site was not located: {refusal}"),
         }
@@ -236,9 +247,24 @@ impl ReplayPackage {
     ///
     /// # Errors
     ///
-    /// [`ReplayPackageError`] when the function name is not an identifier or QSL does not
-    /// compile the unit or find the function.
-    pub fn new(inputs: ReplayInputs) -> Result<Self, ReplayPackageError> {
+    /// [`ReplayPackageError`] when the function name is not an identifier, a dependency identity
+    /// repeats, or QSL does not compile the unit or find the function. `call_site` compiles a
+    /// standalone unit, so a unit that imports a selected dependency is refused as
+    /// [`ReplayPackageError::CallSite`].
+    pub fn new(mut inputs: ReplayInputs) -> Result<Self, ReplayPackageError> {
+        // QSL admits dependency entries in strictly ascending identity order, each identity once.
+        inputs
+            .dependencies
+            .sort_by(|left, right| left.identity.cmp(&right.identity));
+        if let Some(pair) = inputs
+            .dependencies
+            .windows(2)
+            .find(|pair| pair[0].identity == pair[1].identity)
+        {
+            return Err(ReplayPackageError::DuplicateDependency {
+                identity: pair[0].identity.clone(),
+            });
+        }
         let invalid = || ReplayPackageError::InvalidFunction {
             function: inputs.function.clone(),
         };
@@ -291,35 +317,41 @@ impl ReplayPackage {
                 identity: dependency.identity.clone(),
                 version: dependency.version.clone(),
                 package_id: (
-                    Some(DigestDomain::PackageSemanticV2.as_str().to_owned()),
+                    Some(dependency.package_id.domain().as_str().to_owned()),
                     dependency.package_id.hex(),
                 ),
                 sources: dependency.sources.iter().map(LockedSource::wire).collect(),
             })
             .collect();
-        let mut byte_provision: Vec<(Option<String>, String, Vec<u8>)> = Vec::new();
-        let locked = std::iter::once(&inputs.source).chain(
-            inputs
-                .dependencies
-                .iter()
-                .flat_map(|dependency| dependency.sources.iter()),
-        );
-        for file in locked {
-            let hex = file.digest().hex();
-            if byte_provision.iter().all(|(_, known, _)| *known != hex) {
-                byte_provision.push((
-                    Some(DigestDomain::SourceBytesV1.as_str().to_owned()),
-                    hex,
-                    file.bytes.clone(),
-                ));
-            }
-        }
+        // One entry per distinct digest, in digest order: a source shared between the unit and
+        // a dependency, or between dependencies, is provided once.
+        let byte_provision = std::iter::once(&inputs.source)
+            .chain(
+                inputs
+                    .dependencies
+                    .iter()
+                    .flat_map(|dependency| dependency.sources.iter()),
+            )
+            .map(|file| {
+                let digest = file.digest();
+                (
+                    digest.hex(),
+                    (
+                        Some(digest.domain().as_str().to_owned()),
+                        file.bytes.clone(),
+                    ),
+                )
+            })
+            .collect::<BTreeMap<_, _>>()
+            .into_iter()
+            .map(|(hex, (domain, bytes))| (domain, hex, bytes))
+            .collect();
         ReplayRequestWire {
             contract_version: "quire.native-runtime/v1".to_owned(),
             capability_vocabulary: Some("quire.capability-kind/v1".to_owned()),
             profile_selections: Vec::new(),
             package_id: (
-                Some(DigestDomain::PackageSemanticV2.as_str().to_owned()),
+                Some(self.site.package_id.domain().as_str().to_owned()),
                 self.site.package_id.hex(),
             ),
             package_contract_version: "quire.checked-package/v2".to_owned(),
@@ -331,7 +363,7 @@ impl ReplayPackage {
                 .as_bytes(),
             backend: (
                 "kani".to_owned(),
-                Some(DigestDomain::ToolManifestJcsV1.as_str().to_owned()),
+                Some(inputs.backend_manifest.domain().as_str().to_owned()),
                 inputs.backend_manifest.hex(),
             ),
             state_environment: StateEnvironment::new(Vec::new()),
@@ -342,12 +374,23 @@ impl ReplayPackage {
     }
 }
 
+/// Why a transcript did not decode: the stable cause code and the identities the decoder named.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DecodeFailure {
+    /// Stable machine-readable cause code.
+    pub code: String,
+    /// The source or input identity that first caused the refusal.
+    pub source_id: String,
+    /// The profile and bound context of the refusal.
+    pub context: String,
+}
+
 /// Why a counterexample is evidence failure: the backend's evidence and the native replay do not
 /// establish the same typed violation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EvidenceFailureCause {
     /// The transcript did not decode against the obligation's schema or names another harness.
-    Decode(KaniOutcome),
+    Decode(DecodeFailure),
     /// A decoded value lies outside its argument's declared domain.
     Domain {
         /// The argument the value is bound to.
@@ -392,7 +435,13 @@ pub fn replay_counterexample(
         transcript,
     ) {
         Ok(values) => values,
-        Err(outcome) => return failure(EvidenceFailureCause::Decode(outcome)),
+        Err(outcome) => {
+            return failure(EvidenceFailureCause::Decode(DecodeFailure {
+                code: outcome.code,
+                source_id: outcome.source_id,
+                context: outcome.context,
+            }))
+        }
     };
     if let Some(argument) = first_out_of_domain(&identity.arguments, &values) {
         return failure(EvidenceFailureCause::Domain {
@@ -407,13 +456,55 @@ pub fn replay_counterexample(
         &package.parameters(),
         |source| package.request(transcript, source),
     )?;
-    match (result.settlement(), result.category()) {
+    Ok(verdict_of(result.settlement(), result.category()))
+}
+
+/// The verdict one witness-arm settlement decides: only an agreement with backend evidence in
+/// the `violation` category reproduces the backend's falsification; every other settlement is
+/// evidence failure.
+fn verdict_of(settlement: WitnessSettlement, category: ProofCategory) -> ReplayVerdict {
+    match (settlement, category) {
         (WitnessSettlement::ReproducedWithEvaluatedWitness, ProofCategory::Violation) => {
-            Ok(ReplayVerdict::Reproduced)
+            ReplayVerdict::Reproduced
         }
-        (settlement, category) => failure(EvidenceFailureCause::Verdict {
+        (
+            WitnessSettlement::ReproducedWithEvaluatedWitness | WitnessSettlement::Inconclusive,
+            _,
+        ) => ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
             settlement,
             category,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A reproduced settlement in any category other than `violation` is not a reproduced
+    /// failure, and an inconclusive settlement never is, whatever its category.
+    ///
+    /// Trace: FR-016-AC-13, TC-026
+    #[test]
+    fn only_a_reproduced_violation_reproduces() {
+        use WitnessSettlement::{Inconclusive, ReproducedWithEvaluatedWitness as Reproduced};
+        assert_eq!(
+            verdict_of(Reproduced, ProofCategory::Violation),
+            ReplayVerdict::Reproduced
+        );
+        for (settlement, category) in [
+            (Reproduced, ProofCategory::Success),
+            (Inconclusive, ProofCategory::Violation),
+            (Inconclusive, ProofCategory::Success),
+        ] {
+            assert_eq!(
+                verdict_of(settlement, category),
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
+                    settlement,
+                    category
+                }),
+                "{settlement:?} {category:?}"
+            );
+        }
     }
 }
