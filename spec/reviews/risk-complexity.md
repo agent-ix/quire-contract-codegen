@@ -3,7 +3,7 @@ id: SR-012
 title: "Risk and complexity review of numeric and state oracle lowering"
 type: SpecReview
 analysis: risk-complexity
-scope: "FR-001 numeric/state slice and its pinned IR/runtime boundaries"
+scope: "FR-001 numeric/state slice and its IR/runtime boundaries"
 review_set: subset
 ---
 ## Summary
@@ -34,6 +34,3 @@ reviewed grammar and differential controls directly constrain both.
    than the matching public typed node. Compilation and mixed-signature cases expose that error.
 3. An unsupported nested node reports the clause or a neighboring node. TC-003 checks the declared
    preorder winner's exact source identity and endpoints.
-
-The SL/codegen IR revision reconciliation remains explicitly assigned to the later SL pin-bump step
-in issue #83; this crate implements only its already pinned public IR contract.

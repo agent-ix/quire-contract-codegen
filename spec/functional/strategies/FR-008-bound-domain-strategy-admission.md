@@ -130,8 +130,8 @@ integer declaration ([quire-contract-ir FR-013](ix://agent-ix/quire-contract-ir/
 
 - **Upstream**: [StR-001](../../stakeholder/StR-001-traceable-generation.md);
   [FR-014](../complete-v1/FR-014-exact-scalar-oracles.md) bounded-integer comparison oracles;
-  [quire-contract-ir FR-012, FR-013, FR-014, FR-015](ix://agent-ix/quire-contract-ir/FR-014) at
-  `04eb6f8`; [quire-spec-language FR-034](ix://agent-ix/quire-spec-language/FR-034) field aliases;
+  [quire-contract-ir FR-012, FR-013, FR-014, FR-015](ix://agent-ix/quire-contract-ir/FR-014);
+  [quire-spec-language FR-034](ix://agent-ix/quire-spec-language/FR-034) field aliases;
   [FR-002](../FR-002-tristate-proptest.md).
 - **Downstream**: [FR-009](./FR-009-constructive-correlated-populations.md),
   [FR-010](./FR-010-domain-boundary-campaigns.md),

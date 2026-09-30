@@ -2,7 +2,7 @@
 id: "SR-039"
 title: "IR-21 spec review: FR-016 AC-9, FR-023, TC-034, interface-001, matrix, index"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@d2987efc51b1d34aabda0dbd909663e9b884feef; spec/functional/complete-v1/FR-016-witness-native-replay.md, spec/functional/complete-v1/FR-023-claimed-module-proof-gate.md, spec/test/complete-v1/TC-026-witness-native-replay.md, spec/test/complete-v1/TC-034-claimed-module-proof-gate.md, spec/interface/interface-001-codegen-api.md, spec/test-matrix.md, spec/index.md"
+scope: "agent-ix/quire-contract-codegen; spec/functional/complete-v1/FR-016-witness-native-replay.md, spec/functional/complete-v1/FR-023-claimed-module-proof-gate.md, spec/test/complete-v1/TC-026-witness-native-replay.md, spec/test/complete-v1/TC-034-claimed-module-proof-gate.md, spec/interface/interface-001-codegen-api.md, spec/test-matrix.md, spec/index.md"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-023
     type: reviews
@@ -14,7 +14,7 @@ relationships:
 
 ## Summary
 
-Ticket: IR-21. PR: agent-ix/quire-contract-codegen#184, head `d2987ef`. This reviews the spec edits:
+Ticket: IR-21. PR: agent-ix/quire-contract-codegen#184. This reviews the spec edits:
 the new FR-016 Behavior paragraph and AC-9, the new FR-023 and TC-034, three new interface-001
 operations, and the test-matrix and index rows. It covers EARS form, integrity, spec-to-code
 agreement and cross-reference consistency. `make spec` reports no validation error in any of these
@@ -45,20 +45,20 @@ adapter does, or move request construction into the generator. The rest is minor
 
 ## Dispositions
 
-Round 1, reviewed at `728e4312b8f2be6ff70a39c568ad549bc69a1546`.
+Round 1.
 
-| FND | outcome | sha/reason |
+| FND | outcome | reason |
 | --- | --- | --- |
-| FND-001 | fixed 728e431 | FR-016 Behavior now says the caller supplies the complete request (package id, function, limits, byte provision) and the generator supplies the witness replay source and calls `replay`. This matches `replay_falsification` and interface-001. |
-| FND-002 | fixed 728e431 | AC-9 is split into FR-016-AC-9 (reproduced, depends on the witness value), AC-10 (inconclusive naming both verdicts) and AC-11 (distinct typed refusals). The matrix and TC-026 are updated to match. |
-| FND-003 | fixed 728e431 | FR-016 Dependencies now names qsl-replay as the only QSL crate src/ calls, and describes the test-only exception, the qsl-foundation/quire-exact dev-deps and its end condition. |
-| FND-004 | fixed 728e431 | "Step 1 is" is fixed, the duplicate "AC-8 is backed" is removed, and the test procedure is removed from FR-023 Behavior. The TC-034 row move introduced a new defect, recorded as FND-005. |
+| FND-001 | fixed | FR-016 Behavior now says the caller supplies the complete request (package id, function, limits, byte provision) and the generator supplies the witness replay source and calls `replay`. This matches `replay_falsification` and interface-001. |
+| FND-002 | fixed | AC-9 is split into FR-016-AC-9 (reproduced, depends on the witness value), AC-10 (inconclusive naming both verdicts) and AC-11 (distinct typed refusals). The matrix and TC-026 are updated to match. |
+| FND-003 | fixed | FR-016 Dependencies now names qsl-replay as the only QSL crate src/ calls, and describes the test-only exception, the qsl-foundation/quire-exact dev-deps and its end condition. |
+| FND-004 | fixed | "Step 1 is" is fixed, the duplicate "AC-8 is backed" is removed, and the test procedure is removed from FR-023 Behavior. The TC-034 row move introduced a new defect, recorded as FND-005. |
 
-Round 2, reviewed at `9e1787611dac0bf29bacec38dff4804e2f3c86ce` (fix commit `9e17876`).
+Round 2.
 
-| FND | outcome | sha/reason |
+| FND | outcome | reason |
 | --- | --- | --- |
-| FND-005 | fixed 9e17876 | The malformed row is gone from the FR coverage table, and the TC-034 row is back in the TC registry directly after TC-033. The test-matrix diff is exactly that one deletion and one insertion; nothing else moved. |
+| FND-005 | fixed | The malformed row is gone from the FR coverage table, and the TC-034 row is back in the TC registry directly after TC-033. The test-matrix diff is exactly that one deletion and one insertion; nothing else moved. |
 
 ## New findings (disposition pass 1)
 

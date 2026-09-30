@@ -3,7 +3,7 @@ id: SR-010
 title: "Numeric and state oracle Rust review"
 type: SpecReview
 analysis: code-review
-scope: "agent-ix/quire-contract-codegen#4 numeric/state slice at 3bc7e60; origin/main..3bc7e60"
+scope: "agent-ix/quire-contract-codegen#4 numeric/state slice"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-001
@@ -42,7 +42,7 @@ findings were repaired before this closing verdict; no open Rust finding remains
   determine deterministic names; public bound generation preserves full ClauseRef identity.
 - Non-Boolean roots, unsupported nodes/dependencies, and obligations carry their specified exact
   `SourceSpan`. The negative corpus proves deterministic first-locus selection and no approximation.
-- The generated corpus compiles against the pinned runtime, denies warnings, and compares all six
+- The generated corpus compiles against the runtime, denies warnings, and compares all six
   operators over endpoint and immediately-outside values with an independent evaluator.
 - No workflow, dependency, unsafe surface, publish setting, or hosted-CI behavior changed.
 
@@ -51,8 +51,8 @@ findings were repaired before this closing verdict; no open Rust finding remains
 - `cargo fmt --all -- --check`: pass.
 - `cargo clippy --locked --all-targets --target-dir target-codex-backends -- -D warnings`: pass.
 - Stable `cargo test --locked --all-targets --target-dir target-codex-backends`: 68 passed, 0 failed.
-- Rust 1.75.0 full suite before the closing documentation/trace remediation: 68 passed, 0 failed;
+- MSRV full suite before the closing documentation/trace remediation: 68 passed, 0 failed;
   affected post-remediation tests were repeated on the final implementation candidate.
 - `cargo deny check`: advisories, bans, licenses and sources pass; only unmatched allow-list warnings.
-- Rustdoc with denied warnings, release build, unsafe audit, upstream pin check and Quire validation:
+- Rustdoc with denied warnings, release build, unsafe audit and Quire validation:
   pass.

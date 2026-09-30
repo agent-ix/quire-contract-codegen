@@ -5,16 +5,14 @@ type: Task
 status: not_started
 track: D
 priority: P0
-relationships:
-  - target: ix://agent-ix/quire-contract-codegen/AA-001
-    type: references
+relationships: []
 ---
 # Task-007: Human source-release decision
 
 ## Scope
 
-Review accepted dependency identities, protected checks, conformance evidence, residual gaps, and the
-exact source candidate before recording the v0.1 source-release decision.
+Review protected checks, conformance evidence, residual gaps, and the
+source candidate before recording the v0.1 source-release decision.
 
 ## Guard
 

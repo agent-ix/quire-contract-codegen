@@ -35,7 +35,7 @@ relationships:
 
 With codegen #4's bounded-integer oracle grammar landed in PR #29, lower admitted `BoundPackage` clauses into
 the strategy core, execute generated cases against the embedded oracle through runtime verdict
-accounting, and emit the complete consumer bundle with its Quoin proof attestation.
+accounting, and emit the complete consumer bundle.
 
 ## Subtasks
 
@@ -43,8 +43,8 @@ accounting, and emit the complete consumer bundle with its Quoin proof attestati
 - [x] Implement FR-008 admission and ordered structured refusals.
 - [x] Implement the FR-011 proptest and census runners, exact counters, rates, and conclusions.
 - [x] Count all FR-012 shrink replays in `attempted`.
-- [x] Implement the FR-013 case identity surface, bundle assembly, and proof attestation.
-- [x] Run TC-017 through TC-022, Rust 1.75, Rust review, gap analysis, and the full local gate.
+- [x] Implement the FR-013 case identity surface and bundle assembly.
+- [x] Run TC-017 through TC-022, MSRV, Rust review, gap analysis, and the full local gate.
 
 ## Deliverables
 
@@ -54,7 +54,7 @@ accounting, and emit the complete consumer bundle with its Quoin proof attestati
 
 ## Notes
 
-- Task-004's codegen #4 implementation landed as PR #29 at `e0be330`; this branch consumes that
-  merged revision and retains the matrix changes from both work streams.
+- Task-004's codegen #4 implementation landed as PR #29; this branch retains the matrix changes
+  from both work streams.
 - Closing Rust review SR-016 and gap analysis SR-017 found and repaired incomplete TC-017,
   TC-020, and TC-022 controls before approving all 34 slice criteria.

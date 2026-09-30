@@ -10,7 +10,7 @@ type: SuiteRegistry
 
 | ID | Name | Command | Tool | Evidence Kind |
 |---|---|---|---|---|
-| SUITE-003 | Strict specification validation | `quire validate --scope . 'spec/**/*.md' 'planning/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'` | quire | Analysis |
+| SUITE-003 | Strict specification validation | `quire validate --scope . 'spec/**/*.md' 'plan/**/*.md' 'reviews/**/*.md'` | quire | Analysis |
 | SUITE-004 | Static specification and coverage export | `quire coverage --scope . --json` | quire | Static |
 | SUITE-007 | Minimum supported Rust version build | `make msrv` | rustc | Static |
 | SUITE-008 | Bounded Kani generation and execution | `cargo test --locked --target-dir target-codex-backends --test it kani_generation -- --test-threads=1` | cargo-kani / rustc | Analysis |

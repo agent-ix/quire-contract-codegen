@@ -18,7 +18,7 @@ relationships:
 Task-009 is complete. All 34 selected acceptance criteria and constraints are backed, TC-017
 through TC-022 execute real production or generated-consumer paths, every public behavior in the
 numeric-strategy slice has an owning requirement, and no source or test stub was found. Semantic
-review of intent, tests, and code found the gaps recorded in SR-016; all were repaired at `4228611`.
+review of intent, tests, and code found the gaps recorded in SR-016; all were repaired.
 
 ## Verdict
 
@@ -33,8 +33,7 @@ implementation, evidence, or specification gap remains.
 
 ## Coverage
 
-- Reconciliation: `quire coverage --scope . --json` with Quire CLI 0.31.0 / engine
-  `ca7362d4dacecb96f01d74d1d971327118c25917`.
+- Reconciliation: `quire coverage --scope . --json`.
 - Task-009 tasks done: 1 / 1; numeric-strategy tasks done: 2 / 2.
 - Selected criteria and constraints backed: 34 / 34 — FR-008 7/7, FR-009 6/6, FR-010 5/5,
   FR-011 5/5, FR-012 4/4, FR-013 5/5, and NFR-004 2/2.
@@ -45,7 +44,7 @@ implementation, evidence, or specification gap remains.
   stubs: 0; ignored numeric-strategy tests: 0.
 - Schema diff: none. The generated bundle adds no case, census, summary, or repository schema file.
 - Semantic review: completed across requirement intent, matrix mapping, test oracles, production
-  error paths, generated source, consumer compilation, counters, identity, and attestation sealing.
+  error paths, generated source, consumer compilation, counters, and identity.
 
 ## Declared residual work
 

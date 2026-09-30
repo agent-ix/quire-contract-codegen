@@ -400,7 +400,7 @@ pub(crate) fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>)
     // IR-280's FR-322 application-node dependency join means this bound must
     // anchor on a node no other expression's differing bound also reaches
     // (see `PackageBuilder::dedicated_operand`'s doc): the plain shared
-    // `V_INTEGER`, as before this pin bump, would union this unsatisfiable
+    // `V_INTEGER` would union this unsatisfiable
     // `[5, -5]` bound onto every other expression that still references it
     // (`UNBOUNDED` among them), turning its own `RequiresBound` into
     // `AmbiguousBound`/`UnsatisfiableBound` depending on load order.

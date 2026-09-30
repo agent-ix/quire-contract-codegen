@@ -38,8 +38,7 @@ reverse gap, or stub remains.
   PLAN-001 bundle; spec root `spec/`; matrix `spec/test-matrix.md` (`TM-001`); identity prefix
   `ix://agent-ix/quire-contract-codegen`; implementation `src/oracle.rs`, `src/kani.rs`, and
   `src/lib.rs`; evidence tests `tests/kani_generation.rs`.
-- Reconciliation: `quire coverage --scope . --json` with quire-cli 0.31.0 / engine
-  `ca7362d4dacecb96f01d74d1d971327118c25917`.
+- Reconciliation: `quire coverage --scope . --json`.
 - Targeted tasks done: 1 / 1. PLAN-001 overall is 7 / 10 tasks done after integrating the merged
   strategy Task-008/009 work; Task-005, Task-006, and the human-owned Task-007 remain explicitly
   outside this ticket and are not claimed complete.
@@ -51,7 +50,7 @@ reverse gap, or stub remains.
   The seven reported unbacked reference rows are Inspection/Analysis `no_symbol_rows`, and none
   belongs to FR-003 or Task-010.
 - Inventoried Task-010 behaviors: 6 (typed ABI normalization, exact integer bounds, result-domain
-  guarantees, v2 graph/attestation identity, explicit refusal mapping, and pinned Kani
+  guarantees, v2 graph identity, explicit refusal mapping, and Kani
   proof/playback options). Untraced behaviors: 0. Source stubs: 0. Test stubs: 0.
 - Semantic review: skipped; the optional intent-to-test-to-code pass was not selected. The required
   plan, matrix, reverse-gap, Rust-review, and executable-gate checks ran.

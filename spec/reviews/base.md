@@ -3,7 +3,7 @@ id: SR-008
 title: "Base review of numeric and state oracle lowering"
 type: SpecReview
 analysis: base
-scope: "FR-001, interface-001, TC-002, TC-003, TM-001 at 393c6a1 plus review dispositions"
+scope: "FR-001, interface-001, TC-002, TC-003, TM-001 plus review dispositions"
 review_set: subset
 ---
 ## Summary
@@ -17,7 +17,7 @@ code-specific source-span contract.
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | medium | TC-002 did not explicitly repeat numeric/state generation even though FR-001-AC-8 requires deterministic artifacts. The procedure now requires byte-identical Rust, source-map, and attestation outputs. | FR-001-AC-8; TC-002 |
+| FND-001 | medium | TC-002 did not explicitly repeat numeric/state generation even though FR-001-AC-8 requires deterministic artifacts. The procedure now requires byte-identical Rust and source-map outputs. | FR-001-AC-8; TC-002 |
 | FND-002 | medium | interface-001 described the IR source span as optional without stating which expression failures require it. The interface now defines the four span-bearing codes and deterministic locus selection. | FR-001-AC-4; interface-001; TC-003 |
 
 ## Checks

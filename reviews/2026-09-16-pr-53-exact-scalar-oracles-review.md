@@ -3,7 +3,7 @@ id: SR-030
 title: "PR 53 exact scalar oracles review"
 type: SpecReview
 analysis: gap-analysis
-scope: "PR #53 at f10587897f0d46727b6eae9b0670264646626ec4; FR-014 and TC-024 (implementation); FR-015 and FR-016 (spec text only)"
+scope: "PR #53; FR-014 and TC-024 (implementation); FR-015 and FR-016 (spec text only)"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-014
@@ -43,13 +43,13 @@ no such item exists.
 | FND-005 | low | Operand classification (src/exact_scalar.rs:678-688) gives misleading reasons. An operand that is itself an application term is reported as `OperandTypeMismatch { found: None }` rather than as unsupported. A literal quantity operand is classified by its `value_kind` (`rational`), not its `unit` type. | src/exact_scalar.rs:678 |
 | FND-006 | low | The generated `DecimalType::new(..)` maps failure to `OracleStop::IllTyped` (src/exact_scalar.rs:1114). Every other generated constant maps to `InvalidConstant`, which is what FR-014-CON-2 describes. | FR-014-CON-2 |
 | FND-007 | low | Claim-map items are ordered by `CheckedNodeId`'s `Ord`, which compares domain before digest, but the code documents them as "ascending by node digest" (src/exact_scalar.rs:429, 459). A request with a different domain sorts out of digest order. | FR-014-AC-4 |
-| FND-008 | low | The matrix row says TC-024 covers FR-014-CON-1 and CON-2, but `quire coverage` 0.32.0 reports those test tags as unmatched because CON ids are not minted trace targets. | spec/test-matrix.md, TC-024 |
-| FND-009 | medium | FR-015 is not specific enough. It does not require bounds to come from the lowered IR `bounded_domain` nodes (rather than descriptors). It does not require refusing obligations over caller-declared operation identity (FND-001). The pin set lists only "version, solver and options": it is missing the executable digest, CBMC version, unwind, adapter profile, oracle crate digest and runtime revision. There is no acceptance criterion for vacuous (unsatisfiable) bounds. | FR-015-AC-2, FR-015-AC-4 |
-| FND-010 | medium | FR-016 is not specific enough. Its Outputs omit `malformed`, although AC-1 and TC-026 use it. It does not bind a witness to the identity and pins of the harness that produced it. "Same typed outcome" does not say whether charges, consumed counters and limits must match. There is no resource bound on decoding a witness. | FR-016, TC-026 |
+| FND-008 | low | The matrix row says TC-024 covers FR-014-CON-1 and CON-2, but `quire coverage` reports those test tags as unmatched because CON ids are not minted trace targets. | spec/test-matrix.md, TC-024 |
+| FND-009 | medium | FR-015 is not specific enough. It does not require bounds to come from the lowered IR `bounded_domain` nodes (rather than descriptors). It does not require refusing obligations over caller-declared operation identity (FND-001). There is no acceptance criterion for vacuous (unsatisfiable) bounds. | FR-015-AC-2, FR-015-AC-4 |
+| FND-010 | medium | FR-016 is not specific enough. Its Outputs omit `malformed`, although AC-1 and TC-026 use it. It does not bind a witness to the identity of the harness that produced it. "Same typed outcome" does not say whether charges, consumed counters and limits must match. There is no resource bound on decoding a witness. | FR-016, TC-026 |
 
 ## Coverage
 
-- Reconciliation: quire coverage (`quire 0.32.0`, engine 0.46.0@a874fb64), `--scope` set to the
+- Reconciliation: quire coverage, `--scope` set to the
   worktree root. All eight rows FR-014-AC-1 to AC-8 are backed by TC-024 tests. TC-024 is backed.
   FR-014-CON-1 and CON-2 tags are unmatched (FND-008).
 - Tasks done: not applicable. PLAN-001 has no task for #48.
@@ -57,7 +57,7 @@ no such item exists.
 - Untraced behaviours and stubs: 0 stubs. The dead `RequiresBound` path is FND-002.
 - Semantic review: ran for FR-014 (descriptor authority, refusal taxonomy, determinism, claim map,
   agreement independence). The agreement counts are real: the loops assert their counts, and the
-  runtime-only rows are justified because QSL d9d5273 has no integer, rational or ordering operator.
+  runtime-only rows are justified because QSL has no integer, rational or ordering operator.
   Agreement cannot catch FND-001, because the direct side restates the same descriptor parameters.
 - Gates: `cargo +1.98.1 test --locked --test exact_scalar_generation --test exact_scalar_agreement
   --target-dir target-codex-backends` passed 13/13. `make lint` and `make fmt-check` are clean.

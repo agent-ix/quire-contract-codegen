@@ -31,13 +31,13 @@ independent review or promote the planned FR-002 and TC-004 matrix rows.
 
 ## Findings
 
-PR #22's exact-head review at `b32ae2a` found three high, six medium, and five low issues. The
+PR #22's exact-head review found three high, six medium, and five low issues. The
 remediation makes the following changes for rereview:
 
 | ID | Severity | Summary | Refs |
 |---|---|---|---|
 | FND-2201 | high | R7-01: Campaign accounting is concluded after every framework result. The runner no longer rejects low configured case counts before execution, and exact fixtures distinguish below-floor outcomes. | FR-002-AC-5, TC-004 |
-| FND-2202 | high | R7-02: Harness and strategy source enforce the same 1 MiB maximum declared by the shared attestation command, returning `ResourceLimitExceeded` and `Unsupported`. | interface-001, TC-004 |
+| FND-2202 | high | R7-02: Harness and strategy source enforce the same 1 MiB maximum, returning `ResourceLimitExceeded` and `Unsupported`. | interface-001, TC-004 |
 | FND-2203 | high | R7-03: Enum output states plainly that its finite membership is all-admitted and no longer emits an unreachable rejected variant. Integer boundary cases retain value-dependent accepted/rejected classification. | FR-002-AC-6, TC-004 |
 | FND-2204 | medium | R7-04: `minimum_rejected_cases` is caller-supplied, rendered once, enforced, and included in deterministic identity; zero declares a total precondition. | FR-002-AC-5, interface-001 |
 | FND-2205 | medium | R7-05: Generated campaigns return typed below-accepted-floor, below-rejected-floor, above-discard-ceiling, exhausted, and failed outcomes with retained summaries. | FR-002-AC-5, TC-004 |
@@ -49,30 +49,27 @@ remediation makes the following changes for rereview:
 | FND-2211 | low | R7-11: The generated harness compiled and executed by TC-004 uses an accepted floor above one, a positive rejected floor, and a zero explicit-discard ceiling. | TC-004 |
 | FND-2212 | low | R7-12: The stale Makefile comment announcing a removed final guard is deleted without recreating a local assurance control. | Makefile |
 | FND-2213 | low | R7-13: This postimplementation analysis lives beside the repository's other SpecReviews. | SR-007 |
-| FND-2214 | low | R7-14: REV-007 remains a planning-only, future-tense preimplementation record. | REV-007 |
 
 ## Round 8 remediation
 
-The independent review at `7a5cd3f` closed the earlier high findings and identified two medium
+The independent review closed the earlier high findings and identified two medium
 blockers and five low findings. This table records the local repair; a new independent review is
 still required, and no assurance decision or matrix promotion is implied.
 
 | Finding | Disposition | Verification |
 |---|---|---|
-| R8-01 | Repaired: the successful mixed campaign uses proptest 1.5.0's deterministic ChaCha RNG and pins 12 attempts, 8 accepted, 4 rejected, and zero failures/discards. | TC-004 generated campaign execution. |
+| R8-01 | Repaired: the successful mixed campaign uses proptest's deterministic ChaCha RNG and pins 12 attempts, 8 accepted, 4 rejected, and zero failures/discards. | TC-004 generated campaign execution. |
 | R8-02 | Repaired: every framework abort returns `Exhausted` with reason and summary; an optional boxed policy result retains the observed missed floor. Completed searches still return floor failures directly. | All-rejected exhaustion; exhausted input generation with zero attempts, a missed rejected floor, and both floors satisfied; completed below-floor controls. |
-| R8-03 | Review premise rejected after independent integration review: the public runner accepts an existing report, so the policy-level discard check is reachable even when the new loop completes successfully. The check is restored after its erroneous removal in `63b6a09`. | A report with one prior discard plus a deterministic 8-accepted/4-rejected completed campaign returns `AboveDiscardCeiling`; an aborted search retains the same excess as nested policy. |
+| R8-03 | Review premise rejected after independent integration review: the public runner accepts an existing report, so the policy-level discard check is reachable even when the new loop completes successfully. The check is restored after its erroneous removal. | A report with one prior discard plus a deterministic 8-accepted/4-rejected completed campaign returns `AboveDiscardCeiling`; an aborted search retains the same excess as nested policy. |
 | R8-04 | Repaired: accounting documentation distinguishes adapter invocations from explicit discards and names global-reject retries correctly. | Exact summary/report counts and TC-004's discard control. |
 | R8-05 | Retained hardening gap: the source-size layers intentionally retain the same public diagnostic. This revision preserves every size guard; the existing fixtures pin the result rather than independently discriminating all layers. | Oversized harness/strategy controls; added native harness-source-limit conformance row. |
 | R8-06 | Retained bounded API: the enum membership population is all-admitted; its one-variant expected-domain type remains documented and is not presented as rejection coverage. | Existing enum generation/admission tests. |
 | R8-07 | Partially repaired: the native corpus now includes `ResourceLimitExceeded` for a harness and a ten-check diagnostic census floor. Campaign-execution outcomes remain generated-crate test evidence, not native generation-producer rows. | TC-009 requires the source-limit row; campaign producer integration remains open before full issue #3 closure. |
 
 Local repair verification: all five harness tests and all five strategy tests passed on stable and
-Rust 1.75.0, including compilation and execution of the generated crates. `make assurance-inputs`
-completed, the native conformance stream reported ten passing rows, and TC-009's consumer check
-passed against those producer bytes. All-target Clippy with denied warnings, rustfmt, and Quire
-document validation passed. Quire reported existing duplicate module/inverse-edge warnings. This
-is focused verification, not a claim that the complete `make ci`, shared-assurance receipt campaign,
+MSRV, including compilation and execution of the generated crates. All-target Clippy with denied
+warnings, rustfmt, and Quire document validation passed. Quire reported existing duplicate
+module/inverse-edge warnings. This is focused verification, not a claim that the complete `make ci`
 or strict coverage gate passed.
 
 ## Remaining declared gaps

@@ -19,12 +19,12 @@ relationships:
 
 Task-008 and Task-009 are complete. Mechanical reconciliation reports every one of the 34 selected
 criteria and constraints backed. Independent semantic review found the implementation and evidence
-gaps recorded in SR-018; commit `1f49184` closes them with production fixes, public-pipeline and
+gaps recorded in SR-018; a fix commit closes them with production fixes, public-pipeline and
 generated-consumer regressions, independently measured oracles, and corrected requirement wording.
 
 ## Verdict
 
-**PASS** for the PR #30 numeric-strategy subset after `1f49184`. No known requirement,
+**PASS** for the PR #30 numeric-strategy subset after the fixes. No known requirement,
 implementation, semantic-evidence, reverse-traceability, resource-bound, or stub gap remains in the
 selected slice.
 
@@ -36,8 +36,7 @@ selected slice.
 
 ## Coverage
 
-- Reconciliation uses `quire coverage --scope . --json` with Quire CLI 0.31.0 / engine
-  `ca7362d4dacecb96f01d74d1d971327118c25917`.
+- Reconciliation uses `quire coverage --scope . --json`.
 - Selected tasks done: 2 / 2 — Task-008 and Task-009.
 - Selected criteria and constraints backed: 34 / 34 — FR-008 7/7, FR-009 6/6, FR-010 5/5,
   FR-011 5/5, FR-012 4/4, FR-013 5/5, and NFR-004 2/2.
@@ -46,7 +45,7 @@ selected slice.
   design; their underlying criterion and constraint IDs are traced by exercising tests.
 - Semantic review checked intent, test oracle independence, real production/generated execution,
   failure precedence, exact diagnostic loci, public construction invariants, resource ceilings,
-  identity and attestation binding, and consumer-only dependencies.
+  identity binding, and consumer-only dependencies.
 - Public-behavior inspection found no unowned numeric-strategy behavior; source stubs: 0; test
   stubs: 0; ignored numeric-strategy tests: 0; schema diff: none.
 

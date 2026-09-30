@@ -101,9 +101,8 @@ pub(super) fn corpus_oracles() -> ExactScalarOracles {
 /// Trace: FR-014-AC-4, TC-024.
 ///
 /// The corpus crate is exactly `Cargo.toml`, `src/lib.rs` and `claim-map.json`;
-/// the claim map on disk is the serialized in-memory claim map; every
-/// generated claim's oracle symbol is defined in `src/lib.rs`; and each
-/// artifact records the SHA-256 of its own contents.
+/// the claim map on disk is the serialized in-memory claim map; and every
+/// generated claim's oracle symbol is defined in `src/lib.rs`.
 #[test]
 fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
     let oracles = corpus_oracles();

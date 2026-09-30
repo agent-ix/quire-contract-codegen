@@ -54,7 +54,7 @@ operations:
     output: versioned structured AnalysisOutcome including non-success diagnostics and available input identities
     semantics: coverage obligation succeeds only for nonempty complete exercised population with successful bound execution; successful serialization is not successful coverage; never executes LLVM
   - name: analyze_bound_coverage
-    status: implemented phase A after coordinator approval of REV-017; full native-run analysis remains pending
+    status: implemented phase A; full native-run analysis remains pending
     inputs: [public BoundPackage, immutable BoundOracleGeneration, complete artifact bytes, optional LLVM export bytes, source root]
     output: immutable versioned BoundCoverageAnalysis domain observations
     semantics: exact independent clause and implication census; whole-batch artifact/map binding; measured clauses or explicit unavailable states; valid informational-only population is no_executable; no runtime transport, producer execution, or assurance verdict

@@ -10,34 +10,17 @@
 //! `Debug` renderings, which include every value, typed refusal, incomplete
 //! record, admitted charge and consumed counter, must be identical.
 //!
-//! IR-254: this file used to run a third, authority leg through
-//! `quire_spec_language::value`, comparing the direct runtime call against
-//! QSL's own value-level implementation of the same operators before
-//! comparing either to the generated oracle (`agree3!`, since removed). The
-//! RT==QSL authority check lives in RT's `conformance/qsl-agreement` lane;
-//! this crate only checks generated==RT, so that leg does not belong here.
-//! The QSL revision this bumps to also withdraws `quire_spec_language::value`
-//! entirely: QSL arch-lint T12-A confines this crate to `qsl_replay`'s
-//! public API, one source-recompiling proof-witness replay executor
-//! (`qsl_replay::replay`, taking a `ReplayRequestWire` built from
-//! digest-addressed compiled QSL source and a witness arm). None of this
-//! file's vectors are shaped as compiled source plus a witness -- they call
-//! value-level operators directly (`Meter`, `Integer`, `IeeeValue`, unit
-//! conversion, division profiles, ...) -- so none can be re-expressed
-//! through that facade without building a new source-level test harness
-//! from nothing, which is out of scope for a pin bump. Four of this file's
-//! vectors were also already red for an unrelated reason (AGE-1989) when
-//! this pin bump landed; that reproducer is recorded on the ticket. The
-//! authority leg is deleted outright rather than ported; every vector below
-//! still runs the direct-runtime-vs-generated-oracle comparison it always
-//! did.
+//! The RT==QSL authority check lives in RT's `conformance/qsl-agreement` lane;
+//! this crate only checks generated==RT. QSL arch-lint T12-A confines this
+//! crate to `qsl_replay`'s public API, and none of this file's vectors are
+//! shaped as compiled source plus a witness -- they call value-level
+//! operators directly (`Meter`, `Integer`, `IeeeValue`, unit conversion,
+//! division profiles, ...).
 //!
-//! Node keys in this file no longer need to be QSL's own honest
-//! preimage-hash values, because nothing here compares them to QSL's
-//! computation anymore: [`GraphSpec::keys`] only has to be internally
-//! self-consistent within one process (the direct call and the generated
-//! oracle call always share one constructed [`Fixture`]), so it now hashes
-//! its own JSON directly with `sha2` instead of calling into QSL.
+//! Node keys in this file are not compared to QSL's computation:
+//! [`GraphSpec::keys`] only has to be internally self-consistent within one
+//! process (the direct call and the generated oracle call always share one
+//! constructed [`Fixture`]), so it hashes its own JSON with `sha2`.
 
 // Each helper is used by some vectors on one side only.
 #![allow(dead_code, unused_imports)]

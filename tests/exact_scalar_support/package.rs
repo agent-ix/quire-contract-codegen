@@ -811,7 +811,7 @@ impl PackageBuilder {
     /// IR-280's FR-322 application-node dependency join requires this node's
     /// own `dependencies` to be *exactly* the unique, digest-ascending
     /// `reference` targets of its body -- `bounds` cannot be listed there
-    /// directly, unlike before this pin bump. Each bound is still registered
+    /// directly. Each bound is still registered
     /// once (as [`Self::bounded`] does) and wired reachable, but as an extra
     /// dependency of a node the join constraint does not cover: the body's
     /// own first `reference` target, or, when every argument is a literal
@@ -2614,12 +2614,9 @@ pub fn corpus_package() -> PackageBuilder {
         );
     // IR-280's FR-322 join means each of these must anchor its own bound on
     // a node no other expression's differing bound also reaches (see
-    // `dedicated_operand`'s doc): sharing `V_INTEGER`/`V_DECIMAL` directly,
-    // as before this pin bump, would union every one of these bounds onto
-    // whatever else references the same shared node -- exactly the
-    // `AmbiguousBound` IR-280 itself now catches (measured: `UNBOUNDED`
-    // sharing `V_INTEGER` with these saw 3 reachable bounds and refused
-    // ambiguous instead of requiring one, before this fix).
+    // `dedicated_operand`'s doc): sharing `V_INTEGER`/`V_DECIMAL` directly
+    // would union every one of these bounds onto whatever else references
+    // the same shared node -- exactly the `AmbiguousBound` IR-280 catches.
     let expression_operand_anchor = {
         let int_key = builder.bound(&INT);
         builder.dedicated_operand("integer", &[int_key])
@@ -2775,9 +2772,9 @@ pub fn corpus_package() -> PackageBuilder {
             ),
         );
     // Each anchor is dedicated to its own fixture's exact bound set (see
-    // `dedicated_operand`'s doc): `key(V_INTEGER)` directly, as before this
-    // pin bump, would union these bounds onto every other expression that
-    // still references the shared node too.
+    // `dedicated_operand`'s doc): `key(V_INTEGER)` directly would union
+    // these bounds onto every other expression that still references the
+    // shared node too.
     let calls_function_anchor = {
         let int_key = builder.bound(&INT);
         builder.dedicated_operand("integer", &[int_key])

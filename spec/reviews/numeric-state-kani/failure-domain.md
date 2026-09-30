@@ -20,7 +20,7 @@ every unrepresentable semantic shape without a partial bundle.
 | --- | --- | --- | --- |
 | FND-001 | high | The first draft named a framing region without defining what state it framed, which could be read as a proof claim over unmodeled globals, heap or aliases. FR-003 and interface-001 now limit framing to copied primitive arguments and returned primitive values. | FR-003; interface-001 |
 | FND-002 | medium | Customer subject paths and assumed/stubbed proof paths are extension points, but generation-time refusal and external compile/Kani failure were not separated. The interface now validates path syntax and the typed ABI while reserving signature, link and body failures to external observations that cannot become proof success. | interface-001; TC-014 |
-| FND-003 | medium | Kani-specific failure conditions lacked a stable code allocation. The interface now assigns binding, propagated clause, backend, identity, dependency, unwind, attestation, syntax, serialization and resource failures without a fallback code or partial output. | FR-003-AC-3; interface-001; TC-003 |
+| FND-003 | medium | Kani-specific failure conditions lacked a stable code allocation. The interface now assigns binding, propagated clause, backend, identity, dependency, unwind, syntax, serialization and resource failures without a fallback code or partial output. | FR-003-AC-3; interface-001; TC-003 |
 
 ## Failure controls
 
