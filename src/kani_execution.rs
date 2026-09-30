@@ -48,7 +48,7 @@ use crate::{
         KaniBanner, KaniCoverSummary, KaniFailedCheck, KaniPlaybackTarget, KaniTranscript,
     },
     oracle::Artifact,
-    state_frame::StateFrameHarness,
+    state_frame::{StateFrameHarness, StateFrameProperty},
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
@@ -218,7 +218,10 @@ impl<'a> KaniExecutableHarness<'a> {
                 let identity = &harness.identity;
                 HarnessView {
                     rust: &harness.rust,
-                    kind: None,
+                    kind: Some(match identity.property {
+                        StateFrameProperty::Postcondition { .. } => ObligationKind::Postcondition,
+                        StateFrameProperty::Frame { .. } => ObligationKind::Frame,
+                    }),
                     unwind: identity.unwind,
                     solver: &identity.solver,
                     options: &identity.options,

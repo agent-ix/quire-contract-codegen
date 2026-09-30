@@ -7,9 +7,10 @@
 //!
 //! - **Operation contract.** The clause's condition is read back from the graph -- never taken
 //!   from a caller descriptor -- as one integer comparison between the post-state value of a
-//!   field and its `pre(...)` value, over the one integer range the lowered clause reaches. The
-//!   harness builds a symbolic state inside that range, snapshots it, runs the operation subject
-//!   on a copy, and asserts the comparison between the snapshot (before) and the copy (after).
+//!   field and its `pre(...)` value, both read through the clause's first parameter, `self`. The
+//!   harness builds a symbolic state inside the integer range the framed object's member of that
+//!   name declares, snapshots it, runs the operation subject on a copy, and asserts the comparison
+//!   between the snapshot (before) and the copy (after).
 //! - **Frame effects.** The frame's `modifies` field entries are the *allowed* effects. Every
 //!   other caller-named state field is a *forbidden* effect: the harness asserts the operation
 //!   left it unchanged. The obligation's identity is scoped to the operation, its anchor, its
@@ -18,9 +19,9 @@
 //!   an ungranted field is falsified.
 //!
 //! No other value family is lowered: a condition that is not one integer comparison of pre and
-//! post reads of a single field, a frame that creates, deletes or grants a relationship, and a
-//! lowered clause with no single integer bound are each refused with a typed reason and produce
-//! no harness.
+//! post reads of a single field through `self`, a frame that creates, deletes or grants a
+//! relationship, and a clause field whose object member declares no integer range are each
+//! refused with a typed reason and produce no harness.
 //!
 //! The subject ABI is fixed and documented on [`StateFrameRequest`]. Nothing in this module runs
 //! the prover; `execute_kani_obligation` does.
@@ -45,11 +46,12 @@ const LOWERING_WORK_LIMIT: u64 = 65_536;
 
 /// Every tag a postcondition clause's dependency closure holds: the clause, its anchor and frame
 /// (`state`), the framed object (`model`), its reference type (`composite_type`), the field and
-/// integer types (`scalar_type`, `bounded_domain`), the `self` parameter (`value`) and the
+/// integer types (`scalar_type`, `bounded_domain`), a relationship a frame grants (`relation`), the `self` parameter (`value`) and the
 /// condition (`expression`).
-const STATE_FRAME_LOWERING_TAGS: [CheckedNodeTag; 7] = [
+const STATE_FRAME_LOWERING_TAGS: [CheckedNodeTag; 8] = [
     CheckedNodeTag::State,
     CheckedNodeTag::Model,
+    CheckedNodeTag::Relation,
     CheckedNodeTag::CompositeType,
     CheckedNodeTag::ScalarType,
     CheckedNodeTag::BoundedDomain,
@@ -300,10 +302,10 @@ pub enum StateFrameRefusal {
         /// The effect.
         effect: UnsupportedFrameEffect,
     },
-    /// The lowered clause does not reach exactly one integer range, or it is not an `i64` range.
+    /// The framed object's member for the clause's field declares no `i64` integer range.
     BoundNotResolved {
-        /// Distinct integer ranges reached.
-        distinct: usize,
+        /// The clause's field.
+        field: String,
     },
     /// A field the clause reads or the frame grants is not in `state_fields`.
     UnknownStateField {
@@ -385,10 +387,10 @@ impl std::fmt::Display for StateFrameRefusal {
                     frame.digest
                 )
             }
-            Self::BoundNotResolved { distinct } => {
+            Self::BoundNotResolved { field } => {
                 write!(
                     formatter,
-                    "the clause reaches {distinct} integer ranges, not one i64 range"
+                    "the object declares no i64 integer range for `{field}`"
                 )
             }
             Self::UnknownStateField { field } => {
@@ -425,11 +427,10 @@ pub fn generate_state_frame_obligations(
 ) -> Result<StateFrameObligations, StateFrameRefusal> {
     validate_request(request)?;
     let graph = Graph::of(request.package);
-    let lowered = lower_clause(request)?;
+    lower_clause(request)?;
     let shape = ClauseShape::read(&graph, request.clause)?;
     let granted = shape.frame_grants(&graph)?;
     let condition = shape.condition(&graph, request.clause)?;
-    let clause_range = single_integer_range(&graph, &lowered.bounds)?;
     let known = request
         .state_fields
         .iter()
@@ -457,13 +458,12 @@ pub fn generate_state_frame_obligations(
             frame: shape.scope.frame.clone(),
         });
     }
-    let domains = state_domains(
-        &graph,
-        &shape.scope.object,
-        &condition.field,
-        clause_range,
-        request,
-    );
+    let domains = state_domains(&graph, &shape.scope.object, request);
+    if !domains.iter().any(|domain| domain.field == condition.field) {
+        return Err(StateFrameRefusal::BoundNotResolved {
+            field: condition.field,
+        });
+    }
     let postcondition = render(
         request,
         &shape.scope,
@@ -483,7 +483,11 @@ pub fn generate_state_frame_obligations(
             granted: granted.into_iter().collect(),
             checked,
         },
-        &format!("frame_{}", short(&shape.scope.anchor.digest)),
+        &format!(
+            "frame_{}_{}",
+            short(&shape.scope.anchor.digest),
+            short(&request.clause.digest)
+        ),
     )?;
     Ok(StateFrameObligations {
         postcondition,
@@ -523,9 +527,7 @@ fn short(digest: &str) -> &str {
     digest.get(..12).unwrap_or(digest)
 }
 
-fn lower_clause(
-    request: &StateFrameRequest<'_>,
-) -> Result<quire_contract_ir::CompleteContractNodeV2, StateFrameRefusal> {
+fn lower_clause(request: &StateFrameRequest<'_>) -> Result<(), StateFrameRefusal> {
     let profile = CompleteLoweringProfileV2 {
         supported_tags: BTreeSet::from(STATE_FRAME_LOWERING_TAGS),
         require_bounds: true,
@@ -535,7 +537,7 @@ fn lower_clause(
         .package
         .lower(std::slice::from_ref(request.clause), &profile);
     match result.records.into_iter().next() {
-        Some(CompleteLoweringRecordV2::Lowered { node }) => Ok(*node),
+        Some(CompleteLoweringRecordV2::Lowered { .. }) => Ok(()),
         Some(record) => Err(StateFrameRefusal::NotLowered {
             record: Box::new(record),
         }),
@@ -603,6 +605,8 @@ fn application<'v>(body: &'v Value, operator: &str, identity: &str) -> Option<&'
 }
 
 struct ClauseShape {
+    /// The clause's parameters: `self` first, then the result and every operation parameter.
+    /// Only `self` is a read of the framed state.
     parameters: Vec<CheckedNodeId>,
     scope: StateFrameScope,
     condition: Value,
@@ -814,7 +818,7 @@ impl ClauseShape {
             .ok_or_else(unsupported)?;
         let is_self = &*subject.node_tag == "value"
             && &*subject.semantic_form == "parameter"
-            && self.parameters.contains(&subject.node_id);
+            && self.parameters.first() == Some(&subject.node_id);
         if !is_self {
             return Err(unsupported());
         }
@@ -855,25 +859,6 @@ fn read_scope(graph: &Graph<'_>, anchor: &CheckedSemanticNodeV2) -> Option<State
     })
 }
 
-/// The one `i64` range of the `integer_range` bounds the lowered clause reaches.
-fn single_integer_range(
-    graph: &Graph<'_>,
-    bounds: &[CheckedNodeId],
-) -> Result<(i64, i64), StateFrameRefusal> {
-    let ranges = bounds
-        .iter()
-        .filter_map(|bound| graph.nodes.get(bound))
-        .filter(|node| &*node.semantic_form == "integer_range")
-        .map(|node| integer_range(&node.body))
-        .collect::<BTreeSet<_>>();
-    match ranges.into_iter().collect::<Vec<_>>().as_slice() {
-        [Some(range)] => Ok(*range),
-        other => Err(StateFrameRefusal::BoundNotResolved {
-            distinct: other.len(),
-        }),
-    }
-}
-
 fn integer_range(body: &Value) -> Option<(i64, i64)> {
     let members = body.get("members")?.as_array()?;
     let [minimum, maximum] = bound_members(members, INTEGER_RANGE_MEMBERS)?;
@@ -883,14 +868,11 @@ fn integer_range(body: &Value) -> Option<(i64, i64)> {
     ))
 }
 
-/// The range of each state field: the clause's own field takes the one range the clause reaches;
-/// every other field takes the `integer_range` its member of the framed object's body references,
-/// when the object declares one.
+/// The range of each state field: the `integer_range` the field's own member of the framed
+/// object's body references, for each field whose member declares one.
 fn state_domains(
     graph: &Graph<'_>,
     object: &CheckedNodeId,
-    clause_field: &str,
-    clause_range: (i64, i64),
     request: &StateFrameRequest<'_>,
 ) -> Vec<StateFieldDomain> {
     let members = graph
@@ -913,12 +895,7 @@ fn state_domains(
         .state_fields
         .iter()
         .filter_map(|field| {
-            let range = if *field == clause_field {
-                Some(clause_range)
-            } else {
-                declared(field)
-            };
-            range.map(|(minimum, maximum)| StateFieldDomain {
+            declared(field).map(|(minimum, maximum)| StateFieldDomain {
                 field: (*field).to_owned(),
                 minimum,
                 maximum,
@@ -1045,6 +1022,12 @@ fn symbolic_state(request: &StateFrameRequest<'_>, domains: &[StateFieldDomain])
     )
 }
 
+/// `text` as a Rust string literal. It is passed to `assert!` as a format argument, never as the
+/// format string, so braces in an operation name cannot break the generated source.
+fn assertion_message(text: &str) -> String {
+    format!("{text:?}")
+}
+
 /// The `kani::proof` function every generated module holds.
 const HARNESS: &str = "check";
 
@@ -1072,15 +1055,12 @@ fn postcondition_body(
         ("post", "pre")
     };
     let operator = comparison.rust();
-    let message = format!(
-        "{:?}",
-        format!(
-            "operation `{}`: postcondition `{left}.{field} {operator} {right}.{field}` failed",
-            scope.operation
-        )
-    );
+    let message = assertion_message(&format!(
+        "operation `{}`: postcondition `{left}.{field} {operator} {right}.{field}` failed",
+        scope.operation
+    ));
     format!(
-        "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"state bounds hold and the operation returns\");\n        assert!(\n            {left}.{field} {operator} {right}.{field},\n            {message}\n        );\n    }}\n}}\n",
+        "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"state bounds hold and the operation returns\");\n        assert!(\n            {left}.{field} {operator} {right}.{field},\n            \"{{}}\",\n            {message}\n        );\n    }}\n}}\n",
         state = symbolic_state(request, domains),
         subject = request.subject_path,
     )
@@ -1096,14 +1076,11 @@ fn frame_body(
     let assertions = checked
         .iter()
         .map(|field| {
-            let message = format!(
-                "{:?}",
-                format!(
-                    "operation `{}` changed `{field}`, which its frame does not modify",
-                    scope.operation
-                )
-            );
-            format!("        assert!(post.{field} == pre.{field}, {message});\n")
+            let message = assertion_message(&format!(
+                "operation `{}` changed `{field}`, which its frame does not modify",
+                scope.operation
+            ));
+            format!("        assert!(post.{field} == pre.{field}, \"{{}}\", {message});\n")
         })
         .collect::<String>();
     format!(
@@ -1111,4 +1088,22 @@ fn frame_body(
         state = symbolic_state(request, domains),
         subject = request.subject_path,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Trace: FR-015-AC-26, TC-025.
+    #[test]
+    fn tc_025_an_operation_name_with_braces_cannot_break_an_assertion() {
+        let message = assertion_message("operation `a{b}c{}`: postcondition failed");
+        let source = format!("fn f() {{ assert!(true, \"{{}}\", {message}); }}");
+        let file = syn::parse_file(&source).expect("braces in the message stay data");
+        assert!(source.contains("a{b}c{}"));
+        assert_eq!(file.items.len(), 1);
+        // A message used as the format string would be a compile-time error in rustc, which
+        // `syn` does not check; the `"{}"` format argument is what the generators emit.
+        assert!(source.contains("\"{}\""));
+    }
 }

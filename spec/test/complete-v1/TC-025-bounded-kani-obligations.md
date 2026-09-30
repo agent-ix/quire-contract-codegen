@@ -36,7 +36,7 @@ State clauses: generate the operation-contract and frame-effect harnesses of one
 `postcondition` clause over one integer field; read each identity's scope, field
 ranges, granted and forbidden fields and cover count; and submit a clause that is
 a precondition, one comparing two reads of the same side, one comparing two
-fields, a frame that creates an object, an object whose fields carry two ranges,
+fields, a frame that creates or deletes an object or grants a relationship or a foreign field, a condition that is a negation, compares to a literal or reads through a second parameter, a clause field with no integer range,
 a state without the clause's field, a frame granting every field, and an
 unparsable path and an out-of-range unwind bound. Run the installed Kani backend
 over a healthy subject, a subject mutated to debit, a subject writing a granted
@@ -97,19 +97,19 @@ unsatisfiable requires as `cover_unsatisfied`.
    every harness records execution `not_run` (FR-015-AC-25).
 8. Generate the operation-contract and frame-effect harnesses of one `postcondition` state clause
    over one integer field. Each carries one cover, an identity scoped to the operation, anchor,
-   frame and object, and the IR range of each state field (FR-015-AC-26). Each clause or frame
-   shape outside that encoding is refused by name with no harness (FR-015-AC-27). The installed
+   frame and object, and the IR range of each state field (FR-015-AC-26 to FR-015-AC-28). Each clause or frame
+   shape outside that encoding is refused by name with no harness (FR-015-AC-29). The installed
    backend verifies the healthy subject, falsifies the debiting subject, verifies the granted write,
    falsifies the ungranted write naming its field, falsifies the allowed subject against a frame
    regenerated with nothing granted, and QSL's `replay_frame` reproduces the forbidden write and
-   finds the allowed run inside its frame (FR-015-AC-28).
+   finds the allowed run inside its frame (FR-015-AC-30 to FR-015-AC-32).
 
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
   `unsupported` there until QSpec decides how a frame node lowers into a Kani form (ADR-004). The
   frame of a `postcondition` state clause over one integer field is instead generated with that
-  clause by `generate_state_frame_obligations` (FR-015-AC-26 to FR-015-AC-28).
+  clause by `generate_state_frame_obligations` (FR-015-AC-26 to FR-015-AC-32).
 - V2 scalar harnesses outside `IntegerArithmetic`: an IR-confirmed claim over
   one of the four `quire.op.integer.{add,sub,mul,negate}` identities reaches a
   real harness unless a ground independent of the operation (an

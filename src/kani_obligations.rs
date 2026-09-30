@@ -2655,4 +2655,25 @@ mod tests {
             Ok(_) => panic!("a malformed generated source must not render"),
         }
     }
+
+    /// A frame is not a clause oracle: the clause renderer refuses one by name rather than as
+    /// an internal render failure.
+    ///
+    /// Trace: FR-015-AC-1, TC-025.
+    #[test]
+    fn render_refuses_a_frame_as_not_a_clause_oracle() {
+        let package = render_probe_package();
+        let clause_ref = render_probe_clause();
+        let items = [ObligationItem::BoundClause {
+            package: &package,
+            clause: &clause_ref,
+        }];
+        let request = render_probe_request(&items);
+        let mut lowered = render_probe_lowered(&items[0]);
+        lowered.kind = ObligationKind::Frame;
+        assert!(matches!(
+            render(&request, &lowered),
+            Err(UnsupportedObligation::FrameNotClauseRendered)
+        ));
+    }
 }

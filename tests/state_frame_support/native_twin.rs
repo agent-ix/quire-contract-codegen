@@ -3,10 +3,15 @@
 //! are generated from, the invocation documents of one concrete run, and the `replay_frame`
 //! request and envelope that put that run before QSL.
 //!
-//! The twin is tied to the Rust side only by names: the model `Bank`, its object `Account`, its
-//! fields `balance` and `audit` and its operation `deposit`. The node identities a counterexample
-//! names come from the twin's own compile, because `qsl_replay` does not let a caller mint an
-//! occurrence key.
+//! The twin's fields, their ranges and the fields its frame grants come from `model`, the same
+//! source the Rust fixture's checked package is built from. The rest is tied to the Rust side only
+//! by names: the model `Bank`, its object `Account` and its operation `deposit`. The node
+//! identities a counterexample names come from the twin's own compile, because `qsl_replay` does
+//! not let a caller mint an occurrence key, so they are not the fixture package's node ids. The
+//! envelope's obligation and originating-counterexample identities are fixed stand-ins: CG
+//! computes no identity for a frame obligation, and QSL only requires that one be present.
+
+use super::model;
 
 use std::collections::BTreeMap;
 
@@ -37,8 +42,9 @@ fn population() -> String {
     format!("ix://{PACKAGE}/accounts")
 }
 
-fn balance_type() -> String {
-    format!("ix://{PACKAGE}/Balance")
+/// The value type of a field: one per field, each with the range `model` gives it.
+fn range_type(field: &str) -> String {
+    format!("ix://{PACKAGE}/{field}_range")
 }
 
 /// RFC 8785 text of `value`. The documents here hold only strings, integers and booleans, so
@@ -95,7 +101,7 @@ fn field(owner: &str, name: &str) -> Value {
     json!({
         "identity": identity,
         "name": name,
-        "typeRef": balance_type(),
+        "typeRef": range_type(name),
         "presence": "required",
         "nullable": false,
         "defaultKind": "none",
@@ -104,21 +110,71 @@ fn field(owner: &str, name: &str) -> Value {
     })
 }
 
-/// The `test/bank` domain package: `Account` with two `Int[0, 1000]` fields, one operation
-/// `deposit` whose frame modifies `balance` only, and one closed population.
+/// The `test/bank` domain package: `Account` with the integer fields and ranges of `model`, one
+/// operation `deposit` whose frame modifies the fields `model` grants, and one closed population.
 fn domain_document() -> Vec<u8> {
     let account = account_type();
-    let balance = balance_type();
-    let bound = |keyword: &str, value: i64| {
+    let bound = |field: &str, keyword: &str, value: i64| {
+        let range = range_type(field);
         json!({
-            "identity": format!("{balance}/constraints/{keyword}"),
+            "identity": format!("{range}/constraints/{keyword}"),
             "keyword": keyword,
             "operands": {"value": value},
             "appliesTo": "ix://quire/native/Integer",
             "diagnosticCode": format!("bound.{keyword}"),
-            "origin": generated(&balance),
+            "origin": generated(&range),
         })
     };
+    let value_type = |(field, (minimum, maximum)): (&str, (i64, i64))| {
+        let range = range_type(field);
+        json!({
+            "identity": range,
+            "displayName": range,
+            "kind": {"module": PACKAGE, "name": "value_type"},
+            "roles": [],
+            "origin": generated(&range),
+            "extensions": [],
+            "unknownPolicy": "reject",
+            "scalar": "integer",
+            "constraints": [bound(field, "min", minimum), bound(field, "max", maximum)],
+        })
+    };
+    let mut types = model::FIELDS.map(value_type).to_vec();
+    types.push(json!({
+        "identity": account,
+        "displayName": account,
+        "kind": {"module": PACKAGE, "name": "object_type"},
+        "roles": [],
+        "origin": generated(&account),
+        "constraints": [],
+        "extensions": [],
+        "unknownPolicy": "reject",
+        "supertypes": [],
+        "fields": model::FIELDS.map(|(name, _)| field(&account, name)),
+        "operations": [{
+            "identity": format!("{account}/deposit"),
+            "name": "deposit",
+            "params": [],
+            "returns": {
+                "typeRef": "ix://quire/native/Boolean",
+                "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+                "nullable": false,
+            },
+            "pre": [],
+            "post": [],
+            "origin": {"source": {
+                "sourceIdentity": format!("ix://{PACKAGE}/spec"),
+                "path": "spec.qspec",
+                "startLine": 1,
+                "startColumn": 1,
+            }},
+            "frame": {
+                "modifies": model::GRANTED.map(|name| format!("{account}/{name}")),
+                "creates": [],
+                "deletes": [],
+            },
+        }],
+    }));
     json!({
         "contractVersion": "2.0.0",
         "source": {
@@ -142,54 +198,7 @@ fn domain_document() -> Vec<u8> {
             construct("population", "quire.meaning.model.population/v1"),
             construct("value_type", "quire.meaning.model.value-type/v1"),
         ],
-        "types": [
-            {
-                "identity": balance,
-                "displayName": balance,
-                "kind": {"module": PACKAGE, "name": "value_type"},
-                "roles": [],
-                "origin": generated(&balance),
-                "extensions": [],
-                "unknownPolicy": "reject",
-                "scalar": "integer",
-                "constraints": [bound("min", 0), bound("max", 1000)],
-            },
-            {
-                "identity": account,
-                "displayName": account,
-                "kind": {"module": PACKAGE, "name": "object_type"},
-                "roles": [],
-                "origin": generated(&account),
-                "constraints": [],
-                "extensions": [],
-                "unknownPolicy": "reject",
-                "supertypes": [],
-                "fields": [field(&account, "balance"), field(&account, "audit")],
-                "operations": [{
-                    "identity": format!("{account}/deposit"),
-                    "name": "deposit",
-                    "params": [],
-                    "returns": {
-                        "typeRef": "ix://quire/native/Boolean",
-                        "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
-                        "nullable": false,
-                    },
-                    "pre": [],
-                    "post": [],
-                    "origin": {"source": {
-                        "sourceIdentity": format!("ix://{PACKAGE}/spec"),
-                        "path": "spec.qspec",
-                        "startLine": 1,
-                        "startColumn": 1,
-                    }},
-                    "frame": {
-                        "modifies": [format!("{account}/balance")],
-                        "creates": [],
-                        "deletes": [],
-                    },
-                }],
-            },
-        ],
+        "types": types,
         "populations": [{
             "identity": population(),
             "displayName": population(),

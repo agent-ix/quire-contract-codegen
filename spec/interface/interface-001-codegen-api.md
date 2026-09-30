@@ -102,8 +102,12 @@ operations:
     inputs: [KaniObligationRequest]
     output: KaniObligationOutcome | KaniObligationError
     semantics: settles every item in request order and, only when no item is invalid, emits one harness per supported item; an invalid item returns no harness bytes (FR-015)
+  - name: generate_state_frame_obligations
+    inputs: [StateFrameRequest]
+    output: StateFrameObligations | StateFrameRefusal
+    semantics: from one postcondition state_clause of an admitted CheckedPackageV2 over one integer field, returns one operation-contract harness and one frame-effect harness of the clause's operation, each with a scoped identity and one non-vacuity cover; every other shape is a typed refusal with no harness (FR-015-AC-26 to FR-015-AC-29)
   - name: execute_kani_obligation
-    inputs: [KaniExecutionRequest]
+    inputs: [KaniExecutionRequest, whose harness is a KaniExecutableHarness: Contract, Scalar or StateFrame]
     output: KaniExecutionEvidence | KaniExecutionRefusal
     semantics: refuses a crate that does not contain the harness, runs the harness and reports the backend's own outcome; see kani_obligation_execution_slice (FR-017)
   - name: kani_launch_command

@@ -14,6 +14,8 @@
 //! each seeded defect is falsified for the intended property, and regenerating the frame from a
 //! mutated package turns a green proof red.
 
+#[path = "../state_frame_support/model.rs"]
+mod model;
 #[path = "../state_frame_support/native_twin.rs"]
 mod native_twin;
 #[path = "../exact_scalar_support/package.rs"]
@@ -29,7 +31,7 @@ use std::{fs, path::PathBuf, time::Duration};
 use native_twin::Twin;
 use package::{
     application, code_id, corpus_package, key, literal, member, op, op_full, parameter_body,
-    reference, Bound, PackageBuilder, NODE_DOMAIN, T_BOOLEAN,
+    reference, Bound, PackageBuilder, NODE_DOMAIN, T_BOOLEAN, T_INTEGER,
 };
 use qsl_replay::{
     DisagreementCause, FrameChange, ProofCategory, ReplayResult, Verdict, WitnessSettlement,
@@ -49,10 +51,11 @@ const SELF: u32 = 4003;
 const FRAME: u32 = 4004;
 const ANCHOR: u32 = 4005;
 const DEREF: u32 = 4006;
-const POST_BALANCE: u32 = 4007;
-const PRE_BALANCE: u32 = 4008;
+const OTHER: u32 = 4011;
+const OTHER_OBJECT: u32 = 4012;
+const RELATIONSHIP: u32 = 4013;
 
-const STATE_FIELDS: [&str; 2] = ["balance", "audit"];
+const STATE_FIELDS: [&str; 2] = [model::FIELDS[0].0, model::FIELDS[1].0];
 const STATE_PATH: &str = "crate::subject::Account";
 const SUBJECT_PATH: &str = "crate::subject::deposit";
 const SUBJECT_SOURCE: &str = include_str!("../state_frame_support/subject.rs");
@@ -63,29 +66,50 @@ struct Shape {
     variant: u32,
     clause: &'static str,
     modifies: &'static [&'static str],
-    creates_object: bool,
+    frame_effect: FrameEffect,
     condition: Condition,
+    /// The range the object's `balance` member declares; `None` types it by the plain integer.
+    balance_bound: Option<(i64, i64)>,
     audit_bound: (i64, i64),
+}
+
+/// What a frame does beyond granting fields.
+#[derive(Clone, Copy, PartialEq)]
+enum FrameEffect {
+    None,
+    Creates,
+    Deletes,
+    GrantsRelationship,
+    GrantsForeignField,
 }
 
 #[derive(Clone, Copy)]
 enum Condition {
-    /// `post(balance) >= pre(balance)`.
+    /// `post(self.balance) >= pre(self.balance)`.
     PostGePre,
-    /// `post(balance) >= post(balance)`.
+    /// `post(self.balance) >= post(self.balance)`.
     PostGePost,
-    /// `post(balance) >= pre(audit)`.
+    /// `post(self.balance) >= pre(self.audit)`.
     BalanceAgainstAudit,
+    /// `post(self.balance) >= pre(other.balance)`, `other` a second parameter of the object type.
+    BalanceAgainstOther,
+    /// `post(self.balance) >= 0`.
+    BalanceAgainstLiteral,
+    /// `post(self.balance) <= pre(self.balance)`.
+    PostLePre,
+    /// `not (post(self.balance) >= pre(self.balance))`.
+    Negated,
 }
 
 impl Shape {
     const HEALTHY: Self = Self {
         variant: 0,
         clause: "postcondition",
-        modifies: &["balance"],
-        creates_object: false,
+        modifies: &model::GRANTED,
+        frame_effect: FrameEffect::None,
         condition: Condition::PostGePre,
-        audit_bound: (0, 1000),
+        balance_bound: Some(model::FIELDS[0].1),
+        audit_bound: model::FIELDS[1].1,
     };
 
     fn code(&self, base: u32) -> u32 {
@@ -105,6 +129,16 @@ fn field_read(
     bound: &str,
 ) -> String {
     let deref = code_id(DEREF).digest.to_string();
+    field_read_through(builder, code, &deref, (object, field, bound))
+}
+
+/// `project(<deref>, field)` over `object`'s `field`, typed by `bound`.
+fn field_read_through(
+    builder: &mut PackageBuilder,
+    code: u32,
+    deref: &str,
+    (object, field, bound): (&str, &str, &str),
+) -> String {
     let member = json!({"kind": "field", "declaration": node_ref(object), "name": field});
     builder.application_code_with(
         code,
@@ -115,9 +149,9 @@ fn field_read(
             "query",
             op_full("quire.op.record.project", vec![], None, Some(member)),
             bound,
-            vec![reference(&deref)],
+            vec![reference(deref)],
         ),
-        &[deref, object.to_owned()],
+        &[deref.to_owned(), object.to_owned()],
     );
     code_id(code).digest.to_string()
 }
@@ -141,8 +175,12 @@ fn pre_read(builder: &mut PackageBuilder, code: u32, read: &str, bound: &str) ->
 
 fn package_for(shape: &Shape) -> PackageBuilder {
     let mut builder = corpus_package();
-    let bound_key = builder.bound(&Bound::Integer(0, 1000));
+    let balance_key = match shape.balance_bound {
+        Some((minimum, maximum)) => builder.bound(&Bound::Integer(minimum, maximum)),
+        None => key(T_INTEGER),
+    };
     let audit_key = builder.bound(&Bound::Integer(shape.audit_bound.0, shape.audit_bound.1));
+    // A second integer range keeps a bound reachable when `balance` names none.
     let object = key(OBJECT);
     builder.node_with(
         &object,
@@ -150,10 +188,28 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         "object_type",
         &key(T_BOOLEAN),
         json!({"term": "aggregate", "members": [
-            member("balance", reference(&bound_key)),
+            member("balance", reference(&balance_key)),
             member("audit", reference(&audit_key)),
         ]}),
-        &[bound_key.clone(), audit_key.clone()],
+        &[balance_key.clone(), audit_key.clone()],
+    );
+    let other_object = key(OTHER_OBJECT);
+    builder.node_with(
+        &other_object,
+        "model",
+        "object_type",
+        &key(T_BOOLEAN),
+        json!({"term": "aggregate", "members": []}),
+        &[],
+    );
+    let relationship = key(RELATIONSHIP);
+    builder.node_with(
+        &relationship,
+        "relation",
+        "relationship",
+        &key(T_BOOLEAN),
+        json!({"term": "aggregate", "members": []}),
+        &[key(T_BOOLEAN)],
     );
     builder.node_with(
         &key(REFERENCE),
@@ -170,23 +226,41 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         &key(REFERENCE),
         parameter_body("self", 0),
     );
-    let creates = if shape.creates_object {
-        vec![node_ref(&object)]
-    } else {
-        vec![]
-    };
-    let modifies = shape
+    builder.code(
+        OTHER,
+        "value",
+        "parameter",
+        &key(REFERENCE),
+        parameter_body("other", 1),
+    );
+    let field_entry = |declaration: &str, name: &str| json!({"kind": "field", "declaration": node_ref(declaration), "name": name});
+    let mut modifies = shape
         .modifies
         .iter()
-        .map(|name| json!({"kind": "field", "declaration": node_ref(&object), "name": name}))
+        .map(|name| field_entry(&object, name))
         .collect::<Vec<_>>();
+    let mut frame_dependencies = vec![object.clone()];
+    let (mut creates, mut deletes) = (vec![], vec![]);
+    match shape.frame_effect {
+        FrameEffect::None => {}
+        FrameEffect::Creates => creates.push(node_ref(&object)),
+        FrameEffect::Deletes => deletes.push(node_ref(&object)),
+        FrameEffect::GrantsRelationship => {
+            modifies.push(json!({"kind": "relationship", "declaration": node_ref(&relationship)}));
+            frame_dependencies.push(relationship.clone());
+        }
+        FrameEffect::GrantsForeignField => {
+            modifies.push(field_entry(&other_object, "balance"));
+            frame_dependencies.push(other_object.clone());
+        }
+    }
     builder.node_with(
         &key(FRAME),
         "state",
         "frame",
         &object,
-        json!({"term": "frame", "modifies": modifies, "creates": creates, "deletes": []}),
-        std::slice::from_ref(&object),
+        json!({"term": "frame", "modifies": modifies, "creates": creates, "deletes": deletes}),
+        &frame_dependencies,
     );
     let frame = key(FRAME);
     builder.node_with(
@@ -214,14 +288,46 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         ),
         &[],
     );
-    let post_balance = field_read(&mut builder, POST_BALANCE, &object, "balance", &bound_key);
-    let pre_balance = pre_read(&mut builder, PRE_BALANCE, &post_balance, &bound_key);
+    builder.application_bounded(
+        shape.code(420),
+        "expression",
+        "deref",
+        &object,
+        application(
+            "deref",
+            op("quire.op.model.deref"),
+            &object,
+            vec![reference(&key(OTHER))],
+        ),
+        &[],
+    );
+    let post_balance = field_read(
+        &mut builder,
+        shape.code(410),
+        &object,
+        "balance",
+        &balance_key,
+    );
+    let pre_balance = pre_read(&mut builder, shape.code(411), &post_balance, &balance_key);
     let post_audit = field_read(&mut builder, shape.code(400), &object, "audit", &audit_key);
     let pre_audit = pre_read(&mut builder, shape.code(401), &post_audit, &audit_key);
+    let other = code_id(shape.code(420)).digest.to_string();
+    let post_other = field_read_through(
+        &mut builder,
+        shape.code(421),
+        &other,
+        (&object, "balance", &balance_key),
+    );
+    let pre_other = pre_read(&mut builder, shape.code(422), &post_other, &balance_key);
+    let zero = literal("integer", "0");
     let (left, right) = match shape.condition {
-        Condition::PostGePre => (&post_balance, &pre_balance),
-        Condition::PostGePost => (&post_balance, &post_balance),
-        Condition::BalanceAgainstAudit => (&post_balance, &pre_audit),
+        Condition::PostGePre | Condition::PostLePre | Condition::Negated => {
+            (reference(&post_balance), reference(&pre_balance))
+        }
+        Condition::PostGePost => (reference(&post_balance), reference(&post_balance)),
+        Condition::BalanceAgainstAudit => (reference(&post_balance), reference(&pre_audit)),
+        Condition::BalanceAgainstOther => (reference(&post_balance), reference(&pre_other)),
+        Condition::BalanceAgainstLiteral => (reference(&post_balance), zero),
     };
     builder.application_bounded(
         shape.code(200),
@@ -230,13 +336,38 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         &key(T_BOOLEAN),
         application(
             "binary",
-            op("quire.op.integer.ge"),
+            op(if matches!(shape.condition, Condition::PostLePre) {
+                "quire.op.integer.le"
+            } else {
+                "quire.op.integer.ge"
+            }),
             &key(T_BOOLEAN),
-            vec![reference(left), reference(right)],
+            vec![left, right],
         ),
         &[],
     );
-    let condition = code_id(shape.code(200)).digest.to_string();
+    let mut condition = code_id(shape.code(200)).digest.to_string();
+    if matches!(shape.condition, Condition::Negated) {
+        builder.application_bounded(
+            shape.code(210),
+            "expression",
+            "unary",
+            &key(T_BOOLEAN),
+            application(
+                "unary",
+                op("quire.op.boolean.not"),
+                &key(T_BOOLEAN),
+                vec![reference(&condition)],
+            ),
+            &[],
+        );
+        condition = code_id(shape.code(210)).digest.to_string();
+    }
+    let parameters = if matches!(shape.condition, Condition::BalanceAgainstOther) {
+        vec![reference(&key(SELF)), reference(&key(OTHER))]
+    } else {
+        vec![reference(&key(SELF))]
+    };
     builder.application_bounded(
         shape.code(300),
         "state",
@@ -252,7 +383,7 @@ fn package_for(shape: &Shape) -> PackageBuilder {
             ),
             &key(T_BOOLEAN),
             vec![
-                json!({"term": "aggregate", "members": [reference(&key(SELF))]}),
+                json!({"term": "aggregate", "members": parameters}),
                 reference(&key(ANCHOR)),
                 reference(&condition),
             ],
@@ -312,7 +443,7 @@ fn refusal(shape: &Shape, fields: &[&str]) -> StateFrameRefusal {
 /// operation, anchor, frame and object, whose bounds and granted and forbidden fields are read
 /// from the IR, and each carries exactly one non-vacuity cover.
 ///
-/// Trace: FR-015-AC-26, TC-025
+/// Trace: FR-015-AC-26, FR-015-AC-27, FR-015-AC-28, TC-025
 #[test]
 fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness() {
     let fixture = fixture(&Shape::HEALTHY);
@@ -395,7 +526,7 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
 
 /// A frame that grants nothing checks every field, so a different frame is a different proof.
 ///
-/// Trace: FR-015-AC-26, TC-025
+/// Trace: FR-015-AC-28, TC-025
 #[test]
 fn tc_025_the_frame_harness_follows_the_frame_node_not_the_caller() {
     let emptied = Shape {
@@ -416,70 +547,104 @@ fn tc_025_the_frame_harness_follows_the_frame_node_not_the_caller() {
     assert!(frame.contains("assert!(post.audit == pre.audit,"));
 }
 
-/// Every shape outside one integer comparison of pre and post reads of one field, every frame
-/// effect with no finite encoding, and every unreadable or unbounded clause is refused by name,
-/// with no harness.
+/// Every shape outside one integer comparison of pre and post reads of one field through
+/// `self`, and every frame effect with no finite encoding, is refused by name, with no harness.
+/// Each row fails if the refusal it names is removed: the shape would otherwise generate.
 ///
-/// Trace: FR-015-AC-27, TC-025
+/// Trace: FR-015-AC-29, TC-025
 #[test]
 fn tc_025_shapes_without_a_finite_encoding_are_refused_by_name() {
+    let refused = |shape: Shape| refusal(&shape, &STATE_FIELDS);
+    let with = |variant, edit: fn(Shape) -> Shape| {
+        refused(edit(Shape {
+            variant,
+            ..Shape::HEALTHY
+        }))
+    };
+    let condition_not_supported = |refusal: StateFrameRefusal| {
+        matches!(refusal, StateFrameRefusal::ConditionNotSupported { .. })
+    };
+    let unsupported_effect = |refusal: StateFrameRefusal, expected: UnsupportedFrameEffect| {
+        matches!(
+            refusal,
+            StateFrameRefusal::FrameEffectUnsupported { effect, .. } if effect == expected
+        )
+    };
+
+    // Not a postcondition.
     assert!(matches!(
-        refusal(
-            &Shape { variant: 2, clause: "precondition", ..Shape::HEALTHY },
-            &STATE_FIELDS
-        ),
+        with(2, |shape| Shape { clause: "precondition", ..shape }),
         StateFrameRefusal::NotAPostcondition { clause } if clause == "precondition"
     ));
+    // The condition.
     assert_eq!(
-        refusal(
-            &Shape {
-                variant: 3,
-                condition: Condition::PostGePost,
-                ..Shape::HEALTHY
-            },
-            &STATE_FIELDS
-        ),
+        with(3, |shape| Shape {
+            condition: Condition::PostGePost,
+            ..shape
+        }),
         StateFrameRefusal::ObservationsSameSide
     );
     assert_eq!(
-        refusal(
-            &Shape {
-                variant: 4,
-                condition: Condition::BalanceAgainstAudit,
-                ..Shape::HEALTHY
-            },
-            &STATE_FIELDS
-        ),
+        with(4, |shape| Shape {
+            condition: Condition::BalanceAgainstAudit,
+            ..shape
+        }),
         StateFrameRefusal::ObservationsDiffer {
             left: "balance".to_owned(),
             right: "audit".to_owned()
         }
     );
-    assert!(matches!(
-        refusal(
-            &Shape {
-                variant: 5,
-                creates_object: true,
-                ..Shape::HEALTHY
-            },
-            &STATE_FIELDS
-        ),
-        StateFrameRefusal::FrameEffectUnsupported {
-            effect: UnsupportedFrameEffect::Creates,
-            ..
-        }
+    assert!(condition_not_supported(with(10, |shape| Shape {
+        condition: Condition::Negated,
+        ..shape
+    })));
+    assert!(condition_not_supported(with(11, |shape| Shape {
+        condition: Condition::BalanceAgainstLiteral,
+        ..shape
+    })));
+    // A read through a second parameter of the object type is not a read of `self`.
+    assert!(condition_not_supported(with(12, |shape| Shape {
+        condition: Condition::BalanceAgainstOther,
+        ..shape
+    })));
+    // The frame.
+    assert!(unsupported_effect(
+        with(5, |shape| Shape {
+            frame_effect: FrameEffect::Creates,
+            ..shape
+        }),
+        UnsupportedFrameEffect::Creates
     ));
-    // The object's two fields are typed by two different ranges: no single bound.
+    assert!(unsupported_effect(
+        with(7, |shape| Shape {
+            frame_effect: FrameEffect::Deletes,
+            ..shape
+        }),
+        UnsupportedFrameEffect::Deletes
+    ));
+    assert!(unsupported_effect(
+        with(8, |shape| Shape {
+            frame_effect: FrameEffect::GrantsRelationship,
+            ..shape
+        }),
+        UnsupportedFrameEffect::Relationship
+    ));
+    assert!(unsupported_effect(
+        with(9, |shape| Shape {
+            frame_effect: FrameEffect::GrantsForeignField,
+            ..shape
+        }),
+        UnsupportedFrameEffect::ForeignField
+    ));
+    // The clause's own field declares no integer range.
     assert_eq!(
-        refusal(
-            &Shape {
-                variant: 6,
-                audit_bound: (0, 50),
-                ..Shape::HEALTHY
-            },
-            &STATE_FIELDS
-        ),
-        StateFrameRefusal::BoundNotResolved { distinct: 2 }
+        with(13, |shape| Shape {
+            balance_bound: None,
+            ..shape
+        }),
+        StateFrameRefusal::BoundNotResolved {
+            field: "balance".to_owned()
+        }
     );
     // A field the frame grants or the clause reads that the caller's state lacks.
     assert_eq!(
@@ -495,10 +660,54 @@ fn tc_025_shapes_without_a_finite_encoding_are_refused_by_name() {
     ));
 }
 
+/// Each field is assumed in the range its own member declares, so two fields with different
+/// ranges each keep theirs, and the clause field never takes another field's.
+///
+/// Trace: FR-015-AC-27, TC-025
+#[test]
+fn tc_025_each_field_is_assumed_in_its_own_declared_range() {
+    let shape = Shape {
+        variant: 6,
+        balance_bound: Some((5, 900)),
+        audit_bound: (0, 50),
+        ..Shape::HEALTHY
+    };
+    let generated = generate(&fixture(&shape));
+    let domain = |field: &str, minimum, maximum| StateFieldDomain {
+        field: field.to_owned(),
+        minimum,
+        maximum,
+    };
+    let expected = vec![domain("balance", 5, 900), domain("audit", 0, 50)];
+    assert_eq!(generated.postcondition.identity.domains, expected);
+    assert_eq!(generated.frame.identity.domains, expected);
+    let post = &generated.postcondition.rust.contents;
+    assert!(post.contains("kani::assume(pre.balance >= 5_i64 && pre.balance <= 900_i64);"));
+    assert!(post.contains("kani::assume(pre.audit >= 0_i64 && pre.audit <= 50_i64);"));
+}
+
+/// Two clauses of one operation share an anchor and frame, yet each harness lands at its own
+/// module and record path.
+///
+/// Trace: FR-015-AC-26, TC-025
+#[test]
+fn tc_025_two_clauses_of_one_operation_never_share_a_frame_record_path() {
+    let first = generate(&fixture(&Shape::HEALTHY));
+    let second = generate(&fixture(&Shape {
+        variant: 14,
+        condition: Condition::PostLePre,
+        ..Shape::HEALTHY
+    }));
+    assert_eq!(first.frame.identity.scope, second.frame.identity.scope);
+    assert_ne!(first.frame.identity.clause, second.frame.identity.clause);
+    assert_ne!(first.frame.record.path, second.frame.record.path);
+    assert_ne!(first.frame.rust.path, second.frame.rust.path);
+}
+
 /// A request that is not well formed, and a node that is not a clause, are refused before any
 /// harness is generated.
 ///
-/// Trace: FR-015-AC-27, TC-025
+/// Trace: FR-015-AC-29, TC-025
 #[test]
 fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
     let fixture = fixture(&Shape::HEALTHY);
@@ -643,7 +852,7 @@ fn playback_state(counterexample: &str) -> (i64, i64) {
 /// The operation contract verifies for a healthy subject and is falsified, for the postcondition
 /// and no other reason, when the subject is mutated to debit.
 ///
-/// Trace: FR-015-AC-28, TC-025
+/// Trace: FR-015-AC-30, TC-025
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifies_it() {
@@ -662,7 +871,7 @@ fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifi
 /// field, and regenerating the frame from a package whose `modifies` is mutated to grant nothing
 /// turns the allowed proof red.
 ///
-/// Trace: FR-015-AC-28, TC-025
+/// Trace: FR-015-AC-31, TC-025
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_frame_falsifies() {
@@ -693,7 +902,7 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
 /// QSL's `replay_frame`, which reproduces the violation on the forbidden field; the allowed
 /// effect's run replays as a frame the invocation respects.
 ///
-/// Trace: FR-015-AC-28, TC-025
+/// Trace: FR-015-AC-32, TC-025
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
