@@ -5,9 +5,6 @@ type: Task
 status: done
 track: A
 priority: P0
-relationships:
-  - target: ix://agent-ix/quire-contract-ir/PGM-01
-    type: references
 ---
 # Task-003: Upstream dependency reconciliation
 

@@ -64,8 +64,3 @@ inconclusive or unsupported state visible to human decision makers.
 | StR-001-VC-2 | Executable, proptest, Kani, and vacuity outputs retain the same requirement identity and agree on the shared bounded corpus. | Demonstration |
 | StR-001-VC-3 | A proof counterexample is reported as a contract failure only after native replay of that counterexample reproduces it, and a malformed, out-of-domain or disagreeing counterexample is reported as exactly that. | Demonstration |
 | StR-001-VC-4 | A proof result is claimed only for an obligation that was settled once, generated for its routed backend, and observed verifying with its non-vacuity cover satisfied. | Demonstration |
-
-## Dependencies
-
-The governing compatibility, evidence, and qualification policy is PGM-01 at
-`ix://agent-ix/quire-contract-ir/PGM-01`.
