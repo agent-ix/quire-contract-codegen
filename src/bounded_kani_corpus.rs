@@ -6,11 +6,11 @@
 //! input, and declared proof-dependency census.  A non-success outcome returns before any role is
 //! emitted.
 
-use std::{collections::BTreeMap, fmt::Write as _};
+use std::fmt::Write as _;
 
 use quire_contract_ir::kani::{
-    CheckedArithmeticRequest, CollectionQuery, CounterexamplePacket, DispatchIndex, GraphRequest,
-    KaniOutcome, KaniOutcomeKind, KaniProfile, ReplaySource, ValidatedFiniteInput, WitnessValue,
+    CheckedArithmeticRequest, CollectionQuery, DispatchIndex, GraphRequest, KaniOutcome,
+    KaniOutcomeKind, KaniProfile, ValidatedFiniteInput,
 };
 use serde::{Deserialize, Serialize};
 
@@ -165,11 +165,6 @@ pub struct BoundedCorpusCase {
     pub outcome: KaniOutcome,
     /// Generated roles derived from the same profile and finite input selection.
     pub artifacts: BoundedCorpusArtifacts,
-    /// Retained false counterexample, when the admitted case is a counterexample. This corpus
-    /// never runs Kani, so it never holds a backend transcript: its packet's `source` is always
-    /// `ReplaySource::Input`, carrying the canonical assignments that produced the false result,
-    /// never a fabricated `ReplaySource::Witness`.
-    pub counterexample: Option<CounterexamplePacket>,
 }
 
 /// Generates the complete codegen corpus case from one already validated Contract IR input.
@@ -256,28 +251,17 @@ pub fn generate_bounded_kani_corpus_case(
         ));
     }
     let normalized_dependencies = normalize_dependencies(dependencies);
-    // Each arm collects only the *raw* (fallible-conversion-free) per-case assignment data here.
-    // Converting a raw `i128` into the closed `WitnessValue` wire representation is fallible
-    // (`integer_assignment`, below), and a provable case must never be refused over an assignment
-    // that no packet will ever carry: conversion happens later, only inside the `!value` branch
-    // that actually builds a retained counterexample packet.
-    let (value, oracle_body, raw_assignments) = match request {
+    let (value, oracle_body) = match request {
         BoundedCorpusRequest::Arithmetic(request) => {
             let lowered = prepare_checked_arithmetic(profile, dispatch, input, request)?;
-            let raw_assignments = arithmetic_assignments(&lowered.request);
             // Admission establishes the checked arithmetic/definedness property; the numeric
             // result itself is not a Boolean verdict (zero is as valid as any other in-range
             // result).
-            (true, render_arithmetic_oracle(&lowered), raw_assignments)
+            (true, render_arithmetic_oracle(&lowered))
         }
         BoundedCorpusRequest::Graph(request) => {
             let lowered = prepare_finite_graph_reaches(profile, dispatch, input, request)?;
-            let raw_assignments = graph_assignments(&lowered.request);
-            (
-                lowered.reachable,
-                render_graph_oracle(&lowered, input),
-                raw_assignments,
-            )
+            (lowered.reachable, render_graph_oracle(&lowered, input))
         }
         BoundedCorpusRequest::Collection(request) => {
             let lowered = prepare_bounded_collection_query(profile, dispatch, input, request)?;
@@ -296,11 +280,9 @@ pub fn generate_bounded_kani_corpus_case(
                     format!("values.iter().any(|value| *value == {expected}i128)")
                 }
             };
-            let raw_assignments = collection_assignments(&lowered.query);
             (
                 lowered.value,
                 format!("{{ let values = [{values}]; {predicate} }}"),
-                raw_assignments,
             )
         }
     };
@@ -315,62 +297,13 @@ pub fn generate_bounded_kani_corpus_case(
             profile.selection.revision.clone(),
         )
     };
-    // Fallible conversion to `WitnessValue` runs only here, for a case that actually retains a
-    // packet: a provable case's `raw_assignments` are dropped unconverted, so an admitted value
-    // outside `i64`'s range can never refuse generation of a case no packet will carry. This is
-    // also the last fallible step before the case is emitted, so a call that fails here never
-    // consumes a case number.
-    let counterexample_assignments = (!value)
-        .then(|| build_assignments(&request_source_id, &revision, raw_assignments))
-        .transpose()?;
     let name = format!("{}_{}", family.label(), emitted.next());
     let artifacts = render_artifacts(family, &name, value, &oracle_body, &normalized_dependencies);
-    let counterexample = counterexample_assignments.map(|assignments| CounterexamplePacket {
-        profile_revision: profile.selection.revision.clone(),
-        input: input.input().clone(),
-        // This corpus is generated from a concrete, already-admitted finite selection and
-        // never runs Kani, so it never has a backend transcript to build a `Witness` from.
-        // `assignments` is the real per-family concrete input this case was generated from
-        // (see the match above).
-        source: ReplaySource::Input(assignments),
-    });
     Ok(BoundedCorpusCase {
         family,
         outcome,
         artifacts,
-        counterexample,
     })
-}
-
-/// The checked-arithmetic family's raw per-case input assignments: exactly its two operands,
-/// keyed by declared parameter identifier (AD-016 "Replay source"). `minimum` and `maximum` are
-/// the checked property's own domain, fixed by the request definition rather than a concrete
-/// value drawn for this instance, so neither belongs here.
-fn arithmetic_assignments(request: &CheckedArithmeticRequest) -> Vec<(String, i128)> {
-    vec![
-        ("left".to_owned(), request.left),
-        ("right".to_owned(), request.right),
-    ]
-}
-
-/// The finite-reference-graph family's raw per-case input assignments.
-fn graph_assignments(request: &GraphRequest) -> Vec<(String, i128)> {
-    // Widening, not narrowing: `usize` never exceeds `i128` on any supported target.
-    vec![("max_expansions".to_owned(), request.max_expansions as i128)]
-}
-
-/// The bounded-collection-query family's raw per-case input assignments: exactly the ordered
-/// population's own concrete values, keyed by declared parameter identifier (AD-016 "Replay
-/// source"). `max_items` bounds the property's domain and `expected` (for `ExistsEqual`) is the
-/// query's own oracle target; both are fixed by the request definition, not a concrete value
-/// drawn for this instance, so neither belongs here.
-fn collection_assignments(query: &CollectionQuery) -> Vec<(String, i128)> {
-    query
-        .values
-        .iter()
-        .enumerate()
-        .map(|(index, item)| (format!("value_{index}"), *item))
-        .collect()
 }
 
 fn render_arithmetic_oracle(lowered: &quire_contract_ir::kani::ArithmeticLowering) -> String {
@@ -468,44 +401,6 @@ fn render_artifacts(
     }
 }
 
-/// Converts one family's raw per-case assignment data into the closed `WitnessValue` map, for a
-/// case that actually retains a counterexample packet. Called only from inside the `!value`
-/// branch in [`generate_bounded_kani_corpus_case`], so a provable case's own raw values -- which
-/// may fall outside `i64`'s range even though Contract IR's `i128` fields admit them -- are never
-/// even attempted and can never refuse generation of a case no packet will carry.
-fn build_assignments(
-    source_id: &str,
-    revision: &str,
-    raw_assignments: Vec<(String, i128)>,
-) -> Result<BTreeMap<String, WitnessValue>, KaniOutcome> {
-    raw_assignments
-        .into_iter()
-        .map(|(key, value)| {
-            integer_assignment(source_id, revision, value).map(|witness| (key, witness))
-        })
-        .collect()
-}
-
-/// Converts one bounded-Kani finite-domain integer into the closed `WitnessValue` wire
-/// representation, refusing rather than silently truncating a value this bounded domain does
-/// not actually produce.
-fn integer_assignment(
-    source_id: &str,
-    revision: &str,
-    value: i128,
-) -> Result<WitnessValue, KaniOutcome> {
-    i64::try_from(value)
-        .map(WitnessValue::Integer)
-        .map_err(|_| {
-            KaniOutcome::non_success(
-                KaniOutcomeKind::InvalidInput,
-                "kani_corpus_assignment_out_of_range",
-                source_id.to_owned(),
-                revision.to_owned(),
-            )
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use quire_contract_ir::kani::{
@@ -516,9 +411,8 @@ mod tests {
     use quire_contract_ir::NumericOperator;
 
     use super::{
-        arithmetic_assignments, collection_assignments, generate_bounded_kani_corpus_case,
-        BoundedCorpusRequest, CorpusProofDependencyGraph, EmittedCorpusIdentities, ProofReadiness,
-        CORPUS_PROOF_GRAPH_SCHEMA,
+        generate_bounded_kani_corpus_case, BoundedCorpusRequest, CorpusProofDependencyGraph,
+        EmittedCorpusIdentities, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
     };
     use crate::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
@@ -851,39 +745,6 @@ mod tests {
 
     /// Trace: TC-023.
     #[test]
-    fn tc_023_false_case_retains_a_replayable_counterexample_packet() {
-        let (profile, dispatch, input) = fixture();
-        let generated = generate_bounded_kani_corpus_case(
-            &profile,
-            &dispatch,
-            &input,
-            BoundedCorpusRequest::Graph(GraphRequest {
-                source_id: "source".to_owned(),
-                start_id: "b".to_owned(),
-                target_id: "a".to_owned(),
-                field_id: "next".to_owned(),
-                max_expansions: 2,
-            }),
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .unwrap();
-        assert_eq!(generated.outcome.boolean_claim(), Some(false));
-        let packet = generated.counterexample.unwrap();
-        assert_eq!(packet.input, input.input().clone());
-        // This corpus never runs Kani, so its packet carries the real canonical input
-        // assignments as an `Input` arm, never a fabricated `Witness` (ir#156).
-        assert_eq!(
-            packet.source,
-            quire_contract_ir::kani::ReplaySource::Input(std::collections::BTreeMap::from([(
-                "max_expansions".to_owned(),
-                quire_contract_ir::kani::WitnessValue::Integer(2),
-            )]))
-        );
-    }
-
-    /// Trace: TC-023.
-    #[test]
     fn tc_023_admitted_zero_arithmetic_is_a_proof_not_a_false_verdict() {
         let (profile, dispatch, input) = fixture();
         let generated = generate_bounded_kani_corpus_case(
@@ -906,8 +767,7 @@ mod tests {
         assert_eq!(generated.outcome.source_id, "checked-zero");
     }
 
-    /// Regression for the PR #101 review finding: a provable request with an operand outside
-    /// `i64`'s range must not be refused over an assignment no packet will ever carry.
+    /// A provable request with an operand outside `i64`'s range still generates.
     ///
     /// Trace: TC-023.
     #[test]
@@ -929,12 +789,9 @@ mod tests {
             &[],
             &mut EmittedCorpusIdentities::new(),
         )
-        .expect(
-            "a provable case must never be refused over an assignment map no packet will carry",
-        );
+        .expect("a provable case with an operand outside i64's range generates");
         assert_eq!(generated.outcome.kind, KaniOutcomeKind::Proved);
         assert_eq!(generated.outcome.source_id, "out-of-i64-range");
-        assert!(generated.counterexample.is_none());
     }
 
     /// Trace: TC-023.
@@ -1014,89 +871,5 @@ mod tests {
             .split('(')
             .next()
             .expect("proof function name must be followed by its parameter list")
-    }
-
-    /// Pins the exact content the Arithmetic arm feeds into `assignments`.
-    ///
-    /// Trace: TC-023.
-    #[test]
-    fn tc_023_arithmetic_assignments_are_exactly_the_two_operands() {
-        let request = quire_contract_ir::kani::CheckedArithmeticRequest {
-            source_id: "source",
-            operator: NumericOperator::Add,
-            left: 3,
-            right: -4,
-            minimum: -100,
-            maximum: 100,
-        };
-        assert_eq!(
-            arithmetic_assignments(&request),
-            vec![("left".to_owned(), 3), ("right".to_owned(), -4)],
-            "assignments must carry exactly the two operands, not the checked range"
-        );
-    }
-
-    /// Pins the Collection family's content: exactly the ordered population's own values, never
-    /// `max_items` or the query's `expected` oracle target.
-    ///
-    /// Trace: TC-023.
-    #[test]
-    fn tc_023_collection_assignments_are_exactly_the_ordered_population() {
-        let query = quire_contract_ir::kani::CollectionQuery {
-            source_id: "source".to_owned(),
-            values: vec![2, 2, 7],
-            max_items: 3,
-            kind: QueryKind::ExistsEqual(7),
-        };
-        assert_eq!(
-            collection_assignments(&query),
-            vec![
-                ("value_0".to_owned(), 2),
-                ("value_1".to_owned(), 2),
-                ("value_2".to_owned(), 7),
-            ],
-            "assignments must carry exactly the ordered population, not max_items or expected"
-        );
-    }
-
-    /// A case refused at the last fallible step (assignment conversion) consumes no case number,
-    /// and a retry reports the same error (ir#57 review finding F1).
-    ///
-    /// Trace: TC-023.
-    #[test]
-    fn tc_023_retry_after_assignment_out_of_range_reports_the_real_error() {
-        let (profile, dispatch, input) = fixture();
-        let mut emitted = EmittedCorpusIdentities::new();
-        let request = || {
-            BoundedCorpusRequest::Collection(quire_contract_ir::kani::CollectionQuery {
-                source_id: "out-of-range".to_owned(),
-                values: vec![i64::MAX as i128 + 1],
-                max_items: 1,
-                kind: QueryKind::ExistsEqual(999),
-            })
-        };
-        for _ in 0..2 {
-            let error = generate_bounded_kani_corpus_case(
-                &profile,
-                &dispatch,
-                &input,
-                request(),
-                &[],
-                &mut emitted,
-            )
-            .unwrap_err();
-            assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
-            assert_eq!(error.code, "kani_corpus_assignment_out_of_range");
-        }
-        let next = generate_bounded_kani_corpus_case(
-            &profile,
-            &dispatch,
-            &input,
-            arithmetic("after", 1, 1),
-            &[],
-            &mut emitted,
-        )
-        .unwrap();
-        assert_eq!(next.artifacts.oracle.path, "corpus/arithmetic_0.oracle.rs");
     }
 }

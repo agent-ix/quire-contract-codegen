@@ -119,8 +119,8 @@ refusal under FR-016-AC-11.
 At this revision the generator meets none of these criteria in full:
 
 - `src/kani_witness_join.rs` imports Contract IR's `Witness`.
-- `src/bounded_kani_corpus.rs` imports Contract IR's `ReplaySource`, and `src/bounded_kani_replay.rs`
-  replays through Contract IR's `replay_counterexample` and `CounterexamplePacket`.
+- The bounded-Kani corpus retains no counterexample packet, so no corpus counterexample reaches
+  QSL as the `Input` arm and FR-024-AC-5 is unbacked.
 - No domain check runs before replay, and no `WitnessEnvelope` is built.
 - Only the skeleton spine renders a QSL transcript (`src/spine_replay.rs`), and it builds the
   request without an envelope.
