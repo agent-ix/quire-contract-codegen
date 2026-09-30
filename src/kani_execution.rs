@@ -435,7 +435,7 @@ const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
 /// Kani's launcher forks `kani-driver`, which forks CBMC, so on a timeout `child.kill()` alone
 /// would leave CBMC — the actual solver, and the one most likely to be the non-terminating
 /// process a budget exists to bound — orphaned and still running past the deadline it just
-/// exceeded. [`kill_process_tree`] finds and signals every live descendant it can still see by
+/// exceeded. `kill_process_tree` finds and signals every live descendant it can still see by
 /// its own pid instead of relying on a process-group-wide signal: a negative-pid group kill is
 /// the textbook fix, but it is deliberately not used here, because it was measured to escape its
 /// own group on the sandbox this crate was developed in — killing a freshly spawned child's
@@ -446,7 +446,7 @@ const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
 /// Stdout and stderr are drained on their own threads as soon as the process is spawned, the same
 /// way `Command::output()` drains them internally: a full pipe buffer would otherwise stall the
 /// child while this function is only polling `try_wait`, turning a bounded run into a hang of its
-/// own. Each thread keeps at most [`CAPTURE_LIMIT`] bytes and polls its pipe rather than blocking
+/// own. Each thread keeps at most `CAPTURE_LIMIT` bytes and polls its pipe rather than blocking
 /// in `read`, so once the launcher is gone this function tells both threads to stop and joins
 /// them: a descendant the tree walk could not see (forked after the snapshot, or already
 /// reparented away) may still hold the pipe's write end open, and the threads stop regardless,
