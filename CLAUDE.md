@@ -22,11 +22,17 @@ make build            # locked release build
 make msrv
 make spec             # Quire-validate the specification, plan and review documents
 make clean            # cargo clean
-make deny             # all configured cargo-deny lanes
+make deny             # cargo-deny lanes plus the one-copy check (scripts/check_one_copy.awk: one Cargo.lock entry per agent-ix git crate)
+make use-local        # patch first-party git deps to sibling checkouts via a gitignored .cargo/config.toml; snapshots Cargo.lock to .cargo/Cargo.lock.pre-local; fails if cargo metadata fails or a patch is unused
+make use-remote       # delete the patch config and restore Cargo.lock from that snapshot (no snapshot: lock untouched)
 make audit-unsafe     # check that every unsafe block has a // SAFETY: comment
 make rustdoc          # build warning-free API documentation
 make ci               # every local gate above except build and clean
 ```
+
+`LOCKED` (default `--locked`, empty while `.cargo/config.toml` exists) is passed to the cargo
+targets that resolve dependencies (`lint`, `test`, `build`, `msrv`, `kani`, `rustdoc`); override
+it, e.g. `make lint LOCKED=`, when a patch or a deliberate lock change makes `--locked` wrong.
 
 ## Safety scaffolding
 

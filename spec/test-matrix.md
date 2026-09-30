@@ -72,8 +72,7 @@ type: TestMatrix
 | FR-026 | FR-026-AC-1, FR-026-AC-4 | TC-037 | 🚧 Planned |
 | FR-028 | FR-028-AC-1 through FR-028-AC-9 | TC-039 | 🚧 Planned |
 | FR-029 | FR-029-AC-1 through FR-029-AC-6 | TC-040 | 🚧 Planned |
-| TC-041 | Verify the total map from a Contract IR Kani outcome to QSL's terminal value | Integration | P0 | FR-030-AC-1, FR-030-AC-2, FR-030-AC-3, FR-030-AC-4, FR-030-AC-5, FR-030-AC-6 | 🚧 Planned |
-| FR-030 | FR-030-AC-1 through FR-030-AC-6 | TC-041 | 🚧 Planned |
+| FR-030 | FR-030-AC-1 through FR-030-AC-8 | TC-041 | 🚧 Planned |
 
 FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 are `🚧 Planned`: each names at least one
 clause TC-029 carries no test for. AC-4 requires a schedule assertion for a top-level quantity pair;
@@ -170,6 +169,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-037 | Verify the backend adapter trait and its closed-enum dispatch | Integration | P0 | FR-026-AC-1, FR-026-AC-4 | 🚧 Planned |
 | TC-039 | Verify bounded proof ceilings, their inconclusive reasons and the proof subject | Integration | P0 | FR-028-AC-1, FR-028-AC-2, FR-028-AC-3, FR-028-AC-4, FR-028-AC-5, FR-028-AC-6, FR-028-AC-7, FR-028-AC-8, FR-028-AC-9 | 🚧 Planned |
 | TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6 | 🚧 Planned |
+| TC-041 | Verify the total map from a Contract IR Kani outcome to QSL's terminal value | Integration | P0 | FR-030-AC-1, FR-030-AC-2, FR-030-AC-3, FR-030-AC-4, FR-030-AC-5, FR-030-AC-6, FR-030-AC-7, FR-030-AC-8 | 🚧 Planned |
 
 TC-017 through TC-022 are backed by passing named tests in `tests/bound_strategy_generation.rs`,
 `tests/bound_populations.rs`, and `tests/bound_census.rs`. Together they cover admission and ordered

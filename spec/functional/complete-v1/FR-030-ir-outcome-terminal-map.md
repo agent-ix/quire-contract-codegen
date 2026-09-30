@@ -24,14 +24,25 @@ value collapses into one variant stay distinguishable through that variant's typ
 
 Contract IR retired its own outcome-to-terminal map (FR-031-AC-5, Linear IR-358) because the
 terminal value belongs to QSL and Contract IR must not depend on QSL. This repository owns the map.
-[FR-029](./FR-029-run-outcome-terminal-record.md) maps this repository's own `KaniRunOutcome`; this
-requirement maps the Contract IR outcome that the Kani boundary produces at negotiation and input
-validation.
+
+Two maps exist and their domains do not overlap. [FR-029](./FR-029-run-outcome-terminal-record.md)
+maps this repository's own `KaniRunOutcome`, which describes a run this repository executed. This
+requirement maps a `KaniOutcome` that Contract IR's Kani boundary produced and handed in. One run
+has one outcome of one of those two types and so one terminal value. Precedence: when this
+repository executed the run, FR-029 governs and FR-030 is not applied to any outcome derived from
+that run; FR-030 applies only to an outcome that arrived from Contract IR and was not produced by
+a run of this repository. Items settled at negotiation (`unsupported`, `requires-bound`,
+`invalid-request`; [FR-019](./FR-019-capability-settlement.md)) have no `KaniOutcome` and no
+terminal value, so neither map applies to them.
 
 ## Inputs
 
 - One `quire_contract_ir::kani::KaniOutcome`: its closed `KaniOutcomeKind` and its stable cause
-  `code`.
+  `code`. The IR outcome carries kind, `code`, `source_id` and `context` only; it has no
+  SUCCESS-check count.
+- For a `Proved` outcome, the SUCCESS-check count taken from the Kani transcript this generator
+  parsed, passed to the map as an explicit input, as [FR-029](./FR-029-run-outcome-terminal-record.md)
+  takes it.
 
 ## Outputs
 
@@ -45,12 +56,15 @@ validation.
 
   | Contract IR kind | Result |
   |---|---|
-  | `Proved` | `Proved { success_checks: n }`, `n` at least one |
+  | `Proved`, with `n` SUCCESS checks from the transcript, `n` at least one | `Proved { success_checks: n }` |
+  | `Proved`, with zero SUCCESS checks from the transcript | `Proved { success_checks: 0 }` |
   | `Counterexample` | `Refuted` |
   | `Refused` | `Declined(ProofRefusalCause::Refused)` |
   | `InvalidInput` | `Declined(ProofRefusalCause::InvalidInput)` |
   | `IncompleteInput` | `Declined(ProofRefusalCause::IncompleteInput)` |
-  | `Unavailable` | `Unsupported(UnavailabilityCause)` |
+  | `Unavailable` with cause `kani_solver_absent` | `Unsupported(UnavailabilityCause::SolverAbsent)` |
+  | `Unavailable` with cause `kani_backend_absent` | `Unsupported(UnavailabilityCause::BackendAbsent)` |
+  | `Unavailable`, any other cause | `Unsupported(UnavailabilityCause::BackendAbsent)` |
   | `TimedOut` | `Incomplete(IncompleteCause::TimedOut)` |
   | `ResourceExhausted` | `Incomplete(IncompleteCause::ResourceExhausted)` |
   | `Cancelled` | `Incomplete(IncompleteCause::Cancelled)` |
@@ -59,18 +73,23 @@ validation.
 
 - The generator shall map no outcome to `Tested`.
 - The generator shall use QSL's terminal-value type, defining none of its own.
-- The generator shall not read the outcome's message, `source_id` or `context` to choose the result.
+- The generator shall not read the outcome's `source_id` or `context` to choose the result. It reads
+  the kind, and the `code` only for `Unavailable` and `Inconclusive`, as the table states.
+- The map preserves the refusal kind only. The outcome's stable `code` is not carried into the
+  result, because `TerminalRecord` holds an item and a value only.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-030-AC-1 | Every `KaniOutcomeKind` maps to exactly one `TerminalValue`, and the map is one `match` with no wildcard arm. | Test (TC-041) |
+| FR-030-AC-1 | Every `KaniOutcomeKind` maps to exactly one `TerminalValue`. | Test (TC-041) |
 | FR-030-AC-2 | `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined` with `ProofRefusalCause::Refused`, `InvalidInput` and `IncompleteInput` respectively, so no refusal cause is lost. | Test (TC-041) |
 | FR-030-AC-3 | `TimedOut`, `ResourceExhausted` and `Cancelled` map to `Incomplete` with `IncompleteCause::TimedOut`, `ResourceExhausted` and `Cancelled` respectively. | Test (TC-041) |
-| FR-030-AC-4 | `Proved` and `Counterexample` map to `Proved` with at least one SUCCESS check and to `Refuted`; `Unavailable` maps to `Unsupported`. | Test (TC-041) |
+| FR-030-AC-4 | `Proved` with a transcript count of three SUCCESS checks maps to `Proved { success_checks: 3 }`, `Proved` with a count of zero maps to `Proved { success_checks: 0 }`, and `Counterexample` maps to `Refuted`. | Test (TC-041) |
 | FR-030-AC-5 | `Inconclusive` with cause `kani_vacuous_proof` maps to `Proved { success_checks: 0 }`, and `Inconclusive` with any other cause maps to `Failed`. | Test (TC-041) |
 | FR-030-AC-6 | No outcome maps to `Tested`. | Test (TC-041) |
+| FR-030-AC-7 | The map is one `match` over `KaniOutcomeKind` with no wildcard arm. | Inspection (TC-041) |
+| FR-030-AC-8 | `Unavailable` with cause `kani_solver_absent` maps to `Unsupported(SolverAbsent)`; with `kani_backend_absent` or any other cause it maps to `Unsupported(BackendAbsent)`. | Test (TC-041) |
 
 ## Dependencies
 
