@@ -20,15 +20,15 @@ relationships:
 One independent review of PR #54: code review, Rust review and gap analysis, limited to the PR
 diff. The PR negotiates each requested item and records one outcome per item. It lowers V1
 precondition, postcondition and invariant clauses to separate harnesses. It refuses every V2
-scalar claim as caller-declared. Negotiation, refusals, argument-only assumptions and
-the seeded falsification all hold up.
+scalar claim as caller-declared. Negotiation, refusals, argument-only assumptions and the seeded
+falsification all hold up.
 
 The problem is vacuity. A contract harness turns every precondition that shares its anchor, plus
 the invariant's pre-state, into `kani::requires`. Kani assumes those requires. The only
 non-vacuity check is each precondition's own `kani::cover!`, run on its own. Nothing checks the
-conjunction the contract harness actually assumes. This was reproduced under Kani: two preconditions that are each satisfiable but contradict each other, plus a
-postcondition that is false for every input, gave three `VERIFICATION:- SUCCESSFUL` results with
-both covers satisfied. `classify_run` reports all three as `Verified`.
+conjunction the contract harness actually assumes. This was reproduced under Kani: two
+preconditions that are each satisfiable but contradict each other, plus a postcondition that is
+false for every input, gave three `VERIFICATION:- SUCCESSFUL` results with both covers satisfied. `classify_run` reports all three as `Verified`.
 
 ## Verdict
 

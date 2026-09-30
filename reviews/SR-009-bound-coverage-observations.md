@@ -65,8 +65,7 @@ public imported-report decoder whose acceptance could be mistaken for authentica
 ## Qualification record
 
 The seven new controls, including native LLVM, passed on stable and MSRV during
-bring-up. Full clean-head
-regression and independent review are required before publication.
+bring-up. Full clean-head regression and independent review are required before publication.
 
 The implementation subsequently passed all 48 selected tests on both stable and
 MSRV: 9 unit, 7 aggregate, 7 bound generation, 5 harness, 10 oracle, 5 strategy,

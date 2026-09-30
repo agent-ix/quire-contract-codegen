@@ -9,15 +9,15 @@ review_set: subset
 
 ## Summary
 
-The deterministic advisor produced no recommendations, so the method disposition below is
-reviewer judgment grounded in Quire's obligation/property exports and the installed method catalog.
-It confirms the authored Test methods and the Analysis-kind SUITE-008 plan.
+The deterministic advisor was not run, so the method disposition below is reviewer judgment
+grounded in Quire's obligation/property exports and the installed method catalog. It confirms the
+authored Test methods and the Analysis-kind SUITE-008 plan.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | low | No issues found in the method disposition. | FR-003-AC-1..FR-003-AC-8 |
+| FND-001 | low | No findings (placeholder) | - |
 
 ## Method disposition
 
@@ -29,6 +29,6 @@ refusal, parity, and identity assertions in TC-003/005/007/014. Therefore the re
 remain `Test`, while SUITE-008 correctly records `Analysis` evidence for the actual cargo-kani runs.
 
 SUITE-008 covers harness options, schemas, typed ABI/domains, proof success, proof failure,
-printed concrete playback, and independent oracle checks. Its planned 0, 1000, -1, and 1001 cases cover both model endpoints and adjacent outside
-controls. TM-001 truthfully retains every numeric/state row as Planned; current Boolean test symbols
-do not discharge TC-014. Native `runtime::execute` replay remains downstream IT-010 evidence.
+printed concrete playback, and independent oracle checks. Its planned 0, 1000, -1, and 1001 cases
+cover both model endpoints and adjacent outside controls. TM-001 truthfully retains every
+numeric/state row as Planned; current Boolean test symbols do not discharge TC-014. Native `runtime::execute` replay remains downstream IT-010 evidence.

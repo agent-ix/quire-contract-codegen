@@ -58,8 +58,8 @@ on the clean integrated candidate.
   `CARGO_TARGET_DIR=target-codex-backends`: pass.
 - Stable `cargo test --locked`: 94 passed, 0 failed.
 - MSRV `cargo test --locked`: 94 passed, 0 failed.
-- SUITE-008: healthy mixed and ConfigVersion-style identity proofs pass; changed-state and strict-comparison subjects print
-  concrete counterexamples.
+- SUITE-008: healthy mixed and ConfigVersion-style identity proofs pass; changed-state and
+  strict-comparison subjects print concrete counterexamples.
 - Generated option identity: `-Z function-contracts`, optional `-Z stubbing`,
   `-Z concrete-playback`, exact harness, unwind, `cadical`, regular output, and printed playback.
 - `cargo deny check`: advisories, bans, licenses, and sources pass; only the existing unmatched

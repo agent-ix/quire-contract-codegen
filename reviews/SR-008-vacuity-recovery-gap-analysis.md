@@ -50,14 +50,14 @@ unexecuted, nested partial and fully exercised cases. Synthetic controls cover e
 types, coordinate order/zero, source-root boundary and normalized duplicates, traversal/backslash,
 missing segments, unavailable probes, partial overlap, gap/non-count and final-span refusal, census
 mismatch, contradictory entry/consequent observations and the raw 16 MiB size limit. Decoder limits
-also cap files and total segments with independent over-limit controls. The fixture preflights installed
-LLVM tools; it does not install missing tools.
+also cap files and total segments with independent over-limit controls. The fixture preflights
+installed LLVM tools; it does not install missing tools.
 
 ## Remaining work and verdict
 
 Implement and independently review the IR-owned complete population join, full artifact/map semantic
-validation, native runtime report binding,
-versioned success/non-success analysis outcomes and the producer/consumer obligation gate. Tests must
+validation, native runtime report binding, versioned success/non-success analysis outcomes and the
+producer/consumer obligation gate. Tests must
 prove removing all clauses, one clause, an implication or evaluator cannot pass, and serialization of
 an adverse/unavailable result cannot discharge coverage. Failures must retain diagnostics rather than
 turn unavailable evaluation into implication-free success. No automatic human sufficiency decision.

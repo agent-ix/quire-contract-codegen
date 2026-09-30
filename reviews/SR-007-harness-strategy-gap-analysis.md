@@ -58,7 +58,7 @@ still required, and no assurance decision or matrix promotion is implied.
 
 | Finding | Disposition | Verification |
 |---|---|---|
-| R8-01 | Repaired: the successful mixed campaign uses proptest 1.5.0's deterministic ChaCha RNG and pins 12 attempts, 8 accepted, 4 rejected, and zero failures/discards. | TC-004 generated campaign execution. |
+| R8-01 | Repaired: the successful mixed campaign uses proptest's deterministic ChaCha RNG and pins 12 attempts, 8 accepted, 4 rejected, and zero failures/discards. | TC-004 generated campaign execution. |
 | R8-02 | Repaired: every framework abort returns `Exhausted` with reason and summary; an optional boxed policy result retains the observed missed floor. Completed searches still return floor failures directly. | All-rejected exhaustion; exhausted input generation with zero attempts, a missed rejected floor, and both floors satisfied; completed below-floor controls. |
 | R8-03 | Review premise rejected after independent integration review: the public runner accepts an existing report, so the policy-level discard check is reachable even when the new loop completes successfully. The check is restored after its erroneous removal. | A report with one prior discard plus a deterministic 8-accepted/4-rejected completed campaign returns `AboveDiscardCeiling`; an aborted search retains the same excess as nested policy. |
 | R8-04 | Repaired: accounting documentation distinguishes adapter invocations from explicit discards and names global-reject retries correctly. | Exact summary/report counts and TC-004's discard control. |
@@ -67,9 +67,9 @@ still required, and no assurance decision or matrix promotion is implied.
 | R8-07 | Partially repaired: the native corpus now includes `ResourceLimitExceeded` for a harness and a ten-check diagnostic census floor. Campaign-execution outcomes remain generated-crate test evidence, not native generation-producer rows. | TC-009 requires the source-limit row; campaign producer integration remains open before full issue #3 closure. |
 
 Local repair verification: all five harness tests and all five strategy tests passed on stable and
-MSRV, including compilation and execution of the generated crates. All-target Clippy with denied warnings, rustfmt, and Quire
-document validation passed. Quire reported existing duplicate module/inverse-edge warnings. This
-is focused verification, not a claim that the complete `make ci` or strict coverage gate passed.
+MSRV, including compilation and execution of the generated crates. All-target Clippy with denied
+warnings, rustfmt, and Quire document validation passed. Quire reported existing duplicate
+module/inverse-edge warnings. This is focused verification, not a claim that the complete `make ci` or strict coverage gate passed.
 
 ## Remaining declared gaps
 
