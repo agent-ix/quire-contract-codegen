@@ -145,7 +145,6 @@ LOCAL_PATCHES ?= quire-contract-ir:quire-contract-ir:. quire-contract-ir:quire-c
 .PHONY: use-local
 use-local:
 	@set -e; mkdir -p .cargo; \
-	[ -f .cargo/Cargo.lock.pre-local ] || cp Cargo.lock .cargo/Cargo.lock.pre-local; \
 	: > .cargo/config.toml; \
 	for spec in $(LOCAL_PATCHES); do \
 	  if [ "$$(printf '%s' "$$spec" | tr -cd ':' | wc -c)" != 2 ] || printf '%s' "$$spec" | grep -q '::\|^:\|:$$'; then \
@@ -157,6 +156,7 @@ use-local:
 	    echo "use-local: $(SIBLINGS)/$$repo is not cloned (no Cargo.toml at $(SIBLINGS)/$$repo/$$dir); clone agent-ix/$$repo next to this repo" >&2; exit 1; \
 	  fi; \
 	done; \
+	[ -f .cargo/Cargo.lock.pre-local ] || cp Cargo.lock .cargo/Cargo.lock.pre-local; \
 	repos=$$(for spec in $(LOCAL_PATCHES); do printf '%s\n' "$${spec%%:*}"; done | awk '!seen[$$0]++'); \
 	first=1; \
 	for repo in $$repos; do \
