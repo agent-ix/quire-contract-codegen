@@ -44,12 +44,12 @@ no such item exists.
 | FND-006 | low | The generated `DecimalType::new(..)` maps failure to `OracleStop::IllTyped` (src/exact_scalar.rs:1114). Every other generated constant maps to `InvalidConstant`, which is what FR-014-CON-2 describes. | FR-014-CON-2 |
 | FND-007 | low | Claim-map items are ordered by `CheckedNodeId`'s `Ord`, which compares domain before digest, but the code documents them as "ascending by node digest" (src/exact_scalar.rs:429, 459). A request with a different domain sorts out of digest order. | FR-014-AC-4 |
 | FND-008 | low | The matrix row says TC-024 covers FR-014-CON-1 and CON-2, but `quire coverage` 0.32.0 reports those test tags as unmatched because CON ids are not minted trace targets. | spec/test-matrix.md, TC-024 |
-| FND-009 | medium | FR-015 is not specific enough. It does not require bounds to come from the lowered IR `bounded_domain` nodes (rather than descriptors). It does not require refusing obligations over caller-declared operation identity (FND-001). The pin set lists only "version, solver and options": it is missing the executable digest, CBMC version, unwind, adapter profile, oracle crate digest and runtime revision. There is no acceptance criterion for vacuous (unsatisfiable) bounds. | FR-015-AC-2, FR-015-AC-4 |
-| FND-010 | medium | FR-016 is not specific enough. Its Outputs omit `malformed`, although AC-1 and TC-026 use it. It does not bind a witness to the identity and pins of the harness that produced it. "Same typed outcome" does not say whether charges, consumed counters and limits must match. There is no resource bound on decoding a witness. | FR-016, TC-026 |
+| FND-009 | medium | FR-015 is not specific enough. It does not require bounds to come from the lowered IR `bounded_domain` nodes (rather than descriptors). It does not require refusing obligations over caller-declared operation identity (FND-001). There is no acceptance criterion for vacuous (unsatisfiable) bounds. | FR-015-AC-2, FR-015-AC-4 |
+| FND-010 | medium | FR-016 is not specific enough. Its Outputs omit `malformed`, although AC-1 and TC-026 use it. It does not bind a witness to the identity of the harness that produced it. "Same typed outcome" does not say whether charges, consumed counters and limits must match. There is no resource bound on decoding a witness. | FR-016, TC-026 |
 
 ## Coverage
 
-- Reconciliation: quire coverage (`quire 0.32.0`), `--scope` set to the
+- Reconciliation: quire coverage, `--scope` set to the
   worktree root. All eight rows FR-014-AC-1 to AC-8 are backed by TC-024 tests. TC-024 is backed.
   FR-014-CON-1 and CON-2 tags are unmatched (FND-008).
 - Tasks done: not applicable. PLAN-001 has no task for #48.

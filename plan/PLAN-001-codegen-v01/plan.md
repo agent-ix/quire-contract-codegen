@@ -93,7 +93,7 @@ Task-004 -> Task-010 numeric/state Kani -> SL IT-010
 
 ### Quality gates
 
-- **Core gate (Task-008):** TC-018 and TC-019 pass on stable and Rust 1.75, TC-021's value-tree
+- **Core gate (Task-008):** TC-018 and TC-019 pass on stable and MSRV, TC-021's value-tree
   subset passes, the specification validates, and the full local repository gate has no
   change-caused failure.
 - **Integration gate (Task-009):** codegen #4 is merged, TC-017 through TC-022 pass with all matrix
@@ -102,9 +102,9 @@ Task-004 -> Task-010 numeric/state Kani -> SL IT-010
 
 ## Coordination Rule
 
-`main` now carries the
-deterministic oracle slice, the issue #3 harness/proptest remediation (PR #22), atomic publication
-(PR #26), the bounded vacuity observation primitives (PR #23) and the bounded Kani slice (PR #25).
+`main` now carries the deterministic oracle slice, the issue #3 harness/proptest remediation
+(PR #22), atomic publication (PR #26), the bounded vacuity observation primitives (PR #23) and the
+bounded Kani slice (PR #25).
 
 The IR binds executable expressions through the public API, so Task-006's
 serialized-package generation is no longer blocked on the binding itself; what remains is the
@@ -123,6 +123,6 @@ NFR-004.
 
 Task-010, Task-005's numeric/state Kani increment, is also complete against that merged oracle core:
 checked IR domains exclusively determine symbolic bounds, the generalized subject ABI covers direct
-Boolean and bounded-`i64` current/pre/post observations, and Kani 0.67.0 concrete playback is retained
-for downstream IT-010 replay. Task-005 remains in progress for its remaining vacuity work; the
+Boolean and bounded-`i64` current/pre/post observations, and Kani concrete playback is retained for
+downstream IT-010 replay. Task-005 remains in progress for its remaining vacuity work; the
 strategy and Kani increments retain separate requirements, tests, and review evidence.

@@ -16,8 +16,9 @@
 //! FR-021-AC-18 (three-way agreement with the QSL authority) is not
 //! implemented here: this repository reaches QSL only through `qsl-replay`'s
 //! public API, not the `quire_spec_language::value::expression` API AC-18
-//! was written against (see `src/exact_function.rs`'s module doc). This file's agreement legs
-//! are exactly two: the generated oracle and a direct Contract Runtime call.
+//! was written against (see `src/exact_function.rs`'s module doc). This
+//! file's agreement legs are exactly two: the generated oracle and a direct
+//! Contract Runtime call.
 
 /// The generated main-corpus crate under test. `names.rs`, written beside the scratch crate's
 /// manifest at test time, re-exports each executed oracle as `oracle_<function>`.

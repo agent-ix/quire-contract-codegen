@@ -22,7 +22,7 @@ vacuity evidence after deterministic oracle semantics exist.
 
 ## Current slice
 
-Issue #3 is being reconciled directly from the shared-assurance `main` revision. The harness
+The harness
 generator owns the pre-state snapshot, subject invocation ordering, post-state evaluation, runtime
 `Verdict`, proptest execution loop, explicit-discard path, and complete campaign accounting boundary.
 Its accepted-case floor and discard ceiling are request inputs bound into generation identity.
@@ -79,7 +79,8 @@ counterexamples remains the downstream quire-spec-language IT-010 boundary.
 ## Numeric/state Kani completion evidence
 
 The issue #2 increment generates deterministic zero/one/multiple-result Boolean/`i64` subject ABIs,
-exact inclusive IR-domain assumptions, v2 proof graphs, and source-spanned explicit
-refusals. The local SUITE-008 run exercises cargo-kani 0.67.0: healthy mixed and ConfigVersion-style identity subjects prove, while changed-state and
-strict-comparison subjects print concrete counterexamples. TC-003, TC-005, and TC-014 are complete;
-the FR-003 portion of TC-007 is complete, while TC-007 overall stays planned for FR-005 parity.
+exact inclusive IR-domain assumptions, v2 proof graphs, and source-spanned explicit refusals. In
+the local SUITE-008 run, healthy mixed and ConfigVersion-style identity subjects prove, while
+changed-state and strict-comparison subjects print concrete counterexamples. TC-003, TC-005, and
+TC-014 are complete; the FR-003 portion of TC-007 is complete, while TC-007 overall stays planned
+for FR-005 parity.

@@ -8,7 +8,7 @@ review_set: subset
 ---
 ## Summary
 
-Quire 0.32.0 classified all 30 specification documents as grammar-clean with zero EARS findings.
+Quire classified all 30 specification documents as grammar-clean with zero EARS findings.
 Semantic inspection of the amended FR-001 statements found concrete subjects, responses, and the
 correct event/ubiquitous patterns.
 

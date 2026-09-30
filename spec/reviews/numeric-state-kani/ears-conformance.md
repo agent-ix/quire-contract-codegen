@@ -9,7 +9,7 @@ review_set: subset
 
 ## Summary
 
-Quire 0.31.0 classifies all 38 repository spec documents as grammar-clean with zero EARS findings.
+Quire classifies all 38 repository spec documents as grammar-clean with zero EARS findings.
 Semantic inspection of FR-003's 18 normative statements found concrete subjects and responses after
 one compound requirement was split during review.
 

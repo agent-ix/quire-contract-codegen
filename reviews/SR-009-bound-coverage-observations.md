@@ -19,14 +19,13 @@ Additional native/schema/resource controls accompany the implementation.
 
 `analyze_bound_coverage` consumes public BoundPackage, immutable generated outputs,
 complete actual artifact bytes, optional LLVM export, and an absolute source root.
-It reads no filesystem paths and runs no producer. Its own strict domain output
-schema is not an assurance/attestation schema. Every result says `unqualified`.
+It reads no filesystem paths and runs no producer. Every result says `unqualified`.
 The concrete read-only API exposes computation state and bounded deterministic JSON;
 private report fields have no Deserialize or mutation boundary. Per-requirement membership
 is retained through ordered full ClauseRefs rather than a second duplicated bucket array.
 No requirement or campaign counters are inferred or summed.
-The pinned IR/runtime revisions, dependency roles, source/source-map generation,
-source-size guards, publisher, campaign policy, and shared assurance inputs remain unchanged.
+Dependency roles, source/source-map generation,
+source-size guards, publisher and campaign policy remain unchanged.
 
 ## Findings
 
@@ -35,7 +34,7 @@ source-size guards, publisher, campaign policy, and shared assurance inputs rema
 | FND-25001 | high | Closed in phase A: exact bound digest, complete clauses, expression/declaration identities, informational population and every generated artifact byte are joined before observations. Foreign or missing inventory emits no classifications. | FR-004-AC-7 |
 | FND-25002 | high | Closed in phase A: the independent typed implication count must match the exact immutable generated map's role census, full identity, ranges and unique probes. Consequent order is qualified through the unchanged generator and native ordering control, not independent per-subexpression digest matching. | FR-004-AC-3, FR-004-AC-7 |
 | FND-25003 | high | Closed in phase A: unavailable counts remain null with diagnostics, distinct from measured zero; global refusals retain an explicit not-emitted population. | FR-004-AC-5 |
-| FND-25004 | high | Deliberately withheld: native authentication, runtime campaign transport, shared obligation mapping, retained coverage attestations and human sufficiency remain separate owner gates. An all-exercised result is still unqualified. | FR-004-AC-4, FR-004-AC-6, FR-004-AC-8, FR-004-AC-9 |
+| FND-25004 | high | Deliberately withheld: native authentication, runtime campaign transport, shared obligation mapping and human sufficiency remain separate owner gates. An all-exercised result is still unqualified. | FR-004-AC-4, FR-004-AC-6, FR-004-AC-8, FR-004-AC-9 |
 | FND-25005 | medium | The output is bounded before allocating serialized bytes; oversize analysis clears unpublishable populations with a resource diagnostic instead of manufacturing zeros. Input artifact and LLVM limits remain enforced. | FR-004-AC-5 |
 | FND-25006 | medium | Coordinator review found that the unbound primitive permits evaluation 1 / consequent 2. The exact loop-free generated Boolean aggregate now refuses this impossible observation without changing the primitive contract; both counts remain visible with no clause classification. | FR-004-AC-3, FR-004-AC-5 |
 
@@ -43,7 +42,7 @@ source-size guards, publisher, campaign policy, and shared assurance inputs rema
 
 The new native test derives seven executable clauses and one informational clause from a
 synthetic public projection, generates the whole batch, publishes it, and uses actual
-cargo-llvm-cov 0.9.0 / Rust 1.94.1 / LLVM JSON 3.0.1. It re-reads every published artifact
+cargo-llvm-cov. It re-reads every published artifact
 after the native command. Expected classifications are vacuous, implication-free exercised,
 sibling partial, unexecuted, nested-consequent partial, exercised, and nested-antecedent
 partial. The last clause pins consequent counts `[1, 0]`, distinguishing left-own-right
@@ -65,13 +64,12 @@ public imported-report decoder whose acceptance could be mistaken for authentica
 
 ## Qualification record
 
-The seven new controls, including native LLVM, passed on stable and Rust 1.75.0 during
-bring-up. Initial broader runs correctly refused the dirty source tree in the existing
-oracle attestation control (`source_dirty`); that gate is unchanged. Full clean-head
+The seven new controls, including native LLVM, passed on stable and MSRV during
+bring-up. Full clean-head
 regression and independent review are required before publication.
 
 The implementation subsequently passed all 48 selected tests on both stable and
-Rust 1.75.0: 9 unit, 7 aggregate, 7 bound generation, 5 harness, 10 oracle, 5 strategy,
+MSRV: 9 unit, 7 aggregate, 7 bound generation, 5 harness, 10 oracle, 5 strategy,
 and 5 primitive tests. Both actual LLVM fixtures ran on the explicitly qualified stable
 toolchain, including when the outer library suite used MSRV. The clean-source guard passed.
 Final self-review added the normalized source-root mapping parameter to the domain report
@@ -85,14 +83,12 @@ The native fixture additionally mutates the actual LLVM span for its measured 1/
 clause to 1/2. The real healthy export remains complete; the modified export retains count 2
 and an inconsistency diagnostic with no classification for that clause.
 
-No full make-ci/shared receipt or FR-004 ticket closure is claimed here. Existing shared
-measurement producers still do not publish campaign/vacuity outcomes. Their historical
-adopted records are not rewritten into current execution claims by this phase.
+No full make-ci or FR-004 ticket closure is claimed here.
 
 ## Exact-head review checkpoint
 
 All 50 selected tests passed
-on stable and Rust 1.75.0: 9 unit, 9 aggregate, 7 bound generation, 5 harness,
+on stable and MSRV: 9 unit, 9 aggregate, 7 bound generation, 5 harness,
 10 oracle, 5 strategy, and 5 primitive tests. Both actual LLVM fixtures ran in
 each suite. All-target Clippy, rustdoc with denied warnings, formatting, unsafe
 audit, and exact upstream identity checks passed. Scoped specification validation
@@ -106,7 +102,7 @@ generator map is the producer-owned semantic correspondence; byte equality,
 independent typed count, map invariants, and native ordering controls qualify
 this bounded boundary without independently authenticating execution.
 
-Reproduce the selected test set with the normal stable Cargo or `cargo +1.75.0`:
+Reproduce the selected test set with the normal stable Cargo or the MSRV toolchain:
 
 ```sh
 cargo test --locked --offline --lib --test bound_coverage --test bound_generation \

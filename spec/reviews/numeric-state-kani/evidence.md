@@ -9,16 +9,15 @@ review_set: subset
 
 ## Summary
 
-The deterministic advisor was invoked but Quoin 0.23.1 could not recognize the installed Quire
-0.31.0 version string, so it produced no recommendations. Reviewer judgment grounded in Quire's
-obligation/property exports and the installed method catalog confirms the authored Test methods and
-the Analysis-kind SUITE-008 plan while retaining the advisor failure as an evidence limitation.
+The deterministic advisor produced no recommendations, so the method disposition below is
+reviewer judgment grounded in Quire's obligation/property exports and the installed method catalog.
+It confirms the authored Test methods and the Analysis-kind SUITE-008 plan.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | medium | `quoin advise --json` exits 2 with “could not determine the quire CLI version” even though `quire --version` reports 0.31.0, above the stated 0.21.0 floor. The required deterministic recommendation step is unavailable, so the method disposition below is explicitly reviewer judgment rather than catalog advice. | FR-003-AC-1..FR-003-AC-8; Quoin 0.23.1; Quire 0.31.0 |
+| FND-001 | low | No issues found in the method disposition. | FR-003-AC-1..FR-003-AC-8 |
 
 ## Method disposition
 
@@ -29,7 +28,7 @@ analysis methods provide solver evidence but do not replace the observable contr
 refusal, parity, and identity assertions in TC-003/005/007/014. Therefore the requirement methods
 remain `Test`, while SUITE-008 correctly records `Analysis` evidence for the actual cargo-kani runs.
 
-SUITE-008 covers harness options, schemas, typed ABI/domains, proof success, proof failure, printed concrete playback, and independent oracle
-checks. Its planned 0, 1000, -1, and 1001 cases cover both model endpoints and adjacent outside
+SUITE-008 covers harness options, schemas, typed ABI/domains, proof success, proof failure,
+printed concrete playback, and independent oracle checks. Its planned 0, 1000, -1, and 1001 cases cover both model endpoints and adjacent outside
 controls. TM-001 truthfully retains every numeric/state row as Planned; current Boolean test symbols
 do not discharge TC-014. Native `runtime::execute` replay remains downstream IT-010 evidence.

@@ -37,7 +37,7 @@ remediation makes the following changes for rereview:
 | ID | Severity | Summary | Refs |
 |---|---|---|---|
 | FND-2201 | high | R7-01: Campaign accounting is concluded after every framework result. The runner no longer rejects low configured case counts before execution, and exact fixtures distinguish below-floor outcomes. | FR-002-AC-5, TC-004 |
-| FND-2202 | high | R7-02: Harness and strategy source enforce the same 1 MiB maximum declared by the shared attestation command, returning `ResourceLimitExceeded` and `Unsupported`. | interface-001, TC-004 |
+| FND-2202 | high | R7-02: Harness and strategy source enforce the same 1 MiB maximum, returning `ResourceLimitExceeded` and `Unsupported`. | interface-001, TC-004 |
 | FND-2203 | high | R7-03: Enum output states plainly that its finite membership is all-admitted and no longer emits an unreachable rejected variant. Integer boundary cases retain value-dependent accepted/rejected classification. | FR-002-AC-6, TC-004 |
 | FND-2204 | medium | R7-04: `minimum_rejected_cases` is caller-supplied, rendered once, enforced, and included in deterministic identity; zero declares a total precondition. | FR-002-AC-5, interface-001 |
 | FND-2205 | medium | R7-05: Generated campaigns return typed below-accepted-floor, below-rejected-floor, above-discard-ceiling, exhausted, and failed outcomes with retained summaries. | FR-002-AC-5, TC-004 |
@@ -67,12 +67,9 @@ still required, and no assurance decision or matrix promotion is implied.
 | R8-07 | Partially repaired: the native corpus now includes `ResourceLimitExceeded` for a harness and a ten-check diagnostic census floor. Campaign-execution outcomes remain generated-crate test evidence, not native generation-producer rows. | TC-009 requires the source-limit row; campaign producer integration remains open before full issue #3 closure. |
 
 Local repair verification: all five harness tests and all five strategy tests passed on stable and
-Rust 1.75.0, including compilation and execution of the generated crates. `make assurance-inputs`
-completed, the native conformance stream reported ten passing rows, and TC-009's consumer check
-passed against those producer bytes. All-target Clippy with denied warnings, rustfmt, and Quire
+MSRV, including compilation and execution of the generated crates. All-target Clippy with denied warnings, rustfmt, and Quire
 document validation passed. Quire reported existing duplicate module/inverse-edge warnings. This
-is focused verification, not a claim that the complete `make ci`, shared-assurance receipt campaign,
-or strict coverage gate passed.
+is focused verification, not a claim that the complete `make ci` or strict coverage gate passed.
 
 ## Remaining declared gaps
 

@@ -25,11 +25,12 @@ relationships:
 
 Complete issue #2's numeric/state increment after Task-004: derive deterministic Boolean and bounded
 `i64` subject arguments and zero/one/multiple post-state result ABIs from the checked executable
-oracle dependencies. Emit exact inclusive model-domain assumptions, v2 graph and schema, and source-spanned explicit refusals without consuming issue #3's strategy interface.
+oracle dependencies. Emit exact inclusive model-domain assumptions, v2 graph and schema, and
+source-spanned explicit refusals without consuming issue #3's strategy interface.
 
 ## Completion Evidence
 
-SUITE-008 passes on stable and exact Rust 1.75.0 with cargo-kani 0.67.0. Healthy mixed and ConfigVersion-style identity subjects prove; changed-state and
-strict-comparison subjects print bounded concrete counterexamples. All eight FR-003 criteria are
-backed, and the integrated Test Matrix reports 19 / 19 backed rows with no status lie. Native replay
-is the downstream quire-spec-language IT-010 boundary.
+SUITE-008 passes on stable and MSRV. Healthy mixed and ConfigVersion-style identity subjects
+prove; changed-state and strict-comparison subjects print bounded concrete counterexamples. All
+eight FR-003 criteria are backed, and the integrated Test Matrix reports 19 / 19 backed rows with
+no status lie. Native replay is the downstream quire-spec-language IT-010 boundary.

@@ -59,7 +59,7 @@ implementation.
 - Focused admission, population, census, runner, shrink, and consumer tests pass on the stable
   toolchain after all repairs.
 - Generated downstream crates compile with denied warnings and exercise exact metadata, census
-  fields, counters, rates, identity failures, and attestations.
+  fields, counters, rates, and identity failures.
 - `cargo fmt --all -- --check`, all-target/all-feature Clippy with denied warnings, and
   `git diff --check` pass.
 - No unsafe block, ignored test, source/test stub, direct strategy filter, global reject, silent

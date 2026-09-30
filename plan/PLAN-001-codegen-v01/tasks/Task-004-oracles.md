@@ -32,10 +32,9 @@ dependency signatures and source maps.
 
 ## Guard
 
-The undefined-result ruling permits only Boolean-root
-comparison clauses with no definedness obligations in this slice. The numeric/state acceptance
-criteria pass on stable and Rust 1.75.0, and exact-head Rust review plus gap analysis closed the
-slice without a retained implementation gap.
+The undefined-result ruling permits only Boolean-root comparison clauses with no definedness
+obligations in this slice. The numeric/state acceptance criteria pass on stable and MSRV, and
+exact-head Rust review plus gap analysis closed the slice without a retained implementation gap.
 
 ## Completion Evidence
 

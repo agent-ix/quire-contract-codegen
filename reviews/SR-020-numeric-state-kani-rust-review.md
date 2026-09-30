@@ -22,7 +22,7 @@ and local gates. Three findings were repaired during the PR-time pass; no open R
 
 ## Verdict
 
-**PASS** — every Rust-review finding is closed and the stable plus exact Rust 1.75 local suites pass
+**PASS** — every Rust-review finding is closed and the stable and MSRV local suites pass
 on the clean integrated candidate.
 
 ## Findings
@@ -56,19 +56,14 @@ on the clean integrated candidate.
 - `cargo fmt --all -- --check`: pass.
 - `cargo clippy --locked --all-targets -- -D warnings` with
   `CARGO_TARGET_DIR=target-codex-backends`: pass.
-- Stable `cargo test --locked` with the prescribed pinned assurance inputs: 94 passed, 0 failed.
-- Exact Rust 1.75.0 `cargo +1.75.0 test --locked`: 94 passed, 0 failed.
-- SUITE-008 actual backend: cargo-kani 0.67.0; healthy mixed and
-  ConfigVersion-style identity proofs pass; changed-state and strict-comparison subjects print
+- Stable `cargo test --locked`: 94 passed, 0 failed.
+- MSRV `cargo test --locked`: 94 passed, 0 failed.
+- SUITE-008: healthy mixed and ConfigVersion-style identity proofs pass; changed-state and strict-comparison subjects print
   concrete counterexamples.
 - Generated option identity: `-Z function-contracts`, optional `-Z stubbing`,
   `-Z concrete-playback`, exact harness, unwind, `cadical`, regular output, and printed playback.
-- Local assurance tools: quire-cli 0.31.0, Quoin 0.23.1, ix-flow 0.0.4, and Engineering
-  Assurance 0.2.0; the full shared-assurance suite passes outside the sandboxed process-spawn
-  restriction.
 - `cargo deny check`: advisories, bans, licenses, and sources pass; only the existing unmatched
   allow-list warnings remain.
-- Unsafe audit, warning-denied rustdoc, upstream pin check, ten-row generation conformance, release
-  build, shared pin classification, and the full assurance chain: pass.
+- Unsafe audit, warning-denied rustdoc, ten-row generation conformance and release build: pass.
 - The aggregate `make spec` remains independently red only on the pre-existing installed-catalog
   `Status` versus `Coverage Status` TestMatrix column conflict; this review does not report it green.

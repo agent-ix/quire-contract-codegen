@@ -39,7 +39,6 @@ checks are the named mitigations.
    canonical and source/census permutations must reproduce the same bytes.
 3. Shared rendering hides a common semantic defect. The suite evaluates predicates independently,
    and SL IT-010 later replays the concrete counterexample through native runtime execution.
-4. Concrete-playback syntax changes. The exact 0.67.0 executable/profile/options are evidence inputs;
-   unbound output cannot be promoted or replayed.
+4. Concrete-playback syntax changes. Unbound output cannot be promoted or replayed.
 
 The failure-domain review contains the corresponding framing, extension-point, and topology controls.

@@ -23,7 +23,7 @@ blocking finding remains in Task-008's scope.
 ## Verdict
 
 **APPROVED** for Task-008's buildable core. This verdict does not approve the Task-009 admission,
-runner, consumer bundle, or attestation work blocked on codegen #4.
+runner, or consumer bundle work blocked on codegen #4.
 
 ## Findings
 
@@ -37,7 +37,7 @@ runner, consumer bundle, or attestation work blocked on codegen #4.
 
 | Finding | Disposition | Evidence |
 | --- | --- | --- |
-| FND-1401 | **FIXED** | callers use `Relation::with_literal` or `Relation::between_reads`, and all 14 focused tests pass on stable and Rust 1.75. |
+| FND-1401 | **FIXED** | callers use `Relation::with_literal` or `Relation::between_reads`, and all 14 focused tests pass on stable and MSRV. |
 | FND-1402 | **FIXED** | the comment now matches the measured 20-case maximum and the accepted NFR. |
 | FND-1403 | **FIXED** | FR-012, TC-021, and `walk_every_path` agree with the `ValueTree` contract. |
 
@@ -46,12 +46,11 @@ runner, consumer bundle, or attestation work blocked on codegen #4.
 | Gate | Result |
 | --- | --- |
 | `make ci` | **exit 0** on the committed tree |
-| Rust tests | **79 passed, 0 failed, 0 ignored** on stable and again on Rust 1.75.0 |
-| Focused tests | TC-018/TC-021 6/6 and TC-019 8/8 on stable and Rust 1.75.0 |
+| Rust tests | **79 passed, 0 failed, 0 ignored** on stable and again on MSRV |
+| Focused tests | TC-018/TC-021 6/6 and TC-019 8/8 on stable and MSRV |
 | Format and lint | rustfmt clean; all-target Clippy with denied warnings clean |
 | Specification | Quire validation exits 0; duplicate-module and inverse-edge diagnostics are the documented shared-module warnings |
 | Supply chain and docs | cargo-deny passes; unsafe audit passes; rustdoc passes with denied warnings |
-| Shared assurance | Four pinned components compatible; all scenarios, controls, and probes pass through Quoin |
 
 ## Rust review checklist
 
