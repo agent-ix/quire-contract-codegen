@@ -16,9 +16,9 @@ use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
     core::naming::{bounded_readable_component, oracle_symbol, reference_identifier, upper_camel},
-    generate_bound_oracles,
-    oracle::bound_v1::BoundGenerationError,
-    BoundOracleGeneration, GeneratedArtifactBundle, StrategyDiagnostic, StrategyErrorCode,
+    oracle::boolean_v1::GeneratedArtifactBundle,
+    oracle::bound_v1::{generate_bound_oracles, BoundGenerationError, BoundOracleGeneration},
+    strategy::campaign::{StrategyDiagnostic, StrategyErrorCode},
 };
 
 /// Population selected for one bound numeric strategy bundle.

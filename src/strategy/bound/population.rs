@@ -1,8 +1,8 @@
 //! Constructive `Satisfying`, `Violating`, and `Broad` populations for one bound comparison.
 //!
 //! This consumes the IR-independent [`Relation`] and [`Domain`] of [`super::relation`]: the shape
-//! FR-008 admission hands to FR-009. The public [`super::generate_bound_strategy`] operation owns
-//! that IR extraction and supplies this module only the admitted relation model.
+//! FR-008 admission hands to FR-009. The public [`super::generation::generate_bound_strategy`]
+//! operation owns that IR extraction and supplies this module only the admitted relation model.
 //!
 //! Every value set is computed directly as intervals or as "domain minus one point", so generated
 //! populations construct each case on its side instead of drawing and filtering. Edge values are
@@ -13,8 +13,9 @@
 
 use super::relation::{ComparisonOperator, Domain, OperandPosition, Partner, Relation};
 use crate::{
-    core::artifact::MAX_GENERATED_SOURCE_BYTES, core::diagnostic::GenerationErrorCode,
-    StrategyDiagnostic, StrategyErrorCode,
+    core::artifact::MAX_GENERATED_SOURCE_BYTES,
+    core::diagnostic::GenerationErrorCode,
+    strategy::campaign::{StrategyDiagnostic, StrategyErrorCode},
 };
 
 /// Field name of the expectation tag in every generated case type.

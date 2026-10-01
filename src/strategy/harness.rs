@@ -13,8 +13,10 @@ use crate::{
     core::naming::{
         bounded_readable_component, oracle_symbol, reference_identifier, unique_pair, upper_camel,
     },
-    oracle::boolean_v1::{dependency_parameters, generate_named_boolean_oracle},
-    GeneratedArtifactBundle, OracleRequest,
+    oracle::boolean_v1::{
+        dependency_parameters, generate_named_boolean_oracle, GeneratedArtifactBundle,
+        OracleRequest,
+    },
 };
 
 /// Explicit inputs for one generated pre/post harness.

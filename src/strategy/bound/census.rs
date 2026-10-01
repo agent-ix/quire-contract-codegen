@@ -10,7 +10,7 @@ use super::relation::{Domain, Partner, Relation};
 use crate::{
     core::artifact::MAX_GENERATED_SOURCE_BYTES,
     core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
-    StrategyDiagnostic, StrategyErrorCode,
+    strategy::campaign::{StrategyDiagnostic, StrategyErrorCode},
 };
 
 /// Value the clause's oracle returns for one in-domain census case.
