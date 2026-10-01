@@ -72,3 +72,9 @@ own spec PR with a ticket.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | AD-004 promises a split of `oracle/scalar/` that no migration step owns. The target tree says `scalar/` is "was exact_scalar, split along derivation, lowering and rendering" and the module map gives `exact_scalar` the fate "split" (`oracle/scalar/`; walkers to `core/ir/`). Step 2d is `git mv` only, so `exact_scalar` correctly lands whole at `oracle/scalar/mod.rs`. Step 3 moves `exact_scalar` onto `core/ir` (the walkers), and step 4b ports the scalar Kani family; neither schedules the derivation/lowering/rendering split. A reader planning step 3 or 4 cannot tell who does it, and L-1 checks directories only, so no gate notices if the split never happens. Amend AD-004 (own spec PR, own ticket) to name the step and PR that splits `oracle/scalar/`, or drop the split from the tree and map. | spec/assurance/AD-004-cg-crate-layout.md:177, spec/assurance/AD-004-cg-crate-layout.md:239, spec/assurance/AD-004-cg-crate-layout.md:620-622, spec/assurance/AD-004-cg-crate-layout.md:641-642 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | deferred | IR-501: AD-004 amendment in its own spec PR (name the step that splits `oracle/scalar/`, or drop the split); ticket verified to capture the finding; not a defect of PR 227 (round 1, reviewed at 47e7699) |

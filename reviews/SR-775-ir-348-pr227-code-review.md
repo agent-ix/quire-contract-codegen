@@ -76,3 +76,10 @@ not comparable. The reviewer's run covers the final head, which the coder did no
 | --- | --- | --- | --- |
 | FND-001 | low | Seven comments in `tests/` still name `src/exact_scalar.rs` or `src/exact_function.rs`, which this PR removes. The same PR fixed the identical kind of comment in `src/` (8692a13, `kani_obligations.rs:2384`), and AD-004 makes 2c to 2g "`git mv` plus path fixes" without deferring test comments to any later step (2g-0 covers root imports and doc links, step 7 covers spec). Repoint them to `src/oracle/scalar/mod.rs` and `src/oracle/function/mod.rs`. | tests/it/exact_scalar_generation.rs:665, tests/it/exact_scalar_generation.rs:702, tests/it/exact_scalar_generation.rs:1170, tests/it/exact_function_agreement.rs:18, tests/exact_function_support/agreement_cases.rs:19, tests/exact_scalar_support/agreement_cases.rs:141, tests/exact_scalar_support/package.rs:799 |
 | FND-002 | low | The new `oracle/mod.rs` module header says "The files are moved from the flat layout unchanged (AD-004 step 2d)", and the `lib.rs` comment says "The oracle subsystem (AD-004 step 2d)". Migration history in a permanent module header goes false at step 3, when `scalar`, `equality` and `function` move onto `core/ir`. Say what the module owns and drop the history clause. | src/oracle/mod.rs:4-5, src/lib.rs:21 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 903a351 (round 1, reviewed at 47e7699: the seven `tests/` comments now name `src/oracle/scalar/mod.rs` / `src/oracle/function/mod.rs`; no old path left in `src/` or `tests/`) |
+| FND-002 | fixed | 903a351 (round 1, reviewed at 47e7699: history clause dropped from `src/oracle/mod.rs` and `src/lib.rs`) |
