@@ -123,12 +123,11 @@
 //! direct-expression-call shape cannot reach. AC-2's two legs (generated oracle, direct runtime
 //! call) are implemented and tested in full.
 
+use crate::artifact::Artifact;
 use crate::composite_equality::EqualityOperatorKind;
 use crate::exact_scalar::IntegerOperator;
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-use crate::oracle::{
-    bounded_readable_component, unique_names, Artifact, MAX_GENERATED_SOURCE_BYTES,
-};
+use crate::oracle::{bounded_readable_component, unique_names, MAX_GENERATED_SOURCE_BYTES};
 use crate::profile::oracle_crate_manifest;
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,

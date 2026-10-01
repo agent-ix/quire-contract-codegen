@@ -43,14 +43,16 @@ use rustix::{
 use serde::Serialize;
 
 use crate::{
+    artifact::Artifact,
     kani::KaniSolver,
-    kani_obligations::{KaniObligationHarness, KaniScalarObligationHarness, ObligationKind},
+    kani_identity::{
+        KaniObligationHarness, KaniScalarObligationHarness, ObligationKind, StateFrameHarness,
+        StateFrameProperty,
+    },
     kani_transcript::{
         counterexample_playback, KaniCheckResult, KaniHarnessReport, KaniHarnessStatus,
         KaniReportRefusal,
     },
-    oracle::Artifact,
-    state_frame::{StateFrameHarness, StateFrameProperty},
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
@@ -900,12 +902,12 @@ mod tests {
     const ASSERTION_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `assertion`: \"|post_state: &i64| *post_state <= 5\"\n\n#[test]\nfn kani_concrete_playback_h_2() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![8, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
 
     fn state_frame_harness(
-        property: crate::state_frame::StateFrameProperty,
+        property: crate::kani_identity::StateFrameProperty,
         options: Vec<String>,
     ) -> StateFrameHarness {
         use crate::{
             identity::{HarnessSymbol, ModuleSymbol},
-            state_frame::{StateFrameIdentity, StateFrameScope},
+            kani_identity::{StateFrameIdentity, StateFrameScope},
         };
         let id = |digit: &str| -> quire_contract_model::CheckedNodeId {
             serde_json::from_value(serde_json::json!({
@@ -944,7 +946,7 @@ mod tests {
     /// Trace: TC-027
     #[test]
     fn tc_027_a_state_frame_harness_reports_the_kind_of_what_it_proves() {
-        use crate::state_frame::{StateComparison, StateFrameProperty};
+        use crate::kani_identity::{StateComparison, StateFrameProperty};
         let harness = |property| state_frame_harness(property, Vec::new());
         let contract = harness(StateFrameProperty::Postcondition {
             field: "balance".to_owned(),
@@ -1325,7 +1327,7 @@ mod tests {
         .unwrap();
         fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
         let harness = state_frame_harness(
-            crate::state_frame::StateFrameProperty::Frame {
+            crate::kani_identity::StateFrameProperty::Frame {
                 granted: Vec::new(),
                 checked: Vec::new(),
             },
@@ -1395,7 +1397,7 @@ mod tests {
     #[test]
     fn tc_027_the_launch_exports_the_report_after_the_harness_options() {
         let harness = state_frame_harness(
-            crate::state_frame::StateFrameProperty::Frame {
+            crate::kani_identity::StateFrameProperty::Frame {
                 granted: Vec::new(),
                 checked: Vec::new(),
             },

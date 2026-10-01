@@ -57,6 +57,8 @@ use quire_contract_model::{
 use serde::Serialize;
 
 use crate::{
+    artifact::Artifact,
+    diagnostic::GenerationErrorCode,
     exact_scalar::{
         aggregate_members, bound_members, literal_count, literal_integer, operand_ranges,
         OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
@@ -67,13 +69,17 @@ use crate::{
         adapter_options, i64_literal, readable_component, KaniBindingRole, KaniIntegerBounds,
         KaniPrimitiveType, KaniSolver,
     },
+    kani_identity::{
+        EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
+        ObligationBinding, ObligationKind, ScalarObligationArgument, ScalarObligationIdentity,
+    },
     oracle::{
         generate_named_boolean_oracle, reference_identifier, typed_dependency_parameters,
         unique_names, DependencyParameter, RustValueType,
     },
-    Artifact, ClaimDerivationRefusal, ClaimDisposition, ClaimMap, ExactScalarClaim,
-    ExactScalarRefusal, GeneratedScalarClaim, GenerationErrorCode, OperationProvenance,
-    OracleRequest, UpstreamBlocker, MAX_GENERATED_SOURCE_BYTES,
+    ClaimDerivationRefusal, ClaimDisposition, ClaimMap, ExactScalarClaim, ExactScalarRefusal,
+    GeneratedScalarClaim, OperationProvenance, OracleRequest, UpstreamBlocker,
+    MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Largest number of items one request may negotiate.
@@ -81,21 +87,6 @@ pub const MAX_OBLIGATION_ITEMS: usize = 256;
 
 /// Largest accepted loop unwind bound.
 pub const MAX_OBLIGATION_UNWIND: u32 = 1024;
-
-/// The contract role of one obligation.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ObligationKind {
-    /// Lowered to a `kani::proof` that the precondition is total and satisfiable in bounds.
-    Precondition,
-    /// Lowered to a `kani::ensures` checked by `kani::proof_for_contract`.
-    Postcondition,
-    /// Lowered to a `kani::requires`/`kani::ensures` preservation contract.
-    Invariant,
-    /// A frame's effects; generated from its operation's `state_clause` by
-    /// [`crate::generate_state_frame_obligations`], never by the clause renderer.
-    Frame,
-}
 
 /// One item to negotiate.
 #[derive(Clone, Copy, Debug)]
@@ -433,129 +424,6 @@ pub struct ObligationRecord {
     pub subject: ObligationSubject,
     /// Outcome.
     pub disposition: ObligationDisposition,
-}
-
-/// One primitive argument or result position of a harness's subject ABI.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ObligationBinding {
-    /// Generated identifier.
-    pub identifier: String,
-    /// Argument or result.
-    pub role: KaniBindingRole,
-    /// Rust primitive.
-    pub primitive_type: KaniPrimitiveType,
-    /// IR integer bounds; the only source of a symbolic assumption.
-    pub integer_bounds: Option<KaniIntegerBounds>,
-    /// Every IR dependency bound to this position.
-    pub dependencies: Vec<DependencyIdentity>,
-}
-
-/// One clause oracle embedded in a harness.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EmbeddedOracle {
-    /// The clause.
-    pub clause: ClauseRef,
-    /// Its contract role.
-    pub kind: ObligationKind,
-    /// Oracle function symbol.
-    pub symbol: String,
-}
-
-/// What a generated harness proves and how it is run.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KaniObligationIdentity {
-    /// Contract role.
-    pub kind: ObligationKind,
-    /// The obligation's clause.
-    pub clause: ClauseRef,
-    /// Its QSL source span.
-    pub source_span: SourceSpan,
-    /// The obligation's oracle followed by every assumed precondition's oracle.
-    pub oracles: Vec<EmbeddedOracle>,
-    /// Harness module symbol.
-    pub module_symbol: ModuleSymbol,
-    /// Proof function symbol.
-    pub harness_symbol: HarnessSymbol,
-    /// Contract function symbol, for postcondition and invariant harnesses.
-    pub contract_symbol: Option<String>,
-    /// Customer subject, for postcondition and invariant harnesses.
-    pub subject_path: Option<String>,
-    /// Symbolic arguments, ascending by identifier.
-    pub arguments: Vec<ObligationBinding>,
-    /// Subject results, ascending by identifier.
-    pub results: Vec<ObligationBinding>,
-    /// Solver.
-    pub solver: KaniSolver,
-    /// Loop unwind bound.
-    pub unwind: u32,
-    /// Every flag passed after `cargo kani`.
-    pub options: Vec<String>,
-}
-
-/// One generated harness.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct KaniObligationHarness {
-    /// Identity.
-    pub identity: KaniObligationIdentity,
-    /// Self-contained Rust source.
-    pub rust: Artifact,
-    /// JSON record of the identity and the Rust source path: the persisted obligation schema a
-    /// witness is decoded against.
-    pub record: Artifact,
-}
-
-/// One symbolic `i64` argument of a rendered scalar harness, bounded by the IR domain the
-/// lowered scalar claim carries.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ScalarObligationArgument {
-    /// Generated identifier.
-    pub identifier: String,
-    /// Inclusive checked minimum.
-    pub minimum: i64,
-    /// Inclusive checked maximum.
-    pub maximum: i64,
-}
-
-/// What a V2 scalar obligation harness proves and how it is run. Parallel to [`KaniObligationIdentity`] but for an IR-confirmed exact-scalar claim,
-/// which has no QSL clause, declaration or subject signature -- a node id and its confirmed
-/// operation identity stand in their place.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ScalarObligationIdentity {
-    /// The claimed node.
-    pub node_id: CheckedNodeId,
-    /// The node's own catalogued operation identity, IR-confirmed at package admission.
-    pub operation_identity: String,
-    /// The embedded oracle's function symbol.
-    pub oracle_symbol: String,
-    /// Harness module symbol.
-    pub module_symbol: ModuleSymbol,
-    /// Proof function symbol.
-    pub harness_symbol: HarnessSymbol,
-    /// Symbolic arguments, in call order.
-    pub arguments: Vec<ScalarObligationArgument>,
-    /// Solver.
-    pub solver: KaniSolver,
-    /// Loop unwind bound.
-    pub unwind: u32,
-    /// Every flag passed after `cargo kani`.
-    pub options: Vec<String>,
-}
-
-/// One generated V2 exact-scalar obligation harness.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct KaniScalarObligationHarness {
-    /// Identity.
-    pub identity: ScalarObligationIdentity,
-    /// Self-contained Rust source.
-    pub rust: Artifact,
-    /// JSON record of the identity and the Rust source path: the persisted obligation schema a
-    /// witness is decoded against.
-    pub record: Artifact,
 }
 
 /// The result of one negotiated request.
@@ -1163,28 +1031,6 @@ fn harness_path(module: &str, harness: &str) -> Result<HarnessPath, UnsupportedO
         module: ModuleSymbol::try_from(module).map_err(invalid)?,
         harness: HarnessSymbol::try_from(harness).map_err(invalid)?,
     })
-}
-
-impl KaniObligationIdentity {
-    /// The `module::harness` path of this harness.
-    #[must_use]
-    pub fn harness_path(&self) -> HarnessPath {
-        HarnessPath {
-            module: self.module_symbol.clone(),
-            harness: self.harness_symbol.clone(),
-        }
-    }
-}
-
-impl ScalarObligationIdentity {
-    /// The `module::harness` path of this harness.
-    #[must_use]
-    pub fn harness_path(&self) -> HarnessPath {
-        HarnessPath {
-            module: self.module_symbol.clone(),
-            harness: self.harness_symbol.clone(),
-        }
-    }
 }
 
 /// The module, harness and contract names built on one settled name.

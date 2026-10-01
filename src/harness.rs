@@ -8,12 +8,13 @@ use quire_contract_model::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    artifact::Artifact,
+    diagnostic::{GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState},
     oracle::{
         bounded_readable_component, dependency_parameters, generate_named_boolean_oracle,
         oracle_symbol, reference_identifier, unique_pair, upper_camel,
     },
-    Artifact, GeneratedArtifactBundle, GenerationDiagnostic, GenerationErrorCode,
-    GenerationTerminalState, OracleRequest, MAX_GENERATED_SOURCE_BYTES,
+    GeneratedArtifactBundle, OracleRequest, MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Explicit inputs for one generated pre/post harness.

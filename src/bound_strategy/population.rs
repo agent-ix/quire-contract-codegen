@@ -13,7 +13,8 @@
 
 use super::relation::{ComparisonOperator, Domain, OperandPosition, Partner, Relation};
 use crate::{
-    GenerationErrorCode, StrategyDiagnostic, StrategyErrorCode, MAX_GENERATED_SOURCE_BYTES,
+    diagnostic::GenerationErrorCode, StrategyDiagnostic, StrategyErrorCode,
+    MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Field name of the expectation tag in every generated case type.

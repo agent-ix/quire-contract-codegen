@@ -20,12 +20,14 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 
 use crate::{
+    artifact::Artifact,
     derive_exact_scalar_items, generate_exact_scalar_oracles,
     identity::{HarnessPath, HarnessSymbol},
-    negotiate_kani_obligations, Artifact, BackendKind, Candidate, ClaimMap, ExactScalarClaim,
+    kani_identity::KaniScalarObligationHarness,
+    negotiate_kani_obligations, BackendKind, Candidate, ClaimMap, ExactScalarClaim,
     ExactScalarOracles, InvalidObligationItem, KaniObligationError, KaniObligationOutcome,
-    KaniObligationRequest, KaniScalarObligationHarness, ObligationDisposition, ObligationItem,
-    ObligationRecord, OracleGenerationError,
+    KaniObligationRequest, ObligationDisposition, ObligationItem, ObligationRecord,
+    OracleGenerationError,
 };
 
 /// One item the driver routed to a backend.
@@ -393,10 +395,10 @@ fn derive_claim_map(
 mod tests {
     use super::{index_harnesses, RoutedGenerationError};
     use crate::{
+        artifact::Artifact,
         identity::{HarnessSymbol, ModuleSymbol},
         kani::KaniSolver,
-        kani_obligations::{KaniScalarObligationHarness, ScalarObligationIdentity},
-        Artifact,
+        kani_identity::{KaniScalarObligationHarness, ScalarObligationIdentity},
     };
 
     fn harness(module: &str, symbol: &str) -> KaniScalarObligationHarness {

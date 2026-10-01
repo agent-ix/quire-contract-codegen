@@ -224,8 +224,8 @@ Migration order, not moved.
 | `oracle` (shared parts: `Artifact`, diagnostics, naming, `RUNTIME_REVISION`) | core | `core/artifact.rs`, `core/diagnostic.rs`, `core/naming.rs`, `core/profile.rs` | split; `RUNTIME_REVISION` deleted |
 | `oracle` (`SourceProbe`, `SourceRegion`) | core | `core/source_map.rs` | split |
 | `oracle` (V1: `generate_boolean_oracle`, `analyze_node`, `render_node`) | oracle | `oracle/boolean_v1.rs` | moved, then retired with V1 |
-| `publication` (`ArtifactBundle`, limits, `PublicationDiagnostic`, `PublicationErrorCode`) | core | `core/artifact.rs` | split (step 2a) |
-| `publication` (writer, destination state, published identity) | publication | `publication/publish.rs` | split |
+| `publication` (`ArtifactBundle`, limits, `PublicationDiagnostic`, `PublicationErrorCode`, `PublicationDestinationState`) | core | `core/artifact.rs` | split (step 2a); the destination state is a field of the diagnostic, so it moves with it |
+| `publication` (writer, published identity) | publication | `publication/publish.rs` | split |
 | `generation` | oracle | `oracle/claim.rs` | moved |
 | `exact_scalar` | oracle | `oracle/scalar/`; walkers to `core/ir/` | split |
 | `composite_equality` | oracle | `oracle/equality/` | moved |
@@ -237,7 +237,7 @@ Migration order, not moved.
 | `vacuity` | evidence | `evidence/vacuity.rs` | moved |
 | `bound_coverage` | evidence | `evidence/bound_coverage.rs` | moved; V1 input |
 | `kani` (types, `adapter_options`, `i64_literal`, `readable_component`) | kani | `kani/abi.rs` | split |
-| `kani` (`ProofDependencyEdge`, `Kind`, `Request`, `ProofReadiness`, `normalize_dependencies`, `dependency_readiness`) | kani | `kani/census.rs` | split (step 2b); the FR-015 census input and the corpus use them |
+| `kani` (`ProofDependencyEdge`, `Kind`, `State`, `Request`, `ProofReadiness`, `normalize_dependencies`, `dependency_readiness`) | kani | `kani/census.rs` | split (step 2b); the FR-015 census input and the corpus use them |
 | `kani` (`generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependencyGraph`, bundle validation) | kani | none | retired (step 4f) |
 | `kani` (`deterministic_json`, `artifact`) | core | `core/canonical.rs` | `deterministic_json` deleted; `Artifact::new` used directly |
 | `kani_obligations` (harness and identity records, `ObligationKind`, `ObligationBinding`) | kani | `kani/identity.rs` | split (step 2b) |
@@ -582,9 +582,14 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
 2. **Edge removal, then directories.** Precondition: PR 210 has landed, after this AD is approved
    and with a local `make kani` transcript from its head. 2a to 2b are definition moves in the flat
    layout, each removing an edge a rename cannot: 2a moves `ArtifactBundle`, its limits,
-   `PublicationDiagnostic` and `PublicationErrorCode`, `SourceProbe` and `SourceRegion` out of
-   `publication` and `oracle` into the modules that become `core`. 2b moves the proof-dependency
-   census types to `census`, and the harness and identity record types (`KaniObligationHarness`,
+   `PublicationDiagnostic`, `PublicationErrorCode` and `PublicationDestinationState` (a field of the
+   diagnostic), `SourceProbe` and `SourceRegion` out of `publication` and `oracle` into the modules
+   that become `core`, together with what those types hold so that `core` imports nothing: `Artifact`
+   and the generation diagnostic types (`GenerationTerminalState`, `GenerationErrorCode`,
+   `GenerationDiagnostic`). In the flat layout they are `artifact`, `diagnostic` and `source_map`.
+   2b moves the proof-dependency census types (including `ProofDependencyState`, a field of the
+   edge and the request) to `census` (flat `kani_census`), and the harness and identity record
+   types, flat `kani_identity` because `identity` is already `core/identity.rs` (`KaniObligationHarness`,
    `KaniScalarObligationHarness`, `ObligationKind`, `ObligationBinding`,
    `KaniObligationIdentity`, `ScalarObligationIdentity`, `ScalarObligationArgument`,
    `EmbeddedOracle`, `StateFrameHarness`, `StateFrameProperty`, `StateFrameIdentity`,

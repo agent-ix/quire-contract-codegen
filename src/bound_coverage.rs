@@ -6,9 +6,12 @@ use quire_contract_model::{BooleanOperator, BoundPackage, ClauseRef, Expression,
 use serde::Serialize;
 
 use crate::{
-    classify_clause, parse_llvm_coverage, publication, vacuity::normalize_path,
+    artifact::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
+    classify_clause, parse_llvm_coverage,
+    source_map::SourceRegion,
+    vacuity::normalize_path,
     BoundOracleGeneration, ClauseCoverage, CoverageDiagnostic, CoverageErrorCode,
-    GeneratedBoundOracles, LlvmCoverage, SourceRegion, MAX_COVERAGE_BYTES,
+    GeneratedBoundOracles, LlvmCoverage, MAX_COVERAGE_BYTES,
 };
 
 /// Domain observation format, not a native-run result or attestation format.
@@ -250,7 +253,7 @@ fn check_artifacts(
     supplied: &[ArtifactBytes<'_>],
     body: &mut ObservationBody,
 ) -> Result<(), CoverageDiagnostic> {
-    if supplied.len() > publication::MAX_ARTIFACTS {
+    if supplied.len() > MAX_ARTIFACTS {
         return Err(diag(
             CoverageErrorCode::ResourceLimitExceeded,
             "artifact count exceeded",
@@ -266,9 +269,7 @@ fn check_artifacts(
     let mut index = BTreeMap::new();
     for artifact in supplied {
         total = total.saturating_add(artifact.bytes.len());
-        if artifact.bytes.len() > publication::MAX_ARTIFACT_BYTES
-            || total > publication::MAX_BUNDLE_BYTES
-        {
+        if artifact.bytes.len() > MAX_ARTIFACT_BYTES || total > MAX_BUNDLE_BYTES {
             return Err(diag(
                 CoverageErrorCode::ResourceLimitExceeded,
                 "artifact byte budget exceeded",

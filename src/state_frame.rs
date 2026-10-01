@@ -36,10 +36,15 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
+    artifact::Artifact,
     exact_scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
     identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     kani::{adapter_options, i64_literal, KaniSolver},
-    Artifact, MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
+    kani_identity::{
+        StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
+        StateFrameProperty, StateFrameScope,
+    },
+    MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
 };
 
 /// Work budget for lowering one clause and its closure.
@@ -91,35 +96,6 @@ pub struct StateFrameObligations {
     pub frame: StateFrameHarness,
 }
 
-/// One generated harness with the identity it proves and its persisted record.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StateFrameHarness {
-    /// Everything the proof is about.
-    pub identity: StateFrameIdentity,
-    /// The harness source, `src/generated/<module>.rs`.
-    pub rust: Artifact,
-    /// The persisted identity record, `kani-obligations/<module>.json`.
-    pub record: Artifact,
-}
-
-/// An integer comparison operator of the closed `quire.op.integer` ordering family.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum StateComparison {
-    /// `<`.
-    Lt,
-    /// `<=`.
-    Le,
-    /// `>`.
-    Gt,
-    /// `>=`.
-    Ge,
-    /// `==`.
-    Eq,
-    /// `!=`.
-    Ne,
-}
-
 impl StateComparison {
     fn from_operation(identity: &str) -> Option<Self> {
         Some(match identity {
@@ -150,81 +126,6 @@ impl StateComparison {
 enum Side {
     Pre,
     Post,
-}
-
-/// The property one harness proves.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case", tag = "kind")]
-pub enum StateFrameProperty {
-    /// `left <op> right` between the named observations of one field.
-    Postcondition {
-        /// The one integer field the condition reads.
-        field: String,
-        /// The comparison.
-        comparison: StateComparison,
-        /// Whether the left operand is the field's pre-state value (else its post-state value).
-        left_is_pre: bool,
-    },
-    /// Every `checked` field is unchanged; the `granted` fields may change.
-    Frame {
-        /// The frame's `modifies` field entries: the allowed effects.
-        granted: Vec<String>,
-        /// Every other state field: the forbidden effects, each asserted unchanged.
-        checked: Vec<String>,
-    },
-}
-
-/// The inclusive integer range the IR carries for one state field. Every harness assumes it of
-/// the symbolic pre-state, so a counterexample is a state the model admits.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct StateFieldDomain {
-    /// The state field.
-    pub field: String,
-    /// Inclusive lower bound.
-    pub minimum: i64,
-    /// Inclusive upper bound.
-    pub maximum: i64,
-}
-
-/// The operation a harness is scoped to. Two harnesses with different scopes are never the same
-/// proof.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct StateFrameScope {
-    /// The operation's name, from its anchor.
-    pub operation: String,
-    /// The framed object type node, the anchor's `context`.
-    pub object: CheckedNodeId,
-    /// The operation's `state`/`operation_anchor` node.
-    pub anchor: CheckedNodeId,
-    /// The operation's `state`/`frame` node.
-    pub frame: CheckedNodeId,
-}
-
-/// Everything a generated harness proves, persisted with it.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct StateFrameIdentity {
-    /// The `state_clause` node both obligations of a request come from.
-    pub clause: CheckedNodeId,
-    /// The operation scope.
-    pub scope: StateFrameScope,
-    /// The property proved.
-    pub property: StateFrameProperty,
-    /// The IR range assumed of each state field that has one, in `state_fields` order.
-    pub domains: Vec<StateFieldDomain>,
-    /// Rust path of the state struct.
-    pub state_path: String,
-    /// Rust path of the operation subject.
-    pub subject_path: String,
-    /// The generated module holding the harness.
-    pub module_symbol: ModuleSymbol,
-    /// The `kani::proof` function.
-    pub harness_symbol: HarnessSymbol,
-    /// The solver, always `cadical`.
-    pub solver: KaniSolver,
-    /// The unwind bound.
-    pub unwind: u32,
-    /// The exact Kani option vector.
-    pub options: Vec<String>,
 }
 
 /// A frame effect this generator has no finite encoding for.

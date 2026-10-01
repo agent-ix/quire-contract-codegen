@@ -8,8 +8,8 @@ use std::{collections::BTreeSet, fmt::Write as _};
 
 use super::relation::{Domain, Partner, Relation};
 use crate::{
-    GenerationErrorCode, GenerationTerminalState, StrategyDiagnostic, StrategyErrorCode,
-    MAX_GENERATED_SOURCE_BYTES,
+    diagnostic::{GenerationErrorCode, GenerationTerminalState},
+    StrategyDiagnostic, StrategyErrorCode, MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Value the clause's oracle returns for one in-domain census case.
