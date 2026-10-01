@@ -82,7 +82,8 @@ grepping `src/`. Counts exclude `#[cfg(test)]` modules unless said so.
     `bounded_kani_corpus`, `harness`, `kani`, `kani_obligations`, `routed_generation`,
     `state_frame`, `strategy`, `bound_strategy/census`, `bound_strategy/generation` and
     `bound_strategy/population`; the count includes `#[cfg(test)]` modules, and six further files
-    use `use crate::{...}` with module paths only. So the real edge is hidden behind `lib.rs`'s
+    use `use crate::{...}` with module paths only. Two more files reach a root item by an inline
+    path, not a `use` line (`crate::GenerationDiagnostic` in `kani` and `kani_obligations`). So the real edge is hidden behind `lib.rs`'s
     `pub use` list and an import of a root item can close a loop with no module name in sight.
   - Utility modules sit in the wrong place. The V1 `kani` module is a helper library for the V2
     path (`kani_obligations`, `state_frame`, `kani_witness_join` and `bounded_kani_corpus` import
@@ -227,8 +228,8 @@ Migration order, not moved.
 | Module today | Subsystem | Target | Fate |
 | --- | --- | --- | --- |
 | `lib` | core | `lib.rs` | stays; re-exports by explicit list, no logic. The one `pub mod bound_strategy` path leaves (step 2e); callers use the re-exported names |
-| `oracle` (shared parts: `Artifact`, diagnostics, naming, `RUNTIME_REVISION`) | core | `core/artifact.rs`, `core/diagnostic.rs`, `core/naming.rs`, `core/profile.rs` | split; `RUNTIME_REVISION` deleted |
-| `oracle` (naming helpers: `bounded_readable_component`, `readable_name_component`, `upper_camel`, `unique_names`, `unique_pair`, `oracle_symbol`, `reference_identifier`, and the private `rust_component` and `observation_name` they use) | core | `core/naming.rs` | split (step 2d-0). `dependency_parameters` and `typed_dependency_parameters` are not naming: they run the V1 expression analysis, so they stay with `oracle/boolean_v1.rs` |
+| `oracle` (shared parts: `Artifact`, diagnostics, `RUNTIME_REVISION`) | core | `core/artifact.rs`, `core/diagnostic.rs`, `core/profile.rs` | split; `RUNTIME_REVISION` deleted |
+| `oracle` (naming helpers: `bounded_readable_component`, `readable_name_component`, `upper_camel`, `unique_names`, `unique_pair`, `oracle_symbol`, `reference_identifier`, `observation_name`, and the private `rust_component`; with their tests) | core | `core/naming.rs` | split (step 2d-0). `observation_name` becomes `pub(crate)`, because `reference_key` (V1 identity key, with `dependency_key`) stays in `oracle/boolean_v1.rs` and calls it; those two are expression bookkeeping, not naming. `dependency_parameters` and `typed_dependency_parameters` are not naming either: they run the V1 expression analysis and stay in `oracle/boolean_v1.rs` at step 2d. Because the V2 `kani_obligations` and `kani` import `typed_dependency_parameters` (and `generate_boolean_oracle`), that dependency predates this AD and step 6 must move or replace it before it deletes `boolean_v1.rs` |
 | `oracle` (`MAX_GENERATED_SOURCE_BYTES`) | core | `core/artifact.rs` | split (step 2d-0): the one cap on a generated source, kept beside the bundle's size limits. Every user (the oracle, strategy, harness and Kani generators) sits above `core`, so rule 4 holds |
 | `oracle` (`SourceProbe`, `SourceRegion`) | core | `core/source_map.rs` | split |
 | `oracle` (V1: `generate_boolean_oracle`, `analyze_node`, `render_node`) | oracle | `oracle/boolean_v1.rs` | moved, then retired with V1 |
@@ -530,7 +531,8 @@ requirement is authored.
   once step 7 lands the registry rows by directory, it reads the registry instead.
 - L-2. The import graph is acyclic and follows the dependency direction above, `#[cfg(test)]`
   modules included, and no file imports an item through the crate root. Test: a layout test that
-  reads `use crate::` lines. It lands at the end of step 2, after the edge-removal steps, so it can
+  reads `use crate::` lines and flags a bare `crate::<Item>` path in code (inline types, calls,
+  doc links; not string literals). It lands at the end of step 2, after the edge-removal steps, so it can
   pass when it lands.
 - L-3. `#[kani::proof]`, `#[kani::proof_for_contract]`, `kani::requires`, `kani::ensures`,
   `kani::any`, `kani::assume` and `kani::cover!` occur in string literals of non-test source in
@@ -607,11 +609,15 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    2d-0 is the third definition move and lands after 2c, before 2d: it moves the shared naming
    helpers out of `oracle` into `core/naming.rs` (`bounded_readable_component`,
    `readable_name_component`, `upper_camel`, `unique_names`, `unique_pair`, `oracle_symbol`,
-   `reference_identifier`, and the private `rust_component` and `observation_name` they use) and
+   `reference_identifier`, `observation_name` and the private `rust_component`) and
    `MAX_GENERATED_SOURCE_BYTES` into `core/artifact.rs`, and points every importer at the new
-   module path. Without it `core/naming.rs` is never created, because 2d moves `oracle.rs` whole,
-   and L-1 cannot pass. It carries no behaviour change: the items move unchanged and the
-   generated output is byte-identical. 2c to 2g are `git mv` plus path fixes, imports by module
+   module path. `observation_name` becomes `pub(crate)` because `reference_key`, which stays in
+   `oracle`, calls it; that visibility is the only edit to a moved item. The tests of
+   `unique_names` and `oracle_symbol` (in `oracle.rs`, traced to FR-022-AC-9 and TC-033) move to
+   `core/naming.rs` with the items, their trace tags unchanged. Without this step
+   `core/naming.rs` is never created, because 2d moves `oracle.rs` whole, and L-1 cannot pass.
+   It carries no behaviour change: the items otherwise move unchanged and the generated output
+   is byte-identical. 2c to 2g are `git mv` plus path fixes, imports by module
    path, no logic change, one PR per subsystem in leaf order: 2c `core`, 2d `oracle` (with `bound`
    landing as `oracle/bound_v1.rs`), 2e `evidence` and `strategy` (the one `pub mod
    bound_strategy` path leaves here; its callers in `tests/it/` and any item reached only by
@@ -622,8 +628,14 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    The crate-root imports (L-2) are rewritten by the steps that move the files: each of 2d to
    2g rewrites every root-path import in the files it moves to a module path, and 2g-0, a sweep
    PR before the layout test lands, rewrites any that remain (`use crate::{..., Item}` and
-   `use crate::Item`, in `#[cfg(test)]` modules too; `lib.rs` keeps its re-export list). 2g-0
-   changes imports only. The layout test (L-1, L-2) lands with 2g.
+   `use crate::Item`, in `#[cfg(test)]` modules too; `lib.rs` keeps its re-export list). The
+   sweep also covers inline paths in code, `crate::Item` outside a `use` line, and intra-doc
+   links that name a root item; it leaves string literals (the template text `"crate::State"`
+   and the like) alone. At the time of writing there are two inline code paths,
+   `crate::GenerationDiagnostic` in `kani.rs` and in `kani_obligations.rs`, and two doc links
+   (`crate::MAX_GENERATED_SOURCE_BYTES` in `generation.rs` and `kani_obligations.rs`). 2g-0
+   changes paths only. The layout test (L-1, L-2) lands with 2g; it reads `use` lines and also
+   flags `crate::<Item>` with no module segment in non-comment code outside string literals.
 3. **Typed node access.** `core/ir` with the operator enum, then `state_frame`, `exact_scalar`,
    `composite_equality` and `exact_function` onto it, one PR each. L-8 lands with the last.
 4. **The one generator.**
@@ -744,7 +756,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
   `kani_transcript` split in 2f are the only edits beyond renames and path fixes; they relocate
   items unchanged and carry no behaviour change, and each is refused if its generated output is
   not byte-identical.
-- The layout test reads `use` lines, not the compiler's graph. A path in a macro or a
+- The layout test reads `use` lines and bare `crate::<Item>` paths, not the compiler's graph. A path in a macro or a
   `super::` import would escape it. The measured edge list in this AD was made the same way
   and has the same blind spot.
 - Step 4c needs a spec change and has no ticket. If it slips, 4e and 4f slip with it, because the
