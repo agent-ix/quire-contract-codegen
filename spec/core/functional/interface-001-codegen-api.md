@@ -119,13 +119,25 @@ operations:
     output: LaunchOutcome | io error
     semantics: the bounded launch execute_kani_obligation performs, draining stdout and stderr on their own threads and killing the process at the timeout (FR-017)
   - name: launch_evidence
-    inputs: [LaunchOutcome]
-    output: KaniRunOutcome and exit code
-    semantics: the mapping execute_kani_obligation applies from a concluded launch to evidence; a timed-out launch has no exit code (FR-017)
+    inputs: [LaunchOutcome, exported report bytes, optional obligation kind]
+    output: ClassifiedRun and exit code | KaniReportRefusal
+    semantics: the mapping execute_kani_obligation applies from a concluded launch to evidence; a timed-out launch has no exit code and its report is not read (FR-017)
   - name: classify_kani_run
-    inputs: [process exit success, Kani transcript text]
-    output: KaniRunOutcome
-    semantics: the transcript classifier execute_kani_obligation uses, so a test asserting falsification routes through production classification and an inconclusive run is never read as a decided failure (FR-017)
+    inputs: [process exit success, exported Kani report bytes, console text, optional obligation kind]
+    output: ClassifiedRun (KaniRunOutcome, SUCCESS-check count and the per-check KaniCheckResult view) | KaniReportRefusal
+    semantics: the classifier execute_kani_obligation uses, so a test asserting falsification routes through production classification and an inconclusive run is never read as a decided failure; the verdict is read from the report only and the console text is read only for the falsifying playback; a report it cannot read exactly is a refusal, never an outcome (FR-017)
+  - name: terminal_value
+    inputs: [KaniRunOutcome, SUCCESS-check count]
+    output: qsl_replay::TerminalValue
+    semantics: the one total map from an executed run to QSL's FR-331 terminal value, a vacuous or cover-unsatisfied run to Proved with zero checks (FR-029)
+  - name: proof_category
+    inputs: [KaniRunOutcome, SUCCESS-check count]
+    output: qsl_replay::ProofCategory
+    semantics: terminal_value read through QSL's TerminalValue::category (FR-029)
+  - name: ir_outcome_terminal_value
+    inputs: [quire_contract_ir::kani::KaniOutcome, SUCCESS-check count]
+    output: qsl_replay::TerminalValue
+    semantics: the one total map from a Contract IR outcome that this crate did not execute to QSL's terminal value, preserving refusal and limit causes (FR-030, ADR-013 C-09)
   - name: generate_composite_equality_oracles
     inputs: [admitted CheckedPackageV2, CompositeEqualityItem list]
     output: CompositeEqualityOracles | OracleGenerationError
@@ -267,8 +279,8 @@ kani_obligation_execution_slice:
   scope: running one FR-015 harness; FR-015 generation, and the FR-014 oracles it embeds, have no slice of their own yet and are governed by their requirements alone
   refusals: a refusal when the crate's library source does not contain the harness source byte for byte, and a tool refusal naming a launcher that cannot be started and its path. Neither runs anything
   outcomes: `verified`, `falsified` with the concrete playback verbatim, `cover_unsatisfied` with satisfied and total counts, and `inconclusive` with one of `failed_without_counterexample`, `no_verdict`, `missing_cover_summary`, `unwind_bound_exhausted`, `timed_out`. Success is never defaulted: without a readable, fully satisfied cover summary a successful run is not `verified`. A run is given a caller-declared wall-clock budget on every request; one that has not concluded when the budget elapses is killed, along with every process it forked that a `/proc` walk taken at that moment can still see (one forked or reparented away in the instant before that walk is not guaranteed reached, only that the caller is never made to wait for it), and reported `inconclusive`/`timed_out` rather than left running
-  evidence: the kind, harness path, launcher path, complete argument vector, unwind bound, solver, exit code and outcome. This repository retains none of it and computes no aggregate verdict
-  outcome_source: the outcome is read from the backend's `--output-format regular` prose, because Kani publishes no machine-readable verdict; this crate reads that prose to decide a verdict only in `src/kani_transcript.rs`, which returns a typed transcript; a falsifying playback block is passed through verbatim to the FR-016 witness join
+  evidence: the kind, harness path, launcher path, complete argument vector, unwind bound, solver, exit code, outcome, SUCCESS-check count and the per-check view (id, class, source file and line, status). This repository retains none of it and computes no aggregate verdict
+  outcome_source: the outcome is read from the report Kani exports under `-Z unstable-options --export-json`, in `src/kani_transcript.rs`, which returns a typed report; a report that is absent after a successful exit, unreadable, over the read bound, of another schema version, malformed, of an unknown check status or holding other than one harness result is a typed KaniReportRefusal, never an outcome; the report carries no concrete playback, so a falsifying playback block is taken from the console as a payload only and passed through verbatim to the FR-016 witness join
 coverage_analysis_slice:
   implementation_boundary: parse_llvm_coverage, LlvmCoverage.observe, and classify_clause remain unbound observation primitives; the separate bound observation API performs no native-qualified aggregate analysis, campaign binding, or obligation discharge
   bound_observation_boundary: analyze_bound_coverage emits the strict codegen.bound-coverage-observations/v1 domain schema from a complete immutable generated bundle plus independently validated BoundPackage; no campaign binding, native execution, or obligation discharge
@@ -337,6 +349,9 @@ The interface's features in declaration order: every operation the contract abov
 | run_launcher_with_timeout | operation |
 | launch_evidence | operation |
 | classify_kani_run | operation |
+| terminal_value | operation |
+| proof_category | operation |
+| ir_outcome_terminal_value | operation |
 | generate_composite_equality_oracles | operation |
 | negotiate_backend_provider | operation |
 | generate_routed | operation |
