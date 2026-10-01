@@ -16,7 +16,10 @@ use quire_contract_codegen::{
     OracleGenerationError, RationalOperator, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CRATE_NAME,
     RUNTIME_REVISION, SCALAR_LOWERING_SUPPORTED_TAGS,
 };
-use quire_contract_ir::CheckedPackageV2;
+use quire_contract_ir::{
+    CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
+    CheckedPackageV2ReadResult,
+};
 use quire_contract_runtime::exact::{
     ComparisonOperator, DivisionProfile, QuantityTarget, RoundingMode, TextProfile,
 };
@@ -98,6 +101,56 @@ pub(super) fn corpus_oracles() -> ExactScalarOracles {
     generate(&corpus_package().admit(), &golden_items())
 }
 
+/// Trace: FR-014-AC-2, TC-024. UNBACKED today: the six text admissions (FR-014-AC-2's text
+/// admission case) and the four ordering enum comparisons (`enum.lt/le/gt/ge`) are refused by
+/// Contract IR at admission, so no oracle is generated for them and no agreement or generation
+/// test can run over them. Text admission: `quire.op.numeric.convert` takes `exact_numeric`, no
+/// catalogued `convert` identity takes `text`, and QSL lowers no text admission; it is unblocked
+/// by a catalogued text-admission operation. Ordered enums: the catalog requires operand family
+/// `ordered_enum`, which IR's `resolve_family` yields for no node, though the enum is declared
+/// `ordered: true`; it is unblocked by IR resolving that. This test pins the exact refusal of
+/// each node (code, cause, pointer, locus), so the behaviour is recorded and a change in either
+/// IR or the corpus shows up here.
+#[test]
+fn tc_024_text_admission_and_ordered_enum_corpus_is_refused_by_ir_today() {
+    let refused = refused_corpus();
+    assert_eq!(
+        refused.len(),
+        TEXT_ADMISSIONS.len() + 4,
+        "six admissions, four orderings"
+    );
+    for expression in refused {
+        let code = expression.code;
+        let (result, wire) = refused_corpus_package(code).read();
+        let node_id = code_id(code);
+        let position = wire["semantic_graph"]["nodes"]
+            .as_array()
+            .expect("nodes")
+            .iter()
+            .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+            .unwrap_or_else(|| panic!("node {code} is in the wire"));
+        let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+            panic!("node {code}: IR now admits it ({result:?}); move it back into the corpus");
+        };
+        assert_eq!(
+            refusal.code,
+            CheckedPackageRefusalCode::IllTyped,
+            "node {code}"
+        );
+        assert_eq!(
+            refusal.cause,
+            Some(CheckedPackageRefusalCause::OperatorIneligible),
+            "node {code}"
+        );
+        assert_eq!(
+            refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+            Some(format!("/semantic_graph/nodes/{position}/body/arguments/0")),
+            "node {code}"
+        );
+        assert_eq!(refusal.locus, Some(node_id), "node {code}");
+    }
+}
+
 /// Trace: FR-014-AC-4, TC-024.
 ///
 /// The corpus crate is exactly `Cargo.toml`, `src/lib.rs` and `claim-map.json`;
@@ -126,7 +179,11 @@ fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
             generated += 1;
         }
     }
-    assert!(generated > 60, "the corpus generates every family");
+    // The ten `refused_corpus` nodes are not requested: IR refuses them (see its test).
+    assert!(
+        generated + refused_corpus().len() > 60,
+        "the corpus generates every family"
+    );
 }
 
 /// Trace: FR-014-AC-4, TC-024.
@@ -317,18 +374,18 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
             "rt::evaluate_quantity(rt::QuantityOperation::Divide(".to_owned(),
         ),
     ];
-    for (code, profile) in TEXT_ADMISSIONS.into_iter().zip(TextProfile::ALL) {
-        calls.push((code, format!("rt::TextProfile::{profile:?}")));
-    }
     for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {
         calls.push((
             TEXT_COMPARISONS[index],
             format!("rt::compare_text(rt::ComparisonOperator::{operator:?},"),
         ));
-        calls.push((
-            ENUM_COMPARISONS[index],
-            format!("rt::compare_enum(rt::ComparisonOperator::{operator:?},"),
-        ));
+        // The ordering comparisons are refused by IR today (see `refused_corpus`).
+        if index < 2 {
+            calls.push((
+                ENUM_COMPARISONS[index],
+                format!("rt::compare_enum(rt::ComparisonOperator::{operator:?},"),
+            ));
+        }
         calls.push((
             QUANTITY_COMPARISONS[index],
             format!("rt::compare_quantity(rt::ComparisonOperator::{operator:?},"),
@@ -1876,7 +1933,10 @@ fn derive_one(
 fn tc_024_derivation_equals_every_golden_corpus_descriptor() {
     let package = corpus_package().admit();
     let corpus = corpus();
-    assert!(corpus.len() > 60, "the corpus is the whole golden set");
+    assert!(
+        corpus.len() + refused_corpus().len() > 60,
+        "the corpus is the whole golden set"
+    );
     let ids = corpus
         .iter()
         .map(|expression| code_id(expression.code))
@@ -1956,11 +2016,9 @@ fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
             ..
         })
     ));
-    // numeric.convert to a text type is an admission; to an integer it is neither.
-    assert!(matches!(
-        operation(TEXT_ADMISSIONS[0]),
-        Ok(ExactScalarOperation::TextAdmission { .. })
-    ));
+    // numeric.convert to an integer is neither a rounding nor an admission. (A conversion to a
+    // text type is an admission, but IR refuses those nodes today: see
+    // `tc_024_text_admission_and_ordered_enum_corpus_is_refused_by_ir_today`.)
     assert_eq!(
         operation(DERIVE_CONVERT_TO_INTEGER),
         Err(no_claim(ClaimDerivationRefusal::OperandFormsNotDerivable {

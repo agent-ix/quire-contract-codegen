@@ -99,3 +99,6 @@ pub const E_CONV_DEC_DEC: u32 = 119;
 /// `admits_equality_conversion`'s `Decimal -> Integer/Int` row, exercised
 /// against `Integer` (codegen#83).
 pub const E_CONV_DEC_INT: u32 = 120;
+/// An equality directly over `REF_TYPE` operands: refused by Contract IR at admission, so it is
+/// only in [`direct_reference_package`](super::direct_reference_package), never in the corpus.
+pub const E_REFERENCE_DIRECT: u32 = 121;

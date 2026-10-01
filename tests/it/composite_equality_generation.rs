@@ -22,7 +22,8 @@ use quire_contract_codegen::{
     RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_ir::{
-    CheckedNodeTag, CheckedPackageV2, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    CheckedNodeTag, CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
 use quire_contract_runtime::exact::{
     CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration, CompositeShape,
@@ -440,7 +441,48 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     assert!(!not_ieee_environment.contains_ieee(&not_float_sequence_type));
 }
 
-/// Trace: FR-018-AC-7, TC-029.
+/// Trace: FR-018-AC-15, TC-029. A body operand that is a `convert` application over a literal is
+/// read as the literal's type: the descriptor's `source_type` must equal it, and a descriptor
+/// naming any other source refuses at that position, reporting the converted operand's type as
+/// found.
+#[test]
+fn tc_029_ac15_a_convert_operand_is_read_as_the_type_it_converts() {
+    let package = corpus_package().admit();
+    let wrong_source = item(
+        E_CONV_CHARGE,
+        EqualityOperatorKind::Equal,
+        converted(T_INTEGER, T_DECIMAL_SMALL),
+        typed(T_DECIMAL_SMALL),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&wrong_source));
+    match refused(only_claim(&oracles, E_CONV_CHARGE)) {
+        CompositeEqualityRefusal::OperandTypeMismatch {
+            position,
+            expected,
+            found,
+        } => {
+            assert_eq!(*position, 0);
+            assert_eq!(*expected, code_id(T_INTEGER));
+            assert_eq!(*found, Some(code_id(T_INTEGER_BOUNDED)));
+        }
+        other => panic!("expected OperandTypeMismatch, got {other:?}"),
+    }
+    let right_source = item(
+        E_CONV_CHARGE,
+        EqualityOperatorKind::Equal,
+        converted(T_INTEGER_BOUNDED, T_DECIMAL_SMALL),
+        typed(T_DECIMAL_SMALL),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&right_source));
+    assert!(matches!(
+        only_claim(&oracles, E_CONV_CHARGE).result,
+        ClaimDisposition::Generated(_)
+    ));
+}
+
+/// Trace: FR-018-AC-7, TC-029. `E_REFERENCE` is the "operand reaching a `reference` composite"
+/// case (a record with a `REF_TYPE` field); the direct `REF_TYPE` operand is
+/// `tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today`.
 #[test]
 fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     let package = corpus_package().admit();
@@ -502,6 +544,37 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
             .iter()
             .all(|claim| matches!(claim.result, ClaimDisposition::Refused { .. })));
     }
+}
+
+/// Trace: FR-018-AC-7, TC-029. The direct `reference` composite form: an equality over two
+/// `REF_TYPE` operands is refused by Contract IR at admission, before this generator runs, so the
+/// generator's `QuireSpecLanguage120` blocker is not reached for it today. This pins the exact
+/// refusal (code, cause, pointer, locus); `quire.op.reference.eq` needs a `Reference<X>` naming a
+/// model object type of a selected document, which `REF_TYPE` does not. Unblocked by a corpus
+/// with such a model declaration.
+#[test]
+fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
+    let (result, wire) = direct_reference_package().read();
+    let node_id = code_id(E_REFERENCE_DIRECT);
+    let position = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .expect("the node is in the wire");
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("IR now admits a direct reference operand ({result:?}); add it to the corpus");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::OperatorIneligible)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!("/semantic_graph/nodes/{position}/body/arguments/0"))
+    );
+    assert_eq!(refusal.locus, Some(node_id));
 }
 
 /// Trace: FR-018-AC-8, TC-029 (generation-time half; the `check_type` guard

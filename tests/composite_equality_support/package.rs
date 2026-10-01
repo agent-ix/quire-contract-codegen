@@ -197,6 +197,7 @@ fn family_of(code: u32) -> &'static str {
         T_RATIONAL_NARROW | T_RATIONAL_WIDE | T_RATIONAL_INT => "rational",
         R_POINT | R_FLOAT | R_DUP | R_SELF | R_PAIR_OF_POINTS | R_WITH_REF => "structural",
         SEQ_R_FLOAT | SEQ_INT | TUP_PAIR | OPT_INT | OPT_SELF => "structural",
+        REF_TYPE => "reference",
         other => panic!("no operand family registered for corpus type code {other}"),
     }
 }
@@ -556,6 +557,15 @@ impl PackageBuilder {
         self
     }
 
+    /// The reader's verdict on this package, admitted or refused, with the wire it read.
+    pub fn read(&self) -> (CheckedPackageV2ReadResult, Value) {
+        let wire = self.wire();
+        let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
+        let result =
+            CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence());
+        (result, wire)
+    }
+
     pub fn admit(&self) -> CheckedPackageV2 {
         let wire = self.wire();
         let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
@@ -575,6 +585,21 @@ fn evidence() -> CheckedPackageEvidence {
 // ---------------------------------------------------------------------------
 // The composite/structural corpus (codes in `codes.rs`)
 // ---------------------------------------------------------------------------
+
+/// [`corpus_package`] plus [`E_REFERENCE_DIRECT`]: `quire.op.reference.eq` over two `REF_TYPE`
+/// operands. Contract IR refuses it (`reference.eq`'s `conforming_reference` constraint needs a
+/// `Reference<X>` naming a model object type of a selected document, and `REF_TYPE` names none),
+/// so it cannot be in the corpus; `tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today`
+/// pins the refusal.
+pub fn direct_reference_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    builder.application_code(
+        E_REFERENCE_DIRECT,
+        "binary",
+        binary_body(REF_TYPE, REF_TYPE),
+    );
+    builder
+}
 
 /// A package carrying the full composite/structural equality corpus.
 pub fn corpus_package() -> PackageBuilder {

@@ -152,6 +152,10 @@ in the `NODE_KEY_DOMAIN` domain.
 - If a node is unlowered, invalid, over its work limit, of a form other than
   `binary`, or disagrees with its descriptor's arity or operand types, then the
   generator shall refuse the item with a typed reason.
+- Where a `binary` node's operand is an `application` of operator `convert` (how a
+  checked package spells `convert<T>`), the generator shall read that operand's type as
+  the type of the operand it converts, which is the descriptor's `source_type`; the
+  application's own `result_type` is the conversion target.
 - If one node id appears more than once in the request under one descriptor, then
   the generator shall refuse every copy. One node id under two descriptors is not
   a duplicate: the operation law is caller-declared and V2 does not carry it, so
@@ -194,6 +198,7 @@ in the `NODE_KEY_DOMAIN` domain.
 | FR-018-AC-12 | The generated crate declares `publish = false`, names the Contract Runtime dependency this repository's `Cargo.toml` names with the `exact` feature, contains no charge amount and no planned pair count (every charge and every pair comes from runtime metering), and compiles. | Test (TC-029) |
 | FR-018-AC-13 | Every claim-map entry carries the node id, IR id, package id, source map, claims, reconstructed declaration keys and selected schedule of its item, and its declaration keys equal `NodeKey::from_hex` of the V2 node ids its operand types reach. | Test (TC-029) |
 | FR-018-AC-14 | The `bounded_domain` nodes an operand type reaches (`integer_range`, `rational_range`, `decimal_range`, `text_bounds`, `collection_bounds`) are read from `binding` members looked up by name as FR-014 lists them, in any order; a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-029) |
+| FR-018-AC-15 | A `binary` node whose operand is a `convert` application over a literal is compared with its descriptor by the converted literal's type: a descriptor whose `source_type` is that type generates, and any other source is refused as an operand-type disagreement at that position, reporting the converted literal's type as found. | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -223,6 +228,7 @@ without one is not written.
 | FR-018-AC-12 | Emit the plan's pair count or a charge amount as a literal constant in the generated source. |
 | FR-018-AC-13 | Key declarations by request ordinal instead of by the V2 node id. |
 | FR-018-AC-14 | Read bound members by position, or accept a bare literal in place of a `binding` member, so a QSL-shaped or wrongly named bound is read as some other range. |
+| FR-018-AC-15 | Read the operand's type from the `convert` application's own `result_type`, so a descriptor naming the conversion target as its source type is accepted over a body that converts from another type. |
 
 ## Dependencies
 
