@@ -114,8 +114,9 @@ unsatisfiable requires as `cover_unsatisfied`.
 
 10. Request one V2 clause claim each over a `precondition`, a `postcondition` and an
     `invariant` node of an admitted `CheckedPackageV2`. Each yields one harness of its own
-    kind with one value per argument (the state fields of `self` the body reads, the
-    result, the operation parameters) bounded by its declared domain, and none takes a
+    kind with one drawn value per drawn input (the pre-state field reads and the
+    operation parameters, bounded by their declared domains; the postcondition's result
+    and post-state come from the subject call and their domain is asserted), and none takes a
     bound from a caller (FR-015-AC-38, FR-015-AC-39). The invariant harness asserts the
     clause with no subject call (FR-015-AC-49).
 11. Generate a clause of connectives and comparisons and compare the embedded oracle with
@@ -123,7 +124,8 @@ unsatisfiable requires as `cover_unsatisfied`.
     arithmetic postcondition `amount < 1000` implies `amount + 1 <= 1000`, check the
     native `i128` assertion of each arithmetic subterm, and run the installed backend over
     the unmutated clause and over one whose `+` returns `left + right + 1` (expected
-    playback `amount_current = 999`), and one whose `+` returns `left` (FR-015-AC-40,
+    playback `amount_current = 999`), and one whose `+` returns `left`, which is
+    falsified on the native assertion (FR-015-AC-40,
     FR-015-AC-41). The package comes from QSL's facade on source, never a copied fixture
     (AD-004 step 4a); if the facade cannot build it, the real-Kani control is the
     quire-integration exemplar of AD-004 L-5, a test in a repository above both.

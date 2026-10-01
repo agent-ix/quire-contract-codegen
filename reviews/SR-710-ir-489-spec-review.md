@@ -67,3 +67,32 @@ amendment otherwise meets its brief:
 
 The PR adds no pins, SHAs, version records or compatibility layers, and discloses nothing
 confidential. `make spec` adds no warning.
+
+## New findings (disposition pass 1)
+
+Reviewed at ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09. I checked the new text against IR FR-040 and
+FR-038 at IR origin/main, and against CG `src/state_frame.rs` at origin/main, which reads a field as
+`project(deref(self), field)` and its pre-state value as `quire.op.state.pre`.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-012 | high | AC-39 and the Inputs bullet make every post-state field read, and a postcondition's result, a nondeterministic argument held inside its domain by an assumption. In a postcondition harness those values are what the customer subject produces: AC-46 calls the subject, AC-27 asserts against the state after the subject runs, and Behavior requires the post-state result to stay inside its domain. If they are drawn independently, the subject does not affect the verdict, and a result outside its domain is assumed away, which breaks AC-4. Only the pre-state, the parameters and (for a precondition or invariant) the state should be drawn. | spec/kani/functional/FR-015-bounded-kani-obligations.md:262, spec/kani/functional/FR-015-bounded-kani-obligations.md:54-63, spec/kani/functional/FR-015-bounded-kani-obligations.md:186-189 |
+| FND-013 | medium | FR-014-AC-38 does not say how a field read becomes an oracle operand. A V2 clause condition reads state through `project(deref(self), field)` and `pre(...)` terms. Those are neither a literal nor a reference, so FR-014-AC-10 refuses them, and their bound is the object member's `integer_range`, not a descriptor parameter's reachable `bounded_domain`. As written, FR-014-AC-38 conflicts with FR-014-AC-10. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:348, spec/oracle/functional/FR-014-exact-scalar-oracles.md:301-305 |
+| FND-014 | medium | AC-48 identifies a state field read "by the object type's field node". IR FR-040 says a field is named by its declaring node and its name, never by a node of its own. AC-48 also widens AD-003 E-1's "parameter node id" to non-parameter arguments while still claiming the identity is "formed by AD-003 E-1". | spec/kani/functional/FR-015-bounded-kani-obligations.md:271 |
+| FND-015 | medium | AC-46 says the cover states that "the clause's evaluation completes", "as FR-015-AC-7 does". For the precondition family, AC-7 and AD-004's cover rule (IR-464) say the cover states that the precondition holds, which is a different property. | spec/kani/functional/FR-015-bounded-kani-obligations.md:269 |
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: a `Reference` parameter such as `self` is not an argument and binds through its object's declared fields (AC-39). The new binding semantics have their own defect, FND-012. |
+| FND-002 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: planned FR-014-AC-38 and its Behavior bullet, cited by AC-40 and the Behavior. The new AC has its own defect, FND-013. |
+| FND-003 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: AC-41 keeps the AC-37 native `i128` assertion per arithmetic subterm, and TC-025 step 11 adds the `left` mutant. |
+| FND-004 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: AC-46 states what the cover states and defines the subject call. The precondition cover wording is FND-015. |
+| FND-005 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: AC-47 now concerns the harness identity record and AC-48 the E-1 obligation identity, and the two are distinct values. |
+| FND-006 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: AC-42 makes an unsupported operator `unsupported` and refuses an unmodelled or absent node as AC-14 states. Division, modulo and abs are named. |
+| FND-007 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: the two unreachable cases are dropped from AC-42, and TC-025 step 12 marks them unreachable. |
+| FND-008 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: the Description is marked Planned (IR-489), AC-44 and AC-45 back AC-22 and AC-25, and AC-8 is no longer said to be census-backed. |
+| FND-009 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: AC-45 states order independence as an addition ("in addition, ..."). |
+| FND-010 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: the row names the single row holding AC-22 and AC-25 (FR-015-AC-19 through FR-015-AC-25). |
+| FND-011 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: the playback is `amount_current = 999` in AC-41 and TC-025. |

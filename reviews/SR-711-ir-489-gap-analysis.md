@@ -52,3 +52,11 @@ FND-002 is a coordination item with draft PR #209, not a defect in this PR. I co
 that QSL lowering emits precondition and invariant `state_clause` nodes into a `CheckedPackageV2`
 the way it emits postconditions; qsl-forms builds the `state_clause` form for all three. That
 stays the coder's open question 3.
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: new AC-49. A V2 invariant harness draws its arguments within their domains and asserts the clause, with no subject call. Preservation under an operation is explicitly not specified. |
+| FND-002 | deferred | The collision with draft PR #209 is recorded in the PR body for the leader to decide. Whichever PR lands second renumbers. This is coordination, not a defect in this PR. |
+| FND-003 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: AC-41 and TC-025 step 11 name the quire-integration exemplar (AD-004 L-5) as the real-Kani control when QSL's facade cannot build the package. |
