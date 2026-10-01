@@ -135,7 +135,7 @@ pub struct CorpusProofDependencyGraph {
 
 /// Registry of the corpus case identities emitted into one output tree.
 ///
-/// A case's identity is the SHA-256 of its canonical request content ([`CaseIdentity`]): the
+/// A case's identity is the SHA-256 of its canonical request content: the
 /// request, the finite input it is evaluated over, the profile selection, and the normalized
 /// proof-dependency census. Every emitted artifact path is `corpus/{family}_{identity}.*`, so the
 /// same content always lands on the same files and two distinct cases never share one, whatever
