@@ -599,7 +599,7 @@ fn tc_033_bounded_parameters_are_supported_with_a_per_operand_scalar_harness() {
         let (lower, upper) = result;
         assert!(
             harness.rust.contents.contains(&format!(
-                "rt::Integer::from({}), rt::Integer::from({})",
+                "exact >= i128::from({}) && exact <= i128::from({});",
                 lit(lower),
                 lit(upper)
             )),
@@ -705,7 +705,7 @@ fn tc_033_qsl_shaped_increment_sum_and_negation_are_supported() {
         let (lower, upper) = result;
         assert!(
             harness.rust.contents.contains(&format!(
-                "rt::Integer::from({}), rt::Integer::from({})",
+                "exact >= i128::from({}) && exact <= i128::from({});",
                 lit(lower),
                 lit(upper)
             )),
