@@ -76,9 +76,14 @@ grepping `src/`. Counts exclude `#[cfg(test)]` modules unless said so.
   inside `kani_transcript`'s own `#[cfg(test)]` module (`src/kani_transcript.rs:261`). No
   strongly connected component exists among the non-test `use crate::` edges. The structure that
   produces cycles is still there, for two reasons:
-  - 17 files import through the crate root (`use crate::{Artifact, GenerationErrorCode, ...}` and
-    `use crate::SourceProbe`), so the real edge is hidden behind `lib.rs`'s `pub use` list and an
-    import of a root item can close a loop with no module name in sight.
+  - 12 files import at least one item through the crate root (`use crate::{..., OracleRequest, ...}`
+    beside module paths, and `use crate::OperationClaim`), at the time of writing, measured after
+    step 2c (an earlier draft of this AD said 17). The 12 are `bound`, `bound_coverage`,
+    `bounded_kani_corpus`, `harness`, `kani`, `kani_obligations`, `routed_generation`,
+    `state_frame`, `strategy`, `bound_strategy/census`, `bound_strategy/generation` and
+    `bound_strategy/population`; the count includes `#[cfg(test)]` modules, and six further files
+    use `use crate::{...}` with module paths only. So the real edge is hidden behind `lib.rs`'s
+    `pub use` list and an import of a root item can close a loop with no module name in sight.
   - Utility modules sit in the wrong place. The V1 `kani` module is a helper library for the V2
     path (`kani_obligations`, `state_frame`, `kani_witness_join` and `bounded_kani_corpus` import
     `adapter_options`, `i64_literal`, `readable_component`, `KaniBindingRole`, `KaniSolver` and
@@ -156,7 +161,8 @@ grepping `src/`. Counts exclude `#[cfg(test)]` modules unless said so.
 src/
   lib.rs                      declares directories, re-exports the public API, holds no logic
   core/                       leaf: depends on nothing else in the crate
-    artifact.rs               Artifact, ArtifactBundle, its size limits, PublicationDiagnostic with
+    artifact.rs               Artifact, ArtifactBundle, its size limits and the generated-source cap
+                              (`MAX_GENERATED_SOURCE_BYTES`), PublicationDiagnostic with
                               its code and PublicationDestinationState (no I/O)
     source_map.rs             SourceProbe, SourceRegion
     canonical.rs              the one caller of quire-canonical's encoder and digest
@@ -222,6 +228,8 @@ Migration order, not moved.
 | --- | --- | --- | --- |
 | `lib` | core | `lib.rs` | stays; re-exports by explicit list, no logic. The one `pub mod bound_strategy` path leaves (step 2e); callers use the re-exported names |
 | `oracle` (shared parts: `Artifact`, diagnostics, naming, `RUNTIME_REVISION`) | core | `core/artifact.rs`, `core/diagnostic.rs`, `core/naming.rs`, `core/profile.rs` | split; `RUNTIME_REVISION` deleted |
+| `oracle` (naming helpers: `bounded_readable_component`, `readable_name_component`, `upper_camel`, `unique_names`, `unique_pair`, `oracle_symbol`, `reference_identifier`, and the private `rust_component` and `observation_name` they use) | core | `core/naming.rs` | split (step 2d-0). `dependency_parameters` and `typed_dependency_parameters` are not naming: they run the V1 expression analysis, so they stay with `oracle/boolean_v1.rs` |
+| `oracle` (`MAX_GENERATED_SOURCE_BYTES`) | core | `core/artifact.rs` | split (step 2d-0): the one cap on a generated source, kept beside the bundle's size limits. Every user (the oracle, strategy, harness and Kani generators) sits above `core`, so rule 4 holds |
 | `oracle` (`SourceProbe`, `SourceRegion`) | core | `core/source_map.rs` | split |
 | `oracle` (V1: `generate_boolean_oracle`, `analyze_node`, `render_node`) | oracle | `oracle/boolean_v1.rs` | moved, then retired with V1 |
 | `publication` (`ArtifactBundle`, limits, `PublicationDiagnostic`, `PublicationErrorCode`, `PublicationDestinationState`) | core | `core/artifact.rs` | split (step 2a); the destination state is a field of the diagnostic, so it moves with it |
@@ -595,14 +603,27 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    `EmbeddedOracle`, `StateFrameHarness`, `StateFrameProperty`, `StateFrameIdentity`,
    `StateFrameScope`, `StateFieldDomain`, `StateComparison`) to `identity`, since the harness
    records hold them and `identity` would otherwise import `generate`, so
-   `kani_execution`, `kani_witness_join` and `spine_replay` stop importing the generators. 2c to
-   2g are `git mv` plus path fixes, imports by module path, no logic change, one PR per
-   subsystem in leaf order: 2c `core`, 2d `oracle` (with `bound` landing as `oracle/bound_v1.rs`),
-   2e `evidence` and `strategy` (the one `pub mod bound_strategy` path leaves here; its callers
-   in `tests/it/` and any item reached only by that path are re-exported by name or made
-   private in the same PR), 2f `kani` (including the `run`, `output`, `classify` split of
-   `kani_execution` and `kani_transcript`, and the test back-edges), 2g `replay`, `routed`,
-   `publication`. The layout test (L-1, L-2) lands with 2g.
+   `kani_execution`, `kani_witness_join` and `spine_replay` stop importing the generators.
+   2d-0 is the third definition move and lands after 2c, before 2d: it moves the shared naming
+   helpers out of `oracle` into `core/naming.rs` (`bounded_readable_component`,
+   `readable_name_component`, `upper_camel`, `unique_names`, `unique_pair`, `oracle_symbol`,
+   `reference_identifier`, and the private `rust_component` and `observation_name` they use) and
+   `MAX_GENERATED_SOURCE_BYTES` into `core/artifact.rs`, and points every importer at the new
+   module path. Without it `core/naming.rs` is never created, because 2d moves `oracle.rs` whole,
+   and L-1 cannot pass. It carries no behaviour change: the items move unchanged and the
+   generated output is byte-identical. 2c to 2g are `git mv` plus path fixes, imports by module
+   path, no logic change, one PR per subsystem in leaf order: 2c `core`, 2d `oracle` (with `bound`
+   landing as `oracle/bound_v1.rs`), 2e `evidence` and `strategy` (the one `pub mod
+   bound_strategy` path leaves here; its callers in `tests/it/` and any item reached only by
+   that path are re-exported by name or made private in the same PR), 2f `kani` (including the
+   `run`, `output`, `classify` split of `kani_execution` and `kani_transcript`, which is a
+   verbatim item move: items move unchanged between files, with no logic edit and
+   byte-identical output; and the test back-edges), 2g `replay`, `routed`, `publication`.
+   The crate-root imports (L-2) are rewritten by the steps that move the files: each of 2d to
+   2g rewrites every root-path import in the files it moves to a module path, and 2g-0, a sweep
+   PR before the layout test lands, rewrites any that remain (`use crate::{..., Item}` and
+   `use crate::Item`, in `#[cfg(test)]` modules too; `lib.rs` keeps its re-export list). 2g-0
+   changes imports only. The layout test (L-1, L-2) lands with 2g.
 3. **Typed node access.** `core/ir` with the operator enum, then `state_frame`, `exact_scalar`,
    `composite_equality` and `exact_function` onto it, one PR each. L-8 lands with the last.
 4. **The one generator.**
@@ -718,8 +739,11 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
 ## Risks
 
 - A rename-only step that also touches imports is large in line count. It is reviewable only if
-  it carries no logic change, so each of 2c to 2g must be refused if it does. The definition moves
-  of 2a and 2b are the only logic-adjacent edits and carry no behaviour change.
+  it carries no logic change, so each of 2c to 2g (and 2g-0) must be refused if it does. The
+  definition moves of 2a, 2b and 2d-0 and the verbatim item move of the `kani_execution` and
+  `kani_transcript` split in 2f are the only edits beyond renames and path fixes; they relocate
+  items unchanged and carry no behaviour change, and each is refused if its generated output is
+  not byte-identical.
 - The layout test reads `use` lines, not the compiler's graph. A path in a macro or a
   `super::` import would escape it. The measured edge list in this AD was made the same way
   and has the same blind spot.
@@ -770,7 +794,8 @@ FR-015 V2 contract input (step 4c).
   through, and whether the control's clause is a contract-family clause or a scalar claim, is the
   planner's statement on IR-344 and was not determined here.
 - The 70-call count and the import edges are greps over `src/`, not the compiler's output, and no
-  build or test was run for this AD.
+  build or test was run for this AD. The crate-root import count (12 files) is a grep over
+  `use crate::` blocks, not the compiler's output.
 - PR 210 was read as a description and file list, not built. It is not at this base.
 - Whether IR exposes a typed body-term decoder today was not checked; IR's layout AD is a separate
   ticket. The IR-347 lowering move and IR's `BoundPackage` retirement are relayed and not
