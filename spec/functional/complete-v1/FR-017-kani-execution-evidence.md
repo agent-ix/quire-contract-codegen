@@ -38,7 +38,8 @@ the run and everything read back from it.
   hands it, through one borrowed view, rather than owning two execution
   paths.
 - A Kani installation: the `cargo-kani` launcher to invoke.
-- The caller's wall-clock timeout, `KaniExecutionRequest::timeout`. The run has no memory ceiling.
+- The caller's wall-clock timeout, `KaniExecutionRequest::timeout`. The run has no memory ceiling;
+  what the generator keeps of the launcher's stdout and stderr is bounded to the last 8 MiB of each.
 - The crate directory whose library source contains that harness's generated
   source byte for byte, and the Cargo target directory the run builds into.
 
@@ -72,7 +73,16 @@ the run and everything read back from it.
   playback printed for a satisfied cover witnesses reachability and shall never
   be taken as a counterexample.
 - If the process exited successfully and the backend reported success with zero successful
-  checks, then the generator shall classify the run as inconclusive with the vacuous-proof reason.
+  checks, then the generator shall classify the run as inconclusive with the vacuous-proof reason;
+  for a precondition harness, whose only property is its non-vacuity cover, the generator shall
+  instead classify the run by its cover summary alone, as verified, cover-unsatisfied or
+  inconclusive under the cover rules above.
+- The generator shall run the launcher as the leader of its own process group and, when the run
+  does not conclude within the timeout, kill that group, so that the solver and every other
+  process the launcher started in it are killed with it.
+- The generator shall keep at most the last 8 MiB of the launcher's stdout and of its stderr,
+  read the pipes to their end or until the launcher has ended, and return within the timeout plus
+  a small fixed constant even when a process that left the group still holds a pipe open.
 - If the run does not conclude within the caller's timeout, then the generator shall kill it and
   classify it as inconclusive with the timed-out reason.
 - If the backend reported a failed unwinding assertion, then the
@@ -86,7 +96,8 @@ the run and everything read back from it.
   the byte-for-byte crate check, the launch and the outcome classification
   read the identity, the source artifact, the unwind bound, the solver
   and the option vector from whichever kind's identity the caller supplied,
-  and none of those steps branches on which kind it is.
+  and none of those steps branches on which kind it is, except that the
+  classification applies the zero-checks rule to every harness but a precondition harness.
 - The generator shall retain, in the evidence, the obligation kind when the
   harness carries one, the harness path, the invoked
   launcher path, the complete argument vector, the unwind bound, the solver,
@@ -119,7 +130,11 @@ the run and everything read back from it.
 | FR-017-AC-7 | A crate whose library source does not contain the harness source byte for byte is refused, and no backend runs. | Test (TC-027) |
 | FR-017-AC-11 | A routed FR-022/FR-014 exact-scalar harness (`KaniScalarObligationHarness`) runs through `execute_kani_obligation` and `kani_launch_command` the same way an FR-015 contract harness does: a crate whose library source lacks its generated source byte for byte is `HarnessNotInCrate`, its covers classify a run identically (all satisfied is verified, an unsatisfied one is cover-unsatisfied, none printed is inconclusive), and its evidence carries `None` for obligation kind, since an exact-scalar claim carries no contract role. | Test (TC-027) |
 | FR-017-AC-12 | Real Kani captures of a verified run, a falsified run with a playback, an exhausted unwind bound, an unreachable cover, a partly satisfied cover and a run with no cover summary each parse into the expected typed transcript of verdict banners, failed checks, check and cover summaries and playback tests, and classify to the expected outcome; the falsifying playback block passes through verbatim. | Test (TC-027) |
-| FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified. | Test (TC-027) |
+| FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified, except that a precondition harness, which asserts nothing beyond its cover, is decided by its cover summary. | Test (TC-027) |
+| FR-017-AC-14 | A launcher that prints more than 8 MiB completes with its real exit status and only the tail of each stream retained, the verdict lines included. | Test (TC-027) |
+| FR-017-AC-15 | A timeout too large to add to the current instant never elapses and does not panic. | Test (TC-027) |
+| FR-017-AC-16 | The launcher's capture threads are stopped and joined on every outcome: they return what the launcher wrote before it ended, stop while a write end is still held open, and stop within their drain limit while a straggler keeps writing, so a process holding a pipe open does not delay the return. | Test (TC-027) |
+| FR-017-AC-17 | A run that times out has its whole process group killed, a real grandchild included. | Test (TC-027) |
 
 ## Dependencies
 

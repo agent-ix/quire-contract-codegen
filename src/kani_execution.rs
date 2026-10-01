@@ -12,26 +12,32 @@
 //! not conclude within it is killed and classified `TimedOut` rather than left to
 //! block the caller forever (agent-ix/quire-contract-codegen#58). This module's
 //! own call always returns within that budget plus a small constant, regardless
-//! of what the launcher forked: [`kill_process_tree`] walks `/proc` for every
-//! process it can still see descended from the launcher at that instant and
-//! signals each by its own positive pid (a process-group-wide signal was tried
-//! first and abandoned — see [`run_launcher_with_timeout`]), and the caller is
-//! never made to wait on output from anything that walk did not reach, including
-//! a process the launcher forked in the instant between the walk's snapshot and
-//! the kill, or one that had already reparented away from it. Such a straggler
-//! is not guaranteed killed by this call — only that this call does not wait for
-//! it.
+//! of what the launcher forked: the launcher runs as the leader of its own
+//! process group and a timeout kills the whole group, so CBMC and every other
+//! descendant die with it. A descendant that leaves the group is not reached, and
+//! the caller is never made to wait on output from it beyond a short, fixed drain.
 
 use std::{
-    collections::HashMap,
     env,
     ffi::OsString,
     fmt, fs, io,
     io::Read,
+    os::{fd::AsFd, unix::process::CommandExt},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread,
     time::{Duration, Instant},
+};
+
+use rustix::{
+    event::{poll, PollFd, PollFlags},
+    io::Errno,
+    process::{kill_process_group, Pid, Signal},
+    time::Timespec,
 };
 
 use serde::Serialize;
@@ -357,7 +363,7 @@ pub fn execute_kani_obligation(
             path: request.installation.launcher.clone(),
             error,
         })?;
-    let (outcome, exit_code) = launch_evidence(launch);
+    let (outcome, exit_code) = launch_evidence(launch, harness.kind);
     Ok(KaniExecutionEvidence {
         kind: harness.kind,
         harness_path: harness.rust.path.clone(),
@@ -397,181 +403,206 @@ pub enum LaunchOutcome {
         /// Combined stdout and stderr, newline-joined, matching `classify_kani_run`'s input shape.
         text: String,
     },
-    /// The budget elapsed before the process exited. Every descendant this call could still see
-    /// in `/proc` at that instant has been killed and reaped; one that forked or reparented away
-    /// in the instant before the kill is not guaranteed to be — only that this call does not
-    /// wait for it.
+    /// The budget elapsed before the process exited. The launcher's whole process group has been
+    /// killed and the launcher reaped; a descendant that left the group is not killed, and this
+    /// call does not wait for it.
     TimedOut,
 }
 
-/// Polling interval while waiting for the launcher to exit within its budget. Short enough that
-/// a tight caller-declared timeout in a test is still observed promptly, long enough not to spin.
+/// Polling interval while waiting for the launcher to exit within its budget, and the longest a
+/// capture thread goes between looking at its stop flag. Short enough that a tight caller-declared
+/// timeout in a test is still observed promptly, long enough not to spin.
 const LAUNCHER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
-/// Runs `command` to completion or kills what it can still find of it once `timeout` elapses,
-/// whichever happens first — but always **returns** within `timeout` plus a small constant
-/// either way; that bound does not depend on whether the kill actually reached everything.
+/// Most bytes kept from each of the launcher's stdout and stderr. Kani prints its verdict, check
+/// summary, cover summary and playback last, so when a stream is longer its tail is what is kept.
+/// A stream is always drained to the end so the child never blocks on a full pipe; only what is
+/// retained is bounded.
+const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
+
+/// Longest a capture thread keeps reading after it is told to stop. Whatever the launcher wrote
+/// before it ended is already in the pipe and is read in microseconds; the limit only bounds a
+/// straggler that keeps writing.
+const STOP_DRAIN_LIMIT: Duration = Duration::from_millis(100);
+
+/// Runs `command` to completion or kills its process group once `timeout` elapses, whichever
+/// happens first, and **returns** within `timeout` plus a small constant (the poll interval and
+/// `STOP_DRAIN_LIMIT`) either way; that bound does not depend on whether the kill reached
+/// everything. A `timeout` too large to add to the current instant never elapses.
 ///
-/// Kani's launcher forks `kani-driver`, which forks CBMC, so on a timeout `child.kill()` alone
-/// would leave CBMC — the actual solver, and the one most likely to be the non-terminating
-/// process a budget exists to bound — orphaned and still running past the deadline it just
-/// exceeded. `kill_process_tree` finds and signals every live descendant it can still see by
-/// its own pid instead of relying on a process-group-wide signal: a negative-pid group kill is
-/// the textbook fix, but it is deliberately not used here, because it was measured to escape its
-/// own group on the sandbox this crate was developed in — killing a freshly spawned child's
-/// isolated process group also killed the unrelated caller in the same run, reproduced with a
-/// minimal standalone program before this function was written this way. Signalling only
-/// positive, individually discovered pids cannot exhibit that failure mode.
-///
-/// That walk is one `/proc` snapshot, so it is inherently unable to see a process forked after
-/// it, or one that reparented away from the launcher before it (a double fork, `setsid`, or
-/// simply an orphan whose original parent already exited) — either keeps its own copy of the
-/// inherited stdout/stderr pipe write end open, which is why this function does not wait for the
-/// reader threads to see EOF on a timeout: doing so would block on that copy until whatever
-/// holds it happens to exit on its own, which can be arbitrarily long and would make this
-/// function's own return time unbounded — the defect this exists to remove, in a new place. See
-/// the `None` arm below for that reasoning in full, and the module's own top-level doc comment
-/// for the guarantee this leaves in place versus the one it does not.
+/// The launcher runs as the leader of its own process group, so a timeout kills CBMC and
+/// every other descendant along with it instead of leaving them running past the budget; see
+/// `kill_process_tree`. The group is no longer the terminal's foreground group, so a Ctrl-C
+/// typed at the caller's terminal reaches the caller and not the launcher or its descendants:
+/// a caller that is interrupted and exits without returning from this function leaves them
+/// running until they finish on their own.
 ///
 /// Stdout and stderr are drained on their own threads as soon as the process is spawned, the same
 /// way `Command::output()` drains them internally: a full pipe buffer would otherwise stall the
 /// child while this function is only polling `try_wait`, turning a bounded run into a hang of its
-/// own.
+/// own. Each thread keeps at most `CAPTURE_LIMIT` bytes and polls its pipe rather than blocking
+/// in `read`, so once the launcher is gone this function tells both threads to stop and joins
+/// them: a descendant that left the process group may still hold the pipe's write end open. Each thread then reads what is
+/// already in the pipe for at most `STOP_DRAIN_LIMIT` and returns, however fast a straggler
+/// keeps writing, so the join adds at most that limit plus one poll interval to the return time.
 pub fn run_launcher_with_timeout(
     mut command: Command,
     timeout: Duration,
 ) -> io::Result<LaunchOutcome> {
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0);
     let mut child = command.spawn()?;
-    let pid = child.id();
-    let mut stdout = child.stdout.take().expect("stdout was piped at spawn");
-    let mut stderr = child.stderr.take().expect("stderr was piped at spawn");
-    let stdout_reader = thread::spawn(move || {
-        let mut buffer = Vec::new();
-        let _ = stdout.read_to_end(&mut buffer);
-        buffer
-    });
-    let stderr_reader = thread::spawn(move || {
-        let mut buffer = Vec::new();
-        let _ = stderr.read_to_end(&mut buffer);
-        buffer
-    });
+    let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(io::Error::other("a piped standard stream was not captured"));
+    };
+    let stop = Arc::new(AtomicBool::new(false));
+    let stdout_reader = spawn_capture(stdout, &stop);
+    let stderr_reader = spawn_capture(stderr, &stop);
 
-    let deadline = Instant::now() + timeout;
-    let status = loop {
+    let deadline = Instant::now().checked_add(timeout);
+    let waited = wait_until(&mut child, deadline);
+    if !matches!(waited, Ok(Some(_))) {
+        kill_process_tree(&mut child);
+        let _ = child.wait();
+    }
+    stop.store(true, Ordering::Release);
+    let stdout_bytes = stdout_reader.join().unwrap_or_default();
+    let stderr_bytes = stderr_reader.join().unwrap_or_default();
+
+    match waited? {
+        Some(status) => Ok(LaunchOutcome::Completed {
+            exited_successfully: status.success(),
+            exit_code: status.code(),
+            text: format!(
+                "{}\n{}",
+                String::from_utf8_lossy(&stdout_bytes),
+                String::from_utf8_lossy(&stderr_bytes)
+            ),
+        }),
+        None => Ok(LaunchOutcome::TimedOut),
+    }
+}
+
+/// Polls `child` until it exits (`Some`) or `deadline` passes (`None`). A `deadline` of `None`
+/// never passes.
+fn wait_until(child: &mut Child, deadline: Option<Instant>) -> io::Result<Option<ExitStatus>> {
+    loop {
         if let Some(status) = child.try_wait()? {
-            break Some(status);
+            return Ok(Some(status));
         }
-        if Instant::now() >= deadline {
-            break None;
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            return Ok(None);
         }
         thread::sleep(LAUNCHER_POLL_INTERVAL);
-    };
-
-    match status {
-        Some(status) => {
-            let stdout_bytes = stdout_reader.join().unwrap_or_default();
-            let stderr_bytes = stderr_reader.join().unwrap_or_default();
-            Ok(LaunchOutcome::Completed {
-                exited_successfully: status.success(),
-                exit_code: status.code(),
-                text: format!(
-                    "{}\n{}",
-                    String::from_utf8_lossy(&stdout_bytes),
-                    String::from_utf8_lossy(&stderr_bytes)
-                ),
-            })
-        }
-        None => {
-            kill_process_tree(pid);
-            // Belt-and-suspenders repeat targeted at the direct child alone, in case `pid` had
-            // already exited between the last `try_wait` and the tree walk above and so was
-            // absent from it (`kill_process_tree` reads `/proc` at one instant; it cannot see a
-            // process that exited before that read).
-            let _ = child.kill();
-            let _ = child.wait();
-            // The reader threads are deliberately NOT joined here. `kill_process_tree` only
-            // reaches what its one `/proc` snapshot could still see: a process the launcher
-            // forked in the instant between that snapshot and the kill, or one that reparented
-            // away from the launcher before either (a double fork, `setsid`, or simply a plain
-            // orphan whose parent already exited), keeps its inherited copy of the pipes' write
-            // end open and is never touched by this call. Joining here would block
-            // `read_to_end` on that copy until whatever holds it happens to exit on its own,
-            // making this function's own return time unbounded on exactly the kind of process a
-            // caller-declared budget exists to bound (agent-ix/quire-contract-codegen#58) — the
-            // defect returning wearing the correct typed result. A timed-out run carries no
-            // captured text at all (`LaunchOutcome::TimedOut` has none), so nothing this call
-            // needs is lost by leaving the readers running in the background, unjoined, for as
-            // long as whatever they are still attached to keeps them alive.
-            Ok(LaunchOutcome::TimedOut)
-        }
     }
 }
 
-/// Kills `root` and every process descended from it, discovered by walking `/proc`'s live
-/// parent/child relationships at one instant and signalling each by its own positive pid. See
-/// [`run_launcher_with_timeout`] for why this walks the tree instead of sending one signal to a
-/// process group.
-fn kill_process_tree(root: u32) {
-    for pid in descendants_including_self(root) {
-        let _ = Command::new("kill")
-            .args(["-KILL", &pid.to_string()])
-            .status();
-    }
+/// Starts a thread that reads `pipe` to its end, or until `stop` is set and nothing more is
+/// waiting in it.
+fn spawn_capture<R>(pipe: R, stop: &Arc<AtomicBool>) -> thread::JoinHandle<Vec<u8>>
+where
+    R: Read + AsFd + Send + 'static,
+{
+    let stop = Arc::clone(stop);
+    thread::spawn(move || capture_tail(pipe, &stop, CAPTURE_LIMIT, STOP_DRAIN_LIMIT))
 }
 
-/// `root` followed by every live process transitively parented by it, in discovery order.
-/// Built from one snapshot of `/proc`, so a process forked after the snapshot is not included —
-/// the same inherent limitation any tree-walking killer has, standard practice for this problem.
-fn descendants_including_self(root: u32) -> Vec<u32> {
-    let mut children_of: HashMap<u32, Vec<u32>> = HashMap::new();
-    if let Ok(entries) = fs::read_dir("/proc") {
-        for entry in entries.flatten() {
-            let Some(pid) = entry
-                .file_name()
-                .to_str()
-                .and_then(|name| name.parse::<u32>().ok())
-            else {
-                continue;
-            };
-            if let Some(ppid) = parent_pid(pid) {
-                children_of.entry(ppid).or_default().push(pid);
+/// Reads `pipe` until EOF, or until `stop` is set and the pipe has been read dry or
+/// `drain_limit` has passed, returning its last `limit` bytes at most. Everything written
+/// before `stop` was set is already in the pipe when the flag is seen, so the drain after it
+/// loses none of it.
+fn capture_tail<R: Read + AsFd>(
+    mut pipe: R,
+    stop: &AtomicBool,
+    limit: usize,
+    drain_limit: Duration,
+) -> Vec<u8> {
+    let mut kept = Vec::new();
+    let mut chunk = [0_u8; 64 * 1024];
+    let interval = Timespec::try_from(LAUNCHER_POLL_INTERVAL).unwrap_or_default();
+    let no_wait = Timespec::default();
+    let mut drain_until: Option<Instant> = None;
+    loop {
+        if drain_until.is_none() && stop.load(Ordering::Acquire) {
+            drain_until = Instant::now().checked_add(drain_limit);
+            if drain_until.is_none() {
+                break;
             }
         }
-    }
-    let mut order = vec![root];
-    let mut frontier = vec![root];
-    while let Some(pid) = frontier.pop() {
-        if let Some(children) = children_of.get(&pid) {
-            for &child in children {
-                order.push(child);
-                frontier.push(child);
+        if drain_until.is_some_and(|until| Instant::now() >= until) {
+            break;
+        }
+        let wait = if drain_until.is_some() {
+            &no_wait
+        } else {
+            &interval
+        };
+        let mut fds = [PollFd::new(&pipe, PollFlags::IN)];
+        match poll(&mut fds, Some(wait)) {
+            Ok(0) if drain_until.is_some() => break,
+            Ok(0) => continue,
+            Ok(_) => {}
+            Err(Errno::INTR) => continue,
+            Err(_) => break,
+        }
+        match pipe.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(read) => {
+                kept.extend_from_slice(&chunk[..read]);
+                if kept.len() > limit.saturating_mul(2) {
+                    kept.drain(..kept.len() - limit);
+                }
             }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(_) => break,
         }
     }
-    order
+    if kept.len() > limit {
+        kept.drain(..kept.len() - limit);
+    }
+    kept
 }
 
-/// The parent pid recorded in `/proc/<pid>/stat`'s fourth field, or `None` when the process is
-/// gone or the field cannot be read. The executable name in the second field is
-/// parenthesized and may itself contain spaces or parentheses, so the parse splits on the last
-/// `)` in the line rather than on whitespace from the start.
-fn parent_pid(pid: u32) -> Option<u32> {
-    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    let after_comm = stat.rsplit_once(')')?.1;
-    after_comm.split_whitespace().nth(1)?.parse().ok()
+/// Kills the launcher and every process in its process group.
+///
+/// This exists so that a timed-out run does not leave its descendants behind: Kani's launcher
+/// forks `kani-driver`, which forks CBMC, and CBMC is the solver a budget most needs to stop. A
+/// `child.kill()` alone would leave it running after the launcher is gone. The launcher is started
+/// as the leader of its own process group ([`run_launcher_with_timeout`]), every descendant
+/// inherits that group, and one signal to the group reaches them all, however deep, with no
+/// snapshot of the process tree that could miss a process forked a moment later.
+///
+/// A descendant that leaves the group (`setsid`, `setpgid`) is not reached. Nothing in Kani's
+/// process tree does, and this call does not wait for one either way.
+fn kill_process_tree(child: &mut Child) {
+    if let Some(group) = i32::try_from(child.id()).ok().and_then(Pid::from_raw) {
+        let _ = kill_process_group(group, Signal::KILL);
+    }
+    let _ = child.kill();
 }
 
 /// Maps a concluded [`LaunchOutcome`] to the `(outcome, exit_code)` pair
-/// [`KaniExecutionEvidence`] stores, exactly as `execute_kani_obligation` does. Kept as its own
-/// pure function so the mapping is tested directly with a value rather than a real subprocess.
-pub fn launch_evidence(launch: LaunchOutcome) -> (KaniRunOutcome, Option<i32>) {
+/// [`KaniExecutionEvidence`] stores, exactly as `execute_kani_obligation` does. `kind` is the
+/// harness's contract role (`None` for an exact-scalar harness); see [`classify_kani_run`] for
+/// how it affects the zero-checks rule. Kept as its own pure function so the mapping is tested
+/// directly with a value rather than a real subprocess.
+pub fn launch_evidence(
+    launch: LaunchOutcome,
+    kind: Option<ObligationKind>,
+) -> (KaniRunOutcome, Option<i32>) {
     match launch {
         LaunchOutcome::Completed {
             exited_successfully,
             exit_code,
             text,
-        } => (classify_kani_run(exited_successfully, &text), exit_code),
+        } => (
+            classify_transcript(exited_successfully, &KaniTranscript::parse(&text), kind),
+            exit_code,
+        ),
         LaunchOutcome::TimedOut => (
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::TimedOut,
@@ -601,15 +632,31 @@ pub fn launch_evidence(launch: LaunchOutcome) -> (KaniRunOutcome, Option<i32>) {
 /// `pub` so a test asserting "this transcript proves falsification" can route through the same
 /// classifier production uses (IR-220), instead of re-implementing banner parsing that misreads
 /// an inconclusive run — CBMC out-of-memory among them — as a decided failure.
+///
+/// This entry point classifies as a harness that asserts something, so it applies the
+/// zero-checks rule unconditionally; it is not for a precondition harness's run, which goes
+/// through [`launch_evidence`] with its kind. A precondition harness asserts nothing: its one property is
+/// its non-vacuity cover, which Kani reports outside the `** <failed> of <total> failed` count,
+/// so a run that proved the cover satisfied always prints `0 of 0`. [`launch_evidence`] exempts
+/// that kind from the rule and lets the cover decide.
 pub fn classify_kani_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
-    classify_transcript(exited_successfully, &KaniTranscript::parse(text))
+    classify_transcript(exited_successfully, &KaniTranscript::parse(text), None)
 }
 
 /// The classification rule (codegen#55), over the typed transcript only. Kani's prose is read in
 /// [`crate::kani_transcript`] and nowhere else.
-fn classify_transcript(exited_successfully: bool, transcript: &KaniTranscript) -> KaniRunOutcome {
+fn classify_transcript(
+    exited_successfully: bool,
+    transcript: &KaniTranscript,
+    kind: Option<ObligationKind>,
+) -> KaniRunOutcome {
     if exited_successfully && transcript.banner == KaniBanner::Successful {
-        if let Some(summary) = transcript.checks_summary {
+        let checks_gate = if kind == Some(ObligationKind::Precondition) {
+            None
+        } else {
+            transcript.checks_summary
+        };
+        if let Some(summary) = checks_gate {
             let success_checks =
                 usize::try_from(summary.total.saturating_sub(summary.failed)).unwrap_or(usize::MAX);
             let checks_outcome = KaniOutcome::proved_from_checks(
@@ -682,6 +729,8 @@ fn read_file(tool: KaniTool, path: &Path) -> Result<Vec<u8>, KaniToolError> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
 
     const COVER_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `cover`: \"contract assumptions are jointly satisfiable\"\n\n#[test]\nfn kani_concrete_playback_h_1() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![0, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
@@ -828,6 +877,61 @@ mod tests {
         );
     }
 
+    /// A precondition harness asserts nothing; its only property is its cover, which Kani keeps out
+    /// of the checks count. The same `0 of 0` transcript that is a vacuous proof for any other
+    /// harness therefore decides by the cover alone for a precondition harness.
+    ///
+    /// Trace: FR-017-AC-13, TC-027
+    #[test]
+    fn a_precondition_harness_with_no_checks_is_decided_by_its_cover_not_the_zero_checks_rule() {
+        let run = |kind: Option<ObligationKind>, cover: &str| {
+            let text =
+                format!("SUMMARY:\n ** 0 of 0 failed\n\n{cover}\n\n\nVERIFICATION:- SUCCESSFUL\n");
+            launch_evidence(
+                LaunchOutcome::Completed {
+                    exited_successfully: true,
+                    exit_code: Some(0),
+                    text,
+                },
+                kind,
+            )
+            .0
+        };
+        let satisfied = " ** 1 of 1 cover properties satisfied";
+        assert_eq!(
+            run(Some(ObligationKind::Precondition), satisfied),
+            KaniRunOutcome::Verified
+        );
+        assert_eq!(
+            run(Some(ObligationKind::Postcondition), satisfied),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::VacuousProof
+            }
+        );
+        assert_eq!(
+            run(None, satisfied),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::VacuousProof
+            }
+        );
+        assert_eq!(
+            run(
+                Some(ObligationKind::Precondition),
+                " ** 0 of 1 cover properties satisfied"
+            ),
+            KaniRunOutcome::CoverUnsatisfied {
+                satisfied: 0,
+                total: 1
+            }
+        );
+        assert_eq!(
+            run(Some(ObligationKind::Precondition), ""),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::MissingCoverSummary
+            }
+        );
+    }
+
     /// The checks-failed line's parenthetical is not always `unreachable`: this repository's own
     /// `tc_027_an_exhausted_unwind_bound_is_inconclusive_not_falsified` fixture below carries a
     /// real `(38 undetermined)` suffix on a *different* (failed) transcript. Before this test,
@@ -959,36 +1063,19 @@ mod tests {
     }
 
     /// The launcher's descendants are killed when the budget elapses, not only the immediate
-    /// child, reproducing the defect against a real process tree with a genuine grandchild —
-    /// not the direct child under another name. `sh -c '(sh -c "echo $$ > pidfile ; exec sleep
-    /// 30") & wait'` spawns an outer `sh` (the pid `run_launcher_with_timeout` itself sees) that
-    /// forks a real grandchild shell in the background — a distinct pid, never `exec`'d into the
-    /// outer shell — which records its own pid and then execs into `sleep 30`; the outer shell
-    /// only `wait`s, so it stays alive (and stays the parent `kill_process_tree` must walk
-    /// through) for the whole run. This is deliberately not `sh -c 'echo $$ > pidfile ; exec
-    /// sleep 30'` run directly: there, `exec` replaces the shell in place, so the recorded pid
-    /// would be the direct child's own — the one plain `child.kill()` already handles without
-    /// walking `/proc` at all, which is why that version of this test stayed green when
-    /// `kill_process_tree` was disabled outright (confirmed by disabling it: this version goes
-    /// red, that one did not) and is not evidence the tree-walking kill does anything.
+    /// child, against a real process tree with a genuine grandchild. `sh -c '(sh -c "echo $$ >
+    /// pidfile ; exec sleep 30") & wait'` runs an outer `sh` (the pid `run_launcher_with_timeout`
+    /// itself sees) that forks a distinct grandchild shell, which records its pid and execs into
+    /// `sleep 30`; the outer shell only waits. Running the grandchild through `exec` directly in
+    /// the outer shell would record the direct child's own pid, which plain `child.kill()`
+    /// already kills, and so would prove nothing about the group kill.
     ///
-    /// The budget below is not one fixed guess: [`GRANDCHILD_KILL_TIMEOUT_LADDER`] is tried in
-    /// increasing order until the grandchild is confirmed both timed out and killed. A single
-    /// fixed budget cannot be correct here because `kill_process_tree` only ever reaches what
-    /// its one `/proc` snapshot, taken the instant the budget elapses, can still see — the
-    /// module doc says outright that a straggler which has not yet forked by then "is not
-    /// guaranteed killed by this call". A short budget races that snapshot against however long
-    /// the OS takes, under whatever load this test happens to run under, to actually schedule,
-    /// fork and exec the grandchild, so a single fixed budget can lose that race under load
-    /// without `kill_process_tree` having done anything wrong. Only every rung up to the
-    /// ladder's top losing the race is a real finding about `kill_process_tree`; any earlier
-    /// rung losing it is exactly the "not guaranteed" case the module doc already describes.
+    /// The budget is tried up a ladder because a budget shorter than the time the OS takes to
+    /// fork the grandchild ends the run before any grandchild exists; a grandchild that died
+    /// before writing its pidfile counts as killed.
     ///
-    /// A rung can also "lose" not because the grandchild is still running but because it died
-    /// before it finished writing its own pidfile — a race at the *other* end of the same
-    /// window. That is read as at least as strong evidence of a kill as finding the pidfile and
-    /// then finding `/proc/<pid>` gone, not weaker, and is treated the same way: retry on an
-    /// earlier rung, accept on the last.
+    /// Trace: FR-017-AC-17, TC-027
+    #[cfg(target_os = "linux")]
     #[test]
     fn a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child() {
         let mut last_surviving_grandchild = None;
@@ -1044,9 +1131,8 @@ mod tests {
         panic!(
             "the timed-out run's grandchild ({last_surviving_grandchild:?}) was still present \
              in `/proc` even at the largest budget in GRANDCHILD_KILL_TIMEOUT_LADDER \
-             ({GRANDCHILD_KILL_TIMEOUT_LADDER:?}); kill_process_tree must be reaching every \
-             descendant its own `/proc` snapshot could see, not merely losing a race against \
-             scheduling delay"
+             ({GRANDCHILD_KILL_TIMEOUT_LADDER:?}); kill_process_tree must reach every member of \
+             the launcher's process group"
         );
     }
 
@@ -1059,6 +1145,7 @@ mod tests {
     /// reaps it in its own time (measured here: PID 1 left killed grandchildren as zombies
     /// for seconds), so `/proc/<pid>` outlives a process that is already dead. Dead means
     /// absent or in state `Z`/`X`; anything else after the wait is a survivor.
+    #[cfg(target_os = "linux")]
     fn process_gone_within(pid: i32) -> bool {
         let deadline = Instant::now() + GRANDCHILD_REAP_WAIT;
         loop {
@@ -1081,6 +1168,7 @@ mod tests {
     /// How long a delivered SIGKILL is given to take effect before its target counts as a
     /// survivor. Far longer than signal delivery takes; a process still running after it was
     /// not killed.
+    #[cfg(target_os = "linux")]
     const GRANDCHILD_REAP_WAIT: Duration = Duration::from_secs(2);
 
     /// Successive budgets [`a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`]
@@ -1090,6 +1178,7 @@ mod tests {
     /// direct local measurement — this fix's own local validation environment could not
     /// reproduce the original flake at all — sized so that exhausting it is a real finding
     /// about `kill_process_tree`, not an unlucky scheduling instant.
+    #[cfg(target_os = "linux")]
     const GRANDCHILD_KILL_TIMEOUT_LADDER: [Duration; 5] = [
         Duration::from_millis(200),
         Duration::from_millis(500),
@@ -1098,16 +1187,13 @@ mod tests {
         Duration::from_secs(5),
     ];
 
-    /// A process the launcher forks (or that reparents to it) in the instant before this call's
-    /// `/proc` snapshot-and-kill sweep survives that sweep and keeps its inherited copy of the
-    /// pipes' write end open — reproduced directly with the reviewer's own case: `( sleep 45 &
-    /// )` backgrounds and immediately orphans a `sleep 45` (its parent, the subshell, exits at
-    /// once), while `exec sleep 45` replaces the outer shell — this call's own direct child —
-    /// with a second `sleep 45` that `kill_process_tree` does reach and kill. If this function
-    /// waited for the stdout/stderr reader threads to see EOF on every timeout, it would block
-    /// on the orphan's still-open copy of the pipe until that `sleep 45` finished on its own —
-    /// unbounded, and exactly the defect #58 exists to remove, back again behind the correct
-    /// typed result. This must return in about 200ms, nowhere near the orphan's own 45s.
+    /// A process orphaned just before the kill keeps its inherited copy of the pipes' write end
+    /// open: `( sleep 45 & )` orphans a `sleep 45` at once, while `exec sleep 45` replaces the
+    /// outer shell, the direct child. Waiting for the capture threads to see EOF would block
+    /// until the orphan's `sleep 45` ended on its own, which is unbounded; the call must return
+    /// in about 200ms.
+    ///
+    /// Trace: FR-017-AC-16, TC-027
     #[test]
     fn a_process_orphaned_just_before_the_kill_does_not_block_this_calls_own_return() {
         let mut command = Command::new("sh");
@@ -1129,7 +1215,7 @@ mod tests {
     /// A timed-out launch maps to no exit code and `Inconclusive { reason: TimedOut }`.
     #[test]
     fn a_timed_out_launch_carries_no_exit_code_into_the_evidence() {
-        let (outcome, exit_code) = launch_evidence(LaunchOutcome::TimedOut);
+        let (outcome, exit_code) = launch_evidence(LaunchOutcome::TimedOut, None);
         assert_eq!(exit_code, None);
         assert_eq!(
             outcome,
@@ -1163,5 +1249,165 @@ mod tests {
             }
             LaunchOutcome::TimedOut => panic!("a fast process must not be reported as timed out"),
         }
+    }
+
+    /// A stream longer than the capture limit is drained to its end but only its tail is kept,
+    /// because Kani prints its verdict last; the launcher's own memory is bounded by the limit,
+    /// not by what the child prints.
+    ///
+    /// Trace: FR-017-AC-14, TC-027
+    #[test]
+    fn a_stream_longer_than_the_capture_limit_keeps_only_its_tail() {
+        let (reader, mut writer) = io::pipe().unwrap();
+        let producer = thread::spawn(move || {
+            for _ in 0..100 {
+                writer.write_all(&[b'x'; 1000]).unwrap();
+            }
+            writer.write_all(b"VERIFICATION:- SUCCESSFUL").unwrap();
+        });
+        let kept = capture_tail(reader, &AtomicBool::new(false), 4096, STOP_DRAIN_LIMIT);
+        producer.join().unwrap();
+        assert_eq!(kept.len(), 4096);
+        assert!(kept.ends_with(b"VERIFICATION:- SUCCESSFUL"));
+    }
+
+    /// Runs `capture_tail` on its own thread and returns what it kept, or `None` if it had not
+    /// returned within `within`, so a capture that never stops fails the test instead of
+    /// hanging it.
+    fn capture_within(
+        reader: io::PipeReader,
+        stop: &Arc<AtomicBool>,
+        drain_limit: Duration,
+        within: Duration,
+    ) -> Option<Vec<u8>> {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let stop = Arc::clone(stop);
+        thread::spawn(move || {
+            let _ = sender.send(capture_tail(reader, &stop, CAPTURE_LIMIT, drain_limit));
+        });
+        receiver.recv_timeout(within).ok()
+    }
+
+    /// Bytes already in the pipe when the stop flag is seen are returned even though a write end
+    /// is still open.
+    ///
+    /// Trace: FR-017-AC-16, TC-027
+    #[test]
+    fn a_capture_thread_told_to_stop_returns_what_is_already_in_the_pipe() {
+        let (reader, mut writer) = io::pipe().unwrap();
+        writer.write_all(b"written before stop").unwrap();
+        let stop = Arc::new(AtomicBool::new(true));
+        let kept = capture_within(reader, &stop, STOP_DRAIN_LIMIT, Duration::from_secs(10));
+        assert_eq!(kept.as_deref(), Some(&b"written before stop"[..]));
+        drop(writer);
+    }
+
+    /// A capture thread that is idle in its poll, with a write end still open and nothing more
+    /// coming, stops once the flag is set later.
+    ///
+    /// Trace: FR-017-AC-16, TC-027
+    #[test]
+    fn a_capture_thread_blocked_on_an_open_idle_pipe_stops_when_the_flag_is_set() {
+        let (reader, writer) = io::pipe().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let setter = {
+            let stop = Arc::clone(&stop);
+            thread::spawn(move || {
+                thread::sleep(3 * LAUNCHER_POLL_INTERVAL);
+                stop.store(true, Ordering::Release);
+            })
+        };
+        let kept = capture_within(reader, &stop, STOP_DRAIN_LIMIT, Duration::from_secs(10));
+        setter.join().unwrap();
+        assert_eq!(kept, Some(Vec::new()), "the capture must stop on the flag");
+        drop(writer);
+    }
+
+    /// The drain after the stop flag ends at its limit even when bytes are still waiting: with a
+    /// zero limit nothing is read.
+    ///
+    /// Trace: FR-017-AC-16, TC-027
+    #[test]
+    fn a_capture_thread_stops_reading_when_its_drain_limit_has_passed() {
+        let (reader, mut writer) = io::pipe().unwrap();
+        writer.write_all(b"waiting in the pipe").unwrap();
+        let stop = Arc::new(AtomicBool::new(true));
+        let kept = capture_within(reader, &stop, Duration::ZERO, Duration::from_secs(10));
+        assert_eq!(kept, Some(Vec::new()), "read past a zero drain limit");
+        drop(writer);
+    }
+
+    /// A straggler that writes without pause cannot hold the capture thread past the drain
+    /// limit after the flag is set.
+    ///
+    /// Trace: FR-017-AC-16, TC-027
+    #[test]
+    fn a_capture_thread_stops_within_the_drain_limit_while_a_straggler_keeps_writing() {
+        let (reader, mut writer) = io::pipe().unwrap();
+        let running = Arc::new(AtomicBool::new(true));
+        let straggler = {
+            let running = Arc::clone(&running);
+            thread::spawn(move || {
+                while running.load(Ordering::Acquire) {
+                    if writer.write_all(&[b'x'; 4096]).is_err() {
+                        break;
+                    }
+                }
+            })
+        };
+        let stop = Arc::new(AtomicBool::new(false));
+        let setter = {
+            let stop = Arc::clone(&stop);
+            thread::spawn(move || {
+                thread::sleep(3 * LAUNCHER_POLL_INTERVAL);
+                stop.store(true, Ordering::Release);
+            })
+        };
+        let kept = capture_within(
+            reader,
+            &stop,
+            STOP_DRAIN_LIMIT,
+            STOP_DRAIN_LIMIT + Duration::from_secs(10),
+        );
+        running.store(false, Ordering::Release);
+        setter.join().unwrap();
+        straggler.join().unwrap();
+        assert!(kept.is_some(), "the drain limit must end the capture");
+    }
+
+    /// A launcher that prints far more than the capture limit and then exits still reports its
+    /// real exit status and the end of its output, with the retained text bounded.
+    ///
+    /// Trace: FR-017-AC-14, TC-027
+    #[test]
+    fn a_launcher_printing_more_than_the_limit_completes_with_bounded_text() {
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(format!(
+            "head -c {} /dev/zero | tr '\\0' x; printf '\\nVERIFICATION:- SUCCESSFUL'",
+            3 * CAPTURE_LIMIT
+        ));
+        let LaunchOutcome::Completed {
+            exit_code, text, ..
+        } = run_launcher_with_timeout(command, Duration::from_secs(60)).unwrap()
+        else {
+            panic!("the launcher exits on its own within its budget");
+        };
+        assert_eq!(exit_code, Some(0));
+        assert!(text.len() <= CAPTURE_LIMIT + 2);
+        assert!(text.contains("VERIFICATION:- SUCCESSFUL"));
+    }
+
+    /// A timeout too large to add to the current instant means no deadline, not a panic.
+    ///
+    /// Trace: FR-017-AC-15, TC-027
+    #[test]
+    fn a_timeout_of_duration_max_never_elapses_and_does_not_panic() {
+        let mut command = Command::new("sh");
+        command.arg("-c").arg("printf done");
+        let outcome = run_launcher_with_timeout(command, Duration::MAX).unwrap();
+        assert!(matches!(
+            outcome,
+            LaunchOutcome::Completed { exit_code: Some(0), ref text, .. } if text.contains("done")
+        ));
     }
 }
