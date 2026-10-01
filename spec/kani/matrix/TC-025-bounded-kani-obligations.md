@@ -110,6 +110,33 @@ unsatisfiable requires as `cover_unsatisfied`.
    arm, a `Refused` arm and a failing catch-all. The installed backend verifies the healthy `x + 1`
    harness and falsifies it with the oracle's `Add` replaced by `Subtract` (FR-015-AC-37).
 
+## V2 clause claims and the V2 census (planned, IR-489)
+
+10. Request one V2 clause claim each over a `precondition`, a `postcondition` and an
+    `invariant` node of an admitted `CheckedPackageV2`. Each yields one harness of its own
+    kind with arguments equal to the clause's parameter nodes and their IR domains, and
+    none takes a bound from a caller (FR-015-AC-38, FR-015-AC-39).
+11. Generate a clause of connectives and comparisons and compare the embedded oracle with
+    the FR-014 crate's function byte for byte; generate the arithmetic postcondition
+    `amount < 1000` implies `amount + 1 <= 1000` and run the installed backend over the
+    unmutated clause and over one whose `+` returns `left + right + 1` (FR-015-AC-40,
+    FR-015-AC-41). The package comes from QSL's facade on source, never a copied fixture
+    (AD-004 step 4a).
+12. Request a clause with an unsupported operator, a node that is not a state clause, a
+    clause value outside the three kinds, a non-Boolean body and an absent node id beside a
+    supported item. Each unsupported item keeps its reason and gets no harness
+    (FR-015-AC-42). Request a postcondition without its sibling precondition
+    (FR-015-AC-43).
+13. Declare the four invalid censuses of FR-015-AC-22 and the three valid censuses of
+    FR-015-AC-25 on V2 clause claims, with the dependency list reordered. The invalid ones
+    are refused; the valid ones fold into the identity and settle `ready`, `incomplete` and
+    `incomplete`, and every harness records execution `not_run` (FR-015-AC-44,
+    FR-015-AC-45).
+14. Count the covers and locate each relative to the assumptions and the subject call; run
+    a clause with jointly unsatisfiable assumptions; regenerate from equal inputs; vary the
+    unwind bound, the subject, a parameter's domain and the source span (FR-015-AC-46 to
+    FR-015-AC-48).
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
