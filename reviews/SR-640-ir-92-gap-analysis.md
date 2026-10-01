@@ -59,3 +59,26 @@ test) agrees with this reading. The refusal clause is FND-001.
 Code with no owning AC: none. `ProvidedDocument` and `FrameReplayError::{Name, Transcript, Envelope}`
 are part of the FR-015-AC-33 builder. State-clause postcondition replay is absent, with no stub,
 which matches the PR's stated scope (QSL-336 is not landed).
+
+## Dispositions
+
+Round 1, reviewed at e0fc6407f5812faa593af53581f92f265b491f29 (fix commit e0fc640).
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e0fc640 |
+| FND-002 | fixed | e0fc640 |
+
+Evidence for this round:
+- **FND-001.** The twin's domain package now declares `transfer`, and no clause names it. The
+  refusal test loops over `transfer` and `withdraw`. For each one it asserts
+  `UnknownOperation { selection }` whose `selection.operation` is the operation passed in.
+  - Both operations return the same variant, so I checked that the `transfer` case is the declared
+    branch and not the undeclared one. Probe P3 adds a `post` clause naming
+    `Bank::Account::transfer` to the twin unit. With that clause the unit compiles, `FrameReplay`
+    builds for `transfer`, and the test fails at "the unit names no frame for `transfer`".
+  - So `transfer` is declared and resolvable, and it is refused only because no clause names it.
+    This is a faithful test of FR-015-AC-35.
+- **FND-002.** The new test `tc_026_libraries_sharing_a_source_owner_are_refused` reaches
+  `ReplayPackageError::Dependencies(DependencyLockError::Input(_))`. Probe P5 (ignoring the
+  `DependencyInput::new` refusal) makes it fail.

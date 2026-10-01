@@ -58,3 +58,24 @@ What is right:
 - TC-025's Expected Results item names the default-suite frame request builder and the no-frame
   refusal under FR-015-AC-33.
 - `make spec` passed.
+
+## Dispositions
+
+Round 1, reviewed at e0fc6407f5812faa593af53581f92f265b491f29 (fix commit e0fc640).
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e0fc640 |
+| FND-002 | fixed | e0fc640 |
+
+Evidence for this round:
+- **FND-001.** The TC-025 index row now lists FR-015-AC-13 and FR-015-AC-26 to FR-015-AC-36. The
+  TC-026 row lists FR-016-AC-14 to FR-016-AC-20 one by one. The FR table rows (AC-26 to AC-36 for
+  TC-025, and AC-14 to AC-20 for TC-026) agree with both.
+- **FND-002.** FR-016-AC-14 is split into AC-14 to AC-20 and FR-015-AC-33 into AC-33 to AC-36.
+  - Each new AC has a single behaviour, and each has its own tagged test: AC-15 is the
+    request-shape test; AC-16, AC-17 and AC-18 are the refusal tests; AC-19 and AC-20 are new
+    tests; AC-33/34 share the envelope test; AC-35 is the refusal loop; AC-36 is the settle test.
+  - Probes P1, P2, P4 and P5 show these tests fail when the behaviour is removed.
+  - No AC was deleted: the old AC-14 and AC-33 ids are kept, with narrowed text.
+- `make spec` passed.

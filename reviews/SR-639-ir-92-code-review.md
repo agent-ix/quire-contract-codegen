@@ -95,3 +95,49 @@ passed: `tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl`,
 `tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_replay` and
 `tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_refuses`.
 I did not re-run the full 8-test `make kani`.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The fix round rewrapped the `ReplayPackage::new` doc comment by hand and left one line at 166 characters. The rest of the item is wrapped at the 100-character width `rustfmt.toml` sets for this module. rustfmt does not wrap comments, so `make fmt-check` passes. This is cosmetic only. | src/spine_replay.rs:381 |
+
+## Dispositions
+
+Round 1, reviewed at e0fc6407f5812faa593af53581f92f265b491f29 (fix commit e0fc640). CG main is still
+8fcb51f, so the PR does not need a rebase.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e0fc640 |
+| FND-002 | fixed | e0fc640 |
+| FND-003 | fixed | e0fc640 |
+| FND-004 | fixed | e0fc640 |
+| FND-005 | still-open | New this round. The doc line at src/spine_replay.rs:381 is 166 characters and needs rewrapping. Low and cosmetic, so it does not block merge. |
+
+Evidence for this round:
+- **FND-001.** The settle test is now `tc_025_frame_replay_settles_a_forbidden_and_a_granted_write`.
+  Both legs go through `FrameReplay::replay`. The forbidden leg asserts `category() == Violation`
+  and that `found()` names the field write `account`/`audit`. The granted leg asserts
+  `Inconclusive`, `DisagreementCause::Verdicts{Violation, Success}` and `found().is_none()`.
+- **FND-002.** `ReplayInputs` has no `function` field any more, and `ReplayPackage::new` takes
+  `(inputs, function: &str)`. interface-001 matches the new signature. Nothing reads a function
+  name on the frame path.
+- **FND-003.** The `Input` doc now names only libraries that share an owner, and it points the
+  case of a library sharing the unit's owner to `ReplayPackageError::CallSite`.
+- **FND-004.** The tag on `mod frame_replay` now reads `Implements: FR-015-AC-33`.
+
+Mutation probes at e0fc640. Each was run with `cargo test --locked --test it <filter>` and then
+reverted.
+- P1: `admit` without the sort. Killed by the FR-016-AC-15 request-shape test.
+- P2: the dependency entry carries the unit's `package_id`. Killed by the AC-14 replay test and
+  the AC-15 test.
+- P4: `clause_node = payload.anchor`. Killed by the AC-33/34 envelope test, the AC-36 settle test
+  and the envelope-disagrees test.
+- P5: `DependencyInput::new(..).unwrap_or_default()`. Killed by the new FR-016-AC-19 test.
+
+Gates at e0fc640:
+- `make ci` with a private scratchpad TRUSTED_HOME exited 0. Each test run gave 94 unit and 238
+  integration tests passed, with 8 ignored.
+- Kani lane: `tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl` and
+  `tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_replay` both passed.

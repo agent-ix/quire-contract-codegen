@@ -379,8 +379,9 @@ pub struct ReplayPackage {
 }
 
 impl ReplayPackage {
-    /// Compiles `inputs.source` against the lock's dependencies and locates `function` in it. A dependency the unit imports is compiled from its lock source; one the
-    /// unit does not import changes nothing.
+    /// Compiles `inputs.source` against the lock's dependencies and locates `function` in it.
+    /// A dependency the unit imports is compiled from its lock source; one the unit does not
+    /// import changes nothing.
     ///
     /// # Errors
     ///
