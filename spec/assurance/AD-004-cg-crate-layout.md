@@ -658,19 +658,27 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      the envelope. AD-001's Failure view keeps each a distinct typed state before the map.
    - QSL's answer on CG-side refusals (relayed; keyed on when the refusal happens, and consistent
      with the when-rule in AD-003's R-Q1 as in the follow-up PR 216, which is not edited here):
-     a refusal before Kani runs, when the obligation's own input is refused (a refused caller
-     lock; nothing was proved), is `Declined(ProofRefusalCause)`, mapped by the IR-outcome map.
-     A replay setup refused on data after a refuted Kani run (`CallSiteRefusal` `Compile` or
-     `UnknownFunction`, `InvalidFunction`, `Name`, a dependency-selection refusal,
-     `DependencyLockError`, `DecodeFailure`) is `Inconclusive(ReplayRefused)` with a QSL code
-     catalogued in QSL-352, which lands with this step. Faults stay `Failed`. Until QSL-352's
-     codes exist, these refusals map to `Failed` as the interim.
+     a refusal before Kani runs, when the obligation's own input is refused (IR's `Refused`,
+     `InvalidInput` and `IncompleteInput` outcomes; nothing was proved), is
+     `Declined(ProofRefusalCause)`, mapped by the IR-outcome map. A caller-lock refusal is not
+     that case: in CG it is `DependencyLockError`, reached through `ReplayPackageError::Dependencies`
+     (interface-001; FR-016-AC-16 to AC-19), which happens in replay setup AFTER Kani refuted, so
+     it is the after-Kani case and not a `Declined` candidate. A replay setup refused on data
+     after a refuted Kani run (`CallSiteRefusal` `Compile` or `UnknownFunction`,
+     `InvalidFunction`, `Name`, a dependency-selection refusal, `DependencyLockError`,
+     `DecodeFailure`) is `Inconclusive(ReplayRefused)` with a QSL code catalogued in QSL-352, which
+     lands with this step. Faults stay `Failed`. Until QSL-352's codes exist, these refusals map
+     to `Failed` as the interim.
    - Layering. The C-09 map is a public entry in `kani/terminal.rs` that the driver calls; the
      driver runs the obligation and the replay and pairs the two, as QSL's merged T-13 says. Its
      first input is IR's `KaniOutcome` (ADR-013 C-09's `KaniOutcomeKind`); the FR-029 map from
      CG's `KaniRunOutcome` is the other entry. Its second input is a replay-outcome type that
      `kani/terminal.rs` defines from `qsl-replay` types (a QSL result, a QSL `ReplayRefusal`, a
-     QSL fault) plus one variant for a CG-origin defect, so `kani` imports nothing from `replay`.
+     QSL fault) plus two CG-raised variants, so `kani` imports nothing from `replay`: a CG-origin
+     defect, and a setup refusal on data (the after-Kani case above) that carries a QSL code from
+     QSL-352. The setup-refusal variant needs QSL-352's codes to be constructible by CG, so it
+     is an open item on QSL-352: until those codes exist the variant cannot be built, and `replay/`
+     converts those refusals to the CG-defect variant (the `Failed` interim).
      `replay/` imports `kani` (downward) and owns the conversion: it turns its own errors
      (`SpineReplayError`, the envelope failure, the out-of-bound playback) and QSL's result into
      that type, so a CG-origin failure reaches the map as the CG-defect variant and becomes
