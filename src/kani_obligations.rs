@@ -2381,7 +2381,7 @@ mod tests {
     // and finite, just outside `i64` -- so citing it would misdescribe what this test proves.
     //
     // `ScalarLoweringRefusal::NoCheckedBound` and `::NoIntegerDomain` were removed rather than
-    // given a test here: `check_parameters`'s `Bounds::equal` (`exact_scalar.rs`) returns `Ok`
+    // given a test here: `check_parameters`'s `Bounds::equal` (`oracle/scalar/mod.rs`) returns `Ok`
     // only after reading exactly one `integer_range` bound via the same `literal_integer` this
     // module's `derive_domain` uses on the identical node, so for `IntegerArithmetic` -- the only
     // family `ScalarOperation::of` renders -- neither an empty `checked_bounds` nor a checked bound with
