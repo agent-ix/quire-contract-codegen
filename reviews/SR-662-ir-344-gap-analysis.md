@@ -2,7 +2,7 @@
 id: "SR-662"
 title: "CG PR 215 gap analysis: AD-004 migration plan against the code and FR-015"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@bfaaa849a100aee4a49959554b4607f0410227b1 (review), b0c000866656cb3f4044acd10ed15ccb53b5d463 (disposition pass 1), fe571ba8cc34b33a7beea59c6c00c4f902a25a96 (disposition pass 2); spec/assurance/AD-004-cg-crate-layout.md; measured against src/ and tests/it/ at origin/main 2fad745"
+scope: "agent-ix/quire-contract-codegen@bfaaa849a100aee4a49959554b4607f0410227b1 (review), b0c000866656cb3f4044acd10ed15ccb53b5d463 (disposition pass 1), fe571ba8cc34b33a7beea59c6c00c4f902a25a96 (disposition pass 2), 9d06673a824c498b6d1b447b7fbf5efe25e6b2c2 (disposition pass 3); spec/assurance/AD-004-cg-crate-layout.md; measured against src/ and tests/it/ at origin/main 2fad745"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AD-004
     type: references
@@ -79,3 +79,19 @@ strategy chain, not FR-015.
 | --- | --- | --- |
 | FND-006 | still-open | fe571ba changes only step 5; 4a still builds the V1 control package through qsl-replay, which cannot yield a BoundPackage (lower_for is in QSL's root crate), and 4c's intent still omits rule clauses and integer arithmetic |
 | FND-007 | still-open | fe571ba changes only step 5; the corpus still "renders through render.rs and stays as it is" with no cover, and no step says when L-3 lands |
+
+## New findings (disposition pass 3)
+
+Re-reviewed at 9d06673. The control does exist in quire-integration (`tests/qsl_kani_exemplar.rs`,
+read in pass 1), so moving L-5 onto that test instead of a CG copy is sound and copies nothing.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | L-5's test is quire-integration's exemplar suite, "run against CG's branch by each step's PR", but no mechanism is named. quire-integration resolves CG from its own lock, so each step needs a local run with a `[patch]` to the CG branch and its transcript in the PR, as step 2 requires for PR 210. Also, 4c says "the arithmetic control moves onto the V2 arm and passes there", but that test calls `generate_kani_bundle` and only the QSL-owned follow-up after 4e can move it. Reword 4c so the move is that follow-up, which 4f already waits for | spec/assurance/AD-004-cg-crate-layout.md:353-367, :524-527, :592-596 |
+
+## Dispositions (round 3)
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | 9d06673 |
+| FND-007 | fixed | 9d06673 |

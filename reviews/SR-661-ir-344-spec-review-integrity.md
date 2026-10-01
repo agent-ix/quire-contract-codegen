@@ -2,7 +2,7 @@
 id: "SR-661"
 title: "CG PR 215 spec review (integrity): AD-004 CG crate layout"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@bfaaa849a100aee4a49959554b4607f0410227b1 (review), b0c000866656cb3f4044acd10ed15ccb53b5d463 (disposition pass 1), fe571ba8cc34b33a7beea59c6c00c4f902a25a96 (disposition pass 2); spec/assurance/AD-004-cg-crate-layout.md, spec/spec.md (References); measured against src/ at origin/main 2fad745"
+scope: "agent-ix/quire-contract-codegen@bfaaa849a100aee4a49959554b4607f0410227b1 (review), b0c000866656cb3f4044acd10ed15ccb53b5d463 (disposition pass 1), fe571ba8cc34b33a7beea59c6c00c4f902a25a96 (disposition pass 2), 9d06673a824c498b6d1b447b7fbf5efe25e6b2c2 (disposition pass 3); spec/assurance/AD-004-cg-crate-layout.md, spec/spec.md (References); measured against src/ at origin/main 2fad745"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AD-004
     type: references
@@ -126,3 +126,34 @@ none is a caller refusal. PR 214 at 0cbb45f now names `quire-canonical` directly
 | FND-013 | still-open | fe571ba leaves step 1a's precondition unchanged: CG's own Cargo.lock resolves quire-canonical from QSL's tag, so a direct branch=main dependency fails CG's own make deny one-copy gate; the precondition still names only the driver's gate |
 | FND-014 | still-open | Step 2b's type list is unchanged at fe571ba; EmbeddedOracle, ScalarObligationIdentity/Argument, StateFrameIdentity/Scope/FieldDomain and StateComparison are still not listed |
 | FND-015 | still-open | The PR 214 half is resolved (AD-003 at 0cbb45f names quire-canonical directly); the IR PR 241 AD-006 decision A (direct quire-contract-model dependency, R3-C2) is still not reflected in AD-004 |
+
+## New findings (disposition pass 3)
+
+Re-reviewed at 9d06673. `make spec` exits 0 with the 3 baseline warnings at the head, and also
+with merged AD-002 and AD-003 from origin/main d3acbe5 laid over it. Against origin/main
+(PR 214 merged as d3acbe5), `git merge-tree` reports a conflict in `spec/spec.md` References only:
+keep the AD-002, AD-003 and AD-004 lines.
+
+Layering verified. `kani/terminal.rs` defining its replay-outcome type from `qsl-replay` types
+makes `kani` depend on `qsl-replay`. That dependency is external to the crate, so the
+crate-internal direction rules do not govern it. `qsl-replay` is the one QSL crate T12-A allows,
+and `kani` already names `qsl_replay::TerminalValue` for FR-029 and FR-030. With `replay/`
+converting into that type, `kani` imports nothing from `replay`.
+
+Step 1d verified at IR origin/main: AD-006 is merged with R3-C2, and `src/lib.rs:12` holds
+`pub use quire_contract_model::*;`.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-017 | low | PR 214 is merged (d3acbe5), but AD-004 still says AD-002 and AD-003 "are proposed in PR 214 and are not at this base ... PR 214 merges first", and cites them as "(PR 214, pending)" in four more places. The rebase should drop "pending", and may add AD-002 and AD-003 to `relationships` | spec/assurance/AD-004-cg-crate-layout.md:32-34, :325, :431, :474, :724 |
+| FND-018 | low | Step 5's open question says it uses the "same wording as R-Q1 in CG PR 214", but merged AD-003 R-Q1 (AD-003:345) is the request for inconclusive causes, not this Declined-or-refusal question. QSL's answer, relayed by the leader and not in any merged text I could read: an obligation input refused before Kani gives `Declined(ProofRefusalCause)`; a replay setup refused on data after a refuted Kani run gives `Inconclusive(ReplayRefused)` with a QSL code catalogued in QSL-352, which lands with step 5; faults give `Failed`; `Failed` in the interim. `DependencyLockError` and the witness `DecodeFailure` arise after a refuted run, so step 5 should record that answer and move them out of the CG-defect variant when QSL-352's codes land, not leave the question open | spec/assurance/AD-004-cg-crate-layout.md:641-656 |
+| FND-019 | low | Who calls `qsl_replay::replay` is left ambiguous. QSL's merged ADR-011 E9 (the T-13 driver row) says the driver calls `qsl_replay::replay` with the request CG's replay adapter builds. AD-004's table says the driver "calls `replay/` for the replay outcome", which reads as CG's `replay/` still running the replay, as `spine_replay` does today and as AD-001:162 says. State that `replay/` builds the request and converts QSL's result (and its own errors) into the C-09 input, or record the deviation from T-13 | spec/assurance/AD-004-cg-crate-layout.md:394-396, :657-666 |
+
+## Dispositions (round 3)
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-013 | fixed | 9d06673 |
+| FND-014 | fixed | 9d06673 |
+| FND-015 | fixed | 9d06673 |
+| FND-016 | fixed | 9d06673 |
