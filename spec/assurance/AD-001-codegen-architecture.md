@@ -189,7 +189,7 @@ success fallback, and no requirement converts one into another.
 
 The views and decisions above state the target. At this revision:
 
-- `src/kani_witness_join.rs` decodes the playback through Contract IR's `Witness`.
+- `src/kani_witness_join.rs` decodes the playback itself into `qsl_replay::WitnessValue`; it imports no Contract IR witness type.
   The bounded-Kani corpus (`src/bounded_kani_corpus.rs`) generates and classifies cases and
   retains no counterexample packet and claims no replay: every caller of the retired replay
   passed a constant closure as its native evaluator, so the verdict was predetermined.

@@ -18,6 +18,7 @@
 
 use std::{fs, path::PathBuf};
 
+use qsl_replay::WitnessValue;
 use qsl_replay::{
     ByteDigest, CanonicalAssignment, DependencySelectionsCause, DigestDomain, DigestRecord,
     ProofCategory, ReplayRefusal, ReplaySource, ScalarLimits, StageLimits, Verdict, WireNodeId,
@@ -29,7 +30,6 @@ use quire_contract_codegen::{
     KaniObligationHarness, KaniRunOutcome, LockedSource, ReplayInputs, ReplayPackage,
     ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
 };
-use quire_contract_ir::kani::WitnessValue;
 
 use super::kani_obligations::{
     bound_package, supported_contract_harnesses, write_crate, REAL_KANI_TIMEOUT,
@@ -280,7 +280,7 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
             .zip([1_i64, 5])
             .map(|(parameter, value)| CanonicalAssignment {
                 parameter: WireNodeId::from_hex(parameter.node_id).expect("a node id"),
-                value,
+                value: WitnessValue::Integer(value),
             })
             .collect();
         package.request("x", ReplaySource::Input(input))

@@ -7,8 +7,7 @@
 //! transcript, and this module is the only code that does so. It turns the transcript into a
 //! typed [`KaniTranscript`]; verdict classification reads fields of that value and never scans
 //! text for Kani's wording. A falsifying playback block is passed through verbatim as the
-//! counterexample; it is decoded later by the IR crate's witness parser
-//! (`quire_contract_ir::kani::Witness::parse`, via `kani_witness_join`), not here.
+//! counterexample; it is decoded later by `kani_witness_join`, not here.
 //!
 //! The wording matched here is Kani's, not ours. A Kani release that changes it changes what this
 //! module recognises; the transcripts in `tests/fixtures/kani-0.67.0/` are real captures.

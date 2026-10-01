@@ -13,13 +13,12 @@ use qsl_replay::{
     call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DependencyEntryWire, DigestDomain,
     DigestRecord, Identifier, MalformedTranscript, ProofCategory, QualifiedName, ReplayRefusal,
     ReplayRequestWire, ReplayResult, ReplaySource, ScalarLimits, SourceIdentity, StageLimits,
-    StateEnvironment, Witness, WitnessArmResult, WitnessSettlement,
+    StateEnvironment, Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
 };
-use quire_contract_ir::kani::WitnessValue;
 
 use crate::{
-    kani_obligations::KaniObligationIdentity, kani_witness_join::decode_falsification,
-    kani_witness_join::first_out_of_domain,
+    kani_obligations::KaniObligationIdentity,
+    kani_witness_join::{decode_falsification, first_out_of_domain, DecodeFailure},
 };
 
 /// One parameter of the function the replay selects: the harness argument name a decoded value
@@ -374,17 +373,6 @@ impl ReplayPackage {
     }
 }
 
-/// Why a transcript did not decode: the stable cause code and the identities the decoder named.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DecodeFailure {
-    /// Stable machine-readable cause code.
-    pub code: String,
-    /// The source or input identity that first caused the refusal.
-    pub source_id: String,
-    /// The profile and bound context of the refusal.
-    pub context: String,
-}
-
 /// Why a counterexample is evidence failure: the backend's evidence and the native replay do not
 /// establish the same typed violation.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -435,13 +423,7 @@ pub fn replay_counterexample(
         transcript,
     ) {
         Ok(values) => values,
-        Err(outcome) => {
-            return failure(EvidenceFailureCause::Decode(DecodeFailure {
-                code: outcome.code,
-                source_id: outcome.source_id,
-                context: outcome.context,
-            }))
-        }
+        Err(cause) => return failure(EvidenceFailureCause::Decode(cause)),
     };
     if let Some(argument) = first_out_of_domain(&identity.arguments, &values) {
         return failure(EvidenceFailureCause::Domain {
