@@ -36,7 +36,8 @@ results are each refused with their own typed cause; a launcher stand-in that ex
 and exports nothing is refused, one that fails and exports nothing is `NoVerdict`.
 
 Per-check view (FR-017-AC-20): classify the falsified and the exhausted-unwind captures and read each
-check's id, class, file, line and status; a line of `unknown` is absent and a non-numeric line is refused.
+check's id, class, file, line and status; a line of `unknown` is absent and a non-numeric line is refused; serialize a view and read the keys
+`id`, `class`, `location { file, line }` and `status`.
 
 Report file (FR-017-AC-19): the launch's arguments are the harness options then the export flags;
 a report left by an earlier run is not read; a file over the read bound is refused.
@@ -117,7 +118,8 @@ through FR-017-AC-17;
 the `src/kani_transcript.rs` tests `tc_027_a_report_that_changed_shape_is_refused_not_classified`,
 `tc_027_a_report_without_exactly_one_harness_is_refused`,
 `tc_027_real_kani_the_per_check_view_carries_id_class_location_and_status`,
-`tc_027_an_unknown_line_is_none_and_a_non_numeric_line_is_refused` (FR-017-AC-20),
+`tc_027_an_unknown_line_is_none_and_a_non_numeric_line_is_refused`,
+`tc_027_the_per_check_view_has_one_serialized_wire_shape` (FR-017-AC-20),
 `tc_027_the_console_banner_never_decides_the_verdict`,
 `tc_027_playback_scanning_returns_the_property_block_and_stops_at_an_unterminated_fence` and the six
 `tc_027_real_kani_*` capture tests for FR-017-AC-12 and FR-017-AC-18; the

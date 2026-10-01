@@ -119,7 +119,12 @@ the run and everything read back from it.
 - The generator shall retain, in the evidence and in the classified run, every check the report
   lists, each with its position in the report, its class, its source file and line and its status,
   so a consumer attributes each successful check to source. A line Kani states as unknown is absent;
-  a line that is neither a number nor unknown makes the report malformed.
+  a line that is neither a number nor unknown makes the report malformed. The per-check view has
+  one wire shape, `id`, `class`, `location { file, line }` and `status`, and is serialize-only: it
+  is never read back from Kani's own spelling (`category`, a line string).
+- The generator shall carry on the evidence and the classified run the SUCCESS-check count: the
+  report's checks that are not covers and hold, plus, for a precondition harness, whose one property
+  is its cover, the satisfied covers.
 - The report carries no concrete playback. The generator shall take a falsifying playback from the
   console as a payload only, after the report names a failed property check, and pass it
   through verbatim as the counterexample, which FR-016 decodes. A playback printed for a cover is
@@ -150,7 +155,7 @@ the run and everything read back from it.
 | FR-017-AC-17 | A run that times out has its whole process group killed, a real grandchild included. | Test (TC-027) |
 | FR-017-AC-18 | A report that is malformed, of an unknown check or harness status, of another schema version, or that holds other than one harness result is refused with its own typed cause and never classified; a run that exited successfully and exported no report is refused, and one that exited unsuccessfully and exported none is `NoVerdict`. | Test (TC-027) |
 | FR-017-AC-19 | The launch exports its report after the harness options; a report an earlier run left in the target directory is removed and never read as this run's; a report over the read bound is refused and not truncated. | Test (TC-027) |
-| FR-017-AC-20 | The evidence and the classified run list every check of a real run with its id, class, source file and line and status, a line stated as unknown is absent, and a non-numeric line or a check with no location is a refused report. | Test (TC-027) |
+| FR-017-AC-20 | The evidence and the classified run list every check of a real run with its id, class, source file and line and status, a line stated as unknown is absent, and a non-numeric line or a check with no location is a refused report; the view serializes as `id`, `class`, `location { file, line }` and `status` and is not deserializable. | Test (TC-027) |
 
 ## Dependencies
 

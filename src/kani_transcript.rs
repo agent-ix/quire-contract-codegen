@@ -168,7 +168,7 @@ impl From<KaniCheckClass> for String {
 }
 
 /// Where Kani attributes a check in the source it verified.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct KaniCheckLocation {
     /// The source file, as Kani printed it (`unknown` when Kani had none).
     pub file: String,
@@ -178,8 +178,12 @@ pub struct KaniCheckLocation {
 
 /// One check Kani reported for a harness: the per-check view a consumer attributes proof to
 /// source with.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(try_from = "RawCheck")]
+///
+/// This is this crate's own view and has one wire shape, the one it serializes: `id`, `class`,
+/// `location { file, line }` and `status`. It is serialize-only. Kani's report spells the class
+/// `category` and the line as a string; that spelling is read by a private type and never by
+/// this one, so the view cannot be deserialized into a shape it does not serialize to.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct KaniCheckResult {
     /// The check's position in the harness's list, from one.
     pub id: u64,
@@ -209,18 +213,23 @@ struct RawLocation {
 }
 
 impl TryFrom<RawCheck> for KaniCheckResult {
-    type Error = String;
+    type Error = KaniReportRefusal;
 
-    fn try_from(raw: RawCheck) -> Result<Self, String> {
+    fn try_from(raw: RawCheck) -> Result<Self, KaniReportRefusal> {
         let line = if raw.location.line == UNKNOWN_LOCATION {
             None
         } else {
-            Some(raw.location.line.parse().map_err(|_| {
-                format!(
-                    "check {}: line {:?} is not a number",
-                    raw.id, raw.location.line
-                )
-            })?)
+            Some(
+                raw.location
+                    .line
+                    .parse()
+                    .map_err(|_| KaniReportRefusal::Malformed {
+                        detail: format!(
+                            "check {}: line {:?} is not a number",
+                            raw.id, raw.location.line
+                        ),
+                    })?,
+            )
         };
         Ok(Self {
             id: raw.id,
@@ -235,12 +244,33 @@ impl TryFrom<RawCheck> for KaniCheckResult {
 }
 
 /// The typed result Kani reported for one harness.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct KaniHarnessReport {
     /// Kani's verdict.
     pub(crate) status: KaniHarnessStatus,
     /// Every check, in the order Kani listed them.
     pub(crate) checks: Vec<KaniCheckResult>,
+}
+
+#[derive(Deserialize)]
+struct RawHarness {
+    status: KaniHarnessStatus,
+    checks: Vec<RawCheck>,
+}
+
+impl TryFrom<RawHarness> for KaniHarnessReport {
+    type Error = KaniReportRefusal;
+
+    fn try_from(raw: RawHarness) -> Result<Self, KaniReportRefusal> {
+        Ok(Self {
+            status: raw.status,
+            checks: raw
+                .checks
+                .into_iter()
+                .map(KaniCheckResult::try_from)
+                .collect::<Result<_, _>>()?,
+        })
+    }
 }
 
 #[derive(Deserialize)]
@@ -256,7 +286,7 @@ struct RawMetadata {
 
 #[derive(Deserialize)]
 struct RawResults {
-    results: Vec<KaniHarnessReport>,
+    results: Vec<RawHarness>,
 }
 
 impl KaniHarnessReport {
@@ -273,7 +303,7 @@ impl KaniHarnessReport {
         }
         let mut results = raw.verification_results.results;
         match (results.pop(), results.is_empty()) {
-            (Some(harness), true) => Ok(harness),
+            (Some(harness), true) => harness.try_into(),
             (Some(_), false) => Err(KaniReportRefusal::HarnessCount {
                 found: results.len() + 1,
             }),
@@ -648,6 +678,52 @@ mod tests {
             .any(|check| check.class == KaniCheckClass::Unwind
                 && check.status == KaniCheckStatus::Failure
                 && check.location.line == Some(24)));
+    }
+
+    /// The per-check view has one wire shape: it serializes as `id`, `class`, `location { file,
+    /// line }` and `status`, with the line a number (or null), and it is not read back from any
+    /// other spelling. Kani's own `category` key is not part of it.
+    ///
+    /// Trace: FR-017-AC-20, TC-027
+    #[test]
+    fn tc_027_the_per_check_view_has_one_serialized_wire_shape() {
+        let checks = [
+            KaniCheckResult {
+                id: 1,
+                class: KaniCheckClass::Cover,
+                location: KaniCheckLocation {
+                    file: "src/lib.rs".to_owned(),
+                    line: Some(15),
+                },
+                status: KaniCheckStatus::Satisfied,
+            },
+            KaniCheckResult {
+                id: 2,
+                class: KaniCheckClass::Other("assertion".to_owned()),
+                location: KaniCheckLocation {
+                    file: "unknown".to_owned(),
+                    line: None,
+                },
+                status: KaniCheckStatus::Failure,
+            },
+        ];
+        assert_eq!(
+            serde_json::to_value(checks).unwrap(),
+            serde_json::json!([
+                {
+                    "id": 1,
+                    "class": "cover",
+                    "location": { "file": "src/lib.rs", "line": 15 },
+                    "status": "Satisfied"
+                },
+                {
+                    "id": 2,
+                    "class": "assertion",
+                    "location": { "file": "unknown", "line": null },
+                    "status": "Failure"
+                },
+            ])
+        );
     }
 
     /// A location Kani leaves unknown has no line; a line that is neither a number nor Kani's
