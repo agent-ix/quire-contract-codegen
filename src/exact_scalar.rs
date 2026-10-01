@@ -47,8 +47,11 @@
 
 use crate::core::artifact::Artifact;
 use crate::core::profile::oracle_crate_manifest;
+use crate::core::{
+    artifact::MAX_GENERATED_SOURCE_BYTES,
+    naming::{bounded_readable_component, unique_names},
+};
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-use crate::oracle::{bounded_readable_component, unique_names, MAX_GENERATED_SOURCE_BYTES};
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteContractNodeV2, CompleteLoweringProfileV2,

@@ -14,12 +14,11 @@ use super::{
 };
 use crate::{
     bound::BoundGenerationError,
-    core::artifact::Artifact,
+    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
-    generate_bound_oracles,
-    oracle::{bounded_readable_component, oracle_symbol, reference_identifier, upper_camel},
-    BoundOracleGeneration, GeneratedArtifactBundle, StrategyDiagnostic, StrategyErrorCode,
-    MAX_GENERATED_SOURCE_BYTES,
+    core::naming::{bounded_readable_component, oracle_symbol, reference_identifier, upper_camel},
+    generate_bound_oracles, BoundOracleGeneration, GeneratedArtifactBundle, StrategyDiagnostic,
+    StrategyErrorCode,
 };
 
 /// Population selected for one bound numeric strategy bundle.

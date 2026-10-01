@@ -73,12 +73,12 @@
 
 use crate::core::artifact::Artifact;
 use crate::core::profile::oracle_crate_manifest;
+use crate::core::{artifact::MAX_GENERATED_SOURCE_BYTES, naming::unique_names};
 use crate::exact_scalar::{
     aggregate_members, bound_members, literal_count, read_decimal_range, read_integer_range,
     read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
 };
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-use crate::oracle::{unique_names, MAX_GENERATED_SOURCE_BYTES};
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,

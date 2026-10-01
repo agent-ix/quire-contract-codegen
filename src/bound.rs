@@ -7,7 +7,8 @@ use crate::{
         ArtifactBundle, PublicationDiagnostic, MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES,
     },
     core::diagnostic::GenerationDiagnostic,
-    oracle::{generate_named_boolean_oracle, oracle_symbol, unique_names},
+    core::naming::{oracle_symbol, unique_names},
+    oracle::generate_named_boolean_oracle,
     OracleArtifactBundle, OracleRequest,
 };
 

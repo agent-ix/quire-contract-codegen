@@ -144,7 +144,7 @@ pub use routed_generation::{
 
 pub use crate::core::artifact::{
     Artifact, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
-    PublicationErrorCode,
+    PublicationErrorCode, MAX_GENERATED_SOURCE_BYTES,
 };
 pub use crate::core::diagnostic::{
     GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
@@ -181,5 +181,4 @@ pub use strategy::{
 
 pub use oracle::{
     generate_boolean_oracle, GeneratedArtifactBundle, OracleArtifactBundle, OracleRequest,
-    MAX_GENERATED_SOURCE_BYTES,
 };

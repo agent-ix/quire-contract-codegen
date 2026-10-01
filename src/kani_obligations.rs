@@ -57,9 +57,10 @@ use quire_contract_model::{
 use serde::Serialize;
 
 use crate::{
-    core::artifact::Artifact,
+    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::diagnostic::GenerationErrorCode,
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
+    core::naming::{reference_identifier, unique_names},
     exact_scalar::{
         aggregate_members, bound_members, literal_count, literal_integer, operand_ranges,
         OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
@@ -74,12 +75,11 @@ use crate::{
         ObligationBinding, ObligationKind, ScalarObligationArgument, ScalarObligationIdentity,
     },
     oracle::{
-        generate_named_boolean_oracle, reference_identifier, typed_dependency_parameters,
-        unique_names, DependencyParameter, RustValueType,
+        generate_named_boolean_oracle, typed_dependency_parameters, DependencyParameter,
+        RustValueType,
     },
     ClaimDerivationRefusal, ClaimDisposition, ClaimMap, ExactScalarClaim, ExactScalarRefusal,
     GeneratedScalarClaim, OperationProvenance, OracleRequest, UpstreamBlocker,
-    MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Largest number of items one request may negotiate.
