@@ -626,6 +626,8 @@ mod tests {
     };
     use crate::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
+    type InputEdit = Box<dyn Fn(&mut FiniteInput)>;
+
     type Fixture = (
         KaniProfile,
         DispatchIndex,
@@ -1342,7 +1344,7 @@ mod tests {
             type_id: "node".to_owned(),
             snapshot_id: "s".to_owned(),
         };
-        let edits: Vec<(&str, Box<dyn Fn(&mut FiniteInput)>)> = vec![
+        let edits: Vec<(&str, InputEdit)> = vec![
             ("model_id", Box::new(|i| i.model_id = "other".to_owned())),
             ("source_id", Box::new(|i| i.source_id = "other".to_owned())),
             ("max_objects", Box::new(|i| i.bounds.max_objects = 3)),
