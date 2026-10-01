@@ -61,13 +61,6 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   | `inconclusive` with the failure-without-counterexample reason | `Failed` |
   | `inconclusive` with the missing-cover-summary reason | `Failed` |
 
-- The SUCCESS-check count is `KaniExecutionEvidence::success_checks`: the checks of the run's report
-  that are not covers and hold, plus, for a precondition harness, whose one property is its cover,
-  the satisfied covers. The map is `kani_terminal::terminal_value`, and
-  `ir_outcome_terminal_value` is FR-030's.
-- No `KaniInconclusiveReason` is memory-exhausted at this revision: a CBMC out-of-memory abort writes
-  no report and is `NoVerdict`, which maps to `Failed`, so the memory-exhausted row of the table has
-  no producer yet.
 - QSL reads `Proved { success_checks: 0 }` as category `inconclusive` with the vacuity cause
   `KaniVacuousProof`, which is the vacuity record QSpec FR-331-AC-8 requires. A vacuous proof and a
   cover-unsatisfied run are both vacuous: the run established no property over a satisfiable
@@ -88,7 +81,7 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 |----|----------|--------------|
 | FR-029-AC-1 | `verified` with three SUCCESS checks maps to `Proved { success_checks: 3 }`, and `falsified` maps to `Refuted`. | Test (TC-040) |
 | FR-029-AC-2 | `inconclusive` with the vacuous-proof reason and `cover-unsatisfied` each map to `Proved { success_checks: 0 }`, whose QSL category is `inconclusive` with cause `KaniVacuousProof`. | Test (TC-040) |
-| FR-029-AC-3 | The timed-out reason maps to `Incomplete(TimedOut)`, and the memory-exhausted and exhausted-unwind-bound reasons each map to `Incomplete(ResourceExhausted)`. The timed-out and exhausted-unwind-bound reasons are implemented and tested; the memory-exhausted reason is not produced. | Test (TC-040) |
+| FR-029-AC-3 | The timed-out reason maps to `Incomplete(TimedOut)`, and the memory-exhausted and exhausted-unwind-bound reasons each map to `Incomplete(ResourceExhausted)`. | Test (TC-040) |
 | FR-029-AC-4 | The no-verdict reason maps to `Failed`. | Test (TC-040) |
 | FR-029-AC-5 | The failure-without-counterexample and missing-cover-summary reasons each map to `Failed`. | Test (TC-040) |
 | FR-029-AC-6 | No outcome maps to `Tested`. | Test (TC-040) |

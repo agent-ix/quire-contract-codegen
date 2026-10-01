@@ -36,6 +36,4 @@ is one match with no wildcard arm.
 
 ## Status
 
-Implemented in `src/kani_terminal.rs`, tests `tc_040_*`, for steps 1, 2, 4, 5 and 6 and the
-timed-out and exhausted-unwind-bound reasons of step 3. The memory-exhausted reason of step 3 is not
-produced by any run at this revision, so that part is not tested.
+Planned. No outcome maps to QSL's terminal value at this revision.

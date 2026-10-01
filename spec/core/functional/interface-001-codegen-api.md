@@ -126,18 +126,6 @@ operations:
     inputs: [process exit success, exported Kani report bytes, console text, optional obligation kind]
     output: ClassifiedRun (KaniRunOutcome, SUCCESS-check count and the per-check KaniCheckResult view) | KaniReportRefusal
     semantics: the classifier execute_kani_obligation uses, so a test asserting falsification routes through production classification and an inconclusive run is never read as a decided failure; the verdict is read from the report only and the console text is read only for the falsifying playback; a report it cannot read exactly is a refusal, never an outcome (FR-017)
-  - name: terminal_value
-    inputs: [KaniRunOutcome, SUCCESS-check count]
-    output: qsl_replay::TerminalValue
-    semantics: the one total map from an executed run to QSL's FR-331 terminal value, a vacuous or cover-unsatisfied run to Proved with zero checks (FR-029)
-  - name: proof_category
-    inputs: [KaniRunOutcome, SUCCESS-check count]
-    output: qsl_replay::ProofCategory
-    semantics: terminal_value read through QSL's TerminalValue::category (FR-029)
-  - name: ir_outcome_terminal_value
-    inputs: [quire_contract_ir::kani::KaniOutcome, SUCCESS-check count]
-    output: qsl_replay::TerminalValue
-    semantics: the one total map from a Contract IR outcome that this crate did not execute to QSL's terminal value, preserving refusal and limit causes (FR-030, ADR-013 C-09)
   - name: generate_composite_equality_oracles
     inputs: [admitted CheckedPackageV2, CompositeEqualityItem list]
     output: CompositeEqualityOracles | OracleGenerationError
@@ -349,9 +337,6 @@ The interface's features in declaration order: every operation the contract abov
 | run_launcher_with_timeout | operation |
 | launch_evidence | operation |
 | classify_kani_run | operation |
-| terminal_value | operation |
-| proof_category | operation |
-| ir_outcome_terminal_value | operation |
 | generate_composite_equality_oracles | operation |
 | negotiate_backend_provider | operation |
 | generate_routed | operation |

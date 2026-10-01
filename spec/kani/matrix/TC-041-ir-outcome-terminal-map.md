@@ -39,5 +39,4 @@ and that the map is one match with no wildcard arm.
 
 ## Status
 
-Implemented in `src/kani_terminal.rs`, tests `tc_041_*`. Step 7 is by inspection: the map is one
-`match` over `KaniOutcomeKind` with guard arms only on `Inconclusive`, and no wildcard arm.
+Planned. No outcome maps to QSL's terminal value at this revision.
