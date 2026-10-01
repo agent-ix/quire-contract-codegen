@@ -92,7 +92,7 @@ anywhere on this seam, and none is proposed.
 | A qualified name built from the operation's identifiers is not admitted (`FrameReplayError::Name`) | CG | typed refusal, no replay |
 | The frame witness transcript or the envelope CG built is not admitted (`FrameReplayError::Transcript`, `FrameReplayError::Envelope`, from `WitnessEnvelope::reconstruct`) | CG | typed refusal, no replay; CG built a value its own contract says QSL admits, so AD-003 maps it to a failure |
 | `replay` / `replay_frame` refuses the request or envelope | QSL (`ReplayRefusal`) | CG carries it unchanged in `Refused`; it is not a verdict on the evidence |
-| Decoded value outside its declared domain (function path) | CG (`EvidenceFailureCause::Domain`) before any request is built | evidence failure |
+| Decoded value outside its declared domain (function path) | CG (`EvidenceFailureCause::Domain`) before any request is built | evidence failure; AD-003 link 7 maps it to a failure value, since it is CG's own defect and not a `ReplayRefusal` |
 | Replay ran and did not settle `ReproducedWithEvaluatedWitness` in category `violation` | QSL settles; CG partitions (`verdict_of`) | evidence failure with QSL's settlement and category |
 | A witness-sourced request settles on the input arm | CG (`WrongArm`) | typed refusal |
 
