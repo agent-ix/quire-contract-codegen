@@ -2,7 +2,7 @@
 id: "SR-632"
 title: "IR-412 slice 1 spec review: FR-015-AC-26 to AC-28, TC-025 state clauses, matrix row"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@01204aba72480578167cc3510ba13a535083f39c; spec/functional/complete-v1/FR-015-bounded-kani-obligations.md, spec/test/complete-v1/TC-025-bounded-kani-obligations.md, spec/test-matrix.md"
+scope: "agent-ix/quire-contract-codegen@01204aba72480578167cc3510ba13a535083f39c (disposition round 1 at fea49c75bfdf51a000b042dfa2735cb7cd4300bd); spec/functional/complete-v1/FR-015-bounded-kani-obligations.md, spec/test/complete-v1/TC-025-bounded-kani-obligations.md, spec/test-matrix.md"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: reviews
@@ -37,3 +37,14 @@ rewritten Blocked note keeps FR-025's clause-negotiation `unsupported` accountin
 the new generator. That is consistent with the code, where the clause renderer still refuses a
 frame (`FrameNotClauseRendered`). The completeness of the matrix row is covered in SR-631
 FND-001.
+
+## Dispositions
+
+Round 1 at fea49c7. FR-015-AC-26 to AC-28 are split into AC-26 to AC-32, one outcome each. TC-025
+and the matrix row follow the split.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 4af93a1 |
+| FND-002 | fixed | 4af93a1 |
+| FND-003 | fixed | 4af93a1 |

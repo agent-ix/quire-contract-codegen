@@ -2,7 +2,7 @@
 id: "SR-630"
 title: "IR-412 slice 1 code review: state-clause operation-contract and frame-effect Kani harnesses"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@01204aba72480578167cc3510ba13a535083f39c; src/state_frame.rs, src/kani_execution.rs, src/kani_obligations.rs, src/lib.rs, tests/it/kani_obligations_state_frame.rs, tests/state_frame_support/native_twin.rs, tests/state_frame_support/subject.rs, tests/exact_scalar_support/package.rs"
+scope: "agent-ix/quire-contract-codegen@01204aba72480578167cc3510ba13a535083f39c (disposition round 1 at fea49c75bfdf51a000b042dfa2735cb7cd4300bd); src/state_frame.rs, src/kani_execution.rs, src/kani_obligations.rs, src/lib.rs, tests/it/kani_obligations_state_frame.rs, tests/state_frame_support/native_twin.rs, tests/state_frame_support/subject.rs, tests/exact_scalar_support/package.rs"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: references
@@ -90,3 +90,29 @@ Merges and the rebased head:
   precondition-only classification branch keys on `Some(Precondition)`, and the `StateFrame` view
   passes `None`, so the two are semantically compatible. #202 will need its own re-lock and
   re-gate against QSL c7fd631 after this lands.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | The braces regression test exercises `assertion_message` on a string the test builds itself, not the generators' output. Reverting either generator to `assert!(cond, {message})`, with the message as the format string, passes every test (mutant M9 survived), so the FND-005 fix is not guarded. | src/state_frame.rs:1099-1108, src/state_frame.rs:1062-1064, src/state_frame.rs:1083 |
+| FND-009 | low | Nothing tests the `StateFrame` evidence-kind mapping. Reporting a frame harness as `ObligationKind::Postcondition` passes every default-lane test (mutant M8 survived), and the real-Kani tests read only `evidence.outcome`. | src/kani_execution.rs:215-218 |
+
+## Dispositions
+
+Round 1 at fea49c7 (fixes in 4af93a1 and fea49c7). `make ci` exited 0 with a private TRUSTED_HOME (230 passed, 8 ignored). The three state-frame real-Kani tests passed (3 of 3). I re-checked each finding by mutating the fix back out:
+
+- M1 (`.contains` restored), M2 (the clause field takes another field's range), M3 (the `BoundNotResolved` guard dropped), M4, M5 and M6 (the deletes, relationship and foreign-field refusals dropped) and M7 (the clause digest dropped from the frame path) were all killed by the default lane.
+- M8 and M9 survived. See FND-009 and FND-008.
+
+Adding `CheckedNodeTag::Relation` to the state-frame lowering tags is acceptable. The closure reaches a relation node only through a frame's relationship grant, which `frame_grants` then refuses as `Relationship`, or through the condition, which the decoder refuses. A field-only frame on the object therefore admits nothing new.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 4af93a1 |
+| FND-002 | fixed | 4af93a1 |
+| FND-003 | fixed | 4af93a1 |
+| FND-004 | fixed | 4af93a1 |
+| FND-005 | fixed | 4af93a1 |
+| FND-006 | fixed | 4af93a1 |
+| FND-007 | fixed | 4af93a1; fea49c7 adds the envelope-identity refusal test. The obligation-identity join remains impossible by QSL API and is documented at native_twin.rs:6-12 |

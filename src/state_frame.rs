@@ -921,13 +921,18 @@ fn render(
         KaniSolver::Cadical,
         false,
     );
+    let abi = Abi {
+        state_path: request.state_path,
+        subject_path: request.subject_path,
+        state_fields: request.state_fields,
+    };
     let body = match &property {
         StateFrameProperty::Postcondition {
             field,
             comparison,
             left_is_pre,
         } => postcondition_body(
-            request,
+            &abi,
             scope,
             domains,
             &Postcondition {
@@ -938,7 +943,7 @@ fn render(
             module,
         ),
         StateFrameProperty::Frame { checked, .. } => {
-            frame_body(request, scope, domains, checked, module)
+            frame_body(&abi, scope, domains, checked, module)
         }
     };
     let identity = StateFrameIdentity {
@@ -992,9 +997,16 @@ struct RecordView<'a> {
     rust_path: &'a str,
 }
 
+/// What the generated harness bodies need of the request: the subject ABI.
+struct Abi<'a> {
+    state_path: &'a str,
+    subject_path: &'a str,
+    state_fields: &'a [&'a str],
+}
+
 /// `let pre: S = S { a: kani::any(), ... };` and an assumption of each field's IR range.
-fn symbolic_state(request: &StateFrameRequest<'_>, domains: &[StateFieldDomain]) -> String {
-    let fields = request
+fn symbolic_state(abi: &Abi<'_>, domains: &[StateFieldDomain]) -> String {
+    let fields = abi
         .state_fields
         .iter()
         .map(|field| format!("{field}: kani::any()"))
@@ -1018,7 +1030,7 @@ fn symbolic_state(request: &StateFrameRequest<'_>, domains: &[StateFieldDomain])
         .collect::<String>();
     format!(
         "        let pre: {state} = {state} {{ {fields} }};\n{assumptions}",
-        state = request.state_path
+        state = abi.state_path
     )
 }
 
@@ -1038,7 +1050,7 @@ struct Postcondition<'a> {
 }
 
 fn postcondition_body(
-    request: &StateFrameRequest<'_>,
+    abi: &Abi<'_>,
     scope: &StateFrameScope,
     domains: &[StateFieldDomain],
     condition: &Postcondition<'_>,
@@ -1061,13 +1073,13 @@ fn postcondition_body(
     ));
     format!(
         "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"state bounds hold and the operation returns\");\n        assert!(\n            {left}.{field} {operator} {right}.{field},\n            \"{{}}\",\n            {message}\n        );\n    }}\n}}\n",
-        state = symbolic_state(request, domains),
-        subject = request.subject_path,
+        state = symbolic_state(abi, domains),
+        subject = abi.subject_path,
     )
 }
 
 fn frame_body(
-    request: &StateFrameRequest<'_>,
+    abi: &Abi<'_>,
     scope: &StateFrameScope,
     domains: &[StateFieldDomain],
     checked: &[String],
@@ -1085,8 +1097,8 @@ fn frame_body(
         .collect::<String>();
     format!(
         "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"the operation returns\");\n{assertions}    }}\n}}\n",
-        state = symbolic_state(request, domains),
-        subject = request.subject_path,
+        state = symbolic_state(abi, domains),
+        subject = abi.subject_path,
     )
 }
 
@@ -1094,16 +1106,51 @@ fn frame_body(
 mod tests {
     use super::*;
 
+    fn scope(operation: &str) -> StateFrameScope {
+        let id = |digest: &str| -> CheckedNodeId {
+            serde_json::from_value(serde_json::json!({
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": digest,
+            }))
+            .expect("a node id")
+        };
+        StateFrameScope {
+            operation: operation.to_owned(),
+            object: id(&"1".repeat(64)),
+            anchor: id(&"2".repeat(64)),
+            frame: id(&"3".repeat(64)),
+        }
+    }
+
+    /// An operation name that would break a format string reaches the generated assertions as a
+    /// format argument, never as the format string, in both generators.
+    ///
     /// Trace: FR-015-AC-26, TC-025.
     #[test]
     fn tc_025_an_operation_name_with_braces_cannot_break_an_assertion() {
-        let message = assertion_message("operation `a{b}c{}`: postcondition failed");
-        let source = format!("fn f() {{ assert!(true, \"{{}}\", {message}); }}");
-        let file = syn::parse_file(&source).expect("braces in the message stay data");
-        assert!(source.contains("a{b}c{}"));
-        assert_eq!(file.items.len(), 1);
-        // A message used as the format string would be a compile-time error in rustc, which
-        // `syn` does not check; the `"{}"` format argument is what the generators emit.
-        assert!(source.contains("\"{}\""));
+        let abi = Abi {
+            state_path: "crate::State",
+            subject_path: "crate::operate",
+            state_fields: &["balance", "audit"],
+        };
+        let scope = scope("dep{osit}{}");
+        let domains = [];
+        let frame = frame_body(&abi, &scope, &domains, &["audit".to_owned()], "m");
+        let postcondition = postcondition_body(
+            &abi,
+            &scope,
+            &domains,
+            &Postcondition {
+                field: "balance",
+                comparison: StateComparison::Ge,
+                left_is_pre: false,
+            },
+            "m",
+        );
+        syn::parse_file(&frame).expect("the frame harness parses");
+        syn::parse_file(&postcondition).expect("the postcondition harness parses");
+        // `"{}"` is the format string and the operation-bearing literal its argument.
+        assert!(frame.contains("pre.audit, \"{}\", \"operation `dep{osit}{}` changed"));
+        assert!(postcondition.contains("\"{}\",\n            \"operation `dep{osit}{}`:"));
     }
 }

@@ -760,7 +760,7 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
 /// payload's, naming both; the same run with an agreeing envelope replays, so each refusal is the
 /// difference and not the run.
 ///
-/// Trace: FR-015-AC-32, TC-025
+/// Trace: TC-025
 #[test]
 fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
     let twin = Twin::compile();
