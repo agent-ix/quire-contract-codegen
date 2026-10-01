@@ -145,7 +145,7 @@ pub fn generate_boolean_oracle(
 }
 
 /// [`generate_boolean_oracle`] with the oracle function named `symbol`, for generators that name
-/// several oracles together through [`unique_names`].
+/// several oracles together through [`unique_names`](crate::core::naming::unique_names).
 pub(crate) fn generate_named_boolean_oracle(
     request: &OracleRequest<'_>,
     symbol: &str,

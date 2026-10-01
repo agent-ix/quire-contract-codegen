@@ -124,12 +124,9 @@
 //! call) are implemented and tested in full.
 
 use crate::composite_equality::EqualityOperatorKind;
-use crate::core::artifact::Artifact;
+use crate::core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES};
+use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
-use crate::core::{
-    artifact::MAX_GENERATED_SOURCE_BYTES,
-    naming::{bounded_readable_component, unique_names},
-};
 use crate::exact_scalar::IntegerOperator;
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use quire_contract_model::{
