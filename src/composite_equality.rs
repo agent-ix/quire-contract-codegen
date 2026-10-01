@@ -891,12 +891,12 @@ fn application_arguments(body: &Value) -> Option<&Vec<Value>> {
 /// Each `binary` operand names its own static type through `literal.type`
 /// -- IR-216 requires that member on every literal and validates only that
 /// it resolves to a real node, never cross-checking it against `value_kind`,
-/// so it is free for this generator to read on its own terms. A `reference`
-/// operand is deliberately not read here: IR's own admission-time
-/// `argument_family`/`check_operands` check resolves and enforces a
-/// `reference` operand's family against the operation's declared operand
-/// family, so a type node named by `reference` never admits at all, before
-/// this generator would run.
+/// so it is free for this generator to read on its own terms. An operand
+/// that is an explicit `convert` application (how a checked package spells
+/// the `convert<T>` a `converted` descriptor names) is read through to the
+/// operand it converts, whose type is the descriptor's `source_type`; the
+/// application's own `result_type` is the conversion target. A `reference`
+/// operand is deliberately not read here.
 ///
 /// This is the generator's only read of body content (FR-018's Behavior
 /// clause "disagrees with its descriptor's arity or operand types"): the
@@ -904,10 +904,16 @@ fn application_arguments(body: &Value) -> Option<&Vec<Value>> {
 /// never from this value, so disagreement here is refused before either
 /// operand's type is resolved.
 fn operand_type_id(term: &Value) -> Option<CheckedNodeId> {
-    if term.get("term")?.as_str()? != "literal" {
-        return None;
+    let mut term = term;
+    loop {
+        match term.get("term")?.as_str()? {
+            "literal" => return serde_json::from_value(term.get("type")?.clone()).ok(),
+            "application" if term.get("operator")?.as_str()? == "convert" => {
+                term = term.get("arguments")?.as_array()?.first()?;
+            }
+            _ => return None,
+        }
     }
-    serde_json::from_value(term.get("type")?.clone()).ok()
 }
 
 /// Compare each body operand's declared type against the descriptor's for

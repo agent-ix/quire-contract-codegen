@@ -186,30 +186,70 @@ fn application(operator: &str, operation: Value, result_type: u32, arguments: Ve
     })
 }
 
-/// The catalogued `operation` member for `quire.op.boolean.eq`: no laws, no
-/// mode, no member.
-fn boolean_eq() -> Value {
-    json!({
-        "identity": "quire.op.boolean.eq",
-        "laws": [],
-        "mode": null,
-        "member": null,
-        "leaves": [],
-    })
+/// The operand family (FR-322 operation catalog) of a corpus type node, by code: what
+/// Contract IR resolves for a `literal` operand typed by that node.
+fn family_of(code: u32) -> &'static str {
+    match code {
+        T_BOOLEAN => "boolean",
+        T_INTEGER | T_INTEGER_BOUNDED => "integer",
+        T_TEXT => "text",
+        T_DECIMAL_SMALL | T_DECIMAL_WIDE => "decimal",
+        T_RATIONAL_NARROW | T_RATIONAL_WIDE | T_RATIONAL_INT => "rational",
+        R_POINT | R_FLOAT | R_DUP | R_SELF | R_PAIR_OF_POINTS | R_WITH_REF => "structural",
+        SEQ_R_FLOAT | SEQ_INT | TUP_PAIR | OPT_INT | OPT_SELF => "structural",
+        other => panic!("no operand family registered for corpus type code {other}"),
+    }
 }
 
-/// One `literal` operand naming its own declared type via `literal.type`,
-/// exactly the member IR-216 already requires and validates only by
-/// resolving it to a real node (see [`literal`]'s own doc comment) -- never
-/// cross-checked against `value_kind`, so `value_kind`/`value` are a fixed,
-/// inert placeholder and `type_ref` alone carries the operand's type.
+/// The `quire.op.<family>.eq` operation FR-093's `Equality` row lowers an equality over
+/// `family` operands to: Contract IR checks every operand's family against the operation's
+/// declared operands, so the identity must match the operands' own type. `text` carries its
+/// `text_profile` law and mode, selected by [`PackageBuilder::select_definition`]; `structural`
+/// carries the one leaf Contract IR requires of `quire.op.structural.eq`.
+fn equality_operation(family: &str) -> Value {
+    let plain = |identity: &str| {
+        json!({
+            "identity": identity,
+            "laws": [],
+            "mode": null,
+            "member": null,
+            "leaves": [],
+        })
+    };
+    match family {
+        "text" => json!({
+            "identity": "quire.op.text.eq",
+            "laws": [{"role": "text_profile", "definition": text_profile_definition()}],
+            "mode": {"kind": "text_profile", "value": "nfc"},
+            "member": null,
+            "leaves": [],
+        }),
+        "structural" => {
+            let mut operation = plain("quire.op.structural.eq");
+            operation["leaves"] = json!([{"path": ["recursion:0"], "laws": [], "mode": null}]);
+            operation
+        }
+        other => plain(&format!("quire.op.{other}.eq")),
+    }
+}
+
+/// The catalog's `text_profile` law definition, read from the catalog's home.
+fn text_profile_definition() -> Value {
+    let catalog: Value = serde_json::from_str(
+        quire_verification_contracts::operation_catalog::CHECKED_OPERATION_CATALOG_V1,
+    )
+    .expect("the operation catalog is JSON");
+    catalog["law_roles"]["text_profile"][0].clone()
+}
+
+/// One `literal` operand naming its own declared type via `literal.type`.
+/// `value_kind`/`value` are a fixed, inert placeholder and `type_ref` alone carries the
+/// operand's type: Contract IR resolves a literal operand's family through `literal.type`
+/// (FR-322), and `quire_contract_codegen::composite_equality::check_operand_types` reads
+/// only that member.
 ///
-/// This must stay a `literal`, not a `reference`: a `reference` operand's
-/// family is resolved and enforced against `boolean.eq`'s own declared
-/// `boolean` operand family by IR's `argument_family`/`check_operands`
-/// admission check, and a scalar/composite *type* node is never in that
-/// family, so a package built from `reference` operands is refused
-/// `OperatorIneligible` at *admission*, before this generator ever runs.
+/// This must stay a `literal`, not a `reference`: the generator reads a body operand's type
+/// from `literal.type` alone, and a `reference` to a type node is never an operand.
 fn typed_operand(type_ref: Value) -> Value {
     json!({"term": "literal", "type": type_ref, "value_kind": "integer", "value": "0"})
 }
@@ -222,12 +262,10 @@ fn typed_operand(type_ref: Value) -> Value {
 /// Behavior: "disagrees with its descriptor's arity or operand types"),
 /// every caller of this function must pass the same two type codes its
 /// descriptor declares as `source_type`, or the item refuses before
-/// generation rather than after. Catalogued as `quire.op.boolean.eq`
-/// (binary, two boolean operands): a real, closed-catalog identity every
-/// caller can share, structurally conformant regardless of what the caller
-/// actually means by the node -- IR's operand-family check never resolves a
-/// family for a `literal` operand at all, so it never enforces that
-/// declared `boolean` family against these placeholders. `result_type`
+/// generation rather than after. The `operation` is the equality FR-093 lowers
+/// the left operand's family to ([`equality_operation`]): Contract IR checks each
+/// literal operand's family against it, so a body whose operands are not of that
+/// family is refused `OperatorIneligible` at admission. `result_type`
 /// defaults to `T_BOOLEAN`, the body's actual result type;
 /// [`binary_body_with_result`] overrides it only where two callers would
 /// otherwise share one (type, type) pair and collide on one preimage digest.
@@ -241,7 +279,7 @@ pub fn binary_body(left_type: u32, right_type: u32) -> Value {
 pub fn binary_body_with_result(left_type: u32, right_type: u32, result_type: u32) -> Value {
     application(
         "binary",
-        boolean_eq(),
+        equality_operation(family_of(left_type)),
         result_type,
         vec![
             typed_operand(node_ref(&key(left_type))),
@@ -250,13 +288,41 @@ pub fn binary_body_with_result(left_type: u32, right_type: u32, result_type: u32
     )
 }
 
+/// [`binary_body`] whose left operand is the explicit `convert` application a checked package
+/// spells the `convert<T>` of a `converted(source, target)` descriptor with: it converts a
+/// `source`-typed literal to `target` (`quire.op.numeric.convert`, `result_type` = `target`).
+/// The equality is then over two `target`-family operands, so Contract IR admits it where a body
+/// whose operands are of two different families would be `OperatorIneligible`; the generator
+/// reads `source` through the application ([`quire_contract_codegen`]'s operand-type check).
+pub fn binary_body_converting(source: u32, target: u32, right_type: u32) -> Value {
+    let convert = application(
+        "convert",
+        json!({
+            "identity": "quire.op.numeric.convert",
+            "laws": [],
+            "mode": null,
+            "member": {"kind": "type_argument"},
+            "leaves": [],
+        }),
+        target,
+        vec![typed_operand(node_ref(&key(source)))],
+    );
+    application(
+        "binary",
+        equality_operation(family_of(right_type)),
+        T_BOOLEAN,
+        vec![convert, typed_operand(node_ref(&key(right_type)))],
+    )
+}
+
 /// [`binary_body`] for an operand type not registered through
 /// [`PackageBuilder::code`] -- the base package's `Example.Phase` enum node,
-/// named by its own node key rather than a placeholder `key(code)`.
+/// named by its own node key rather than a placeholder `key(code)`. The enum's own
+/// `quire.op.enum.eq` is the operation.
 pub fn binary_body_digest(left_digest: &str, right_digest: &str) -> Value {
     application(
         "binary",
-        boolean_eq(),
+        equality_operation("enum"),
         T_BOOLEAN,
         vec![
             typed_operand(node_ref(left_digest)),
@@ -475,6 +541,21 @@ impl PackageBuilder {
         package
     }
 
+    /// Registers `definition` in `lock.definition_selections` and the identity preimage's copy
+    /// (deduplicated): Contract IR refuses an operation law whose definition the lock did not
+    /// select.
+    pub fn select_definition(&mut self, definition: Value) -> &mut Self {
+        for path in ["lock", "identity_preimage"] {
+            let selections = self.value[path]["definition_selections"]
+                .as_array_mut()
+                .expect("definition_selections");
+            if !selections.contains(&definition) {
+                selections.push(definition.clone());
+            }
+        }
+        self
+    }
+
     pub fn admit(&self) -> CheckedPackageV2 {
         let wire = self.wire();
         let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
@@ -499,6 +580,7 @@ fn evidence() -> CheckedPackageEvidence {
 pub fn corpus_package() -> PackageBuilder {
     let mut builder = PackageBuilder::default();
 
+    builder.select_definition(text_profile_definition());
     builder
         .code(
             T_BOOLEAN,
@@ -695,6 +777,13 @@ pub fn corpus_package() -> PackageBuilder {
             aggregate(vec![reference(T_INTEGER)]),
         )
         .code(
+            R_WITH_REF,
+            "composite_type",
+            "record",
+            T_BOOLEAN,
+            aggregate(vec![binding("r", REF_TYPE)]),
+        )
+        .code(
             R_DUP,
             "composite_type",
             "record",
@@ -787,10 +876,14 @@ pub fn corpus_package() -> PackageBuilder {
             "binary",
             binary_body_with_result(T_TEXT, T_TEXT, T_INTEGER),
         )
-        .application_code(E_REFERENCE, "binary", binary_body(REF_TYPE, T_INTEGER))
+        .application_code(E_REFERENCE, "binary", binary_body(R_WITH_REF, R_WITH_REF))
         .application_code(E_CALL, "call", binary_body(T_INTEGER, T_INTEGER))
         .application_code(E_SELF, "binary", binary_body(R_SELF, R_SELF))
-        .application_code(E_CONV, "binary", binary_body(T_INTEGER_BOUNDED, T_INTEGER))
+        .application_code(
+            E_CONV,
+            "binary",
+            binary_body_converting(T_INTEGER_BOUNDED, T_INTEGER, T_INTEGER),
+        )
         .application_code(E_COLLECTION, "binary", binary_body(SEQ_INT, SEQ_INT))
         .application_code(
             E_PAIR_OF_POINTS,
@@ -800,7 +893,7 @@ pub fn corpus_package() -> PackageBuilder {
         .application_code(
             E_CONV_CHARGE,
             "binary",
-            binary_body(T_INTEGER_BOUNDED, T_DECIMAL_SMALL),
+            binary_body_converting(T_INTEGER_BOUNDED, T_DECIMAL_SMALL, T_DECIMAL_SMALL),
         )
         // FR-018 Behavior's operand-type disagreement refusal (codegen#82):
         // every request over this node in this module's tests declares a
@@ -814,27 +907,27 @@ pub fn corpus_package() -> PackageBuilder {
         .application_code(
             E_CONV_RAT_RAT,
             "binary",
-            binary_body(T_RATIONAL_NARROW, T_RATIONAL_WIDE),
+            binary_body_converting(T_RATIONAL_NARROW, T_RATIONAL_WIDE, T_RATIONAL_WIDE),
         )
         .application_code(
             E_CONV_RAT_INT,
             "binary",
-            binary_body(T_RATIONAL_INT, T_INTEGER),
+            binary_body_converting(T_RATIONAL_INT, T_INTEGER, T_INTEGER),
         )
         .application_code(
             E_CONV_DEC_RAT,
             "binary",
-            binary_body(T_DECIMAL_SMALL, T_RATIONAL_WIDE),
+            binary_body_converting(T_DECIMAL_SMALL, T_RATIONAL_WIDE, T_RATIONAL_WIDE),
         )
         .application_code(
             E_CONV_DEC_DEC,
             "binary",
-            binary_body(T_DECIMAL_SMALL, T_DECIMAL_WIDE),
+            binary_body_converting(T_DECIMAL_SMALL, T_DECIMAL_WIDE, T_DECIMAL_WIDE),
         )
         .application_code(
             E_CONV_DEC_INT,
             "binary",
-            binary_body(T_DECIMAL_SMALL, T_INTEGER),
+            binary_body_converting(T_DECIMAL_SMALL, T_INTEGER, T_INTEGER),
         );
 
     builder

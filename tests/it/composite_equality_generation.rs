@@ -472,8 +472,8 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
         item(
             E_REFERENCE,
             EqualityOperatorKind::Equal,
-            typed(REF_TYPE),
-            typed(T_INTEGER),
+            typed(R_WITH_REF),
+            typed(R_WITH_REF),
         ),
         item(
             E_CALL,

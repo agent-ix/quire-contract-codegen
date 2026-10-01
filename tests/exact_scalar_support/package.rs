@@ -2575,7 +2575,17 @@ pub fn corpus_package() -> PackageBuilder {
                 "binary",
                 op("quire.op.quantity.add"),
                 &unit_type(),
-                vec![reference(&key(V_QUANTITY)), literal("rational", "1")],
+                // A quantity literal is typed by its unit: IR resolves a literal operand
+                // through `literal.type`, and `quantity.add` takes a quantity on both sides.
+                vec![
+                    reference(&key(V_QUANTITY)),
+                    json!({
+                        "term": "literal",
+                        "type": node_ref(&unit_type()),
+                        "value_kind": "rational",
+                        "value": "1",
+                    }),
+                ],
             ),
             &[],
         );
