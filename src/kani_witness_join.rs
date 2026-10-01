@@ -275,8 +275,8 @@ fn read_block<'a>(
         .ok_or_else(|| DecodeFailure::new("kani_witness_harness_missing", source_id, context))?;
     let (_, after_kind) = check_clause(block, source_id, context)?;
     let no_text = || DecodeFailure::new("kani_witness_check_text_missing", source_id, context);
-    let after_colon = after_kind.split_once(':').ok_or_else(no_text)?.1;
-    let after_quote = after_colon.split_once('"').ok_or_else(no_text)?.1;
+    // Kani always prints `: "` directly after the check kind; anything else is not a check text.
+    let after_quote = after_kind.strip_prefix(": \"").ok_or_else(no_text)?;
     let check_text = &after_quote[..unescaped_quote(after_quote).ok_or_else(no_text)?];
     let entries = concrete_entries(block, source_id, context)?;
     Ok(Playback {
@@ -834,6 +834,14 @@ fn kani_concrete_playback_synthetic() {{\n\
             ),
             (
                 good.replace("\"synthetic assertion\"", "\"unterminated"),
+                "kani_witness_check_text_missing",
+            ),
+            (
+                good.replace("`assertion`: \"synthetic", "`assertion` \"synthetic")
+                    .replace(
+                        "concrete_vals, synthetic)",
+                        "concrete_vals, \"later quote\")",
+                    ),
                 "kani_witness_check_text_missing",
             ),
             (

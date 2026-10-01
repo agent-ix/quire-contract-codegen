@@ -55,3 +55,10 @@ corpus path is a different mechanism: an IR `execute_native` Input-arm replay of
 carry no QSL source package, which `qsl_replay::replay` requires. Moving it is a design step of
 its own, not unfinished work of this one. What makes the slice acceptable is that the remainder
 is tracked (FND-002) and this slice's own path works on real transcripts (FND-001).
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 6feece1: a real Kani contract transcript with a multi-line check text now decodes. Both ignored real-Kani TC-026 tests pass (reviewer run), so FR-016-AC-1 and AC-8 hold for real witnesses. |
+| FND-002 | deferred | The remaining corpus and native Input-arm replay is retired in CG PR #205 (open, head 75f4303). IR-453 (Backlog) tracks backing the corpus rows honestly through qsl_replay. |

@@ -35,3 +35,10 @@ features table matches `src/lib.rs`. The new `decode_falsification` output (`Dec
 source_id, context) matches the struct. Dropping `InvalidInput` from TC-026 is correct, because
 `DecodeFailure` carries no outcome kind. FR-016-AC-8's text still holds without change: the
 schema, the naming by position and the typed non-argument refusal all remain.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 6feece1: interface-001:150 now reads "named qsl-replay WitnessValue list". |
+| FND-002 | fixed | 6feece1: TC-026's procedure now reads the persisted obligation arguments as the decode schema. |

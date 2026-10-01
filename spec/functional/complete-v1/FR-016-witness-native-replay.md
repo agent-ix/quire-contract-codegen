@@ -48,9 +48,9 @@ failure is reported.
 - The generator shall read the concrete values of a Kani playback only
   through the Kani adapter's transcript module, `src/kani_transcript.rs`.
   At this revision the witness join
-  (`src/kani_witness_join.rs`) still decodes the playback through Contract
-  IR's `Witness::parse`, so this bullet states the target and is not yet
-  met.
+  (`src/kani_witness_join.rs`) decodes the playback itself rather than
+  through the transcript module, so this bullet states the target and is not
+  yet met.
 - The generator shall decode a witness against the harness's own persisted
   obligation schema: the obligation's argument bindings, in the order the
   obligation persists them, typed position for position against the

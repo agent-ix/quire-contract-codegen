@@ -69,3 +69,18 @@ What is right:
 Mutation results: 8 of 13 killed (bool any-byte, comment check dropped, big-endian i64,
 multiple assertions allowed, identity check dropped, arity check dropped, cover as other,
 non-argument binding accepted). The 5 survivors are listed in FND-002.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The check text's `:` is not anchored to the kind's closing backtick. Because `after_kind` is now the rest of the block, `split_once(':')` finds the first colon anywhere below, typically `let concrete_vals:`. So the colon lookup almost never refuses anything, and the "colon lookup dropped" mutant survives the tests. The coder's claim that this mutant is EQUIVALENT is wrong. A check line with quoted text and no colon (``/// Check for `assertion` "no colon"``) is refused by the code (`kani_witness_check_text_missing`) but decoded by the mutant. The refusal happens only because the lookup ran on to `concrete_vals:` and found no quote after it. Kani always prints `: "`, so nothing real is affected. Requiring `: "` directly after the backtick would make the check mean what it says. | src/kani_witness_join.rs:276-280 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 6feece1: `check_clause` now returns the rest of the block after the kind. The "HIGH revert" mutant turns `decode_falsification_reads_a_multi_line_check_text` red. Both ignored real-Kani TC-026 tests pass at 6feece1 (reviewer run). |
+| FND-002 | fixed | 6feece1: all 16 codes are asserted, plus negative, i64::MIN and i64::MAX. All 5 former surviving mutants are now killed, and 14 of 15 mutants are killed in total. |
+| FND-003 | fixed | 6feece1: `WitnessSchemaError` is private and is no longer re-exported from `lib.rs`. |
+| FND-004 | fixed | 6feece1: the test doc no longer names `Witness::parse`/`decode`. The module doc and PR body now call the decoder a behavioural port of IR's `Witness`. |
