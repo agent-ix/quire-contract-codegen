@@ -108,7 +108,7 @@
 //! AC-17's runtime cross-check (reading `Origin::Body` off a real
 //! `CheckRefusal`) confirms `origin` again, independently. Both are
 //! implemented and tested; the `path`-is-non-empty case is not implemented,
-//! is not reachable from this V1's body vocabulary, and `spec/test-matrix.md`
+//! is not reachable from this V1's body vocabulary, and `spec/oracle/matrix/tests.md`
 //! records AC-15 accordingly rather than as fully covered. The dynamic half
 //! -- `Evaluation.location`/`.losses` becoming non-empty at a specific call
 //! -- is Out of Scope per FR-021 itself: the runtime's `Body` return

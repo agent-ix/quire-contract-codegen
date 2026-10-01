@@ -1,0 +1,350 @@
+---
+id: FR-014
+title: "Generate exact complete-V1 scalar oracles"
+type: FR
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/StR-001
+    type: satisfies
+  - target: ix://agent-ix/quire-specification/FR-196
+    type: references
+  - target: ix://agent-ix/quire-specification/FR-333
+    type: references
+  - target: ix://agent-ix/quire-contract-ir/FR-036
+    type: references
+  - target: ix://agent-ix/quire-contract-ir/FR-038
+    type: references
+---
+# FR-014: Generate exact complete-V1 scalar oracles
+
+## Description
+
+When a caller supplies an admitted `quire.checked-package/v2` package and a set
+of scalar expression nodes, the code generator shall emit a deterministic Rust
+oracle crate whose functions evaluate each node by calling the
+Contract Runtime `exact` operators and metering. It never approximates a
+scalar family through another family and never copies a resource charge.
+
+FR-014 is the one oracle generator for every family it covers, the Boolean
+connectives and the bounded-integer comparisons included
+([ADR-001](../../decisions/ADR-001-overlapping-generators-and-input-models.md)
+Q2). Its composite/structural equality sibling is
+[FR-018](./FR-018-composite-equality-oracles.md).
+
+FR-014 owns the integer and Boolean `eq` and `ne` nodes. Their oracles call the
+runtime's one equality relation, `TypeEnvironment::check_equality` followed by
+`CheckedEquality::evaluate`, as FR-018's oracles do, and return its
+`Outcome<bool>` unchanged; no oracle compares two values itself. A Boolean
+connective's oracle calls `exact::evaluate_boolean` with the matching
+`BooleanConnective` when both operands are decided values, and
+`exact::evaluate_boolean_short_circuit` when its right operand is itself an
+oracle that may stop, and returns the runtime's `Outcome<bool>` unchanged.
+
+## Inputs
+
+- An admitted `CheckedPackageV2` read through Contract IR's strict reader.
+- A request of items, each naming one checked node id and one typed exact
+  scalar operation descriptor.
+- Contract Runtime with the `exact` feature, as this repository's `Cargo.toml`
+  names it.
+
+The V2 transport carries each application term's `operation` member — its
+catalogued identity, its laws and its mode — so the operation law (for example
+which division law or which comparison) is present in the IR. This generator
+classifies a body from its `term`, `operator` and `arguments` together with the
+request item's own descriptor, and checks every descriptor parameter the IR
+carries (integer, rational and decimal ranges, float rounding, text bounds)
+against the node's reachable `bounded_domain` nodes. It then reads the node's
+own `operation.identity` and compares it against the catalogued identity the
+descriptor implies, together with the operation mode's value.
+
+A claim whose node lowers and whose descriptor agrees with that identity marks
+its operation `ir_confirmed` and carries no blocked item: quire-contract-ir
+validated the identity against the closed
+`quire.checked-operation-catalog/v1` at package admission, before this
+generator saw the package, so a consumer may treat the operation identity, and
+nothing else about the oracle, as checked. A descriptor naming a different
+catalogued operation over the same bounds is not confirmed, even where the two
+share one operand shape.
+
+A claim this generator never confirms marks its operation `caller_declared` and
+carries the typed blocked item: the identity the claim map reports is the
+request item's own descriptor-derived identity, and downstream obligations must
+not treat it as checked. A claim goes unconfirmed for one of three reasons:
+this generator never inspected the node; it inspected the node and refused the
+item with a typed reason; or it lowered the node and the descriptor and the
+node disagreed — a descriptor naming a different catalogued operation, a
+descriptor naming an operation the catalogue has no entry for, or one whose
+implied identity matches while its law definition or its mode value is absent
+from the node's own `operation.laws` and `operation.mode`. Only the third case
+still generates an oracle; it is the confirmation that is withheld, not the
+code.
+
+A bound is read from a `bounded_domain` node whose form matches the descriptor,
+and each role a node uses is identified by what the node itself names, not by a
+package-wide "the one bound of this form". A `reference` operand whose target is
+typed by a `bounded_domain` has that domain as its own bound. The result bound
+is the domain typing the node's result when the node's `semantic_type` is a
+`bounded_domain`; when it is a scalar type and only narrowing conversions consume
+the node, the result bound is the one `bounded_domain` they narrow it to, and a
+node that a narrowing conversion and any other node both consume has no result
+bound, since the narrow's bound does not bound the other use. QSL emits an
+expression in a bounded context this way: the arithmetic node's own type is the
+plain scalar type, and the declared bound types a `conversion` node whose body
+is a `convert` application with identity `quire.op.numeric.narrow` and exactly
+one argument, a `reference` to the node. Otherwise the result bound is the one
+reachable bound of the form over that type, and where several are reachable,
+the one that is not the own bound of an operand. The descriptor is compared with the result
+bound only; each operand's own bound is recorded after it and ranges that
+operand in a Kani harness, and need not lie inside the result bound. A
+`reference` operand typed by a plain scalar type owns no bound: where another
+operand owns one, or the result is typed by one, it is `RequiresBound` naming
+its type, and a literal operand, being a constant, is never `RequiresBound`. A
+`reference` to a `value` node whose body is a literal is a literal operand: QSL
+emits a literal operand that way, typed by the plain scalar type, and it is the
+referenced node's body that decides it, not its type or form. A literal operand
+owns no bound: a Kani harness constrains it to exactly its own value (FR-015),
+and one that is not a canonical `integer` literal is refused for an integer
+operation whatever the referenced node's type. A bound's body is an `aggregate` of
+`binding` members, `{term: binding, name, value: <literal>}` (QSpec
+`proposals/checked-package-v2/fixtures/positive-operation-identities.json`),
+each carrying a canonical decimal `integer` literal or, for a spelling, a `text`
+literal. A member is looked up by its `name`, in any order; the body holds
+exactly the names of its form, once each:
+
+| Form | Member names |
+|------|--------------|
+| `integer_range` | `min`, `max` |
+| `rational_range` | `numerator_min`, `numerator_max`, `denominator_min`, `denominator_max` |
+| `decimal_range` | `coefficient_min`, `coefficient_max`, `scale_min`, `scale_max`, `rounding` (text) |
+| `float_rounding` | `rounding` (text) |
+| `text_bounds` | `min`, `max`, `text_profile` (text) |
+| `collection_bounds` | `min`, `max` |
+
+A bare literal member, a missing or duplicate name and an unlisted name are each
+an unreadable bound.
+
+### Deriving the descriptor from the node
+
+`derive_exact_scalar_items` builds each item's descriptor from the package
+alone, so a caller that holds only node ids need not declare one. For each
+node id it returns one `ExactScalarItem` or one `ExactScalarRefusal`, in
+input order. It first checks that the node is in the graph and lowers, and
+returns the refusal `generate_exact_scalar_oracles` gives such a node
+(`InvalidInput`, `BlockedOnUpstream`, `Unsupported`, `RequiresBound`), so a
+consumer classifies it as it always did. It then reads the node's
+`operation.identity` and maps it to an operator by an exhaustive match over
+identity strings. The descriptor's own identity check is the opposite
+exhaustive match over descriptors; the two are kept aligned by a round-trip
+test that walks every descriptor through both and cannot omit an
+`ExactScalarOperation` variant. Its other sources are:
+
+- the operand scalar forms, for the identities whose operator depends on them
+  (`rational.div`: `IntegerDivide` when both operands are integers, `Divide`
+  when both are rationals; the IEEE comparisons: the operand width);
+- `operation.laws`, whose `definition.identity` selects the division profile
+  of `integer.div`;
+- `operation.mode`, whose rounding value must equal the rounding of the bound
+  the operation is read against, and which supplies the rounding of an
+  integer `quantity.convert` target;
+- the one reachable bound of the needed form on the node's result type, read by
+  the same selector the descriptor's parameter check uses: the integer, rational
+  or decimal domain, the IEEE rounding, the text bounds or the decimal target.
+
+The derivable operations are integer `add`, `sub`, `mul`, `negate`, `div`,
+`mod`, `eq` and `ne`; the Boolean `and`, `or`, `not`, `implies`, `eq` and `ne`;
+rational `add`, `sub`, `mul`, `negate` and `div` (both operands
+integers, or both rationals); `lt`, `le`, `gt` and `ge` over integers,
+rationals and decimals; decimal `add`, `sub`, `mul`, `div` and `negate`;
+`numeric.convert_rounding` to a decimal; IEEE `float32` and `float64` `add`,
+`sub`, `mul` and `div`, `numeric_equal`, `total_order`, `bit_identical`,
+`to_float32` and `to_float64`; every `text` and `enum` comparison;
+`quantity` `add`, `sub`, `mul`, `div`, `pow`, every comparison and `convert`;
+and `numeric.convert` to a text type. Every other operation identity is
+refused as `OperationNotDerivable`. The catalogued identities refused this way
+are `rational.eq`, `rational.ne`, `decimal.eq`, `decimal.ne`, `integer.rem`,
+`ieee.float32.sqrt`, `ieee.float64.sqrt`, `ieee.float32.fma`,
+`ieee.float64.fma`, `ieee.from_exact`, `ieee.to_rational`, `numeric.narrow`,
+`rational.narrow` and `text.size` (each read against the operation catalog).
+
+On the derived path the descriptor is built from the node's own identity, laws
+and mode, so the comparison of the descriptor with the node always agrees and a
+derived claim is never `caller_declared` by disagreement. One derived descriptor
+can still fail its parameter check: `quantity.convert` to a rational result
+derives `QuantityTarget::Exact`, for which the descriptor declares no domain,
+and generation refuses it as `BoundMismatch`.
+
+A claim for a node derivation refused has operation provenance `underived`: no
+descriptor was built, so no operation was declared or confirmed. Its identity is
+the node's own `operation.identity` when the node carries one, and empty
+otherwise.
+
+## Outputs
+
+- A generated crate: `Cargo.toml` (`publish = false`, the Contract Runtime
+  dependency this repository's `Cargo.toml` names, with the `exact` feature) and `src/lib.rs` with one oracle function
+  per supported item.
+- A coverage-probe source map for the generated crate.
+- `derive_exact_scalar_items`: one `Result<ExactScalarItem, ExactScalarRefusal>`
+  per requested node id, in input order. A refusal is a lowering or bound
+  refusal `generate_exact_scalar_oracles` also gives, or `NoDerivableClaim`
+  carrying a `ClaimDerivationRefusal`, a tagged `code` enum:
+  `not_application`, `missing_operation_identity`, `operation_not_derivable`,
+  `operand_forms_not_derivable`, `law_not_derivable` and `mode_not_derivable`.
+- A typed claim map with one entry per requested item: node id, Contract IR
+  semantic id, package id, semantic type, source map, claims, bounds, the
+  bounds its parameters were checked against, operation identity with its
+  `ir_confirmed` or `caller_declared` provenance, and either the generated
+  symbol or the typed refusal; plus the map-level blocked items.
+
+## Behavior
+
+- When generation begins, the generator shall lower every requested node
+  through Contract IR's complete lowering with a scalar tag profile and select
+  exactly one generated or refused disposition per item.
+- When a requested item is requested exactly once, passes every check this
+  requirement states, and its node carries the catalogued `operation.identity`
+  the admission guarantees, the generator shall emit an oracle function that
+  calls the runtime operator named by the descriptor with a caller-supplied
+  `Meter`.
+- If a requested item fails any of the checks this requirement states, then
+  the generator shall return the `ExactScalarRefusal` variant naming that
+  failure — see `ExactScalarRefusal` for the closed set of checks and their
+  reasons — and emit no code for it, without changing any other item's
+  output.
+- If a node lowers, then the generator shall compare the node's own
+  `operation.identity` against the catalogued identity its descriptor implies,
+  and shall compare the descriptor's law definition and mode value against the
+  node's `operation.laws` and `operation.mode`.
+- If every one of those comparisons agrees, then the generator shall mark that
+  claim's operation `ir_confirmed`.
+- If any of those comparisons disagrees, then the generator shall generate the
+  oracle the descriptor names and shall mark that claim's operation
+  `caller_declared` with a typed blocked item, withholding the confirmation
+  rather than the code.
+- If the bound a descriptor parameter needs is missing, repeated, unreadable or
+  unequal to the parameter, then the generator shall refuse the item with a
+  typed reason.
+- Where an integer node's result is typed by a `bounded_domain`, or its
+  operands are typed by distinct `integer_range` `bounded_domain` nodes, the
+  generator shall compare the descriptor's domain with the result bound only.
+- Where an integer operand is typed by an `integer_range` `bounded_domain`, the
+  generator shall record that bound among the claim's checked bounds after the
+  result bound, whether or not it lies inside the result bound.
+- If the result of an integer node is typed by a `bounded_domain` of a form
+  other than the descriptor's, or an operand is typed by one, then the
+  generator shall refuse the item as `MissingBound`.
+- If a node with a scalar-typed result reaches two or more bounds of the form
+  and not exactly one of them is outside the operands' own bounds, then the
+  generator shall refuse the item as `AmbiguousBound`.
+- If an integer operand is a `reference` typed by a plain scalar type and
+  another operand owns a bound or the result is typed by one, then the
+  generator shall refuse the item as `RequiresBound` naming the operand's type.
+- Where a `reference` operand's target is a `value` node whose body is a
+  literal, the generator shall treat the operand as a literal.
+- If a literal operand of an integer operation, inline or referenced, is not a
+  canonical `integer` literal, then the generator shall refuse the item as
+  `OperandTypeMismatch` naming the operand's position and its literal kind.
+- Where a node's result is typed by a scalar type and narrowing conversions
+  consume the node, the generator shall take the one bound they narrow it to as
+  the result bound, record it first among the checked bounds, and compare the
+  descriptor with it.
+- If the narrowing conversions consuming a node narrow it to two or more
+  distinct bounds, or a narrowing conversion and a node that is not one both
+  consume it, then the generator shall refuse the item as `AmbiguousBound`; if
+  they narrow it to one bound of another form, or of the form over another
+  scalar type, then as `MissingBound`.
+- Where a `reference` operand's target is typed by a `bounded_domain` node, the
+  generator shall classify the operand by that domain's own `semantic_type`, its
+  base scalar type; QSL emits a bounded domain directly over its scalar base.
+- If an operand is neither a literal nor a reference, or a literal stands where
+  a quantity is required, then the generator shall refuse the item with a typed
+  reason.
+- If a node belongs to the function family, then the generator shall refuse
+  it as blocked on quire-contract-runtime#34; model and relation families as
+  blocked on quire-spec-language#120; composite, collection, state, temporal
+  and protocol families as unsupported.
+- If a node id appears more than once in the request, then the generator shall
+  refuse every copy.
+- The generator shall order output by node id so
+  that equal requests in any order produce identical bytes.
+- When a node id is passed to `derive_exact_scalar_items`, the generator shall
+  read the node's `operation.identity`, `operation.laws`, `operation.mode`
+  and operand forms and the one result bound, and return the descriptor they
+  determine.
+- If a node is absent, does not lower or has a refused bound, then the
+  generator shall return the `ExactScalarRefusal` `generate_exact_scalar_oracles`
+  gives it, and no descriptor.
+- If a node has no derivable descriptor for another reason, then the generator
+  shall return `NoDerivableClaim` carrying the `ClaimDerivationRefusal` naming
+  why (a node that is not an application, an absent identity, an identity
+  outside the derivable set, operand forms that do not select an operator, or a
+  law or mode that does not select a parameter), and no descriptor.
+- If the generated source exceeds its size ceiling, then the generator shall
+  return a typed error and no partial output.
+- If lowering a requested node's closure consumes more than 65,536 metered work
+  units, then the generator shall refuse the item as `LoweringWorkExhausted`,
+  naming the ceiling and the counter at the failed charge, contribute no
+  generated function for it, and leave every other item's disposition
+  unaffected.
+- When a node is a Boolean connective (`and`, `or`, `not`, `implies`), the
+  generator shall derive its descriptor and generate an oracle that calls
+  `exact::evaluate_boolean` or, where the right operand may stop,
+  `exact::evaluate_boolean_short_circuit`, and returns its `Outcome<bool>`.
+- When a node is an integer or Boolean `eq` or `ne`, the generator shall derive
+  its descriptor and generate an oracle that calls
+  `TypeEnvironment::check_equality` and `CheckedEquality::evaluate` and returns
+  its `Outcome<bool>`.
+- The generator shall emit, for each oracle, one evaluation-entry probe on its
+  function-entry line and one entry-token probe inside the exact source region
+  of each implication consequent, and shall declare the consequent count
+  derived from the node, independent of the emitted region list.
+
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+|----|----------|--------------|
+| FR-014-AC-1 | Every requested item receives exactly one generated or typed-refused disposition, and a refused item contributes no generated function while its siblings are generated unchanged. | Test (TC-024) |
+| FR-014-AC-2 | Integer (add, subtract, multiply, negate, truncating/floor/Euclidean division, modulo), rational, ordering, decimal, IEEE arithmetic/comparison/width conversion, text admission/comparison, enum comparison, and quantity arithmetic/comparison/conversion descriptors each generate a function calling the matching runtime `exact` operator. | Test (TC-024) |
+| FR-014-AC-3 | A descriptor whose arity, result or operand scalar type disagrees with the lowered node, a node that is not a lowered scalar expression, a node that is unbounded, has an invalid or incomplete body, or exhausts lowering work, or a node id requested more than once, is refused with a typed reason. | Test (TC-024) |
+| FR-014-AC-4 | Generated bytes are identical across repeated runs and across permutations of the request order; the generated crate is exactly `Cargo.toml`, `src/lib.rs` and `claim-map.json`, its `claim-map.json` equals the returned claim map, every generated claim's oracle symbol is defined in `src/lib.rs`, and claim-map entries are ordered by node id. | Test (TC-024) |
+| FR-014-AC-5 | Every claim-map entry carries the node id, IR id, package id, source map, claims, bounds and operation identity of its item. | Test (TC-024) |
+| FR-014-AC-6 | Executing generated oracles on the QSpec TC-185, TC-186, TC-187, TC-192 and TC-193 vectors yields outcomes, charges and consumed counters equal to direct runtime execution and to the QSL value authority. | Test (TC-024) |
+| FR-014-AC-7 | Composite, collection, function, model, relation, state, temporal and protocol nodes are refused with their blocked or unsupported reason and never reported as generated. | Test (TC-024) |
+| FR-014-AC-8 | The generated crate declares `publish = false`, names the Contract Runtime dependency this repository's `Cargo.toml` names with the `exact` feature, contains no charge amount (every charge comes from runtime metering), and compiles. | Test (TC-024) |
+| FR-014-AC-9 | Generated oracle functions do not panic: an invalid generated constant, including a decimal target, stops as `InvalidConstant`, an operand of the wrong width stops before any charge, and generated source over its ceiling is a typed error with no output. | Test (TC-024) |
+| FR-014-AC-10 | A descriptor parameter whose bound is missing, repeated, unreadable or unequal to the reachable `bounded_domain` node, an operand that is neither a literal nor a reference, and a literal quantity operand, are each refused with a typed reason. | Test (TC-024) |
+| FR-014-AC-11 | A claim whose descriptor passes every check this requirement states, and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value, marks its operation `ir_confirmed`. An item refused by any of those checks is `caller_declared` even where its operation agrees. | Test (TC-024) |
+| FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound; nor is a descriptor naming an operation the catalogue has no entry for. | Test (TC-024) |
+| FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition is absent from that node's `operation.laws`, or whose mode value disagrees with that node's `operation.mode`, is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |
+| FR-014-AC-14 | A claim whose node this generator never inspected — a duplicate copy, or a record that never lowered — or inspected and refused with a typed reason, marks its operation `caller_declared` with a typed blocked item and reports the request item's own descriptor-derived identity. | Test (TC-024) |
+| FR-014-AC-15 | A requested item whose node closure exceeds the 65,536-unit lowering work ceiling is refused as `LoweringWorkExhausted`, naming the ceiling and the consumed counter, contributes no generated function, and leaves every other item's disposition unaffected. | Test (TC-024) |
+| FR-014-AC-16 | A bound is read from `binding` members looked up by name in any order (`min`/`max`, `numerator_min` through `denominator_max`, `coefficient_min` through `rounding`, `rounding`, `min`/`max`/`text_profile`); a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-024) |
+| FR-014-AC-17 | A `reference` operand whose target is typed by a `bounded_domain` node is classified by that domain's base scalar type, so `x + 1` over a parameter `x` of type `Int[0, 9]` generates, and a bounded text parameter is still a text operand. | Test (TC-024) |
+| FR-014-AC-18 | `derive_exact_scalar_items` returns, per node id in input order, the descriptor determined by the node's `operation.identity`, `operation.mode`, `operation.laws`, operand forms and the one bound of the needed form on its result type; a node that is not an application, has no identity, names an identity outside the derivable set, has operand forms, a law or a mode that select no parameter, is refused with the matching `ClaimDerivationRefusal` and no descriptor; a node that is absent, does not lower or has a refused bound (missing, repeated or unreadable) is refused with the `ExactScalarRefusal` generation gives it. | Test (TC-024) |
+| FR-014-AC-19 | A derived item generates an oracle whose operation is `ir_confirmed`, and for every item of the corpus the derived descriptor equals the descriptor the fixture declares. | Test (TC-024) |
+| FR-014-AC-20 | An integer node over two distinct bounded parameters, `Int[0, 9]` and `Int[10, 20]`, each typed by its own `integer_range` `bounded_domain`, with its result typed by a third `integer_range` `[0, 29]`, generates an `ir_confirmed` oracle whose descriptor is compared with the result bound only; the claim's checked bounds are the result bound, then each operand's own bound; derivation returns the descriptor over `[0, 29]`. | Test (TC-024) |
+| FR-014-AC-21 | A node whose result is typed by a scalar type and whose reachable bounds are its operands' own and exactly one other takes that other as its result bound. | Test (TC-024) |
+| FR-014-AC-22 | A node whose result is typed by a scalar type and whose two or more reachable bounds of the form are not exactly one outside the operands' own bounds is refused as `AmbiguousBound`, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-23 | An operand, or the result, typed by a `bounded_domain` of a form other than the descriptor's is refused as `MissingBound`. | Test (TC-024) |
+| FR-014-AC-24 | An operand's own bound need not lie inside the result bound: `a + wide` over `[0, 9]` and `[0, 50]` with a `[0, 29]` result, `-e` over `[1, 9]` with a `[-9, -1]` result and `e * f` over `[1, 9]` and `[100, 200]` with a `[100, 1800]` result each generate, derive the same descriptor, and record each operand's own bound. | Test (TC-024) |
+| FR-014-AC-25 | A `reference` operand typed by a plain scalar type is refused as `RequiresBound` naming its type, in generation and in derivation, where another operand owns a bound or the result is typed by one (`x + y`, `y + y`, and `x + y` over a scalar-typed result); a literal operand is never refused as `RequiresBound`. | Test (TC-024) |
+| FR-014-AC-26 | A `reference` operand whose target is a `value` node with a literal body is a literal operand: `x + 1` over `x: Int[0, 9]` narrowed to `Int[0, 10]`, with the literal as a reference to its own plain-Integer-typed `value` node, generates with checked bounds `[0, 10]` then `[0, 9]` and derives the descriptor over `[0, 10]`. | Test (TC-024) |
+| FR-014-AC-27 | A node whose result is typed by a scalar type and that only narrowing conversions (`quire.op.numeric.narrow`, exactly one argument referencing the node) consume takes the bound they narrow it to as its result bound: `x + y` over `Int[0, 9]` and `Int[10, 20]` narrowed to `Int[10, 29]` generates with checked bounds `[10, 29]`, `[0, 9]`, `[10, 20]` and derives the descriptor over `[10, 29]`, a descriptor over `[0, 9]` is `BoundMismatch` against `[10, 29]`, and `-z` over `Int[0, 9]` narrowed to `Int[-9, 0]` checks `[-9, 0]` then `[0, 9]`. | Test (TC-024) |
+| FR-014-AC-28 | The referenced node's body, not its form or type, makes an operand a literal: `x + n`, where `n` is a plain-Integer-typed `value` node of form `literal` whose body is not a literal, is refused as `RequiresBound` naming Integer, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-29 | `x + p` narrowed to `Int[0, 29]`, where `p` is a parameter typed by the plain Integer type, is refused as `RequiresBound` naming Integer, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-30 | `q + q` narrowed to `Int[0, 29]`, where no operand owns a bound and `q`'s node reaches `[0, 29]`, is refused as `RequiresBound` naming Integer, in generation and in derivation: the narrowing bounds the result as a `bounded_domain` result type does. | Test (TC-024) |
+| FR-014-AC-31 | A literal operand of an integer operation that is not a canonical `integer` literal is refused as `OperandTypeMismatch` naming its position and literal kind, whatever the referenced node's type: `x + "a"` with the text literal in a plain-Integer-typed `value` node is refused at position 1 with kind `text`, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-32 | A node that narrowing conversions narrow to two distinct bounds (`[10, 29]` and `[0, 40]`) is refused as `AmbiguousBound`, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-33 | A node narrowed to a `text_bounds` bound over Integer, or to an `integer_range` over Rational, is refused as `MissingBound` naming Integer and `integer_range`, in generation and in derivation. | Test (TC-024) |
+| FR-014-AC-34 | A node that a narrowing conversion and a node that is not a narrowing conversion both consume (`x + 2` narrowed to `Int[0, 11]` and an operand of `(x + 2) + x`) is refused as `AmbiguousBound`, in generation and in derivation, while `x + 1`, consumed only by its narrowing, generates. | Test (TC-024) |
+| FR-014-AC-35 | Boolean `and`, `or`, `not`, `implies`, `eq` and `ne` nodes and integer `eq`, `ne`, `lt`, `le`, `gt` and `ge` nodes each derive a descriptor and generate an `ir_confirmed` oracle; each connective's oracle calls `evaluate_boolean` or `evaluate_boolean_short_circuit`, and each `eq`/`ne` oracle calls `check_equality` and `CheckedEquality::evaluate`, each returning `Outcome<bool>`. | Test (TC-024) |
+| FR-014-AC-36 | Every oracle's source map declares the node's implication-consequent count, one evaluation-entry probe on the function-entry line disjoint from every consequent region, and one entry-token probe inside the exact region of each consequent; a dropped or duplicated region does not change the declared count. | Test (TC-024) |
+| FR-014-AC-37 | A differential corpus covering every node FR-014-AC-35 names compiles against the runtime alone, and each oracle's outcome, admitted charges and consumed counters equal direct runtime execution and the QSL value authority. | Test (TC-024) |
+
+## Dependencies
+
+- **Upstream**: Contract IR
+  FR-036/FR-038 (CheckedPackage V2 lowering), Contract Runtime FR-007 (exact
+  scalar operators), QSpec FR-196.
+- **Downstream**: [TC-024](../matrix/TC-024-exact-scalar-oracles.md),
+  [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md).

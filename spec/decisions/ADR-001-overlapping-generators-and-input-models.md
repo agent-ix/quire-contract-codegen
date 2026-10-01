@@ -26,13 +26,13 @@ replay facade recompiles against.
 
 ### Q1: FR-015 is the Kani backend's one generator
 
-[FR-015](../functional/complete-v1/FR-015-bounded-kani-obligations.md) is the only Kani generation
+[FR-015](../kani/functional/FR-015-bounded-kani-obligations.md) is the only Kani generation
 requirement. It lowers against `cadical` with no stubbing option, and a counterexample replays only
-through QSL's replay facade ([FR-024](../functional/complete-v1/FR-024-counterexample-envelope-intake.md)).
+through QSL's replay facade ([FR-024](../replay/functional/FR-024-counterexample-envelope-intake.md)).
 
 ### Q2: FR-014 is the one oracle generator for the families it covers
 
-[FR-014](../functional/complete-v1/FR-014-exact-scalar-oracles.md) generates the oracle of every
+[FR-014](../oracle/functional/FR-014-exact-scalar-oracles.md) generates the oracle of every
 family it covers, the Boolean connectives and the bounded-integer comparisons included, with its
 coverage-probe source map.
 

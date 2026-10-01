@@ -69,7 +69,7 @@ A shadow proof is never reported without its refinement obligation.
 FR-015-AC-9's ban stands: no option enabling stubbing is emitted. Every stub is an assumption the
 proof does not discharge.
 
-[FR-028](../functional/complete-v1/FR-028-bounded-proof-ceilings.md) states Q1 and Q2.
+[FR-028](../kani/functional/FR-028-bounded-proof-ceilings.md) states Q1 and Q2.
 
 ## Consequences
 

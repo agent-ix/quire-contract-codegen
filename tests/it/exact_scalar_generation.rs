@@ -636,7 +636,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
 /// AC-14 is bound here for its provenance conjunct only: the loop below asserts that every
 /// `Refused` claim is `CallerDeclared` with a typed blocked item. It asserts nothing about the
 /// identity such a claim reports, so AC-14's identity clause stays unbacked and its row in
-/// `spec/test-matrix.md` says so.
+/// `spec/oracle/matrix/tests.md` says so.
 ///
 /// Discharges FR-014-AC-11 over the whole golden corpus, typed and on the wire. Every
 /// golden CORPUS item's descriptor agrees with its node -- `golden_items()` as a whole also
