@@ -61,10 +61,6 @@ use crate::{
     core::diagnostic::GenerationErrorCode,
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     core::naming::{reference_identifier, unique_names},
-    exact_scalar::{
-        aggregate_members, bound_members, literal_count, literal_integer, operand_ranges,
-        OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
-    },
     generate_boolean_oracle,
     kani::{
         adapter_options, i64_literal, readable_component, KaniBindingRole, KaniIntegerBounds,
@@ -74,9 +70,13 @@ use crate::{
         EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
         ObligationBinding, ObligationKind, ScalarObligationArgument, ScalarObligationIdentity,
     },
-    oracle::{
+    oracle::boolean_v1::{
         generate_named_boolean_oracle, typed_dependency_parameters, DependencyParameter,
         RustValueType,
+    },
+    oracle::scalar::{
+        aggregate_members, bound_members, literal_count, literal_integer, operand_ranges,
+        OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
     },
     ClaimDerivationRefusal, ClaimDisposition, ClaimMap, ExactScalarClaim, ExactScalarRefusal,
     GeneratedScalarClaim, OperationProvenance, OracleRequest, UpstreamBlocker,
@@ -1104,14 +1104,14 @@ fn classify_node<'a>(
 /// [`ClaimMap`]/[`ExactScalarClaim`] are fully `pub`, so nothing enforces that a claim
 /// map assembled by another caller names only node ids [`CheckedPackageV2::graph`] also carries --
 /// that invariant holds only for a claim map this crate's own
-/// [`crate::exact_scalar::generate_exact_scalar_oracles`] produced. A hand-assembled claim map
+/// [`crate::oracle::scalar::generate_exact_scalar_oracles`] produced. A hand-assembled claim map
 /// whose [`GeneratedScalarClaim`] bounds still resolve can therefore reach
 /// [`Outcome::LoweredScalar`] for a `node_id` this crate never checked is in the graph at all, so
 /// that case is refused here too, as [`InvalidObligationItem::UnknownNode`] -- the same code
 /// [`ExactScalarRefusal::InvalidInput`] ("the node is not in the admitted graph") already reports
 /// through `classify_claim`'s `Refused` arm, so a node absent from the graph is refused under one
 /// code regardless of which path notices it first. `expression` is excluded from the tag/form
-/// check because it is the one family [`crate::exact_scalar::generate_exact_scalar_oracles`] ever
+/// check because it is the one family [`crate::oracle::scalar::generate_exact_scalar_oracles`] ever
 /// lowers to a [`ClaimDisposition::Generated`] claim at all -- every real, golden-path
 /// scalar claim this generator supports is an `expression` node, and none of those carry a
 /// contract role, so a null `kind` there is correct, not unmodeled. Scoped to the success arm
@@ -1302,7 +1302,7 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
 /// derived domain is not an `integer_range` -- are not represented here: [`ScalarOperation::of`] only
 /// renders the `IntegerArithmetic` family, and for that family `check_parameters`'s own
 /// `Bounds::equal` returns `Ok` only after successfully reading exactly one `integer_range` bound
-/// (`exact_scalar::check_parameters`, `exact_scalar::Bounds::equal`) -- the same node, read by the
+/// (`oracle::scalar::check_parameters`, `oracle::scalar::Bounds::equal`) -- the same node, read by the
 /// same `literal_integer`, that this function's own [`derive_domain`] call reads. Given that
 /// guarantee, both failure shapes are structurally unreachable through this function today, so
 /// they are asserted with `unreachable!` below rather than modelled as a caller-visible refusal a

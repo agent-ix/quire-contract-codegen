@@ -38,12 +38,12 @@ use serde_json::Value;
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
-    exact_scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
     kani::{adapter_options, i64_literal, KaniSolver},
     kani_identity::{
         StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
         StateFrameProperty, StateFrameScope,
     },
+    oracle::scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
     MAX_OBLIGATION_UNWIND,
 };
 
