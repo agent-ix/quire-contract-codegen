@@ -51,7 +51,7 @@ Issue #5's reviewed spec is being repaired in a bounded coordinator-authorized s
 entry probes, a typed-IR implication census, strict LLVM reading, and measured classification
 primitives. Native fixtures use actual generator outputs. Aggregate analysis awaits IR #50's
 bound population and a native producer/run-result contract; no private
-binding or counter model is introduced. REV-015 records the repair and residual work.
+binding or counter model is introduced. SR-800 records the repair and residual work.
 
 ## Guards
 

@@ -1,5 +1,5 @@
 ---
-id: REV-021
+id: SR-804
 title: "Integrity review of the numeric/state strategy slice"
 type: SpecReview
 analysis: integrity

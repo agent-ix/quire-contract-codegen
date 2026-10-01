@@ -1,5 +1,5 @@
 ---
-id: SR-010
+id: SR-806
 title: "Numeric and state oracle Rust review"
 type: SpecReview
 analysis: code-review
@@ -12,7 +12,7 @@ relationships:
     type: references
 ---
 
-# SR-010: Numeric and state oracle Rust review
+# SR-806: Numeric and state oracle Rust review
 
 ## Summary
 

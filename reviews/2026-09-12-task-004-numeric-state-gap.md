@@ -1,5 +1,5 @@
 ---
-id: SR-011
+id: SR-807
 title: "Gap analysis — PLAN-001 Task-004 numeric and state oracles"
 type: SpecReview
 analysis: gap-analysis
@@ -12,7 +12,7 @@ relationships:
     type: references
 ---
 
-# SR-011: Gap analysis — PLAN-001 Task-004 numeric and state oracles
+# SR-807: Gap analysis — PLAN-001 Task-004 numeric and state oracles
 
 ## Summary
 

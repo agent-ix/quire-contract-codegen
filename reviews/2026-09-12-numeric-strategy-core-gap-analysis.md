@@ -39,7 +39,7 @@ not covered by this verdict.
 - Repository rollup: 52 / 98 reference rows backed and 15 / 18 Test Cases backed. The unbacked rows
   are not counted as Task-008 coverage.
 - Inventoried Task-008 public behaviors: 28; untraced behaviors: 0; source stubs: 0; test stubs: 0.
-- Semantic review: skipped; SR-010 through SR-013 are the completed base, failure-domain, integrity,
+- Semantic review: skipped; SR-802 through SR-805 are the completed base, failure-domain, integrity,
   and scope-boundary reviews of the governing specification.
 
 ## Declared residual work

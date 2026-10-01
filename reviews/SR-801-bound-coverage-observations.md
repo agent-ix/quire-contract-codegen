@@ -1,5 +1,5 @@
 ---
-id: REV-018
+id: SR-801
 title: "Complete bound coverage observation implementation"
 type: SpecReview
 analysis: gap-analysis
