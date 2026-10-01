@@ -77,3 +77,27 @@ Not mergeable as is: FND-001 lets a report listing a failed or errored property 
 test. FND-002 should be fixed or the exclusivity documented in the same round. FND-003 to FND-005
 are one-line cleanups. The wire shape, the refusal surface, the precondition rule and the strip
 are sound.
+
+## Dispositions
+
+Round 1, reviewed at db75b798c7cbabe28e39169e9090416c21bee38f (rebased on main with #216; fix
+commit db75b79). `make ci` rerun by this reviewer: exit 0 (111 unit, 245 integration, 9
+ignored). `make kani`: the coder's transcript was checked, not rerun: 9 named tests passed in
+1291.88 s, built from the coder's worktree at db75b79. Mutations in a scratch copy: disabling the
+contradiction refusal turns `tc_027_a_success_report_listing_a_failed_check_is_refused_never_verified`
+red; a fixed report name turns the concurrent-runs test and the launch-arguments test red.
+FND-001 soundness against real Kani: the real lane (9 runs: verified, falsified,
+cover-unsatisfied) passes with the refusal active, and the six captures still parse (the vacuous
+capture is a success with an `Unreachable` check, which stays allowed). Kani marks checks
+`Undetermined` only beside a failed unwinding or unsupported-construct check, which makes the
+harness a failure, so a legitimate success never lists one; an over-refusal would be a typed
+refusal, never a wrong verdict. No generated harness uses `should_panic` (the one Kani mode that
+reports success beside failed checks).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | db75b79: `refuse_contradiction` returns `KaniReportRefusal::Inconsistent { check_id, status }` for a success harness listing a `Failure`, `Error`, `Undetermined` or `Unknown` check of any class, every kind |
+| FND-002 | fixed | db75b79: `fresh_report_path` names `quire-kani-report-<pid>-<seq>.json` (atomic sequence); the run removes only its own file before launch and after reading; concurrent test added |
+| FND-003 | fixed | db75b79: doc now names FR-017 and says FR-029's map is not implemented yet |
+| FND-004 | fixed | db75b79: `Other(OtherCheckClass)` with a private field, built only through `From<String>`, which maps `cover`/`unwind` to their variants |
+| FND-005 | fixed | db75b79: the Kani version is removed from `tests/it/kani_witness_join.rs:5` |

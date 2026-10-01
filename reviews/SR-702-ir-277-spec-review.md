@@ -52,3 +52,20 @@ Checked and clean:
 
 The FR-017 amendments are sound and complete for what the code does; two low wording defects
 remain, best fixed with SR-701's matrix items in one spec commit.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | AD-004 still fixes the old report path: the question (c) decision says `kani/run` passes `--export-json <target-dir>/quire-kani-report.json` "(the path PR 210 uses)" and removes any file there before launch, and layout rule L-7 says "The report path is `<target-dir>/quire-kani-report.json`, removed before launch", with a stale-report test. This PR now uses a per-launch name, `quire-kani-report-<pid>-<seq>.json`, removed only by its own run, as FR-017 states. The AD's numbered rule and the code disagree; fix both sentences in this PR, since this PR changed the behaviour | spec/assurance/AD-004-cg-crate-layout.md:378, spec/assurance/AD-004-cg-crate-layout.md:543 |
+| FND-004 | low | interface-001's execution slice `outcome_source` still lists the refusal causes without the new contradiction refusal, which its own `refusals` field and FR-017 now name | spec/core/functional/interface-001-codegen-api.md:271 |
+
+## Dispositions
+
+Round 1, reviewed at db75b798c7cbabe28e39169e9090416c21bee38f. `make spec` exits 0 with the 3
+baseline warnings (FR-017's AC-17 warning now at line 159).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | db75b79: FR-017-AC-14 now says the verdict is read from the exported report, not the stream |
+| FND-002 | fixed | db75b79: interface-001 `refusals` names `KaniExecutionRefusal::Report` and its causes; `outcomes` lists `vacuous_proof` and states success in report terms |

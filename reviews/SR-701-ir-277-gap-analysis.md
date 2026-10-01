@@ -51,3 +51,14 @@ Checked and clean:
 Code coverage of the new criteria is real and discriminating. Fix the two matrix/trace defects
 (FND-001, FND-002) and the stale Expected Results (FND-003) in the fix round; FND-004 is a
 tracker action for the lead at merge.
+
+## Dispositions
+
+Round 1, reviewed at db75b798c7cbabe28e39169e9090416c21bee38f.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | db75b79: the TC-027 row of `spec/kani/matrix/tests.md` now lists FR-017-AC-18, AC-19 and AC-20 |
+| FND-002 | fixed | db75b79: TC-027 Implementation names `a_report_with_no_successful_check_is_inconclusive_not_verified_even_with_every_cover_satisfied` |
+| FND-003 | fixed | db75b79: TC-027 Expected Results rewritten (report-based; no unreadable cover summaries, no verdict in the stream) |
+| FND-004 | fixed | db75b79: the PR body states the PR delivers only IR-288, IR-463 and part of IR-277 and that IR-277 stays open with batching, `kani_witness_join` console scanning, the silent tail capture and criterion 5 remaining; the lead must still keep IR-277 open at merge, because the branch name links it |

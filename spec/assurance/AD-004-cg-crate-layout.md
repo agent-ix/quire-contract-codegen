@@ -375,8 +375,10 @@ Where the report file lives. The runner already owns the run's directory: it set
 `CARGO_TARGET_DIR` from `KaniExecutionRequest::target_directory` and runs in
 `crate_directory`. The report is run evidence, not a generated artifact, so it is never part of an
 `ArtifactBundle` and is never published. Decision: `kani/run` passes
-`--export-json <target-dir>/quire-kani-report.json` (the path PR 210 uses), removes any file
-there before launch (a stale report must never read as this run's verdict), reads it once after
+`--export-json <target-dir>/quire-kani-report-<pid>-<seq>.json` (a name unique to the launch, as
+PR 210 implements and FR-017 states), removes only that file before launch and after reading it
+(a report left by another run must never read as this run's verdict, and runs sharing a target
+directory never touch each other's file), reads it once after
 the process exits, and hands the bytes to `kani/output/report.rs`. The evidence record carries the
 parsed typed result, never the path. A report that is absent after a clean exit, unreadable, over
 the size cap or of an unknown schema is a typed refusal and never `Inconclusive`, as PR 210
@@ -540,8 +542,10 @@ requirement is authored.
 - L-6. Kani output is read in `kani/output/` only, and the classifier, the terminal maps and the
   witness decode take typed values. Test: a grep for Kani's banner, check and playback wording
   outside that directory.
-- L-7. The report path is `<target-dir>/quire-kani-report.json`, removed before launch and absent
-  from every `ArtifactBundle`. Test: a stand-in launcher that leaves a previous report.
+- L-7. The report path is `<target-dir>/quire-kani-report-<pid>-<seq>.json`, unique to the launch,
+  removed only by its own run before launch and after reading, and absent from every
+  `ArtifactBundle`. Test: a stand-in launcher that leaves another run's report, and concurrent
+  runs in one target directory.
 - L-8. `serde_json::Value` and `.get("` appear for body terms only in `core/ir`. Test: a grep
   gate.
 - L-9. The canonical encoder and the content digest are called from `core/canonical.rs` only, and
