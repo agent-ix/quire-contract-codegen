@@ -1,0 +1,97 @@
+---
+id: "SR-662"
+title: "CG PR 215 gap analysis: AD-004 migration plan against the code and FR-015"
+type: SpecReview
+scope: "agent-ix/quire-contract-codegen@bfaaa849a100aee4a49959554b4607f0410227b1 (review), b0c000866656cb3f4044acd10ed15ccb53b5d463 (disposition pass 1), fe571ba8cc34b33a7beea59c6c00c4f902a25a96 (disposition pass 2), 9d06673a824c498b6d1b447b7fbf5efe25e6b2c2 (disposition pass 3); spec/assurance/AD-004-cg-crate-layout.md; measured against src/ and tests/it/ at origin/main 2fad745"
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/AD-004
+    type: references
+  - target: ix://agent-ix/quire-contract-codegen/FR-015
+    type: references
+---
+
+# SR-662: CG PR 215 gap analysis
+
+## Summary
+
+Ticket: IR-344. PR: agent-ix/quire-contract-codegen#215 at bfaaa84.
+
+The PR is spec-only, so this gap analysis asks whether AD-004's migration plan covers what
+the code at the base actually does and what the cited requirements need. It also checks
+whether any step drops a requirement, reopens a vacuity gap (IR-464) or keeps a pin or digest
+that CLAUDE.md forbids. Plan completion: not assessed (no plan supplied).
+
+Checked clean: no step deletes a requirement or rewrites a criterion (FR-015-AC-22/AC-25
+"stay verbatim"; rows go planned or unbacked). The arithmetic control (L-5) is required at
+every step, and its package comes through QSL's facade, never a copied fixture. 4f waits on 4e
+and on the QSL move of the quire-integration exemplars. GitHub code search confirms
+quire-integration's `tests/support/mod.rs` calls `generate_kani_bundle`. `RUNTIME_REVISION`
+is deleted, not respelled. The report path decision (question c) matches the runner's
+existing `CARGO_TARGET_DIR` ownership.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | high | The plan has no step that gives the precondition, postcondition and invariant (contract) families a V2 input. Yet 4a, 4e, 4f and L-5 all rest on the claim that "V1 has no consumer once the contract family exists". At the base the contract family is the V1 arm. `lower_clause` takes `&BoundClause` (`kani_obligations.rs:1069-1092`, through `generate_boolean_oracle`). `render_precondition` and `render_contract` take that `LoweredClause` (`:2180`, `:2204`). `ObligationKind::Precondition`/`Postcondition` come only from V1 `ClauseKind` (`:1062-1063`). The only V2 arm, `ScalarClaim`, reaches `render_scalar` alone. `generate_kani_bundle` is V1 too (`KaniRequest` takes `TypedExpression`, `kani.rs:156-176`). So 4f, "delete the `BoundClause` arm", deletes the contract family that 4e made the public entry and that the QSL exemplars will have moved onto. 4a cannot put the control on a V2 FR-015 contract path that does not exist, so L-5 cannot hold "at every step". Needed: a step before 4e that adds a V2 contract arm (over `CheckedPackageV2`), with the criteria it needs, or an honest statement that 4f waits for it | spec/assurance/AD-004-cg-crate-layout.md:282-292, :337-339, :455-469 |
+| FND-002 | medium | Step 4f retires "`ProofDependency*`, validation" with `generate_kani_bundle` (map row). The corpus survives until 4g, which is gated on QSL-353, and it imports `ProofDependencyEdge`, `ProofDependencyKind`, `ProofDependencyRequest`, `ProofReadiness`, `normalize_dependencies` and `dependency_readiness` from `kani` (`bounded_kani_corpus.rs:19-22`, `:442`, `:598`). It also publicly exports `CorpusProofDependencyGraph` and `CORPUS_PROOF_GRAPH_SCHEMA`. Those request and readiness types are also the FR-015 census input that AC-22/AC-25 need. The AD should retire only `ProofDependencyGraph` and the V1 bundle at 4f, and name where the census types live (for example `kani/identity.rs`) | spec/assurance/AD-004-cg-crate-layout.md:200, :463-469, :529 |
+| FND-003 | medium | "Its constructor refuses an empty cover list ... That closes IR-464 for every family at once" overclaims. A non-empty cover list is not a non-vacuity check. IR-464 asks for a cover "reached only when the property's precondition is satisfiable". A `kani::cover!(true, ..)` placed before the assumptions would satisfy L-4 and still be vacuous. The AD states no render rule placing covers after every `kani::assume` and the subject call. It also does not say what cover the corpus family gets, though it has none today. Add the placement rule to `render.rs`, with a test that a harness whose assumptions are unsatisfiable reads as vacuous | spec/assurance/AD-004-cg-crate-layout.md:256-260, :417 |
+| FND-004 | medium | The AD says "No tool, version or file digest is added" and lists the carried digests as `package_id` and source byte digests. It misses the tool digest CG already carries: `ReplayInputs::backend_manifest`, "The digest of the tool manifest of the backend that found the counterexample" (`spine_replay.rs:197-198`, public API). CLAUDE.md says to remove such a digest where it is found. Step 5 depends on QSL-351 with "the tool pin gone", but no step deletes CG's `backend_manifest` field and its plumbing when QSL drops it | spec/assurance/AD-004-cg-crate-layout.md:353-358, :474-477 |
+| FND-005 | low | `SourceProbe` and `SourceRegion` (`oracle.rs`, imported by `vacuity.rs:7` and `bound_coverage.rs`) are named only as "source regions" in the `oracle` split row, with no target file in `core/`. The target tree lists no file for them | spec/assurance/AD-004-cg-crate-layout.md:126-133, :186 |
+
+## Verdict
+
+The plan keeps every requirement and the QSL arithmetic control, and its ordering of 4e/4f
+behind the QSL exemplar move is right. But it cannot run as written. The contract family it
+keeps alive is the V1 arm it deletes (FND-001). The census types it retires are used by the
+corpus that outlives them (FND-002). The cover rule is weaker than IR-464 asks (FND-003). And
+one existing tool digest is left without a removal step (FND-004). Not mergeable as an
+approved AD until FND-001 to FND-004 are resolved.
+
+## New findings (disposition pass 1)
+
+Re-reviewed at b0c0008. The open question in the AD (is the control's clause a contract-family
+clause or a scalar claim?) was settled by reading quire-integration `tests/qsl_kani_exemplar.rs`.
+That repository is private, so this note gives file and line only. The control is a contract-family
+clause: a population rule bound as the postcondition of a `generate_kani_bundle` bundle with an
+absent precondition (`:329-346`), mutated at `:538-624`. Step 4c is therefore needed, as the AD
+now says. FR-015 has no V2 contract-input ticket. IR-364's scope as recorded on IR-344 is the V2
+strategy chain, not FR-015.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | 4a and 4c do not keep L-5 as written. (1) The control's V1 package is built by `quire_spec_language::lowering::lower_for(native, ProjectionTarget::IntegerIrV1, ..)` and then `ir::BoundPackage::from_json_bytes`. `lower_for` is in QSL's root crate (`src/lowering.rs:283`), not in `qsl-replay`, and CG may depend on `qsl-replay` only (`Cargo.toml:19-22`, QSL arch-lint T12-A). `call_site(...).package` yields no `BoundPackage`. So 4a cannot build the V1-path control "through QSL's facade" without a new QSL dependency or a fixture. (2) The control's clause is `amount < 1000 implies amount + 1 <= 1000`, a population rule with integer arithmetic. 4c's design intent covers only "a precondition, postcondition or invariant clause node" with "Boolean connectives and bounded-integer comparisons", so the V2 arm as intended would not carry the control. Fix: say how 4a obtains its package (or that 4a starts at 4c, with QSL's own exemplar as the guard until then), and include rule clauses and FR-014 integer arithmetic in 4c's intent | spec/assurance/AD-004-cg-crate-layout.md:328-338, :349-362, :558-567 |
+| FND-007 | medium | The corpus contradicts L-3 and L-4. 4g says that until QSL-353 the corpus "renders through `render.rs` and stays as it is". It has no cover and no symbolic input, and `HarnessSpec`'s constructor refuses an empty cover list, so it cannot render through `render.rs` without changing. If it keeps its own template, L-3 ("render.rs only") fails until 4g. The V1 arm and the bundle also "keep their own templates until 4f". No step says when the L-3 gate lands, and it can only land after 4f and 4g. "A case with no symbolic input is not rendered as a proof" contradicts "stays as it is". State when L-3 lands and what the corpus renders as before 4g | spec/assurance/AD-004-cg-crate-layout.md:316-318, :499-501, :565-567, :583-588 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 6303729 |
+| FND-002 | fixed | 6303729 |
+| FND-003 | fixed | 6303729 |
+| FND-004 | fixed | 6303729 |
+| FND-005 | fixed | 6303729 |
+
+## Dispositions (round 2)
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | still-open | fe571ba changes only step 5; 4a still builds the V1 control package through qsl-replay, which cannot yield a BoundPackage (lower_for is in QSL's root crate), and 4c's intent still omits rule clauses and integer arithmetic |
+| FND-007 | still-open | fe571ba changes only step 5; the corpus still "renders through render.rs and stays as it is" with no cover, and no step says when L-3 lands |
+
+## New findings (disposition pass 3)
+
+Re-reviewed at 9d06673. The control does exist in quire-integration (`tests/qsl_kani_exemplar.rs`,
+read in pass 1), so moving L-5 onto that test instead of a CG copy is sound and copies nothing.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | L-5's test is quire-integration's exemplar suite, "run against CG's branch by each step's PR", but no mechanism is named. quire-integration resolves CG from its own lock, so each step needs a local run with a `[patch]` to the CG branch and its transcript in the PR, as step 2 requires for PR 210. Also, 4c says "the arithmetic control moves onto the V2 arm and passes there", but that test calls `generate_kani_bundle` and only the QSL-owned follow-up after 4e can move it. Reword 4c so the move is that follow-up, which 4f already waits for | spec/assurance/AD-004-cg-crate-layout.md:353-367, :524-527, :592-596 |
+
+## Dispositions (round 3)
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | 9d06673 |
+| FND-007 | fixed | 9d06673 |

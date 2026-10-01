@@ -106,4 +106,5 @@ Two recorded exceptions to the layout convention, both to be settled at the layo
 
 - [CG to QSL replay seam](assurance/AD-002-cg-qsl-replay-seam.md).
 - [Evidence chain across IR, CG and QSL](assurance/AD-003-evidence-chain.md).
+- [CG crate layout](assurance/AD-004-cg-crate-layout.md).
 - ISO/IEC/IEEE 29148 (requirements engineering), per `standards_alignment`.
