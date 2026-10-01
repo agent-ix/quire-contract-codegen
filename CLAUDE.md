@@ -48,7 +48,7 @@ it, e.g. `make lint LOCKED=`, when a patch or a deliberate lock change makes `--
 src/lib.rs                 # crate root
 tests/it/main.rs           # the merged integration test binary; each former tests/*.rs file is a mod here
 schemas/                   # domain output contracts included by their owning library producers
-spec/                      # requirements artifacts, the test matrix, the suite registry
+spec/                      # spec.md (Subsystem Registry), tests.md (matrix index), <subsystem>/{stakeholder,functional,non-functional,matrix}/ per quire-contract-ir:ADR-0056; the suite registry is spec/core/matrix/suites.md
 reviews/                   # quire-validated SpecReview artifacts
 scripts/                   # the unsafe-comment audit
 ```

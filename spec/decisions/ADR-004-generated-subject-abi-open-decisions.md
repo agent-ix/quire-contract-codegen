@@ -18,7 +18,7 @@ Accepted.
 
 ## Context
 
-[FR-025](../functional/complete-v1/FR-025-generated-subject-abi.md) states the subject ABI of a
+[FR-025](../kani/functional/FR-025-generated-subject-abi.md) states the subject ABI of a
 generated harness: the argument order, the parameter and domain each binding names, lossless
 widening, and the Rust types of the Boolean and bounded-integer families.
 

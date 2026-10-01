@@ -221,7 +221,7 @@ fn tc_031_ac10_reference_parameter_blocked_on_qsl_120() {
 /// quire-spec-language#120 and state nodes on quire-spec-language#121 --
 /// two distinct blockers. (The corpus carries no `relation`/`protocol`
 /// node, matching FR-018's own TC-029 precedent for this same family
-/// split: `spec/test-matrix.md`'s FR-018 row records the identical gap.)
+/// split: `spec/oracle/matrix/tests.md`'s FR-018 row records the identical gap.)
 #[test]
 fn tc_031_ac11_model_and_state_are_distinct_blockers() {
     let package = ext_corpus_package().admit();
@@ -687,7 +687,7 @@ fn tc_031_ac14_manifest_and_source_shape() {
 }
 
 /// Trace: FR-021-AC-15 (origin half only -- see module doc "Location
-/// tagging" and `spec/test-matrix.md`'s FR-021 row: the `path`-non-empty
+/// tagging" and `spec/oracle/matrix/tests.md`'s FR-021 row: the `path`-non-empty
 /// case is not implemented and is unreachable from this V1's scoped body
 /// vocabulary), TC-031. The location map records one entry per generated
 /// function body, each `Location{origin, path}` re-derivable from the

@@ -1,0 +1,96 @@
+---
+type: master-requirements
+name: quire-contract-codegen
+org: agent-ix
+component_type: rust-library
+implementation_language: rust
+tags: [contract-codegen, rust, proptest, kani, assurance]
+standards_alignment: [iso-iec-ieee-29148]
+security_critical: false
+---
+# Master Requirements Specification
+
+## Purpose
+
+This specification defines deterministic lowering from a validated contract package into Rust
+oracles, tri-state test harnesses, shaped proptest strategies, Kani obligations and coverage maps. Generated artifacts remain traceable to one authoritative source contract.
+
+## Scope
+
+### In Scope
+
+- Library-first and CLI-driven deterministic generation.
+- Executable, property-test, proof, vacuity and source-map outputs.
+- Explicit diagnostics for unsupported or unproved constructs.
+- Differential and cross-backend semantic conformance, with determinism checked by regeneration.
+
+### Out of Scope
+
+- A Rust compiler, property-testing framework, proof engine, or coverage engine.
+- Contract parsing or canonicalization owned by `quire-contract-ir`.
+- Project-specific certification or accreditation.
+
+## System Overview
+
+### System Description
+
+The crate consumes a versioned serialized contract package and emits a deterministic artifact bundle.
+It uses a bounded deterministic renderer plus `syn` validation for Rust syntax, depends generated customer code only on
+`quire-contract-runtime` and declared customer types, adapts to proptest and Kani, and consumes LLVM
+coverage exports rather than implementing those engines.
+
+### Intended Users
+
+Assurance engineers generate reproducible verification artifacts. Developers compile and execute the
+outputs. Reviewers inspect diagnostics, proof dependencies, coverage evidence and semantic-parity
+results. A human release owner alone decides source release suitability.
+
+## Requirements Architecture
+
+StR-001 is the one stakeholder requirement. Every functional requirement satisfies it. NFR-001 and
+NFR-002 constrain it, and NFR-004 constrains FR-008 to FR-013.
+`interface-001` defines the serialized input, the library and CLI operations, the artifact bundle,
+the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
+Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 record the owner's decisions on the
+generators, the input model, the backend adapter, Kani tractability and the generated subject ABI.
+[tests.md](tests.md) indexes the per-subsystem matrices that map every criterion to its test case.
+
+| Area | Requirements | Test cases |
+|---|---|---|
+| Tri-state harnesses, vacuity and publication | FR-002, FR-004, FR-005 | TC-001 to TC-004, TC-006, TC-007 |
+| Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
+| Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
+| Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings | TC-025, TC-027, TC-036, TC-039 |
+| Backend adapter | FR-026 adapter trait and registration, FR-029 and FR-030 terminal-value maps | TC-037, TC-040, TC-041 |
+| Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope | TC-026, TC-035 |
+| Capability settlement and routing | FR-019 settlement, FR-022 routed generation | TC-030, TC-033 |
+
+FR-018 and FR-014 refuse the
+model graph, relation, temporal and protocol families with typed blockers. Function application is
+FR-021's.
+
+## Subsystems
+
+Specification files are grouped by subsystem under `spec/<subsystem>/`, following
+`ix://agent-ix/quire-contract-ir/ADR-0056` (the layout `quire-contract-ir` already uses). Identifiers
+stay flat and globally sequential; the directory carries the subsystem. Each subsystem directory
+holds `stakeholder/`, `functional/`, `non-functional/` and `matrix/` as it needs them: the matrix is
+`matrix/tests.md` and the `TC-###` artifacts it declares sit beside it. Architecture descriptions
+are in `assurance/`, decision records in `decisions/`, and every SpecReview in the repository-root
+`reviews/`. [tests.md](tests.md) indexes the matrices.
+
+### Subsystem Registry
+
+| Subsystem | Path | Role | Owning crates/modules | ADs | Owner |
+| --- | --- | --- | --- | --- | --- |
+| Core | `spec/core/` | The stakeholder need, the library and CLI interface and publication conformance, and the reproducibility, atomic-publication and provenance-boundary properties every subsystem shares | `lib` (crate root), `publication` | AD-001, quire-contract-ir:ADR-0056 | Contract codegen lane |
+| Strategy | `spec/strategy/` | Tri-state proptest harnesses, bound numeric and state strategies, constructive populations, boundary campaigns and shrinking, and the strategy output consumable by Contract Runtime | `harness`, `strategy`, `bound`, `bound_strategy`, `bound_coverage` | AD-001, ADR-001 | Contract codegen lane |
+| Oracle | `spec/oracle/` | Exact complete-V1 scalar, composite-equality and function-application oracle generation and its agreement with the runtime | `oracle`, `exact_scalar`, `composite_equality`, `exact_function`, `definedness_arithmetic` | AD-001, ADR-001 | Contract codegen lane |
+| Kani | `spec/kani/` | Bounded Kani obligation generation, the generated subject ABI, proof ceilings, execution evidence, and the maps from a Kani run outcome and a Contract IR Kani outcome to QSL's terminal value | `kani`, `kani_obligations`, `kani_execution`, `kani_transcript`, `bounded_kani_profile`, `bounded_kani_corpus`, `bounded_collections`, `finite_reference_graphs`, `state_frame` | AD-001, ADR-002, ADR-003, ADR-004 | Contract codegen lane |
+| Routed | `spec/routed/` | Capability settlement at one negotiation point, routed generation per backend kind, and the backend adapter contract | `capability`, `routed_generation`, `generation` | AD-001, ADR-002 | Contract codegen lane |
+| Replay | `spec/replay/` | Witness decoding and native replay of Kani counterexamples, and their submission in QSL's counterexample envelope | `kani_witness_join`, `spine_replay`, `frame_replay` | AD-001, ADR-001 | Contract codegen lane |
+| Evidence | `spec/evidence/` | Vacuity and unexecuted-flow evidence | `vacuity` | AD-001 | Contract codegen lane |
+
+## References
+
+- ISO/IEC/IEEE 29148 (requirements engineering), per `standards_alignment`.

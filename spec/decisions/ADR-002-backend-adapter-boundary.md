@@ -54,7 +54,7 @@ once per kind, whose associated items are the adapter's four parts:
 
 The closed `BackendKind` enum is the registry. An adapter is reached only through an exhaustive
 match on it, and no adapter is registered at run time.
-[FR-026](../functional/complete-v1/FR-026-backend-adapter-contract.md) states this.
+[FR-026](../routed/functional/FR-026-backend-adapter-contract.md) states this.
 
 ### Q2: the adapter runs the installed Kani
 
@@ -71,7 +71,7 @@ FR-331-AC-8 requires. Every run outcome maps to exactly one value, so every run 
 one terminal record (QSpec FR-331). An
 item settled `unsupported` at negotiation has no run and no terminal value; its warning names its
 capability kind from `quire.capability-kind/v1` (QSpec FR-290).
-[FR-029](../functional/complete-v1/FR-029-run-outcome-terminal-record.md) states this.
+[FR-029](../kani/functional/FR-029-run-outcome-terminal-record.md) states this.
 
 ### Q4: a second backend registers through the closed enum
 
