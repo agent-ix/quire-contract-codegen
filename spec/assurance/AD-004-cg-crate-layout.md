@@ -197,7 +197,7 @@ Migration order, not moved.
 | `vacuity` | evidence | `evidence/vacuity.rs` | moved |
 | `bound_coverage` | evidence | `evidence/bound_coverage.rs` | moved; V1 input |
 | `kani` (types, `adapter_options`, `i64_literal`, `readable_component`) | kani | `kani/abi.rs` | split |
-| `kani` (`generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependency*`, validation) | kani | none | retired (step 4f), unless the planner keeps a proof-dependency graph (Risks) |
+| `kani` (`generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependency*`, validation) | kani | none | retired (step 4f); the census requirements stay and need a V2 census input (Decisions taken from the planner) |
 | `kani` (`deterministic_json`, `artifact`) | core | `core/canonical.rs` | merged into the one helper |
 | `kani_obligations` | kani | `kani/generate/{negotiate,scalar,precondition,contract}.rs`, `kani/identity.rs` | split |
 | `state_frame` | kani | `kani/generate/frame.rs` | moved; one entry with `negotiate` |
@@ -395,12 +395,11 @@ Splitting FR-005 into a core publication requirement and an integration requirem
 taken, because it mints ids.
 
 **`core/matrix/suites.md` (SUR-001, a SuiteRegistry).** ADR-0056 has no matrix slot for it.
-Recommendation: `spec/core/functional/suites.md`, by analogy with ADR-0056 rule 5, which puts "a
-registry every subsystem consumes" in `core/functional/`. SUR-001 lists the commands that
-validate and run every subsystem (spec validation, coverage export, MSRV build, the Kani lane), so
-every subsystem consumes it, and it depends on no subsystem's requirement. The alternative is to
-amend ADR-0056 in `quire-contract-ir` to add a `matrix/suites.md` slot; that costs an edit to an
-ADR three repositories reference, for one file. It can wait.
+Decision (the IR planner, on IR-344): `spec/core/functional/suites.md`, by analogy with ADR-0056
+rule 5, which puts "a registry every subsystem consumes" in `core/functional/`. SUR-001 lists the
+commands that validate and run every subsystem (spec validation, coverage export, MSRV build, the
+Kani lane), so every subsystem consumes it, and it depends on no subsystem's requirement.
+ADR-0056 is not amended. The move is part of migration step 7.
 
 ## Decisions
 
@@ -462,8 +461,10 @@ tickets in.
    `generate_kani_bundle` served). This is the step the leader reports to the planner when it
    lands. A QSL-owned follow-up then moves QSL's quire-integration exemplars, which call
    `generate_kani_bundle` today, onto that entry; it is a QSL ticket, not CG work. 4f deletion of
-   `generate_kani_bundle`, the V1 obligation arm and, unless the planner keeps it (see Decisions
-   taken from the planner), the proof-dependency graph, with the matching `interface-001` edit.
+   `generate_kani_bundle`, the V1 obligation arm and `ProofDependencyGraph`, with the matching
+   `interface-001` edit. FR-015's census and FR-015-AC-22 and AC-25 stay verbatim; if the V2 side
+   does not back them by this step, their matrix rows go to planned or unbacked, and nothing is
+   deleted or rewritten.
    4f is merged only after 4e has landed and the QSL follow-up has moved the exemplars. 4g the
    corpus (see Decisions taken from the planner).
 5. **One output reader.** Precondition: PR 210 has landed before the directory moves (it is a
@@ -515,7 +516,7 @@ what it could against the code; the checks are stated.
 | --- | --- | --- |
 | Publication subsystem | Yes. FR-005 with TC-001, TC-002 and TC-007 moves to `publication`; no FR-005 exception. The move is migration step 7, and the spec.md registry note becomes obsolete when it lands. | IR planner, IR-344 |
 | Corpus | CG's hand-built package lowerer is retired once QSL-353 (QSL's emission-to-admission corpus) lands, and the corpus rows are backed from QSL-emitted packages (IR-453). No requirement row is removed; until QSL-353 lands the rows and the corpus stay as they are. CG obtains those packages by calling QSL's facade on source, never from QSL test fixtures or copied package files. | IR planner, IR-344, IR-453, QSL-353 |
-| Proof-dependency graph | Retire it with the V1 bundle unless a current requirement names it. Checked: FR-015 does. Its Inputs and Behavior name an optional declared proof-dependency census per obligation, folded into the harness identity, and FR-015-AC-22 and AC-25 are the criteria TC-005 traces. So those requirements stay as planned and are not touched. Ask the planner: the census is a V2 request input, while `ProofDependencyGraph` is the V1 bundle's output type, so whether the graph type survives in `kani/` to carry the census or is replaced by identity members is the planner's to say. Step 4f leaves the type in place until it answers. | IR planner, IR-344 |
+| Proof-dependency graph | `ProofDependencyGraph`, the V1 bundle's output type, retires at step 4f with `generate_kani_bundle`. Checked: FR-015's Inputs and Behavior name an optional declared proof-dependency census per obligation, folded into the harness identity, and FR-015-AC-22 and AC-25 are the criteria TC-005 traces. They stay verbatim as requirements on the V2 request input, and are backed by a V2 census input, not by keeping the V1 graph type. Rule: if the V2 side does not back them by 4f, their matrix rows go to planned or unbacked; nothing is deleted and no criterion is rewritten. | IR planner, IR-344 |
 | `RUNTIME_REVISION` | Deleted, not spelled once. Checked: the constant is read by the three emitters' manifest templates (a `rev = "..."` on the runtime dependency) and by tests (failure messages and `manifest.contains`). Nothing else decides on it: no code compares it with the runtime CG itself builds against, and CG's own `Cargo.toml` names the runtime by branch with the lockfile recording the commit. The emitted manifest needs a runtime source, not a pin, so the template names it the way `Cargo.toml` does. The cost is that an emitted crate follows the runtime branch as CG does. I did not build an emitted crate to confirm. | IR planner, IR-344; QSL concurs; repository CLAUDE.md |
 | PR 210 | Lands before the directory moves, only after this AD is approved, and with a local `make kani` transcript from its head. A precondition of migration step 2. | IR planner, IR-344 |
 | V2 strategy criteria | FR-002, FR-004 and FR-008 to FR-013 over `CheckedPackageV2` are IR-364 (M3, the V2 strategy chain), IR team, ordered before step 6. | IR planner, IR-344, IR-364 |
@@ -524,8 +525,8 @@ what it could against the code; the checks are stated.
 | Terminal map dependency | Step 5's reader and the C-09 map (`kani/terminal.rs`) depend on QSL-351 (`Inconclusive(cause)`, a `NonZero` `Proved`, the tool pin gone) and on the terminal value also taking the replay settlement. | QSL review of this PR |
 | `ContentDigest` | Wraps QSL's `ByteDigest` through the facade. | QSL review of this PR |
 
-Still open: the SuiteRegistry home (`spec/core/functional/suites.md` is the recommendation; the
-planner has not ruled), and the planner's answer on the proof-dependency graph type.
+SuiteRegistry (SUR-001): moves to `spec/core/functional/suites.md` in step 7; ADR-0056 is not
+amended (IR planner, IR-344). No question remains open in this AD.
 
 ### Not verified in this AD
 
