@@ -18,13 +18,13 @@
     "schemaVersion": {"const": "quire.kani-corpus-proof-graph/v1"},
     "proofId": {
       "type": "string",
-      "pattern": "^corpus_case_(arithmetic|graph|collection)_[0-9]+$"
+      "pattern": "^corpus_case_(arithmetic|graph|collection)_[0-9a-f]{64}$"
     },
     "family": {"enum": ["arithmetic", "graph", "collection"]},
     "construct": {
       "enum": ["checked-arithmetic", "finite-reference-graph", "bounded-collection-query"]
     },
-    "identity": {"type": "string", "pattern": "^(arithmetic|graph|collection)_[0-9]+$"},
+    "identity": {"type": "string", "pattern": "^(arithmetic|graph|collection)_[0-9a-f]{64}$"},
     "readiness": {"enum": ["ready", "incomplete"]},
     "dependencies": {
       "type": "array",
