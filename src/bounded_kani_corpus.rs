@@ -10,8 +10,9 @@ use std::{collections::BTreeSet, fmt::Write as _};
 
 use qsl_replay::ByteDigest;
 use quire_contract_ir::kani::{
-    CheckedArithmeticRequest, CollectionQuery, DispatchIndex, FiniteInput, GraphRequest,
-    KaniOutcome, KaniOutcomeKind, KaniProfile, ProfileSelection, QueryKind, ValidatedFiniteInput,
+    CheckedArithmeticRequest, CollectionQuery, DispatchIndex, FiniteInput, FiniteObject,
+    FiniteReference, GraphRequest, KaniOutcome, KaniOutcomeKind, KaniProfile,
+    PopulationCompleteness, ProfileSelection, QueryKind, ResourceBounds, ValidatedFiniteInput,
 };
 use serde::{Deserialize, Serialize};
 
@@ -166,7 +167,7 @@ impl EmittedCorpusIdentities {
 struct CaseIdentity<'a> {
     construct: &'static str,
     profile: &'a ProfileSelection,
-    input: &'a FiniteInput,
+    input: InputIdentity<'a>,
     request: RequestIdentity<'a>,
     dependencies: &'a [ProofDependencyEdge],
 }
@@ -206,32 +207,129 @@ enum QueryKindIdentity {
 }
 
 impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
+    // Each request struct is destructured without `..`, so a field added to one is a compile
+    // error here rather than a field silently left out of the identity.
     fn from(request: &'a BoundedCorpusRequest) -> Self {
         match request {
-            BoundedCorpusRequest::Arithmetic(request) => Self::Arithmetic {
-                source_id: request.source_id,
-                operator: checked_method(request.operator),
-                left: request.left,
-                right: request.right,
-                minimum: request.minimum,
-                maximum: request.maximum,
-            },
-            BoundedCorpusRequest::Graph(request) => Self::Graph {
-                source_id: &request.source_id,
-                start_id: &request.start_id,
-                target_id: &request.target_id,
-                field_id: &request.field_id,
-                max_expansions: request.max_expansions,
-            },
-            BoundedCorpusRequest::Collection(request) => Self::Collection {
-                source_id: &request.source_id,
-                values: &request.values,
-                max_items: request.max_items,
-                kind: match request.kind {
-                    QueryKind::ForAllNonNegative => QueryKindIdentity::ForAllNonNegative,
-                    QueryKind::ExistsEqual(expected) => QueryKindIdentity::ExistsEqual(expected),
-                },
-            },
+            BoundedCorpusRequest::Arithmetic(request) => {
+                let CheckedArithmeticRequest {
+                    source_id,
+                    operator,
+                    left,
+                    right,
+                    minimum,
+                    maximum,
+                } = request;
+                Self::Arithmetic {
+                    source_id,
+                    operator: checked_method(*operator),
+                    left: *left,
+                    right: *right,
+                    minimum: *minimum,
+                    maximum: *maximum,
+                }
+            }
+            BoundedCorpusRequest::Graph(request) => {
+                let GraphRequest {
+                    source_id,
+                    start_id,
+                    target_id,
+                    field_id,
+                    max_expansions,
+                } = request;
+                Self::Graph {
+                    source_id,
+                    start_id,
+                    target_id,
+                    field_id,
+                    max_expansions: *max_expansions,
+                }
+            }
+            BoundedCorpusRequest::Collection(request) => {
+                let CollectionQuery {
+                    source_id,
+                    values,
+                    max_items,
+                    kind,
+                } = request;
+                Self::Collection {
+                    source_id,
+                    values,
+                    max_items: *max_items,
+                    kind: match kind {
+                        QueryKind::ForAllNonNegative => QueryKindIdentity::ForAllNonNegative,
+                        QueryKind::ExistsEqual(expected) => {
+                            QueryKindIdentity::ExistsEqual(*expected)
+                        }
+                    },
+                }
+            }
+        }
+    }
+}
+
+/// A [`FiniteInput`] with its population order removed: the rendered oracle sorts the reference
+/// edges it reads, so the same graph offered in another order is the same case.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InputIdentity<'a> {
+    model_id: &'a str,
+    source_id: &'a str,
+    profile: &'a ProfileSelection,
+    completeness: &'a PopulationCompleteness,
+    bounds: &'a ResourceBounds,
+    input_bytes: usize,
+    /// `(identity, type_id, snapshot_id)`, sorted.
+    objects: Vec<(&'a str, &'a str, &'a str)>,
+    /// `(source_id, field_id, target_id)`, sorted.
+    references: Vec<(&'a str, &'a str, &'a str)>,
+}
+
+impl<'a> From<&'a FiniteInput> for InputIdentity<'a> {
+    fn from(input: &'a FiniteInput) -> Self {
+        let FiniteInput {
+            model_id,
+            source_id,
+            profile,
+            completeness,
+            bounds,
+            input_bytes,
+            objects,
+            references,
+        } = input;
+        let mut objects: Vec<_> = objects
+            .iter()
+            .map(|object| {
+                let FiniteObject {
+                    identity,
+                    type_id,
+                    snapshot_id,
+                } = object;
+                (identity.as_str(), type_id.as_str(), snapshot_id.as_str())
+            })
+            .collect();
+        objects.sort_unstable();
+        let mut references: Vec<_> = references
+            .iter()
+            .map(|reference| {
+                let FiniteReference {
+                    source_id,
+                    field_id,
+                    target_id,
+                } = reference;
+                (source_id.as_str(), field_id.as_str(), target_id.as_str())
+            })
+            .collect();
+        references.sort_unstable();
+        Self {
+            model_id,
+            source_id,
+            profile,
+            completeness,
+            bounds,
+            input_bytes: *input_bytes,
+            objects,
+            references,
         }
     }
 }
@@ -346,7 +444,7 @@ pub fn generate_bounded_kani_corpus_case(
     let identity = CaseIdentity {
         construct: family.construct(),
         profile: &profile.selection,
-        input: input.input(),
+        input: InputIdentity::from(input.input()),
         request: RequestIdentity::from(&request),
         dependencies: &normalized_dependencies,
     }
@@ -528,16 +626,27 @@ mod tests {
     };
     use crate::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
-    fn fixture() -> (
+    type Fixture = (
         KaniProfile,
         DispatchIndex,
         quire_contract_ir::kani::ValidatedFiniteInput,
-    ) {
-        let selection = ProfileSelection {
+    );
+
+    fn fixture() -> Fixture {
+        fixture_with(|_| {}, |_| {})
+    }
+
+    /// The standard fixture with its profile selection and finite input edited before validation.
+    fn fixture_with(
+        edit_selection: impl FnOnce(&mut ProfileSelection),
+        edit_input: impl FnOnce(&mut FiniteInput),
+    ) -> Fixture {
+        let mut selection = ProfileSelection {
             profile: "kani-bounded/1".to_owned(),
             revision: "r1".to_owned(),
             abi_revision: "abi".to_owned(),
         };
+        edit_selection(&mut selection);
         let profile = KaniProfile::new(
             selection.clone(),
             vec![
@@ -583,7 +692,7 @@ mod tests {
             },
         ])
         .unwrap();
-        let input = FiniteInput {
+        let mut input = FiniteInput {
             model_id: "model".to_owned(),
             source_id: "source".to_owned(),
             profile: selection,
@@ -611,9 +720,9 @@ mod tests {
                 field_id: "next".to_owned(),
                 target_id: "b".to_owned(),
             }],
-        }
-        .validate()
-        .unwrap();
+        };
+        edit_input(&mut input);
+        let input = input.validate().unwrap();
         (profile, dispatch, input)
     }
 
@@ -977,11 +1086,7 @@ mod tests {
     }
 
     fn emit(
-        fixture: &(
-            KaniProfile,
-            DispatchIndex,
-            quire_contract_ir::kani::ValidatedFiniteInput,
-        ),
+        fixture: &Fixture,
         request: BoundedCorpusRequest,
         dependencies: &[ProofDependencyRequest<'_>],
         emitted: &mut EmittedCorpusIdentities,
@@ -1095,6 +1200,268 @@ mod tests {
         )
         .unwrap();
         assert_eq!(first, again);
+    }
+
+    fn identity_of(fixture: &Fixture, request: BoundedCorpusRequest) -> String {
+        case_name(&emit(fixture, request, &[], &mut EmittedCorpusIdentities::new()).unwrap())
+    }
+
+    /// Asserts that the base case and every variant each have a different identity.
+    fn assert_each_variation_changes_identity(
+        fixture: &Fixture,
+        base: BoundedCorpusRequest,
+        variants: Vec<(&str, BoundedCorpusRequest)>,
+    ) {
+        let base_identity = identity_of(fixture, base);
+        let mut seen = vec![base_identity];
+        for (field, request) in variants {
+            let identity = identity_of(fixture, request);
+            assert!(
+                !seen.contains(&identity),
+                "varying `{field}` alone must change the case identity"
+            );
+            seen.push(identity);
+        }
+    }
+
+    fn checked(
+        source_id: &'static str,
+        operator: NumericOperator,
+        [left, right, minimum, maximum]: [i128; 4],
+    ) -> BoundedCorpusRequest {
+        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+            source_id,
+            operator,
+            left,
+            right,
+            minimum,
+            maximum,
+        })
+    }
+
+    fn reach(
+        source_id: &str,
+        start_id: &str,
+        target_id: &str,
+        field_id: &str,
+        max_expansions: usize,
+    ) -> BoundedCorpusRequest {
+        BoundedCorpusRequest::Graph(GraphRequest {
+            source_id: source_id.to_owned(),
+            start_id: start_id.to_owned(),
+            target_id: target_id.to_owned(),
+            field_id: field_id.to_owned(),
+            max_expansions,
+        })
+    }
+
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_every_arithmetic_request_field_changes_the_identity() {
+        use NumericOperator::{Add, Subtract};
+        assert_each_variation_changes_identity(
+            &fixture(),
+            checked("s", Add, [1, 1, 0, 2]),
+            vec![
+                ("source_id", checked("t", Add, [1, 1, 0, 2])),
+                ("operator", checked("s", Subtract, [1, 1, 0, 2])),
+                ("left", checked("s", Add, [0, 1, 0, 2])),
+                ("right", checked("s", Add, [1, 0, 0, 2])),
+                ("minimum", checked("s", Add, [1, 1, -1, 2])),
+                ("maximum", checked("s", Add, [1, 1, 0, 3])),
+            ],
+        );
+    }
+
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_every_graph_request_field_changes_the_identity() {
+        assert_each_variation_changes_identity(
+            &fixture(),
+            reach("s", "a", "b", "next", 2),
+            vec![
+                ("source_id", reach("t", "a", "b", "next", 2)),
+                ("start_id", reach("s", "b", "b", "next", 2)),
+                ("target_id", reach("s", "a", "a", "next", 2)),
+                ("field_id", reach("s", "a", "b", "other", 2)),
+                ("max_expansions", reach("s", "a", "b", "next", 3)),
+            ],
+        );
+    }
+
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_every_collection_request_field_changes_the_identity() {
+        let query = |source_id: &str, values: Vec<i128>, max_items, kind| {
+            BoundedCorpusRequest::Collection(quire_contract_ir::kani::CollectionQuery {
+                source_id: source_id.to_owned(),
+                values,
+                max_items,
+                kind,
+            })
+        };
+        assert_each_variation_changes_identity(
+            &fixture(),
+            query("s", vec![2, 2, 7], 3, QueryKind::ExistsEqual(7)),
+            vec![
+                (
+                    "source_id",
+                    query("t", vec![2, 2, 7], 3, QueryKind::ExistsEqual(7)),
+                ),
+                (
+                    "values",
+                    query("s", vec![2, 7, 7], 3, QueryKind::ExistsEqual(7)),
+                ),
+                (
+                    "max_items",
+                    query("s", vec![2, 2, 7], 4, QueryKind::ExistsEqual(7)),
+                ),
+                (
+                    "kind",
+                    query("s", vec![2, 2, 7], 3, QueryKind::ForAllNonNegative),
+                ),
+                (
+                    "expected value",
+                    query("s", vec![2, 2, 7], 3, QueryKind::ExistsEqual(2)),
+                ),
+            ],
+        );
+    }
+
+    /// Every part of the finite input and the profile selection is part of the identity: the
+    /// graph oracle is built from the input's references, and the input also fixes the bounds
+    /// the case was admitted under.
+    ///
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_every_input_and_profile_field_changes_the_identity() {
+        let request = || checked("s", NumericOperator::Add, [1, 1, 0, 2]);
+        let base = identity_of(&fixture(), request());
+        let object = |identity: &str| FiniteObject {
+            identity: identity.to_owned(),
+            type_id: "node".to_owned(),
+            snapshot_id: "s".to_owned(),
+        };
+        let edits: Vec<(&str, Box<dyn Fn(&mut FiniteInput)>)> = vec![
+            ("model_id", Box::new(|i| i.model_id = "other".to_owned())),
+            ("source_id", Box::new(|i| i.source_id = "other".to_owned())),
+            ("max_objects", Box::new(|i| i.bounds.max_objects = 3)),
+            ("max_references", Box::new(|i| i.bounds.max_references = 2)),
+            (
+                "max_input_bytes",
+                Box::new(|i| i.bounds.max_input_bytes = 3),
+            ),
+            ("input_bytes", Box::new(|i| i.input_bytes = 2)),
+            (
+                "object identity",
+                Box::new(move |i| {
+                    i.objects[1] = object("c");
+                    i.references[0].target_id = "c".to_owned();
+                }),
+            ),
+            (
+                "object type_id",
+                Box::new(|i| i.objects[1].type_id = "other".to_owned()),
+            ),
+            (
+                "object snapshot_id",
+                Box::new(|i| i.objects[1].snapshot_id = "t".to_owned()),
+            ),
+            (
+                "reference source_id",
+                Box::new(|i| i.references[0].source_id = "b".to_owned()),
+            ),
+            (
+                "reference field_id",
+                Box::new(|i| i.references[0].field_id = "other".to_owned()),
+            ),
+            (
+                "reference target_id",
+                Box::new(|i| i.references[0].target_id = "a".to_owned()),
+            ),
+            (
+                "extra reference",
+                Box::new(|i| {
+                    i.bounds.max_references = 2;
+                    i.references.push(FiniteReference {
+                        source_id: "b".to_owned(),
+                        field_id: "next".to_owned(),
+                        target_id: "a".to_owned(),
+                    });
+                }),
+            ),
+        ];
+        let mut seen = vec![base];
+        for (field, edit) in edits {
+            let identity = identity_of(&fixture_with(|_| {}, edit), request());
+            assert!(
+                !seen.contains(&identity),
+                "varying input `{field}` alone must change the case identity"
+            );
+            seen.push(identity);
+        }
+        let revised = identity_of(
+            &fixture_with(|selection| selection.revision = "r2".to_owned(), |_| {}),
+            request(),
+        );
+        assert!(
+            !seen.contains(&revised),
+            "the profile selection is part of the identity"
+        );
+    }
+
+    /// The same graph offered with its objects and references in another order is the same case
+    /// (so a second emission is refused), and a genuinely different graph is a different one.
+    ///
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_identity_is_canonical_over_the_input_population_order() {
+        let node = |identity: &str| FiniteObject {
+            identity: identity.to_owned(),
+            type_id: "node".to_owned(),
+            snapshot_id: "s".to_owned(),
+        };
+        let edge = |source: &str, target: &str| FiniteReference {
+            source_id: source.to_owned(),
+            field_id: "next".to_owned(),
+            target_id: target.to_owned(),
+        };
+        let population = |objects: Vec<FiniteObject>, references: Vec<FiniteReference>| {
+            fixture_with(
+                |_| {},
+                move |input| {
+                    input.bounds.max_objects = 3;
+                    input.bounds.max_references = 2;
+                    input.objects = objects;
+                    input.references = references;
+                },
+            )
+        };
+        let request = || reach("s", "a", "b", "next", 2);
+        let forward = population(
+            vec![node("a"), node("b"), node("c")],
+            vec![edge("a", "b"), edge("b", "c")],
+        );
+        let permuted = population(
+            vec![node("c"), node("a"), node("b")],
+            vec![edge("b", "c"), edge("a", "b")],
+        );
+        let different = population(
+            vec![node("a"), node("b"), node("c")],
+            vec![edge("a", "b"), edge("c", "b")],
+        );
+        assert_eq!(
+            identity_of(&forward, request()),
+            identity_of(&permuted, request())
+        );
+        assert_ne!(
+            identity_of(&forward, request()),
+            identity_of(&different, request())
+        );
+        let mut emitted = EmittedCorpusIdentities::new();
+        emit(&forward, request(), &[], &mut emitted).unwrap();
+        let refusal = emit(&permuted, request(), &[], &mut emitted).unwrap_err();
+        assert_eq!(refusal.code, "kani_corpus_identity_collision");
     }
 
     /// Extracts the `#[kani::proof]` function's name from generated harness source, verbatim.
