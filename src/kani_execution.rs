@@ -1292,12 +1292,11 @@ mod tests {
             run_stand_in("missing", 0, None, None),
             Err(KaniExecutionRefusal::Report(KaniReportRefusal::Missing))
         ));
-        let evidence = run_stand_in("stale", 1, None, Some(&verified)).unwrap();
-        assert_eq!(
-            evidence.outcome,
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::NoVerdict
-            },
+        assert!(
+            matches!(
+                run_stand_in("stale", 0, None, Some(&verified)),
+                Err(KaniExecutionRefusal::Report(KaniReportRefusal::Missing))
+            ),
             "a report left by an earlier run is not this run's verdict"
         );
         assert!(matches!(
