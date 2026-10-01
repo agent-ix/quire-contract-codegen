@@ -25,7 +25,7 @@ success from a process that exited unsuccessfully; a successful run with no cove
 a failed unwinding assertion with playbacks present; a report in which an
 unwinding check succeeded; and a successful run whose report lists zero successful checks.
 
-Report parsing (FR-017-AC-12): parse real Kani 0.68.0 captures (`tests/fixtures/kani-0.68.0/`, the
+Report parsing (FR-017-AC-12): parse real Kani captures (`tests/fixtures/kani-report/`, the
 exported report and the stdout) of a verified run, a falsified run with a playback, an exhausted
 unwind bound, a run whose only check is unreachable, a partly satisfied cover and a run with no
 cover, and classify each; feed a console banner beside a contradicting report and confirm the report decides.
@@ -116,11 +116,11 @@ FR-017-AC-13, and the launcher tests (`a_stream_longer_than_the_capture_limit_ke
 through FR-017-AC-17;
 the `src/kani_transcript.rs` tests `tc_027_a_report_that_changed_shape_is_refused_not_classified`,
 `tc_027_a_report_without_exactly_one_harness_is_refused`,
-`tc_027_real_kani_0_68_0_the_per_check_view_carries_id_class_location_and_status`,
+`tc_027_real_kani_the_per_check_view_carries_id_class_location_and_status`,
 `tc_027_an_unknown_line_is_none_and_a_non_numeric_line_is_refused` (FR-017-AC-20),
 `tc_027_the_console_banner_never_decides_the_verdict`,
 `tc_027_playback_scanning_returns_the_property_block_and_stops_at_an_unterminated_fence` and the six
-`tc_027_real_kani_0_68_0_*` capture tests for FR-017-AC-12 and FR-017-AC-18; the
+`tc_027_real_kani_*` capture tests for FR-017-AC-12 and FR-017-AC-18; the
 `src/kani_execution.rs` tests `tc_027_execution_reads_only_the_report_its_own_run_exported`,
 `tc_027_the_report_is_read_bounded_and_refused_not_truncated`,
 `tc_027_the_launch_exports_the_report_after_the_harness_options` and

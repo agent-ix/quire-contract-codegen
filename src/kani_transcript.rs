@@ -349,7 +349,7 @@ mod tests {
     use super::*;
     use crate::kani_execution::{classify_kani_run, KaniInconclusiveReason, KaniRunOutcome};
 
-    /// A real Kani 0.68.0 capture of one `--exact` harness: the exported report, its stdout, and
+    /// A real Kani capture of one `--exact` harness: the exported report, its stdout, and
     /// whether it exited successfully.
     struct Capture {
         report: &'static str,
@@ -360,10 +360,10 @@ mod tests {
     macro_rules! capture {
         ($name:literal) => {
             Capture {
-                report: include_str!(concat!("../tests/fixtures/kani-0.68.0/", $name, ".json")),
-                stdout: include_str!(concat!("../tests/fixtures/kani-0.68.0/", $name, ".stdout")),
+                report: include_str!(concat!("../tests/fixtures/kani-report/", $name, ".json")),
+                stdout: include_str!(concat!("../tests/fixtures/kani-report/", $name, ".stdout")),
                 exited_successfully: include_str!(concat!(
-                    "../tests/fixtures/kani-0.68.0/",
+                    "../tests/fixtures/kani-report/",
                     $name,
                     ".exit"
                 ))
@@ -390,7 +390,7 @@ mod tests {
 
     /// Trace: FR-017-AC-12, TC-027
     #[test]
-    fn tc_027_real_kani_0_68_0_success_with_a_satisfied_cover_is_verified() {
+    fn tc_027_real_kani_success_with_a_satisfied_cover_is_verified() {
         let capture = capture!("verified-satisfied-cover");
         let parsed = report(&capture);
         assert_eq!(parsed.status, KaniHarnessStatus::Success);
@@ -402,7 +402,7 @@ mod tests {
 
     /// Trace: FR-017-AC-5, FR-017-AC-12, TC-027
     #[test]
-    fn tc_027_real_kani_0_68_0_failure_carries_the_assertion_playback_not_the_cover_one() {
+    fn tc_027_real_kani_failure_carries_the_assertion_playback_not_the_cover_one() {
         let capture = capture!("falsified-with-playback");
         let parsed = report(&capture);
         assert_eq!(parsed.status, KaniHarnessStatus::Failure);
@@ -419,7 +419,7 @@ mod tests {
 
     /// Trace: FR-017-AC-5, FR-017-AC-12, TC-027
     #[test]
-    fn tc_027_real_kani_0_68_0_unwinding_failure_is_inconclusive_not_falsified() {
+    fn tc_027_real_kani_unwinding_failure_is_inconclusive_not_falsified() {
         let capture = capture!("unwind-exhausted");
         let parsed = report(&capture);
         assert_eq!(parsed.status, KaniHarnessStatus::Failure);
@@ -441,7 +441,7 @@ mod tests {
     ///
     /// Trace: FR-017-AC-12, FR-017-AC-13, TC-027
     #[test]
-    fn tc_027_real_kani_0_68_0_a_run_with_no_successful_check_is_a_vacuous_proof() {
+    fn tc_027_real_kani_a_run_with_no_successful_check_is_a_vacuous_proof() {
         let capture = capture!("vacuous-cover");
         let parsed = report(&capture);
         assert_eq!(parsed.status, KaniHarnessStatus::Success);
@@ -457,7 +457,7 @@ mod tests {
 
     /// Trace: FR-017-AC-12, TC-027
     #[test]
-    fn tc_027_real_kani_0_68_0_partly_satisfied_covers_are_cover_unsatisfied() {
+    fn tc_027_real_kani_partly_satisfied_covers_are_cover_unsatisfied() {
         let capture = capture!("partial-cover");
         let parsed = report(&capture);
         assert_eq!((parsed.covers_satisfied(), parsed.covers_total()), (1, 2));
@@ -472,7 +472,7 @@ mod tests {
 
     /// Trace: FR-017-AC-12, TC-027
     #[test]
-    fn tc_027_real_kani_0_68_0_success_without_a_cover_is_inconclusive() {
+    fn tc_027_real_kani_success_without_a_cover_is_inconclusive() {
         let capture = capture!("no-cover");
         assert_eq!(report(&capture).covers_total(), 0);
         assert_eq!(
@@ -604,7 +604,7 @@ mod tests {
     ///
     /// Trace: FR-017-AC-20, TC-027
     #[test]
-    fn tc_027_real_kani_0_68_0_the_per_check_view_carries_id_class_location_and_status() {
+    fn tc_027_real_kani_the_per_check_view_carries_id_class_location_and_status() {
         let capture = capture!("falsified-with-playback");
         let run = classify_kani_run(
             capture.exited_successfully,
