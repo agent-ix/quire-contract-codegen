@@ -17,6 +17,8 @@ mod publication;
 mod harness;
 // Implements: FR-015
 mod kani_obligations;
+// Implements: FR-015
+mod obligation_identity;
 // Implements: FR-019
 mod capability;
 // Implements: FR-022
@@ -124,7 +126,10 @@ pub use routed_generation::{
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
 };
 
-pub use frame_replay::{FrameReplay, FrameReplayError, FrameReplayInputs, ProvidedDocument};
+pub use frame_replay::{
+    decode_frame_witness, FrameReplay, FrameReplayError, FrameReplayInputs, FrameWitness,
+    FrameWitnessRefusal, ProvidedDocument,
+};
 pub use kani_obligations::{
     negotiate_kani_obligations, DerivedDomain, EmbeddedOracle, InvalidObligationItem,
     KaniObligationError, KaniObligationHarness, KaniObligationIdentity, KaniObligationOutcome,
@@ -133,6 +138,7 @@ pub use kani_obligations::{
     ScalarObligationIdentity, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 pub use kani_witness_join::{decode_falsification, DecodeFailure};
+pub use obligation_identity::{obligation_digest, IdentityRefusal, ObligationDigest};
 pub use publication::{
     write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
     PublicationErrorCode, PublishedBundleIdentity,
@@ -143,9 +149,9 @@ pub use spine_replay::{
     ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use state_frame::{
-    generate_state_frame_obligations, StateComparison, StateFieldDomain, StateFrameHarness,
-    StateFrameIdentity, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
-    StateFrameRequest, StateFrameScope, UnsupportedFrameEffect,
+    generate_state_frame_obligations, StateComparison, StateFrameHarness, StateFrameIdentity,
+    StateFrameObligations, StateFrameProperty, StateFrameRefusal, StateFrameRequest,
+    StateFrameScope, UnsupportedFrameEffect,
 };
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,

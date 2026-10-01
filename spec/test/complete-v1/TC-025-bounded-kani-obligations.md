@@ -105,8 +105,20 @@ unsatisfiable requires as `cover_unsatisfied`.
    finds the allowed run inside its frame (FR-015-AC-30 to FR-015-AC-32). The default suite builds that
    replay's request and envelope through `qsl_replay::call_site` and settles a forbidden and a
    granted write without Kani, and refuses an operation with no frame, declared or not (FR-015-AC-33 to FR-015-AC-36).
+   The frame obligation's identity is a digest over its clause, kind and bindings: the two obligations
+   of one clause differ, and changing the clause, a binding's identifier or range changes
+   it while the source span, unwind bound and symbols do not (FR-015-AC-37). The envelope's witness is
+   the decoded playback of the obligation's harness, and a value outside the assumed range, another
+   harness's playback, a non-frame obligation, an altered identity and a mismatched request are each
+   refused (FR-015-AC-38).
 
 ## Blocked
+
+- The frame envelope's declared domains and the package it replays against: QSL's facade exports
+  none of the bound types a declared domain is built from, and `call_site` returns no lowered
+  checked package, so the envelope carries no declared domains and the replay unit is mirrored by
+  hand from the fixture package; nothing here checks either (QSL-345). A binding's domain key is
+  likewise pending QSL's key shape, so a binding is identified by its field name and declared range.
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
   `unsupported` there until QSpec decides how a frame node lowers into a Kani form (ADR-004). The
