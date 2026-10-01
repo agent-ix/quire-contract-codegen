@@ -34,13 +34,15 @@ use generated::{
     quantity_at_least,
     integer_at_least,
     narrow_to_binary32,
-    enum_at_least,
     quantity_add,
     integer_less,
     rational_divide,
     binary32_numeric_equal,
-    admit_nfkd,
     enum_equal,
+    enum_less,
+    enum_at_most,
+    enum_greater,
+    enum_at_least,
     integer_at_most,
     quantity_power,
     text_greater,
@@ -54,7 +56,6 @@ use generated::{
     convert_integer,
     decimal_subtract,
     integer_add,
-    enum_greater,
     integer_negate,
     text_at_least,
     text_less,
@@ -64,30 +65,23 @@ use generated::{
     decimal_round,
     text_equal,
     quantity_multiply,
-    admit_nfkc,
     binary64_multiply,
     divide_bounded,
     text_at_most,
     binary64_divide,
-    enum_at_most,
     binary64_total_order,
-    enum_less,
     binary32_subtract,
     enum_not_equal,
     convert_decimal,
     quantity_less,
     divide_floor,
-    admit_binary_utf8,
     quantity_subtract,
     rational_negate,
     quantity_divide,
     divide_truncating,
-    admit_unicode_scalars,
     decimal_negate,
     rational_greater,
-    admit_nfc,
     quantity_not_equal,
-    admit_nfd,
     integer_divide,
     decimal_at_most,
     rational_subtract,
@@ -95,7 +89,7 @@ use generated::{
     OracleStop,
 };
 use quire_contract_runtime::exact::{
-    EnumValue, IllTyped, Integer, Meter, Outcome, Quantity, ScalarLimits, Text, TextPayload,
+    EnumValue, IllTyped, Integer, Meter, Outcome, Quantity, ScalarLimits, Text,
 };
 
 /// Generated oracles in `ComparisonOperator::ALL` order.
@@ -123,16 +117,6 @@ const QUANTITY_COMPARISONS: [Compare<Quantity>; 6] = [
     quantity_at_most,
     quantity_greater,
     quantity_at_least,
-];
-/// Generated `[0, 4]` admissions in `TextProfile::ALL` order.
-type Admit = fn(&TextPayload, &mut Meter) -> Result<Outcome<Text>, OracleStop>;
-const ADMISSIONS: [Admit; 6] = [
-    admit_unicode_scalars,
-    admit_nfc,
-    admit_nfd,
-    admit_nfkc,
-    admit_nfkd,
-    admit_binary_utf8,
 ];
 
 /// An oracle over an infallible runtime operator. Its generated constants are
@@ -409,23 +393,9 @@ const SEQUENCES: [&str; 12] = [
 fn tc_024_tc186_text_and_enum_oracles_agree() {
     const T11: [u64; 10] = [0, 0, 0, 5, 3, 2, 0, 2, 6, 1];
     const T14: [u64; 10] = [0, 0, 0, 5, 3, 0, 0, 2, 3, 1];
-    const T16: [u64; 10] = [0, 0, 0, 3, 2, 2, 0, 1, 5, 1];
-    let mut admissions = 0_usize;
-    for (p, admit) in ADMISSIONS.into_iter().enumerate() {
-        for input in SEQUENCES {
-            for tuple in [[u64::MAX; 10], T11, T14, T16] {
-                agree2! {
-                    limits: limits(tuple),
-                    setup: { let input = payload(input); let target = text_type(0, 4, TextProfile::ALL[p]); },
-                    direct: |m| admit_text(&input, &target, m),
-                    generated: |m| done(admit(&input, m)),
-                };
-                admissions += 1;
-            }
-        }
-    }
-    assert_eq!(admissions, 6 * 12 * 4);
-
+    // The six `[0, 4]` text admissions are not generated today: no catalogued `convert`
+    // identity admits a text operand, so Contract IR refuses their nodes
+    // (`tc_024_text_admission_corpus_is_refused_by_ir_today`).
     let mut comparisons = 0_usize;
     for (o, compare) in TEXT_COMPARISONS.into_iter().enumerate() {
         for p in 0..6_usize {
@@ -490,7 +460,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
         }
     }
     assert_eq!(enums, 10 * 10 * 6 * 2);
-    println!("TC-186 three-way agreement: {admissions} admissions, {comparisons} text comparisons, {enums} enum comparisons");
+    println!("TC-186 agreement: {comparisons} text comparisons, {enums} enum comparisons");
 }
 
 /// Trace: FR-014-AC-6, TC-024.

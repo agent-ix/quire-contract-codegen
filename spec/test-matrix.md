@@ -27,7 +27,8 @@ type: TestMatrix
 | FR-012 | FR-012-AC-4 | TC-021 | ✅ Covered |
 | FR-013 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-4 | TC-022 | ✅ Covered |
 | FR-013 | FR-013-AC-5 | Inspection | ✅ Covered |
-| FR-014 | FR-014-AC-1 through FR-014-AC-3, FR-014-AC-5 through FR-014-AC-11 | TC-024 | ✅ Covered |
+| FR-014 | FR-014-AC-1, FR-014-AC-3, FR-014-AC-5 through FR-014-AC-11 | TC-024 | ✅ Covered |
+| FR-014 | FR-014-AC-2 | TC-024 | ⚠️ Partially covered; every family generates and agrees with the runtime except text admission, which is refused today and has no generated-crate evidence: Contract IR refuses the node because no catalogued `convert` identity takes a `text` operand (QSL lowers no text admission); unblocked by a catalogued text-admission operation. `tc_024_text_admission_corpus_is_refused_by_ir_today` pins each refusal |
 | FR-014 | FR-014-AC-4 | TC-024 | ⚠️ Partially covered; byte identity across repeated runs and request permutations and the claim-map order are asserted by regeneration; the criterion's remaining clause has no test |
 | FR-014 | FR-014-AC-12 | TC-024 | ⚠️ Partially covered; a descriptor naming a different catalogued operation is discharged, but the clause covering a descriptor naming an operation the catalogue has no entry for is a defensive branch no fixture reaches -- the only such state is a same-width IEEE conversion, which the package builder refuses to construct |
 | FR-014 | FR-014-AC-13 | TC-024 | ✅ Covered |
@@ -35,7 +36,7 @@ type: TestMatrix
 | FR-014 | FR-014-AC-15 | TC-024 | ⚠️ Partially covered; the typed refusal and the withheld generated function are asserted, but no fixture requests a work-exhausted item alongside healthy ones, so the per-item isolation clause is unasserted |
 | FR-014 | FR-014-AC-16 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-17 | TC-024 | ✅ Covered |
-| FR-014 | FR-014-AC-18 | TC-024 | 🚧 Planned; the derivation test's refused-identity case is `integer.eq`, which FR-014-AC-35 makes derivable |
+| FR-014 | FR-014-AC-18 | TC-024 | 🚧 Planned; the derivation test's refused-identity case is `integer.eq`, which FR-014-AC-35 makes derivable. The text-admission selector case (`numeric.convert` with a text result) is no longer asserted: Contract IR refuses every text-admission node, so the TextAdmission derivation and emission paths (`src/exact_scalar.rs`) are reachable from no admitted package and untested, pending the owner's decision on text admission |
 | FR-014 | FR-014-AC-19 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-20 through FR-014-AC-25 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-26 through FR-014-AC-34 | TC-024 | ✅ Covered |
@@ -54,7 +55,8 @@ type: TestMatrix
 | FR-016 | FR-016-AC-6, FR-016-AC-7, FR-016-AC-12 | TC-026 | 🚧 Planned |
 | FR-017 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-12, FR-017-AC-13, FR-017-AC-14, FR-017-AC-15, FR-017-AC-16, FR-017-AC-17, FR-017-CON-2 | TC-027 | ✅ Covered |
 | FR-017 | FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-CON-1 | TC-027 | 🚧 Planned |
-| FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-11 through FR-018-AC-14 | TC-029 | ✅ Covered |
+| FR-018 | FR-018-AC-1, FR-018-AC-3, FR-018-AC-6, FR-018-AC-11 through FR-018-AC-15 | TC-029 | ✅ Covered |
+| FR-018 | FR-018-AC-2 | TC-029 | ⚠️ Partially covered; every admitted shape agrees with the runtime, but no recursive composite is generated or agreement-tested: Contract IR 0a889f9 refuses an equality over any type that reaches itself (as the QSpec reference reader does), so `E_SELF` (`{ next: Option<R_SELF> }`, no text, for which QSL emits `leaves: []`) is outside the corpus. Pending STD-129 (a cyclic type with no text: operator-ineligible or 0 leaves). `tc_029_a_cyclic_compared_type_is_refused_by_ir_today` pins the refusal |
 | FR-018 | FR-018-AC-10 | TC-029 | ⚠️ Partially covered; byte identity across repeated runs and request permutations, the descriptor-key order, and the generated crate compiled and executed at test time under AC-2 are asserted; the criterion's remaining clause has no test |
 | FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |
 | FR-019 | FR-019-AC-1 through FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | TC-030 | ✅ Covered |
@@ -85,7 +87,10 @@ need `ValueType::Quantity` operands, refused as `Unsupported` before `check_equa
 distinct text profiles, distinct enum declarations, no common type, and the "admits no charge on any
 `Meter`" clause are untested but reachable. AC-7 names eight refused node forms across three distinct
 blockers; the corpus exercises six (`reference`, `model`, `function`, `call`, `state`, `temporal`) and
-confirms all three blocker values are distinct, but carries no `relation` or `protocol` node, so two
+confirms all three blocker values are distinct (`reference` is exercised as an operand reaching a
+`reference` composite; the direct `reference` composite operand is refused by Contract IR at admission,
+before the generator runs, and `tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today` pins that
+refusal), but carries no `relation` or `protocol` node, so two
 of the eight named forms are untested. AC-8 requires a declaration refusal for "both recursion passes
 and a duplicate record field"; only the duplicate-field half is tested; no vector produces
 `DeclarationCause::Recursion` in either pass. AC-9's conversion-charge clause ("each conversion charge
@@ -161,7 +166,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-025 | Verify separate bounded Kani obligations | Analysis | P0 | FR-015-AC-1, FR-015-AC-2, FR-015-AC-3, FR-015-AC-4, FR-015-AC-5, FR-015-AC-6, FR-015-AC-7, FR-015-AC-8, FR-015-AC-9, FR-015-AC-10, FR-015-AC-11, FR-015-AC-12, FR-015-AC-13, FR-015-AC-14, FR-015-AC-19, FR-015-AC-20, FR-015-AC-21, FR-015-AC-22, FR-015-AC-23, FR-015-AC-24, FR-015-AC-25, FR-015-AC-26, FR-015-AC-27, FR-015-AC-28, FR-015-AC-29, FR-015-AC-30, FR-015-AC-31, FR-015-AC-32, FR-015-AC-33, FR-015-AC-34, FR-015-AC-35, FR-015-AC-36, FR-015-AC-37 | 🚧 Planned |
 | TC-026 | Verify witness decoding and native replay | Integration | P0 | FR-016-AC-1, FR-016-AC-2, FR-016-AC-3, FR-016-AC-4, FR-016-AC-5, FR-016-AC-6, FR-016-AC-7, FR-016-AC-8, FR-016-AC-9, FR-016-AC-10, FR-016-AC-11, FR-016-AC-12, FR-016-AC-13, FR-016-AC-14, FR-016-AC-15, FR-016-AC-16, FR-016-AC-17, FR-016-AC-18, FR-016-AC-19, FR-016-AC-20 | 🚧 Planned |
 | TC-027 | Verify Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-AC-12, FR-017-AC-13, FR-017-AC-14, FR-017-AC-15, FR-017-AC-16, FR-017-AC-17, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
-| TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13, FR-018-AC-14 | 🚧 Planned |
+| TC-029 | Verify composite equality oracle generation and three-way agreement | Integration | P0 | FR-018-AC-1, FR-018-AC-2, FR-018-AC-3, FR-018-AC-4, FR-018-AC-5, FR-018-AC-6, FR-018-AC-7, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, FR-018-AC-12, FR-018-AC-13, FR-018-AC-14, FR-018-AC-15 | 🚧 Planned |
 | TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
 | TC-031 | Verify function-application oracle generation, agreement, and static location tagging | Integration | P0 | FR-021-AC-1, FR-021-AC-2, FR-021-AC-3, FR-021-AC-4, FR-021-AC-5, FR-021-AC-6, FR-021-AC-7, FR-021-AC-8, FR-021-AC-9, FR-021-AC-10, FR-021-AC-11, FR-021-AC-12, FR-021-AC-13, FR-021-AC-14, FR-021-AC-15, FR-021-AC-16, FR-021-AC-17, FR-021-AC-18 | ✅ Covered |
 | TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-022-AC-14, FR-022-AC-15, FR-015-AC-15, FR-015-AC-16, FR-015-AC-17, FR-015-AC-18 | ✅ Covered |

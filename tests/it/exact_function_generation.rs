@@ -140,10 +140,20 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
         .map(|f| f.name.as_str())
         .collect();
 
-    let ClaimDisposition::Generated(claim) = disposition_for(&oracles, ITEM_CALL_ADD) else {
-        panic!("expected generated");
-    };
-    assert_eq!(claim.function, "add_fn");
+    // Two items name this call node (`add_fn` and `eq_fn`); their order in the claim map follows
+    // the declaring node ids' digests, so select the claim by the function it records.
+    let claim = oracles
+        .claim_map
+        .items
+        .iter()
+        .filter(|claim| claim.node_id == code_id(ITEM_CALL_ADD))
+        .find_map(|claim| match &claim.result {
+            ClaimDisposition::Generated(generated) if generated.function == "add_fn" => {
+                Some(generated)
+            }
+            _ => None,
+        })
+        .expect("a generated claim for add_fn over the call node");
     let expected_index = survivor_names
         .iter()
         .position(|name| *name == "add_fn")
