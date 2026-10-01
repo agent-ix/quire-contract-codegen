@@ -6,11 +6,12 @@
 //! input, and declared proof-dependency census.  A non-success outcome returns before any role is
 //! emitted.
 
-use std::fmt::Write as _;
+use std::{collections::BTreeSet, fmt::Write as _};
 
+use qsl_replay::ByteDigest;
 use quire_contract_ir::kani::{
-    CheckedArithmeticRequest, CollectionQuery, DispatchIndex, GraphRequest, KaniOutcome,
-    KaniOutcomeKind, KaniProfile, ValidatedFiniteInput,
+    CheckedArithmeticRequest, CollectionQuery, DispatchIndex, FiniteInput, GraphRequest,
+    KaniOutcome, KaniOutcomeKind, KaniProfile, ProfileSelection, QueryKind, ValidatedFiniteInput,
 };
 use serde::{Deserialize, Serialize};
 
@@ -124,7 +125,7 @@ pub struct CorpusProofDependencyGraph {
     pub family: String,
     /// Contract IR construct name this case lowers (e.g. `checked-arithmetic`).
     pub construct: String,
-    /// The corpus case's name, `{family}_{number}`; the same name its artifact paths carry.
+    /// The corpus case's name, `{family}_{digest}`; the same name its artifact paths carry.
     pub identity: String,
     /// Derived dependency readiness; this generator never executes or classifies a proof.
     pub readiness: ProofReadiness,
@@ -132,27 +133,115 @@ pub struct CorpusProofDependencyGraph {
     pub dependencies: Vec<ProofDependencyEdge>,
 }
 
-/// Numbers the corpus cases of one generation run.
+/// Registry of the corpus case identities emitted into one output tree.
 ///
-/// Every emitted artifact path is `corpus/{family}_{number}.*`, so each case emitted through one
-/// counter gets its own files. The number is taken only once every fallible step of
-/// [`generate_bounded_kani_corpus_case`] has succeeded, so a refused case never consumes one.
-/// Callers generating more than one case into the same output tree share one counter; a fresh
-/// counter per call makes an identical request yield identical output.
+/// A case's identity is the SHA-256 of its canonical request content ([`CaseIdentity`]): the
+/// request, the finite input it is evaluated over, the profile selection, and the normalized
+/// proof-dependency census. Every emitted artifact path is `corpus/{family}_{identity}.*`, so the
+/// same content always lands on the same files and two distinct cases never share one, whatever
+/// the emission order. Callers generating more than one case into the same output tree share one
+/// registry; a case whose identity it already holds is refused as
+/// `kani_corpus_identity_collision` rather than emitted again. The identity is recorded only once
+/// every fallible step of [`generate_bounded_kani_corpus_case`] has succeeded, so a refused case
+/// never claims one.
 #[derive(Debug, Default)]
-pub struct EmittedCorpusIdentities(usize);
+pub struct EmittedCorpusIdentities(BTreeSet<String>);
 
 impl EmittedCorpusIdentities {
-    /// Starts a counter at case number zero.
+    /// Starts an empty registry.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    fn next(&mut self) -> usize {
-        let number = self.0;
-        self.0 = self.0.saturating_add(1);
-        number
+    /// Records `identity`; `false` when it was already held.
+    fn claim(&mut self, identity: &str) -> bool {
+        self.0.insert(identity.to_owned())
+    }
+}
+
+/// The canonical content one corpus case is identified by.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CaseIdentity<'a> {
+    construct: &'static str,
+    profile: &'a ProfileSelection,
+    input: &'a FiniteInput,
+    request: RequestIdentity<'a>,
+    dependencies: &'a [ProofDependencyEdge],
+}
+
+/// Every field of a [`BoundedCorpusRequest`], including those the rendered oracle does not read.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+enum RequestIdentity<'a> {
+    Arithmetic {
+        source_id: &'a str,
+        operator: &'static str,
+        left: i128,
+        right: i128,
+        minimum: i128,
+        maximum: i128,
+    },
+    Graph {
+        source_id: &'a str,
+        start_id: &'a str,
+        target_id: &'a str,
+        field_id: &'a str,
+        max_expansions: usize,
+    },
+    Collection {
+        source_id: &'a str,
+        values: &'a [i128],
+        max_items: usize,
+        kind: QueryKindIdentity,
+    },
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+enum QueryKindIdentity {
+    ForAllNonNegative,
+    ExistsEqual(i128),
+}
+
+impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
+    fn from(request: &'a BoundedCorpusRequest) -> Self {
+        match request {
+            BoundedCorpusRequest::Arithmetic(request) => Self::Arithmetic {
+                source_id: request.source_id,
+                operator: checked_method(request.operator),
+                left: request.left,
+                right: request.right,
+                minimum: request.minimum,
+                maximum: request.maximum,
+            },
+            BoundedCorpusRequest::Graph(request) => Self::Graph {
+                source_id: &request.source_id,
+                start_id: &request.start_id,
+                target_id: &request.target_id,
+                field_id: &request.field_id,
+                max_expansions: request.max_expansions,
+            },
+            BoundedCorpusRequest::Collection(request) => Self::Collection {
+                source_id: &request.source_id,
+                values: &request.values,
+                max_items: request.max_items,
+                kind: match request.kind {
+                    QueryKind::ForAllNonNegative => QueryKindIdentity::ForAllNonNegative,
+                    QueryKind::ExistsEqual(expected) => QueryKindIdentity::ExistsEqual(expected),
+                },
+            },
+        }
+    }
+}
+
+impl CaseIdentity<'_> {
+    /// Lowercase hex SHA-256 over this content's deterministic JSON bytes.
+    fn digest(&self) -> String {
+        let bytes = deterministic_json(self)
+            .expect("a corpus case identity is plain finite data with no fallible conversion");
+        format!("{:x}", ByteDigest::of(bytes.as_bytes()))
     }
 }
 
@@ -188,8 +277,10 @@ pub struct BoundedCorpusCase {
 /// identity, an inconsistent kind/state/path combination, or any non-`Required` kind -- returns a
 /// typed `InvalidInput` `kani_corpus_dependency_invalid` result before any artifact is emitted.
 ///
-/// `emitted` hands out this case's number only after every other fallible step in this function
-/// has already succeeded, so cases emitted through one counter never share artifact paths.
+/// The case is named from its canonical content digest ([`EmittedCorpusIdentities`]), so identical
+/// requests name identical artifacts and distinct requests never share a path. `emitted` records
+/// that identity only after every other fallible step has succeeded; a case whose identity it
+/// already holds returns `InvalidInput` `kani_corpus_identity_collision` and emits nothing.
 pub fn generate_bounded_kani_corpus_case(
     profile: &KaniProfile,
     dispatch: &DispatchIndex,
@@ -226,8 +317,8 @@ pub fn generate_bounded_kani_corpus_case(
     // `validate_dependencies`'s second argument is the "root proof id" a dependency must not name
     // itself; passing `request_source_id` here would spuriously refuse a legitimate dependency
     // whose declared proof id happens to equal the request's own source id, even though a real
-    // self-dependency cannot occur -- this corpus case's own harness symbol is named from its case
-    // number, which is taken only after this census is accepted. The empty string is passed
+    // self-dependency cannot occur -- this corpus case's own harness symbol is named from its
+    // content digest, which is claimed only after this census is accepted. The empty string is passed
     // instead: `validate_dependencies` requires every declared proof id to be non-empty, so `""`
     // can never equal a legitimate one and the self-dependency check can never spuriously fire
     // (ir#80 review finding F5).
@@ -251,6 +342,15 @@ pub fn generate_bounded_kani_corpus_case(
         ));
     }
     let normalized_dependencies = normalize_dependencies(dependencies);
+    // Computed before lowering consumes the request; recorded only after lowering succeeds.
+    let identity = CaseIdentity {
+        construct: family.construct(),
+        profile: &profile.selection,
+        input: input.input(),
+        request: RequestIdentity::from(&request),
+        dependencies: &normalized_dependencies,
+    }
+    .digest();
     let (value, oracle_body) = match request {
         BoundedCorpusRequest::Arithmetic(request) => {
             let lowered = prepare_checked_arithmetic(profile, dispatch, input, request)?;
@@ -297,7 +397,15 @@ pub fn generate_bounded_kani_corpus_case(
             profile.selection.revision.clone(),
         )
     };
-    let name = format!("{}_{}", family.label(), emitted.next());
+    if !emitted.claim(&identity) {
+        return Err(KaniOutcome::non_success(
+            KaniOutcomeKind::InvalidInput,
+            "kani_corpus_identity_collision",
+            request_source_id,
+            revision,
+        ));
+    }
+    let name = format!("{}_{identity}", family.label());
     let artifacts = render_artifacts(family, &name, value, &oracle_body, &normalized_dependencies);
     Ok(BoundedCorpusCase {
         family,
@@ -306,14 +414,18 @@ pub fn generate_bounded_kani_corpus_case(
     })
 }
 
-fn render_arithmetic_oracle(lowered: &quire_contract_ir::kani::ArithmeticLowering) -> String {
-    let operator = match lowered.request.operator {
+const fn checked_method(operator: quire_contract_ir::NumericOperator) -> &'static str {
+    match operator {
         quire_contract_ir::NumericOperator::Add => "checked_add",
         quire_contract_ir::NumericOperator::Subtract => "checked_sub",
         quire_contract_ir::NumericOperator::Multiply => "checked_mul",
         quire_contract_ir::NumericOperator::Divide => "checked_div",
         quire_contract_ir::NumericOperator::Remainder => "checked_rem",
-    };
+    }
+}
+
+fn render_arithmetic_oracle(lowered: &quire_contract_ir::kani::ArithmeticLowering) -> String {
+    let operator = checked_method(lowered.request.operator);
     format!(
         "{}i128.{operator}({}i128).is_some_and(|value| value >= {}i128 && value <= {}i128)",
         lowered.request.left,
@@ -645,11 +757,11 @@ mod tests {
     }
 
     /// A declared census with a duplicate proof identity is refused by the shared dependency
-    /// rules, and the refusal consumes no case number: the next accepted case is still case 0.
+    /// rules, and the refusal claims no identity: the same request with a valid census is accepted.
     ///
     /// Trace: TC-023.
     #[test]
-    fn tc_023_duplicate_dependency_identity_is_refused_and_consumes_no_case_number() {
+    fn tc_023_duplicate_dependency_identity_is_refused_and_claims_no_identity() {
         let (profile, dispatch, input) = fixture();
         let mut emitted = EmittedCorpusIdentities::new();
         let duplicate = ProofDependencyRequest {
@@ -679,16 +791,19 @@ mod tests {
             &mut emitted,
         )
         .unwrap();
-        assert_eq!(retry.artifacts.oracle.path, "corpus/arithmetic_0.oracle.rs");
+        assert_eq!(
+            retry.artifacts.oracle.path,
+            format!("corpus/{}.oracle.rs", case_name(&retry))
+        );
     }
 
     /// This corpus's generated harnesses render no `// proof-dependency-site:` marker, no
     /// `kani::assume`, and no `#[kani::stub]`, so a declared `Assumed` dependency must be refused
-    /// (ir#80 review finding F1), consuming no case number.
+    /// (ir#80 review finding F1), claiming no identity.
     ///
     /// Trace: TC-023.
     #[test]
-    fn tc_023_assumed_dependency_kind_is_refused_and_consumes_no_case_number() {
+    fn tc_023_assumed_dependency_kind_is_refused_and_claims_no_identity() {
         let (profile, dispatch, input) = fixture();
         let mut emitted = EmittedCorpusIdentities::new();
         let assumed = ProofDependencyRequest {
@@ -718,7 +833,10 @@ mod tests {
             &mut emitted,
         )
         .unwrap();
-        assert_eq!(retry.artifacts.oracle.path, "corpus/arithmetic_0.oracle.rs");
+        assert_eq!(
+            retry.artifacts.oracle.path,
+            format!("corpus/{}.oracle.rs", case_name(&retry))
+        );
     }
 
     /// Trace: TC-023.
@@ -847,41 +965,136 @@ mod tests {
             .contains("values.iter().any(|value| *value == 7i128)"));
     }
 
-    /// Cases emitted through one counter -- including the identical request twice -- get distinct
-    /// case names, artifact paths and `#[kani::proof]` symbols, and each symbol carries the case
-    /// name its own artifact path carries (#61, ir#73).
+    /// The case name carried by a case's own harness path.
+    fn case_name(case: &super::BoundedCorpusCase) -> String {
+        case.artifacts
+            .kani_harness
+            .path
+            .strip_prefix("corpus/")
+            .and_then(|path| path.strip_suffix(".kani.rs"))
+            .expect("harness path is corpus/<name>.kani.rs")
+            .to_owned()
+    }
+
+    fn emit(
+        fixture: &(
+            KaniProfile,
+            DispatchIndex,
+            quire_contract_ir::kani::ValidatedFiniteInput,
+        ),
+        request: BoundedCorpusRequest,
+        dependencies: &[ProofDependencyRequest<'_>],
+        emitted: &mut EmittedCorpusIdentities,
+    ) -> Result<super::BoundedCorpusCase, quire_contract_ir::kani::KaniOutcome> {
+        let (profile, dispatch, input) = fixture;
+        generate_bounded_kani_corpus_case(profile, dispatch, input, request, dependencies, emitted)
+    }
+
+    fn collection(max_items: usize, source_id: &str) -> BoundedCorpusRequest {
+        BoundedCorpusRequest::Collection(quire_contract_ir::kani::CollectionQuery {
+            source_id: source_id.to_owned(),
+            values: vec![2, 2, 7],
+            max_items,
+            kind: QueryKind::ExistsEqual(7),
+        })
+    }
+
+    /// A case's name, paths and `#[kani::proof]` symbol come from its request content, so the
+    /// same request yields the same ones in any emission order and in any run, and the symbol
+    /// carries the name its artifact paths carry.
     ///
     /// Trace: TC-023.
     #[test]
-    fn tc_023_cases_in_one_run_get_distinct_names_paths_and_proof_symbols() {
-        let (profile, dispatch, input) = fixture();
-        let mut emitted = EmittedCorpusIdentities::new();
-        let cases = [
-            arithmetic("first", 1, 1),
-            arithmetic("first", 1, 1),
-            arithmetic("second", 1, 0),
-        ]
-        .map(|request| {
-            generate_bounded_kani_corpus_case(
-                &profile,
-                &dispatch,
-                &input,
-                request,
-                &[],
-                &mut emitted,
-            )
-            .unwrap()
-        });
-        for (number, case) in cases.iter().enumerate() {
-            assert_eq!(
-                case.artifacts.kani_harness.path,
-                format!("corpus/arithmetic_{number}.kani.rs")
-            );
+    fn tc_023_case_identity_is_independent_of_emission_order_and_run() {
+        let fixture = fixture();
+        let requests = || {
+            [
+                arithmetic("first", 1, 1),
+                collection(3, "second"),
+                arithmetic("third", 1, 0),
+            ]
+        };
+        let mut forward = EmittedCorpusIdentities::new();
+        let in_order: Vec<_> = requests()
+            .into_iter()
+            .map(|request| emit(&fixture, request, &[], &mut forward).unwrap())
+            .collect();
+        let mut backward = EmittedCorpusIdentities::new();
+        let mut reversed: Vec<_> = requests()
+            .into_iter()
+            .rev()
+            .map(|request| emit(&fixture, request, &[], &mut backward).unwrap())
+            .collect();
+        reversed.reverse();
+        assert_eq!(in_order, reversed);
+        for case in &in_order {
             assert_eq!(
                 proof_symbol(&case.artifacts.kani_harness.contents),
-                format!("corpus_case_arithmetic_{number}")
+                format!("corpus_case_{}", case_name(case)),
             );
         }
+    }
+
+    /// Requests that differ in any one field -- including a field the rendered oracle never
+    /// reads (`max_items`), the source id, or the declared census -- get distinct names, paths
+    /// and proof symbols, so no case overwrites another.
+    ///
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_distinct_requests_get_distinct_names_paths_and_proof_symbols() {
+        let fixture = fixture();
+        let census = [ProofDependencyRequest {
+            proof_id: "upstream-lemma",
+            kind: ProofDependencyKind::Required,
+            state: ProofDependencyState::Passed,
+            original_path: None,
+            replacement_path: None,
+        }];
+        let mut emitted = EmittedCorpusIdentities::new();
+        let cases = [
+            emit(&fixture, arithmetic("a", 1, 1), &[], &mut emitted),
+            emit(&fixture, arithmetic("b", 1, 1), &[], &mut emitted),
+            emit(&fixture, arithmetic("a", 1, 0), &[], &mut emitted),
+            emit(&fixture, arithmetic("a", 1, 1), &census, &mut emitted),
+            emit(&fixture, collection(3, "a"), &[], &mut emitted),
+            emit(&fixture, collection(4, "a"), &[], &mut emitted),
+        ]
+        .map(|case| case.expect("each distinct request is accepted"));
+        let mut names: Vec<_> = cases.iter().map(case_name).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), cases.len());
+        let mut symbols: Vec<_> = cases
+            .iter()
+            .map(|case| proof_symbol(&case.artifacts.kani_harness.contents).to_owned())
+            .collect();
+        symbols.sort();
+        symbols.dedup();
+        assert_eq!(symbols.len(), cases.len());
+    }
+
+    /// Emitting one request twice through one registry refuses the second deterministically and
+    /// leaves the first untouched; a fresh registry accepts it again with the same artifacts.
+    ///
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_a_request_emitted_twice_is_refused_as_an_identity_collision() {
+        let fixture = fixture();
+        let mut emitted = EmittedCorpusIdentities::new();
+        let first = emit(&fixture, arithmetic("same", 1, 1), &[], &mut emitted).unwrap();
+        for _ in 0..2 {
+            let refusal = emit(&fixture, arithmetic("same", 1, 1), &[], &mut emitted).unwrap_err();
+            assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
+            assert_eq!(refusal.code, "kani_corpus_identity_collision");
+        }
+        let again = emit(
+            &fixture,
+            arithmetic("same", 1, 1),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        assert_eq!(first, again);
     }
 
     /// Extracts the `#[kani::proof]` function's name from generated harness source, verbatim.
