@@ -2,7 +2,7 @@
 id: "SR-670"
 title: "CG PR 214 spec review: AD-002 replay seam and AD-003 evidence chain"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@80243027bcda41f1d81e83718bd29738926b6972 (review), ae98754466eef0f9754e043157e4bcb9bf552600 (disposition pass 1); spec/assurance/AD-002-cg-qsl-replay-seam.md, spec/assurance/AD-003-evidence-chain.md, spec/spec.md"
+scope: "agent-ix/quire-contract-codegen@80243027bcda41f1d81e83718bd29738926b6972 (review), ae98754466eef0f9754e043157e4bcb9bf552600 (disposition pass 1), 2dd86c945eb0b5bcc5d9f31bbd6b9fc1eb04e715 (disposition pass 2); spec/assurance/AD-002-cg-qsl-replay-seam.md, spec/assurance/AD-003-evidence-chain.md, spec/spec.md"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AD-002
     type: references
@@ -148,3 +148,26 @@ Sibling PRs are consistent: #215 b0c0008, IR #241 d22e222 (AD-006:58, :120-123) 
 | FND-012 | fixed | f254ff6: AD-003 says CG code spells `kani_vacuous_proof` at `kani_execution.rs:690` (verified) and the other two only in spec (FR-030) |
 | FND-013 | fixed | f254ff6: the encoder gap separates the corpus JSON digest from the byte digests at `spine_replay.rs:149-152` and `:440` |
 | FND-014 | fixed | ae98754: AD-003 no longer asks QSL to export `ContentDigest`. CG depends on `quire-canonical` directly through `core::canonical`, matching #215 b0c0008 (AD-004:421-436, :532-535, :672). The leftover stale sentence is FND-016 |
+
+Round 2 was reviewed at 2dd86c9, which supersedes 0cbb45f. That head applies QSL's closed-set
+ruling and cites QSL-354 as merged at QSL b5ef647. `make spec` exits 0 with the 3 baseline
+warnings.
+
+Merged QSL text at origin/main b5ef647 matches link 7:
+
+- ADR-011 T-13 (:196, :262, :720);
+- ADR-013 O-16 (:409, :416);
+- ADR-013 C-09 (:629, :967).
+
+At QSL main, `CallSiteRefusal` has no `code()` (`call_site.rs`). R-Q3 (resolved) and R-Q9
+(QSL-only, relayed) are accurate.
+
+`reviews/` at 2dd86c9 holds the round-1 SR files verbatim.
+
+FND-011 stays deferred: merge-tree of 2dd86c9 with #215 fe571ba still conflicts in
+`spec/spec.md` References.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-015 | fixed | 2dd86c9 (first in 0cbb45f): the CG defects (`Domain`, `UnboundArgument`, `FieldDelimiter`, `Decode`, `Transcript`, `Envelope`, `WrongArm`) and any fault map to `Failed`. The package and lock properties (`Dependencies`, a non-fault `CallSite` refusal, `InvalidFunction`, `Name`) map to `Inconclusive(ReplayRefused)` only once QSL's refusal carries a code in its closed `ReplayRefusal` set, and stay `Failed` until then. QSL is asked in R-Q1. This is sound and loud by default, and it matches merged C-09 ("a replay refusal maps to `inconclusive` with cause `replay_refused` and the refusal's catalog code") (AD-003:77, :345) |
+| FND-016 | fixed | 2dd86c9: the encoder gap now says #215's AD-004 already adopts the target: `core/canonical.rs` is the one caller of `quire-canonical`, both `deterministic_json` copies are deleted, and `ContentDigest` is built only by `core::canonical`. Verified against #215 fe571ba, AD-004:159, :427 and :676 (AD-003:282-286) |
