@@ -39,3 +39,13 @@ Otherwise sound:
 - The FR-014-AC-2 split row is honest and actionable: it states the reason, the pin and the
   unblock condition.
 - The AC-7 note is accurate.
+
+## Dispositions
+
+Round 1, reviewed at bdbad7af90728ce194bb685dae2cb247923c0582.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed bdbad7a | The clause now says each operand is a `reference` to the node that denotes it, as QSL keys operands. That matches qsl-semantics a28a5578 `typed_application`/`value_node`/`parameter` |
+| FND-002 | fixed bdbad7a | The clause and AC-15 now share one scope: reference operands, nested conversions read to the first non-conversion node, and a non-convert application read as its own `semantic_type`. A non-reference operand disagrees. Each branch has a traced test, and the counterexample row names the read-through mutants |
+| FND-003 | fixed bdbad7a | The misleading notes prose is removed, and the accurate statement is on the FR-018-AC-2 row |

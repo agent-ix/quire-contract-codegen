@@ -42,3 +42,13 @@ Checked and honest:
 
 The `> 60` floors are discussed in SR-653 FND-006. They lose no coverage, because the exact-count
 assertion stands.
+
+## Dispositions
+
+Round 1, reviewed at bdbad7af90728ce194bb685dae2cb247923c0582.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed bdbad7a | FR-018-AC-2 is split out of the Covered row into a Partially-covered row. The row states that no recursive composite is generated or agreement-tested, gives the IR reason, says QSL emits `leaves: []`, cites STD-129 and names the pin |
+| FND-002 | fixed bdbad7a | The FR-014-AC-18 matrix note now records that the text-admission selector case is no longer asserted and that the TextAdmission derivation and emission paths are reachable from no admitted package, pending the owner's decision |
+| FND-003 | fixed bdbad7a | The cyclic pin's tag is now `Trace: TC-029`, and its doc says it backs no clause of FR-018-AC-8 |

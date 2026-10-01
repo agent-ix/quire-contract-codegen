@@ -75,3 +75,31 @@ Sound, and checked:
 FND-001 is the root cause the planner named, and this PR deepens it in spec and code. FND-002 and
 FND-003 are wording or shape fixes that belong in this PR. FND-001 can be deferred to a ticket only
 if FR-018's clause stops claiming QSL emits this shape (see SR-655 FND-001).
+
+## Dispositions
+
+Round 1, reviewed at bdbad7af90728ce194bb685dae2cb247923c0582 (lock commit 58dd43d unchanged, #211 branch
+unmoved at 9ddf5a9, main 113b624). Gate run by the reviewer at bdbad7a, no patch config, with a private
+TRUSTED_HOME:
+
+- `make ci` exits 0: lib 101/101, `it` 244 passed, 0 failed, 8 ignored (msrv and test runs).
+- `deny` passes, as does the one-copy check.
+- `make kani`: 8 passed, 0 failed.
+
+`operand_type_id` mutants:
+
+- killed: read through any application (by the non-conversion test), single step (by the nested
+  test), read the conversion's own `semantic_type`, iteration bound 1, and no read-through.
+- surviving, both equivalent: dropping the `expression`-tag check (only expression nodes carry an
+  application body) and `last()` in place of `first()` (a convert has one argument).
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed bdbad7a | `operand_type_id` now resolves a `reference` operand through the graph. A convert `expression` node is read through to the first non-conversion node, any other node reads as its `semantic_type`, and inline terms read as no type. The loop is bounded by `graph.len()+1` and every step uses `?`, so a missing node, a cycle or a non-convert node cannot loop or panic. The corpus now keys operands as QSL a28a5578 does: `value`/`parameter` nodes with name/level bindings and the `expression` occurrence role (lowering.rs `parameter`), and the convert as its own `expression`/`conversion` node with operator `convert` and a `type_argument` member carrying `declaration`, referenced from the equality, plus the FR-322 dependency join. IR 0a889f9 admits the corpus |
+| FND-002 | fixed bdbad7a | The convert member is now `{"kind":"type_argument","declaration":<target type node>}`, matching QSL's `Member::TypeArgument` |
+| FND-003 | fixed bdbad7a | The comments and matrix now say QSL emits `leaves: []` for `R_SELF` and that IR refuses any compared type that reaches itself (the reference reader rule), pending STD-129. The pin is renamed `tc_029_a_cyclic_compared_type_is_refused_by_ir_today`, and the coverage loss is recorded on a split FR-018-AC-2 row |
+| FND-004 | fixed bdbad7a | Both surviving mutants (guard removal, single step) are now killed by `tc_029_ac15_a_non_conversion_application_operand_is_read_as_its_own_type` and `tc_029_ac15_nested_conversions_are_read_through_to_the_innermost_operand` |
+| FND-005 | accepted-no-change | FR-018's clause now states deliberately that the conversion's `result_type` is not compared, because `check_equality`'s verdict on the descriptor governs. Round-0 probes showed the runtime refuses every mismatched conversion in the corpus |
+| FND-006 | fixed bdbad7a | The refused constant is removed from both sums, and the floor is `>= 59`. It is tight: raising either floor to `>= 60` fails both tests, so exactly 59 expressions are admitted (65 less the six text admissions; the ordered-enum codes are back). The lost six are recorded under FR-014-AC-2, and the exact `corpus().len() == calls.len()` check stands |
+| FND-007 | fixed bdbad7a | The tautological `add_fn` assert is removed, and the agreement test is renamed `tc_029_ac2_and_ac9_record_tuple_option_and_collection_oracles_agree` |
+| FND-008 | fixed bdbad7a | The LITERAL_QUANTITY, WRONG_OPERAND and 3002 fixtures each carry a comment saying they are deliberate negative fixtures in a shape QSL never emits |
