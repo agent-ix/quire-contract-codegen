@@ -35,8 +35,14 @@ Every supported case has matching typed classification across backends. Every un
 typed non-Boolean result and no partial artifact or proof claim. Every retained
 counterexample either reproduces native false or reports a typed replay
 non-success (unbacked). The dependency graph keeps Contract IR below codegen. Every
-generated `#[kani::proof]` symbol carries its corpus case's readable name,
-family label plus positional counter, the same name its artifact paths carry. A
+generated `#[kani::proof]` symbol carries its corpus case's name: the family label
+plus the SHA-256 of the case's canonical content (construct, every request field, the finite
+input with its objects and references in sorted order, the profile selection and the
+normalized dependency census), the same name its artifact paths carry. The same request
+names the same artifacts in any emission order and any run, and the same graph offered in
+another object or reference order names the same ones. Varying any single one of those
+fields names different artifacts. A request emitted twice through one registry is refused
+as `kani_corpus_identity_collision` and emits nothing. A
 declared proof-dependency census that is empty or duplicate-identity,
 kind/state/path-inconsistent, or names any non-`Required` kind is refused
 with a typed `InvalidInput` `kani_corpus_dependency_invalid` result and

@@ -2,7 +2,7 @@
 //!
 //! `--harness <name>` below is a substring filter over the fully qualified harness name, not an
 //! exact match (`--exact` is not passed), so e.g. `--harness corpus_case_arithmetic` matches the
-//! generated `corpus_case_arithmetic_<identity>` symbol. Each temporary crate here writes exactly
+//! generated `corpus_case_arithmetic_<digest>` symbol. Each temporary crate here writes exactly
 //! one harness, so the filter is effectively exact in this file today, but read literally it is a
 //! prefix over the whole `arithmetic`/`graph`/`collection` family: a crate containing more than one
 //! case of the same family would have every one of them selected by this same filter.
