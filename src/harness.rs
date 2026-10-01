@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeMap, fmt::Write as _};
 
-use quire_contract_ir::{
+use quire_contract_model::{
     ClauseId, DependencyIdentity, DependencyKind, RequirementRef, StateObservation, TypedExpression,
 };
 use serde::{Deserialize, Serialize};

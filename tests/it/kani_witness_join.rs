@@ -29,9 +29,8 @@ use quire_contract_codegen::{
     ArtifactBundle, KaniBindingRole, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
     KaniObligationOutcome, KaniObligationRequest, KaniPrimitiveType, KaniRunOutcome,
     ObligationBinding, ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord,
-    RUNTIME_REVISION,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
@@ -256,9 +255,7 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
     .unwrap();
     fs::write(
         directory.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[workspace]\n"
-        ),
+        "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\", features = [\"exact\"] }\n\n[workspace]\n",
     )
     .unwrap();
     fs::write(

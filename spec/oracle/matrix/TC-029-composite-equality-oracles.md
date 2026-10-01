@@ -57,7 +57,8 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    quire-spec-language#121) are distinct values rather than one reason. Assert
    the generated source contains no `unwrap`, `expect`, panicking index or
    charge or pair-count literal, and that the crate manifest declares
-   `publish = false` and the runtime revision with the `exact` feature.
+   `publish = false` and the runtime dependency (git source, `branch = "main"`, no pinned `rev`)
+   with the `exact` feature.
 4. Generate the corpus crate at test time, compile it with the agreement cases
    as its integration test, and execute it on the corpus vectors. For each vector compare the `Outcome<bool>`, the admitted
    charge sequence and the consumed counters against (a) a direct call to

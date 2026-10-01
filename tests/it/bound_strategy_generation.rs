@@ -12,7 +12,7 @@ use quire_contract_codegen::{
     generate_bound_oracles, generate_bound_strategy, BoundGenerationError, BoundStrategyPopulation,
     BoundStrategyRequest, GenerationTerminalState, StrategyErrorCode,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
@@ -262,10 +262,7 @@ fn run_integer_oracles(cases: &[(&str, &str)]) {
     fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
     fs::write(
         temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"bound-integer-oracles\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\" }}\n\n[workspace]\n",
-            quire_contract_codegen::RUNTIME_REVISION
-        ),
+        "[package]\nname = \"bound-integer-oracles\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\" }\n\n[workspace]\n",
     )
     .unwrap();
     let output = Command::new(env!("CARGO"))
@@ -945,10 +942,7 @@ mod generated_checks {{
     let temporary = TemporaryDirectory::new("quire-bound-strategy-consumer");
     fs::write(
         temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"bound-strategy-consumer\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\", features = [\"snapshot-json\"] }}\n\n[workspace]\n",
-            quire_contract_codegen::RUNTIME_REVISION
-        ),
+        "[package]\nname = \"bound-strategy-consumer\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\", features = [\"snapshot-json\"] }\n\n[workspace]\n",
     )
     .unwrap();
     fs::write(temporary.0.join("src/lib.rs"), source).unwrap();
@@ -1138,10 +1132,7 @@ pub fn {oracle}({oracle_parameters}) -> bool {{
     fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
     fs::write(
         temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"bound-strategy-mismatch\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\" }}\n\n[workspace]\n",
-            quire_contract_codegen::RUNTIME_REVISION
-        ),
+        "[package]\nname = \"bound-strategy-mismatch\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\" }\n\n[workspace]\n",
     )
     .unwrap();
     let output = Command::new(env!("CARGO"))
@@ -1412,10 +1403,7 @@ fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
     fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
     fs::write(
         temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"bound-strategy-all-populations\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\" }}\n\n[workspace]\n",
-            quire_contract_codegen::RUNTIME_REVISION
-        ),
+        "[package]\nname = \"bound-strategy-all-populations\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\" }\n\n[workspace]\n",
     )
     .unwrap();
     let output = Command::new(env!("CARGO"))

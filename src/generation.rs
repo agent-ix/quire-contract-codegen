@@ -7,7 +7,7 @@
 //! be blocked on. A new generator returns these with its own type parameters
 //! and does not edit this module.
 
-use quire_contract_ir::CheckedSemanticId;
+use quire_contract_model::CheckedSemanticId;
 use serde::Serialize;
 
 /// Upstream work an item, or a whole generation, is blocked on.

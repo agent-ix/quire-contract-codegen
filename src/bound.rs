@@ -1,6 +1,6 @@
 //! Complete-package oracle lowering through the public IR binding boundary.
 
-use quire_contract_ir::{BoundPackage, ClauseRef};
+use quire_contract_model::{BoundPackage, ClauseRef};
 
 use crate::{
     oracle::{generate_named_boolean_oracle, oracle_symbol, unique_names},

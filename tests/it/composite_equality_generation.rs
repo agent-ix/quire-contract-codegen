@@ -21,7 +21,7 @@ use quire_contract_codegen::{
     DeclarationRefusalCause, EqualityOperandDescriptor, EqualityOperatorKind, IllTypedCauseKind,
     RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     CheckedNodeTag, CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
     CheckedPackageV2ReadResult, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
@@ -912,11 +912,10 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains(&format!("name = \"{COMPOSITE_EQUALITY_CRATE_NAME}\"")));
     assert!(manifest.contains("publish = false"));
-    assert!(manifest.contains(&format!(
-        "rev = \"{}\"",
-        quire_contract_codegen::RUNTIME_REVISION
-    )));
-    assert!(manifest.contains("features = [\"exact\"]"));
+    assert!(manifest.contains(
+        "quire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\", features = [\"exact\"] }"
+    ));
+    assert!(!manifest.contains("rev ="));
 
     let lib = contents(&oracles, "src/lib.rs");
     for forbidden in [

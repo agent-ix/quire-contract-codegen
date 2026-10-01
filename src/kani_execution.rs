@@ -43,6 +43,7 @@ use rustix::{
 use serde::Serialize;
 
 use crate::{
+    kani::KaniSolver,
     kani_obligations::{KaniObligationHarness, KaniScalarObligationHarness, ObligationKind},
     kani_transcript::{
         counterexample_playback, KaniCheckResult, KaniHarnessReport, KaniHarnessStatus,
@@ -188,7 +189,7 @@ struct HarnessView<'a> {
     rust: &'a Artifact,
     kind: Option<ObligationKind>,
     unwind: u32,
-    solver: &'a str,
+    solver: KaniSolver,
     options: &'a [String],
 }
 
@@ -201,7 +202,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     rust: &harness.rust,
                     kind: Some(identity.kind),
                     unwind: identity.unwind,
-                    solver: &identity.solver,
+                    solver: identity.solver,
                     options: &identity.options,
                 }
             }
@@ -211,7 +212,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     rust: &harness.rust,
                     kind: None,
                     unwind: identity.unwind,
-                    solver: &identity.solver,
+                    solver: identity.solver,
                     options: &identity.options,
                 }
             }
@@ -224,7 +225,7 @@ impl<'a> KaniExecutableHarness<'a> {
                         StateFrameProperty::Frame { .. } => ObligationKind::Frame,
                     }),
                     unwind: identity.unwind,
-                    solver: &identity.solver,
+                    solver: identity.solver,
                     options: &identity.options,
                 }
             }
@@ -365,7 +366,7 @@ pub struct KaniExecutionEvidence {
     /// Loop unwind bound.
     pub unwind: u32,
     /// Solver.
-    pub solver: String,
+    pub solver: KaniSolver,
     /// Process exit code, or `None` when the process was killed by a signal — including the
     /// kill this module itself sends on [`KaniInconclusiveReason::TimedOut`].
     pub exit_code: Option<i32>,
@@ -430,7 +431,7 @@ pub fn execute_kani_obligation(
         launcher_path: request.installation.launcher.display().to_string(),
         arguments,
         unwind: harness.unwind,
-        solver: harness.solver.to_owned(),
+        solver: harness.solver,
         exit_code,
         outcome: run.outcome,
         success_checks: run.success_checks,
@@ -902,8 +903,11 @@ mod tests {
         property: crate::state_frame::StateFrameProperty,
         options: Vec<String>,
     ) -> StateFrameHarness {
-        use crate::state_frame::{StateFrameIdentity, StateFrameScope};
-        let id = |digit: &str| -> quire_contract_ir::CheckedNodeId {
+        use crate::{
+            identity::{HarnessSymbol, ModuleSymbol},
+            state_frame::{StateFrameIdentity, StateFrameScope},
+        };
+        let id = |digit: &str| -> quire_contract_model::CheckedNodeId {
             serde_json::from_value(serde_json::json!({
                 "domain": "quire.checked-semantic-node/v1",
                 "digest": digit.repeat(64),
@@ -923,9 +927,9 @@ mod tests {
                 domains: Vec::new(),
                 state_path: "crate::State".to_owned(),
                 subject_path: "crate::operate".to_owned(),
-                module_symbol: "m".to_owned(),
-                harness_symbol: "check".to_owned(),
-                solver: "cadical".to_owned(),
+                module_symbol: ModuleSymbol::try_from("m").unwrap(),
+                harness_symbol: HarnessSymbol::try_from("check").unwrap(),
+                solver: KaniSolver::Cadical,
                 unwind: 4,
                 options,
             },

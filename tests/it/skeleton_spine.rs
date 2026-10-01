@@ -695,7 +695,8 @@ fn tc_026_each_malformed_counterexample_class_is_a_decode_evidence_failure() {
 fn tc_026_a_counterexample_for_another_harness_is_never_replayed() {
     let harness = spine_harness();
     let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
-    let other = playback(&harness, 1, 5).replace(&harness.identity.harness_symbol, "sibling");
+    let other =
+        playback(&harness, 1, 5).replace(harness.identity.harness_symbol.as_str(), "sibling");
     let verdict =
         replay_counterexample(&harness.identity, &other, &package).expect("the verdict is reached");
     assert!(
@@ -781,8 +782,8 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
 
     // The counterexample decodes to typed values, and QSL replays them to the same violation.
     let decoded = decode_falsification(
-        &harness.identity.harness_symbol,
-        &harness.identity.module_symbol,
+        harness.identity.harness_symbol.as_str(),
+        harness.identity.module_symbol.as_str(),
         &harness.identity.arguments,
         counterexample,
     )

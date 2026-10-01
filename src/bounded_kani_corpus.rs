@@ -512,13 +512,13 @@ pub fn generate_bounded_kani_corpus_case(
     })
 }
 
-const fn checked_method(operator: quire_contract_ir::NumericOperator) -> &'static str {
+const fn checked_method(operator: quire_contract_model::NumericOperator) -> &'static str {
     match operator {
-        quire_contract_ir::NumericOperator::Add => "checked_add",
-        quire_contract_ir::NumericOperator::Subtract => "checked_sub",
-        quire_contract_ir::NumericOperator::Multiply => "checked_mul",
-        quire_contract_ir::NumericOperator::Divide => "checked_div",
-        quire_contract_ir::NumericOperator::Remainder => "checked_rem",
+        quire_contract_model::NumericOperator::Add => "checked_add",
+        quire_contract_model::NumericOperator::Subtract => "checked_sub",
+        quire_contract_model::NumericOperator::Multiply => "checked_mul",
+        quire_contract_model::NumericOperator::Divide => "checked_div",
+        quire_contract_model::NumericOperator::Remainder => "checked_rem",
     }
 }
 
@@ -618,7 +618,7 @@ mod tests {
         FiniteReference, GraphRequest, KaniOutcomeKind, KaniProfile, ModuleDescriptor,
         PopulationCompleteness, ProfileSelection, QueryKind, ResourceBounds, SemanticFamily,
     };
-    use quire_contract_ir::NumericOperator;
+    use quire_contract_model::NumericOperator;
 
     use super::{
         generate_bounded_kani_corpus_case, BoundedCorpusRequest, CorpusProofDependencyGraph,

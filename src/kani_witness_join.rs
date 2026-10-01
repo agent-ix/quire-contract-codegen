@@ -449,7 +449,7 @@ pub(crate) fn first_out_of_domain<'a>(
 
 #[cfg(test)]
 mod tests {
-    use quire_contract_ir::{IntegerDomain, OverflowPolicy};
+    use quire_contract_model::{IntegerDomain, OverflowPolicy};
 
     use super::*;
     use crate::kani::KaniIntegerBounds;

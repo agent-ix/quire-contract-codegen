@@ -17,7 +17,7 @@ use quire_contract_codegen::{
     negotiate_kani_obligations, KaniObligationHarness, KaniObligationOutcome,
     KaniObligationRequest, ObligationDisposition, ObligationItem, ObligationRecord,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};

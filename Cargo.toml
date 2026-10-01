@@ -15,6 +15,10 @@ path = "src/lib.rs"
 
 [dependencies]
 quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", branch = "main" }
+# The model items (`CheckedPackageV2`, `RequirementRef`, ...) come from quire-contract-model, a crate in
+# the same repository and the same lock entry as quire-contract-ir; the IR root crate is named only
+# for its `kani` module (IR AD-006 R3-C2).
+quire-contract-model = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", branch = "main" }
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", branch = "main", features = ["exact"] }
 # qsl-replay is the only QSL crate this repository depends on (QSL arch-lint T12-A); the
 # replay adapter in src/spine_replay.rs builds its requests from `call_site` and the crate's own

@@ -128,9 +128,9 @@ use crate::exact_scalar::IntegerOperator;
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{
     bounded_readable_component, unique_names, Artifact, MAX_GENERATED_SOURCE_BYTES,
-    ORACLE_KANI_METADATA, RUNTIME_REVISION,
 };
-use quire_contract_ir::{
+use crate::profile::oracle_crate_manifest;
+use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
@@ -583,7 +583,7 @@ fn resolve_operand_type(
 /// expected form with two operands.
 fn lowered_binary_body(
     record: &CompleteLoweringRecordV2,
-) -> Result<&quire_contract_ir::CompleteContractNodeV2, ExactFunctionRefusal> {
+) -> Result<&quire_contract_model::CompleteContractNodeV2, ExactFunctionRefusal> {
     let node = match record {
         CompleteLoweringRecordV2::Lowered { node } => node.as_ref(),
         CompleteLoweringRecordV2::Unsupported {
@@ -656,7 +656,7 @@ fn application_arguments(body: &serde_json::Value) -> Option<&Vec<serde_json::Va
 /// Classify one declared function's own body shape against its lowered
 /// node, independent of any other function (Stage 1, non-`Call` bodies).
 fn classify_body_shape(
-    node: &quire_contract_ir::CompleteContractNodeV2,
+    node: &quire_contract_model::CompleteContractNodeV2,
     declaration: &ExactFunctionDeclaration,
 ) -> Result<(), ExactFunctionRefusal> {
     match &declaration.body {
@@ -1088,7 +1088,10 @@ pub fn generate_exact_function_oracles(
 
     Ok(ExactFunctionOracles {
         artifacts: vec![
-            artifact("Cargo.toml", manifest()),
+            artifact(
+                "Cargo.toml",
+                oracle_crate_manifest(EXACT_FUNCTION_CRATE_NAME),
+            ),
             artifact("src/lib.rs", lib),
             artifact("claim-map.json", map_text),
             artifact("location-map.json", location_text),
@@ -1371,12 +1374,6 @@ fn render_body(declaration: &ExactFunctionDeclaration) -> String {
             )
         }
     }
-}
-
-fn manifest() -> String {
-    format!(
-        "[package]\nname = \"{EXACT_FUNCTION_CRATE_NAME}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[lints.rust]\nunsafe_code = \"forbid\"\n\n{ORACLE_KANI_METADATA}[workspace]\n"
-    )
 }
 
 fn artifact(path: &str, contents: String) -> Artifact {

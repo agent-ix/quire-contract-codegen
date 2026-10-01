@@ -76,10 +76,9 @@ use crate::exact_scalar::{
     read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
 };
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-use crate::oracle::{
-    unique_names, Artifact, MAX_GENERATED_SOURCE_BYTES, ORACLE_KANI_METADATA, RUNTIME_REVISION,
-};
-use quire_contract_ir::{
+use crate::oracle::{unique_names, Artifact, MAX_GENERATED_SOURCE_BYTES};
+use crate::profile::oracle_crate_manifest;
+use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
@@ -649,7 +648,10 @@ pub fn generate_composite_equality_oracles(
         String::from_utf8(map_bytes).map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     Ok(CompositeEqualityOracles {
         artifacts: vec![
-            artifact("Cargo.toml", manifest()),
+            artifact(
+                "Cargo.toml",
+                oracle_crate_manifest(COMPOSITE_EQUALITY_CRATE_NAME),
+            ),
             artifact("src/lib.rs", lib),
             artifact("claim-map.json", map_text),
         ],
@@ -723,7 +725,7 @@ impl DescriptorKey {
 
 /// A checked, admitted item ready to emit.
 struct CheckedItem<'r> {
-    node: &'r quire_contract_ir::CompleteContractNodeV2,
+    node: &'r quire_contract_model::CompleteContractNodeV2,
     checked: rt::CheckedEquality,
     left_source: ValueType,
     left_target: Option<ValueType>,
@@ -818,7 +820,7 @@ fn check_item<'r>(
 
 fn lowered(
     record: &CompleteLoweringRecordV2,
-) -> Result<&quire_contract_ir::CompleteContractNodeV2, CompositeEqualityRefusal> {
+) -> Result<&quire_contract_model::CompleteContractNodeV2, CompositeEqualityRefusal> {
     match record {
         CompleteLoweringRecordV2::Lowered { node } => Ok(node),
         CompleteLoweringRecordV2::Unsupported {
@@ -1566,12 +1568,6 @@ fn profile_path(profile: TextProfile) -> &'static str {
         TextProfile::BinaryUtf8 => "rt::TextProfile::BinaryUtf8",
         _ => unreachable!("TextProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
-}
-
-fn manifest() -> String {
-    format!(
-        "[package]\nname = \"{COMPOSITE_EQUALITY_CRATE_NAME}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[lints.rust]\nunsafe_code = \"forbid\"\n\n{ORACLE_KANI_METADATA}[workspace]\n"
-    )
 }
 
 fn artifact(path: &str, contents: String) -> Artifact {

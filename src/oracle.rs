@@ -2,21 +2,12 @@
 
 use std::{collections::BTreeMap, fmt::Write as _};
 
-use quire_contract_ir::{
+use quire_contract_model::{
     BooleanOperator, ClauseId, ComparisonOperator, DefinednessObligationKind, DependencyIdentity,
     DependencyKind, Expression, ExpressionKind, IntegerType, NumericOperator, RequirementRef,
     SourceSpan, StateObservation, TypedExpression, ValueType,
 };
 use serde::{Deserialize, Serialize};
-
-/// The Contract Runtime git revision every generated crate's `Cargo.toml` depends on.
-pub const RUNTIME_REVISION: &str = "ed0a04b482216b79d3559a6ac59e6e260c5591cf";
-
-/// The `[package.metadata.kani]` table every generated oracle crate's manifest carries. CBMC
-/// tracks heap objects field by field only up to 64 bytes by default; RT's `Value` and `ValueType`
-/// are larger, and a non-field-sensitive read of them cannot be constant-folded, so the crate raises
-/// the limit the way RT's own `Cargo.toml` does.
-pub(crate) const ORACLE_KANI_METADATA: &str = "[package.metadata.kani]\nunstable = { unstable-options = true }\nflags = { cbmc-args = [\"--max-field-sensitivity-array-size\", \"1024\"] }\n\n";
 
 /// Maximum generated Rust bytes for one clause.
 pub const MAX_GENERATED_SOURCE_BYTES: usize = 1_048_576;

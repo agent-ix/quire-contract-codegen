@@ -2,7 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Write};
 
-use quire_contract_ir::{BooleanOperator, BoundPackage, ClauseRef, Expression, ExpressionKind};
+use quire_contract_model::{BooleanOperator, BoundPackage, ClauseRef, Expression, ExpressionKind};
 use serde::Serialize;
 
 use crate::{
@@ -421,7 +421,7 @@ fn check_maps(
 }
 
 fn observe_clause(
-    clause: &quire_contract_ir::BoundClause,
+    clause: &quire_contract_model::BoundClause,
     map: &[SourceRegion],
     coverage: Option<&LlvmCoverage>,
 ) -> ClauseObservation {

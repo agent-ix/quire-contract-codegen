@@ -15,15 +15,17 @@
 //! `src/lib.rs`. That generator numbers its records by position; this module maps every position
 //! back to the driver's request index and pairs each harness with its record by `harness_symbol`.
 
-use std::collections::BTreeMap;
+use std::collections::{btree_map::Entry, BTreeMap};
 
-use quire_contract_ir::{CheckedNodeId, CheckedPackageV2};
+use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 
 use crate::{
-    derive_exact_scalar_items, generate_exact_scalar_oracles, negotiate_kani_obligations, Artifact,
-    BackendKind, Candidate, ClaimMap, ExactScalarClaim, ExactScalarOracles, InvalidObligationItem,
-    KaniObligationError, KaniObligationOutcome, KaniObligationRequest, KaniScalarObligationHarness,
-    ObligationDisposition, ObligationItem, ObligationRecord, OracleGenerationError,
+    derive_exact_scalar_items, generate_exact_scalar_oracles,
+    identity::{HarnessPath, HarnessSymbol},
+    negotiate_kani_obligations, Artifact, BackendKind, Candidate, ClaimMap, ExactScalarClaim,
+    ExactScalarOracles, InvalidObligationItem, KaniObligationError, KaniObligationOutcome,
+    KaniObligationRequest, KaniScalarObligationHarness, ObligationDisposition, ObligationItem,
+    ObligationRecord, OracleGenerationError,
 };
 
 /// One item the driver routed to a backend.
@@ -135,10 +137,38 @@ pub enum RoutedGenerationError {
         /// The kind.
         kind: BackendKind,
     },
+    /// Two harnesses the Kani arm emitted share one proof symbol, so a record's
+    /// `Supported { harness_symbol }` cannot name one of them.
+    DuplicateHarness {
+        /// The `module::harness` path of the second harness with the shared symbol.
+        harness: HarnessPath,
+    },
     /// The Kani arm refused its group as a whole.
     Kani(KaniObligationError),
     /// FR-014 generation over the derived items failed as a whole.
     Oracle(OracleGenerationError),
+}
+
+/// The harnesses by proof symbol, which is what a record's `Supported` disposition names. Two
+/// harnesses with one symbol are a typed refusal: collecting them into the map would keep the last
+/// and silently drop the first (AD-004 L-10).
+fn index_harnesses(
+    harnesses: Vec<KaniScalarObligationHarness>,
+) -> Result<BTreeMap<HarnessSymbol, KaniScalarObligationHarness>, RoutedGenerationError> {
+    let mut indexed = BTreeMap::new();
+    for harness in harnesses {
+        match indexed.entry(harness.identity.harness_symbol.clone()) {
+            Entry::Occupied(_) => {
+                return Err(RoutedGenerationError::DuplicateHarness {
+                    harness: harness.identity.harness_path(),
+                });
+            }
+            Entry::Vacant(slot) => {
+                slot.insert(harness);
+            }
+        }
+    }
+    Ok(indexed)
 }
 
 /// What one kind's arm produced.
@@ -274,14 +304,7 @@ fn generate_kani(
             records,
             scalar_harnesses,
             ..
-        } => (
-            records,
-            scalar_harnesses
-                .into_iter()
-                .map(|harness| (harness.identity.harness_symbol.clone(), harness))
-                .collect::<BTreeMap<_, _>>(),
-            false,
-        ),
+        } => (records, index_harnesses(scalar_harnesses)?, false),
         KaniObligationOutcome::Rejected { records } => (records, BTreeMap::new(), true),
     };
     debug_assert_eq!(
@@ -364,4 +387,63 @@ fn derive_claim_map(
         .items
         .sort_by(|left, right| left.node_id.cmp(&right.node_id));
     Ok((claim_map, artifacts))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{index_harnesses, RoutedGenerationError};
+    use crate::{
+        identity::{HarnessSymbol, ModuleSymbol},
+        kani::KaniSolver,
+        kani_obligations::{KaniScalarObligationHarness, ScalarObligationIdentity},
+        Artifact,
+    };
+
+    fn harness(module: &str, symbol: &str) -> KaniScalarObligationHarness {
+        let node_id = serde_json::from_value(serde_json::json!({
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1".repeat(64),
+        }))
+        .expect("a checked node id");
+        KaniScalarObligationHarness {
+            identity: ScalarObligationIdentity {
+                node_id,
+                operation_identity: "quire.op.integer.add".to_owned(),
+                oracle_symbol: "oracle".to_owned(),
+                module_symbol: ModuleSymbol::try_from(module).expect("a module symbol"),
+                harness_symbol: HarnessSymbol::try_from(symbol).expect("a harness symbol"),
+                arguments: Vec::new(),
+                solver: KaniSolver::Cadical,
+                unwind: 1,
+                options: Vec::new(),
+            },
+            rust: Artifact::new(format!("src/generated/{module}.rs"), String::new()),
+            record: Artifact::new(format!("kani-obligations/{module}.json"), String::new()),
+        }
+    }
+
+    /// Trace: TC-033.
+    #[test]
+    fn tc_033_two_harnesses_sharing_a_symbol_are_a_typed_error_not_a_silent_overwrite() {
+        let refused = index_harnesses(vec![
+            harness("a_module", "x_proof"),
+            harness("b_module", "x_proof"),
+        ])
+        .expect_err("a shared symbol is refused");
+        let RoutedGenerationError::DuplicateHarness { harness } = refused else {
+            panic!("expected DuplicateHarness, got {refused:?}");
+        };
+        assert_eq!(harness.to_string(), "b_module::x_proof");
+
+        let indexed = index_harnesses(vec![harness_pair().0, harness_pair().1])
+            .expect("distinct symbols are indexed");
+        assert_eq!(indexed.len(), 2);
+    }
+
+    fn harness_pair() -> (KaniScalarObligationHarness, KaniScalarObligationHarness) {
+        (
+            harness("a_module", "a_proof"),
+            harness("b_module", "b_proof"),
+        )
+    }
 }

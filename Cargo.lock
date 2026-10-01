@@ -1360,6 +1360,7 @@ dependencies = [
  "proptest",
  "qsl-replay",
  "quire-contract-ir",
+ "quire-contract-model",
  "quire-contract-runtime",
  "quire-verification-contracts",
  "rustix",

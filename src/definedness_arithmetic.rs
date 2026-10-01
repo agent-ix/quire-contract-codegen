@@ -21,14 +21,12 @@ pub fn prepare_checked_arithmetic(
 
 #[cfg(test)]
 mod tests {
-    use quire_contract_ir::{
-        kani::{
-            CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, KaniOutcomeKind,
-            KaniProfile, ModuleDescriptor, PopulationCompleteness, ProfileSelection,
-            ResourceBounds, SemanticFamily,
-        },
-        NumericOperator,
+    use quire_contract_ir::kani::{
+        CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, KaniOutcomeKind,
+        KaniProfile, ModuleDescriptor, PopulationCompleteness, ProfileSelection, ResourceBounds,
+        SemanticFamily,
     };
+    use quire_contract_model::NumericOperator;
 
     use super::{prepare_checked_arithmetic, CheckedArithmeticRequest};
 

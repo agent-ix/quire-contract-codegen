@@ -20,7 +20,7 @@ use std::sync::{Mutex, OnceLock};
 use quire_contract_codegen::{
     CompositeEqualityItem, EqualityOperandDescriptor, EqualityOperatorKind,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
     CheckedPackageV2ReadResult,
 };

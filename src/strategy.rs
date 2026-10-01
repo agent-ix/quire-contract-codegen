@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use quire_contract_ir::{ClauseRef, RequirementRef, SourceSpan};
+use quire_contract_model::{ClauseRef, RequirementRef, SourceSpan};
 use serde::{Deserialize, Serialize};
 
 use crate::{
