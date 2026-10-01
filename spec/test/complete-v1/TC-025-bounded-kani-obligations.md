@@ -105,6 +105,10 @@ unsatisfiable requires as `cover_unsatisfied`.
    finds the allowed run inside its frame (FR-015-AC-30 to FR-015-AC-32). The default suite builds that
    replay's request and envelope through `qsl_replay::call_site` and settles a forbidden and a
    granted write without Kani, and refuses an operation with no frame, declared or not (FR-015-AC-33 to FR-015-AC-36).
+9. Generate the scalar harness of each integer operation (add, subtract, multiply, negate). Each
+   asserts the oracle's outcome against the operation evaluated natively in `i128`, with a `Completed`
+   arm, a `Refused` arm and a failing catch-all. The installed backend verifies the healthy `x + 1`
+   harness and falsifies it with the oracle's `Add` replaced by `Subtract` (FR-015-AC-37).
 
 ## Blocked
 

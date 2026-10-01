@@ -761,7 +761,7 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
 /// not matched: it is true for `Ok(Refused(_))` too. This is a source-inspection check of the
 /// rendered text; the real-Kani tests below discharge it and falsify a mutated oracle.
 ///
-/// Trace: FR-015-AC-7, TC-025
+/// Trace: FR-015-AC-37, FR-015-AC-7, TC-025
 #[test]
 fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (scalar, claim_map) = scalar_package();
@@ -796,6 +796,11 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
         "a refusal is correct exactly when the native result leaves the domain: {source}"
     );
     assert!(
+        source.contains("_ => false,"),
+        "every other outcome (Undefined, Incomplete, Err) must fail the proof, so an oracle that \
+         stops on some inputs cannot verify: {source}"
+    );
+    assert!(
         !source.contains("domain.contains("),
         "regression to the tautology that re-ran the oracle's own bound check: {source}"
     );
@@ -826,6 +831,69 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     // corresponding source-level check.
     assert!(source.contains("kani::assume(left >= 3_i64 && left <= 3_i64);"));
     assert!(source.contains("kani::assume(right >= 3_i64 && right <= 3_i64);"));
+}
+
+/// Each of the four rendered integer operations states its own native `i128` expression, written
+/// out here independently of the generator. A slip in one (operands swapped for subtraction,
+/// multiplication rendered as addition, a dropped negation) would make the first real Kani run of
+/// that operation falsify a correct oracle, and the real-Kani lane runs only addition.
+///
+/// Trace: FR-015-AC-37, TC-025
+#[test]
+fn tc_025_every_rendered_operation_states_its_own_native_relation() {
+    const EXACT: [(&str, &str); 4] = [
+        (
+            "quire.op.integer.add",
+            "let exact: i128 = i128::from(left_native) + i128::from(right_native);",
+        ),
+        (
+            "quire.op.integer.sub",
+            "let exact: i128 = i128::from(left_native) - i128::from(right_native);",
+        ),
+        (
+            "quire.op.integer.mul",
+            "let exact: i128 = i128::from(left_native) * i128::from(right_native);",
+        ),
+        (
+            "quire.op.integer.negate",
+            "let exact: i128 = -i128::from(operand_native);",
+        ),
+    ];
+    let (scalar, claim_map) = scalar_package();
+    let generated = claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+        .collect::<Vec<_>>();
+    let items = generated
+        .iter()
+        .map(|claim| ObligationItem::ScalarClaim {
+            package: &scalar,
+            claim_map: &claim_map,
+            node_id: &claim.node_id,
+        })
+        .collect::<Vec<_>>();
+    let (_, harnesses) =
+        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+    for (identity, line) in EXACT {
+        let rendered = harnesses
+            .iter()
+            .filter(|harness| harness.identity.operation_identity == identity)
+            .collect::<Vec<_>>();
+        assert!(!rendered.is_empty(), "{identity}: the corpus renders it");
+        for harness in rendered {
+            let source = &harness.rust.contents;
+            assert_eq!(
+                source.matches("let exact: i128 = ").count(),
+                1,
+                "{identity}: {source}"
+            );
+            assert!(
+                source.contains(line),
+                "{identity}: expected `{line}` in {source}"
+            );
+        }
+    }
 }
 
 /// Unbounded, non-finite, model-dependent, frame and definedness-bearing items are typed
@@ -1993,9 +2061,10 @@ fn tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified() {
 /// `subtract`, the one defect the old in-domain assertion could not see (a subtraction result that
 /// stays in the domain is still `Completed`). The healthy harness verifies, and the mutated one is
 /// falsified by a counterexample on the harness's own assertion, not by a build error: the mutated
-/// source still compiles and its failing check is the generated `sound` assertion.
+/// source still compiles, and the failing check is the generated `sound` assertion, whose message
+/// the counterexample names.
 ///
-/// Trace: FR-015-AC-7, TC-025, FR-017-AC-7
+/// Trace: FR-015-AC-37, TC-025, FR-017-AC-11
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic() {
@@ -2016,4 +2085,9 @@ fn tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic() {
     };
     assert!(counterexample.contains(&mutated.identity.harness_symbol));
     assert_ne!(evidence.exit_code, Some(0));
+    let message = "the oracle must complete with exactly the native quire.op.integer.add result";
+    assert!(
+        counterexample.contains("Check for `assertion`") && counterexample.contains(message),
+        "the failing check must be the generated `sound` assertion, got {counterexample}"
+    );
 }

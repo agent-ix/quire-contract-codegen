@@ -733,7 +733,7 @@ struct LoweredScalarClaim {
     /// verbatim ahead of the harness module, exactly as a V1 harness embeds its `ClauseOracle`s.
     oracle_source: String,
     oracle_symbol: String,
-    arity: ScalarArity,
+    operation: ScalarOperation,
     /// Each operand's inclusive range, in call order.
     operands: Vec<(i64, i64)>,
     /// The result's inclusive range: the checked domain a completed result must lie in.
@@ -743,10 +743,85 @@ struct LoweredScalarClaim {
     harness_symbol: String,
 }
 
+/// One integer operation this generator renders a scalar harness for. Everything that differs
+/// between the four -- the catalogued identity, the operand names, the exact result, the range of
+/// reachable results -- is an exhaustive method here, so adding an operation is one new variant the
+/// compiler checks at every use.
 #[derive(Clone, Copy)]
-enum ScalarArity {
-    Unary,
-    Binary,
+enum ScalarOperation {
+    Add,
+    Subtract,
+    Multiply,
+    Negate,
+}
+
+impl ScalarOperation {
+    /// The renderable operation for an IR-confirmed operation identity, or `None` when this
+    /// generator has no scalar-harness renderer for it. Recognizing these four exact catalogued
+    /// identities is not a vocabulary bridge: it only recognizes, among identities IR already
+    /// confirmed, which ones this generator additionally knows how to turn into a harness.
+    fn of(operation_identity: &str) -> Option<Self> {
+        match operation_identity {
+            "quire.op.integer.add" => Some(Self::Add),
+            "quire.op.integer.sub" => Some(Self::Subtract),
+            "quire.op.integer.mul" => Some(Self::Multiply),
+            "quire.op.integer.negate" => Some(Self::Negate),
+            _ => None,
+        }
+    }
+
+    /// The oracle's parameter names, in call order, which are also the harness's variable names.
+    fn operand_names(self) -> &'static [&'static str] {
+        match self {
+            Self::Negate => &["operand"],
+            Self::Add | Self::Subtract | Self::Multiply => &["left", "right"],
+        }
+    }
+
+    /// The exact result as a Rust expression over the harness's native `i64` operands
+    /// (`<name>_native`), evaluated in `i128` where a sum, difference, product or negation of `i64`
+    /// values cannot overflow. It shares no code with the embedded oracle, which evaluates through
+    /// `quire_contract_runtime`'s `rt::Integer`; it is the independent statement of the clause that
+    /// [`render_scalar`] compares the oracle's result with.
+    fn native_expression(self) -> String {
+        let native = |index: usize| format!("i128::from({}_native)", self.operand_names()[index]);
+        match self {
+            Self::Add => format!("{} + {}", native(0), native(1)),
+            Self::Subtract => format!("{} - {}", native(0), native(1)),
+            Self::Multiply => format!("{} * {}", native(0), native(1)),
+            Self::Negate => format!("-{}", native(0)),
+        }
+    }
+
+    /// The least and greatest exact results over inclusive `i64` operand ranges, one per operand.
+    /// Each is exact in `i128`. The extremes of `+`, `-` and unary `-` lie at the range endpoints,
+    /// and so do those of `*`, which is bilinear.
+    fn reachable(self, operands: &[(i64, i64)]) -> (i128, i128) {
+        let wide = |(low, high): (i64, i64)| (i128::from(low), i128::from(high));
+        match (self, operands) {
+            (Self::Negate, [operand]) => {
+                let (low, high) = wide(*operand);
+                (-high, -low)
+            }
+            (Self::Add, [left, right]) => {
+                let ((a, b), (c, d)) = (wide(*left), wide(*right));
+                (a + c, b + d)
+            }
+            (Self::Subtract, [left, right]) => {
+                let ((a, b), (c, d)) = (wide(*left), wide(*right));
+                (a - d, b - c)
+            }
+            (Self::Multiply, [left, right]) => {
+                let ((a, b), (c, d)) = (wide(*left), wide(*right));
+                let corners = [a * c, a * d, b * c, b * d];
+                (
+                    corners.into_iter().min().unwrap_or_default(),
+                    corners.into_iter().max().unwrap_or_default(),
+                )
+            }
+            _ => unreachable!("one range per operand name"),
+        }
+    }
 }
 
 struct LoweredClause<'a> {
@@ -1330,27 +1405,11 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
     }
 }
 
-/// The renderable shape for a confirmed operation identity, or `None` when this generator has no
-/// scalar-harness renderer for it. Recognizing these four exact catalogued identities is not a
-/// vocabulary bridge -- it does not translate between codegen's own descriptor vocabulary and IR's
-/// catalog to reconcile a disagreement; it only recognizes, among identities IR already confirmed,
-/// which ones this generator additionally knows how to turn into a harness (the same kind of
-/// closed match `Shape::of` already makes over `ExactScalarOperation`).
-fn scalar_arity(operation_identity: &str) -> Option<ScalarArity> {
-    match operation_identity {
-        "quire.op.integer.add" | "quire.op.integer.sub" | "quire.op.integer.mul" => {
-            Some(ScalarArity::Binary)
-        }
-        "quire.op.integer.negate" => Some(ScalarArity::Unary),
-        _ => None,
-    }
-}
-
 /// Why [`lower_scalar_claim`] could not lower an IR-confirmed claim -- two distinct causes that
 /// [`classify_claim`] reports as two distinct [`UnsupportedObligation`] reasons, rather than
 /// folding them into one the way a single `Option` return would. A third and fourth candidate
 /// cause -- `check_parameters` recording no `checked_bounds` entry, or recording one whose own
-/// derived domain is not an `integer_range` -- are not represented here: [`scalar_arity`] only
+/// derived domain is not an `integer_range` -- are not represented here: [`ScalarOperation::of`] only
 /// renders the `IntegerArithmetic` family, and for that family `check_parameters`'s own
 /// `Bounds::equal` returns `Ok` only after successfully reading exactly one `integer_range` bound
 /// (`exact_scalar::check_parameters`, `exact_scalar::Bounds::equal`) -- the same node, read by the
@@ -1359,7 +1418,7 @@ fn scalar_arity(operation_identity: &str) -> Option<ScalarArity> {
 /// they are asserted with `unreachable!` below rather than modelled as a caller-visible refusal a
 /// test could never construct a fixture for.
 enum ScalarLoweringRefusal {
-    /// [`scalar_arity`] has no renderer for this operation identity.
+    /// [`ScalarOperation::of`] has no renderer for this operation identity.
     NoRenderer,
     /// Every operand range combines to results outside the result range, so no input the harness
     /// assumes completes and its non-vacuity cover could never be met.
@@ -1393,11 +1452,12 @@ fn lower_scalar_claim(
     derived: &[DerivedDomain],
     operand_ranges: &[OperandRange],
 ) -> Result<LoweredScalarClaim, ScalarLoweringRefusal> {
-    let arity = scalar_arity(&claim.operation.identity).ok_or(ScalarLoweringRefusal::NoRenderer)?;
+    let operation =
+        ScalarOperation::of(&claim.operation.identity).ok_or(ScalarLoweringRefusal::NoRenderer)?;
     let Some(bound_id) = generated.checked_bounds.first() else {
         unreachable!(
             "check_parameters's Bounds::equal records exactly one checked bound for every \
-             IntegerArithmetic claim, the only family scalar_arity renders a harness for"
+             IntegerArithmetic claim, the only family ScalarOperation::of renders a harness for"
         );
     };
     let range_of = |id: &CheckedNodeId| {
@@ -1425,11 +1485,7 @@ fn lower_scalar_claim(
         }),
     };
     let (lower, upper) = to_i64((lower, upper))?;
-    let positions = match arity {
-        ScalarArity::Unary => 1,
-        ScalarArity::Binary => 2,
-    };
-    let operands = (0..positions)
+    let operands = (0..operation.operand_names().len())
         .map(|position| match operand_ranges.get(position) {
             None | Some(OperandRange::Result) => Ok((lower, upper)),
             Some(OperandRange::Literal(value)) => to_i64((value, value)),
@@ -1445,8 +1501,7 @@ fn lower_scalar_claim(
                 .and_then(to_i64),
         })
         .collect::<Result<Vec<(i64, i64)>, _>>()?;
-    let (reachable_lower, reachable_upper) =
-        reachable_results(&claim.operation.identity, &operands);
+    let (reachable_lower, reachable_upper) = operation.reachable(&operands);
     if reachable_upper < i128::from(lower) || reachable_lower > i128::from(upper) {
         return Err(ScalarLoweringRefusal::ResultUnreachable {
             lower,
@@ -1464,46 +1519,13 @@ fn lower_scalar_claim(
         operation_identity: claim.operation.identity.clone(),
         oracle_source: generated.oracle_source.clone(),
         oracle_symbol: generated.symbol.clone(),
-        arity,
+        operation,
         operands,
         lower,
         upper,
         module_symbol,
         harness_symbol,
     })
-}
-
-/// The least and greatest exact results of a rendered integer operation over inclusive `i64`
-/// operand ranges. Each is exact in `i128`: a sum, difference or product of two `i64` values, or
-/// the negation of one, fits. The extremes of `+`, `-` and unary `-` lie at the range endpoints,
-/// and so do those of `*`, which is bilinear.
-fn reachable_results(identity: &str, operands: &[(i64, i64)]) -> (i128, i128) {
-    let wide = |(low, high): (i64, i64)| (i128::from(low), i128::from(high));
-    match (identity, operands) {
-        ("quire.op.integer.negate", [operand]) => {
-            let (low, high) = wide(*operand);
-            (-high, -low)
-        }
-        ("quire.op.integer.add", [left, right]) => {
-            let ((a, b), (c, d)) = (wide(*left), wide(*right));
-            (a + c, b + d)
-        }
-        ("quire.op.integer.sub", [left, right]) => {
-            let ((a, b), (c, d)) = (wide(*left), wide(*right));
-            (a - d, b - c)
-        }
-        ("quire.op.integer.mul", [left, right]) => {
-            let ((a, b), (c, d)) = (wide(*left), wide(*right));
-            let corners = [a * c, a * d, b * c, b * d];
-            (
-                corners.into_iter().min().unwrap_or_default(),
-                corners.into_iter().max().unwrap_or_default(),
-            )
-        }
-        _ => unreachable!(
-            "scalar_arity renders only integer add, sub, mul and negate, with one range per operand"
-        ),
-    }
 }
 
 fn derive_domain(bound: &CheckedSemanticNodeV2) -> DerivedDomain {
@@ -1972,25 +1994,9 @@ fn render(
     })
 }
 
-/// The exact result of an IR-confirmed integer operation, as a Rust expression over the
-/// harness's native `i64` operands (`<name>_native`), evaluated in `i128` where a sum, difference,
-/// product or negation of `i64` values cannot overflow. It reads the operator from the claim's
-/// catalogued operation identity and shares no code with the embedded oracle, which evaluates
-/// through `quire_contract_runtime`'s `rt::Integer`; it is the independent statement of the
-/// clause that [`render_scalar`] compares the oracle's result with.
-fn native_expression(operation_identity: &str) -> &'static str {
-    match operation_identity {
-        "quire.op.integer.add" => "i128::from(left_native) + i128::from(right_native)",
-        "quire.op.integer.sub" => "i128::from(left_native) - i128::from(right_native)",
-        "quire.op.integer.mul" => "i128::from(left_native) * i128::from(right_native)",
-        "quire.op.integer.negate" => "-i128::from(operand_native)",
-        _ => unreachable!("scalar_arity renders only integer add, sub, mul and negate"),
-    }
-}
-
 /// Renders one IR-confirmed V2 exact-scalar claim to a `kani::proof` that the embedded oracle
 /// computes the clause's own arithmetic. The harness evaluates the operation a second time, in
-/// native `i128` over the same symbolic `i64` operands ([`native_expression`]), and asserts the
+/// native `i128` over the same symbolic `i64` operands ([`ScalarOperation::native_expression`]), and asserts the
 /// oracle agrees with it in both directions: the outcome is `Ok(Completed(value))` with `value`
 /// exactly the native result when that result lies within the checked domain (the result bound's
 /// own literal bounds), and `Ok(Refused(_))` when it does not. Any other outcome fails. An oracle
@@ -2015,10 +2021,7 @@ fn render_scalar(
     let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
     let lower = i64_literal(lowered.lower);
     let upper = i64_literal(lowered.upper);
-    let names: &[&str] = match lowered.arity {
-        ScalarArity::Unary => &["operand"],
-        ScalarArity::Binary => &["left", "right"],
-    };
+    let names = lowered.operation.operand_names();
     let declarations = names
         .iter()
         .zip(&lowered.operands)
@@ -2082,7 +2085,7 @@ mod {module} {{\n\
         module = lowered.module_symbol,
         harness = lowered.harness_symbol,
         symbol = lowered.oracle_symbol,
-        exact = native_expression(&lowered.operation_identity),
+        exact = lowered.operation.native_expression(),
         operation = lowered.operation_identity,
     );
     let identity = ScalarObligationIdentity {
@@ -2481,7 +2484,7 @@ mod tests {
     // given a test here: `check_parameters`'s `Bounds::equal` (`exact_scalar.rs`) returns `Ok`
     // only after reading exactly one `integer_range` bound via the same `literal_integer` this
     // module's `derive_domain` uses on the identical node, so for `IntegerArithmetic` -- the only
-    // family `scalar_arity` renders -- neither an empty `checked_bounds` nor a checked bound with
+    // family `ScalarOperation::of` renders -- neither an empty `checked_bounds` nor a checked bound with
     // no `IntegerRange` domain is reachable; both are now `unreachable!` invariants in
     // `lower_scalar_claim` instead of typed refusals no fixture could ever construct. This test
     // is the one cause of the original four that a fixture -- built directly against
