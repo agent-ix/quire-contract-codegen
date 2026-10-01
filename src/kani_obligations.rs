@@ -32,8 +32,9 @@
 //! that name: `CallerDeclaredOperation` is constructed once, inside the `Generated` arm of
 //! `classify_claim`, so a claim codegen refused outright is classified through the `Refused` arm
 //! instead and never reaches it. V1 has no
-//! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so no frame
-//! harness is emitted. A V2 scalar claim's graph node that is present but is neither the one
+//! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so this
+//! negotiation emits no frame harness; `generate_state_frame_obligations` generates them from a
+//! state clause. A V2 scalar claim's graph node that is present but is neither the one
 //! recognized `state`/`frame` pair nor `expression`-tagged (the only family this generator ever
 //! lowers to a `Generated` claim) is refused as [`UnsupportedObligation::UnknownNodeKind`] rather
 //! than accounted with a null contract role and no typed reason; a claim naming a `node_id`
@@ -90,7 +91,8 @@ pub enum ObligationKind {
     Postcondition,
     /// Lowered to a `kani::requires`/`kani::ensures` preservation contract.
     Invariant,
-    /// Would lower to `kani::modifies`; no input currently reaches a supported frame.
+    /// A frame's effects; generated from its operation's `state_clause` by
+    /// [`crate::generate_state_frame_obligations`], never by the clause renderer.
     Frame,
 }
 
@@ -232,15 +234,18 @@ pub enum UnsupportedObligation {
         precondition: ClauseRef,
     },
     /// No harness could be produced for a reason that is not the bounded-resource or syntax
-    /// ground below. Three distinct causes still collapse to this one code: (1) an
+    /// ground below. Two distinct causes still collapse to this one code: (1) an
     /// internal-invariant fallback for an otherwise-successful render -- its oracle function
     /// symbol could not be located in generated source, or an ABI binding `abi` already
-    /// resolved could not be found again when assembling the harness body; (2) the harness
-    /// identity or record struct failing to serialize as JSON; and (3) the
-    /// [`ObligationKind::Frame`] arm, an ordinary "no encoding for this obligation kind" refusal,
-    /// not an invariant violation. Distinct from [`Self::ResourceLimitExceeded`] and
-    /// [`Self::InvalidGeneratedSyntax`] below, which this generator does split out.
+    /// resolved could not be found again when assembling the harness body; and (2) the harness
+    /// identity or record struct failing to serialize as JSON. Distinct from
+    /// [`Self::ResourceLimitExceeded`] and [`Self::InvalidGeneratedSyntax`] below, which this
+    /// generator does split out.
     RenderFailed,
+    /// A frame is not a clause oracle, so this renderer has no encoding for one. The frame
+    /// obligations of an operation are generated from its `state_clause` by
+    /// [`crate::generate_state_frame_obligations`].
+    FrameNotClauseRendered,
     /// The generated harness source exceeds [`MAX_GENERATED_SOURCE_BYTES`], the same
     /// bounded-resource ceiling every other generator in this crate enforces. Distinct from
     /// [`Self::InvalidGeneratedSyntax`]: a resource ceiling is not a generator defect.
@@ -1929,7 +1934,7 @@ fn render(
             render_contract(request.subject_path, lowered, &abi)
                 .ok_or(UnsupportedObligation::RenderFailed)?
         }
-        ObligationKind::Frame => return Err(UnsupportedObligation::RenderFailed),
+        ObligationKind::Frame => return Err(UnsupportedObligation::FrameNotClauseRendered),
     };
     let clause = lowered.clause.identity();
     let mut source = format!(
@@ -2649,5 +2654,26 @@ mod tests {
             Err(other) => panic!("expected InvalidGeneratedSyntax, got {other:?}"),
             Ok(_) => panic!("a malformed generated source must not render"),
         }
+    }
+
+    /// A frame is not a clause oracle: the clause renderer refuses one by name rather than as
+    /// an internal render failure.
+    ///
+    /// Trace: FR-015-AC-1, TC-025.
+    #[test]
+    fn render_refuses_a_frame_as_not_a_clause_oracle() {
+        let package = render_probe_package();
+        let clause_ref = render_probe_clause();
+        let items = [ObligationItem::BoundClause {
+            package: &package,
+            clause: &clause_ref,
+        }];
+        let request = render_probe_request(&items);
+        let mut lowered = render_probe_lowered(&items[0]);
+        lowered.kind = ObligationKind::Frame;
+        assert!(matches!(
+            render(&request, &lowered),
+            Err(UnsupportedObligation::FrameNotClauseRendered)
+        ));
     }
 }

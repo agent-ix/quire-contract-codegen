@@ -52,6 +52,7 @@ mod harness_generation;
 mod kani_argument_order;
 mod kani_generation;
 mod kani_obligations;
+mod kani_obligations_state_frame;
 mod kani_witness_join;
 mod oracle_generation;
 mod routed_generation;

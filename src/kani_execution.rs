@@ -48,6 +48,7 @@ use crate::{
         KaniBanner, KaniCoverSummary, KaniFailedCheck, KaniPlaybackTarget, KaniTranscript,
     },
     oracle::Artifact,
+    state_frame::{StateFrameHarness, StateFrameProperty},
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
@@ -159,6 +160,8 @@ pub enum KaniExecutableHarness<'a> {
     Contract(&'a KaniObligationHarness),
     /// A V2 exact-scalar harness, as `generate_routed` returns it (FR-022).
     Scalar(&'a KaniScalarObligationHarness),
+    /// A V2 state-clause operation-contract or frame-effect harness (IR-412).
+    StateFrame(&'a StateFrameHarness),
 }
 
 impl<'a> From<&'a KaniObligationHarness> for KaniExecutableHarness<'a> {
@@ -170,6 +173,12 @@ impl<'a> From<&'a KaniObligationHarness> for KaniExecutableHarness<'a> {
 impl<'a> From<&'a KaniScalarObligationHarness> for KaniExecutableHarness<'a> {
     fn from(harness: &'a KaniScalarObligationHarness) -> Self {
         Self::Scalar(harness)
+    }
+}
+
+impl<'a> From<&'a StateFrameHarness> for KaniExecutableHarness<'a> {
+    fn from(harness: &'a StateFrameHarness) -> Self {
+        Self::StateFrame(harness)
     }
 }
 
@@ -200,6 +209,19 @@ impl<'a> KaniExecutableHarness<'a> {
                 HarnessView {
                     rust: &harness.rust,
                     kind: None,
+                    unwind: identity.unwind,
+                    solver: &identity.solver,
+                    options: &identity.options,
+                }
+            }
+            Self::StateFrame(harness) => {
+                let identity = &harness.identity;
+                HarnessView {
+                    rust: &harness.rust,
+                    kind: Some(match identity.property {
+                        StateFrameProperty::Postcondition { .. } => ObligationKind::Postcondition,
+                        StateFrameProperty::Frame { .. } => ObligationKind::Frame,
+                    }),
                     unwind: identity.unwind,
                     solver: &identity.solver,
                     options: &identity.options,
@@ -735,6 +757,63 @@ mod tests {
 
     const COVER_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `cover`: \"contract assumptions are jointly satisfiable\"\n\n#[test]\nfn kani_concrete_playback_h_1() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![0, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
     const ASSERTION_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `assertion`: \"|post_state: &i64| *post_state <= 5\"\n\n#[test]\nfn kani_concrete_playback_h_2() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![8, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
+
+    /// A state-clause harness reports the contract role of what it proves, so execution
+    /// evidence tells an operation-contract proof from a frame-effect proof.
+    ///
+    /// Trace: TC-027
+    #[test]
+    fn tc_027_a_state_frame_harness_reports_the_kind_of_what_it_proves() {
+        use crate::state_frame::{
+            StateComparison, StateFrameIdentity, StateFrameProperty, StateFrameScope,
+        };
+        let id = |digit: &str| -> quire_contract_ir::CheckedNodeId {
+            serde_json::from_value(serde_json::json!({
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": digit.repeat(64),
+            }))
+            .expect("a node id")
+        };
+        let harness = |property| StateFrameHarness {
+            identity: StateFrameIdentity {
+                clause: id("1"),
+                scope: StateFrameScope {
+                    operation: "deposit".to_owned(),
+                    object: id("2"),
+                    anchor: id("3"),
+                    frame: id("4"),
+                },
+                property,
+                domains: Vec::new(),
+                state_path: "crate::State".to_owned(),
+                subject_path: "crate::operate".to_owned(),
+                module_symbol: "m".to_owned(),
+                harness_symbol: "check".to_owned(),
+                solver: "cadical".to_owned(),
+                unwind: 4,
+                options: Vec::new(),
+            },
+            rust: Artifact::new("src/generated/m.rs".to_owned(), String::new()),
+            record: Artifact::new("kani-obligations/m.json".to_owned(), String::new()),
+        };
+        let contract = harness(StateFrameProperty::Postcondition {
+            field: "balance".to_owned(),
+            comparison: StateComparison::Ge,
+            left_is_pre: false,
+        });
+        let frame = harness(StateFrameProperty::Frame {
+            granted: Vec::new(),
+            checked: vec!["audit".to_owned()],
+        });
+        assert_eq!(
+            KaniExecutableHarness::from(&contract).view().kind,
+            Some(ObligationKind::Postcondition)
+        );
+        assert_eq!(
+            KaniExecutableHarness::from(&frame).view().kind,
+            Some(ObligationKind::Frame)
+        );
+    }
 
     /// Success is `Verified` only with every cover satisfied, for every obligation kind; a
     /// vacuous run is `CoverUnsatisfied`. Summaries are Kani 0.67.0's own output. The parametrized
