@@ -1,7 +1,7 @@
 //! Exact complete-V1 composite/structural equality oracle generation from
 //! CheckedPackage V2 (FR-018).
 //!
-//! This is the composite/structural sibling of [`crate::exact_scalar`]
+//! This is the composite/structural sibling of [`crate::oracle::scalar`]
 //! (FR-014): a requested item names one checked `binary` expression node and a
 //! typed equality descriptor — an operator and two operands, each either
 //! `EqualityOperand::typed(source)` or `EqualityOperand::converted(source,
@@ -74,11 +74,11 @@
 use crate::core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES};
 use crate::core::naming::unique_names;
 use crate::core::profile::oracle_crate_manifest;
-use crate::exact_scalar::{
+use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
+use crate::oracle::scalar::{
     aggregate_members, bound_members, literal_count, read_decimal_range, read_integer_range,
     read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
 };
-use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,

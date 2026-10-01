@@ -19,7 +19,7 @@ use crate::{
         dependency_readiness, dependency_site, normalize_dependencies, ProofDependencyEdge,
         ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness,
     },
-    oracle::{
+    oracle::boolean_v1::{
         generate_named_boolean_oracle, typed_dependency_parameters, DependencyParameter,
         RustValueType,
     },

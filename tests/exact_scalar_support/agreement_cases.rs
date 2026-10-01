@@ -138,7 +138,7 @@ fn typed<T>(result: Result<Outcome<T>, OracleStop>) -> Result<Outcome<T>, IllTyp
 // generated oracle directly -- no Kani/CBMC involved -- to prove, by actual execution, that
 // `quire.op.integer.add` over `[-1000,1000]` refuses an out-of-domain result rather than
 // completing it: exactly the fact `render_scalar`'s rendered `sound` assertion now checks. The
-// accompanying generator mutation (`integer_arithmetic_bound` in `src/exact_scalar.rs`, forcing
+// accompanying generator mutation (`integer_arithmetic_bound` in `src/oracle/scalar/mod.rs`, forcing
 // its `Bounded` arm to also emit `None`) is not committed; it is a one-time proof, captured in
 // this change's own review transcript, that removing the domain check makes this same call
 // return `Completed(2000)` instead -- the input this test already knows must not complete.

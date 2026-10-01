@@ -13,12 +13,12 @@ use super::{
     relation::{ComparisonOperator, Domain, OperandPosition, Relation},
 };
 use crate::{
-    bound::BoundGenerationError,
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
     core::naming::{bounded_readable_component, oracle_symbol, reference_identifier, upper_camel},
-    generate_bound_oracles, BoundOracleGeneration, GeneratedArtifactBundle, StrategyDiagnostic,
-    StrategyErrorCode,
+    generate_bound_oracles,
+    oracle::bound_v1::BoundGenerationError,
+    BoundOracleGeneration, GeneratedArtifactBundle, StrategyDiagnostic, StrategyErrorCode,
 };
 
 /// Population selected for one bound numeric strategy bundle.

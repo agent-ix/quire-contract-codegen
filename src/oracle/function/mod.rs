@@ -24,10 +24,10 @@
 //! full FR-014/FR-018 operator matrix:
 //!
 //! - Scalar bodies: unbounded (`IntegerDomain::Mathematical`) integer
-//!   arithmetic only -- [`crate::exact_scalar::IntegerOperator::Add`],
+//!   arithmetic only -- [`crate::oracle::scalar::IntegerOperator::Add`],
 //!   `Subtract` and `Multiply` (binary; `Negate` is unary and out of scope,
 //!   since FR-021's Inputs names only *binary* scalar expressions).
-//! - Composite-equality bodies: [`crate::composite_equality::EqualityOperatorKind`]
+//! - Composite-equality bodies: [`crate::oracle::equality::EqualityOperatorKind`]
 //!   (both `Equal` and `NotEqual`, fully supported) over `Boolean` or
 //!   unbounded `Integer` operands only -- not the full record/tuple/
 //!   collection declaration closure FR-018 itself reconstructs.
@@ -51,8 +51,8 @@
 //! below.
 //!
 //! Reused types, not reimplemented: this module imports
-//! [`crate::exact_scalar::IntegerOperator`] and
-//! [`crate::composite_equality::EqualityOperatorKind`] directly rather than
+//! [`crate::oracle::scalar::IntegerOperator`] and
+//! [`crate::oracle::equality::EqualityOperatorKind`] directly rather than
 //! declaring parallel enums, so a caller's scalar or equality descriptor is
 //! the same type FR-014/FR-018 already validate elsewhere in this crate.
 //!
@@ -123,12 +123,12 @@
 //! direct-expression-call shape cannot reach. AC-2's two legs (generated oracle, direct runtime
 //! call) are implemented and tested in full.
 
-use crate::composite_equality::EqualityOperatorKind;
 use crate::core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES};
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
-use crate::exact_scalar::IntegerOperator;
-use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
+use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
+use crate::oracle::equality::EqualityOperatorKind;
+use crate::oracle::scalar::IntegerOperator;
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,

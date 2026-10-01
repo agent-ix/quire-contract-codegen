@@ -3,7 +3,6 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-mod bound;
 mod bounded_collections;
 mod bounded_kani_corpus;
 mod bounded_kani_profile;
@@ -19,6 +18,7 @@ mod kani_census;
 // Harness and identity record types (AD-004 step 2b); becomes `kani/identity.rs`.
 // Implements: FR-015
 mod kani_identity;
+// The oracle subsystem.
 mod oracle;
 // Implements: FR-005, NFR-001
 mod publication;
@@ -43,14 +43,6 @@ mod spine_replay;
 mod frame_replay;
 // Implements: FR-002
 mod strategy;
-// Shared generation-result and claim vocabulary (FR-014, FR-018, FR-021).
-mod generation;
-// Implements: FR-014
-mod exact_scalar;
-// Implements: FR-018
-mod composite_equality;
-// Implements: FR-021
-mod exact_function;
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
 mod vacuity;
 // Implements: FR-004 (complete domain observations, always unqualified).
@@ -67,7 +59,9 @@ pub use bounded_kani_corpus::{
 };
 pub use bounded_kani_profile::{classify_bounded_kani_profile, BoundedKaniProfile};
 pub use definedness_arithmetic::prepare_checked_arithmetic;
-pub use exact_scalar::{
+pub use finite_reference_graphs::prepare_finite_graph_reaches;
+pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
+pub use oracle::scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
     DecimalOperator, ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
     ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator, IntegerOperator,
@@ -75,10 +69,8 @@ pub use exact_scalar::{
     ScalarForm, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS,
     SCALAR_LOWERING_WORK_LIMIT,
 };
-pub use finite_reference_graphs::prepare_finite_graph_reaches;
-pub use generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 
-pub use composite_equality::{
+pub use oracle::equality::{
     generate_composite_equality_oracles, CompositeEqualityClaim, CompositeEqualityItem,
     CompositeEqualityOracles, CompositeEqualityRefusal, CompositeOperationClaim,
     CompositeOperationProvenance, DeclarationRefusalCause, EqualityOperandDescriptor,
@@ -87,7 +79,7 @@ pub use composite_equality::{
     COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT,
 };
 
-pub use exact_function::{
+pub use oracle::function::{
     generate_exact_function_oracles, CallPointKind, ExactFunctionBody, ExactFunctionClaim,
     ExactFunctionDeclaration, ExactFunctionItem, ExactFunctionOracles, ExactFunctionRefusal,
     FunctionParameter, GeneratedExactFunctionClaim, LocationMapEntry, RecordedLocation,
@@ -104,7 +96,7 @@ pub use vacuity::{
     LlvmCoverage, ProbeObservation, MAX_COVERAGE_BYTES,
 };
 
-pub use bound::{
+pub use oracle::bound_v1::{
     generate_bound_oracles, BoundGenerationError, BoundOracleClause, BoundOracleGeneration,
     GeneratedBoundOracles, NoExecutableOracles,
 };
@@ -179,6 +171,6 @@ pub use strategy::{
     StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,
 };
 
-pub use oracle::{
+pub use oracle::boolean_v1::{
     generate_boolean_oracle, GeneratedArtifactBundle, OracleArtifactBundle, OracleRequest,
 };

@@ -8,8 +8,7 @@ use crate::{
     },
     core::diagnostic::GenerationDiagnostic,
     core::naming::{oracle_symbol, unique_names},
-    oracle::generate_named_boolean_oracle,
-    OracleArtifactBundle, OracleRequest,
+    oracle::boolean_v1::{generate_named_boolean_oracle, OracleArtifactBundle, OracleRequest},
 };
 
 /// Complete generation result, distinct from a native execution or coverage result.
