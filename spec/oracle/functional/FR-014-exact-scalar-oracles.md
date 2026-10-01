@@ -274,9 +274,9 @@ otherwise.
 - If a node is absent, does not lower or has a refused bound, then the
   generator shall return the `ExactScalarRefusal` `generate_exact_scalar_oracles`
   gives it, and no descriptor.
-- If a node has no derivable descriptor for another reason, then the generator
-  shall return `NoDerivableClaim` carrying the `ClaimDerivationRefusal` naming
-  why (a node that is not an application, an absent identity, an identity
+- If a node has no derivable descriptor for another reason, then the
+  generator shall return `NoDerivableClaim` carrying the `ClaimDerivationRefusal`
+  naming why (a node that is not an application, an absent identity, an identity
   outside the derivable set, operand forms that do not select an operator, or a
   law or mode that does not select a parameter), and no descriptor.
 - If the generated source exceeds its size ceiling, then the generator shall
