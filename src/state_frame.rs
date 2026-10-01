@@ -36,7 +36,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    core::artifact::Artifact,
+    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     exact_scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
     kani::{adapter_options, i64_literal, KaniSolver},
@@ -44,7 +44,7 @@ use crate::{
         StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
         StateFrameProperty, StateFrameScope,
     },
-    MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
+    MAX_OBLIGATION_UNWIND,
 };
 
 /// Work budget for lowering one clause and its closure.

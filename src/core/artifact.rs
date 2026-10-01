@@ -16,6 +16,8 @@ const BUNDLE_SCHEMA: &str = "quire.artifact-bundle/v1";
 pub(crate) const MAX_ARTIFACTS: usize = 4096;
 pub(crate) const MAX_ARTIFACT_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const MAX_BUNDLE_BYTES: usize = 128 * 1024 * 1024;
+/// Maximum generated Rust bytes for one clause.
+pub const MAX_GENERATED_SOURCE_BYTES: usize = 1_048_576;
 
 /// One generated file.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

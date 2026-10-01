@@ -2,7 +2,7 @@
 //!
 //! `core` imports nothing else in this crate. The generated file and the validated bundle, the
 //! generation diagnostic vocabulary, source-map records, the identity newtypes of a generated
-//! harness and the version profile live here.
+//! harness, the shared naming helpers and the version profile live here.
 
 // The generated file and the validated bundle every generator builds.
 // Implements: FR-005
@@ -11,6 +11,9 @@ pub(crate) mod artifact;
 pub(crate) mod diagnostic;
 // Identity newtypes of a generated harness.
 pub(crate) mod identity;
+// Bounded readable name components, unique names and symbol derivation.
+// Implements: FR-022
+pub(crate) mod naming;
 // The version profile: the emitted oracle crate manifest, written once.
 pub(crate) mod profile;
 // Source-map records tracing generated source to a clause.

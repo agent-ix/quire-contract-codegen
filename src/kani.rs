@@ -12,17 +12,18 @@ use quire_contract_model::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    core::artifact::Artifact,
+    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
+    core::naming::{bounded_readable_component, oracle_symbol, unique_pair},
     kani_census::{
         dependency_readiness, dependency_site, normalize_dependencies, ProofDependencyEdge,
         ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness,
     },
     oracle::{
-        bounded_readable_component, generate_named_boolean_oracle, oracle_symbol,
-        typed_dependency_parameters, unique_pair, DependencyParameter, RustValueType,
+        generate_named_boolean_oracle, typed_dependency_parameters, DependencyParameter,
+        RustValueType,
     },
-    OracleRequest, MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
+    OracleRequest, MAX_OBLIGATION_UNWIND,
 };
 
 /// Position of one primitive dependency in the generated subject ABI.
@@ -925,7 +926,7 @@ fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
 
 /// `value` as a readable snake-case name component of at most 12 characters.
 pub(crate) fn readable_component(value: &str) -> String {
-    crate::oracle::readable_name_component(value, 12)
+    crate::core::naming::readable_name_component(value, 12)
 }
 
 // `?Sized` so an unsized `[T]` slice (e.g. `&[ProofDependencyEdge]`) can be passed directly, with
