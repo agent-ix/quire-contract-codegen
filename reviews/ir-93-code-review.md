@@ -175,3 +175,37 @@ audit-unsafe and rustdoc. I did not run `make kani`.
 
 The branch is behind origin/main (#201 merged) and `git merge-tree` reports a content conflict in
 spec/test-matrix.md, so it needs a rebase before it can merge.
+
+### Round 2 dispositions
+
+Reviewed at 780833f428ac9b53f19f6b3687204c758baad7b6, rebased onto origin/main dc19928.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-007 | fixed | 780833f428ac9b53f19f6b3687204c758baad7b6: the zero-drain-limit test runs through `capture_within` with `recv_timeout`. With the stop flag ignored, four capture tests now fail in about 10 s instead of hanging (measured). |
+| FND-008 | fixed | 780833f428ac9b53f19f6b3687204c758baad7b6: the doc now says "a descendant that left the process group may still hold the pipe's write end open". |
+| FND-009 | accepted-no-change | The behaviour is now documented on `run_launcher_with_timeout`. A portable fix would need a signal handler in a library or a return to the Linux-only tree walk, and the owner chose a portable launcher. The cost falls only on an interrupted interactive caller. |
+
+Mutations at 780833f (kani_execution unit tests, baseline 17 passed, restored after each):
+
+| Mutation | Result |
+| --- | --- |
+| drain-limit check disabled | red: the zero-limit test |
+| `kill_process_group` call removed | red: the grandchild test |
+| `process_group(0)` removed | red: the grandchild test |
+| stop flag ignored | red: 4 capture tests, in 10.1 s, no hang |
+
+There is no semantic conflict with merged #205 or with pending #203 and #204. `git merge-tree` of this head with each of those branches is clean. #203 adds a `StateFrame` harness view whose kinds are Postcondition and Frame, so it keeps the zero-checks rule, which is right for harnesses that assert.
+
+### Round 2 verdict
+
+Mergeable. Every finding has a closing outcome (fixed or accepted-no-change), and no finding is
+open. The branch contains origin/main dc19928.
+
+At 780833f I ran:
+
+- `make ci`, which exited 0: fmt, spec, clippy, msrv and `make test` (86 lib and 221 `it` tests
+  each, 5 ignored), deny, one-copy, audit-unsafe and rustdoc.
+- `make kani`, which exited 0 with 5/5 passing in 1340 s. That includes
+  `tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect`, where the
+  precondition harness is now Verified, and `kani_witness_join::tc_026`.

@@ -58,3 +58,11 @@ Reviewed at 5ef88a8a75a755f777e9ff774534d17748979fd1.
 | FND-001 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: "none of those steps branches on which kind it is, except that the classification applies the zero-checks rule to every harness but a precondition harness." |
 | FND-002 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: "for a precondition harness … the generator shall instead classify the run by its cover summary alone, as verified, cover-unsatisfied or inconclusive under the cover rules above." |
 | FND-003 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: a Behavior statement ("shall keep at most the last 8 MiB …") and FR-017-AC-14. |
+
+### Round 2 dispositions
+
+Reviewed at 780833f428ac9b53f19f6b3687204c758baad7b6.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | 780833f428ac9b53f19f6b3687204c758baad7b6: AC-14 is split into AC-14 (8 MiB tail), AC-15 (`Duration::MAX`), AC-16 (capture threads joined, drain bounded) and AC-17 (group kill), with matching matrix rows, TC-027 text and per-test Trace tags. |

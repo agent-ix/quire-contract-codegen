@@ -56,3 +56,11 @@ Reviewed at 5ef88a8a75a755f777e9ff774534d17748979fd1.
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | fixed | 4af361b480a0895203801d65d6fe1c2a8dd9b2a9: FR-017-AC-14 plus a Behavior statement, test-matrix and TC-027 rows, and `Trace: FR-017-AC-14, TC-027` on the six launcher tests. |
+
+### Round 2 dispositions
+
+Reviewed at 780833f428ac9b53f19f6b3687204c758baad7b6.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-002 | fixed | 780833f428ac9b53f19f6b3687204c758baad7b6: the grandchild test now carries `Trace: FR-017-AC-17, TC-027`. It stays `cfg(target_os = "linux")` because it reads /proc; the owner accepted that, since the production code is portable. |
