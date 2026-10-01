@@ -124,7 +124,8 @@ authored).
 - E-1. CG computes QSL's `ObligationIdentity` by one function over the ADR-013 O-09 members
   (the clause or application node id, its occurrence key, the obligation kind, and the
   arguments each as parameter node id and declared domain), excluding the source span, encoded
-  as RFC 8785 JSON by `quire_canonical` through the `qsl-replay` facade, never by `serde_json`;
+  as RFC 8785 JSON in CG's one canonical-encoding place by `quire_canonical`, never by
+  `serde_json`;
   the value changes when any included member changes and does not when the span changes. The
   V1 contract path, the scalar path and the frame path (`StateFrameIdentity`) all use it.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
@@ -267,20 +268,26 @@ crate CG's lock selects.
 - Encoder gap (measured at `main`): CG has no obligation-identity digest code and no
   `quire_canonical` use. The content digest of a corpus case is `serde_json::to_vec` plus a
   newline in `deterministic_json` (`kani.rs:1045-1046`; a second copy at `oracle.rs:1111-1112`),
-  then `ByteDigest::of` from the `qsl-replay` facade (`bounded_kani_corpus.rs:340-342`). CG also
+  then `ByteDigest::of` from the `qsl-replay` API (`bounded_kani_corpus.rs:340-342`). CG also
   hashes bytes with `ByteDigest::of` for source files (`spine_replay.rs:149-152`) and the
   transcript (`spine_replay.rs:440`); those hash given bytes and canonicalise nothing.
   `serde_json` is not RFC 8785: key order is struct field order, and integers above 2^53, floats
   and negative zero are not canonicalised. `sha2` is a dev-dependency only. The obligation
-  identity must not copy this. Target, agreed with QSL: a CG `ContentDigest` wraps QSL's
-  canonical digest reached through the `qsl-replay` facade (`ByteDigest`), and the O-09 preimage
-  is encoded by `quire_canonical` (RFC 8785), never by `serde_json`; QSL's `main` has no
-  `ContentDigest` export yet (R-Q2). The corpus case digest moves to the same encoder. The CG
-  layout AD (CG PR 215, open) defines `ContentDigest` as a CG type built by `core::canonical`,
-  which keeps the `serde_json` `deterministic_json`, and its step 1a only merges the two
-  `deterministic_json` copies. For the identity digest that step must instead adopt the target
-  above, one RFC 8785 encoder behind the facade. Two encoders for one identity is the tangle IR
-  has with its own digest; no ticket is filed here.
+  identity must not copy this. Target, ruled by QSL (as relayed): CG's one canonical-encoding
+  place (`core::canonical`, CG layout AD step 1a) depends on `quire-canonical` directly (its own
+  repository, `agent-ix/quire-canonical`, spelled `branch = "main"`; `to_vec(v, Limits)` and
+  `sha256`, RFC 8785), with no `qsl-replay` re-export. The O-09 preimage is encoded there, never
+  by `serde_json`, and the corpus case digest moves to the same place. `ByteDigest` stays only
+  where QSL's own types require it (`qsl-replay` API surfaces such as source digests). This is a
+  CG-owned decision, not a routed need. The CG layout AD (CG PR 215, open) defines
+  `ContentDigest` as a CG type built by `core::canonical`, which keeps the `serde_json`
+  `deterministic_json`, and its step 1a only merges the two `deterministic_json` copies; for the
+  identity digest that step must adopt the target above. Two encoders for one identity is the
+  tangle IR has with its own digest; no ticket is filed here.
+- Coupling note: QSL still pins `quire-canonical` by tag (`quire-canonical-v0.3.0`), so a lock
+  that pulls QSL together with CG or IR on `main` (quire-integration, the driver) holds two
+  copies of it until QSL moves to `branch = "main"` (waiting on the owner). CG step 1a and
+  IR-274 must not merge into a two-copy lock; check the driver's one-copy gate first.
 - E-3 gap: no CG code builds a `TerminalRecord` or the data an FR-331 `results` record needs,
   and CG is not required to. The driver owns the execute, replay and terminal-record chain
   (quire-driver PR 11); CG provides the map and its typed inputs. QSL exposes
@@ -336,7 +343,7 @@ To QSL (QSL reviews these rows):
 | Id | Stated need |
 | --- | --- |
 | R-Q1 | An inconclusive `TerminalValue` with typed causes including `ReplayParity` and `ReplayRefused`, and a non-zero count in `Proved` (option B of (a); QSL-351, ahead of IR-465), and a typed request index in `TerminalRecord` (QSL-354 as relayed). `ReplayRefused` must be able to carry a code for CG's own pre-replay failures (link 7), not only a `ReplayRefusal` code. QSL confirms the pre-replay classification of link 7. |
-| R-Q2 | Edit QSL's `ObligationIdentity` doc to point at ADR-013 O-09's member list instead of naming `KaniObligationIdentity`. Export the canonical digest (`quire_canonical`, RFC 8785; a `ContentDigest` wrapping `ByteDigest`) through `qsl-replay` so CG has one encoder to call. |
+| R-Q2 | Edit QSL's `ObligationIdentity` doc to point at ADR-013 O-09's member list instead of naming `KaniObligationIdentity`. Move QSL's `quire-canonical` dependency from the tag to `branch = "main"` (waiting on the owner) so locks hold one copy. |
 | R-Q3 | The one sentence of ADR-013 O-16 that says IR implements the proof-column map; CG owns it. |
 | R-Q9 | The tool pin. `BackendProviderSource` has a public `tool_pin` string and ADR-013 O-24 says the envelope carries a tool pin; QSL-351 and the pin removal (F3) are relayed as dropping `ToolPin`. State what CG must supply or QSL derive. CG mints and proposes no pin. |
 
