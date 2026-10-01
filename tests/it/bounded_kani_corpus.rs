@@ -20,15 +20,12 @@ use quire_contract_codegen::{
     CorpusProofDependencyGraph, EmittedCorpusIdentities, KaniRunOutcome, ProofDependencyKind,
     ProofDependencyRequest, ProofDependencyState, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
 };
-use quire_contract_ir::{
-    kani::{
-        CapabilityDisposition, CapabilityEntry, CollectionQuery, DispatchIndex, FiniteInput,
-        FiniteObject, FiniteReference, GraphRequest, KaniOutcomeKind, KaniProfile,
-        ModuleDescriptor, PopulationCompleteness, ProfileSelection, QueryKind, ResourceBounds,
-        SemanticFamily,
-    },
-    NumericOperator,
+use quire_contract_ir::kani::{
+    CapabilityDisposition, CapabilityEntry, CollectionQuery, DispatchIndex, FiniteInput,
+    FiniteObject, FiniteReference, GraphRequest, KaniOutcomeKind, KaniProfile, ModuleDescriptor,
+    PopulationCompleteness, ProfileSelection, QueryKind, ResourceBounds, SemanticFamily,
 };
+use quire_contract_model::NumericOperator;
 
 fn fixture() -> (
     KaniProfile,

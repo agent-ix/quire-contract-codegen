@@ -47,8 +47,8 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    it, and that the unlowerable function (d) refuses every item bound to it without changing an
    unrelated package's items. Assert the generated source contains no `unwrap`, `expect`, panicking
    index, charge-amount literal, or literal `Outcome`/`Value` constant standing in for a runtime
-   result, and that the crate manifest declares `publish = false` and the runtime revision with the
-   `exact` feature.
+   result, and that the crate manifest declares `publish = false` and the runtime dependency (git source,
+   `branch = "main"`, no pinned `rev`) with the `exact` feature.
 4. Generate the main and chain corpus crates at test time, compile them with the agreement cases as
    their integration test, and execute the generated oracle for each
    admitted `call` item on the corpus vectors. For each vector compare the `Outcome<Value>`, the

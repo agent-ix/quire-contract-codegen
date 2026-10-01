@@ -462,8 +462,9 @@ records only the work order the ruling allows, because the code still has V1 rea
   with the tool pin QSL-351 removes, with the manifest members it feeds in `spine_replay`.
 - **Identity newtypes.** `ModuleSymbol` and `HarnessSymbol` are validated Rust identifiers, built
   once where a harness is generated. `HarnessPath` is the pair. `KaniSolver` replaces the `solver:
-  String` field. `generate_routed` keys by `HarnessPath` and a duplicate is a typed error, not a
-  silent `collect` overwrite. Bounds travel as typed integers and are not re-parsed from decimal
+  String` field. `generate_routed` pairs a record with its harness by the harness symbol, which is all
+  the record's `Supported` disposition names, and two harnesses with one symbol are a typed error
+  (`DuplicateHarness`, carrying the second one's `HarnessPath`), not a silent `collect` overwrite. Bounds travel as typed integers and are not re-parsed from decimal
   text.
 - **Model items come from `quire-contract-model` directly.** IR's merged AD-006 (the codegen
   consumption seam; checked at IR `origin/main`) has codegen declare `quire-contract-model` for
@@ -551,7 +552,9 @@ requirement is authored.
 - L-9. The canonical encoder and the content digest are called from `core/canonical.rs` only, and
   `deterministic_json` and `fn artifact(` have no definition. Test: a grep gate.
 - L-10. `module_symbol` and `harness_symbol` have no `String` field outside `core/identity.rs`, and
-  a duplicate `HarnessPath` is a typed error. Test: a duplicate-key test on `generate_routed`.
+  two harnesses sharing a harness symbol are a typed error in `generate_routed`. Test: a duplicate-key
+  test on its pairing helper, because unique name assignment makes the duplicate unreachable from
+  the public entry.
 - L-11. The oracle crate manifest template, the runtime dependency spelling and every contract
   and schema spelling are defined in `core/profile.rs` once.
 - L-12. `BoundPackage` and `BoundClause` are named nowhere in `kani/`, `routed/` or `replay/`, and

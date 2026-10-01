@@ -6,11 +6,12 @@
 //! static location map. Execution-level criteria (AC-2, AC-4, AC-5, AC-7,
 //! AC-9, AC-17) are covered by `tests/it/exact_function_agreement.rs`.
 
+use crate::scratch_crate::runtime_dependency;
 use quire_contract_codegen::{
     generate_exact_function_oracles, CallPointKind, ClaimDisposition, ExactFunctionItem,
     ExactFunctionRefusal, GeneratedExactFunctionClaim, UpstreamBlocker,
 };
-use quire_contract_ir::CheckedPackageV2;
+use quire_contract_model::CheckedPackageV2;
 
 // Duplicated per consumer (also `exact_function_agreement.rs`) for structural consistency with
 // the exact_scalar/composite_equality families (IR-237). Unlike those two, this package.rs holds
@@ -455,7 +456,7 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     // `tc_031_ac3`/`tc_031_ac15` already use, rather than hardcoded.
     let mut survivor_node_ids = [code_id(FN_EQ), code_id(FN_CAPABILITY)];
     survivor_node_ids.sort();
-    let expected_index = |node_id: &quire_contract_ir::CheckedNodeId| {
+    let expected_index = |node_id: &quire_contract_model::CheckedNodeId| {
         survivor_node_ids
             .iter()
             .position(|candidate| candidate == node_id)
@@ -659,7 +660,7 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
 }
 
 /// Trace: FR-021-AC-14, TC-031. The generated crate declares
-/// `publish = false`, pins the runtime revision with the `exact` feature,
+/// `publish = false`, names the runtime by branch with the `exact` feature,
 /// contains no charge amount and no literal `Outcome`/`Value` constant
 /// standing in for a runtime result, and forbids unsafe code.
 #[test]
@@ -668,8 +669,8 @@ fn tc_031_ac14_manifest_and_source_shape() {
     let oracles = generate(&package, &main_functions(), &main_items());
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains("publish = false"));
-    assert!(manifest.contains(quire_contract_codegen::RUNTIME_REVISION));
-    assert!(manifest.contains("features = [\"exact\"]"));
+    assert!(manifest.contains(&runtime_dependency(&["exact"])));
+    assert!(!manifest.contains("rev ="));
     assert!(manifest.contains("unsafe_code = \"forbid\""));
 
     let lib = contents(&oracles, "src/lib.rs");

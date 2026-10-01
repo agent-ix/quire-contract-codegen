@@ -43,7 +43,7 @@ use quire_contract_codegen::{
     StateFrameHarness, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
     StateFrameRequest, UnsupportedFrameEffect,
 };
-use quire_contract_ir::{CheckedNodeId, CheckedPackageV2, CompleteLoweringRecordV2};
+use quire_contract_model::{CheckedNodeId, CheckedPackageV2, CompleteLoweringRecordV2};
 use serde_json::{json, Value};
 
 const OBJECT: u32 = 4001;

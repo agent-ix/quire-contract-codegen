@@ -36,6 +36,10 @@ mod frame_replay;
 mod strategy;
 // Shared generation-result and claim vocabulary (FR-014, FR-018, FR-021).
 mod generation;
+// Identity newtypes of a generated harness (AD-004 step 1b).
+mod identity;
+// The version profile: the emitted oracle crate manifest, written once (AD-004 step 1c).
+mod profile;
 // Implements: FR-014
 mod exact_scalar;
 // Implements: FR-018
@@ -107,6 +111,7 @@ pub use capability::{
     CAPABILITY_VOCABULARY,
 };
 pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
+pub use identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError};
 pub use kani::{
     generate_kani_bundle, KaniArtifactBundle, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
     KaniIntegerBounds, KaniPrimitiveType, KaniRequest, KaniSolver, KaniSubjectBinding,
@@ -123,6 +128,7 @@ pub use kani_transcript::{
     KaniCheckClass, KaniCheckLocation, KaniCheckResult, KaniCheckStatus, KaniReportRefusal,
     OtherCheckClass,
 };
+pub use profile::RUNTIME_DEPENDENCY_SOURCE;
 pub use routed_generation::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
@@ -159,5 +165,5 @@ pub use strategy::{
 pub use oracle::{
     generate_boolean_oracle, Artifact, GeneratedArtifactBundle, GenerationDiagnostic,
     GenerationErrorCode, GenerationTerminalState, OracleArtifactBundle, OracleRequest, SourceProbe,
-    SourceRegion, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    SourceRegion, MAX_GENERATED_SOURCE_BYTES,
 };

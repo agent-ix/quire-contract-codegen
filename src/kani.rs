@@ -5,7 +5,7 @@ use std::{
     fmt::Write as _,
 };
 
-use quire_contract_ir::{
+use quire_contract_model::{
     ClauseId, DependencyIdentity, DependencyKind, IntegerDomain, OverflowPolicy, RequirementRef,
     SourceSpan, StateObservation, TypedExpression,
 };

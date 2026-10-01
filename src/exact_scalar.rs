@@ -48,9 +48,9 @@
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{
     bounded_readable_component, unique_names, Artifact, MAX_GENERATED_SOURCE_BYTES,
-    ORACLE_KANI_METADATA, RUNTIME_REVISION,
 };
-use quire_contract_ir::{
+use crate::profile::oracle_crate_manifest;
+use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteContractNodeV2, CompleteLoweringProfileV2,
     CompleteLoweringRecordV2,
@@ -781,7 +781,7 @@ pub fn generate_exact_scalar_oracles(
         String::from_utf8(map_bytes).map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     Ok(ExactScalarOracles {
         artifacts: vec![
-            artifact("Cargo.toml", manifest()),
+            artifact("Cargo.toml", oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME)),
             artifact("src/lib.rs", lib),
             artifact("claim-map.json", map_text),
         ],
@@ -2812,12 +2812,6 @@ fn profile_path(profile: TextProfile) -> &'static str {
     }
 }
 
-fn manifest() -> String {
-    format!(
-        "[package]\nname = \"{EXACT_SCALAR_CRATE_NAME}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[lints.rust]\nunsafe_code = \"forbid\"\n\n{ORACLE_KANI_METADATA}[workspace]\n"
-    )
-}
-
 fn artifact(path: &str, contents: String) -> Artifact {
     Artifact::new(path, contents)
 }
@@ -3323,7 +3317,7 @@ fn derive_operation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quire_contract_ir::{
+    use quire_contract_model::{
         CheckedPackageIncomplete, CheckedPackageLimit, CheckedPackageRefusal,
         CheckedPackageRefusalCode,
     };

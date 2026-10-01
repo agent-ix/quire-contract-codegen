@@ -5,15 +5,15 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode, GenerationTerminalState,
     KaniBindingRole, KaniDiagnostic, KaniErrorCode, KaniPrimitiveType, KaniRequest, KaniSolver,
     OracleRequest, ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest,
     ProofDependencyState, ProofReadiness, MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
-    RUNTIME_REVISION,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
     ExecutionPoint, Expression, ExpressionKind, IntegerDomain, IntegerType, OverflowPolicy,
     PackageId, RequirementId, RequirementRef, RequirementRevision, SourceDocumentId,
@@ -208,8 +208,8 @@ fn boolean_or(left: Expression, right: Expression, at: u64) -> Expression {
 fn clauses(
     environment: &DeclarationEnvironment,
 ) -> (
-    quire_contract_ir::TypedExpression,
-    quire_contract_ir::TypedExpression,
+    quire_contract_model::TypedExpression,
+    quire_contract_model::TypedExpression,
 ) {
     let precondition = boolean_or(
         observed("input", StateObservation::Current, 10),
@@ -229,8 +229,8 @@ fn clauses(
 
 fn request<'a>(
     environment: &'a DeclarationEnvironment,
-    precondition: &'a quire_contract_ir::TypedExpression,
-    postcondition: &'a quire_contract_ir::TypedExpression,
+    precondition: &'a quire_contract_model::TypedExpression,
+    postcondition: &'a quire_contract_model::TypedExpression,
     precondition_clause: &'a ClauseId,
     postcondition_clause: &'a ClauseId,
     dependencies: &'a [ProofDependencyRequest<'a>],
@@ -298,13 +298,13 @@ fn write_generated_crate(
         ),
     )
     .expect("generated source should be writable");
-    fs::write(
-        directory.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"generated-kani-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n# `exact` is required here because RT's own `#[cfg(kani)] mod verification` unconditionally\n# imports `crate::exact` (verification/kani.rs), independent of whether this fixture's subject\n# uses exact-scalar types. Building this generated crate under `cargo kani` without the feature\n# fails with E0432 on RT's own module, not on anything this generator emitted.\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[workspace]\n"
+    write_manifest(
+        &directory.0,
+        &format!(
+            "[package]\nname = \"generated-kani-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n# `exact` is required here because RT's own `#[cfg(kani)] mod verification` unconditionally\n# imports `crate::exact` (verification/kani.rs), independent of whether this fixture's subject\n# uses exact-scalar types. Building this generated crate under `cargo kani` without the feature\n# fails with E0432 on RT's own module, not on anything this generator emitted.\n{}\n\n[workspace]\n",
+            runtime_dependency(&["exact"])
         ),
-    )
-    .expect("generated manifest should be writable");
+    );
     fs::write(
         directory.0.join("build.rs"),
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
@@ -753,13 +753,13 @@ fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
         .expect("generated corpus source directory should be writable");
     fs::write(directory.0.join("src/main.rs"), generated_program)
         .expect("generated corpus source should be writable");
-    fs::write(
-        directory.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"generated-kani-oracle-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
+    write_manifest(
+        &directory.0,
+        &format!(
+            "[package]\nname = \"generated-kani-oracle-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&[])
         ),
-    )
-    .expect("generated corpus manifest should be writable");
+    );
     let execution = Command::new("cargo")
         .args(["run", "--offline", "--quiet", "--target-dir"])
         .arg(directory.0.join("target-codex-backends"))

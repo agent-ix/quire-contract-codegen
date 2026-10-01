@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use quire_contract_ir::{
+use quire_contract_model::{
     BoundClause, BoundPackage, ClauseKind, ClauseRef, ComparisonOperator as IrComparisonOperator,
     ExecutionPoint, Expression, ExpressionKind, StateObservation, ValueDeclarationKind, ValueType,
 };
@@ -900,7 +900,7 @@ fn bound_diagnostic(
     terminal_state: GenerationTerminalState,
     generation_code: Option<GenerationErrorCode>,
     clause: &ClauseRef,
-    source_span: Option<quire_contract_ir::SourceSpan>,
+    source_span: Option<quire_contract_model::SourceSpan>,
     path: &str,
     message: &str,
 ) -> StrategyDiagnostic {

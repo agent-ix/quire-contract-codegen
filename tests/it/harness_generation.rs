@@ -5,11 +5,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use quire_contract_codegen::{
     generate_tristate_harness, GenerationErrorCode, GenerationTerminalState, HarnessErrorCode,
-    HarnessRequest, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    HarnessRequest, MAX_GENERATED_SOURCE_BYTES,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     AnchorName, BooleanOperator, ClauseId, DeclarationEnvironment, ExecutionPoint, Expression,
     ExpressionKind, PackageId, RequirementId, RequirementRef, RequirementRevision,
     SourceDocumentId, SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation,
@@ -219,10 +220,13 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
     );
 
     let temporary = TemporaryDirectory::new("quire-generated-harness");
-    let manifest = format!(
-        "[package]\nname = \"generated-harness-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"proptest\"] }}\n"
+    write_manifest(
+        &temporary.0,
+        &format!(
+            "[package]\nname = \"generated-harness-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+            runtime_dependency(&["proptest"])
+        ),
     );
-    fs::write(temporary.0.join("Cargo.toml"), manifest).unwrap();
     let tests = r#"
 
 #[cfg(test)]
@@ -671,13 +675,13 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
     ] {
         let function = harness_function_name(&artifact.rust.contents);
         let temporary = TemporaryDirectory::new(&format!("quire-generated-harness-{name}"));
-        fs::write(
-            temporary.0.join("Cargo.toml"),
-            format!(
-                "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"proptest\"] }}\n"
+        write_manifest(
+            &temporary.0,
+            &format!(
+                "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+                runtime_dependency(&["proptest"])
             ),
-        )
-        .unwrap();
+        );
         let generated_test = format!(
             "\n#[cfg(test)] mod generated_tests {{ use super::*; use quire_contract_runtime::{{ClauseId, ClauseKind, ClauseOutcome, Observation, VerdictKind}}; #[test] fn shape_executes() {{ let mut observations = [Observation::new(ClauseId::new(\"blank\"), ClauseKind::Guard, ClauseOutcome::NotEvaluated, None); 2]; {} assert_eq!(verdict.kind(), VerdictKind::Passed); }} }}\n",
             invocation.replace("HARNESS_FN", function),

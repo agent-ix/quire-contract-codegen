@@ -11,7 +11,7 @@ use quire_contract_codegen::{
     KindOutput, ObligationDisposition, ObligationItem, ObligationRecord, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, UnsupportedObligation,
 };
-use quire_contract_ir::{CheckedNodeId, CheckedPackageV2};
+use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 
 use crate::kani_obligations::{package, scalar_package};
 
@@ -474,8 +474,14 @@ fn tc_033_nodes_sharing_a_stem_take_stable_ordinals_in_node_order() {
     let lower_symbol = &harness_at(&forward, 0).identity.harness_symbol;
     let higher_symbol = &harness_at(&forward, 1).identity.harness_symbol;
     assert_ne!(lower_symbol, higher_symbol);
-    assert!(lower_symbol.ends_with("_1_proof"), "{lower_symbol}");
-    assert!(higher_symbol.ends_with("_2_proof"), "{higher_symbol}");
+    assert!(
+        lower_symbol.as_str().ends_with("_1_proof"),
+        "{lower_symbol}"
+    );
+    assert!(
+        higher_symbol.as_str().ends_with("_2_proof"),
+        "{higher_symbol}"
+    );
 }
 
 /// `x + 1` over `Int[0, 9]`, QSL's shape (a parameter typed by an `integer_range`

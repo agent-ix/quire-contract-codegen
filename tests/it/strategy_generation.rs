@@ -5,12 +5,13 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use quire_contract_codegen::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     GenerationErrorCode, GenerationTerminalState, StrategyCampaign, StrategyConstraint,
-    StrategyErrorCode, StrategyRequest, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    StrategyErrorCode, StrategyRequest, MAX_GENERATED_SOURCE_BYTES,
 };
-use quire_contract_ir::{PackageId, RequirementId, RequirementRef, RequirementRevision};
+use quire_contract_model::{PackageId, RequirementId, RequirementRef, RequirementRevision};
 
 struct TemporaryDirectory(PathBuf);
 
@@ -114,13 +115,13 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
     let correlated_function = function_name(&correlated.rust.contents);
     let residual_function = function_name(&residual.rust.contents);
     let temporary = TemporaryDirectory::new("quire-generated-strategies");
-    fs::write(
-        temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"generated-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n"
+    write_manifest(
+        &temporary.0,
+        &format!(
+            "[package]\nname = \"generated-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+            runtime_dependency(&[])
         ),
-    )
-    .unwrap();
+    );
     let executed_tests = format!(
         r#"
 
@@ -382,13 +383,13 @@ fn tc_004_boundary_pinned_and_no_event_bodies_compile_and_execute_with_denied_wa
     let pinned_function = function_name(&pinned.rust.contents);
     let no_event_function = function_name(&no_event.rust.contents);
     let temporary = TemporaryDirectory::new("quire-generated-campaign-shapes");
-    fs::write(
-        temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"generated-campaign-shapes\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n"
+    write_manifest(
+        &temporary.0,
+        &format!(
+            "[package]\nname = \"generated-campaign-shapes\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+            runtime_dependency(&[])
         ),
-    )
-    .unwrap();
+    );
     let generated_tests = format!(
         r#"
 
@@ -611,13 +612,13 @@ fn tc_004_customer_enum_memberships_are_directly_shaped_and_validated() {
         .contains("current: Mode::Idle, related: Some(Mode::Idle)"));
 
     let temporary = TemporaryDirectory::new("quire-generated-enum-strategy");
-    fs::write(
-        temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"generated-enum-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n"
+    write_manifest(
+        &temporary.0,
+        &format!(
+            "[package]\nname = \"generated-enum-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+            runtime_dependency(&[])
         ),
-    )
-    .unwrap();
+    );
     let broad_function = function_name(&broad.rust.contents);
     let no_event_function = function_name(&no_event.rust.contents);
     let tests = format!(

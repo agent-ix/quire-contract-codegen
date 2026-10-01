@@ -49,7 +49,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use quire_contract_ir::{
+use quire_contract_model::{
     BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
     CheckedSemanticNodeV2, CheckedSourceMapEntry, ClauseKind, ClauseRef, DependencyIdentity,
     DependencyKind, ExecutionPoint, SourceSpan, StateObservation,
@@ -62,6 +62,7 @@ use crate::{
         OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
     },
     generate_boolean_oracle,
+    identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     kani::{
         adapter_options, i64_literal, readable_component, KaniBindingRole, KaniIntegerBounds,
         KaniPrimitiveType, KaniSolver,
@@ -402,7 +403,7 @@ pub enum ObligationDisposition {
     /// One harness is emitted.
     Supported {
         /// Its proof function symbol.
-        harness_symbol: String,
+        harness_symbol: HarnessSymbol,
     },
     /// An unbounded type has no bounding domain.
     RequiresBound {
@@ -475,9 +476,9 @@ pub struct KaniObligationIdentity {
     /// The obligation's oracle followed by every assumed precondition's oracle.
     pub oracles: Vec<EmbeddedOracle>,
     /// Harness module symbol.
-    pub module_symbol: String,
+    pub module_symbol: ModuleSymbol,
     /// Proof function symbol.
-    pub harness_symbol: String,
+    pub harness_symbol: HarnessSymbol,
     /// Contract function symbol, for postcondition and invariant harnesses.
     pub contract_symbol: Option<String>,
     /// Customer subject, for postcondition and invariant harnesses.
@@ -487,7 +488,7 @@ pub struct KaniObligationIdentity {
     /// Subject results, ascending by identifier.
     pub results: Vec<ObligationBinding>,
     /// Solver.
-    pub solver: String,
+    pub solver: KaniSolver,
     /// Loop unwind bound.
     pub unwind: u32,
     /// Every flag passed after `cargo kani`.
@@ -532,13 +533,13 @@ pub struct ScalarObligationIdentity {
     /// The embedded oracle's function symbol.
     pub oracle_symbol: String,
     /// Harness module symbol.
-    pub module_symbol: String,
+    pub module_symbol: ModuleSymbol,
     /// Proof function symbol.
-    pub harness_symbol: String,
+    pub harness_symbol: HarnessSymbol,
     /// Symbolic arguments, in call order.
     pub arguments: Vec<ScalarObligationArgument>,
     /// Solver.
-    pub solver: String,
+    pub solver: KaniSolver,
     /// Loop unwind bound.
     pub unwind: u32,
     /// Every flag passed after `cargo kani`.
@@ -705,18 +706,26 @@ impl Outcome<'_> {
     fn disposition_without_harness(self) -> ObligationDisposition {
         match self {
             // A lowered item in a rejected request is accounted but not emitted.
-            Self::Lowered(lowered) => ObligationDisposition::Supported {
-                harness_symbol: lowered.symbols.harness,
-            },
-            Self::LoweredScalar(lowered) => ObligationDisposition::Supported {
-                harness_symbol: lowered.harness_symbol,
-            },
+            Self::Lowered(lowered) => supported_without_harness(&lowered.symbols.harness),
+            Self::LoweredScalar(lowered) => supported_without_harness(&lowered.harness_symbol),
             Self::RequiresBound(unbounded_type) => {
                 ObligationDisposition::RequiresBound { unbounded_type }
             }
             Self::Unsupported(reason) => ObligationDisposition::Unsupported { reason },
             Self::Invalid(reason) => ObligationDisposition::InvalidRequest { reason },
         }
+    }
+}
+
+/// The disposition of a lowered item whose request was rejected: accounted, not emitted.
+fn supported_without_harness(harness: &str) -> ObligationDisposition {
+    match HarnessSymbol::try_from(harness) {
+        Ok(harness_symbol) => ObligationDisposition::Supported { harness_symbol },
+        Err(error) => ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::InvalidGeneratedSyntax {
+                error: error.to_string(),
+            },
+        },
     }
 }
 
@@ -1141,6 +1150,41 @@ fn scalar_stem(operation: &str) -> String {
         "kob_scalar_{}",
         readable_component(operation.strip_prefix("quire.op.").unwrap_or(operation))
     )
+}
+
+/// The validated `module::harness` identity of a harness, built once where the harness is
+/// generated. The names are `kob_`-prefixed readable components, so a refusal is an internal
+/// invariant failing and is reported as invalid generated Rust.
+fn harness_path(module: &str, harness: &str) -> Result<HarnessPath, UnsupportedObligation> {
+    let invalid = |error: SymbolError| UnsupportedObligation::InvalidGeneratedSyntax {
+        error: error.to_string(),
+    };
+    Ok(HarnessPath {
+        module: ModuleSymbol::try_from(module).map_err(invalid)?,
+        harness: HarnessSymbol::try_from(harness).map_err(invalid)?,
+    })
+}
+
+impl KaniObligationIdentity {
+    /// The `module::harness` path of this harness.
+    #[must_use]
+    pub fn harness_path(&self) -> HarnessPath {
+        HarnessPath {
+            module: self.module_symbol.clone(),
+            harness: self.harness_symbol.clone(),
+        }
+    }
+}
+
+impl ScalarObligationIdentity {
+    /// The `module::harness` path of this harness.
+    #[must_use]
+    pub fn harness_path(&self) -> HarnessPath {
+        HarnessPath {
+            module: self.module_symbol.clone(),
+            harness: self.harness_symbol.clone(),
+        }
+    }
 }
 
 /// The module, harness and contract names built on one settled name.
@@ -1916,8 +1960,13 @@ fn render(
         }
     };
     let abi = abi(&contexts)?;
-    let exact_harness = format!("{}::{}", lowered.symbols.module, lowered.symbols.harness);
-    let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
+    let path = harness_path(&lowered.symbols.module, &lowered.symbols.harness)?;
+    let options = adapter_options(
+        &path.to_string(),
+        request.unwind,
+        KaniSolver::Cadical,
+        false,
+    );
     // `assign_names` gave every clause oracle in the request a distinct name.
     let mut embedded = vec![&lowered.oracle];
     embedded.extend(&lowered.assumed);
@@ -1938,13 +1987,13 @@ fn render(
                 symbol: oracle.symbol.clone(),
             })
             .collect(),
-        module_symbol: lowered.symbols.module.clone(),
-        harness_symbol: lowered.symbols.harness.clone(),
+        module_symbol: path.module,
+        harness_symbol: path.harness,
         contract_symbol: is_contract.then(|| lowered.symbols.contract.clone()),
         subject_path: is_contract.then(|| request.subject_path.to_owned()),
         arguments: abi.arguments.clone(),
         results: abi.results.clone(),
-        solver: "cadical".to_owned(),
+        solver: KaniSolver::Cadical,
         unwind: request.unwind,
         options,
     };
@@ -2017,8 +2066,13 @@ fn render_scalar(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredScalarClaim,
 ) -> Result<KaniScalarObligationHarness, UnsupportedObligation> {
-    let exact_harness = format!("{}::{}", lowered.module_symbol, lowered.harness_symbol);
-    let options = adapter_options(&exact_harness, request.unwind, KaniSolver::Cadical, false);
+    let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
+    let options = adapter_options(
+        &path.to_string(),
+        request.unwind,
+        KaniSolver::Cadical,
+        false,
+    );
     let lower = i64_literal(lowered.lower);
     let upper = i64_literal(lowered.upper);
     let names = lowered.operation.operand_names();
@@ -2092,10 +2146,10 @@ mod {module} {{\n\
         node_id: lowered.node_id.clone(),
         operation_identity: lowered.operation_identity.clone(),
         oracle_symbol: lowered.oracle_symbol.clone(),
-        module_symbol: lowered.module_symbol.clone(),
-        harness_symbol: lowered.harness_symbol.clone(),
+        module_symbol: path.module,
+        harness_symbol: path.harness,
         arguments,
-        solver: "cadical".to_owned(),
+        solver: KaniSolver::Cadical,
         unwind: request.unwind,
         options,
     };
@@ -2301,7 +2355,7 @@ mod tests {
 
     use super::*;
     use crate::OperationClaim;
-    use quire_contract_ir::{ClauseId, RequirementRef, EXECUTABLE_PROJECTION_FORMAT};
+    use quire_contract_model::{ClauseId, RequirementRef, EXECUTABLE_PROJECTION_FORMAT};
 
     /// Trace: FR-015-AC-1, TC-025.
     #[test]

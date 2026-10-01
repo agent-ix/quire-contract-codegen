@@ -15,13 +15,14 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, seed_lock};
 use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
     CompositeEqualityItem, CompositeEqualityOracles, CompositeEqualityRefusal,
     DeclarationRefusalCause, EqualityOperandDescriptor, EqualityOperatorKind, IllTypedCauseKind,
     RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     CheckedNodeTag, CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
     CheckedPackageV2ReadResult, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
@@ -912,11 +913,8 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains(&format!("name = \"{COMPOSITE_EQUALITY_CRATE_NAME}\"")));
     assert!(manifest.contains("publish = false"));
-    assert!(manifest.contains(&format!(
-        "rev = \"{}\"",
-        quire_contract_codegen::RUNTIME_REVISION
-    )));
-    assert!(manifest.contains("features = [\"exact\"]"));
+    assert!(manifest.contains(&runtime_dependency(&["exact"])));
+    assert!(!manifest.contains("rev ="));
 
     let lib = contents(&oracles, "src/lib.rs");
     for forbidden in [
@@ -966,6 +964,7 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     for artifact in &oracles.artifacts {
         fs::write(directory.0.join(&artifact.path), &artifact.contents).unwrap();
     }
+    seed_lock(&directory.0);
     let output = Command::new(env!("CARGO"))
         .args(["build", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", directory.0.join("target"))

@@ -55,7 +55,7 @@ fn base_unit_preimage(dimension: &str) -> serde_json::Value {
 
 /// Contract IR's own digest of one nominal identity preimage.
 fn base_preimage_digest(preimage: serde_json::Value) -> String {
-    serde_json::from_value::<quire_contract_ir::NominalIdentityPreimage>(preimage)
+    serde_json::from_value::<quire_contract_model::NominalIdentityPreimage>(preimage)
         .expect("a well-formed nominal identity preimage")
         .digest()
         .expect("a nominal identity preimage digests")

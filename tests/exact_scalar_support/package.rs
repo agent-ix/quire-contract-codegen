@@ -25,7 +25,7 @@ use quire_contract_codegen::{
     DecimalOperator, ExactScalarItem, ExactScalarOperation, IeeeArithmeticOperator,
     IntegerOperator, OrderingOperandKind, QuantityOperator, RationalOperator,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
     CheckedPackageV2ReadResult,
 };

@@ -9,14 +9,15 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::seed_lock;
 use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
     ClaimDisposition, DecimalOperator, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
     ExactScalarRefusal, GeneratedScalarClaim, IntegerOperator, OperationProvenance,
     OracleGenerationError, RationalOperator, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CRATE_NAME,
-    RUNTIME_REVISION, SCALAR_LOWERING_SUPPORTED_TAGS,
+    SCALAR_LOWERING_SUPPORTED_TAGS,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
     CheckedPackageV2ReadResult,
 };
@@ -713,12 +714,12 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     // `SCALAR_LOWERING_SUPPORTED_TAGS`, the tag set `scalar_profile()` itself builds from, so
     // either list changing without the other now fails here, while the lowering profile below
     // still never calls `scalar_profile()`.
-    let claim_supported_tags: BTreeSet<quire_contract_ir::CheckedNodeTag> = [
-        quire_contract_ir::CheckedNodeTag::ScalarType,
-        quire_contract_ir::CheckedNodeTag::BoundedDomain,
-        quire_contract_ir::CheckedNodeTag::Value,
-        quire_contract_ir::CheckedNodeTag::Expression,
-        quire_contract_ir::CheckedNodeTag::Claim,
+    let claim_supported_tags: BTreeSet<quire_contract_model::CheckedNodeTag> = [
+        quire_contract_model::CheckedNodeTag::ScalarType,
+        quire_contract_model::CheckedNodeTag::BoundedDomain,
+        quire_contract_model::CheckedNodeTag::Value,
+        quire_contract_model::CheckedNodeTag::Expression,
+        quire_contract_model::CheckedNodeTag::Claim,
     ]
     .into();
     assert_eq!(
@@ -733,14 +734,14 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
             .iter()
             .map(|expression| code_id(expression.code))
             .collect::<Vec<_>>(),
-        &quire_contract_ir::CompleteLoweringProfileV2 {
+        &quire_contract_model::CompleteLoweringProfileV2 {
             supported_tags: claim_supported_tags,
             require_bounds: true,
             work_limit: u64::MAX,
         },
     );
     for (expression, record) in corpus().iter().zip(&lowered.records) {
-        let quire_contract_ir::CompleteLoweringRecordV2::Lowered { node } = record else {
+        let quire_contract_model::CompleteLoweringRecordV2::Lowered { node } = record else {
             panic!("corpus node {} lowers", expression.code);
         };
         let claim = map
@@ -829,7 +830,7 @@ fn checks_no_bound(operation: &ExactScalarOperation) -> bool {
 #[test]
 fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
     let package = corpus_package().admit();
-    let other_domain: quire_contract_ir::CheckedNodeId = serde_json::from_value(
+    let other_domain: quire_contract_model::CheckedNodeId = serde_json::from_value(
         serde_json::json!({"domain": "quire.a-earlier-domain/v1", "digest": "f".repeat(64)}),
     )
     .expect("node id");
@@ -1063,9 +1064,9 @@ fn work_exhausted_fixture() -> (CheckedPackageV2, ExactScalarItem) {
         ),
         &[INT],
     );
-    let limits = quire_contract_ir::CheckedPackageReadLimits {
+    let limits = quire_contract_model::CheckedPackageReadLimits {
         bytes: 16 * 1024 * 1024,
-        ..quire_contract_ir::CheckedPackageReadLimits::bounded()
+        ..quire_contract_model::CheckedPackageReadLimits::bounded()
     };
     (
         builder.admit_with(limits),
@@ -1272,9 +1273,9 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
             ),
         );
     }
-    let limits = quire_contract_ir::CheckedPackageReadLimits {
+    let limits = quire_contract_model::CheckedPackageReadLimits {
         bytes: 16 * 1024 * 1024,
-        ..quire_contract_ir::CheckedPackageReadLimits::bounded()
+        ..quire_contract_model::CheckedPackageReadLimits::bounded()
     };
     let items = codes
         .map(|code| ExactScalarItem {
@@ -1411,6 +1412,7 @@ fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
     for artifact in &oracles.artifacts {
         fs::write(directory.0.join(&artifact.path), &artifact.contents).unwrap();
     }
+    seed_lock(&directory.0);
     let output = Command::new(env!("CARGO"))
         .args(["build", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", directory.0.join("target"))
@@ -1421,7 +1423,7 @@ fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
         .unwrap();
     assert!(
         output.status.success(),
-        "generated crate did not compile against runtime {RUNTIME_REVISION}: {}",
+        "generated crate did not compile against the runtime: {}",
         String::from_utf8_lossy(&output.stderr)
     );
 }
@@ -1485,7 +1487,7 @@ fn two_parameter_refusal(code: u32, operation: ExactScalarOperation) -> ExactSca
 fn two_parameter_checked_bounds(
     code: u32,
     operation: ExactScalarOperation,
-) -> Vec<quire_contract_ir::CheckedNodeId> {
+) -> Vec<quire_contract_model::CheckedNodeId> {
     match two_parameter_disposition(code, operation).1 {
         ClaimDisposition::Generated(generated) => generated.checked_bounds,
         other => panic!("node {code} is not generated: {other:?}"),
@@ -1698,14 +1700,14 @@ fn qsl_disposition(
 fn qsl_checked_bounds(
     code: u32,
     operation: ExactScalarOperation,
-) -> Vec<quire_contract_ir::CheckedNodeId> {
+) -> Vec<quire_contract_model::CheckedNodeId> {
     match qsl_disposition(code, operation) {
         ClaimDisposition::Generated(generated) => generated.checked_bounds,
         other => panic!("node {code} is not generated: {other:?}"),
     }
 }
 
-fn bound_ids(bounds: &[Bound]) -> Vec<quire_contract_ir::CheckedNodeId> {
+fn bound_ids(bounds: &[Bound]) -> Vec<quire_contract_model::CheckedNodeId> {
     bounds.iter().map(|bound| id(&bound.key())).collect()
 }
 

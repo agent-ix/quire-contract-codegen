@@ -7,12 +7,13 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     generate_boolean_oracle, GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
-    OracleRequest, MAX_GENERATED_SOURCE_BYTES, RUNTIME_REVISION,
+    OracleRequest, MAX_GENERATED_SOURCE_BYTES,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
     ExecutionPoint, Expression, ExpressionKind, IntegerDomain, IntegerType, NumericOperator,
     OverflowPolicy, PackageId, RationalType, RequirementId, RequirementRef, RequirementRevision,
@@ -318,7 +319,13 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
         format!("#![allow(dead_code)]\n{modules}\n#[test] fn native_run() {{ {calls} }}"),
     )
     .unwrap();
-    fs::write(directory.0.join("Cargo.toml"), format!("[package]\nname = \"native-vacuity\"\nversion = \"0.0.0\"\nedition = \"2021\"\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n")).unwrap();
+    write_manifest(
+        &directory.0,
+        &format!(
+            "[package]\nname = \"native-vacuity\"\nversion = \"0.0.0\"\nedition = \"2021\"\n[dependencies]\n{}\n",
+            runtime_dependency(&[])
+        ),
+    );
     let output_path = directory.0.join("coverage.json");
     let sysroot = Command::new("rustc")
         .args(["+stable", "--print", "sysroot"])
@@ -846,13 +853,13 @@ fn run_generated_program(crate_name: &str, program: &str) {
     let source_directory = directory.0.join("src");
     fs::create_dir_all(&source_directory).unwrap();
     fs::write(source_directory.join("main.rs"), program).unwrap();
-    fs::write(
-        directory.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"{crate_name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
+    write_manifest(
+        &directory.0,
+        &format!(
+            "[package]\nname = \"{crate_name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&[])
         ),
-    )
-    .unwrap();
+    );
     let execution = Command::new("cargo")
         .args(["run", "--offline", "--quiet"])
         .env("RUSTFLAGS", "-Dwarnings")
@@ -861,7 +868,7 @@ fn run_generated_program(crate_name: &str, program: &str) {
         .unwrap();
     assert!(
         execution.status.success(),
-        "{crate_name} did not compile and execute against runtime {RUNTIME_REVISION}: {}",
+        "{crate_name} did not compile and execute against the runtime: {}",
         String::from_utf8_lossy(&execution.stderr)
     );
 }
@@ -982,13 +989,13 @@ fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_
     let source_directory = directory.0.join("src");
     fs::create_dir_all(&source_directory).unwrap();
     fs::write(source_directory.join("main.rs"), generated_program).unwrap();
-    fs::write(
-        directory.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"generated-numeric-oracle-differential\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\" }}\n\n[workspace]\n"
+    write_manifest(
+        &directory.0,
+        &format!(
+            "[package]\nname = \"generated-numeric-oracle-differential\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&[])
         ),
-    )
-    .unwrap();
+    );
     let execution = Command::new("cargo")
         .args(["run", "--offline", "--quiet", "--target-dir"])
         .arg(directory.0.join("target-codex-backends"))
@@ -998,7 +1005,7 @@ fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_
         .unwrap();
     assert!(
         execution.status.success(),
-        "generated numeric corpus did not compile and execute against runtime {RUNTIME_REVISION}: {}",
+        "generated numeric corpus did not compile and execute against the runtime: {}",
         String::from_utf8_lossy(&execution.stderr)
     );
 }

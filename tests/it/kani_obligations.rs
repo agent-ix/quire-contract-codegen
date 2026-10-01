@@ -20,6 +20,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
     reference, Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
@@ -31,12 +32,11 @@ use quire_contract_codegen::{
     InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest, KaniGenerationContext,
     KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
     KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniScalarObligationHarness,
-    KaniTool, KaniToolError, KindOutput, ObligationDisposition, ObligationItem, ObligationKind,
-    ObligationRecord, ObligationSubject, OperationProvenance, RoutedGenerationItem,
+    KaniSolver, KaniTool, KaniToolError, KindOutput, ObligationDisposition, ObligationItem,
+    ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance, RoutedGenerationItem,
     UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
-    RUNTIME_REVISION,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
     EXECUTABLE_PROJECTION_FORMAT,
 };
@@ -661,7 +661,7 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     for harness in &harnesses {
         assert!(!harness.rust.contents.contains("kani::unwind"));
     }
-    assert_eq!(identity.solver, "cadical");
+    assert_eq!(identity.solver, KaniSolver::Cadical);
     assert_eq!(identity.unwind, 4);
     let exact = format!("{}::{}", identity.module_symbol, identity.harness_symbol);
     // The complete ordered option vector, not merely a set of substrings present somewhere in
@@ -1710,13 +1710,13 @@ pub(crate) fn write_crate(harness: &KaniObligationHarness, subject: &str) -> Pat
         ),
     )
     .unwrap();
-    fs::write(
-        directory.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"generated-kani-obligation\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[workspace]\n"
+    write_manifest(
+        &directory,
+        &format!(
+            "[package]\nname = \"generated-kani-obligation\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&["exact"])
         ),
-    )
-    .unwrap();
+    );
     fs::write(
         directory.join("build.rs"),
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
@@ -1802,7 +1802,7 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         panic!("the seeded defect must be falsified: {evidence:?}");
     };
     assert!(counterexample.contains("kani::concrete_playback_run"));
-    assert!(counterexample.contains(&harnesses[1].identity.harness_symbol));
+    assert!(counterexample.contains(harnesses[1].identity.harness_symbol.as_str()));
     assert_ne!(evidence.exit_code, Some(0));
 
     // Jointly unsatisfiable requires with a postcondition no result satisfies: every check
@@ -1927,7 +1927,7 @@ fn write_scalar_crate(
     library: &str,
 ) -> PathBuf {
     let directory = scratch(name);
-    fs::write(directory.join("Cargo.toml"), &manifest.contents).unwrap();
+    write_manifest(&directory, &manifest.contents);
     fs::write(directory.join("src/lib.rs"), library).unwrap();
     fs::write(
         directory.join("build.rs"),
@@ -2105,7 +2105,7 @@ fn tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic() {
     let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
         panic!("the mutated arithmetic must be falsified: {evidence:?}");
     };
-    assert!(counterexample.contains(&mutated.identity.harness_symbol));
+    assert!(counterexample.contains(mutated.identity.harness_symbol.as_str()));
     assert_ne!(evidence.exit_code, Some(0));
     let message = "the oracle must complete with exactly the native quire.op.integer.add result";
     assert!(

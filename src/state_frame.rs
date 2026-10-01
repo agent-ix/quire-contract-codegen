@@ -28,7 +28,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use quire_contract_ir::{
+use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2,
     CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
@@ -37,6 +37,7 @@ use serde_json::Value;
 
 use crate::{
     exact_scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
+    identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     kani::{adapter_options, i64_literal, KaniSolver},
     Artifact, MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
 };
@@ -215,11 +216,11 @@ pub struct StateFrameIdentity {
     /// Rust path of the operation subject.
     pub subject_path: String,
     /// The generated module holding the harness.
-    pub module_symbol: String,
+    pub module_symbol: ModuleSymbol,
     /// The `kani::proof` function.
-    pub harness_symbol: String,
+    pub harness_symbol: HarnessSymbol,
     /// The solver, always `cadical`.
-    pub solver: String,
+    pub solver: KaniSolver,
     /// The unwind bound.
     pub unwind: u32,
     /// The exact Kani option vector.
@@ -915,8 +916,15 @@ fn render(
     property: StateFrameProperty,
     module: &str,
 ) -> Result<StateFrameHarness, StateFrameRefusal> {
+    let invalid_symbol = |error: SymbolError| StateFrameRefusal::InvalidGeneratedSyntax {
+        error: error.to_string(),
+    };
+    let path = HarnessPath {
+        module: ModuleSymbol::try_from(module).map_err(invalid_symbol)?,
+        harness: HarnessSymbol::try_from(HARNESS).map_err(invalid_symbol)?,
+    };
     let options = adapter_options(
-        &format!("{module}::{HARNESS}"),
+        &path.to_string(),
         request.unwind,
         KaniSolver::Cadical,
         false,
@@ -953,9 +961,9 @@ fn render(
         domains: domains.to_vec(),
         state_path: request.state_path.to_owned(),
         subject_path: request.subject_path.to_owned(),
-        module_symbol: module.to_owned(),
-        harness_symbol: HARNESS.to_owned(),
-        solver: "cadical".to_owned(),
+        module_symbol: path.module,
+        harness_symbol: path.harness,
+        solver: KaniSolver::Cadical,
         unwind: request.unwind,
         options,
     };

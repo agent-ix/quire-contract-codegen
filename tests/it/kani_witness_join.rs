@@ -23,15 +23,15 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use qsl_replay::WitnessValue;
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, negotiate_kani_obligations, write_bundle_atomic,
     ArtifactBundle, KaniBindingRole, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
     KaniObligationOutcome, KaniObligationRequest, KaniPrimitiveType, KaniRunOutcome,
     ObligationBinding, ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord,
-    RUNTIME_REVISION,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
@@ -254,13 +254,13 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
         ),
     )
     .unwrap();
-    fs::write(
-        directory.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{RUNTIME_REVISION}\", features = [\"exact\"] }}\n\n[workspace]\n"
+    write_manifest(
+        &directory,
+        &format!(
+            "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&["exact"])
         ),
-    )
-    .unwrap();
+    );
     fs::write(
         directory.join("build.rs"),
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",

@@ -198,6 +198,9 @@ already does for the FR-331 envelope.
   with no harness.
 - The generator shall join each Kani harness to its item through the record's
   `harness_symbol` and never by position.
+- If the Kani arm emits two harnesses with one `harness_symbol`, then the
+  generator shall refuse the whole call with `DuplicateHarness`, naming the
+  `module::harness` path of the second, with nothing generated.
 - The generator shall rewrite every position FR-015 reports into the driver's
   request index.
 - The generator shall report every routed item exactly once, under its routed
@@ -228,6 +231,7 @@ already does for the FR-331 envelope.
 | FR-022-AC-13 | The Kani arm routes an integer node over bounded parameters to a supported harness whose arguments are one range per operand and whose result assertion uses the result bound: `a + b` over `[0, 9]` and `[10, 20]` with result `[0, 29]` has arguments `[0, 9]` and `[10, 20]`; `-e` over `[1, 9]` with result `[-9, -1]` and `e * f` over `[1, 9]` and `[100, 200]` with result `[100, 1800]` are supported; a node with a plain-typed `reference` operand beside bounded typing (FR-014-AC-25) settles `requires_bound` and has no harness. | Test (TC-033) |
 | FR-022-AC-14 | `RoutedGeneration.oracle_artifacts` is `Some` after a Kani group and `None` when nothing is routed. It equals, byte for byte, the artifacts `generate_exact_scalar_oracles` returns over the derived items, so a group with no derivable node returns that call's artifacts for an empty item set. For `x + 1` over a parameter `Int[0, 9]`, each `Generated` claim's oracle symbol is defined in the returned `src/lib.rs` and appears in the supported harness's Rust source. | Test (TC-033) |
 | FR-022-AC-15 | The Kani arm routes the packages QSL emits for `x + 1` over `x: Int[0, 9]` into `Int[0, 10]`, `x + y` over `Int[0, 9]` and `Int[10, 20]` into `Int[10, 29]`, and `-z` over `Int[0, 9]` into `Int[-9, 0]` (a literal as a reference to its own `value` node, the declared bound on a narrowing `conversion` consuming the plain-typed arithmetic node) to supported harnesses with arguments `[0, 9]` and `[1, 1]`; `[0, 9]` and `[10, 20]`; and `[0, 9]`, each asserting the result against the conversion's bound (`[0, 10]`, `[10, 29]`, `[-9, 0]`). In that shape a plain-Integer parameter beside a bounded one, and a reference to a `value` node whose body is not a literal, settle `requires_bound`, and a node narrowed to two distinct bounds is `oracle_refused` `AmbiguousBound`, none with a harness. | Test (TC-033) |
+| FR-022-AC-16 | Two Kani harnesses with one `harness_symbol` refuse the call as `DuplicateHarness` naming the second harness's `module::harness` path, and no harness is overwritten or dropped. | Test (TC-033) |
 
 ## Dependencies
 

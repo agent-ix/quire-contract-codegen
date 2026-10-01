@@ -487,8 +487,8 @@ pub fn replay_counterexample(
 ) -> Result<ReplayVerdict, SpineReplayError> {
     let failure = |cause| Ok(ReplayVerdict::EvidenceFailure(cause));
     let values = match decode_falsification(
-        &identity.harness_symbol,
-        &identity.module_symbol,
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
         &identity.arguments,
         transcript,
     ) {
@@ -500,7 +500,7 @@ pub fn replay_counterexample(
             argument: argument.to_owned(),
         });
     }
-    let harness = format!("{}::{}", identity.module_symbol, identity.harness_symbol);
+    let harness = identity.harness_path().to_string();
     let result = replay_falsification(
         &harness,
         identity.clause.clause().as_str(),

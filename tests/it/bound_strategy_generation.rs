@@ -8,11 +8,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use quire_contract_codegen::{
     generate_bound_oracles, generate_bound_strategy, BoundGenerationError, BoundStrategyPopulation,
     BoundStrategyRequest, GenerationTerminalState, StrategyErrorCode,
 };
-use quire_contract_ir::{
+use quire_contract_model::{
     BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
@@ -260,14 +261,13 @@ fn run_integer_oracles(cases: &[(&str, &str)]) {
     checks.push_str("}\n");
     root.push_str(&checks);
     fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
-    fs::write(
-        temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"bound-integer-oracles\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\" }}\n\n[workspace]\n",
-            quire_contract_codegen::RUNTIME_REVISION
+    write_manifest(
+        &temporary.0,
+        &format!(
+            "[package]\nname = \"bound-integer-oracles\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&[])
         ),
-    )
-    .unwrap();
+    );
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", temporary.0.join("target"))
@@ -943,14 +943,13 @@ mod generated_checks {{
 "##
     ));
     let temporary = TemporaryDirectory::new("quire-bound-strategy-consumer");
-    fs::write(
-        temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"bound-strategy-consumer\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\", features = [\"snapshot-json\"] }}\n\n[workspace]\n",
-            quire_contract_codegen::RUNTIME_REVISION
+    write_manifest(
+        &temporary.0,
+        &format!(
+            "[package]\nname = \"bound-strategy-consumer\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
+            runtime_dependency(&["snapshot-json"])
         ),
-    )
-    .unwrap();
+    );
     fs::write(temporary.0.join("src/lib.rs"), source).unwrap();
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
@@ -1136,14 +1135,13 @@ pub fn {oracle}({oracle_parameters}) -> bool {{
     checks.push_str("}\n");
     root.push_str(&checks);
     fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
-    fs::write(
-        temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"bound-strategy-mismatch\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\" }}\n\n[workspace]\n",
-            quire_contract_codegen::RUNTIME_REVISION
+    write_manifest(
+        &temporary.0,
+        &format!(
+            "[package]\nname = \"bound-strategy-mismatch\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
+            runtime_dependency(&[])
         ),
-    )
-    .unwrap();
+    );
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", temporary.0.join("target"))
@@ -1410,14 +1408,13 @@ fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
     checks.push_str("}\n");
     root.push_str(&checks);
     fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
-    fs::write(
-        temporary.0.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"bound-strategy-all-populations\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\nquire-contract-runtime = {{ git = \"https://github.com/agent-ix/quire-contract-runtime\", rev = \"{}\" }}\n\n[workspace]\n",
-            quire_contract_codegen::RUNTIME_REVISION
+    write_manifest(
+        &temporary.0,
+        &format!(
+            "[package]\nname = \"bound-strategy-all-populations\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
+            runtime_dependency(&[])
         ),
-    )
-    .unwrap();
+    );
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", temporary.0.join("target"))
