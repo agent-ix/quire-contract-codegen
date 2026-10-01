@@ -1972,30 +1972,41 @@ fn render(
     })
 }
 
-/// Renders one IR-confirmed V2 exact-scalar claim to a `kani::proof` that the embedded oracle is
-/// *sound*, not that it is *total*: `assert!` that whenever the outcome is
-/// `Ok(rt::Outcome::Completed(value))`, `value` lies within the same checked domain -- reconstructed
-/// here from the result bound's own literal bounds -- that `bound.contains(&result)`
-/// (`quire_contract_runtime::exact::numeric.rs`) itself checks before returning `Completed`. This is not
-/// `Result::is_ok()`: the oracle's `Result<rt::Outcome<T>, OracleStop>` nests the runtime's own four-way
-/// `Outcome` (`Completed`/`Undefined`/`Refused`/`Incomplete`) inside `Ok`, so `Ok(Refused(_))` is `is_ok()`
-/// without being sound-and-completed, and the `match` below only inspects the `Completed` arm; every other
-/// outcome (in particular `Refused`, which is exactly what an operand pair whose exact result leaves the
-/// domain produces) leaves `sound` at its vacuous default. Each operand's `kani::assume` is its own
-/// bound (the `bounded_domain` typing it; a literal operand, which is a constant, takes the result's),
-/// and the result is asserted against the result bound -- but the operation itself is genuinely partial over that domain
-/// (`quire.op.integer.add` over `[-1000,1000]` admits `600 + 600`), so asserting `Completed` unconditionally
-/// (this rendering's original defect) asserted a falsehood no operand assumption could fix. A `kani::cover!`
-/// on the same `completed` flag is the FR-015-AC-7 non-vacuity guard (this harness's proof is reachable at
-/// all), never a substitute for `sound` -- an assertion Kani cannot falsify because the harness body never
-/// runs proves nothing. Unlike a V1 contract harness, there is no precondition/postcondition pair and no
-/// subject signature to unify: the oracle's own parameters, in the order [`SourceBuilder::oracle`] declared
-/// them (`operand` for a unary operation, `left`/`right` for a binary one), are the whole ABI.
+/// The exact result of an IR-confirmed integer operation, as a Rust expression over the
+/// harness's native `i64` operands (`<name>_native`), evaluated in `i128` where a sum, difference,
+/// product or negation of `i64` values cannot overflow. It reads the operator from the claim's
+/// catalogued operation identity and shares no code with the embedded oracle, which evaluates
+/// through `quire_contract_runtime`'s `rt::Integer`; it is the independent statement of the
+/// clause that [`render_scalar`] compares the oracle's result with.
+fn native_expression(operation_identity: &str) -> &'static str {
+    match operation_identity {
+        "quire.op.integer.add" => "i128::from(left_native) + i128::from(right_native)",
+        "quire.op.integer.sub" => "i128::from(left_native) - i128::from(right_native)",
+        "quire.op.integer.mul" => "i128::from(left_native) * i128::from(right_native)",
+        "quire.op.integer.negate" => "-i128::from(operand_native)",
+        _ => unreachable!("scalar_arity renders only integer add, sub, mul and negate"),
+    }
+}
+
+/// Renders one IR-confirmed V2 exact-scalar claim to a `kani::proof` that the embedded oracle
+/// computes the clause's own arithmetic. The harness evaluates the operation a second time, in
+/// native `i128` over the same symbolic `i64` operands ([`native_expression`]), and asserts the
+/// oracle agrees with it in both directions: the outcome is `Ok(Completed(value))` with `value`
+/// exactly the native result when that result lies within the checked domain (the result bound's
+/// own literal bounds), and `Ok(Refused(_))` when it does not. Any other outcome fails. An oracle
+/// that computed a different operation, dropped a carry, or mis-bounded the result therefore
+/// falsifies the proof; asserting only that a completed value lies in the domain would restate the
+/// check the oracle itself makes before returning `Completed`.
 ///
-/// This harness is rendered, and its proposition (above) is the one actually stated in the generated
-/// source; it is NOT discharged by this generator. Nothing in this repository runs the Kani/CBMC solver
-/// against it -- proving it (or finding the counterexample the partial-`add` case above predicts) requires
-/// a real `cargo kani` run this generator does not perform.
+/// Each operand's `kani::assume` is its own bound (the `bounded_domain` typing it; a literal
+/// operand, which is a constant, takes the result's). The operation is genuinely partial over that
+/// domain (`quire.op.integer.add` over `[-1000,1000]` admits `600 + 600`), which is why the
+/// refused direction is part of the property rather than an unconditional `Completed`. The meter
+/// is unlimited, so `Incomplete` cannot occur. A `kani::cover!` on the `Completed` branch is the
+/// FR-015-AC-7 non-vacuity guard: the property is checked on at least one completing input.
+///
+/// This generator renders the harness; it does not run the Kani/CBMC solver. The `kani` lane
+/// (`tests/it/kani_obligations.rs`) proves it and runs the mutated-arithmetic control.
 fn render_scalar(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredScalarClaim,
@@ -2016,6 +2027,7 @@ fn render_scalar(
             format!(
                 "        let {name}: i64 = kani::any();\n\
         kani::assume({name} >= {minimum} && {name} <= {maximum});\n\
+        let {name}_native = {name};\n\
         let {name} = rt::Integer::from({name});\n"
             )
         })
@@ -2055,13 +2067,14 @@ mod {module} {{\n\
             result_units: u64::MAX,\n\
         }});\n\
         let outcome = {symbol}({call_args}, &mut meter);\n\
-        let domain = rt::IntegerInterval::new(rt::Integer::from({lower}), rt::Integer::from({upper}))\n\
-            .expect(\"the checked domain's own literal bounds form a valid interval\");\n\
+        let exact: i128 = {exact};\n\
+        let admitted = exact >= i128::from({lower}) && exact <= i128::from({upper});\n\
         let sound = match &outcome {{\n\
-            Ok(rt::Outcome::Completed(value)) => domain.contains(value),\n\
-            _ => true,\n\
+            Ok(rt::Outcome::Completed(value)) => admitted && *value == rt::Integer::from(exact),\n\
+            Ok(rt::Outcome::Refused(_)) => !admitted,\n\
+            _ => false,\n\
         }};\n\
-        assert!(sound, \"a completed result must lie within the checked domain -- the generated oracle enforces `bound.contains(&result)` and never returns Completed for an operand pair whose exact result leaves it\");\n\
+        assert!(sound, \"the oracle must complete with exactly the native {operation} result when it lies in the checked domain, and refuse otherwise\");\n\
         let completed = matches!(outcome, Ok(rt::Outcome::Completed(_)));\n\
         kani::cover!(completed, \"the generated oracle's Ok(Outcome::Completed(_)) branch is reachable within its checked domain\");\n\
     }}\n\
@@ -2069,6 +2082,8 @@ mod {module} {{\n\
         module = lowered.module_symbol,
         harness = lowered.harness_symbol,
         symbol = lowered.oracle_symbol,
+        exact = native_expression(&lowered.operation_identity),
+        operation = lowered.operation_identity,
     );
     let identity = ScalarObligationIdentity {
         node_id: lowered.node_id.clone(),

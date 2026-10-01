@@ -753,24 +753,17 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     );
 }
 
-/// F1: the scalar harness asserts *soundness* (whenever the outcome is
-/// `Ok(Outcome::Completed(value))`, `value` lies within the same checked domain the
-/// `kani::assume`s constrain the operands to), not *totality* (that every assumed operand pair
-/// completes). `add` over `[-1000,1000]` is genuinely partial -- `600 + 600` leaves the domain --
-/// so an unconditional "always `Completed`" assertion (this rendering's original defect) asserted
-/// a falsehood no operand assumption could fix; asserting soundness instead states what
-/// `evaluate_integer_arithmetic`'s own `bound.contains(&result)` check (`quire-contract-runtime`
-/// `src/exact/numeric.rs`) actually guarantees. `outcome.is_ok()` is still not what is matched --
-/// it is true for `Ok(Refused(_))` too, and `Refused` is exactly the outcome an out-of-domain
-/// result must produce, so the `match` below inspects only the `Completed` arm and leaves `sound`
-/// at its vacuous default otherwise. This is a source-inspection check because real `cargo kani`
-/// cannot be run in this environment (the `make kani` lane; this generator also has no
-/// in-process way to run it against a fabricated single-harness crate) -- the harness is rendered
-/// and its proposition is now correctly stated, but it is NOT claimed to be discharged here.
+/// The scalar harness states a property the oracle does not itself guarantee: the outcome agrees
+/// with the clause's operation evaluated natively in `i128` over the same operands, completing with
+/// exactly that value when it lies in the checked domain and refusing when it does not. Asserting
+/// only that a completed value lies in the domain restated the bound check the oracle makes before
+/// returning `Completed`, so the proof held whatever the arithmetic did. `outcome.is_ok()` is still
+/// not matched: it is true for `Ok(Refused(_))` too. This is a source-inspection check of the
+/// rendered text; the real-Kani tests below discharge it and falsify a mutated oracle.
 ///
 /// Trace: FR-015-AC-7, TC-025
 #[test]
-fn tc_025_scalar_harness_asserts_soundness_not_totality() {
+fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (scalar, claim_map) = scalar_package();
     let node_1001 = code_id(1001);
     let items = [ObligationItem::ScalarClaim {
@@ -782,18 +775,29 @@ fn tc_025_scalar_harness_asserts_soundness_not_totality() {
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
     let source = &scalar_harnesses[0].rust.contents;
     assert!(
-        source.contains(
-            "let domain = rt::IntegerInterval::new(rt::Integer::from(-1000_i64), \
-             rt::Integer::from(1000_i64))"
-        ),
-        "the harness must reconstruct the checked domain from the same literal bounds the \
-         assumes use, to range-check the completed value against: {source}"
+        source.contains("let exact: i128 = i128::from(left_native) + i128::from(right_native);"),
+        "the expected result must be the native i128 evaluation of the clause's operation over \
+         the raw operands, not a value read back from the oracle: {source}"
     );
     assert!(
-        source.contains("Ok(rt::Outcome::Completed(value)) => domain.contains(value),"),
-        "the harness must actually read and range-check the completed value, not merely \
-         classify the outcome variant -- an assertion that never inspects the value is the \
-         vacuity this replaced, wearing a new shape: {source}"
+        source.contains(
+            "let admitted = exact >= i128::from(-1000_i64) && exact <= i128::from(1000_i64);"
+        ),
+        "the checked domain must come from the result bound's own literal bounds: {source}"
+    );
+    assert!(
+        source.contains(
+            "Ok(rt::Outcome::Completed(value)) => admitted && *value == rt::Integer::from(exact),"
+        ),
+        "a completed value must equal the native result, not merely lie in the domain: {source}"
+    );
+    assert!(
+        source.contains("Ok(rt::Outcome::Refused(_)) => !admitted,"),
+        "a refusal is correct exactly when the native result leaves the domain: {source}"
+    );
+    assert!(
+        !source.contains("domain.contains("),
+        "regression to the tautology that re-ran the oracle's own bound check: {source}"
     );
     assert!(
         source.contains("assert!(sound,"),
@@ -1971,16 +1975,45 @@ fn tc_027_a_routed_scalar_harness_verifies() {
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified() {
     let (mut harness, manifest) = routed_scalar_increment();
-    let domain_upper = "rt::Integer::from(9_i64))";
+    let domain_upper = "exact <= i128::from(9_i64);";
     assert_eq!(harness.rust.contents.matches(domain_upper).count(), 1);
     harness.rust.contents = harness
         .rust
         .contents
-        .replace(domain_upper, "rt::Integer::from(5_i64))");
+        .replace(domain_upper, "exact <= i128::from(5_i64);");
     let evidence = run_scalar_under_real_kani("scalar-real-violating", &harness, &manifest);
     assert!(
         matches!(evidence.outcome, KaniRunOutcome::Falsified { .. }),
         "got {:?}",
         evidence.outcome
     );
+}
+
+/// Mutation control for the arithmetic property: the embedded oracle's `add` is replaced by
+/// `subtract`, the one defect the old in-domain assertion could not see (a subtraction result that
+/// stays in the domain is still `Completed`). The healthy harness verifies, and the mutated one is
+/// falsified by a counterexample on the harness's own assertion, not by a build error: the mutated
+/// source still compiles and its failing check is the generated `sound` assertion.
+///
+/// Trace: FR-015-AC-7, TC-025, FR-017-AC-7
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic() {
+    let (harness, manifest) = routed_scalar_increment();
+    let healthy = run_scalar_under_real_kani("scalar-arith-healthy", &harness, &manifest);
+    assert_eq!(healthy.outcome, KaniRunOutcome::Verified);
+
+    let call = "rt::IntegerArithmetic::Add(left, right)";
+    let mut mutated = harness.clone();
+    assert_eq!(mutated.rust.contents.matches(call).count(), 1);
+    mutated.rust.contents = mutated
+        .rust
+        .contents
+        .replace(call, "rt::IntegerArithmetic::Subtract(left, right)");
+    let evidence = run_scalar_under_real_kani("scalar-arith-mutated", &mutated, &manifest);
+    let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
+        panic!("the mutated arithmetic must be falsified: {evidence:?}");
+    };
+    assert!(counterexample.contains(&mutated.identity.harness_symbol));
+    assert_ne!(evidence.exit_code, Some(0));
 }
