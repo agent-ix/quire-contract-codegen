@@ -17,9 +17,13 @@ use quire_contract_ir::kani::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    kani::{dependency_readiness, deterministic_json, normalize_dependencies},
+    artifact::Artifact,
+    kani::deterministic_json,
+    kani_census::{
+        dependency_readiness, normalize_dependencies, ProofDependencyEdge, ProofDependencyKind,
+        ProofDependencyRequest, ProofReadiness,
+    },
     prepare_bounded_collection_query, prepare_checked_arithmetic, prepare_finite_graph_reaches,
-    Artifact, ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest, ProofReadiness,
 };
 
 /// Stable schema identity for [`CorpusProofDependencyGraph`].

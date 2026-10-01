@@ -433,7 +433,7 @@ pub(crate) fn counterexample_playback(text: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::kani_execution::{classify_kani_run, KaniInconclusiveReason, KaniRunOutcome};
-    use crate::ObligationKind;
+    use crate::kani_identity::ObligationKind;
 
     /// A real Kani capture of one `--exact` harness: the exported report, its stdout, and
     /// whether it exited successfully.

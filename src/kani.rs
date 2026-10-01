@@ -12,53 +12,18 @@ use quire_contract_model::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    artifact::Artifact,
+    diagnostic::{GenerationErrorCode, GenerationTerminalState},
+    kani_census::{
+        dependency_readiness, dependency_site, normalize_dependencies, ProofDependencyEdge,
+        ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness,
+    },
     oracle::{
         bounded_readable_component, generate_named_boolean_oracle, oracle_symbol,
         typed_dependency_parameters, unique_pair, DependencyParameter, RustValueType,
     },
-    Artifact, GenerationErrorCode, GenerationTerminalState, OracleRequest,
-    MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
+    OracleRequest, MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
 };
-
-/// Kind of proof dependency declared by one generated harness.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProofDependencyKind {
-    /// A separately executed proof that must pass.
-    Required,
-    /// A Boolean dependency predicate introduced with `kani::assume`.
-    Assumed,
-    /// A function replacement introduced with `kani::stub`.
-    Stubbed,
-}
-
-/// State of one declared proof dependency at generation time.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProofDependencyState {
-    /// A required dependency proof passed under its retained identity.
-    Passed,
-    /// A required dependency proof has no retained result.
-    Missing,
-    /// A required dependency proof failed.
-    Failed,
-    /// The dependency is explicitly assumed rather than proved.
-    Assumed,
-    /// The dependency implementation is explicitly replaced by a stub.
-    Stubbed,
-}
-
-/// Generation-time readiness derived from the complete dependency census.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProofReadiness {
-    /// Every required proof passed and no assumptions or stubs are present.
-    Ready,
-    /// Required proofs passed, but an assumption or stub makes the proof conditional.
-    Conditional,
-    /// A required proof is missing or failed.
-    Incomplete,
-}
 
 /// Position of one primitive dependency in the generated subject ABI.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -135,21 +100,6 @@ impl KaniSolver {
             Self::Cadical => "cadical",
         }
     }
-}
-
-/// One caller-declared proof dependency.
-#[derive(Clone, Copy, Debug)]
-pub struct ProofDependencyRequest<'a> {
-    /// Stable dependency proof identity.
-    pub proof_id: &'a str,
-    /// Relationship to the generated root proof.
-    pub kind: ProofDependencyKind,
-    /// Current retained dependency state.
-    pub state: ProofDependencyState,
-    /// Assumption predicate or original stubbed function path, when required by `kind`.
-    pub original_path: Option<&'a str>,
-    /// Stub replacement function path, present only for `Stubbed`.
-    pub replacement_path: Option<&'a str>,
 }
 
 /// Explicit inputs for one bounded Boolean Kani proof bundle.
@@ -233,20 +183,6 @@ pub struct KaniDiagnostic {
     pub source_span: Option<SourceSpan>,
     /// Human-readable detail not used as machine identity.
     pub message: String,
-}
-
-/// One normalized proof dependency edge in the generated graph.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct ProofDependencyEdge {
-    /// Stable dependency proof identity.
-    pub proof_id: String,
-    /// Dependency kind.
-    pub kind: ProofDependencyKind,
-    /// Dependency state.
-    pub state: ProofDependencyState,
-    /// Generated assumption/stub source-site identity, or `None` for required proof edges.
-    pub source_site: Option<String>,
 }
 
 /// Deterministic Kani proof-dependency graph.
@@ -920,49 +856,6 @@ pub(crate) fn i64_literal(value: i64) -> String {
     }
 }
 
-pub(crate) fn normalize_dependencies(
-    dependencies: &[ProofDependencyRequest<'_>],
-) -> Vec<ProofDependencyEdge> {
-    let mut result = dependencies
-        .iter()
-        .map(|dependency| ProofDependencyEdge {
-            proof_id: dependency.proof_id.to_owned(),
-            kind: dependency.kind,
-            state: dependency.state,
-            source_site: match dependency.kind {
-                ProofDependencyKind::Required => None,
-                ProofDependencyKind::Assumed => {
-                    Some(dependency_site("assumption", dependency.proof_id))
-                }
-                ProofDependencyKind::Stubbed => Some(dependency_site("stub", dependency.proof_id)),
-            },
-        })
-        .collect::<Vec<_>>();
-    result.sort_by(|left, right| left.proof_id.cmp(&right.proof_id));
-    result
-}
-
-pub(crate) fn dependency_readiness(dependencies: &[ProofDependencyEdge]) -> ProofReadiness {
-    if dependencies.iter().any(|dependency| {
-        dependency.kind == ProofDependencyKind::Required
-            && matches!(
-                dependency.state,
-                ProofDependencyState::Missing | ProofDependencyState::Failed
-            )
-    }) {
-        ProofReadiness::Incomplete
-    } else if dependencies.iter().any(|dependency| {
-        matches!(
-            dependency.kind,
-            ProofDependencyKind::Assumed | ProofDependencyKind::Stubbed
-        )
-    }) {
-        ProofReadiness::Conditional
-    } else {
-        ProofReadiness::Ready
-    }
-}
-
 pub(crate) fn adapter_options(
     harness: &str,
     unwind: u32,
@@ -1033,10 +926,6 @@ fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
 /// `value` as a readable snake-case name component of at most 12 characters.
 pub(crate) fn readable_component(value: &str) -> String {
     crate::oracle::readable_name_component(value, 12)
-}
-
-fn dependency_site(kind: &str, proof_id: &str) -> String {
-    format!("{kind}:{proof_id}")
 }
 
 // `?Sized` so an unsized `[T]` slice (e.g. `&[ProofDependencyEdge]`) can be passed directly, with

@@ -6,9 +6,10 @@ use quire_contract_model::{ClauseRef, RequirementRef, SourceSpan};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    artifact::Artifact,
+    diagnostic::{GenerationErrorCode, GenerationTerminalState},
     oracle::{bounded_readable_component, upper_camel},
-    Artifact, GeneratedArtifactBundle, GenerationErrorCode, GenerationTerminalState,
-    MAX_GENERATED_SOURCE_BYTES,
+    GeneratedArtifactBundle, MAX_GENERATED_SOURCE_BYTES,
 };
 
 /// Supported integer constraint shape for one generated strategy.

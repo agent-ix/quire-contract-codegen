@@ -1,132 +1,20 @@
 //! Validated, rollback-protected publication of generated artifact bundles.
 
 use std::{
-    collections::BTreeSet,
     fs::{self, OpenOptions},
     io::Write as _,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Artifact, GenerationTerminalState};
+use crate::artifact::{
+    publication_diagnostic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
+    PublicationErrorCode,
+};
 
-const BUNDLE_SCHEMA: &str = "quire.artifact-bundle/v1";
-pub(crate) const MAX_ARTIFACTS: usize = 4096;
-pub(crate) const MAX_ARTIFACT_BYTES: usize = 16 * 1024 * 1024;
-pub(crate) const MAX_BUNDLE_BYTES: usize = 128 * 1024 * 1024;
 static PUBLICATION_NONCE: AtomicU64 = AtomicU64::new(0);
-
-/// Stable reason a bundle could not be validated or published.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PublicationErrorCode {
-    /// The bundle contains no artifacts or exceeds a bounded resource limit.
-    InvalidBundle,
-    /// An artifact path is absolute, non-canonical, or traverses a parent.
-    UnsafeArtifactPath,
-    /// Two artifacts claim the same bundle-relative path.
-    DuplicateArtifactPath,
-    /// Staging, swapping, rollback, or cleanup encountered an I/O error.
-    IoFailed,
-}
-
-/// Observable destination state when publication returns a diagnostic.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PublicationDestinationState {
-    /// The destination was not changed by this call, or the prior bundle was restored.
-    Unchanged,
-    /// The new bundle was committed, but a post-commit operation failed.
-    Published,
-    /// Rollback itself failed, so callers must inspect the destination before retrying.
-    Unknown,
-}
-
-impl PublicationErrorCode {
-    /// Maps the publication failure onto the codegen terminal-state vocabulary.
-    #[must_use]
-    pub const fn terminal_state(self) -> GenerationTerminalState {
-        match self {
-            Self::InvalidBundle | Self::UnsafeArtifactPath | Self::DuplicateArtifactPath => {
-                GenerationTerminalState::InvalidInput
-            }
-            Self::IoFailed => GenerationTerminalState::IoFailed,
-        }
-    }
-}
-
-/// Structured publication failure.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct PublicationDiagnostic {
-    /// Stable diagnostic category.
-    pub code: PublicationErrorCode,
-    /// Terminal state implied by `code`.
-    pub terminal_state: GenerationTerminalState,
-    /// Whether this call left the destination unchanged, published, or uncertain.
-    pub destination_state: PublicationDestinationState,
-    /// Stable bundle or filesystem path associated with the failure.
-    pub path: String,
-    /// Human-readable detail not used as machine identity.
-    pub message: String,
-}
-
-/// Deterministic set of generated artifacts ready for publication.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct ArtifactBundle {
-    schema_version: String,
-    artifacts: Vec<Artifact>,
-}
-
-impl ArtifactBundle {
-    /// Validates and path-sorts a complete artifact set.
-    pub fn new(mut artifacts: Vec<Artifact>) -> Result<Self, PublicationDiagnostic> {
-        validate_artifacts(&artifacts)?;
-        artifacts.sort_by(|left, right| left.path.cmp(&right.path));
-        Ok(Self {
-            schema_version: BUNDLE_SCHEMA.to_owned(),
-            artifacts,
-        })
-    }
-
-    /// Stable artifact-bundle schema identity.
-    #[must_use]
-    pub fn schema_version(&self) -> &str {
-        &self.schema_version
-    }
-
-    /// Path-sorted artifacts.
-    #[must_use]
-    pub fn artifacts(&self) -> &[Artifact] {
-        &self.artifacts
-    }
-
-    fn revalidate(&self) -> Result<(), PublicationDiagnostic> {
-        if self.schema_version != BUNDLE_SCHEMA {
-            return Err(diagnostic(
-                PublicationErrorCode::InvalidBundle,
-                "bundle.schemaVersion",
-                "the artifact bundle schema version is unsupported",
-            ));
-        }
-        validate_artifacts(&self.artifacts)?;
-        if self
-            .artifacts
-            .windows(2)
-            .any(|pair| pair[0].path >= pair[1].path)
-        {
-            return Err(diagnostic(
-                PublicationErrorCode::InvalidBundle,
-                "bundle.artifacts",
-                "the artifact bundle is not sorted by path",
-            ));
-        }
-        Ok(())
-    }
-}
 
 /// A successfully published bundle.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -169,7 +57,7 @@ fn publish(
 ) -> Result<PublishedBundleIdentity, PublicationDiagnostic> {
     bundle.revalidate()?;
     let parent = destination.parent().ok_or_else(|| {
-        diagnostic(
+        publication_diagnostic(
             PublicationErrorCode::InvalidBundle,
             "destination",
             "the destination must have an existing parent directory",
@@ -179,14 +67,14 @@ fn publish(
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| {
-            diagnostic(
+            publication_diagnostic(
                 PublicationErrorCode::InvalidBundle,
                 "destination",
                 "the destination must have a UTF-8 final component",
             )
         })?;
     if name.is_empty() || !parent.is_dir() {
-        return Err(diagnostic(
+        return Err(publication_diagnostic(
             PublicationErrorCode::InvalidBundle,
             "destination",
             "the destination must have an existing directory parent",
@@ -271,69 +159,8 @@ fn publish(
 
     Ok(PublishedBundleIdentity {
         destination: destination.to_string_lossy().into_owned(),
-        artifact_count: bundle.artifacts.len(),
+        artifact_count: bundle.artifacts().len(),
     })
-}
-
-fn validate_artifacts(artifacts: &[Artifact]) -> Result<(), PublicationDiagnostic> {
-    if artifacts.is_empty() || artifacts.len() > MAX_ARTIFACTS {
-        return Err(diagnostic(
-            PublicationErrorCode::InvalidBundle,
-            "bundle.artifacts",
-            "a bundle must contain between one and 4096 artifacts",
-        ));
-    }
-    let mut paths = BTreeSet::new();
-    let mut total = 0usize;
-    for (index, artifact) in artifacts.iter().enumerate() {
-        validate_path(&artifact.path, index)?;
-        if !paths.insert(artifact.path.as_str()) {
-            return Err(diagnostic(
-                PublicationErrorCode::DuplicateArtifactPath,
-                &format!("bundle.artifacts[{index}].path"),
-                "artifact paths must be unique",
-            ));
-        }
-        if artifact.contents.len() > MAX_ARTIFACT_BYTES {
-            return Err(diagnostic(
-                PublicationErrorCode::InvalidBundle,
-                &format!("bundle.artifacts[{index}].contents"),
-                "one artifact exceeds the bounded size",
-            ));
-        }
-        total = total.saturating_add(artifact.contents.len());
-    }
-    if total > MAX_BUNDLE_BYTES {
-        return Err(diagnostic(
-            PublicationErrorCode::InvalidBundle,
-            "bundle.artifacts",
-            "the complete bundle exceeds the bounded size",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_path(path: &str, index: usize) -> Result<(), PublicationDiagnostic> {
-    let parsed = Path::new(path);
-    let valid = !path.is_empty()
-        && !path.contains('\\')
-        && !path.ends_with('/')
-        && path
-            .split('/')
-            .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
-        && !path.chars().any(char::is_control)
-        && parsed
-            .components()
-            .all(|component| matches!(component, Component::Normal(_)));
-    if valid {
-        Ok(())
-    } else {
-        Err(diagnostic(
-            PublicationErrorCode::UnsafeArtifactPath,
-            &format!("bundle.artifacts[{index}].path"),
-            "artifact paths must be canonical relative paths inside the generated boundary",
-        ))
-    }
 }
 
 fn stage_bundle(
@@ -341,7 +168,7 @@ fn stage_bundle(
     staging: &Path,
     fault: PublicationFault,
 ) -> Result<(), PublicationDiagnostic> {
-    for (index, artifact) in bundle.artifacts.iter().enumerate() {
+    for (index, artifact) in bundle.artifacts().iter().enumerate() {
         if fault == PublicationFault::BeforeArtifact(index) {
             return Err(injected(staging, "during staged artifact writes"));
         }
@@ -373,7 +200,7 @@ fn unique_sibling(parent: &Path, name: &str, role: &str) -> Result<PathBuf, Publ
             return Ok(candidate);
         }
     }
-    Err(diagnostic(
+    Err(publication_diagnostic(
         PublicationErrorCode::IoFailed,
         "destination",
         "no unused staging name was available",
@@ -394,18 +221,8 @@ fn cleanup(path: &Path, action: &str) -> Result<(), PublicationDiagnostic> {
     result.map_err(|error| io_diagnostic(path, action, &error))
 }
 
-fn diagnostic(code: PublicationErrorCode, path: &str, message: &str) -> PublicationDiagnostic {
-    PublicationDiagnostic {
-        code,
-        terminal_state: code.terminal_state(),
-        destination_state: PublicationDestinationState::Unchanged,
-        path: path.to_owned(),
-        message: message.to_owned(),
-    }
-}
-
 fn io_diagnostic(path: &Path, action: &str, error: &std::io::Error) -> PublicationDiagnostic {
-    diagnostic(
+    publication_diagnostic(
         PublicationErrorCode::IoFailed,
         &path.to_string_lossy(),
         &format!("could not {action}: {error}"),
@@ -424,7 +241,7 @@ fn io_diagnostic_with_state(
 }
 
 fn injected(path: &Path, point: &str) -> PublicationDiagnostic {
-    diagnostic(
+    publication_diagnostic(
         PublicationErrorCode::IoFailed,
         &path.to_string_lossy(),
         &format!("injected publication failure {point}"),
@@ -446,6 +263,10 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::*;
+    use crate::{
+        artifact::{Artifact, MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
+        diagnostic::GenerationTerminalState,
+    };
 
     fn temporary(name: &str) -> PathBuf {
         let nonce = PUBLICATION_NONCE.fetch_add(1, Ordering::Relaxed);
@@ -487,7 +308,7 @@ mod tests {
         fs::write(&developer, "developer-owned\n").unwrap();
         let first = bundle("first\n");
         let reversed =
-            ArtifactBundle::new(first.artifacts.iter().cloned().rev().collect()).unwrap();
+            ArtifactBundle::new(first.artifacts().iter().cloned().rev().collect()).unwrap();
         assert_eq!(first, reversed);
         let identity = write_bundle_atomic(&first, &destination).unwrap();
         assert_eq!(identity.artifact_count, 2);

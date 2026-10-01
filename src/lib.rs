@@ -3,13 +3,25 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+// The generated file and the validated bundle every generator builds (AD-004 step 2a).
+// Implements: FR-005
+mod artifact;
 mod bound;
 mod bounded_collections;
 mod bounded_kani_corpus;
 mod bounded_kani_profile;
 mod definedness_arithmetic;
+// The generation diagnostic vocabulary, below every generator (AD-004 step 2a).
+mod diagnostic;
 mod finite_reference_graphs;
 mod kani;
+// Source-map records tracing generated source to a clause (AD-004 step 2a).
+mod source_map;
+// Proof-dependency census types (AD-004 step 2b); becomes `kani/census.rs`.
+mod kani_census;
+// Harness and identity record types (AD-004 step 2b); becomes `kani/identity.rs`.
+// Implements: FR-015
+mod kani_identity;
 mod oracle;
 // Implements: FR-005, NFR-001
 mod publication;
@@ -115,8 +127,11 @@ pub use identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError};
 pub use kani::{
     generate_kani_bundle, KaniArtifactBundle, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
     KaniIntegerBounds, KaniPrimitiveType, KaniRequest, KaniSolver, KaniSubjectBinding,
-    ProofDependencyEdge, ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest,
-    ProofDependencyState, ProofReadiness,
+    ProofDependencyGraph,
+};
+pub use kani_census::{
+    ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
+    ProofReadiness,
 };
 pub use kani_execution::{
     classify_kani_run, execute_kani_obligation, kani_launch_command, launch_evidence,
@@ -134,28 +149,35 @@ pub use routed_generation::{
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
 };
 
+pub use artifact::{
+    Artifact, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
+    PublicationErrorCode,
+};
+pub use diagnostic::{GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState};
 pub use frame_replay::{FrameReplay, FrameReplayError, FrameReplayInputs, ProvidedDocument};
+pub use kani_identity::{
+    EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
+    ObligationBinding, ObligationKind, ScalarObligationArgument, ScalarObligationIdentity,
+    StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
+    StateFrameScope,
+};
 pub use kani_obligations::{
-    negotiate_kani_obligations, DerivedDomain, EmbeddedOracle, InvalidObligationItem,
-    KaniObligationError, KaniObligationHarness, KaniObligationIdentity, KaniObligationOutcome,
-    KaniObligationRequest, KaniScalarObligationHarness, ObligationBinding, ObligationDisposition,
-    ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, ScalarObligationArgument,
-    ScalarObligationIdentity, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    negotiate_kani_obligations, DerivedDomain, InvalidObligationItem, KaniObligationError,
+    KaniObligationOutcome, KaniObligationRequest, ObligationDisposition, ObligationItem,
+    ObligationRecord, ObligationSubject, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
+    MAX_OBLIGATION_UNWIND,
 };
 pub use kani_witness_join::{decode_falsification, DecodeFailure};
-pub use publication::{
-    write_bundle_atomic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
-    PublicationErrorCode, PublishedBundleIdentity,
-};
+pub use publication::{write_bundle_atomic, PublishedBundleIdentity};
+pub use source_map::{SourceProbe, SourceRegion};
 pub use spine_replay::{
     replay_counterexample, replay_falsification, DependencyLock, DependencyLockError,
     EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError,
     ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use state_frame::{
-    generate_state_frame_obligations, StateComparison, StateFieldDomain, StateFrameHarness,
-    StateFrameIdentity, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
-    StateFrameRequest, StateFrameScope, UnsupportedFrameEffect,
+    generate_state_frame_obligations, StateFrameObligations, StateFrameRefusal, StateFrameRequest,
+    UnsupportedFrameEffect,
 };
 pub use strategy::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
@@ -163,7 +185,6 @@ pub use strategy::{
 };
 
 pub use oracle::{
-    generate_boolean_oracle, Artifact, GeneratedArtifactBundle, GenerationDiagnostic,
-    GenerationErrorCode, GenerationTerminalState, OracleArtifactBundle, OracleRequest, SourceProbe,
-    SourceRegion, MAX_GENERATED_SOURCE_BYTES,
+    generate_boolean_oracle, GeneratedArtifactBundle, OracleArtifactBundle, OracleRequest,
+    MAX_GENERATED_SOURCE_BYTES,
 };

@@ -18,7 +18,7 @@ use qsl_replay::{
 };
 
 use crate::{
-    kani_obligations::KaniObligationIdentity,
+    kani_identity::KaniObligationIdentity,
     kani_witness_join::{decode_falsification, first_out_of_domain, DecodeFailure},
 };
 

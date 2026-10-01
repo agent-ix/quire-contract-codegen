@@ -3,10 +3,12 @@
 use quire_contract_model::{BoundPackage, ClauseRef};
 
 use crate::{
+    artifact::{
+        ArtifactBundle, PublicationDiagnostic, MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES,
+    },
+    diagnostic::GenerationDiagnostic,
     oracle::{generate_named_boolean_oracle, oracle_symbol, unique_names},
-    publication::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
-    ArtifactBundle, GenerationDiagnostic, OracleArtifactBundle, OracleRequest,
-    PublicationDiagnostic,
+    OracleArtifactBundle, OracleRequest,
 };
 
 /// Complete generation result, distinct from a native execution or coverage result.

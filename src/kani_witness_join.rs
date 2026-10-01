@@ -4,7 +4,7 @@
 //! A `cargo kani --concrete-playback print` block retains only the untyped bytes Kani handed to
 //! each `kani::any()` call, in call order. This module selects the one assertion playback block
 //! of a run, reads those bytes, and types them with
-//! [`crate::kani_obligations::KaniObligationIdentity::arguments`]: the bindings
+//! [`crate::kani_identity::KaniObligationIdentity::arguments`]: the bindings
 //! `src/kani_obligations.rs`'s `abi()` partitions into `role: KaniBindingRole::Argument`, in the
 //! exact order `symbolic_arguments` walks to emit one `kani::any()` call per binding. `render()`
 //! builds `identity.arguments` from that same `abi.arguments` slice and `symbolic_arguments` is
@@ -36,7 +36,7 @@ use qsl_replay::WitnessValue;
 
 use crate::{
     kani::{KaniBindingRole, KaniPrimitiveType},
-    kani_obligations::ObligationBinding,
+    kani_identity::ObligationBinding,
 };
 
 const HARNESS_MARKER: &str = "/// Test generated for harness `";
@@ -66,7 +66,7 @@ impl DecodeFailure {
 /// Why the generator's persisted argument schema could not be used to type a transcript.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum WitnessSchemaError {
-    /// A binding in [`crate::kani_obligations::KaniObligationIdentity::arguments`] is not
+    /// A binding in [`crate::kani_identity::KaniObligationIdentity::arguments`] is not
     /// [`KaniBindingRole::Argument`].
     ///
     /// `identity.arguments` is built by `src/kani_obligations.rs`'s `abi()` partitioning on
@@ -116,7 +116,7 @@ const fn byte_width(primitive: KaniPrimitiveType) -> usize {
 /// obligation's own persisted argument schema.
 ///
 /// `harness_symbol`, `module_symbol` and `arguments` are the three fields of one
-/// [`crate::kani_obligations::KaniObligationIdentity`] this join needs; the function takes them
+/// [`crate::kani_identity::KaniObligationIdentity`] this join needs; the function takes them
 /// directly so a caller holding only the persisted `identity.{harnessSymbol,moduleSymbol,
 /// arguments}` JSON fields can call it.
 ///

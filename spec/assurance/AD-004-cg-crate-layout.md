@@ -96,7 +96,7 @@ grepping `src/`. Counts exclude `#[cfg(test)]` modules unless said so.
   - `kani_execution` imports the harness types `KaniObligationHarness`,
     `KaniScalarObligationHarness` and `ObligationKind` from `kani_obligations`, and
     `StateFrameHarness` and `StateFrameProperty` from `state_frame` (`kani_execution.rs:45-52`);
-    its tests import `state_frame` generators too (`:767`). `kani_witness_join` and `spine_replay`
+    its tests import the same `state_frame` harness types (`:903`, `:947`). `kani_witness_join` and `spine_replay`
     import `ObligationBinding` and `KaniObligationIdentity` from `kani_obligations`. These are
     harness and identity record types, and they belong below both the generators and the runner.
 - **Harness generators.** Four modules hold seven Kani source templates:
@@ -156,8 +156,8 @@ grepping `src/`. Counts exclude `#[cfg(test)]` modules unless said so.
 src/
   lib.rs                      declares directories, re-exports the public API, holds no logic
   core/                       leaf: depends on nothing else in the crate
-    artifact.rs               Artifact, ArtifactBundle, its size limits, PublicationDiagnostic and
-                              its code (no I/O)
+    artifact.rs               Artifact, ArtifactBundle, its size limits, PublicationDiagnostic with
+                              its code and PublicationDestinationState (no I/O)
     source_map.rs             SourceProbe, SourceRegion
     canonical.rs              the one caller of quire-canonical's encoder and digest
     identity.rs               HarnessSymbol, ModuleSymbol, HarnessPath, ContentDigest
@@ -206,7 +206,7 @@ src/
     generate.rs               was routed_generation
     adapter.rs                the adapter trait and its one Kani implementation
   publication/                FR-005
-    publish.rs                write_bundle_atomic, destination state, published identity
+    publish.rs                write_bundle_atomic, published identity
 ```
 
 `kani/terminal.rs` is added by the parked Kani PR 210, which is not at this base; the layout
@@ -224,8 +224,8 @@ Migration order, not moved.
 | `oracle` (shared parts: `Artifact`, diagnostics, naming, `RUNTIME_REVISION`) | core | `core/artifact.rs`, `core/diagnostic.rs`, `core/naming.rs`, `core/profile.rs` | split; `RUNTIME_REVISION` deleted |
 | `oracle` (`SourceProbe`, `SourceRegion`) | core | `core/source_map.rs` | split |
 | `oracle` (V1: `generate_boolean_oracle`, `analyze_node`, `render_node`) | oracle | `oracle/boolean_v1.rs` | moved, then retired with V1 |
-| `publication` (`ArtifactBundle`, limits, `PublicationDiagnostic`, `PublicationErrorCode`) | core | `core/artifact.rs` | split (step 2a) |
-| `publication` (writer, destination state, published identity) | publication | `publication/publish.rs` | split |
+| `publication` (`ArtifactBundle`, limits, `PublicationDiagnostic`, `PublicationErrorCode`, `PublicationDestinationState`) | core | `core/artifact.rs` | split (step 2a); the destination state is a field of the diagnostic, so it moves with it |
+| `publication` (writer, published identity) | publication | `publication/publish.rs` | split |
 | `generation` | oracle | `oracle/claim.rs` | moved |
 | `exact_scalar` | oracle | `oracle/scalar/`; walkers to `core/ir/` | split |
 | `composite_equality` | oracle | `oracle/equality/` | moved |
@@ -237,8 +237,8 @@ Migration order, not moved.
 | `vacuity` | evidence | `evidence/vacuity.rs` | moved |
 | `bound_coverage` | evidence | `evidence/bound_coverage.rs` | moved; V1 input |
 | `kani` (types, `adapter_options`, `i64_literal`, `readable_component`) | kani | `kani/abi.rs` | split |
-| `kani` (`ProofDependencyEdge`, `Kind`, `Request`, `ProofReadiness`, `normalize_dependencies`, `dependency_readiness`) | kani | `kani/census.rs` | split (step 2b); the FR-015 census input and the corpus use them |
-| `kani` (`generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependencyGraph`, bundle validation) | kani | none | retired (step 4f) |
+| `kani` (`ProofDependencyEdge`, `Kind`, `State`, `Request`, `ProofReadiness`, `normalize_dependencies`, `dependency_readiness`) | kani | `kani/census.rs` | split (step 2b); the FR-015 census input and the corpus use them |
+| `kani` (`generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependencyGraph`, bundle validation, except `validate_dependencies`) | kani | none | retired (step 4f); `validate_dependencies` stays until the corpus stops calling it (step 4g) |
 | `kani` (`deterministic_json`, `artifact`) | core | `core/canonical.rs` | `deterministic_json` deleted; `Artifact::new` used directly |
 | `kani_obligations` (harness and identity records, `ObligationKind`, `ObligationBinding`) | kani | `kani/identity.rs` | split (step 2b) |
 | `kani_obligations` (the rest) | kani | `kani/generate/{negotiate,scalar,precondition,contract}.rs` | split |
@@ -292,7 +292,7 @@ Rules, each checkable:
   `kani/identity.rs` (step 2b), so a harness is run from its identity and its source text.
 - A `#[cfg(test)]` module obeys the same direction as the file it sits in. A test that needs a
   generator as a fixture lives in `tests/it/`, not in the runner's file. The edge at
-  `kani_transcript.rs:261` and the generator imports at `kani_execution.rs:767` move there.
+  `kani_transcript.rs:261` moves there.
 - `serde_json::Value` is named only in `core/ir`, `core/canonical` and the report parser. No other
   file reads a field of a body term.
 - `BoundPackage` and `BoundClause` are named only in `strategy/`, `evidence/`, `oracle/boolean_v1.rs`,
@@ -582,9 +582,14 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
 2. **Edge removal, then directories.** Precondition: PR 210 has landed, after this AD is approved
    and with a local `make kani` transcript from its head. 2a to 2b are definition moves in the flat
    layout, each removing an edge a rename cannot: 2a moves `ArtifactBundle`, its limits,
-   `PublicationDiagnostic` and `PublicationErrorCode`, `SourceProbe` and `SourceRegion` out of
-   `publication` and `oracle` into the modules that become `core`. 2b moves the proof-dependency
-   census types to `census`, and the harness and identity record types (`KaniObligationHarness`,
+   `PublicationDiagnostic`, `PublicationErrorCode` and `PublicationDestinationState` (a field of the
+   diagnostic), `SourceProbe` and `SourceRegion` out of `publication` and `oracle` into the modules
+   that become `core`, together with what those types hold so that `core` imports nothing: `Artifact`
+   and the generation diagnostic types (`GenerationTerminalState`, `GenerationErrorCode`,
+   `GenerationDiagnostic`). In the flat layout they are `artifact`, `diagnostic` and `source_map`.
+   2b moves the proof-dependency census types (including `ProofDependencyState`, a field of the
+   edge and the request) to `census` (flat `kani_census`), and the harness and identity record
+   types, flat `kani_identity` because `identity` is already `core/identity.rs` (`KaniObligationHarness`,
    `KaniScalarObligationHarness`, `ObligationKind`, `ObligationBinding`,
    `KaniObligationIdentity`, `ScalarObligationIdentity`, `ScalarObligationArgument`,
    `EmbeddedOracle`, `StateFrameHarness`, `StateFrameProperty`, `StateFrameIdentity`,
@@ -624,7 +629,11 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    - 4f: deletion of `generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependencyGraph`, the V1
      obligation arm and bundle validation, with the matching `interface-001` edit. The census types
      in `kani/census.rs` stay: the V2 census input needs them, and the corpus imports them until
-     4g. Merged only after 4e has landed, the QSL follow-up has moved the exemplars and the control
+     4g. `validate_dependencies` (census validation, and the `KaniDiagnostic` it returns with the
+     identity and path helpers it uses) is not bundle validation for this purpose: the corpus calls
+     it until 4g (`bounded_kani_corpus.rs`), so 4f leaves it in place and it is deleted with the
+     corpus lowerer at 4g, or when the V2 census input replaces it. It is not in `kani/census.rs`
+     because it returns the V1 bundle's error type. Merged only after 4e has landed, the QSL follow-up has moved the exemplars and the control
      passes on the V2 contract arm (4c), and the V2 census input exists (4d). FR-015's census and
      FR-015-AC-22 and AC-25 stay verbatim; if the V2 side does not back them by this step, their
      matrix rows go to planned or unbacked, and nothing is deleted or rewritten.
