@@ -101,7 +101,7 @@ operations:
   - name: negotiate_kani_obligations
     inputs: [KaniObligationRequest]
     output: KaniObligationOutcome | KaniObligationError
-    semantics: settles every item in request order and, only when no item is invalid, emits one harness per supported item; an invalid item returns no harness bytes (FR-015)
+    semantics: settles every item in request order and, only when no item is invalid, emits one harness per supported item; an invalid item returns no harness bytes (FR-015); planned: an item is also a V2 clause claim over a precondition, postcondition or invariant node of an admitted CheckedPackageV2, with an optional declared census (FR-015-AC-38 to FR-015-AC-49)
   - name: generate_state_frame_obligations
     inputs: [StateFrameRequest]
     output: StateFrameObligations | StateFrameRefusal

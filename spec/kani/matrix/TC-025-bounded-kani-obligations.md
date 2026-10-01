@@ -110,6 +110,44 @@ unsatisfiable requires as `cover_unsatisfied`.
    arm, a `Refused` arm and a failing catch-all. The installed backend verifies the healthy `x + 1`
    harness and falsifies it with the oracle's `Add` replaced by `Subtract` (FR-015-AC-37).
 
+## V2 clause claims and the V2 census (planned, IR-489)
+
+10. Request one V2 clause claim each over a `precondition`, a `postcondition` and an
+    `invariant` node of an admitted `CheckedPackageV2`. Each yields one harness of its own
+    kind with one drawn value per drawn input (the pre-state of every field the body reads, bare or `pre(...)`, and the
+    operation parameters, bounded by their declared domains; the postcondition's result
+    and post-state come from the subject call and their domain is asserted), and none takes a
+    bound from a caller (FR-015-AC-38, FR-015-AC-39). The invariant harness asserts the
+    clause with no subject call (FR-015-AC-49).
+11. Generate a clause of connectives and comparisons and compare the embedded oracle with
+    the FR-014 crate's function byte for byte (needs FR-014-AC-38); generate the
+    arithmetic postcondition `amount < 1000` implies `amount + 1 <= 1000`, check the
+    native `i128` assertion of each arithmetic subterm, and run the installed backend over
+    the unmutated clause and over one whose `+` returns `left + right + 1` (expected
+    playback `amount_current = 999`), and one whose `+` returns `left`, which is
+    falsified on the native assertion (FR-015-AC-40,
+    FR-015-AC-41). The package comes from QSL's facade on source, never a copied fixture
+    (AD-004 step 4a); if the facade cannot build it, the real-Kani control is the
+    quire-integration exemplar of AD-004 L-5, a test in a repository above both.
+12. Request a clause with an unsupported operator (division, modulo, absolute value), a
+    node that is not a modelled clause role and an absent node id beside a supported item.
+    The operator is `unsupported`, the other two refused as FR-015-AC-14 states, each
+    keeps its reason and gets no harness (FR-015-AC-42). A clause value outside the three
+    kinds and a non-Boolean body cannot reach this arm on an admitted package (Contract IR
+    FR-040-AC-8 and FR-040-AC-10 refuse them at admission), so that guard is unreachable
+    and not tested here. Request a postcondition without its sibling precondition
+    (FR-015-AC-43).
+13. Declare the four invalid censuses of FR-015-AC-22 and the three valid censuses of
+    FR-015-AC-25 on V2 clause claims, with the dependency list reordered. The invalid ones
+    are refused; the valid ones fold into the identity and settle `ready`, `incomplete` and
+    `incomplete`, and every harness records execution `not_run` (FR-015-AC-44,
+    FR-015-AC-45).
+14. Count the covers and locate each relative to the assumptions and the subject call; run
+    a clause with jointly unsatisfiable assumptions; regenerate from equal inputs; vary the
+    unwind bound, the subject, a parameter's domain and the source span: the harness
+    identity record changes with the first two, the obligation identity with the domain
+    and not with the span, unwind bound or subject (FR-015-AC-46 to FR-015-AC-48).
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
