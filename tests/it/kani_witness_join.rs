@@ -23,6 +23,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use qsl_replay::WitnessValue;
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, negotiate_kani_obligations, write_bundle_atomic,
@@ -253,11 +254,13 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
         ),
     )
     .unwrap();
-    fs::write(
-        directory.join("Cargo.toml"),
-        "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\", features = [\"exact\"] }\n\n[workspace]\n",
-    )
-    .unwrap();
+    write_manifest(
+        &directory,
+        &format!(
+            "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&["exact"])
+        ),
+    );
     fs::write(
         directory.join("build.rs"),
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",

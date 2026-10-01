@@ -91,6 +91,11 @@ the FR-015 generator returns for the same items.
     `x + 10^23` narrowed to `Int[0, 10]`, `x + "a"` with the text literal in an
     Integer-typed `value` node, and `x + 2` narrowed to `Int[0, 11]` and also
     consumed by `(x + 2) + x`.
+18. **Duplicate harness (FR-022-AC-16).** Hand the arm's harness-pairing step two
+    scalar harnesses with module symbols `a_module` and `b_module` and one harness
+    symbol `x_proof`, and then two with distinct symbols. Unique name assignment
+    makes the duplicate unreachable from `generate_routed` itself, so this step
+    runs on the pairing function (`index_harnesses`).
 
 ## Expected Results
 
@@ -154,3 +159,6 @@ the FR-015 generator returns for the same items.
     `domain_not_representable_in_i64` naming `100000000000000000000000` as both
     endpoints; `x + "a"` is `oracle_refused` with `OperandTypeMismatch` and
     `x + 2` with `AmbiguousBound`; none carries a harness.
+18. `index_harnesses` returns `Err(DuplicateHarness)` naming `b_module::x_proof`
+    for the second of two harnesses sharing the symbol `x_proof`, and indexes two
+    harnesses with distinct symbols.

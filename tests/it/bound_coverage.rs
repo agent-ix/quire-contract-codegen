@@ -1,4 +1,5 @@
 //! Synthetic projections and exports are explicit; native control below uses real LLVM.
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use quire_contract_codegen::{
     analyze_bound_coverage, generate_bound_oracles, ArtifactBytes, BoundCoverageInputs,
     BoundOracleGeneration,
@@ -299,7 +300,13 @@ fn complete_bound_package_is_observed_against_actual_native_llvm() {
     calls.push_str("}\n");
     modules.push_str(&calls);
     fs::write(source_root.join("src/lib.rs"), modules).unwrap();
-    fs::write(source_root.join("Cargo.toml"),"[package]\nname=\"bound-coverage-native\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[dependencies]\nquire-contract-runtime={git=\"https://github.com/agent-ix/quire-contract-runtime\",branch=\"main\"}\n[workspace]\n").unwrap();
+    write_manifest(
+        &source_root,
+        &format!(
+            "[package]\nname=\"bound-coverage-native\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[dependencies]\n{}\n[workspace]\n",
+            runtime_dependency(&[])
+        ),
+    );
     let sysroot = Command::new("rustc")
         .args(["+stable", "--print", "sysroot"])
         .output()

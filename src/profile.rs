@@ -5,8 +5,10 @@
 //! does: the git URL and `branch = "main"`. The commit is not spelled in the emitted manifest; a
 //! consumer's lockfile records it, as this repository's `Cargo.lock` does for its own build.
 
-/// The runtime source every emitted manifest depends on, spelled as in this crate's `Cargo.toml`.
-const RUNTIME_DEPENDENCY_SOURCE: &str =
+/// The runtime source every emitted manifest depends on, spelled as in this crate's `Cargo.toml`:
+/// the `git` and `branch` keys of the dependency table, with no `rev`. Public so a scratch crate
+/// that compiles generated code names the runtime the same way and cannot drift from the emitter.
+pub const RUNTIME_DEPENDENCY_SOURCE: &str =
     "git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\"";
 
 /// The `[package.metadata.kani]` table every generated oracle crate's manifest carries. CBMC

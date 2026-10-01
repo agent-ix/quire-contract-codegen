@@ -422,7 +422,7 @@ mod tests {
         }
     }
 
-    /// Trace: TC-033.
+    /// Trace: TC-033, FR-022-AC-16.
     #[test]
     fn tc_033_two_harnesses_sharing_a_symbol_are_a_typed_error_not_a_silent_overwrite() {
         let refused = index_harnesses(vec![

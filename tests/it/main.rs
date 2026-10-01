@@ -56,6 +56,7 @@ mod kani_obligations_state_frame;
 mod kani_witness_join;
 mod oracle_generation;
 mod routed_generation;
+pub(crate) mod scratch_crate;
 mod skeleton_spine;
 mod strategy_generation;
 mod vacuity_primitives;

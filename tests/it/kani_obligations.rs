@@ -20,6 +20,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
     reference, Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
@@ -1709,11 +1710,13 @@ pub(crate) fn write_crate(harness: &KaniObligationHarness, subject: &str) -> Pat
         ),
     )
     .unwrap();
-    fs::write(
-        directory.join("Cargo.toml"),
-        "[package]\nname = \"generated-kani-obligation\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\", features = [\"exact\"] }\n\n[workspace]\n",
-    )
-    .unwrap();
+    write_manifest(
+        &directory,
+        &format!(
+            "[package]\nname = \"generated-kani-obligation\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&["exact"])
+        ),
+    );
     fs::write(
         directory.join("build.rs"),
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
@@ -1924,7 +1927,7 @@ fn write_scalar_crate(
     library: &str,
 ) -> PathBuf {
     let directory = scratch(name);
-    fs::write(directory.join("Cargo.toml"), &manifest.contents).unwrap();
+    write_manifest(&directory, &manifest.contents);
     fs::write(directory.join("src/lib.rs"), library).unwrap();
     fs::write(
         directory.join("build.rs"),

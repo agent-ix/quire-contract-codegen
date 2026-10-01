@@ -9,6 +9,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::seed_lock;
 use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
     ClaimDisposition, DecimalOperator, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
@@ -1411,6 +1412,7 @@ fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
     for artifact in &oracles.artifacts {
         fs::write(directory.0.join(&artifact.path), &artifact.contents).unwrap();
     }
+    seed_lock(&directory.0);
     let output = Command::new(env!("CARGO"))
         .args(["build", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", directory.0.join("target"))

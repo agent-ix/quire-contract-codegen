@@ -1,5 +1,6 @@
 //! Explicitly synthetic public executable projections, not a source-language frontend.
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use quire_contract_codegen::{
     generate_bound_oracles, BoundGenerationError, BoundOracleGeneration, GenerationErrorCode,
     SourceRegion,
@@ -261,8 +262,13 @@ fn actual_bound_outputs_publish_then_compile_and_execute_against_the_runtime() {
     main.push_str(&calls);
     fs::create_dir(root.join("src")).unwrap();
     fs::write(root.join("src/main.rs"), main).unwrap();
-    fs::write(root.join("Cargo.toml"),
-        "[package]\nname=\"bound-native-control\"\nversion=\"0.0.0\"\nedition=\"2021\"\n\n[dependencies]\nquire-contract-runtime={git=\"https://github.com/agent-ix/quire-contract-runtime\",branch=\"main\"}\n\n[workspace]\n").unwrap();
+    write_manifest(
+        &root,
+        &format!(
+            "[package]\nname=\"bound-native-control\"\nversion=\"0.0.0\"\nedition=\"2021\"\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&[])
+        ),
+    );
     let output = Command::new("cargo")
         .args(["run", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", root.join("target"))

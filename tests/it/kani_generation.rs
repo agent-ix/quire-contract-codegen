@@ -5,6 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::scratch_crate::{runtime_dependency, write_manifest};
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode, GenerationTerminalState,
@@ -297,11 +298,13 @@ fn write_generated_crate(
         ),
     )
     .expect("generated source should be writable");
-    fs::write(
-        directory.0.join("Cargo.toml"),
-        "[package]\nname = \"generated-kani-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n# `exact` is required here because RT's own `#[cfg(kani)] mod verification` unconditionally\n# imports `crate::exact` (verification/kani.rs), independent of whether this fixture's subject\n# uses exact-scalar types. Building this generated crate under `cargo kani` without the feature\n# fails with E0432 on RT's own module, not on anything this generator emitted.\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\", features = [\"exact\"] }\n\n[workspace]\n",
-    )
-    .expect("generated manifest should be writable");
+    write_manifest(
+        &directory.0,
+        &format!(
+            "[package]\nname = \"generated-kani-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n# `exact` is required here because RT's own `#[cfg(kani)] mod verification` unconditionally\n# imports `crate::exact` (verification/kani.rs), independent of whether this fixture's subject\n# uses exact-scalar types. Building this generated crate under `cargo kani` without the feature\n# fails with E0432 on RT's own module, not on anything this generator emitted.\n{}\n\n[workspace]\n",
+            runtime_dependency(&["exact"])
+        ),
+    );
     fs::write(
         directory.0.join("build.rs"),
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
@@ -750,11 +753,13 @@ fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
         .expect("generated corpus source directory should be writable");
     fs::write(directory.0.join("src/main.rs"), generated_program)
         .expect("generated corpus source should be writable");
-    fs::write(
-        directory.0.join("Cargo.toml"),
-        "[package]\nname = \"generated-kani-oracle-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nquire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\" }\n\n[workspace]\n",
-    )
-    .expect("generated corpus manifest should be writable");
+    write_manifest(
+        &directory.0,
+        &format!(
+            "[package]\nname = \"generated-kani-oracle-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            runtime_dependency(&[])
+        ),
+    );
     let execution = Command::new("cargo")
         .args(["run", "--offline", "--quiet", "--target-dir"])
         .arg(directory.0.join("target-codex-backends"))

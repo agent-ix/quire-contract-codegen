@@ -128,6 +128,7 @@ pub use kani_transcript::{
     KaniCheckClass, KaniCheckLocation, KaniCheckResult, KaniCheckStatus, KaniReportRefusal,
     OtherCheckClass,
 };
+pub use profile::RUNTIME_DEPENDENCY_SOURCE;
 pub use routed_generation::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
