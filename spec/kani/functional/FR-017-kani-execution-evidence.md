@@ -104,8 +104,8 @@ the run and everything read back from it.
 - The generator shall retain, in the evidence, the obligation kind when the
   harness carries one, the harness path, the invoked
   launcher path, the complete argument vector, the unwind bound, the solver,
-  the process exit code, the outcome and the count of checks the report lists as holding. The argument vector
-  shall hold the `kani` subcommand, the harness identity's option vector unchanged and the
+  the process exit code, the outcome and the count of checks the report lists as holding. The generator shall make the argument vector
+  hold the `kani` subcommand, the harness identity's option vector unchanged and the
   report-export flags, in that order and nothing else, so the evidence cannot claim an
   invocation the harness did not specify.
 - The generator shall read Kani's output in exactly one module, `src/kani_transcript.rs`, which
