@@ -2,7 +2,7 @@
 id: "SR-632"
 title: "IR-412 slice 1 spec review: FR-015-AC-26 to AC-28, TC-025 state clauses, matrix row"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@01204aba72480578167cc3510ba13a535083f39c (disposition round 1 at fea49c75bfdf51a000b042dfa2735cb7cd4300bd); spec/functional/complete-v1/FR-015-bounded-kani-obligations.md, spec/test/complete-v1/TC-025-bounded-kani-obligations.md, spec/test-matrix.md"
+scope: "agent-ix/quire-contract-codegen@01204aba72480578167cc3510ba13a535083f39c (disposition round 1 at fea49c75bfdf51a000b042dfa2735cb7cd4300bd, round 2 at 5879a61858c1cc76f0f14809788efd904ed7ea16); spec/functional/complete-v1/FR-015-bounded-kani-obligations.md, spec/test/complete-v1/TC-025-bounded-kani-obligations.md, spec/test-matrix.md"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: reviews

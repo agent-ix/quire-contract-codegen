@@ -2,7 +2,7 @@
 id: "SR-630"
 title: "IR-412 slice 1 code review: state-clause operation-contract and frame-effect Kani harnesses"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@01204aba72480578167cc3510ba13a535083f39c (disposition round 1 at fea49c75bfdf51a000b042dfa2735cb7cd4300bd); src/state_frame.rs, src/kani_execution.rs, src/kani_obligations.rs, src/lib.rs, tests/it/kani_obligations_state_frame.rs, tests/state_frame_support/native_twin.rs, tests/state_frame_support/subject.rs, tests/exact_scalar_support/package.rs"
+scope: "agent-ix/quire-contract-codegen@01204aba72480578167cc3510ba13a535083f39c (disposition round 1 at fea49c75bfdf51a000b042dfa2735cb7cd4300bd, round 2 at 5879a61858c1cc76f0f14809788efd904ed7ea16); src/state_frame.rs, src/kani_execution.rs, src/kani_obligations.rs, src/lib.rs, tests/it/kani_obligations_state_frame.rs, tests/state_frame_support/native_twin.rs, tests/state_frame_support/subject.rs, tests/exact_scalar_support/package.rs"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-015
     type: references
@@ -116,3 +116,13 @@ Adding `CheckedNodeTag::Relation` to the state-frame lowering tags is acceptable
 | FND-005 | fixed | 4af93a1 |
 | FND-006 | fixed | 4af93a1 |
 | FND-007 | fixed | 4af93a1; fea49c7 adds the envelope-identity refusal test. The obligation-identity join remains impossible by QSL API and is documented at native_twin.rs:6-12 |
+| FND-008 | fixed | 5879a61 |
+| FND-009 | fixed | 5879a61 |
+
+Round 2 at 5879a61, rebased on main dc19928. Range-diff shows the five earlier commits unchanged; the round-1 fix commits 4af93a1 and fea49c7 are now 17e762f and a8cbd18. `make ci` exited 0 with a private TRUSTED_HOME (230 passed, 8 ignored). I re-ran the mutants that survived round 1, and all three are now killed:
+
+- M8 (frame harness reported as `Postcondition`) is killed by `tc_027_a_state_frame_harness_reports_the_kind_of_what_it_proves`.
+- M9a (frame message turned back into the format string) is killed by `tc_025_an_operation_name_with_braces_cannot_break_an_assertion`.
+- M9b (postcondition message turned back into the format string) is killed by the same test.
+
+No finding remains open.
