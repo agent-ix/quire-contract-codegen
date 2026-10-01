@@ -298,6 +298,11 @@ otherwise.
   function-entry line and one entry-token probe inside the exact source region
   of each implication consequent, and shall declare the consequent count
   derived from the node, independent of the emitted region list.
+- Planned (IR-489): where FR-015 names a V2 clause claim, the generator shall derive a
+  descriptor and generate an oracle for the Boolean condition of that
+  `state`/`state_clause` node, an inline term with no node id of its own, addressed by
+  the clause node id, without admitting the `state` node itself as a claimed node
+  (FR-014-AC-7 stands) (FR-014-AC-38).
 
 ## Acceptance Criteria
 
@@ -340,6 +345,7 @@ otherwise.
 | FR-014-AC-35 | Boolean `and`, `or`, `not`, `implies`, `eq` and `ne` nodes and integer `eq`, `ne`, `lt`, `le`, `gt` and `ge` nodes each derive a descriptor and generate an `ir_confirmed` oracle; each connective's oracle calls `evaluate_boolean` or `evaluate_boolean_short_circuit`, and each `eq`/`ne` oracle calls `check_equality` and `CheckedEquality::evaluate`, each returning `Outcome<bool>`. | Test (TC-024) |
 | FR-014-AC-36 | Every oracle's source map declares the node's implication-consequent count, one evaluation-entry probe on the function-entry line disjoint from every consequent region, and one entry-token probe inside the exact region of each consequent; a dropped or duplicated region does not change the declared count. | Test (TC-024) |
 | FR-014-AC-37 | A differential corpus covering every node FR-014-AC-35 names compiles against the runtime alone, and each oracle's outcome, admitted charges and consumed counters equal direct runtime execution and the QSL value authority. | Test (TC-024) |
+| FR-014-AC-38 | PLANNED (IR-489). The Boolean condition of a `state`/`state_clause` node, addressed by the clause node id, derives a descriptor and generates an `ir_confirmed` oracle over its connectives, integer comparisons and integer add, subtract, multiply and negate, returning `Outcome<bool>`; the `state` node itself stays refused as FR-014-AC-7 states. | Test (TC-024) |
 
 ## Dependencies
 

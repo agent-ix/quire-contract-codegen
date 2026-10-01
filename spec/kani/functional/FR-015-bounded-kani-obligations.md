@@ -25,14 +25,14 @@ backend's one generator
 and every item it lowers is a claim over an admitted `quire.checked-package/v2`
 package.
 
-The contract families (precondition, postcondition, invariant) take their input from a
-V2 clause claim, defined under Inputs and by FR-015-AC-38 to FR-015-AC-48, together with
-a V2 census input. The V2 clause claim and the V2 census request are the requirement on
-the request input that FR-015-AC-8, FR-015-AC-22 and FR-015-AC-25 state; they are
-backed by the V2 census input, not by the V1 `ProofDependencyGraph`
-([AD-004](../../assurance/AD-004-cg-crate-layout.md) steps 4c and 4d). IR-489 owns this
-amendment. FR-015-AC-1 to FR-015-AC-37 stay as they were; the new
-criteria add to them.
+Planned (IR-489): the contract families (precondition, postcondition, invariant) take
+their input from a V2 clause claim, defined under Inputs and by FR-015-AC-38 to
+FR-015-AC-49, together with a V2 census input. FR-015-AC-22 and FR-015-AC-25 state
+the census requirement on the request input; once implemented, the V2 census input
+(FR-015-AC-44 and FR-015-AC-45) backs them in place of the V1 `ProofDependencyGraph`
+([AD-004](../../assurance/AD-004-cg-crate-layout.md) steps 4c and 4d). The V2 clause
+claim carries the clause requirement of FR-015-AC-8 on the V2 input. FR-015-AC-1 to
+FR-015-AC-37 stay as they were; the new criteria add to them.
 
 ## Inputs
 
@@ -51,10 +51,17 @@ criteria add to them.
   `CheckedPackageV2` whose `operation.member.clause` is `precondition`, `postcondition`
   or `invariant` (the node shape Contract IR FR-040 admits), with the package it
   belongs to. The obligation kind is the node's `clause` value and is not chosen by the
-  caller. The clause's arguments are its parameter nodes (`self`, then for a
-  postcondition the result, then the operation's parameters), each bound only by its
-  IR `bounded_domain`. The clause body is the node's Boolean condition, which may hold
-  Boolean connectives, bounded-integer comparisons and integer arithmetic expressions.
+  caller. The clause's parameters are `self` (a `Reference` to the anchor's object
+  type), then for a postcondition the result, then the operation's parameters. The
+  clause's arguments are the leaf reads of its body: each state field of `self` that the
+  body reads, taken from the object type's declared fields and read once for the pre-state
+  and once for the post-state where the body reads both; the result of a postcondition;
+  and each operation parameter. A `Reference` parameter has no `bounded_domain` and is not
+  itself an argument. Every other argument's declared domain is the IR `bounded_domain` of
+  its type (a state field's is that of the field's declared type), never a caller
+  descriptor. The clause body is the node's Boolean condition, an inline term of the
+  node, which may hold Boolean connectives, bounded-integer comparisons and the integer
+  arithmetic expressions add, subtract, multiply and negate.
 - The V2 census input: an optional declared proof-dependency census per V2
   obligation, carried by the same typed census request and readiness types the
   corpus uses, and not by `ProofDependencyGraph`.
@@ -176,16 +183,21 @@ criteria add to them.
   `state`/`state_clause` node of the admitted `CheckedPackageV2`, take its obligation
   kind from the node's `clause` value, and emit one harness for it, separate from the
   harness of every other clause (FR-015-AC-38).
-- The generator shall bind each argument of a V2 clause claim as its parameter node
-  and an inclusive assumption equal to that node's IR `bounded_domain`, and shall take
-  no bound from a caller descriptor (FR-015-AC-39).
+- The generator shall draw one nondeterministic value per argument of a V2 clause
+  claim, as the arguments of the Inputs bullet define them, under an inclusive
+  assumption equal to that argument's declared domain, and shall take no bound from a
+  caller descriptor (FR-015-AC-39).
 - When a V2 clause body holds Boolean connectives, bounded-integer comparisons or
-  integer arithmetic expressions, the generator shall embed the FR-014 oracle of that
+  integer arithmetic expressions, the generator shall embed an FR-014 oracle of that
   body byte-identical to the oracle crate's function, and shall not assume away a
-  `Refused` arithmetic outcome (FR-015-AC-40, FR-015-AC-41).
-- If a V2 clause cannot be lowered, then the generator shall account the item
-  `unsupported` with a typed reason naming the node and the unsupported construct,
-  emit no harness, and not skip the item silently (FR-015-AC-42).
+  `Refused` arithmetic outcome (FR-015-AC-40, FR-015-AC-41). The oracle of an inline
+  clause term depends on the planned FR-014-AC-38.
+- If a V2 clause body holds an operator the V2 arm does not support (division, modulo,
+  absolute value and every other operator outside the Inputs bullet's grammar), then the
+  generator shall account the item `unsupported` with a typed reason naming the node and
+  the operator and emit no harness; a node that is not a modelled clause role, or a node
+  id absent from the package, is refused as FR-015-AC-14 states. No item is skipped
+  silently (FR-015-AC-42).
 - When lowering a V2 postcondition, the generator shall assume every `precondition`
   clause node of the same anchor node, as for the V1 clause under FR-015-AC-8
   (FR-015-AC-43).
@@ -193,11 +205,17 @@ criteria add to them.
   by the rules of FR-015-AC-22, and shall fold it into that obligation's identity and
   record its readiness by the rules of FR-015-AC-25 (FR-015-AC-44, FR-015-AC-45).
 - The generator shall end every V2 clause harness with exactly one non-vacuity cover,
-  placed after every assumption and after the subject call (FR-015-AC-46; IR-464).
+  placed after every assumption and after the subject call, that is reached only when the
+  harness's assumptions are jointly satisfiable and the clause is evaluated (FR-015-AC-46;
+  IR-464).
 - Regeneration of a V2 clause harness from equal inputs shall be byte-identical
   (FR-015-AC-47).
-- The generator shall form the identity of a V2 clause obligation from the members
-  AD-003 E-1 names, with the source span excluded (FR-015-AC-48).
+- The generator shall form the obligation identity of a V2 clause claim from the members
+  AD-003 E-1 names, with the source span excluded, and shall keep it distinct from the
+  harness identity record (FR-015-AC-48).
+- A V2 invariant harness shall assert that the invariant clause holds for every state its
+  arguments' declared domains admit; preservation of the invariant under an operation is
+  not specified here (FR-015-AC-49).
 
 ## Acceptance Criteria
 
@@ -241,16 +259,17 @@ criteria add to them.
 | FR-015-AC-36 | `FrameReplay::replay` returns QSL's `replay_frame` result: a forbidden write settles a reproduced violation naming the written field, and a write the frame grants settles `inconclusive` with no frame witness. | Test (TC-025) |
 | FR-015-AC-37 | A scalar function-application harness asserts the oracle's outcome against the clause's operation evaluated natively in `i128` over the same symbolic operands, independently of the oracle: `Completed` with exactly that value when it lies in the result bound, `Refused` when it does not, and any other outcome fails. With the installed backend, the healthy oracle verifies and an oracle whose arithmetic is mutated is falsified on that assertion. | Test (TC-025) |
 | FR-015-AC-38 | A V2 clause claim naming a `state`/`state_clause` node of an admitted `CheckedPackageV2` whose `operation.member.clause` is `precondition`, `postcondition` or `invariant` yields one harness of that obligation kind, separate from the harness of every other clause of the package; the kind is read from the node and no caller value changes it. PLANNED (IR-489). | Test (TC-025) |
-| FR-015-AC-39 | Each argument of a V2 clause claim is the clause's parameter node, in the clause's parameter order, carries an inclusive assumption equal to the IR `bounded_domain` of that node's type, and is bound by nothing a caller supplies; a parameter with no finite `bounded_domain` refuses the claim as FR-015-AC-3 states. PLANNED (IR-489). | Test (TC-025) |
-| FR-015-AC-40 | A harness for a V2 clause whose body is Boolean connectives and bounded-integer comparisons (`and`, `or`, `not`, `implies`, `eq`, `ne` and the six integer comparisons) embeds its FR-014 oracle byte-identical to the oracle crate's function, as FR-015-AC-20 states for a scalar claim. PLANNED (IR-489). | Test (TC-025) |
-| FR-015-AC-41 | A V2 clause whose body holds integer arithmetic (add, subtract, multiply, negate) as an operand of a comparison lowers: a postcondition `amount < 1000 implies amount + 1 <= 1000` over `amount: Int[0, 1000]` yields one contract harness that embeds the oracle of the whole body and assumes no `Refused` arithmetic outcome away; with the installed backend the unmutated clause verifies with its cover satisfied, and the same clause with `+` mutated to return `left + right + 1` is falsified with the concrete playback `amount = 999`. PLANNED (IR-489). | Test (TC-025) |
-| FR-015-AC-42 | A V2 clause claim the generator cannot lower (an operator outside the connective, comparison and integer-arithmetic grammar, a node that is not a `state`/`state_clause` node, a clause value other than the three kinds, a body that is not Boolean, or a claim naming a node id absent from the package) is accounted `unsupported` or refused as FR-015-AC-14 states, with a typed reason naming the node and the construct, no harness, and no silent skip; a supported item in the same request is unaffected. PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-39 | A V2 clause harness draws one nondeterministic value per argument: each state field of `self` the body reads (once per pre-state and post-state read), the result of a postcondition, and each operation parameter. Each carries an inclusive assumption equal to its declared domain, the IR `bounded_domain` of its type (a state field's is that of the field's declared type); a `Reference` parameter such as `self` is not itself an argument and binds through its object's declared fields; no bound comes from a caller; an argument whose type has no finite `bounded_domain` refuses the claim as FR-015-AC-3 states. PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-40 | A harness for a V2 clause whose body is Boolean connectives and bounded-integer comparisons (`and`, `or`, `not`, `implies`, `eq`, `ne` and the six integer comparisons) embeds an FR-014 oracle of that body byte-identical to the oracle crate's function, as FR-015-AC-20 states for a scalar claim; the oracle of an inline clause term needs FR-014-AC-38. PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-41 | A V2 clause whose body holds integer arithmetic (add, subtract, multiply, negate) as an operand of a comparison lowers, and its harness keeps the independent native assertion of FR-015-AC-37 for each arithmetic subterm (the oracle's outcome against the operation evaluated natively in `i128` over the same operands, `Refused` assumed away nowhere): a postcondition `amount < 1000 implies amount + 1 <= 1000` over `amount: Int[0, 1000]` yields one contract harness. With the installed backend the unmutated clause verifies with its cover satisfied, and the same clause with `+` mutated to return `left + right + 1` is falsified with the concrete playback `amount_current = 999`. The real-Kani control is verified by the quire-integration exemplar of AD-004 L-5 when QSL's facade offers no way to build the package from CG. PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-42 | A V2 clause body holding an operator the V2 arm does not support (division, modulo, absolute value, and every operator outside connectives, the six integer comparisons and add, subtract, multiply, negate; those operators are planned scope for a later criterion) is `unsupported`, with a typed reason naming the node and the operator and no harness; a node that is not a modelled clause role, or a node id absent from the package, is refused as FR-015-AC-14 states; no item is skipped silently, and a supported item of the same request is unaffected. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-43 | A V2 postcondition harness emits every `precondition` clause node sharing its anchor node as a `requires` and records each in its identity's embedded oracles, embeds no other obligation's oracle, and a postcondition whose sibling precondition is not a supported item of the same request is refused naming that precondition with no harness; a V2 invariant is anchored at an object type, binds `self` alone, and so has no operation precondition to assume. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-44 | A census declared on a V2 clause claim with an empty or duplicate dependency identity, an inconsistent kind, state and path combination, or a non-`Required` kind is refused as a typed invalid input with no harness, by the same rules as FR-015-AC-22; the census request and readiness types it uses are not `ProofDependencyGraph`. PLANNED (IR-489). | Test (TC-025) |
-| FR-015-AC-45 | A valid census declared on a V2 clause claim is folded into that harness's identity independently of the order the caller lists its dependencies, readiness is `ready` only when every dependency passed and `incomplete` while any is missing or failed, and proof execution is recorded `not_run`, by the same rules as FR-015-AC-25. PLANNED (IR-489). | Test (TC-025) |
-| FR-015-AC-46 | Every V2 clause harness contains exactly one non-vacuity cover, placed after every assumption and after the subject call; a V2 clause whose assumptions and bounds are jointly unsatisfiable is refused with a typed reason and no harness, or, if it reaches a backend run, does not classify `Verified`. PLANNED (IR-489). | Test (TC-025) |
-| FR-015-AC-47 | Regeneration of a V2 clause harness from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes its identity. PLANNED (IR-489). | Test (TC-025) |
-| FR-015-AC-48 | The identity of a V2 clause obligation is formed by AD-003 E-1: the clause node id, its occurrence key, the obligation kind, and the arguments each as parameter node id and declared domain, with the source span excluded; changing any included member changes it, and changing the span does not. PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-45 | A valid census declared on a V2 clause claim is folded into that harness's identity record, readiness is `ready` only when every dependency passed and `incomplete` while any is missing or failed, and proof execution is recorded `not_run`, by the same rules as FR-015-AC-25; in addition, the folded census is independent of the order the caller lists its dependencies. PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-46 | Every V2 clause harness contains exactly one non-vacuity cover, placed after every assumption and after the subject call, that is reached only when the assumptions are jointly satisfiable and the clause has been evaluated (the cover states that the clause's evaluation completes, as FR-015-AC-7 does for its families). The subject call is the call of the customer subject at the request's subject path in a postcondition harness; a precondition harness and an invariant harness have none, and their cover follows the last assumption and the clause evaluation. A V2 clause whose assumptions and bounds are jointly unsatisfiable is refused with a typed reason and no harness, or, if it reaches a backend run, does not classify `Verified`. PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-47 | Regeneration of a V2 clause harness from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes the harness identity record (as FR-015-AC-10 states). PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-48 | The obligation identity of a V2 clause claim is formed by AD-003 E-1 from the clause node id, its occurrence key, the obligation kind, and the arguments each as the argument's node id and declared domain (the domain FR-015-AC-39 defines; a state field read is identified by the object type's field node), with the source span excluded; changing any included member changes it, and changing the span, the unwind bound or the subject does not. It is a different value from the harness identity record of FR-015-AC-47. PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-49 | A V2 invariant claim yields a harness that draws every argument within its declared domain (FR-015-AC-39) and asserts the invariant clause; its subject is the clause itself, with no subject call. Preservation of the invariant under an operation is not specified by this criterion. PLANNED (IR-489). | Test (TC-025) |
 
 ## Dependencies
 
