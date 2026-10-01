@@ -101,6 +101,8 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    over an integer scalar (refused as missing `integer_range`), and
    `bounded_domain` nodes over a boolean scalar, over the base package's enum
    declaration and over a record (each refused as unsupported `bounded_domain`).
+   Name a `float_rounding` node over a `float64` scalar as a member: it reads as the
+   float and the equality is refused as `OperatorIneligible`.
 
 ## Expected Results
 

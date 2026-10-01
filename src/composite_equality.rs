@@ -1019,7 +1019,7 @@ fn resolve_type(
         }
         // A bounded type as QSL emits it: the `bounded_domain` node is itself the member's
         // type, over its base scalar. Only its own bound is read, never a sibling's over the
-        // same base (FR-018 §Inputs).
+        // same base (FR-018 Behavior, FR-018-AC-16).
         Some(CheckedNodeTag::BoundedDomain) => {
             let base = lookup(graph, &node.semantic_type)?;
             let unsupported = || CompositeEqualityRefusal::Unsupported {
@@ -1030,12 +1030,14 @@ fn resolve_type(
                 return Err(unsupported());
             }
             // The bound's form must be the one its base scalar reads; a base with no such
-            // form (boolean, float, enum) takes no bound here.
+            // form (boolean, enum) takes no bound here. A float's `float_rounding` bound reads
+            // as the float, which `check_equality` then refuses (FR-018-AC-6).
             let expected_form = match &*base.semantic_form {
                 "integer" => "integer_range",
                 "rational" => "rational_range",
                 "decimal" => "decimal_range",
                 "text" => "text_bounds",
+                "float32" | "float64" => "float_rounding",
                 _ => return Err(unsupported()),
             };
             if &*node.semantic_form != expected_form {

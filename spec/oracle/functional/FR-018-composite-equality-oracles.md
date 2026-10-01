@@ -143,12 +143,15 @@ in the `NODE_KEY_DOMAIN` domain.
   the member as the type of that node's base `scalar_type`, bounded by that
   node's own `binding` members and by no sibling bound over the same base.
 - If a member's type node is a `bounded_domain` node whose base is not a
-  `scalar_type`, or whose base scalar reads no bound form (boolean, float or
-  enum), then the generator shall refuse the item as unsupported, naming the
-  bound node; if the node's form is not the one its base reads (`integer_range`
-  over `integer`, `rational_range` over `rational`, `decimal_range` over
-  `decimal`, `text_bounds` over `text`), then it shall refuse the item as
-  missing that form, naming the bound node. Neither is read as an unbounded type.
+  `scalar_type`, or whose base scalar reads no bound form (boolean or enum),
+  then the generator shall refuse the item as unsupported, naming the bound
+  node; if the node's form is not the one its base reads (`integer_range` over
+  `integer`, `rational_range` over `rational`, `decimal_range` over `decimal`,
+  `text_bounds` over `text`, `float_rounding` over `float32` or `float64`), then
+  it shall refuse the item as missing that form, naming the bound node. Neither
+  is read as an unbounded type. A `float_rounding` member reads as the float, so
+  the equality is refused as an IEEE-bearing operand (FR-018-AC-6) by the next
+  clause.
 - If `check_equality` refuses the descriptor — a `convert<T>` operand outside
   `admits_equality_conversion`, distinct text profiles, distinct enum
   declarations, incompatible dimensions, distinct units, no common type, or an
@@ -221,7 +224,7 @@ in the `NODE_KEY_DOMAIN` domain.
 | FR-018-AC-13 | Every claim-map entry carries the node id, IR id, package id, source map, claims, reconstructed declaration keys and selected schedule of its item, and its declaration keys equal `NodeKey::from_hex` of the V2 node ids its operand types reach. | Test (TC-029) |
 | FR-018-AC-14 | The `bounded_domain` nodes an operand type reaches (`integer_range`, `rational_range`, `decimal_range`, `text_bounds`, `collection_bounds`) are read from `binding` members looked up by name as FR-014 lists them, in any order; a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-029) |
 | FR-018-AC-15 | A `binary` node's operand is read through its `reference`: a reference to a `convert` expression node is read as the type of what it converts, following nested conversions to the first node that is not a conversion, and a reference to any other node, including a non-`convert` application, as that node's own `semantic_type`. A descriptor whose `source_type` is the read type generates, and any other source is refused as an operand-type disagreement at that position, reporting the read type as found. | Test (TC-029) |
-| FR-018-AC-16 | A tuple position whose type node is a `text_bounds` `bounded_domain` node generates the declaration `Text(min, max, profile)` read from that node's own members, an integer, decimal or rational `bounded_domain` member reads as the same type as a member naming its base scalar, and a second bound over the same base is never read: naming either of two `text_bounds` nodes over one text scalar reads that node's own `min` and `max`. A `bounded_domain` member whose form does not fit its base scalar is refused as missing the form the base reads, and one over a boolean scalar, over QSL's enum declaration or over a record is refused as unsupported `bounded_domain`, naming the bound node, in every case with no code emitted for the item. | Test (TC-029) |
+| FR-018-AC-16 | A tuple position whose type node is a `text_bounds` `bounded_domain` node generates the declaration `Text(min, max, profile)` read from that node's own members, an integer, decimal or rational `bounded_domain` member reads as the same type as a member naming its base scalar, and a second bound over the same base is never read: naming either of two `text_bounds` nodes over one text scalar reads that node's own `min` and `max`. A `bounded_domain` member whose form does not fit its base scalar is refused as missing the form the base reads, and one over a boolean scalar, over QSL's enum declaration or over a record is refused as unsupported `bounded_domain`, naming the bound node, in every case with no code emitted for the item. A member whose type is a `float_rounding` `bounded_domain` over a float scalar reads as that float, and the equality is refused as `IllTypedCause::OperatorIneligible`. | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -252,7 +255,7 @@ without one is not written.
 | FR-018-AC-13 | Key declarations by request ordinal instead of by the V2 node id. |
 | FR-018-AC-14 | Read bound members by position, or accept a bare literal in place of a `binding` member, so a QSL-shaped or wrongly named bound is read as some other range. |
 | FR-018-AC-15 | Read a conversion's own `result_type` or its first nested conversion's result as the source type, or read every application operand through to its first argument, so a descriptor naming the conversion target (or the inner result) as its source type is accepted over a body that converts from another type, or a `rational.div` operand is typed as its integer argument. |
-| FR-018-AC-16 | Read a `bounded_domain` member as its base scalar's unbounded type or through the union of every bound over that base, take the first sibling bound, or skip the form check, so a mismatched bound (`text_bounds` over an integer, a bound over a boolean) generates as an unbounded type instead of being refused. |
+| FR-018-AC-16 | Read a `bounded_domain` member as its base scalar's unbounded type or through the union of every bound over that base, take the first sibling bound, or skip the form check, so a mismatched bound (`text_bounds` over an integer, a bound over a boolean) generates as an unbounded type instead of being refused, or refuse a `float_rounding` member as unsupported so the IEEE refusal never fires. |
 
 ## Dependencies
 

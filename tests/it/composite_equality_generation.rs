@@ -1185,6 +1185,19 @@ fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
     }
 }
 
+/// Trace: FR-018-AC-16, FR-018-AC-6, TC-029. A tuple member typed by a `float_rounding`
+/// `bounded_domain` over a float scalar, as QSL emits a float type, reads as that float, so the
+/// equality is refused by `check_equality` as operator-ineligible, not as an unsupported bound.
+#[test]
+fn tc_029_ac16_a_float_rounding_member_is_refused_as_operator_ineligible() {
+    assert!(matches!(
+        tuple_refusal(&[BD_FLOAT_ROUNDING], &[BD_FLOAT_ROUNDING, BD_TEXT]),
+        CompositeEqualityRefusal::IllTyped {
+            cause: IllTypedCauseKind::OperatorIneligible
+        }
+    ));
+}
+
 /// Trace: FR-018-AC-16, TC-029. A `bounded_domain` over a boolean scalar (which reads no bound
 /// form), or over a base that is not a `scalar_type` (QSL's enum declaration, a record) is
 /// refused as unsupported, naming the bound node.

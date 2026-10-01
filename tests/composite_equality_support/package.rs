@@ -827,6 +827,16 @@ pub fn tuple_members_package(extras: &[u32], members: &[u32]) -> PackageBuilder 
                 R_POINT,
                 text_members(false),
             ),
+            BD_FLOAT_ROUNDING => builder.code(
+                BD_FLOAT_ROUNDING,
+                "bounded_domain",
+                "float_rounding",
+                T_FLOAT64,
+                aggregate(vec![bound_member(
+                    "rounding",
+                    literal("text", "nearest-even"),
+                )]),
+            ),
             other => panic!("no variant node registered for code {other}"),
         };
     }

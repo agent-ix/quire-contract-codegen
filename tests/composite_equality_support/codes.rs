@@ -80,6 +80,8 @@ pub const BD_BOOLEAN: u32 = 62;
 pub const BD_ENUM: u32 = 64;
 /// A `collection_bounds` bound over the record `R_POINT`, a base that is not a `scalar_type`.
 pub const BD_OVER_COMPOSITE: u32 = 65;
+/// A `float_rounding` bound over the float scalar `T_FLOAT64`, as QSL emits a float type.
+pub const BD_FLOAT_ROUNDING: u32 = 66;
 
 pub const E_RECORD: u32 = 100;
 pub const E_NESTED_IEEE: u32 = 101;
