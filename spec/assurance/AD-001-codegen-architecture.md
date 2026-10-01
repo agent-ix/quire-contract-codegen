@@ -107,8 +107,8 @@ the production code agrees with the shadow on the bounded domain (ADR-003, FR-02
 1. Check that the crate contains the harness source byte for byte.
 2. Launch the installed backend under the memory and wall-clock ceilings the harness identity records
    (FR-028).
-3. Read the output once, in `src/kani_transcript.rs`, into a typed transcript.
-4. Classify the run from that transcript into one `KaniRunOutcome`. A run that exceeds a ceiling is
+3. Read Kani's exported report once, in `src/kani_transcript.rs`, into a typed report.
+4. Classify the run from that report into one `KaniRunOutcome`. A run that exceeds a ceiling is
    `inconclusive` with that ceiling's own reason.
 5. Map the outcome to exactly one QSL terminal value in one total match (FR-029). A vacuous or cover-unsatisfied run maps to
    `Proved { success_checks: 0 }`, QSL's inconclusive vacuity record.
@@ -148,7 +148,7 @@ success fallback, and no requirement converts one into another.
 | QSL → CG | The FR-331 envelope and its `candidates` | QSpec wire; QSL `route` computes candidates | FR-019 reads the envelope, and FR-022 generates for what was routed. |
 | CG → QSL | `Witness`, `ReplaySource`, the counterexample envelope `WitnessEnvelope`, `ObligationIdentity`, the replay request, `replay` and `replay_frame` | QSL `qsl-replay` | Builds them and calls the facade. Target: no copy of these types in CG or in Contract IR; see Current state. |
 | CG → QSL | The FR-331 terminal value of a run | QSL `qsl-replay` | The Kani adapter maps `KaniRunOutcome` to `TerminalValue` in one total match, one value per run (FR-029). An item settled `unsupported` at negotiation has no terminal value. |
-| CG ↔ Kani | The option vector in, the printed transcript and concrete playback out | Kani | Only `src/kani_transcript.rs` reads the text. |
+| CG ↔ Kani | The option vector in, the exported JSON report and the printed concrete playback out | Kani | Only `src/kani_transcript.rs` reads either. The verdict comes from the report; the playback is a payload. |
 
 ## Decisions
 

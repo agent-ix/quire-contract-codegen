@@ -115,9 +115,13 @@ pub use kani::{
 };
 pub use kani_execution::{
     classify_kani_run, execute_kani_obligation, kani_launch_command, launch_evidence,
-    run_launcher_with_timeout, KaniExecutableHarness, KaniExecutionEvidence, KaniExecutionRefusal,
-    KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniRunOutcome, KaniTool,
-    KaniToolError, LaunchOutcome,
+    run_launcher_with_timeout, ClassifiedRun, KaniExecutableHarness, KaniExecutionEvidence,
+    KaniExecutionRefusal, KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation,
+    KaniRunOutcome, KaniTool, KaniToolError, LaunchOutcome,
+};
+pub use kani_transcript::{
+    KaniCheckClass, KaniCheckLocation, KaniCheckResult, KaniCheckStatus, KaniReportRefusal,
+    OtherCheckClass,
 };
 pub use routed_generation::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,

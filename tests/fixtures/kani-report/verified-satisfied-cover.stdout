@@ -1,42 +1,51 @@
-Kani Rust Verifier 0.67.0 (cargo plugin)
+Kani Rust Verifier 0.68.0 (cargo plugin)
+CBMC 6.11.0
+warning: use of an unstable feature
+ --> <crate attribute>:1:12
+  |
+1 | #![feature(register_tool)]
+  |            ^^^^^^^^^^^^^
+  |
+  = note: requested on the command line with `--force-warn unstable-features`
+
 Checking harness proofs::verified_satisfied_cover...
-CBMC 6.8.0 (cbmc-6.8.0)
-CBMC version 6.8.0 (cbmc-6.8.0) 64-bit x86_64 linux
-Reading GOTO program from file <CAPTURE_DIR>/fx-target/kani/x86_64-unknown-linux-gnu/debug/deps/fx-635ae6ed0e49f2aa__RNvNtCs2ybxu1UmaZ3_2fx6proofs24verified_satisfied_cover.out
+CBMC 6.11.0 (cbmc-6.11.0)
+CBMC version 6.11.0 (cbmc-6.11.0) 64-bit x86_64 linux
+Reading GOTO program from file <CAPTURE_DIR>/fx-target/kani/x86_64-unknown-linux-gnu/debug/build/fx/e25c59d6d128b2c1/out/fx-e25c59d6d128b2c1__RNvNtCsknN5xTaIH6P_2fx6proofs24verified_satisfied_cover.out
 Generating GOTO Program
 Adding CPROVER library (x86_64)
 Removal of function pointers and virtual functions
 Generic Property Instrumentation
 Running with 16 object bits, 48 offset bits (user-specified)
 Starting Bounded Model Checking
-Runtime Symex: 0.00149504s
+Runtime Symex: 0.00331318s
 size of program expression: 134 steps
 simple slicing removed 4 assignments
 Generated 4 VCC(s), 4 remaining after simplification
-Runtime Postprocess Equation: 1.8144e-05s
+Runtime Postprocess Equation: 4.1339e-05s
 Passing problem to propositional reduction
 converting SSA
-Runtime Convert SSA: 0.000270166s
+Runtime Convert SSA: 0.000565794s
 Running propositional reduction
 Post-processing
-Runtime Post-process: 6.293e-06s
-Solving with CaDiCaL 2.0.0
+Runtime Post-process: 1.1445e-05s
+Solving with CaDiCaL 3.0.0
 102 variables, 43 clauses
 SAT checker: instance is SATISFIABLE
-Runtime Solver: 9.2608e-05s
-Runtime decision procedure: 0.000516945s
+Runtime Solver: 8.4491e-05s
+Runtime decision procedure: 0.000738091s
 Running propositional reduction
-Solving with CaDiCaL 2.0.0
+Solving with CaDiCaL 3.0.0
 103 variables, 44 clauses
 SAT checker: instance is SATISFIABLE
-Runtime Solver: 2.4227e-05s
-Runtime decision procedure: 6.0095e-05s
+Runtime Solver: 2.8112e-05s
+Runtime decision procedure: 5.5713e-05s
 Running propositional reduction
-Solving with CaDiCaL 2.0.0
+Solving with CaDiCaL 3.0.0
 104 variables, 45 clauses
 SAT checker: instance is UNSATISFIABLE
-Runtime Solver: 1.8144e-05s
-Runtime decision procedure: 4.9817e-05s
+Runtime Solver: 1.4542e-05s
+Runtime decision procedure: 2.9754e-05s
 
 RESULTS:
 Check 1: proofs::verified_satisfied_cover.cover.1
@@ -57,7 +66,7 @@ SUMMARY:
 
 
 VERIFICATION:- SUCCESSFUL
-Verification Time: 0.026755769s
+Verification Time: 0.041985676s
 
 Concrete playback unit test for `proofs::verified_satisfied_cover`:
 ```

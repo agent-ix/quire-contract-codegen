@@ -1,0 +1,160 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "timestamp": "2026-10-01T02:40:55.196284153Z",
+    "kani_version": "0.68.0",
+    "target": "x86_64-unknown-linux-gnu",
+    "build_mode": "release"
+  },
+  "project": {
+    "crate_name": [
+      "fx"
+    ],
+    "workspace_root": "<CAPTURE_DIR>/fx",
+    "output_dir": "<CAPTURE_DIR>/fx-target/kani/x86_64-unknown-linux-gnu/debug/build/fx/0c2f0f91c4f95aba/out"
+  },
+  "tools": {
+    "kani": "0.68.0",
+    "rustc": "rustc 1.100.0-nightly (8925ea358 2026-08-20)",
+    "cbmc": "6.11.0 (cbmc-6.11.0)",
+    "goto_cc": "gcc (goto-cc 6.11.0 (cbmc-6.11.0)) 13.3.0",
+    "goto_instrument": "6.11.0 (cbmc-6.11.0)",
+    "solvers": [
+      {
+        "name": "cadical",
+        "version": null
+      }
+    ]
+  },
+  "harness_metadata": [
+    {
+      "pretty_name": "proofs::partial_cover",
+      "mangled_name": "_RNvNtCsknN5xTaIH6P_2fx6proofs13partial_cover",
+      "crate_name": "fx",
+      "source": {
+        "file": "src/lib.rs",
+        "start_line": 39,
+        "end_line": 45
+      },
+      "goto_file": "<CAPTURE_DIR>/fx-target/kani/x86_64-unknown-linux-gnu/debug/build/fx/0c2f0f91c4f95aba/out/fx-0c2f0f91c4f95aba__RNvNtCsknN5xTaIH6P_2fx6proofs13partial_cover.symtab.out",
+      "attributes": {
+        "kind": "Proof",
+        "should_panic": false
+      },
+      "contract": {
+        "contracted_function_name": null,
+        "recursion_tracker": null
+      },
+      "has_loop_contracts": false,
+      "is_automatically_generated": false,
+      "is_bounded": false,
+      "is_ctor_based": false
+    }
+  ],
+  "error_details": [
+    {
+      "harness_id": "proofs::partial_cover",
+      "has_errors": false
+    }
+  ],
+  "property_details": [
+    {
+      "harness_id": "proofs::partial_cover",
+      "property_details": {
+        "total_properties": 3,
+        "passed": 1,
+        "failed": 0,
+        "unreachable": 0,
+        "undetermined": 0,
+        "solver_error": 0,
+        "satisfied": 1,
+        "unsatisfiable": 1,
+        "covered": 0,
+        "uncovered": 0
+      }
+    }
+  ],
+  "cbmc": [
+    {
+      "harness_id": "proofs::partial_cover",
+      "cbmc_metadata": {
+        "version": "6.11.0",
+        "os_info": "x86_64 linux unix"
+      },
+      "configuration": {
+        "object_bits": 16,
+        "solver": "cadical"
+      },
+      "cbmc_stats": {
+        "runtime_symex_s": 0.00399296,
+        "size_program_expression": 180,
+        "slicing_removed_assignments": 4,
+        "vccs_generated": 6,
+        "vccs_remaining": 6,
+        "runtime_postprocess_equation_s": 0.000032745,
+        "runtime_convert_ssa_s": 0.000634043,
+        "runtime_post_process_s": 8.535e-6,
+        "runtime_solver_s": 0.000096923,
+        "runtime_decision_procedure_s": 0.0001456
+      }
+    }
+  ],
+  "verification_results": {
+    "summary": {
+      "total_harnesses": 1,
+      "executed": 1,
+      "status": "completed",
+      "successful": 1,
+      "failed": 0,
+      "duration_ms": 52
+    },
+    "results": [
+      {
+        "harness_id": "proofs::partial_cover",
+        "status": "Success",
+        "duration_ms": 52,
+        "checks": [
+          {
+            "id": 1,
+            "function": "proofs::partial_cover",
+            "status": "Satisfied",
+            "description": "x can be three",
+            "location": {
+              "file": "src/lib.rs",
+              "line": "42",
+              "column": "9"
+            },
+            "category": "cover"
+          },
+          {
+            "id": 2,
+            "function": "proofs::partial_cover",
+            "status": "Unsatisfiable",
+            "description": "x can be two hundred",
+            "location": {
+              "file": "src/lib.rs",
+              "line": "43",
+              "column": "9"
+            },
+            "category": "cover"
+          },
+          {
+            "id": 3,
+            "function": "proofs::partial_cover",
+            "status": "Success",
+            "description": "assertion failed: x < 10",
+            "location": {
+              "file": "src/lib.rs",
+              "line": "44",
+              "column": "9"
+            },
+            "category": "assertion"
+          }
+        ]
+      }
+    ]
+  },
+  "coverage": {
+    "enabled": false
+  }
+}

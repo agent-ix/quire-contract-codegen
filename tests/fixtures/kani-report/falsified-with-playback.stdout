@@ -1,42 +1,51 @@
-Kani Rust Verifier 0.67.0 (cargo plugin)
+Kani Rust Verifier 0.68.0 (cargo plugin)
+CBMC 6.11.0
+warning: use of an unstable feature
+ --> <crate attribute>:1:12
+  |
+1 | #![feature(register_tool)]
+  |            ^^^^^^^^^^^^^
+  |
+  = note: requested on the command line with `--force-warn unstable-features`
+
 Checking harness proofs::falsified_with_playback...
-CBMC 6.8.0 (cbmc-6.8.0)
-CBMC version 6.8.0 (cbmc-6.8.0) 64-bit x86_64 linux
-Reading GOTO program from file <CAPTURE_DIR>/fx-target/kani/x86_64-unknown-linux-gnu/debug/deps/fx-3a07f7e01c7ea3f7__RNvNtCs2ybxu1UmaZ3_2fx6proofs23falsified_with_playback.out
+CBMC 6.11.0 (cbmc-6.11.0)
+CBMC version 6.11.0 (cbmc-6.11.0) 64-bit x86_64 linux
+Reading GOTO program from file <CAPTURE_DIR>/fx-target/kani/x86_64-unknown-linux-gnu/debug/build/fx/e94e5c7e8ad10563/out/fx-e94e5c7e8ad10563__RNvNtCsknN5xTaIH6P_2fx6proofs23falsified_with_playback.out
 Generating GOTO Program
 Adding CPROVER library (x86_64)
 Removal of function pointers and virtual functions
 Generic Property Instrumentation
 Running with 16 object bits, 48 offset bits (user-specified)
 Starting Bounded Model Checking
-Runtime Symex: 0.00150227s
+Runtime Symex: 0.00266015s
 size of program expression: 132 steps
 simple slicing removed 4 assignments
 Generated 4 VCC(s), 4 remaining after simplification
-Runtime Postprocess Equation: 1.8459e-05s
+Runtime Postprocess Equation: 2.6625e-05s
 Passing problem to propositional reduction
 converting SSA
-Runtime Convert SSA: 0.000256113s
+Runtime Convert SSA: 0.000504001s
 Running propositional reduction
 Post-processing
-Runtime Post-process: 5.768e-06s
-Solving with CaDiCaL 2.0.0
+Runtime Post-process: 7.749e-06s
+Solving with CaDiCaL 3.0.0
 110 variables, 59 clauses
 SAT checker: instance is SATISFIABLE
-Runtime Solver: 9.5125e-05s
-Runtime decision procedure: 0.000459261s
+Runtime Solver: 7.553e-05s
+Runtime decision procedure: 0.000643258s
 Running propositional reduction
-Solving with CaDiCaL 2.0.0
+Solving with CaDiCaL 3.0.0
 111 variables, 60 clauses
 SAT checker: instance is SATISFIABLE
-Runtime Solver: 4.0064e-05s
-Runtime decision procedure: 8.1176e-05s
+Runtime Solver: 8.8198e-05s
+Runtime decision procedure: 0.000136834s
 Running propositional reduction
-Solving with CaDiCaL 2.0.0
+Solving with CaDiCaL 3.0.0
 112 variables, 61 clauses
 SAT checker: instance is SATISFIABLE
-Runtime Solver: 2.2968e-05s
-Runtime decision procedure: 5.8418e-05s
+Runtime Solver: 3.4125e-05s
+Runtime decision procedure: 7.0919e-05s
 
 RESULTS:
 Check 1: proofs::falsified_with_playback.cover.1
@@ -59,7 +68,7 @@ Failed Checks: assertion failed: x < 5
  File: "src/lib.rs", line 16, in proofs::falsified_with_playback
 
 VERIFICATION:- FAILED
-Verification Time: 0.029280394s
+Verification Time: 0.04436336s
 
 Concrete playback unit test for `proofs::falsified_with_playback`:
 ```
@@ -83,10 +92,10 @@ Concrete playback unit test for `proofs::falsified_with_playback`:
 /// Check for `assertion`: "assertion failed: x < 5"
 
 #[test]
-fn kani_concrete_playback_falsified_with_playback_43961980917998124() {
+fn kani_concrete_playback_falsified_with_playback_14157326532969560031() {
     let concrete_vals: Vec<Vec<u8>> = vec![
-        // 9
-        vec![9],
+        // 8
+        vec![8],
     ];
     kani::concrete_playback_run(concrete_vals, falsified_with_playback);
 }
