@@ -156,7 +156,7 @@ src/
     artifact.rs               Artifact, ArtifactBundle, its size limits, PublicationDiagnostic and
                               its code (no I/O)
     source_map.rs             SourceProbe, SourceRegion
-    canonical.rs              the one caller of the QSL facade's canonical encoder and digest
+    canonical.rs              the one caller of quire-canonical's encoder and digest
     identity.rs               HarnessSymbol, ModuleSymbol, HarnessPath, ContentDigest
     ir/                       the one typed node-access layer over CheckedPackageV2
     profile.rs                the version profile: every spelling this build emits or requires
@@ -418,22 +418,25 @@ records only the work order the ruling allows, because the code still has V1 rea
 
 ### Shared core: helpers, identities, node access, profile
 
-- **One canonical module** `core/canonical.rs` is the one place CG calls the QSL facade's canonical
-  encoder and digest. The facade exports them from `quire_canonical` (RFC 8785), as AD-003 (PR 214,
-  pending) requires: the obligation preimage is encoded by that encoder and never by `serde_json`.
+- **One canonical module** `core/canonical.rs` is the one place CG calls `quire-canonical` (its own
+  repository, `agent-ix/quire-canonical`; RFC 8785): `to_vec(value, Limits)` and `sha256`. CG
+  depends on that crate directly, spelled `branch = "main"`, with no `qsl-replay` re-export (QSL's
+  ruling, relayed by the IR planner; not verified here). AD-003 (PR 214, pending) requires the
+  same: the obligation preimage is encoded by that encoder and never by `serde_json`.
   Every JSON CG emits, artifact files and digest preimages alike, goes through it. Both
   `serde_json`-based `deterministic_json` copies are deleted, not kept; this changes the bytes of
   emitted JSON artifacts once, and regeneration stays byte-identical (NFR-001). The nine `artifact`
   wrappers are deleted and callers use `Artifact::new`. The corpus case digest moves to this module
-  too. CG writes no hash or encoding routine of its own. This depends on the facade exporting the
-  encoder and digest, which AD-003 asks QSL for; if it does not, that is a request to QSL, not a
-  reason to keep a CG copy.
+  too. CG writes no hash or encoding routine of its own. Coupling: QSL still pins `quire-canonical` by
+  tag (`quire-canonical-v0.3.0`), so a lock that pulls QSL together with CG or IR on `main`
+  (quire-integration, the driver) holds two copies until QSL moves to `branch = "main"`, which
+  waits on the owner. Step 1a must not merge into a two-copy lock; see its precondition.
 - **One digest identity.** The only digest CG mints for a proof is the obligation digest that
-  binds a proof to its content (AD-003, E-1). `ContentDigest` in `core/identity.rs` wraps QSL's
-  digest type through the facade (`ByteDigest`); it is built only by `core::canonical`, over the
-  RFC 8785 preimage. It is not a second digest beside QSL's `ObligationIdentity`: it is CG's typed
-  holder of the value the facade's identity is built from, and where QSL's type can be used
-  directly CG uses it. Every other digest on the chain (`package_id`, byte digests of provided
+  binds a proof to its content (AD-003, E-1). `ContentDigest` in `core/identity.rs` is a CG type over
+  `quire-canonical`'s digest; it is built only by `core::canonical`, over the RFC 8785 preimage.
+  It does not wrap `qsl-replay`'s `ByteDigest`, except at a QSL API surface that requires one. It
+  is not a second digest beside QSL's `ObligationIdentity`: it is CG's typed holder of the value
+  that identity is built from. Every other digest on the chain (`package_id`, byte digests of provided
   source) is QSL's or IR's and is carried, not recomputed. No tool, version or file digest is
   added, and the one that exists, `ReplayInputs::backend_manifest`, is deleted at step 5 together
   with the tool pin QSL-351 removes, with the manifest members it feeds in `spine_replay`.
@@ -526,8 +529,10 @@ Per the ruling there is no compatibility layer anywhere in it. It is the order I
 tickets in. The planner tracks these numbers: 4e is the public generator entry, 5 is the terminal
 map, 6 is the V1 reader deletions and 7 is the publication move.
 
-1. **Shared core, no moves.** 1a: `core/canonical` over the facade's canonical encoder and digest
-   (RFC 8785, AD-003 pending), deletion of both `deterministic_json` definitions and the nine
+1. **Shared core, no moves.** Precondition for 1a: the driver's one-copy gate is checked first, and 1a (and IR-274)
+   does not merge into a lock that holds two `quire-canonical` copies (see Shared core). 1a:
+   `core/canonical` calling `quire-canonical` directly (RFC 8785, `to_vec` and `sha256`; AD-003
+   pending), deletion of both `deterministic_json` definitions and the nine
    `artifact` wrappers, and the corpus case digest moved onto it. 1b: identity newtypes
    threaded through `kani_obligations`, `state_frame` and `routed_generation`, with the typed
    duplicate error. 1c: `core/profile`, with `RUNTIME_REVISION` deleted.
@@ -634,8 +639,8 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
 - Step 4f depends on a fact this AD could not verify: that QSL's exemplars can be moved onto the
   one public entry. The planner's record puts the arithmetic control on `generate_kani_bundle`. If
   the exemplars need something the contract family does not emit, 4f waits.
-- The canonical encoder and digest depend on the QSL facade exporting them (AD-003, PR 214,
-  pending). Step 1a waits on that.
+- Step 1a waits on the one-copy gate: until QSL moves `quire-canonical` from its tag to
+  `branch = "main"` (waiting on the owner), a lock holding QSL plus CG or IR on `main` has two copies.
 - Batching with per-harness ceilings (FR-028) needs a rule for the batch's wall clock. This AD
   puts batching in `run/` and leaves the rule to FR-017 and IR-277.
 - Typed node access depends on what IR exposes. If IR's decoder lands later than `core/ir`, the
@@ -664,7 +669,7 @@ what it could against the code; the checks are stated.
 | One public entry before deletion | Migration step 4e: the one public generator entry exists. A QSL-owned follow-up moves QSL's quire-integration exemplars, which call `generate_kani_bundle` today, onto it. Only then does step 4f delete `generate_kani_bundle`. | QSL review of this PR |
 | Package source for tests | The arithmetic control (step 4a) and, after QSL-353, the corpus build packages through QSL's facade (`call_site(...).package`, or source plus `qsl_replay`). CG copies no QSL fixture and no QSL-emitted package file. | QSL review of this PR |
 | Terminal map dependency | Step 5's reader and the C-09 map (`kani/terminal.rs`) depend on QSL-351 (`Inconclusive(cause)`, a `NonZero` `Proved`, the tool pin gone) and on the terminal value also taking the replay settlement. | QSL review of this PR |
-| `ContentDigest` and the canonical encoding | `ContentDigest` wraps QSL's digest through the facade (`ByteDigest`). The obligation preimage is encoded by `quire_canonical` (RFC 8785), and `core::canonical` is the one place that calls the facade's encoder and digest; the `serde_json` `deterministic_json` copies are deleted. Cites AD-003 (PR 214, pending); AD-003 is not edited here. | QSL; relayed by the leader after the PR 214 review |
+| `ContentDigest` and the canonical encoding | CG depends on `quire-canonical` directly (`branch = "main"`, no `qsl-replay` re-export). `ContentDigest` is a CG type over its digest, with no `ByteDigest` wrapper except where a QSL API requires one. The obligation preimage is encoded by `quire-canonical` (RFC 8785), and `core::canonical` is the one place that calls it; the `serde_json` `deterministic_json` copies are deleted. QSL still pins it by tag, so step 1a waits on the driver's one-copy gate. Cites AD-003 (PR 214, pending); AD-003 is not edited here. | QSL; relayed by the IR planner |
 
 SuiteRegistry (SUR-001): moves to `spec/core/functional/suites.md` in step 7; ADR-0056 is not
 amended (IR planner, IR-344). No question remains open in this AD except the missing ticket for the
@@ -681,4 +686,5 @@ FR-015 V2 contract input (step 4c).
 - Whether IR exposes a typed body-term decoder today was not checked; IR's layout AD is a separate
   ticket. The IR-347 lowering move, IR's `BoundPackage` retirement and the C-09 terminal cases are
   relayed and not verified.
-- Whether the QSL facade exports a canonical encoder and digest was not checked.
+- The `quire-canonical` API names (`to_vec`, `Limits`, `sha256`), QSL's tag pin and the driver's
+  one-copy gate are relayed and were not checked.
