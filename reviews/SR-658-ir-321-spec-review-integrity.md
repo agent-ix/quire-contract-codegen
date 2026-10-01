@@ -63,6 +63,23 @@ directories in agreement. Two cross-subsystem references are legitimate and rema
 TC-033 (routed) traces FR-015-AC-15 to AC-18 (kani), and StR-001's coverage rows in core cite
 other subsystems' cases.
 
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The new exceptions note says both exceptions are "to be settled at the layout AD (IR-344)", and suites.md waits "until IR-322 or IR-344 settles where it goes". Neither ticket records them. IR-344's body and comments never mention FR-005, rule 4, suites.md or SUR-001. IR-322 is the RT restructure, already Done, and says nothing about a SuiteRegistry. Each exception therefore points at a ticket that will not settle it. Fix: add the two items to IR-344 (a tracker comment is enough) and drop the IR-322 mention | spec/spec.md:95-103 |
+
+## Dispositions
+
+Round 1, reviewed at 842723939d9fea97925672f9bd8c7118fed90feb.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | accepted-no-change | Leader decision: FR-005 stays in core with no new subsystem. 8427239 records it in spec/spec.md:97-100 as a deliberate exception to ADR-0056 rule 4, naming FR-005, TC-001, TC-002 and TC-007 and the three cross-subsystem dependencies. The record is adequate where it is read. Its deferral pointer is FND-005 |
+| FND-002 | fixed 8427239 | The "Backend adapter" row is split into "Backend adapter (routed)" (FR-026, TC-037) and "Terminal-value maps (kani)" (FR-029, FR-030, TC-040, TC-041). The first row (FR-002, FR-004, FR-005) still spans subsystems. That is acceptable for a functional-area map now that the registry carries the subsystem grouping |
+| FND-003 | accepted-no-change | suites.md is not moved. 8427239 records at spec/spec.md:101-103 that ADR-0056 has no slot for a SuiteRegistry. Its deferral pointer is FND-005 |
+| FND-004 | deferred: IR-487 | IR-487, filed under IR-321, lists the corrected duplicates (SR-010, SR-011, SR-014 to SR-021; filename prefixes SR-008 to SR-013 against REV-015 and REV-018 to REV-022), and the PR body states the same facts. Renumbering is out of scope for a restructure PR |
+
 ## Parked branches (report only)
 
 These parked branches will hit the following moves when they rebase. Git rename detection

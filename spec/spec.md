@@ -99,7 +99,7 @@ Two recorded exceptions to the layout convention, both to be settled at the layo
   CLI conformance requirement spans those subsystems and this repository has no publication
   subsystem yet.
 - `core/matrix/suites.md` (SUR-001, a SuiteRegistry) is not a file kind ADR-0056 allows in
-  `matrix/`; the ADR has no slot for it, so it sits beside the core matrix until IR-322 or IR-344
+  `matrix/`; the ADR has no slot for it, so it sits beside the core matrix until IR-344
   settles where it goes.
 
 ## References

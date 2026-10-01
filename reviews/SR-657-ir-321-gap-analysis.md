@@ -65,3 +65,14 @@ Placement of the requirements themselves checks out:
 - Replay: FR-016 and FR-024 (kani_witness_join, spine_replay, frame_replay).
 
 Every TC file sits beside the matrix that declares it.
+
+## Dispositions
+
+Round 1, reviewed at 842723939d9fea97925672f9bd8c7118fed90feb.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed 8427239 | `bound_coverage` is now in the Evidence row (`vacuity`, `bound_coverage`) and gone from Strategy |
+| FND-002 | fixed 8427239 | `generation` is now in the Oracle row and gone from Routed (`capability`, `routed_generation`) |
+| FND-003 | fixed 8427239 | `definedness_arithmetic` is now in the Kani row beside `bounded_collections` and `finite_reference_graphs` |
+| FND-004 | fixed 8427239 | `oracle` is now registered under Core as "the shared lowering core, imported by strategy, kani and oracle modules". The registry still names every `src/lib.rs` module plus `lib` exactly once (28 entries, diffed mechanically) |
