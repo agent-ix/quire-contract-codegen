@@ -51,3 +51,19 @@ Checked and found as stated:
 for `RUNTIME_REVISION`. The gaps are spec catalog and trace gaps around the one new public
 behaviour (DuplicateHarness). FND-001 should be fixed in this PR, at least the interface-001
 line. FND-002 and FND-003 are documentation of choices that are already sound.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The top-level matrix index summary was not updated for the new partial row. `spec/tests.md:19` still says "FR-019 and FR-022 are covered except FR-022-AC-1 and FR-022-AC-6", but `spec/routed/matrix/tests.md` now marks FR-022-AC-16 `⚠️ Partially covered`. Add AC-16 to that exception list | spec/tests.md:19 |
+
+## Dispositions
+
+Round 1, reviewed at 225a3204d7a2b9ee0fbba9e8c0ccdf72b28c38b0.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 225a320 |
+| FND-002 | fixed | 225a320 |
+| FND-003 | fixed | 225a320 |

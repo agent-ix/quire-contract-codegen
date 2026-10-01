@@ -76,3 +76,17 @@ with one copy.
 FND-001 is the one finding to fix before merge. It concerns test hermeticity, not shipped
 behaviour, and seeding the lock is a small change. FND-002 and FND-003 are small cleanups.
 Mergeable after FND-001, or with FND-001 explicitly accepted.
+
+## Dispositions
+
+Round 1, reviewed at 225a3204d7a2b9ee0fbba9e8c0ccdf72b28c38b0 (rebased on main b2aa4e9; the first
+commit is unchanged per `git range-diff`, and the fix is 225a320). Generator source is unchanged:
+the src diff from the reviewed 757efc4 is visibility (`RUNTIME_DEPENDENCY_SOURCE` now `pub` and
+re-exported) and test trace text only. `make ci` exit 0 (105 unit, 246 it passed / 9 ignored, 1
+doctest, on msrv and stable). `make kani` exit 0, 9/9 passed with the seeded-lock fixtures.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 225a320 |
+| FND-002 | fixed | 225a320 |
+| FND-003 | fixed | 225a320 |
