@@ -31,8 +31,7 @@ pub struct ProvidedDocument {
 /// Everything one frame replay needs beyond the proved unit.
 #[derive(Clone, Debug)]
 pub struct FrameReplayInputs {
-    /// The proving run's lock. `function` is not read: a frame replay selects by the payload's
-    /// operation, and the request's own function member is that operation's name.
+    /// The proving run's lock. A frame replay selects by the operation, so no function is named.
     pub run: ReplayInputs,
     /// The domain package documents the unit's `model` declarations select.
     pub packages: Vec<ProvidedDocument>,

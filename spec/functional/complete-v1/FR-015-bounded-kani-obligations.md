@@ -189,7 +189,10 @@ package.
 | FR-015-AC-30 | With the installed backend, the operation contract verifies for a healthy subject and is falsified, naming the postcondition, for a subject mutated to debit. | Test (TC-025) |
 | FR-015-AC-31 | With the installed backend, a frame-allowed effect verifies, a frame-forbidden effect is falsified naming the forbidden field, and regenerating the frame from a package whose `modifies` is mutated to grant nothing falsifies the allowed subject. | Test (TC-025) |
 | FR-015-AC-32 | The forbidden frame counterexample, executed natively, reproduces as a frame violation of that field through QSL's `replay_frame`, and the allowed run replays as a respected frame. | Test (TC-025) |
-| FR-015-AC-33 | The frame-replay request and envelope are built from `qsl_replay::call_site` over the operation's name: the payload's anchor, frame and frame occurrence are QSL's answer for the operation, the envelope's `clause_node` is the payload's frame node and its `occurrence_key` the payload's frame occurrence, and an operation the unit names no frame for is refused when the request is built. | Test (TC-025) |
+| FR-015-AC-33 | The frame-replay payload's anchor, frame and frame occurrence are the values `qsl_replay::call_site` names for the operation's name. | Test (TC-025) |
+| FR-015-AC-34 | The frame-replay envelope's `clause_node` is the payload's frame node and its `occurrence_key` is the payload's frame occurrence. | Test (TC-025) |
+| FR-015-AC-35 | An operation the unit names no frame for, whether the domain package declares it or not, is refused by the call site when the frame-replay request is built. | Test (TC-025) |
+| FR-015-AC-36 | `FrameReplay::replay` returns QSL's `replay_frame` result: a forbidden write settles a reproduced violation naming the written field, and a write the frame grants settles `inconclusive` with no frame witness. | Test (TC-025) |
 
 ## Dependencies
 

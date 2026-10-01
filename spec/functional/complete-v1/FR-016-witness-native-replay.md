@@ -128,7 +128,13 @@ failure is reported.
 | FR-016-AC-11 | The adapter refuses, with a distinct typed error each, a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript QSL does not admit, a request QSL refuses with any `ReplayRefusal` other than `Fault` (returned with its cause), and a witness-sourced request that settles on the input arm. | Test (TC-026) |
 | FR-016-AC-12 | A `replay` call that returns `ReplayRefusal::Fault` yields a typed unavailable result, and never a mismatch, a refusal or a failure; no other condition yields unavailable. | Test (TC-026) |
 | FR-016-AC-13 | A `Witness` arm that settles `reproduced-with-evaluated-witness` with a category other than `violation` yields a typed mismatch, and never a reproduced failure. | Test (TC-026) |
-| FR-016-AC-14 | A proved unit that imports a locked dependency is compiled by `qsl_replay::call_site` together with that dependency's lock source, the replay request's `package.dependencies` carries one entry per lock selection with the lock's recorded `package_id`, and `qsl_replay::replay` settles the unit's falsification through the imported function; a unit whose import no lock selection supplies is refused at the call site, a lock recording another identity for the dependency is refused by QSL as a dependency identity mismatch, and a lock selecting a library the unit does not import is refused by QSL as unselected. | Test (TC-026) |
+| FR-016-AC-14 | A proved unit that imports a locked dependency is compiled by `qsl_replay::call_site` together with that dependency's lock source, and `qsl_replay::replay` settles the unit's falsification through the imported function. | Test (TC-026) |
+| FR-016-AC-15 | The replay request's `package.dependencies` carries one entry per lock dependency selection, in ascending identity order, with the lock's recorded `package_id`. | Test (TC-026) |
+| FR-016-AC-16 | A unit whose import no lock dependency selection supplies is refused at the call site. | Test (TC-026) |
+| FR-016-AC-17 | A lock recording another `package_id` for a dependency the unit imports is refused by QSL as a dependency identity mismatch. | Test (TC-026) |
+| FR-016-AC-18 | A lock selecting a library the unit does not import is refused by QSL as unselected. | Test (TC-026) |
+| FR-016-AC-19 | Lock libraries whose sources share a source owner are refused as no dependency input, before the call site compiles anything. | Test (TC-026) |
+| FR-016-AC-20 | A lock library whose source has the unit's own source owner is refused by the call site. | Test (TC-026) |
 
 ## Dependencies
 

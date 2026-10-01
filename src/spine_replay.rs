@@ -195,8 +195,6 @@ pub struct ReplayInputs {
     pub source: LockedSource,
     /// The proved package lock's dependency selections, each with its own source.
     pub dependencies: Vec<DependencyLock>,
-    /// The selected function's name.
-    pub function: String,
     /// The digest of the tool manifest of the backend that found the counterexample.
     pub backend_manifest: DigestRecord,
     /// The limits the replay run itself is charged against.
@@ -213,8 +211,9 @@ pub enum DependencyLockError {
         /// The repeated library identity.
         identity: String,
     },
-    /// The selections are no dependency input: for example two libraries, or a library and the
-    /// unit, share a source owner.
+    /// The selections are no dependency input: for example two libraries share a source owner.
+    /// A library sharing the unit's owner is refused later, by the call site, as
+    /// [`ReplayPackageError::CallSite`].
     Input(DependencyInputRefusal),
 }
 
@@ -380,8 +379,7 @@ pub struct ReplayPackage {
 }
 
 impl ReplayPackage {
-    /// Compiles `inputs.source` against the lock's dependencies and locates the selected
-    /// function in it. A dependency the unit imports is compiled from its lock source; one the
+    /// Compiles `inputs.source` against the lock's dependencies and locates `function` in it. A dependency the unit imports is compiled from its lock source; one the
     /// unit does not import changes nothing.
     ///
     /// # Errors
@@ -389,13 +387,13 @@ impl ReplayPackage {
     /// [`ReplayPackageError`] when the function name is not an identifier, a dependency identity
     /// repeats, the dependencies are no dependency input, or QSL does not compile the unit or
     /// find the function.
-    pub fn new(inputs: ReplayInputs) -> Result<Self, ReplayPackageError> {
+    pub fn new(inputs: ReplayInputs, function: &str) -> Result<Self, ReplayPackageError> {
         let (inputs, dependency_input) =
             inputs.admit().map_err(ReplayPackageError::Dependencies)?;
         let invalid = || ReplayPackageError::InvalidFunction {
-            function: inputs.function.clone(),
+            function: function.to_owned(),
         };
-        let identifier = Identifier::new(&inputs.function).map_err(|_| invalid())?;
+        let identifier = Identifier::new(function).map_err(|_| invalid())?;
         let selection = QualifiedName::new(vec![identifier]).map_err(|_| invalid())?;
         let source = &inputs.source;
         let site = call_site(

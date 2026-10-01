@@ -81,7 +81,7 @@ fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
 
 /// The proving run's lock for the native twin `source`: unlimited stand-in limits, because no
 /// proving run carries limits, and a stand-in backend manifest.
-fn inputs(source: &str, function: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
+fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     let s1 = ScalarLimits {
         text_input_bytes: u64::try_from(MAX_ENCODED_BYTES).unwrap(),
         ..UNLIMITED
@@ -89,7 +89,6 @@ fn inputs(source: &str, function: &str, dependencies: Vec<DependencyLock>) -> Re
     ReplayInputs {
         source: locked(IDENTITY, source.as_bytes()),
         dependencies,
-        function: function.to_owned(),
         backend_manifest: DigestRecord::mint(
             DigestDomain::ToolManifestJcsV1,
             ByteDigest::of(b"kani").as_bytes(),
@@ -106,7 +105,7 @@ fn inputs(source: &str, function: &str, dependencies: Vec<DependencyLock>) -> Re
 
 /// Compiles the hand-mirrored native twin `source` and locates `function` in it.
 fn compile_native_twin(source: &str, function: &str) -> ReplayPackage {
-    ReplayPackage::new(inputs(source, function, Vec::new()))
+    ReplayPackage::new(inputs(source, Vec::new()), function)
         .expect("the native twin compiles and declares the function")
 }
 
@@ -304,7 +303,7 @@ fn dependency_lock() -> DependencyLock {
 /// domain, in ascending identity order whatever order the lock lists them in. A source shared
 /// by the unit and a dependency, or by two dependencies, is provided once.
 ///
-/// Trace: TC-026
+/// Trace: FR-016-AC-15, TC-026
 #[test]
 fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     let native = native_source(VIOLATING_TWIN);
@@ -318,9 +317,9 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     let mut shared = dependency_lock();
     shared.identity = "test/mmm".to_owned();
     shared.source = locked("lib-mmm", b"a dependency source");
-    let mut lock_inputs = inputs(&native, FUNCTION, vec![lock.clone(), shared, earlier]);
+    let mut lock_inputs = inputs(&native, vec![lock.clone(), shared, earlier]);
     lock_inputs.backend_manifest = DigestRecord::mint(DigestDomain::VerificationJcs, [9; 32]);
-    let package = ReplayPackage::new(lock_inputs).expect("the twin compiles");
+    let package = ReplayPackage::new(lock_inputs, FUNCTION).expect("the twin compiles");
     let wire = package.request("counterexample", ReplaySource::Input(Vec::new()));
 
     let identities: Vec<_> = wire
@@ -378,11 +377,13 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
 /// Trace: TC-026
 #[test]
 fn tc_026_a_lock_repeating_a_dependency_is_refused() {
-    let refusal = ReplayPackage::new(inputs(
-        &native_source(VIOLATING_TWIN),
+    let refusal = ReplayPackage::new(
+        inputs(
+            &native_source(VIOLATING_TWIN),
+            vec![dependency_lock(), dependency_lock()],
+        ),
         FUNCTION,
-        vec![dependency_lock(), dependency_lock()],
-    ))
+    )
     .expect_err("the repeated identity is refused");
     assert!(
         matches!(
@@ -439,7 +440,7 @@ fn importing_inputs(library: &LockedSource) -> (ReplayInputs, DependencyLock) {
         package_id,
         source: library.clone(),
     };
-    (inputs(&unit, "q", vec![lock.clone()]), lock)
+    (inputs(&unit, vec![lock.clone()]), lock)
 }
 
 fn replay_q(
@@ -463,7 +464,8 @@ fn replay_q(
 #[test]
 fn tc_026_a_unit_importing_a_locked_dependency_replays_to_a_reproduced_verdict() {
     let (lock_inputs, _) = importing_inputs(&units_library(BIG));
-    let package = ReplayPackage::new(lock_inputs).expect("the unit compiles with its dependency");
+    let package =
+        ReplayPackage::new(lock_inputs, "q").expect("the unit compiles with its dependency");
     let wire = package.request("counterexample", ReplaySource::Input(Vec::new()));
     assert_eq!(wire.dependencies.len(), 1);
 
@@ -481,12 +483,13 @@ fn tc_026_a_unit_importing_a_locked_dependency_replays_to_a_reproduced_verdict()
 /// The dependency is compiled from the lock's own source, not assumed: a unit whose import names
 /// no supplied library is refused at the call site.
 ///
-/// Trace: FR-016-AC-14, TC-026
+/// Trace: FR-016-AC-16, TC-026
 #[test]
 fn tc_026_an_import_with_no_locked_dependency_is_refused() {
     let (mut lock_inputs, _) = importing_inputs(&units_library(BIG));
     lock_inputs.dependencies.clear();
-    let refusal = ReplayPackage::new(lock_inputs).expect_err("no library satisfies the import");
+    let refusal =
+        ReplayPackage::new(lock_inputs, "q").expect_err("no library satisfies the import");
     assert!(
         matches!(&refusal, ReplayPackageError::CallSite(cause) if matches!(**cause, CallSiteRefusal::Import(_))),
         "{refusal}"
@@ -496,13 +499,14 @@ fn tc_026_an_import_with_no_locked_dependency_is_refused() {
 /// The request's dependency entry carries the lock's recorded `package_id`, which QSL checks
 /// against the dependency it recompiles: a lock recording another identity is refused.
 ///
-/// Trace: FR-016-AC-14, TC-026
+/// Trace: FR-016-AC-17, TC-026
 #[test]
 fn tc_026_a_lock_recording_another_dependency_identity_is_refused() {
     let (mut lock_inputs, _) = importing_inputs(&units_library(BIG));
     lock_inputs.dependencies[0].package_id =
         DigestRecord::mint(DigestDomain::PackageSemanticV2, [7; 32]);
-    let package = ReplayPackage::new(lock_inputs).expect("the unit compiles with its dependency");
+    let package =
+        ReplayPackage::new(lock_inputs, "q").expect("the unit compiles with its dependency");
     let refusal = replay_q(&package, 3).expect_err("QSL refuses the stale dependency identity");
     assert!(
         matches!(
@@ -521,14 +525,13 @@ fn tc_026_a_lock_recording_another_dependency_identity_is_refused() {
 /// A lock selecting a library the unit does not import compiles, but QSL refuses the request
 /// naming it as unselected.
 ///
-/// Trace: FR-016-AC-14, TC-026
+/// Trace: FR-016-AC-18, TC-026
 #[test]
 fn tc_026_qsl_refuses_a_dependency_the_unit_does_not_select() {
-    let package = ReplayPackage::new(inputs(
-        &native_source(VIOLATING_TWIN),
+    let package = ReplayPackage::new(
+        inputs(&native_source(VIOLATING_TWIN), vec![dependency_lock()]),
         FUNCTION,
-        vec![dependency_lock()],
-    ))
+    )
     .expect("the twin compiles");
     let refusal = replay_falsification(
         "module::proof",
@@ -547,6 +550,48 @@ fn tc_026_qsl_refuses_a_dependency_the_unit_does_not_select() {
                     ReplayRefusal::DependencySelections(DependencySelectionsCause::Unselected { identity })
                         if identity.as_str() == "test/units"
                 )
+        ),
+        "{refusal}"
+    );
+}
+
+/// Two lock libraries whose sources share an owner are no dependency input, so the package is
+/// refused before the call site compiles anything.
+///
+/// Trace: FR-016-AC-19, TC-026
+#[test]
+fn tc_026_libraries_sharing_a_source_owner_are_refused() {
+    let first = dependency_lock();
+    let mut second = dependency_lock();
+    second.identity = "test/other".to_owned();
+    let refusal = ReplayPackage::new(
+        inputs(&native_source(VIOLATING_TWIN), vec![first, second]),
+        FUNCTION,
+    )
+    .expect_err("one source owner per library");
+    assert!(
+        matches!(
+            &refusal,
+            ReplayPackageError::Dependencies(DependencyLockError::Input(_))
+        ),
+        "{refusal}"
+    );
+}
+
+/// A lock library whose source has the unit's own owner is refused by QSL's call site.
+///
+/// Trace: FR-016-AC-20, TC-026
+#[test]
+fn tc_026_a_library_sharing_the_units_source_owner_is_refused() {
+    let mut lock = dependency_lock();
+    lock.source = locked(IDENTITY, b"a dependency source");
+    let refusal = ReplayPackage::new(inputs(&native_source(VIOLATING_TWIN), vec![lock]), FUNCTION)
+        .expect_err("the unit and a library never share an owner");
+    assert!(
+        matches!(
+            &refusal,
+            ReplayPackageError::CallSite(cause)
+                if matches!(**cause, CallSiteRefusal::DependencyInput(_))
         ),
         "{refusal}"
     );

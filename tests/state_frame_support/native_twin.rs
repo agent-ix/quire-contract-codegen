@@ -110,7 +110,8 @@ fn field(owner: &str, name: &str) -> Value {
 }
 
 /// The `test/bank` domain package: `Account` with the integer fields and ranges of `model`, one
-/// operation `deposit` whose frame modifies the fields `model` grants, and one closed population.
+/// operation `deposit` whose frame modifies the fields `model` grants, a declared operation
+/// `transfer` no clause names, and one closed population.
 fn domain_document() -> Vec<u8> {
     let account = account_type();
     let bound = |field: &str, keyword: &str, value: i64| {
@@ -138,21 +139,11 @@ fn domain_document() -> Vec<u8> {
             "constraints": [bound(field, "min", minimum), bound(field, "max", maximum)],
         })
     };
-    let mut types = model::FIELDS.map(value_type).to_vec();
-    types.push(json!({
-        "identity": account,
-        "displayName": account,
-        "kind": {"module": PACKAGE, "name": "object_type"},
-        "roles": [],
-        "origin": generated(&account),
-        "constraints": [],
-        "extensions": [],
-        "unknownPolicy": "reject",
-        "supertypes": [],
-        "fields": model::FIELDS.map(|(name, _)| field(&account, name)),
-        "operations": [{
-            "identity": format!("{account}/deposit"),
-            "name": "deposit",
+    // `transfer` is declared by the domain package, but no clause of the unit names it.
+    let operation = |name: &str| {
+        json!({
+            "identity": format!("{account}/{name}"),
+            "name": name,
             "params": [],
             "returns": {
                 "typeRef": "ix://quire/native/Boolean",
@@ -172,7 +163,21 @@ fn domain_document() -> Vec<u8> {
                 "creates": [],
                 "deletes": [],
             },
-        }],
+        })
+    };
+    let mut types = model::FIELDS.map(value_type).to_vec();
+    types.push(json!({
+        "identity": account,
+        "displayName": account,
+        "kind": {"module": PACKAGE, "name": "object_type"},
+        "roles": [],
+        "origin": generated(&account),
+        "constraints": [],
+        "extensions": [],
+        "unknownPolicy": "reject",
+        "supertypes": [],
+        "fields": model::FIELDS.map(|(name, _)| field(&account, name)),
+        "operations": [operation("deposit"), operation("transfer")],
     }));
     json!({
         "contractVersion": "2.0.0",
@@ -362,7 +367,6 @@ impl Twin {
                 bytes: self.unit.clone(),
             },
             dependencies: Vec::<DependencyLock>::new(),
-            function: "deposit".to_owned(),
             backend_manifest: DigestRecord::mint(DigestDomain::ToolManifestJcsV1, [3; 32]),
             accounting_limits: limits(1_000_000),
             stage_limits: StageLimits {

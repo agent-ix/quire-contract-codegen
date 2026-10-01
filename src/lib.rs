@@ -30,7 +30,7 @@ mod kani_transcript;
 mod kani_witness_join;
 // Implements: FR-016
 mod spine_replay;
-// Implements: FR-016
+// Implements: FR-015-AC-33
 mod frame_replay;
 // Implements: FR-002
 mod strategy;

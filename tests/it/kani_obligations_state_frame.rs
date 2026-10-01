@@ -783,64 +783,98 @@ fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
     ));
 }
 
-/// The frame-replay request is built from QSL's own answer for the operation: the envelope names
-/// the payload's frame node and frame occurrence, and a forbidden write replays to a reproduced
-/// violation while a write the frame grants does not, with no Kani run involved.
+/// The frame-replay payload's identities are QSL's answer for the operation, and the envelope
+/// names the payload's own frame node and frame occurrence.
 ///
-/// Trace: FR-015-AC-33, TC-025
+/// Trace: FR-015-AC-33, FR-015-AC-34, TC-025
 #[test]
-fn tc_025_the_frame_replay_request_is_built_from_the_call_site_and_settles() {
+fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
     let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 1));
     let replay = twin.frame_replay(&invocation, "account", "audit");
     let payload = replay.packet.family_payload.as_ref().expect("a payload");
+    assert_ne!(payload.anchor, payload.frame);
+    assert_eq!(payload.occurrence.node(), payload.frame);
     assert_eq!(replay.packet.clause_node, Some(payload.frame));
     assert_eq!(
         replay.packet.occurrence_key.as_ref(),
         Some(&payload.occurrence)
     );
-    assert_ne!(payload.anchor, payload.frame);
-    assert_eq!(payload.occurrence.node(), payload.frame);
+}
 
-    let reproduced = replay.replay().expect("the replay settles");
-    let ReplayResult::Witness(arm) = reproduced.result() else {
+/// `FrameReplay::replay` returns QSL's result without Kani: a forbidden write settles a reproduced
+/// violation that names the written field, and a write the frame grants is a respected frame.
+///
+/// Trace: FR-015-AC-36, TC-025
+#[test]
+fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
+    let twin = Twin::new();
+    let forbidden = twin.invocation("account", (5, 0), (6, 1));
+    let result = twin
+        .frame_replay(&forbidden, "account", "audit")
+        .replay()
+        .expect("the replay settles");
+    let ReplayResult::Witness(arm) = result.result() else {
         panic!("a witness-sourced replay settles on the witness arm");
     };
     assert_eq!(
         arm.settlement(),
         WitnessSettlement::ReproducedWithEvaluatedWitness
     );
+    assert_eq!(arm.category(), ProofCategory::Violation);
+    let Some(FrameChange::FieldWrite { object, field, .. }) =
+        result.found().map(|found| &found.change)
+    else {
+        panic!("the replay found a field write: {:?}", result.found());
+    };
+    assert_eq!((object.as_str(), field.as_str()), ("account", "audit"));
 
     let granted = twin.invocation("account", (5, 0), (6, 0));
-    let respected = twin
-        .replay(&granted, "account", "balance")
+    let result = twin
+        .frame_replay(&granted, "account", "balance")
+        .replay()
         .expect("the replay settles");
-    let ReplayResult::Witness(arm) = respected.result() else {
+    let ReplayResult::Witness(arm) = result.result() else {
         panic!("a witness-sourced replay settles on the witness arm");
     };
     assert_eq!(arm.settlement(), WitnessSettlement::Inconclusive);
+    assert_eq!(
+        arm.disagreement(),
+        Some(DisagreementCause::Verdicts {
+            proved: Verdict::from_category(ProofCategory::Violation),
+            replayed: Verdict::from_category(ProofCategory::Success),
+        })
+    );
+    assert!(result.found().is_none());
 }
 
 /// An operation the unit names no frame for is refused by the call site before any request is
-/// built, paired with the package it was looked up in.
+/// built, whether the domain package declares it (`transfer`, which no clause names) or not
+/// (`withdraw`).
 ///
-/// Trace: FR-015-AC-33, TC-025
+/// Trace: FR-015-AC-35, TC-025
 #[test]
 fn tc_025_an_operation_with_no_frame_is_refused_when_the_request_is_built() {
     let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 0));
-    let refusal = twin
-        .try_frame_replay("withdraw", &invocation, "account", "audit")
-        .err()
-        .expect("the unit names no frame for `withdraw`");
-    assert!(
-        matches!(
-            &refusal,
-            FrameReplayError::CallSite(cause)
-                if matches!(**cause, CallSiteRefusal::UnknownOperation { .. })
-        ),
-        "{refusal}"
-    );
+    for operation in ["transfer", "withdraw"] {
+        let refusal = twin
+            .try_frame_replay(operation, &invocation, "account", "audit")
+            .err()
+            .unwrap_or_else(|| panic!("the unit names no frame for `{operation}`"));
+        assert!(
+            matches!(
+                &refusal,
+                FrameReplayError::CallSite(cause)
+                    if matches!(
+                        &**cause,
+                        CallSiteRefusal::UnknownOperation { selection, .. }
+                            if selection.operation.as_str() == operation
+                    )
+            ),
+            "{operation}: {refusal}"
+        );
+    }
 }
 
 // ---- kani lane ---------------------------------------------------------------
