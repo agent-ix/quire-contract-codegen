@@ -20,7 +20,7 @@ reported outcome and a test. It checked the text against:
 - `quire-contract-runtime` (`CampaignCounts`);
 - `proptest` 1.5.0 (`Union` and `sample::select` shrinking).
 
-It does not repeat the scope-boundary findings in REV-022 (SR-013). Where a failure mode overlaps
+It does not repeat the scope-boundary findings in REV-022. Where a failure mode overlaps
 one of those findings, the row cites it.
 
 What holds up:
