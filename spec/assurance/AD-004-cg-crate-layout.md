@@ -531,8 +531,8 @@ requirement is authored.
   once step 7 lands the registry rows by directory, it reads the registry instead.
 - L-2. The import graph is acyclic and follows the dependency direction above, `#[cfg(test)]`
   modules included, and no file imports an item through the crate root. Test: a layout test that
-  reads `use crate::` lines and flags a bare `crate::<Item>` path in code (inline types, calls,
-  doc links; not string literals). It lands at the end of step 2, after the edge-removal steps, so it can
+  reads `use crate::` lines and flags a bare `crate::<Item>` path in code (inline types, calls;
+  not string literals or comments, so intra-doc links are rewritten by step 2g-0 but not checked). It lands at the end of step 2, after the edge-removal steps, so it can
   pass when it lands.
 - L-3. `#[kani::proof]`, `#[kani::proof_for_contract]`, `kani::requires`, `kani::ensures`,
   `kani::any`, `kani::assume` and `kani::cover!` occur in string literals of non-test source in
@@ -632,10 +632,12 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    sweep also covers inline paths in code, `crate::Item` outside a `use` line, and intra-doc
    links that name a root item; it leaves string literals (the template text `"crate::State"`
    and the like) alone. At the time of writing there are two inline code paths,
-   `crate::GenerationDiagnostic` in `kani.rs` and in `kani_obligations.rs`, and two doc links
-   (`crate::MAX_GENERATED_SOURCE_BYTES` in `generation.rs` and `kani_obligations.rs`). 2g-0
-   changes paths only. The layout test (L-1, L-2) lands with 2g; it reads `use` lines and also
-   flags `crate::<Item>` with no module segment in non-comment code outside string literals.
+   `crate::GenerationDiagnostic` in `kani.rs` and in `kani_obligations.rs`, and ten intra-doc
+   links naming a root item, in six files (`generation`, `kani_obligations`, `spine_replay`,
+   `kani_witness_join`, `kani_identity`, `oracle`). 2g-0 changes paths only. The layout test
+   (L-1, L-2) lands with 2g; it reads `use` lines and also flags `crate::<Item>` with no module
+   segment in code outside string literals. It does not read comments, so the doc links are
+   rewritten by 2g-0 and not checked by the test.
 3. **Typed node access.** `core/ir` with the operator enum, then `state_frame`, `exact_scalar`,
    `composite_equality` and `exact_function` onto it, one PR each. L-8 lands with the last.
 4. **The one generator.**
@@ -738,7 +740,9 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    `oracle/bound_v1.rs` and `oracle/boolean_v1.rs` is replaced and deleted with its V2 criteria.
    IR-364 (the V2 strategy chain: FR-002, FR-004 and FR-008 to FR-013 over `CheckedPackageV2`) is
    owned by the IR team and is ordered before this step; no V1 reader is deleted until its
-   criteria exist.
+   criteria exist. `typed_dependency_parameters` and `generate_boolean_oracle`, which the V2
+   `kani` and `kani_obligations` import, are moved or replaced before `boolean_v1.rs` is deleted
+   (see the `oracle` naming and V1 rows of the module map).
 7. **Spec follows the code.** One spec PR: the registry rows by directory; FR-005 and
    TC-001, TC-002, TC-007 to `spec/publication/`; SUR-001 to `core/functional/`; `interface-001`
    and `tests.md` fixed. `git mv`, ids unchanged. When this step lands, the registry note in
@@ -756,8 +760,8 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
   `kani_transcript` split in 2f are the only edits beyond renames and path fixes; they relocate
   items unchanged and carry no behaviour change, and each is refused if its generated output is
   not byte-identical.
-- The layout test reads `use` lines and bare `crate::<Item>` paths, not the compiler's graph. A path in a macro or a
-  `super::` import would escape it. The measured edge list in this AD was made the same way
+- The layout test reads `use` lines and bare `crate::<Item>` paths in code, not the compiler's graph. A path in a macro, a
+  `super::` import or an intra-doc link (comments are not read) would escape it. The measured edge list in this AD was made the same way
   and has the same blind spot.
 - Step 4c needs a spec change and has no ticket. If it slips, 4e and 4f slip with it, because the
   V1 arm is the only contract family until then.

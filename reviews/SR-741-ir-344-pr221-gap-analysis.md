@@ -50,3 +50,21 @@ CONDITIONAL: one medium gap in the root-import ownership, plus two low notes.
 - Rows: unchanged (spec-only PR; no test or tag touched).
 - Semantic review: skipped (an AD amendment adds no criteria).
 - Plan completion: not assessed
+
+## New findings (disposition pass 1)
+
+Re-measured at 0d1a306 with a grep for `crate::[A-Za-z_]` outside `use` lines, minus module paths. That finds two inline code paths, exactly the two named (kani.rs:889, kani_obligations.rs:961). It finds five string literals, left alone as intended (kani_execution.rs:930-931, state_frame.rs:1041-1042, bounded_kani_corpus.rs:928). And it finds ten doc links naming a root item, in six files.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | 2g-0 says "two doc links (`crate::MAX_GENERATED_SOURCE_BYTES` in `generation.rs` and `kani_obligations.rs`)", but ten intra-doc links in six files name a root item. Beyond the two named: `crate::OperationProvenance::CallerDeclared` (generation.rs:30, kani_obligations.rs:31), `crate::decode_falsification` (spine_replay.rs:5), `crate::KaniRunOutcome::Falsified` (kani_witness_join.rs:115), `crate::generate_state_frame_obligations` (kani_identity.rs:27, kani_obligations.rs:239), `crate::generate_bound_oracles` (oracle.rs:24) and `crate::KaniErrorCode::InvalidGeneratedSyntax` (kani_obligations.rs:252). Correct the count, or drop the enumeration and keep the general rule | spec/assurance/AD-004-cg-crate-layout.md:632-636, src/generation.rs:30, src/oracle.rs:24, src/spine_replay.rs:5, src/kani_witness_join.rs:115, src/kani_identity.rs:27, src/kani_obligations.rs:31 |
+| FND-005 | low | L-2 says the layout test flags a bare `crate::<Item>` in "inline types, calls, doc links; not string literals". But 2g-0's closing sentence says the test flags it "in non-comment code outside string literals", and intra-doc links are comments. So the two texts disagree on whether the test catches doc links, and with FND-004 that decides whether eight unlisted links survive unnoticed. Make the two agree, and say whether doc links are in the test's scope | spec/assurance/AD-004-cg-crate-layout.md:533-535, spec/assurance/AD-004-cg-crate-layout.md:636-638 |
+| FND-006 | low | The requirement that step 6 move or replace `typed_dependency_parameters` and `generate_boolean_oracle` (which the V2 `kani` and `kani_obligations` import) before deleting `boolean_v1.rs` sits only in map row 232. Step 6's own text (737-741) says each V1 reader "is replaced and deleted with its V2 criteria" and does not mention it, so whoever runs step 6 from its step text will not see it. Add one clause to step 6 pointing to that dependency | spec/assurance/AD-004-cg-crate-layout.md:232, spec/assurance/AD-004-cg-crate-layout.md:737-741 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 0d1a306: 2g-0 now owns inline `crate::Item` code paths and doc links, string literals excluded. L-2's test and Risks name bare `crate::<Item>` paths. The two inline code paths are exactly the ones in code; the residual count and wording issues are FND-004 and FND-005 |
+| FND-002 | fixed | 0d1a306: row 232 now says the V2 `kani_obligations` and `kani` import `typed_dependency_parameters` and `generate_boolean_oracle`, that the dependency predates the AD, and that step 6 must move or replace it before deleting `boolean_v1.rs`. Where step 6 states this is FND-006 |
+| FND-003 | fixed | 0d1a306: 2d-0 and row 232 move the `unique_names` and `oracle_symbol` tests to `core/naming.rs`, trace tags unchanged |

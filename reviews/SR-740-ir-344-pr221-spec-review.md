@@ -46,3 +46,10 @@ Mergeable after two low wording fixes. Neither changes the plan.
 | --- | --- | --- | --- |
 | FND-001 | low | The new row 231 and step 2d-0 call `rust_component` and `observation_name` "the private ... they use", and 2d-0 says "the items move unchanged". But `observation_name` is also called by `reference_key` (`src/oracle.rs:818`), which feeds the V1 analysis (`oracle.rs:511`, `670`, `814`) and stays in `oracle`. So `observation_name` cannot move as a private, unchanged item: it must become `pub(crate)` in `core/naming.rs`, or `reference_key` and `dependency_key` must move with it. State which, so a 2d-0 reviewer holding the "unchanged" rule does not refuse a needed visibility change | spec/assurance/AD-004-cg-crate-layout.md:231, spec/assurance/AD-004-cg-crate-layout.md:607-614, src/oracle.rs:817-831 |
 | FND-002 | low | The existing row 230 still maps `oracle` "naming" to `core/naming.rs` as a split with no step. The new row 231 maps the same helpers again, with step 2d-0. Two rows now own one split. Drop "naming" and `core/naming.rs` from row 230, or point row 230 at row 231 | spec/assurance/AD-004-cg-crate-layout.md:230-231 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 0d1a306: `observation_name` is listed as moving `pub(crate)`, the only edit to a moved item. `reference_key` and `dependency_key` stay in oracle. Checked: `reference_key` (oracle.rs:817) is called by `analyze_node` (511), `render_node` (670) and `dependency_key` (814), all V1, and it calls `observation_name`. The claim is right |
+| FND-002 | fixed | 0d1a306: row 231 no longer lists naming or `core/naming.rs`. Row 232 alone owns the naming split, with its tests |
