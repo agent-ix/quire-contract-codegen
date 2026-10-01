@@ -2,7 +2,7 @@
 id: "SR-680"
 title: "CG PR 216 spec review: AD-003 R-Q1 when-rule"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@a1f3baaab6177dd871aee13658b842ece2d9b7ed; spec/assurance/AD-003-evidence-chain.md"
+scope: "agent-ix/quire-contract-codegen@a1f3baaab6177dd871aee13658b842ece2d9b7ed (review), 7f7ccc3e9793a13ccf5b0e52fb37da9d2738b8ab (disposition pass 1); spec/assurance/AD-003-evidence-chain.md; spec/assurance/AD-004-cg-crate-layout.md at origin/main fda2316 (context)"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AD-003
     type: references
@@ -82,3 +82,25 @@ this PR's:
 3. Step 5's replay-outcome type has a QSL result, a `ReplayRefusal`, a fault and a CG-defect
    variant, and no path for a CG pre-replay data refusal that carries a QSL code.
 4. Step 5 does not mention QSL-352, although AD-003 says those codes land with step 5.
+
+## New findings (disposition pass 1)
+
+Reviewed at 7f7ccc3. Base main is now fda2316, which includes CG #215 (AD-004) merged. The PR
+branch sits on d3acbe5 and merges cleanly with fda2316 (`git merge-tree`).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | AD-003 and the merged AD-004 step 5 disagree on the witness decode failure. AD-003 link 7 puts `EvidenceFailureCause::Decode` in the first group, a CG defect that is always `Failed` ("a playback that does not type against the bindings CG persisted"). AD-004 step 5 at origin/main lists `DecodeFailure` among the after-Kani setup refusals on data, which become `Inconclusive(ReplayRefused)` once QSL-352 lands. These are the same value: `EvidenceFailureCause::Decode(DecodeFailure)` (`src/spine_replay.rs:451`, :496). QSL's relayed list (`Compile`/`UnknownFunction`, `InvalidFunction`, `Name`, dependency selection) does not include it. AD-004 defers to PR 216 ("as in the follow-up PR 216, which is not edited here"), so after both merge the two ADs give one value two different results. Needed: one placement in both ADs. AD-003's is the one SR-670 FND-015 settled, so drop `DecodeFailure` from AD-004 step 5's after-Kani list, in this PR or a ticketed follow-up | spec/assurance/AD-003-evidence-chain.md:77; spec/assurance/AD-004-cg-crate-layout.md:666-669 (origin/main) |
+
+## Dispositions
+
+Round 1, reviewed at 7f7ccc3. `make spec` (TRUSTED_HOME on the make command line) exits 0 with
+the 3 baseline warnings. `reviews/SR-680-ir-324-spec-review-when-rule.md` at 7f7ccc3 is
+byte-identical to the review-pass file.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 7f7ccc3: R-Q1 (a) now names IR's `Refused`/`InvalidInput`/`IncompleteInput` as the only CG producer. QSL's "refused caller lock" is marked as QSL's example and not a CG case. `DependencyLockError` via `ReplayPackageError::Dependencies` is stated as case (b), in R-Q1 and in link 7. IR's lock check is placed at checked-package admission. The merged AD-004 step 5 says the same |
+| FND-002 | fixed | 7f7ccc3: E-3 and R-Q1 say "IR-outcome rows of C-09 (FR-030)" and "outside the replay (counterexample) rows of C-09" |
+| FND-003 | fixed | 7f7ccc3: "for example" with `Compile`, `ModelIntake`, `DependencyInput`, `Import`, `Dependency`, `UnknownFunction`, `UnknownOperation` and `UnknownClause`. That matches every non-fault variant of QSL `CallSiteRefusal` at origin/main (`call_site.rs:142`; `UnknownClause` is a real variant, and `Fault` is the only other one) |
+| FND-004 | fixed | 7f7ccc3: R-Q1 states CG's pre-Kani refusals without deciding them. `NoDerivableClaim` settles `unsupported` with no harness (FR-015-AC-15, verified). `HarnessNotInCrate` comes from `execute_kani_obligation` (FR-022:129, verified) and is left open, with `Failed` as a candidate only. A nit, not reopened: `UnsupportedObligations` is a `GenerationErrorCode` whose interface-001 terminal state is `unsupported` with no partial artifact (`src/oracle.rs:94`, :113), not a claim kind, so "an item whose claim is ... `UnsupportedObligations`" is loose wording. The substance (no run, no artifact, no terminal value) holds |
