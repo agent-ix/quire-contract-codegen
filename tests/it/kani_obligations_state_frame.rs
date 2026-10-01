@@ -28,7 +28,7 @@ mod subject;
 
 use std::{fs, path::PathBuf, time::Duration};
 
-use native_twin::{Tamper, Twin};
+use native_twin::{Counterexample, Tamper, Twin};
 use package::{
     application, code_id, corpus_package, key, literal, member, op, op_full, parameter_body,
     reference, Bound, PackageBuilder, NODE_DOMAIN, T_BOOLEAN, T_INTEGER,
@@ -38,10 +38,11 @@ use qsl_replay::{
     ReplayRefusal, ReplayResult, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
-    execute_kani_obligation, generate_state_frame_obligations, FrameReplayError,
-    KaniExecutionRequest, KaniInstallation, KaniRunOutcome, StateComparison, StateFieldDomain,
-    StateFrameHarness, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
-    StateFrameRequest, UnsupportedFrameEffect,
+    decode_frame_witness, execute_kani_obligation, generate_state_frame_obligations,
+    obligation_digest, FrameReplayError, FrameWitnessRefusal, IdentityRefusal,
+    KaniExecutionRequest, KaniInstallation, KaniRunOutcome, ObligationBinding, ObligationKind,
+    StateComparison, StateFrameHarness, StateFrameIdentity, StateFrameObligations,
+    StateFrameProperty, StateFrameRefusal, StateFrameRequest, UnsupportedFrameEffect,
 };
 use quire_contract_ir::{CheckedNodeId, CheckedPackageV2, CompleteLoweringRecordV2};
 use serde_json::{json, Value};
@@ -438,6 +439,69 @@ fn refusal(shape: &Shape, fields: &[&str]) -> StateFrameRefusal {
         .expect_err("the request must be refused")
 }
 
+/// Each binding of `harness` with the range assumed of it.
+fn domains(harness: &StateFrameHarness) -> Vec<(String, Option<(i64, i64)>)> {
+    harness
+        .identity
+        .arguments
+        .iter()
+        .map(|binding| {
+            (
+                binding.identifier.clone(),
+                binding
+                    .integer_bounds
+                    .as_ref()
+                    .map(|bounds| (bounds.minimum, bounds.maximum)),
+            )
+        })
+        .collect()
+}
+
+/// A `cargo kani --concrete-playback print` transcript of `obligation`'s harness whose symbolic
+/// bindings take `values`, in the order the harness draws them. Only the default lane builds one;
+/// the kani lane decodes the prover's own.
+fn playback(obligation: &StateFrameIdentity, values: &[(&str, i64)]) -> String {
+    let entries = obligation
+        .arguments
+        .iter()
+        .map(|binding| {
+            let (_, value) = values
+                .iter()
+                .find(|(name, _)| *name == binding.identifier)
+                .expect("a value for every binding");
+            let bytes = value
+                .to_le_bytes()
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("        // {value}\n        vec![{bytes}],\n")
+        })
+        .collect::<String>();
+    format!(
+        "/// Test generated for harness `{module}::{harness}`\n\
+/// Check for `assertion`: \"a frame effect\"\n\
+#[test]\n\
+fn kani_concrete_playback_check_1() {{\n\
+    let concrete_vals: Vec<Vec<u8>> = vec![\n{entries}    ];\n\
+    kani::concrete_playback_run(concrete_vals, check);\n\
+}}\n",
+        module = obligation.module_symbol,
+        harness = obligation.harness_symbol,
+    )
+}
+
+/// The frame obligation of the healthy fixture and a playback of it at `(balance, audit)`.
+fn counterexample(balance: i64, audit: i64) -> Counterexample {
+    let obligation = generate(&fixture(&Shape::HEALTHY)).frame.identity;
+    let transcript = playback(&obligation, &[("balance", balance), ("audit", audit)]);
+    let witness = decode_frame_witness(&obligation, &transcript).expect("the playback decodes");
+    Counterexample {
+        obligation,
+        witness,
+    }
+}
+
 // ---- default lane ------------------------------------------------------------
 
 /// A postcondition clause yields two separate harnesses whose identity is scoped to the
@@ -466,16 +530,15 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
         }
     );
     // Every field the object's IR bounds is assumed in range, so a counterexample is a state
-    // the model admits.
-    let domain = |field: &str| StateFieldDomain {
-        field: field.to_owned(),
-        minimum: 0,
-        maximum: 1000,
-    };
+    // the model admits. The bindings are ascending by field name, the order the harness draws
+    // them in.
     for harness in [&generated.postcondition, &generated.frame] {
         assert_eq!(
-            harness.identity.domains,
-            vec![domain("balance"), domain("audit")]
+            domains(harness),
+            vec![
+                ("audit".to_owned(), Some((0, 1000))),
+                ("balance".to_owned(), Some((0, 1000)))
+            ]
         );
         let source = &harness.rust.contents;
         assert!(source.contains("kani::assume(pre.balance >= 0_i64 && pre.balance <= 1000_i64);"));
@@ -674,14 +737,12 @@ fn tc_025_each_field_is_assumed_in_its_own_declared_range() {
         ..Shape::HEALTHY
     };
     let generated = generate(&fixture(&shape));
-    let domain = |field: &str, minimum, maximum| StateFieldDomain {
-        field: field.to_owned(),
-        minimum,
-        maximum,
-    };
-    let expected = vec![domain("balance", 5, 900), domain("audit", 0, 50)];
-    assert_eq!(generated.postcondition.identity.domains, expected);
-    assert_eq!(generated.frame.identity.domains, expected);
+    let expected = vec![
+        ("audit".to_owned(), Some((0, 50))),
+        ("balance".to_owned(), Some((5, 900))),
+    ];
+    assert_eq!(domains(&generated.postcondition), expected);
+    assert_eq!(domains(&generated.frame), expected);
     let post = &generated.postcondition.rust.contents;
     assert!(post.contains("kani::assume(pre.balance >= 5_i64 && pre.balance <= 900_i64);"));
     assert!(post.contains("kani::assume(pre.audit >= 0_i64 && pre.audit <= 50_i64);"));
@@ -764,18 +825,37 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
 #[test]
 fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
     let twin = Twin::new();
+    let counterexample = counterexample(5, 0);
     let invocation = twin.invocation("account", (5, 0), (6, 0));
     assert!(twin
-        .replay_tampered(&invocation, "account", "audit", Tamper::Nothing)
+        .replay_tampered(
+            &counterexample,
+            &invocation,
+            "account",
+            "audit",
+            Tamper::Nothing
+        )
         .is_ok());
 
-    let clause = twin.replay_tampered(&invocation, "account", "audit", Tamper::ClauseNode);
+    let clause = twin.replay_tampered(
+        &counterexample,
+        &invocation,
+        "account",
+        "audit",
+        Tamper::ClauseNode,
+    );
     assert!(matches!(
         clause,
         Err(ReplayRefusal::FrameIdentity(mismatch))
             if matches!(*mismatch, FrameIdentityMismatch::EnvelopeFrame { .. })
     ));
-    let occurrence = twin.replay_tampered(&invocation, "account", "audit", Tamper::Occurrence);
+    let occurrence = twin.replay_tampered(
+        &counterexample,
+        &invocation,
+        "account",
+        "audit",
+        Tamper::Occurrence,
+    );
     assert!(matches!(
         occurrence,
         Err(ReplayRefusal::FrameIdentity(mismatch))
@@ -791,7 +871,7 @@ fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
 fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
     let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 1));
-    let replay = twin.frame_replay(&invocation, "account", "audit");
+    let replay = twin.frame_replay(&counterexample(5, 0), &invocation, "account", "audit");
     let payload = replay.packet.family_payload.as_ref().expect("a payload");
     assert_ne!(payload.anchor, payload.frame);
     assert_eq!(payload.occurrence.node(), payload.frame);
@@ -809,9 +889,10 @@ fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
 #[test]
 fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
     let twin = Twin::new();
+    let counterexample = counterexample(5, 0);
     let forbidden = twin.invocation("account", (5, 0), (6, 1));
     let result = twin
-        .frame_replay(&forbidden, "account", "audit")
+        .frame_replay(&counterexample, &forbidden, "account", "audit")
         .replay()
         .expect("the replay settles");
     let ReplayResult::Witness(arm) = result.result() else {
@@ -831,7 +912,7 @@ fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
 
     let granted = twin.invocation("account", (5, 0), (6, 0));
     let result = twin
-        .frame_replay(&granted, "account", "balance")
+        .frame_replay(&counterexample, &granted, "account", "balance")
         .replay()
         .expect("the replay settles");
     let ReplayResult::Witness(arm) = result.result() else {
@@ -857,9 +938,10 @@ fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
 fn tc_025_an_operation_with_no_frame_is_refused_when_the_request_is_built() {
     let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 0));
+    let counterexample = counterexample(5, 0);
     for operation in ["transfer", "withdraw"] {
         let refusal = twin
-            .try_frame_replay(operation, &invocation, "account", "audit")
+            .try_frame_replay(operation, &counterexample, &invocation, "account", "audit")
             .err()
             .unwrap_or_else(|| panic!("the unit names no frame for `{operation}`"));
         assert!(
@@ -875,6 +957,250 @@ fn tc_025_an_operation_with_no_frame_is_refused_when_the_request_is_built() {
             "{operation}: {refusal}"
         );
     }
+}
+
+/// One clause yields a postcondition obligation and a frame obligation, and they are two
+/// identities: the kind is part of what an identity commits to, so the clause node alone never
+/// names an obligation.
+///
+/// Trace: FR-015-AC-37, TC-025
+#[test]
+fn tc_025_two_kinds_of_one_clause_are_two_identities() {
+    let generated = generate(&fixture(&Shape::HEALTHY));
+    let (post, frame) = (&generated.postcondition.identity, &generated.frame.identity);
+    assert_eq!(post.clause, frame.clause);
+    assert_eq!(post.arguments, frame.arguments);
+    assert_eq!(
+        (post.kind, frame.kind),
+        (ObligationKind::Postcondition, ObligationKind::Frame)
+    );
+    assert_ne!(post.obligation_identity, frame.obligation_identity);
+    // Equal inputs mint the same identity, and the stored digest is the digest of the contents.
+    assert_eq!(
+        generate(&fixture(&Shape::HEALTHY))
+            .frame
+            .identity
+            .obligation_identity,
+        frame.obligation_identity
+    );
+    assert_eq!(
+        obligation_digest(&frame.clause, frame.kind, &frame.arguments),
+        Ok(frame.obligation_identity)
+    );
+}
+
+/// The identity commits to the clause, the kind and each binding's identifier and
+/// declared range: changing any one changes it. The unwind bound and the generated symbols are
+/// not in the preimage.
+///
+/// Trace: FR-015-AC-37, TC-025
+#[test]
+fn tc_025_the_identity_changes_with_the_clause_the_kind_and_each_binding() {
+    let frame = generate(&fixture(&Shape::HEALTHY)).frame.identity;
+    let digest = |clause: &_, kind, arguments: &[ObligationBinding]| {
+        obligation_digest(clause, kind, arguments).expect("ascending arguments")
+    };
+    let original = digest(&frame.clause, frame.kind, &frame.arguments);
+    assert_eq!(original, frame.obligation_identity);
+
+    let other_clause = generate(&fixture(&Shape {
+        variant: 14,
+        condition: Condition::PostLePre,
+        ..Shape::HEALTHY
+    }))
+    .frame
+    .identity;
+    assert_ne!(other_clause.clause, frame.clause);
+    assert_ne!(other_clause.obligation_identity, original);
+    assert_ne!(
+        digest(
+            &frame.clause,
+            ObligationKind::Postcondition,
+            &frame.arguments
+        ),
+        original
+    );
+
+    let mut mutated = frame.arguments.clone();
+    mutated[1].integer_bounds.as_mut().expect("a range").maximum += 1;
+    assert_ne!(
+        digest(&frame.clause, frame.kind, &mutated),
+        original,
+        "domain"
+    );
+    let mut mutated = frame.arguments.clone();
+    mutated[1].integer_bounds = None;
+    assert_ne!(
+        digest(&frame.clause, frame.kind, &mutated),
+        original,
+        "unbounded"
+    );
+    let mut mutated = frame.arguments.clone();
+    mutated[1].identifier = "balance_".to_owned();
+    assert_ne!(
+        digest(&frame.clause, frame.kind, &mutated),
+        original,
+        "identifier"
+    );
+    assert_ne!(
+        digest(&frame.clause, frame.kind, &frame.arguments[..1]),
+        original,
+        "a dropped binding"
+    );
+
+    // Neither the unwind bound nor the harness symbols decide which obligation this is.
+    let unwound = generate_state_frame_obligations(&StateFrameRequest {
+        unwind: 5,
+        ..request(&fixture(&Shape::HEALTHY), &STATE_FIELDS)
+    })
+    .expect("generates")
+    .frame
+    .identity;
+    assert_ne!(unwound.options, frame.options);
+    assert_eq!(unwound.obligation_identity, original);
+}
+
+/// The bindings are ascending by field name, and harness order is binding order: `audit` is
+/// drawn first although `balance` is declared first.
+///
+/// Trace: FR-015-AC-37, TC-025
+#[test]
+fn tc_025_bindings_are_ascending_and_the_harness_draws_them_in_that_order() {
+    let fixture = fixture(&Shape::HEALTHY);
+    let frame = generate(&fixture).frame;
+    let names = frame
+        .identity
+        .arguments
+        .iter()
+        .map(|binding| binding.identifier.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(names, vec!["audit", "balance"]);
+    let source = &frame.rust.contents;
+    assert!(
+        source.contains("S { audit: kani::any(), balance: kani::any() }")
+            || source.contains("Account { audit: kani::any(), balance: kani::any() }"),
+        "{source}"
+    );
+
+    // Arguments out of order are no identity: the harness order would not be the committed one.
+    let mut swapped = frame.identity.arguments.clone();
+    swapped.swap(0, 1);
+    assert_eq!(
+        obligation_digest(&frame.identity.clause, frame.identity.kind, &swapped),
+        Err(IdentityRefusal::ArgumentsNotAscending {
+            identifier: "audit".to_owned()
+        })
+    );
+}
+
+/// A playback decodes into the values of its obligation's bindings; a value outside the range
+/// the harness assumed, a playback of another harness, a non-frame obligation and an identity
+/// that is not its own contents' are each refused before an envelope is built.
+///
+/// Trace: FR-015-AC-38, TC-025
+#[test]
+fn tc_025_a_playback_that_is_not_a_witness_of_the_obligation_is_refused() {
+    let generated = generate(&fixture(&Shape::HEALTHY));
+    let frame = &generated.frame.identity;
+    let witness = decode_frame_witness(frame, &playback(frame, &[("balance", 7), ("audit", 9)]))
+        .expect("an in-domain playback decodes");
+    assert_eq!(witness.obligation(), frame.obligation_identity);
+    assert_eq!(witness.integer("balance"), Some(7));
+    assert_eq!(witness.integer("audit"), Some(9));
+    // The bounds are inclusive.
+    assert!(
+        decode_frame_witness(frame, &playback(frame, &[("balance", 1000), ("audit", 0)])).is_ok()
+    );
+
+    for (balance, audit, argument) in [
+        (1001, 0, "balance"),
+        (5, -1, "audit"),
+        (i64::MIN, 0, "balance"),
+    ] {
+        assert_eq!(
+            decode_frame_witness(
+                frame,
+                &playback(frame, &[("balance", balance), ("audit", audit)])
+            ),
+            Err(FrameWitnessRefusal::OutOfDomain {
+                argument: argument.to_owned()
+            })
+        );
+    }
+
+    // The postcondition harness's playback, decoded against the frame obligation.
+    let post = &generated.postcondition.identity;
+    let sibling = playback(post, &[("balance", 7), ("audit", 9)]);
+    assert!(matches!(
+        decode_frame_witness(frame, &sibling),
+        Err(FrameWitnessRefusal::Decode(failure))
+            if failure.code == "cg_witness_harness_identity_mismatch"
+    ));
+    assert_eq!(
+        decode_frame_witness(post, &sibling),
+        Err(FrameWitnessRefusal::NotAFrame {
+            kind: ObligationKind::Postcondition
+        })
+    );
+
+    // An identity whose bindings were edited after it was minted.
+    let mut stale = frame.clone();
+    stale.arguments[0]
+        .integer_bounds
+        .as_mut()
+        .expect("a range")
+        .maximum = i64::MAX;
+    assert_eq!(
+        decode_frame_witness(&stale, &playback(&stale, &[("balance", 7), ("audit", 9)])),
+        Err(FrameWitnessRefusal::IdentityStale(None))
+    );
+}
+
+/// The envelope carries the obligation's identity digest and the decoded values, each named by
+/// its binding, and a request whose obligation is not the one the witness was
+/// decoded under is refused when it is built.
+///
+/// Trace: FR-015-AC-38, TC-025
+#[test]
+fn tc_025_the_envelope_carries_the_obligation_identity_and_the_decoded_values() {
+    let twin = Twin::new();
+    let counterexample = counterexample(5, 3);
+    let invocation = twin.invocation("account", (5, 3), (6, 4));
+    let replay = twin.frame_replay(&counterexample, &invocation, "account", "audit");
+    assert_eq!(
+        replay.packet.obligation_identity,
+        Some(*counterexample.obligation.obligation_identity.as_bytes())
+    );
+    let Some(qsl_replay::ReplaySource::Witness(witness)) = &replay.packet.source else {
+        panic!("the envelope carries the transcript");
+    };
+    assert_eq!(
+        witness.concrete_values(),
+        vec![("audit".to_owned(), 3), ("balance".to_owned(), 5)],
+        "audit then balance, each named by its binding"
+    );
+
+    let other = generate(&self::fixture(&Shape {
+        variant: 14,
+        condition: Condition::PostLePre,
+        ..Shape::HEALTHY
+    }))
+    .frame
+    .identity;
+    let mismatched = Counterexample {
+        obligation: other.clone(),
+        witness: counterexample.witness.clone(),
+    };
+    let refusal = twin
+        .try_frame_replay("deposit", &mismatched, &invocation, "account", "audit")
+        .err()
+        .expect("the witness belongs to another obligation");
+    assert!(matches!(
+        refusal,
+        FrameReplayError::ObligationMismatch { witness, obligation }
+            if witness == counterexample.obligation.obligation_identity
+                && obligation == other.obligation_identity
+    ));
 }
 
 // ---- kani lane ---------------------------------------------------------------
@@ -948,29 +1274,6 @@ fn falsified(outcome: KaniRunOutcome, reason: &str) -> String {
     counterexample
 }
 
-/// The `(balance, audit)` values Kani's concrete playback assigns the harness's two symbolic
-/// `i64` fields, in the order the harness declares them.
-fn playback_state(counterexample: &str) -> (i64, i64) {
-    let values = counterexample
-        .lines()
-        .map(str::trim)
-        .filter(|line| line.starts_with("vec![") && !line.contains("concrete_vals"))
-        .map(|line| {
-            let bytes = line
-                .trim_start_matches("vec![")
-                .trim_end_matches("],")
-                .split(',')
-                .map(|byte| byte.trim().parse::<u8>().expect("a playback byte"))
-                .collect::<Vec<_>>();
-            i64::from_le_bytes(bytes.try_into().expect("eight bytes per i64"))
-        })
-        .collect::<Vec<_>>();
-    let [balance, audit] = values[..] else {
-        panic!("two symbolic fields in the playback, found {values:?}");
-    };
-    (balance, audit)
-}
-
 /// The operation contract verifies for a healthy subject and is falsified, for the postcondition
 /// and no other reason, when the subject is mutated to debit.
 ///
@@ -1036,20 +1339,27 @@ fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
         prove(&forbidden.frame),
         "changed `audit`, which its frame does not modify",
     );
-    let (balance, audit) = playback_state(&counterexample);
+    let witness =
+        decode_frame_witness(&forbidden.frame.identity, &counterexample).expect("a real playback");
+    let balance = witness.integer("balance").expect("a decoded balance");
+    let audit = witness.integer("audit").expect("a decoded audit");
     let mut account = subject::Account { balance, audit };
     subject::deposit_touching_audit(&mut account);
     assert_ne!(
         account.audit, audit,
         "the native run reproduces the forbidden write"
     );
+    let counterexample = Counterexample {
+        obligation: forbidden.frame.identity.clone(),
+        witness,
+    };
     let invocation = twin.invocation(
         "account",
         (balance, audit),
         (account.balance, account.audit),
     );
     let result = twin
-        .replay(&invocation, "account", "audit")
+        .replay(&counterexample, &invocation, "account", "audit")
         .expect("the replay settles");
     let ReplayResult::Witness(arm) = result.result() else {
         panic!("a witness-sourced replay settles on the witness arm");
@@ -1076,7 +1386,7 @@ fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
     subject::deposit(&mut account);
     let invocation = twin.invocation("account", (5, 0), (account.balance, account.audit));
     let result = twin
-        .replay(&invocation, "account", "balance")
+        .replay(&counterexample, &invocation, "account", "balance")
         .expect("the replay settles");
     let ReplayResult::Witness(arm) = result.result() else {
         panic!("a witness-sourced replay settles on the witness arm");

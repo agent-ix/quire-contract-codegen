@@ -35,9 +35,16 @@ use quire_contract_ir::{
 use serde::Serialize;
 use serde_json::Value;
 
+use quire_contract_ir::{IntegerDomain, OverflowPolicy};
+
 use crate::{
     exact_scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
-    kani::{adapter_options, i64_literal, KaniSolver},
+    kani::{
+        adapter_options, i64_literal, KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType,
+        KaniSolver,
+    },
+    kani_obligations::{ObligationBinding, ObligationKind},
+    obligation_identity::{obligation_digest, IdentityRefusal, ObligationDigest},
     Artifact, MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
 };
 
@@ -173,18 +180,6 @@ pub enum StateFrameProperty {
     },
 }
 
-/// The inclusive integer range the IR carries for one state field. Every harness assumes it of
-/// the symbolic pre-state, so a counterexample is a state the model admits.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct StateFieldDomain {
-    /// The state field.
-    pub field: String,
-    /// Inclusive lower bound.
-    pub minimum: i64,
-    /// Inclusive upper bound.
-    pub maximum: i64,
-}
-
 /// The operation a harness is scoped to. Two harnesses with different scopes are never the same
 /// proof.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -208,8 +203,15 @@ pub struct StateFrameIdentity {
     pub scope: StateFrameScope,
     /// The property proved.
     pub property: StateFrameProperty,
-    /// The IR range assumed of each state field that has one, in `state_fields` order.
-    pub domains: Vec<StateFieldDomain>,
+    /// The obligation's kind: a postcondition clause's contract, or its operation's frame.
+    pub kind: ObligationKind,
+    /// One symbolic binding per state field, ascending by field name, which is the order the
+    /// harness emits its `kani::any()` calls in. A binding's `integer_bounds` is the IR range
+    /// assumed of the field, so a counterexample is a state the model admits; a field whose
+    /// object member declares no range is symbolic over all of `i64`.
+    pub arguments: Vec<ObligationBinding>,
+    /// The identity digest over the clause, the kind and the arguments.
+    pub obligation_identity: ObligationDigest,
     /// Rust path of the state struct.
     pub state_path: String,
     /// Rust path of the operation subject.
@@ -330,6 +332,8 @@ pub enum StateFrameRefusal {
     },
     /// The identity record failed to serialize.
     RecordSerialization,
+    /// The obligation's identity could not be minted.
+    Identity(IdentityRefusal),
 }
 
 impl std::fmt::Display for StateFrameRefusal {
@@ -411,6 +415,7 @@ impl std::fmt::Display for StateFrameRefusal {
             Self::RecordSerialization => {
                 formatter.write_str("the identity record did not serialize")
             }
+            Self::Identity(cause) => write!(formatter, "the identity was not minted: {cause}"),
         }
     }
 }
@@ -458,8 +463,11 @@ pub fn generate_state_frame_obligations(
             frame: shape.scope.frame.clone(),
         });
     }
-    let domains = state_domains(&graph, &shape.scope.object, request);
-    if !domains.iter().any(|domain| domain.field == condition.field) {
+    let arguments = state_arguments(&graph, &shape.scope.object, request);
+    let clause_field_is_bounded = arguments
+        .iter()
+        .any(|binding| binding.identifier == condition.field && binding.integer_bounds.is_some());
+    if !clause_field_is_bounded {
         return Err(StateFrameRefusal::BoundNotResolved {
             field: condition.field,
         });
@@ -467,7 +475,7 @@ pub fn generate_state_frame_obligations(
     let postcondition = render(
         request,
         &shape.scope,
-        &domains,
+        &arguments,
         StateFrameProperty::Postcondition {
             field: condition.field,
             comparison: condition.comparison,
@@ -478,7 +486,7 @@ pub fn generate_state_frame_obligations(
     let frame = render(
         request,
         &shape.scope,
-        &domains,
+        &arguments,
         StateFrameProperty::Frame {
             granted: granted.into_iter().collect(),
             checked,
@@ -868,20 +876,21 @@ fn integer_range(body: &Value) -> Option<(i64, i64)> {
     ))
 }
 
-/// The range of each state field: the `integer_range` the field's own member of the framed
-/// object's body references, for each field whose member declares one.
-fn state_domains(
+/// One binding per state field, ascending by field name: the field's name and the
+/// `integer_range` the field's own member of the framed object's body references, for each
+/// field whose member declares one.
+fn state_arguments(
     graph: &Graph<'_>,
     object: &CheckedNodeId,
     request: &StateFrameRequest<'_>,
-) -> Vec<StateFieldDomain> {
+) -> Vec<ObligationBinding> {
     let members = graph
         .nodes
         .get(object)
         .and_then(|node| node.body.get("members")?.as_array())
         .map(Vec::as_slice)
         .unwrap_or_default();
-    let declared = |field: &str| {
+    let declared_range = |field: &str| {
         let member = members
             .iter()
             .find(|member| member.get("name").and_then(Value::as_str) == Some(field))?;
@@ -891,15 +900,25 @@ fn state_domains(
             .then(|| integer_range(&bound.body))
             .flatten()
     };
-    request
-        .state_fields
-        .iter()
-        .filter_map(|field| {
-            declared(field).map(|(minimum, maximum)| StateFieldDomain {
-                field: (*field).to_owned(),
+    let mut fields = request.state_fields.to_vec();
+    fields.sort_unstable_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+    // A binding is identified by its field name and declared range. Its domain key (the
+    // declaring node and a path into its type) is pending QSL's key shape under QSL-345.
+    fields
+        .into_iter()
+        .map(|field| ObligationBinding {
+            identifier: field.to_owned(),
+            role: KaniBindingRole::Argument,
+            primitive_type: KaniPrimitiveType::I64,
+            // The harness field is a signed `i64` the range is assumed of, so an in-range value
+            // never overflows.
+            integer_bounds: declared_range(field).map(|(minimum, maximum)| KaniIntegerBounds {
+                domain: IntegerDomain::Signed,
                 minimum,
                 maximum,
-            })
+                overflow: OverflowPolicy::Reject,
+            }),
+            dependencies: Vec::new(),
         })
         .collect()
 }
@@ -911,7 +930,7 @@ fn state_domains(
 fn render(
     request: &StateFrameRequest<'_>,
     scope: &StateFrameScope,
-    domains: &[StateFieldDomain],
+    arguments: &[ObligationBinding],
     property: StateFrameProperty,
     module: &str,
 ) -> Result<StateFrameHarness, StateFrameRefusal> {
@@ -924,7 +943,10 @@ fn render(
     let abi = Abi {
         state_path: request.state_path,
         subject_path: request.subject_path,
-        state_fields: request.state_fields,
+    };
+    let kind = match property {
+        StateFrameProperty::Postcondition { .. } => ObligationKind::Postcondition,
+        StateFrameProperty::Frame { .. } => ObligationKind::Frame,
     };
     let body = match &property {
         StateFrameProperty::Postcondition {
@@ -934,7 +956,7 @@ fn render(
         } => postcondition_body(
             &abi,
             scope,
-            domains,
+            arguments,
             &Postcondition {
                 field,
                 comparison: *comparison,
@@ -943,14 +965,17 @@ fn render(
             module,
         ),
         StateFrameProperty::Frame { checked, .. } => {
-            frame_body(&abi, scope, domains, checked, module)
+            frame_body(&abi, scope, arguments, checked, module)
         }
     };
     let identity = StateFrameIdentity {
         clause: request.clause.clone(),
         scope: scope.clone(),
         property,
-        domains: domains.to_vec(),
+        kind,
+        arguments: arguments.to_vec(),
+        obligation_identity: obligation_digest(request.clause, kind, arguments)
+            .map_err(StateFrameRefusal::Identity)?,
         state_path: request.state_path.to_owned(),
         subject_path: request.subject_path.to_owned(),
         module_symbol: module.to_owned(),
@@ -1001,32 +1026,27 @@ struct RecordView<'a> {
 struct Abi<'a> {
     state_path: &'a str,
     subject_path: &'a str,
-    state_fields: &'a [&'a str],
 }
 
-/// `let pre: S = S { a: kani::any(), ... };` and an assumption of each field's IR range.
-fn symbolic_state(abi: &Abi<'_>, domains: &[StateFieldDomain]) -> String {
-    let fields = abi
-        .state_fields
+/// `let pre: S = S { a: kani::any(), ... };` and an assumption of each bounded field's IR range.
+/// The fields are listed in `arguments` order, so the `n`th `kani::any()` is the `n`th binding.
+fn symbolic_state(abi: &Abi<'_>, arguments: &[ObligationBinding]) -> String {
+    let fields = arguments
         .iter()
-        .map(|field| format!("{field}: kani::any()"))
+        .map(|binding| format!("{}: kani::any()", binding.identifier))
         .collect::<Vec<_>>()
         .join(", ");
-    let assumptions = domains
+    let assumptions = arguments
         .iter()
-        .map(
-            |StateFieldDomain {
-                 field,
-                 minimum,
-                 maximum,
-             }| {
-                format!(
-                    "        kani::assume(pre.{field} >= {} && pre.{field} <= {});\n",
-                    i64_literal(*minimum),
-                    i64_literal(*maximum)
-                )
-            },
-        )
+        .filter_map(|binding| {
+            let bounds = binding.integer_bounds.as_ref()?;
+            let field = &binding.identifier;
+            Some(format!(
+                "        kani::assume(pre.{field} >= {} && pre.{field} <= {});\n",
+                i64_literal(bounds.minimum),
+                i64_literal(bounds.maximum)
+            ))
+        })
         .collect::<String>();
     format!(
         "        let pre: {state} = {state} {{ {fields} }};\n{assumptions}",
@@ -1052,7 +1072,7 @@ struct Postcondition<'a> {
 fn postcondition_body(
     abi: &Abi<'_>,
     scope: &StateFrameScope,
-    domains: &[StateFieldDomain],
+    arguments: &[ObligationBinding],
     condition: &Postcondition<'_>,
     module: &str,
 ) -> String {
@@ -1073,7 +1093,7 @@ fn postcondition_body(
     ));
     format!(
         "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"state bounds hold and the operation returns\");\n        assert!(\n            {left}.{field} {operator} {right}.{field},\n            \"{{}}\",\n            {message}\n        );\n    }}\n}}\n",
-        state = symbolic_state(abi, domains),
+        state = symbolic_state(abi, arguments),
         subject = abi.subject_path,
     )
 }
@@ -1081,7 +1101,7 @@ fn postcondition_body(
 fn frame_body(
     abi: &Abi<'_>,
     scope: &StateFrameScope,
-    domains: &[StateFieldDomain],
+    arguments: &[ObligationBinding],
     checked: &[String],
     module: &str,
 ) -> String {
@@ -1097,7 +1117,7 @@ fn frame_body(
         .collect::<String>();
     format!(
         "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"the operation returns\");\n{assertions}    }}\n}}\n",
-        state = symbolic_state(abi, domains),
+        state = symbolic_state(abi, arguments),
         subject = abi.subject_path,
     )
 }
@@ -1131,15 +1151,14 @@ mod tests {
         let abi = Abi {
             state_path: "crate::State",
             subject_path: "crate::operate",
-            state_fields: &["balance", "audit"],
         };
         let scope = scope("dep{osit}{}");
-        let domains = [];
-        let frame = frame_body(&abi, &scope, &domains, &["audit".to_owned()], "m");
+        let arguments = [];
+        let frame = frame_body(&abi, &scope, &arguments, &["audit".to_owned()], "m");
         let postcondition = postcondition_body(
             &abi,
             &scope,
-            &domains,
+            &arguments,
             &Postcondition {
                 field: "balance",
                 comparison: StateComparison::Ge,

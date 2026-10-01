@@ -32,7 +32,7 @@ use quire_contract_codegen::{
     RUNTIME_REVISION,
 };
 use quire_contract_ir::{
-    BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
+    BoundPackage, ClauseId, ClauseRef, RequirementRef, SourceSpan, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
 
@@ -227,6 +227,52 @@ fn withdraw_harnesses() -> Vec<KaniObligationHarness> {
     // `bound_package` leaks past this function's return, so `package` must outlive the borrow the
     // request holds; negotiation is complete by the time we get here, so this is fine to drop.
     harnesses
+}
+
+/// The identity digest of a clause-oracle obligation commits to its clause, kind and arguments
+/// and not to its source span, its symbols or its unwind bound; the three obligations of one
+/// operation, over three clauses, are three identities.
+///
+/// Trace: FR-015-AC-37, TC-025
+#[test]
+fn tc_025_a_clause_obligation_identity_is_independent_of_its_source_span() {
+    let harnesses = withdraw_harnesses();
+    let digests = harnesses
+        .iter()
+        .map(|harness| harness.identity.digest().expect("ascending arguments"))
+        .collect::<Vec<_>>();
+    for (index, digest) in digests.iter().enumerate() {
+        assert!(!digests[..index].contains(digest), "{digests:?}");
+    }
+
+    let postcondition = harnesses
+        .iter()
+        .find(|harness| harness.identity.kind == ObligationKind::Postcondition)
+        .expect("a postcondition harness")
+        .identity
+        .clone();
+    let original = postcondition.digest().expect("ascending arguments");
+
+    let mut respanned = postcondition.clone();
+    respanned.source_span = serde_json::from_value::<SourceSpan>(span(999)).expect("a source span");
+    assert_ne!(respanned.source_span, postcondition.source_span);
+    assert_eq!(respanned.digest(), Ok(original));
+
+    let mut rendered = postcondition.clone();
+    rendered.module_symbol.push_str("_other");
+    rendered.harness_symbol.push_str("_other");
+    rendered.unwind += 1;
+    assert_eq!(rendered.digest(), Ok(original));
+
+    let mut other_clause = postcondition.clone();
+    other_clause.clause = clause(PRECONDITION);
+    assert_ne!(other_clause.digest(), Ok(original));
+    let mut other_kind = postcondition.clone();
+    other_kind.kind = ObligationKind::Invariant;
+    assert_ne!(other_kind.digest(), Ok(original));
+    let mut other_arguments = postcondition.clone();
+    other_arguments.arguments.pop();
+    assert_ne!(other_arguments.digest(), Ok(original));
 }
 
 // ---- real Kani execution plumbing (trimmed from tests/kani_obligations.rs) --------------------

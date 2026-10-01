@@ -8,8 +8,15 @@
 //! envelope that put a run before QSL are built by the crate under test
 //! (`quire_contract_codegen::FrameReplay`), which asks QSL for the node identities a
 //! counterexample names; they are not the fixture package's node ids. The envelope's obligation
-//! and originating-counterexample identities are fixed stand-ins: CG computes no identity for a
-//! frame obligation, and QSL only requires that one be present.
+//! identity and witness come from the frame obligation CG generated and the playback decoded
+//! against it, passed in as a [`Counterexample`].
+//!
+//! Two things here are stand-ins, both blocked on QSL-345. The twin's unit and domain package are
+//! hand-mirrored from the Rust fixture's checked package, because QSL's `call_site` does not
+//! return the checked package it lowered, so nothing ties the two by identity. The envelope's
+//! declared domains are empty, because QSL's facade exports no type to build one from. Nothing
+//! here checks either. The originating-counterexample identity and the backend manifest digest
+//! are inputs of the proving run that CG does not compute.
 
 use super::model;
 
@@ -19,8 +26,8 @@ use qsl_replay::{
     WitnessEnvelope, MAX_ENCODED_BYTES,
 };
 use quire_contract_codegen::{
-    DependencyLock, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
-    ProvidedDocument, ReplayInputs,
+    DependencyLock, FrameReplay, FrameReplayError, FrameReplayInputs, FrameWitness, LockedSource,
+    ProvidedDocument, ReplayInputs, StateFrameIdentity,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -237,6 +244,14 @@ pub enum Tamper {
     Occurrence,
 }
 
+/// The frame obligation a counterexample falsified and the playback decoded against it.
+pub struct Counterexample {
+    /// The obligation.
+    pub obligation: StateFrameIdentity,
+    /// Its decoded playback.
+    pub witness: FrameWitness,
+}
+
 /// The twin: the domain package and the native unit selecting it.
 pub struct Twin {
     unit: Vec<u8>,
@@ -343,8 +358,14 @@ impl Twin {
 
     /// The frame-replay request and envelope for `invocation` as a counterexample to the frame of
     /// `deposit`, claiming `field` of `account` was written.
-    pub fn frame_replay(&self, invocation: &Invocation, account: &str, field: &str) -> FrameReplay {
-        self.try_frame_replay("deposit", invocation, account, field)
+    pub fn frame_replay(
+        &self,
+        counterexample: &Counterexample,
+        invocation: &Invocation,
+        account: &str,
+        field: &str,
+    ) -> FrameReplay {
+        self.try_frame_replay("deposit", counterexample, invocation, account, field)
             .expect("the twin's operation frame is located")
     }
 
@@ -352,6 +373,7 @@ impl Twin {
     pub fn try_frame_replay(
         &self,
         operation: &str,
+        counterexample: &Counterexample,
         invocation: &Invocation,
         account: &str,
         field: &str,
@@ -403,7 +425,8 @@ impl Twin {
                 },
                 field: field.to_owned(),
             },
-            obligation_identity: [1; 32],
+            obligation: counterexample.obligation.clone(),
+            witness: counterexample.witness.clone(),
             counterexample_identity: [2; 32],
         })
     }
@@ -412,22 +435,25 @@ impl Twin {
     /// `account` was written.
     pub fn replay(
         &self,
+        counterexample: &Counterexample,
         invocation: &Invocation,
         account: &str,
         field: &str,
     ) -> Result<FrameReplayResult, ReplayRefusal> {
-        self.replay_tampered(invocation, account, field, Tamper::Nothing)
+        self.replay_tampered(counterexample, invocation, account, field, Tamper::Nothing)
     }
 
     /// [`Self::replay`] with one envelope identity made to differ from the payload's.
     pub fn replay_tampered(
         &self,
+        counterexample: &Counterexample,
         invocation: &Invocation,
         account: &str,
         field: &str,
         tamper: Tamper,
     ) -> Result<FrameReplayResult, ReplayRefusal> {
-        let FrameReplay { wire, mut packet } = self.frame_replay(invocation, account, field);
+        let FrameReplay { wire, mut packet } =
+            self.frame_replay(counterexample, invocation, account, field);
         let payload = packet
             .family_payload
             .as_ref()

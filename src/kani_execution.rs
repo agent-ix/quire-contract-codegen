@@ -776,6 +776,15 @@ mod tests {
         };
         let harness = |property| StateFrameHarness {
             identity: StateFrameIdentity {
+                obligation_identity: crate::obligation_identity::obligation_digest(
+                    &id("1"),
+                    match property {
+                        StateFrameProperty::Postcondition { .. } => ObligationKind::Postcondition,
+                        StateFrameProperty::Frame { .. } => ObligationKind::Frame,
+                    },
+                    &[],
+                )
+                .expect("no arguments are ascending"),
                 clause: id("1"),
                 scope: StateFrameScope {
                     operation: "deposit".to_owned(),
@@ -783,8 +792,12 @@ mod tests {
                     anchor: id("3"),
                     frame: id("4"),
                 },
+                kind: match property {
+                    StateFrameProperty::Postcondition { .. } => ObligationKind::Postcondition,
+                    StateFrameProperty::Frame { .. } => ObligationKind::Frame,
+                },
                 property,
-                domains: Vec::new(),
+                arguments: Vec::new(),
                 state_path: "crate::State".to_owned(),
                 subject_path: "crate::operate".to_owned(),
                 module_symbol: "m".to_owned(),

@@ -193,6 +193,8 @@ package.
 | FR-015-AC-34 | The frame-replay envelope's `clause_node` is the payload's frame node and its `occurrence_key` is the payload's frame occurrence. | Test (TC-025) |
 | FR-015-AC-35 | An operation the unit names no frame for, whether the domain package declares it or not, is refused by the call site when the frame-replay request is built. | Test (TC-025) |
 | FR-015-AC-36 | `FrameReplay::replay` returns QSL's `replay_frame` result: a forbidden write settles a reproduced violation naming the written field, and a write the frame grants settles `inconclusive` with no frame witness. | Test (TC-025) |
+| FR-015-AC-37 | An obligation's identity is a digest over its clause, its kind and its bindings, and over nothing else: the bindings are ascending by identifier, each naming its declared range, and the harness draws its symbolic values in that order. Changing the clause, the kind, or any binding's identifier or range changes the identity; changing the source span, the unwind bound or the generated symbols does not; the postcondition and frame obligations of one state clause are two identities. | Test (TC-025) |
+| FR-015-AC-38 | A frame replay's witness is decoded from the Kani playback of the frame obligation against that obligation's bindings and carries the obligation's identity digest into the envelope. A value outside the range the harness assumed, a playback of another harness, an obligation that is not a frame obligation, an identity that is not the digest of its own contents, and a request whose obligation is not the one the witness was decoded under are each refused before QSL is asked to replay. | Test (TC-025) |
 
 ## Dependencies
 
