@@ -743,6 +743,11 @@ fn result_access(result_count: usize, index: usize) -> String {
     }
 }
 
+/// Message of the non-vacuity cover closing a contract harness. Under `proof_for_contract` Kani
+/// assumes the `requires` clause and the argument bounds inside the call, so the cover after the
+/// call is reachable only when they are jointly satisfiable.
+const CONTRACT_COVER: &str = "contract requires and argument bounds are jointly satisfiable";
+
 fn render_kani_source(value: &KaniSource<'_>) -> String {
     let argument_declarations = value
         .abi
@@ -814,6 +819,7 @@ mod {} {{\n\
 {}    #[kani::proof_for_contract({})]\n\
     fn {}() {{\n\
 {}{}        let _post_state = {}({argument_names});\n\
+        kani::cover!(true, \"{CONTRACT_COVER}\");\n\
     }}\n\
     // END proof harness\n\
 }}\n",

@@ -193,6 +193,7 @@ package.
 | FR-015-AC-34 | The frame-replay envelope's `clause_node` is the payload's frame node and its `occurrence_key` is the payload's frame occurrence. | Test (TC-025) |
 | FR-015-AC-35 | An operation the unit names no frame for, whether the domain package declares it or not, is refused by the call site when the frame-replay request is built. | Test (TC-025) |
 | FR-015-AC-36 | `FrameReplay::replay` returns QSL's `replay_frame` result: a forbidden write settles a reproduced violation naming the written field, and a write the frame grants settles `inconclusive` with no frame witness. | Test (TC-025) |
+| FR-015-AC-37 | The single-contract Kani bundle harness and every bounded-corpus harness each end with exactly one non-vacuity cover after the call or assertion they check, so a healthy run reads verified, and a run whose requires clause no argument satisfies is not verified. | Test (TC-007, TC-023) |
 
 ## Dependencies
 

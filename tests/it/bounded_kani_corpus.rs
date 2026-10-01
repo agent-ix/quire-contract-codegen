@@ -259,6 +259,16 @@ fn tc_023_kani_executes_the_generated_arithmetic_harness() {
         "generated arithmetic Kani proof failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        classify_kani_run(output.status.success(), &text),
+        KaniRunOutcome::Verified,
+        "a healthy corpus run must read Verified:\n{text}"
+    );
 }
 
 /// Trace: TC-023.
@@ -309,6 +319,16 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
         output.status.success(),
         "generated graph Kani proof failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
+    );
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        classify_kani_run(output.status.success(), &text),
+        KaniRunOutcome::Verified,
+        "a healthy corpus run must read Verified:\n{text}"
     );
 }
 
@@ -511,4 +531,97 @@ fn validate(schema: &str, instance: &serde_json::Value) {
         .map(|values| values.map(|error| error.to_string()).collect::<Vec<_>>())
         .unwrap_or_default();
     assert!(errors.is_empty(), "schema errors: {errors:?}");
+}
+
+fn arithmetic_case() -> quire_contract_codegen::BoundedCorpusCase {
+    let (profile, dispatch, input) = fixture();
+    generate_bounded_kani_corpus_case(
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+            source_id: "source",
+            operator: NumericOperator::Add,
+            left: 1,
+            right: 1,
+            minimum: 0,
+            maximum: 2,
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap()
+}
+
+/// Every corpus harness carries one cover after its assertion, so anything inserted ahead of the
+/// cover makes it unreachable.
+///
+/// Trace: TC-023.
+#[test]
+fn tc_023_corpus_harness_carries_one_cover_after_its_assertion() {
+    let harness = arithmetic_case().artifacts.kani_harness.contents;
+    assert_eq!(harness.matches("kani::cover!").count(), 1);
+    let assertion = harness
+        .find("assert!(corpus_oracle())")
+        .expect("harness asserts the oracle");
+    let cover = harness
+        .find("kani::cover!(true,")
+        .expect("harness has its cover");
+    assert!(assertion < cover, "{harness}");
+}
+
+/// A corpus harness whose cover is unreachable does not read as a proof: the real prover decides
+/// the same harness `Verified` unmodified and `CoverUnsatisfied` once an `assume(false)` stands
+/// ahead of the cover.
+///
+/// Trace: TC-023.
+#[test]
+fn tc_023_kani_does_not_verify_a_corpus_harness_whose_cover_is_unreachable() {
+    let generated = arithmetic_case();
+    let healthy = classify_corpus_run("corpus-healthy", &generated.artifacts.kani_harness.contents);
+    assert_eq!(healthy, KaniRunOutcome::Verified);
+    let unreachable = generated.artifacts.kani_harness.contents.replace(
+        "    kani::cover!",
+        "    kani::assume(false);\n    kani::cover!",
+    );
+    assert_ne!(unreachable, generated.artifacts.kani_harness.contents);
+    assert_eq!(
+        classify_corpus_run("corpus-unreachable", &unreachable),
+        KaniRunOutcome::CoverUnsatisfied {
+            satisfied: 0,
+            total: 1
+        }
+    );
+}
+
+fn classify_corpus_run(name: &str, harness: &str) -> KaniRunOutcome {
+    let generated = arithmetic_case();
+    let directory = TemporaryDirectory::new();
+    fs::write(
+        directory.0.join("src/lib.rs"),
+        format!("{}\n{harness}", generated.artifacts.oracle.contents),
+    )
+    .expect("generated corpus source should be writable");
+    fs::write(
+        directory.0.join("Cargo.toml"),
+        format!("[package]\nname = \"{name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[workspace]\n"),
+    )
+    .expect("generated corpus manifest should be writable");
+    fs::write(
+        directory.0.join("build.rs"),
+        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+    )
+    .expect("generated check-cfg declaration should be writable");
+    let output = Command::new("cargo")
+        .args(["kani", "--harness", "corpus_case_arithmetic"])
+        .env("CARGO_TARGET_DIR", directory.0.join("target"))
+        .current_dir(&directory.0)
+        .output()
+        .expect("cargo kani should launch");
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    classify_kani_run(output.status.success(), &text)
 }

@@ -559,6 +559,9 @@ fn render_graph_oracle(
     )
 }
 
+/// Message of the non-vacuity cover each corpus harness carries.
+const CORPUS_COVER: &str = "the corpus oracle is evaluated and holds";
+
 /// Renders one corpus case's artifacts, all named from the case's `name`. Infallible: the caller
 /// ([`generate_bounded_kani_corpus_case`]) has already run every fallible step.
 ///
@@ -587,7 +590,12 @@ fn render_artifacts(
     let _ = writeln!(harness, "// Generated Kani harness: {name}");
     let _ = writeln!(harness, "#[kani::proof]");
     let _ = writeln!(harness, "fn {proof_id}() {{");
+    // The harness is closed (literal operands, no `kani::any`, no assume), so the only
+    // reachability question is whether the asserted oracle is evaluated and the run gets past
+    // it. The cover follows the assertion, as in the contract harness: a falsified case then
+    // reaches no cover, and Kani prints no cover witness beside its counterexample.
     let _ = writeln!(harness, "    assert!(corpus_oracle());");
+    let _ = writeln!(harness, "    kani::cover!(true, \"{CORPUS_COVER}\");");
     let _ = writeln!(harness, "}}");
     let proof_graph_value = CorpusProofDependencyGraph {
         schema_version: CORPUS_PROOF_GRAPH_SCHEMA.to_owned(),

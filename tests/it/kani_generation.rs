@@ -7,11 +7,11 @@ use std::{
 
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode, GenerationTerminalState,
-    KaniBindingRole, KaniDiagnostic, KaniErrorCode, KaniPrimitiveType, KaniRequest, KaniSolver,
-    OracleRequest, ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest,
-    ProofDependencyState, ProofReadiness, MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
-    RUNTIME_REVISION,
+    classify_kani_run, generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode,
+    GenerationTerminalState, KaniBindingRole, KaniDiagnostic, KaniErrorCode, KaniPrimitiveType,
+    KaniRequest, KaniRunOutcome, KaniSolver, OracleRequest, ProofDependencyGraph,
+    ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness,
+    MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND, RUNTIME_REVISION,
 };
 use quire_contract_ir::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
@@ -1507,5 +1507,99 @@ fn kani_executes_the_generated_contract_proof() {
         "conditional generated Kani proof failed:\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&conditional_verification.stdout),
         String::from_utf8_lossy(&conditional_verification.stderr)
+    );
+}
+
+const SUBJECT: &str =
+    "/// Customer transition under proof.\npub fn subject(input: bool, pre_state: bool) -> bool { input || pre_state }";
+
+/// The fixture bundle with its precondition replaced by `(input || state) && 2 < 1`, which no argument
+/// satisfies.
+fn unsatisfiable_precondition_bundle() -> quire_contract_codegen::KaniArtifactBundle {
+    let environment = environment();
+    let (_, postcondition) = clauses(&environment);
+    let impossible = boolean_and(
+        boolean_or(
+            observed("input", StateObservation::Current, 10),
+            observed("state", StateObservation::Pre, 11),
+            10,
+        ),
+        compare(
+            ComparisonOperator::Less,
+            integer(2, &integer_type(0, 10), 12),
+            integer(1, &integer_type(0, 10), 14),
+            12,
+        ),
+        10,
+    );
+    let precondition = environment
+        .check_expression(&impossible, &ValueType::Boolean, &handler(), true)
+        .expect("unsatisfiable precondition fixture should type-check");
+    let precondition_clause =
+        ClauseId::new("precondition").expect("fixture clause should be valid");
+    let postcondition_clause =
+        ClauseId::new("postcondition").expect("fixture clause should be valid");
+    generate_kani_bundle(&request(
+        &environment,
+        &precondition,
+        &postcondition,
+        &precondition_clause,
+        &postcondition_clause,
+        &[],
+    ))
+    .expect("unsatisfiable precondition fixture should generate")
+}
+
+fn classify_real_kani(bundle: &quire_contract_codegen::KaniArtifactBundle) -> KaniRunOutcome {
+    let output = execute_kani(bundle, SUBJECT);
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let outcome = classify_kani_run(output.status.success(), &text);
+    assert!(
+        !matches!(outcome, KaniRunOutcome::Falsified { .. }),
+        "fixture must not be falsified:\n{text}"
+    );
+    outcome
+}
+
+/// FR-015-AC-37: the contract harness ends in one cover, after the contract call.
+///
+/// TC-007
+#[test]
+fn contract_harness_ends_with_one_cover_after_the_contract_call() {
+    let source = fixture_bundle(&[]).rust.contents;
+    assert_eq!(source.matches("kani::cover!").count(), 1);
+    let harness = source
+        .split("// BEGIN proof harness")
+        .nth(1)
+        .expect("harness section should exist");
+    let call = harness
+        .find("let _post_state = ")
+        .expect("harness should call the contract");
+    let cover = harness
+        .find("kani::cover!(true,")
+        .expect("harness should carry its cover");
+    assert!(call < cover, "the cover must follow the contract call");
+}
+
+/// FR-015-AC-37: a healthy contract run reads `Verified`, and one whose requires clause no
+/// argument satisfies reads `CoverUnsatisfied`, never `Verified`.
+///
+/// TC-007
+#[test]
+fn kani_classifies_a_healthy_contract_run_verified_and_an_unsatisfiable_requires_not() {
+    assert_eq!(
+        classify_real_kani(&fixture_bundle(&[])),
+        KaniRunOutcome::Verified
+    );
+    assert_eq!(
+        classify_real_kani(&unsatisfiable_precondition_bundle()),
+        KaniRunOutcome::CoverUnsatisfied {
+            satisfied: 0,
+            total: 1
+        }
     );
 }
