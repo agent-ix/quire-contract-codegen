@@ -621,7 +621,7 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
 
 /// Trace: TC-029. UNBACKED today (FR-018-AC-2's recursive vectors): an equality over a record
 /// type that reaches itself (`R_SELF` = `{ next: Option<R_SELF> }`, no text) is refused by
-/// Contract IR 0a889f9 at admission, as any cyclic compared type is under the QSpec reference
+/// Contract IR at admission, as any cyclic compared type is under the QSpec reference
 /// reader, so no oracle is generated for it and no generation or agreement test runs over any
 /// recursive composite. QSL emits `leaves: []` for this shape. Pending STD-129 (a cyclic type with
 /// no text: operator-ineligible or 0 leaves). This pins the exact refusal (code, cause, pointer,

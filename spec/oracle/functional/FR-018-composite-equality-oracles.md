@@ -97,6 +97,13 @@ A declaration is read from the `composite_type` node's body. Its body is an
 | `sequence`, `set`, `bag`, `ordered_set` | a `reference` to the element type node, then a `reference` to the `collection_bounds` domain node |
 | `collection_bounds` | two `binding` members, `min` and `max`, each carrying a canonical decimal `integer` literal |
 
+A member's type node is a `scalar_type` leaf, whose bounds are the `bounded_domain`
+nodes over it, or a `bounded_domain` node itself, as QSL emits a bounded type
+(a `text_bounds` node binds the text profile the checked operation catalog's
+leaf rule reads). A `bounded_domain` member type is read from its own `binding`
+members and its base `scalar_type`'s form; it never takes a sibling bound over the
+same base.
+
 The runtime `NodeKey` of a declaration is `NodeKey::from_hex` of its V2 node id,
 in the `NODE_KEY_DOMAIN` domain.
 

@@ -1013,7 +1013,23 @@ fn resolve_type(
 ) -> Result<ValueType, CompositeEqualityRefusal> {
     let node = lookup(graph, type_id)?;
     match CheckedNodeTag::from_wire(&node.node_tag) {
-        Some(CheckedNodeTag::ScalarType) => resolve_scalar(bounds_by_type, type_id, node),
+        Some(CheckedNodeTag::ScalarType) => {
+            let bounds = bounds_by_type.get(type_id).map_or(&[][..], Vec::as_slice);
+            resolve_scalar(bounds, type_id, node)
+        }
+        // A bounded type as QSL emits it: the `bounded_domain` node is itself the member's
+        // type, over its base scalar. Only its own bound is read, never a sibling's over the
+        // same base (FR-018 §Inputs).
+        Some(CheckedNodeTag::BoundedDomain) => {
+            let base = lookup(graph, &node.semantic_type)?;
+            if CheckedNodeTag::from_wire(&base.node_tag) != Some(CheckedNodeTag::ScalarType) {
+                return Err(CompositeEqualityRefusal::Unsupported {
+                    unsupported_node_id: type_id.clone(),
+                    node_tag: "bounded_domain",
+                });
+            }
+            resolve_scalar(core::slice::from_ref(&node), type_id, base)
+        }
         Some(CheckedNodeTag::CompositeType) => {
             resolve_composite(graph, bounds_by_type, closure, type_id, node)
         }
@@ -1024,16 +1040,17 @@ fn resolve_type(
     }
 }
 
+/// Resolve a scalar type: `node` is the base `scalar_type` and `bounds` the `bounded_domain`
+/// nodes that bound it for this reference (every one over the scalar, or the one the member
+/// names); `type_id` is the member's type node, for refusals.
 fn resolve_scalar(
-    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
+    bounds: &[&CheckedSemanticNodeV2],
     type_id: &CheckedNodeId,
     node: &CheckedSemanticNodeV2,
 ) -> Result<ValueType, CompositeEqualityRefusal> {
     let bound = |form: &'static str| -> Result<&[Value], CompositeEqualityRefusal> {
-        let candidates: Vec<_> = bounds_by_type
-            .get(type_id)
-            .into_iter()
-            .flatten()
+        let candidates: Vec<_> = bounds
+            .iter()
             .filter(|bound| &*bound.semantic_form == form)
             .collect();
         match candidates.as_slice() {
@@ -1055,10 +1072,8 @@ fn resolve_scalar(
     match &*node.semantic_form {
         "boolean" => Ok(ValueType::Boolean),
         "integer" => {
-            let candidates: Vec<_> = bounds_by_type
-                .get(type_id)
-                .into_iter()
-                .flatten()
+            let candidates: Vec<_> = bounds
+                .iter()
                 .filter(|bound| &*bound.semantic_form == "integer_range")
                 .collect();
             match candidates.as_slice() {

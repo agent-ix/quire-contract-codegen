@@ -751,7 +751,7 @@ pub fn direct_reference_package() -> PackageBuilder {
 
 /// [`corpus_package`] plus [`E_SELF`]: `quire.op.structural.eq` over two `R_SELF` operands, a
 /// record `{ next: Option<R_SELF> }` reaching itself and no text. QSL emits `leaves: []` for it,
-/// which this builds. Contract IR 0a889f9 refuses any compared type that reaches itself
+/// which this builds. Contract IR refuses any compared type that reaches itself
 /// (`IllTyped`/`OperatorIneligible` at the operation's `leaves`), as the QSpec reference reader
 /// does, so it cannot be in the corpus; whether a cyclic type with no text should instead take 0
 /// leaves is the owner's question STD-129. `tc_029_a_cyclic_compared_type_is_refused_by_ir_today`
@@ -1041,7 +1041,10 @@ pub fn corpus_package() -> PackageBuilder {
             "composite_type",
             "tuple",
             T_BOOLEAN,
-            aggregate(vec![reference(T_INTEGER_BOUNDED), reference(T_TEXT)]),
+            // The text position names the `text_bounds` node, as QSL emits a text type: the
+            // checked operation catalog's leaf rule reads the profile pin from the type chain
+            // and refuses a text leaf whose type pins none.
+            aggregate(vec![reference(T_INTEGER_BOUNDED), reference(BD_TEXT)]),
         )
         .code(
             OPT_INT,
