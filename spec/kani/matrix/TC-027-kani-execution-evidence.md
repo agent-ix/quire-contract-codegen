@@ -16,19 +16,27 @@ returned evidence describes the invocation that actually happened.
 
 ## Test Procedure
 
-Classification, with the backend's own recorded output as fixtures: a
+Classification, over reports shaped like the backend's own: a
 successful run whose covers are all satisfied; a successful run whose cover is
 unsatisfied; a successful run with a partial cover count; a failed run with a
 concrete playback for the failed assertion and another for a satisfied cover; a
-failed run with only a cover playback; a failed build with no verdict; success
-text from a process that exited unsuccessfully; a successful run with no cover
-summary, with a zero-total summary, and with an unreadable summary; a failed
-unwinding assertion with playbacks present; a results listing in which an
-unwinding check succeeded; and a successful run whose checks summary reports zero successful checks.
+failed run with only a cover playback; a failed build with no report; a report of
+success from a process that exited unsuccessfully; a successful run with no cover;
+a failed unwinding assertion with playbacks present; a report in which an
+unwinding check succeeded; and a successful run whose report lists zero successful checks.
 
-Transcript parsing (FR-017-AC-12): parse real Kani captures (`tests/fixtures/kani-0.67.0/`) of a
-verified run, a falsified run with a playback, an exhausted unwind bound, an unreachable cover, a
-partly satisfied cover and a run with no cover summary, and classify each.
+Report parsing (FR-017-AC-12): parse real Kani 0.68.0 captures (`tests/fixtures/kani-0.68.0/`, the
+exported report and the stdout) of a verified run, a falsified run with a playback, an exhausted
+unwind bound, a run whose only check is unreachable, a partly satisfied cover and a run with no
+cover, and classify each; feed a console banner beside a contradicting report and confirm the report decides.
+
+Refused reports (FR-017-AC-18): a report of another schema version, with an unknown check or
+harness status, with a renamed top-level member, that is not JSON, and with zero or two harness
+results are each refused with their own typed cause; a launcher stand-in that exits successfully
+and exports nothing is refused, one that fails and exports nothing is `NoVerdict`.
+
+Report file (FR-017-AC-19): the launch's arguments are the harness options then the export flags;
+a report left by an earlier run is not read; a file over the read bound is refused.
 
 Refusals: request a run against an installation whose launcher is absent.
 
@@ -89,7 +97,7 @@ never surface as one of FR-017's execution outcomes because no code path convert
 other.
 
 In the `make kani` lane the three healthy harnesses are verified, each with exit code zero and an
-argument vector equal after the subcommand to its harness identity's options; the seeded defect is
+argument vector that begins, after the subcommand, with its harness identity's options; the seeded defect is
 falsified with a concrete counterexample naming its harness symbol and a nonzero exit code; the
 jointly unsatisfiable contract is cover-unsatisfied rather than verified; and the crate that does
 not contain the harness is refused with no run.
@@ -103,11 +111,15 @@ FR-017-AC-13, and the launcher tests (`a_stream_longer_than_the_capture_limit_ke
 `a_timeout_of_duration_max_never_elapses_and_does_not_panic`,
 `a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`) for FR-017-AC-14
 through FR-017-AC-17;
-the `src/kani_transcript.rs` tests `tc_027_a_typed_transcript_reads_each_prose_element`,
-`tc_027_banners_and_absent_prose_are_distinguished`,
-`tc_027_a_cover_line_without_the_counts_shape_is_malformed_not_absent`,
-`tc_027_playback_scanning_stops_at_an_unterminated_fence` and the six
-`tc_027_real_kani_0_67_0_*` capture tests for FR-017-AC-12; and `tests/it/kani_obligations.rs` for the refusals, the
+the `src/kani_transcript.rs` tests `tc_027_a_report_that_changed_shape_is_refused_not_classified`,
+`tc_027_a_report_without_exactly_one_harness_is_refused`,
+`tc_027_the_console_banner_never_decides_the_verdict`,
+`tc_027_playback_scanning_returns_the_property_block_and_stops_at_an_unterminated_fence` and the six
+`tc_027_real_kani_0_68_0_*` capture tests for FR-017-AC-12 and FR-017-AC-18; the
+`src/kani_execution.rs` tests `tc_027_execution_reads_only_the_report_its_own_run_exported`,
+`tc_027_the_report_is_read_bounded_and_refused_not_truncated`,
+`tc_027_the_launch_exports_the_report_after_the_harness_options` and
+`tc_027_an_unreadable_or_missing_report_is_refused_never_inconclusive` for FR-017-AC-18 and FR-017-AC-19; and `tests/it/kani_obligations.rs` for the refusals, the
 generation/execution boundary and the `make kani` lane. The lane is `#[ignore]`d and runs through
 `make kani` under a host-wide lock, because Kani and CBMC are memory-heavy and must run one harness
 at a time.

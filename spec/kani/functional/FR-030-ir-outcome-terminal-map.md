@@ -99,4 +99,4 @@ terminal value, so neither map applies to them.
 
 ## Status
 
-Planned. No code implements this map at this revision. Tracked under Linear IR-358.
+Implemented as `kani_terminal::ir_outcome_terminal_value`. Tracked under Linear IR-358.

@@ -20,7 +20,7 @@ type: TestMatrix
 | FR-015 | FR-015-AC-19 through FR-015-AC-25 | TC-025 | 🚧 Planned |
 | FR-015 | FR-015-AC-26 through FR-015-AC-36 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-37 | TC-025 | ✅ Covered |
-| FR-017 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-12, FR-017-AC-13, FR-017-AC-14, FR-017-AC-15, FR-017-AC-16, FR-017-AC-17, FR-017-CON-2 | TC-027 | ✅ Covered |
+| FR-017 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-12, FR-017-AC-13, FR-017-AC-14, FR-017-AC-15, FR-017-AC-16, FR-017-AC-17, FR-017-AC-18, FR-017-AC-19, FR-017-CON-2 | TC-027 | ✅ Covered |
 | FR-017 | FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-CON-1 | TC-027 | 🚧 Planned |
 | FR-025 | FR-025-AC-1 | TC-036 | 🚧 Planned; emission order is asserted only for the V1 `BoundClause` harness kinds, and the ascending order and the scalar-claim harness are unasserted |
 | FR-025 | FR-025-AC-2 through FR-025-AC-8 | TC-036 | 🚧 Planned |
