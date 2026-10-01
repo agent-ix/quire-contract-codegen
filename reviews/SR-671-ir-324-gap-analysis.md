@@ -2,7 +2,7 @@
 id: "SR-671"
 title: "CG PR 214 gap analysis: seam AD invariants and routed gaps"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@80243027bcda41f1d81e83718bd29738926b6972; spec/assurance/AD-002-cg-qsl-replay-seam.md, spec/assurance/AD-003-evidence-chain.md"
+scope: "agent-ix/quire-contract-codegen@80243027bcda41f1d81e83718bd29738926b6972 (review), ae98754466eef0f9754e043157e4bcb9bf552600 (disposition pass 1); spec/assurance/AD-002-cg-qsl-replay-seam.md, spec/assurance/AD-003-evidence-chain.md"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AD-002
     type: references
@@ -54,3 +54,13 @@ The routing discipline holds. Every routed row has an owner and a stated need. N
 decided, no requirement id is minted, and relayed QSL text is labelled. The three findings are
 low: an AD-local id-to-need mapping, one untestable invariant, and one missing failure-table
 row. The substantive gaps are in SR-670.
+
+## Dispositions
+
+Round 1, reviewed at ae98754466eef0f9754e043157e4bcb9bf552600.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | f254ff6: AD-003 gains a "To IR" table mapping R-I1, R-I2 and R-I3 to their stated needs (AD-003:359-364) |
+| FND-002 | fixed | f254ff6: E-6 names the observable. A stale artifact plus a launcher that prints nothing classifies `NoVerdict` (AD-003:144-148), and `NoVerdict` exists (`kani_execution.rs:291`) |
+| FND-003 | fixed | f254ff6: AD-002's failure table adds rows for `FrameReplayError::Name`, `Transcript` and `Envelope`, plus wrapped `CallSite` faults (AD-002:91-93) |

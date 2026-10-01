@@ -2,7 +2,7 @@
 id: "SR-670"
 title: "CG PR 214 spec review: AD-002 replay seam and AD-003 evidence chain"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@80243027bcda41f1d81e83718bd29738926b6972; spec/assurance/AD-002-cg-qsl-replay-seam.md, spec/assurance/AD-003-evidence-chain.md, spec/spec.md"
+scope: "agent-ix/quire-contract-codegen@80243027bcda41f1d81e83718bd29738926b6972 (review), ae98754466eef0f9754e043157e4bcb9bf552600 (disposition pass 1); spec/assurance/AD-002-cg-qsl-replay-seam.md, spec/assurance/AD-003-evidence-chain.md, spec/spec.md"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AD-002
     type: references
@@ -99,3 +99,52 @@ the full E-1 gap (FND-003), the unrouted tool pin (FND-004), consistency with th
 ruling and AD-001 (FND-005, FND-006), and the `ContentDigest` and encoder conflict with CG #215
 (FND-014). The PR is also still a GitHub draft. Its own body says
 it is not ready until the R-Q rows are reviewed and R-S1 to R-S8 are routed.
+
+## New findings (disposition pass 1)
+
+Reviewed at ae98754466eef0f9754e043157e4bcb9bf552600.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-015 | medium | The new pre-replay rule maps failures "that are a property of this run's data" to `Inconclusive(ReplayRefused)`, a non-failure. Several of them are CG defects, not run data. AD-002:179 says so for `Domain`: "a playback outside the harness's proof bound is a CG harness defect", and the CG pre-check exists so the defect is not hidden. `UnboundArgument` (a decoded harness argument that no `call_site` parameter binds, `spine_replay.rs:111`) is a mismatch between CG's harness and QSL's call site. `FieldDelimiter` is triggered by harness text CG generated. `Decode` is a playback that does not type against the bindings CG persisted. Mapping these to `ReplayRefused` reports a CG defect as an inconclusive proof result, which contradicts the rule's own aim, "so a CG defect stays loud". Needed: map `Domain`, `UnboundArgument` and `FieldDelimiter` to `Failed`; map `Decode` to `Failed` or split it by cause; keep `ReplayRefused` for genuine input or lock properties (`Dependencies`, a non-fault `CallSite` refusal, and `InvalidFunction`/`Name` if they come from the package). R-Q1 already asks QSL to confirm | spec/assurance/AD-003-evidence-chain.md:77; spec/assurance/AD-002-cg-qsl-replay-seam.md:179 |
+| FND-016 | low | The encoder-gap bullet says CG #215 AD-004 "keeps the `serde_json` `deterministic_json`, and its step 1a only merges the two `deterministic_json` copies; ... that step must adopt the target above". At #215 head b0c0008, AD-004 has already adopted the target. `core/canonical.rs` is "the one caller of quire-canonical's encoder and digest". Both `deterministic_json` copies are deleted, and step 1a calls `quire-canonical` directly (AD-004:159, :421-436, :532-535). The sentence is stale; say the two ADs agree | spec/assurance/AD-003-evidence-chain.md:282-285 |
+
+## Dispositions
+
+Round 1, reviewed at ae98754. The fix commits are f254ff6 (SR-670 and SR-671 findings) and
+ae98754 (QSL's encoder ruling, relayed). `make spec` reports the 3 baseline warnings and the PR
+adds none.
+
+New claims were verified at CG origin/main 2fad745, whose `src` is identical at this head:
+
+- `kani_execution.rs:690` spells `kani_vacuous_proof` as a literal.
+- `StateFrameIdentity.clause` is a `CheckedNodeId`.
+- FR-024:69 and FR-024-AC-1 repeat the struct-based preimage.
+
+At QSL origin/main d81193f:
+
+- `execute.rs:476` passes the identity slot to `arguments` as a label.
+- `Cargo.toml:8` depends on `quire-canonical` by tag `quire-canonical-v0.3.0`.
+
+In the public repository agent-ix/quire-canonical, `to_vec(value, Limits)` (lib.rs:175) and
+`sha256` (:187) exist.
+
+Sibling PRs are consistent: #215 b0c0008, IR #241 d22e222 (AD-006:58, :120-123) and driver #11
+7a09d40 (R-Q4 marked rejected by QSL, as relayed).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | f254ff6: link 7 now classifies every CG pre-replay failure (AD-003:77), and E-3 is scoped to items that reach the map (:133). The soundness of the chosen mapping is FND-015 |
+| FND-002 | fixed | f254ff6: "a fault is a fault wherever it sits", covering `Admission(AdmissionFailure::Fault)` and `CallSiteRefusal::Fault` direct or wrapped; the map walks the whole error (AD-003:59) |
+| FND-003 | fixed | f254ff6: the E-1 gap lists the missing clause node id, occurrence key and parameter node ids for all three structs, including `StateFrameIdentity`; E-1 covers the frame path |
+| FND-004 | fixed | f254ff6: tool pin routed to QSL as R-Q9 (relayed), with no pin proposed (AD-003:97-100, :348) |
+| FND-005 | fixed | f254ff6: links 7 and 9 and the E-3 gap say CG provides the map and its typed inputs and the driver builds the record (quire-driver PR 11). R-Q4 is consistent with driver #11 7a09d40 |
+| FND-006 | fixed | f254ff6: "Resolved decision, preimage" records the AD-001 and FR-024 conflict; O-09 wins, and the follow-up spec PR fixes AD-001 and FR-024 (AD-003:297-301) |
+| FND-007 | fixed | f254ff6: E-3 cites FR-030-AC-7 only and says FR-029-AC-1 is to be amended |
+| FND-008 | fixed | f254ff6: AD-002:69 says QSL passes the slot to witness decoding as a label and checks it against no content |
+| FND-009 | fixed | f254ff6: the transcript digest is no longer listed as a content identity, and R-Q7 retires it |
+| FND-010 | fixed | f254ff6: AD-002:65 says `Cargo.lock` selects the revision and nothing is asserted beyond compilation |
+| FND-011 | deferred | Still conflicts: merge-tree of ae98754 with #215 b0c0008 conflicts in `spec/spec.md` References. Whichever of #214 and #215 merges second resolves it on rebase by keeping both lines. It is a merge-order step, not a content defect |
+| FND-012 | fixed | f254ff6: AD-003 says CG code spells `kani_vacuous_proof` at `kani_execution.rs:690` (verified) and the other two only in spec (FR-030) |
+| FND-013 | fixed | f254ff6: the encoder gap separates the corpus JSON digest from the byte digests at `spine_replay.rs:149-152` and `:440` |
+| FND-014 | fixed | ae98754: AD-003 no longer asks QSL to export `ContentDigest`. CG depends on `quire-canonical` directly through `core::canonical`, matching #215 b0c0008 (AD-004:421-436, :532-535, :672). The leftover stale sentence is FND-016 |
