@@ -1964,7 +1964,14 @@ fn tc_027_a_routed_scalar_harness_run_classifies_like_a_contract_harness() {
         }))
         .unwrap()
     };
-    let check = |status: &str, category: &str| serde_json::json!({ "status": status, "category": category });
+    let check = |status: &str, category: &str| {
+        serde_json::json!({
+            "id": 1,
+            "status": status,
+            "category": category,
+            "location": { "file": "src/lib.rs", "line": "10", "column": "5" },
+        })
+    };
     let classify = |checks: Vec<serde_json::Value>| {
         classify_kani_run(true, Some(&report(checks)), "", None)
             .unwrap()

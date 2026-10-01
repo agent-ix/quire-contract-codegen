@@ -121,8 +121,10 @@ pub use kani_execution::{
     KaniExecutionRefusal, KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation,
     KaniRunOutcome, KaniTool, KaniToolError, LaunchOutcome, REPORT_FILE,
 };
-pub use kani_terminal::{ir_outcome_terminal_value, terminal_value};
-pub use kani_transcript::KaniReportRefusal;
+pub use kani_terminal::{ir_outcome_terminal_value, proof_category, terminal_value};
+pub use kani_transcript::{
+    KaniCheckClass, KaniCheckLocation, KaniCheckResult, KaniCheckStatus, KaniReportRefusal,
+};
 pub use routed_generation::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,

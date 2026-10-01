@@ -22,7 +22,7 @@
 
 use std::fmt;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// The report schema version this module reads (`metadata.version`).
 const SUPPORTED_REPORT_VERSION: &str = "1.0";
@@ -109,50 +109,129 @@ pub(crate) enum KaniHarnessStatus {
 
 /// The status of one check. These are exactly the variants of Kani's own `CheckStatus`, which the
 /// report prints by its `Debug` name.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-pub(crate) enum KaniCheckStatus {
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum KaniCheckStatus {
+    /// The property held.
     Success,
+    /// The property failed.
     Failure,
+    /// A cover property was reached.
     Satisfied,
+    /// A cover property cannot be reached.
     Unsatisfiable,
+    /// The property's location is never reached.
     Unreachable,
+    /// The solver could not decide the property.
     Undetermined,
+    /// Another property failed, so this one cannot be concluded.
     Unknown,
+    /// A code-coverage property was reached.
     Covered,
+    /// A code-coverage property was not reached.
     Uncovered,
+    /// The solver reported an error for the property.
     Error,
 }
 
-/// What kind of property a check is. Kani's category is open-ended (`assertion`, `overflow`,
-/// `pointer_dereference`, ...); only the two kinds that change a verdict are named.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(from = "String")]
-pub(crate) enum KaniCheckCategory {
+/// What kind of property a check is. Kani's class is open-ended (`assertion`, `overflow`,
+/// `pointer_dereference`, ...); only the two kinds that change a verdict are named, and any
+/// other class keeps Kani's own word.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(from = "String", into = "String")]
+pub enum KaniCheckClass {
     /// A `kani::cover!` property.
     Cover,
     /// A loop-unwinding assertion.
     Unwind,
-    /// Any other property.
-    Property,
+    /// Any other class, as Kani spelled it.
+    Other(String),
 }
 
-impl From<String> for KaniCheckCategory {
-    fn from(category: String) -> Self {
-        match category.as_str() {
+impl From<String> for KaniCheckClass {
+    fn from(class: String) -> Self {
+        match class.as_str() {
             COVER_CATEGORY => Self::Cover,
             UNWIND_CATEGORY => Self::Unwind,
-            _ => Self::Property,
+            _ => Self::Other(class),
         }
     }
 }
 
-/// One check of a harness.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-pub(crate) struct KaniCheck {
+impl From<KaniCheckClass> for String {
+    fn from(class: KaniCheckClass) -> Self {
+        match class {
+            KaniCheckClass::Cover => COVER_CATEGORY.to_owned(),
+            KaniCheckClass::Unwind => UNWIND_CATEGORY.to_owned(),
+            KaniCheckClass::Other(class) => class,
+        }
+    }
+}
+
+/// Where Kani attributes a check in the source it verified.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct KaniCheckLocation {
+    /// The source file, as Kani printed it (`unknown` when Kani had none).
+    pub file: String,
+    /// The line, `None` when Kani had none.
+    pub line: Option<u32>,
+}
+
+/// One check Kani reported for a harness: the per-check view a consumer attributes proof to
+/// source with.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(try_from = "RawCheck")]
+pub struct KaniCheckResult {
+    /// The check's position in the harness's list, from one.
+    pub id: u64,
+    /// What kind of property it is.
+    pub class: KaniCheckClass,
+    /// Where it is attributed.
+    pub location: KaniCheckLocation,
     /// Its status.
-    pub(crate) status: KaniCheckStatus,
-    /// Its kind.
-    pub(crate) category: KaniCheckCategory,
+    pub status: KaniCheckStatus,
+}
+
+/// Kani prints a missing line or column as this word.
+const UNKNOWN_LOCATION: &str = "unknown";
+
+#[derive(Deserialize)]
+struct RawCheck {
+    id: u64,
+    status: KaniCheckStatus,
+    category: KaniCheckClass,
+    location: RawLocation,
+}
+
+#[derive(Deserialize)]
+struct RawLocation {
+    file: String,
+    line: String,
+}
+
+impl TryFrom<RawCheck> for KaniCheckResult {
+    type Error = String;
+
+    fn try_from(raw: RawCheck) -> Result<Self, String> {
+        let line = if raw.location.line == UNKNOWN_LOCATION {
+            None
+        } else {
+            Some(raw.location.line.parse().map_err(|_| {
+                format!(
+                    "check {}: line {:?} is not a number",
+                    raw.id, raw.location.line
+                )
+            })?)
+        };
+        Ok(Self {
+            id: raw.id,
+            class: raw.category,
+            location: KaniCheckLocation {
+                file: raw.location.file,
+                line,
+            },
+            status: raw.status,
+        })
+    }
 }
 
 /// The typed result Kani reported for one harness.
@@ -161,7 +240,7 @@ pub(crate) struct KaniHarnessReport {
     /// Kani's verdict.
     pub(crate) status: KaniHarnessStatus,
     /// Every check, in the order Kani listed them.
-    pub(crate) checks: Vec<KaniCheck>,
+    pub(crate) checks: Vec<KaniCheckResult>,
 }
 
 #[derive(Deserialize)]
@@ -205,38 +284,38 @@ impl KaniHarnessReport {
     /// Checks that are not covers and held.
     pub(crate) fn property_successes(&self) -> u32 {
         self.count(|check| {
-            check.category != KaniCheckCategory::Cover && check.status == KaniCheckStatus::Success
+            check.class != KaniCheckClass::Cover && check.status == KaniCheckStatus::Success
         })
     }
 
     /// Cover properties that were satisfied.
     pub(crate) fn covers_satisfied(&self) -> u32 {
         self.count(|check| {
-            check.category == KaniCheckCategory::Cover && check.status == KaniCheckStatus::Satisfied
+            check.class == KaniCheckClass::Cover && check.status == KaniCheckStatus::Satisfied
         })
     }
 
     /// Cover properties in total.
     pub(crate) fn covers_total(&self) -> u32 {
-        self.count(|check| check.category == KaniCheckCategory::Cover)
+        self.count(|check| check.class == KaniCheckClass::Cover)
     }
 
     /// Whether a loop-unwinding assertion failed.
     pub(crate) fn failed_unwinding(&self) -> bool {
         self.count(|check| {
-            check.category == KaniCheckCategory::Unwind && check.status == KaniCheckStatus::Failure
+            check.class == KaniCheckClass::Unwind && check.status == KaniCheckStatus::Failure
         }) > 0
     }
 
     /// Whether a property other than a cover or an unwinding assertion failed.
     pub(crate) fn failed_property(&self) -> bool {
         self.count(|check| {
-            check.category == KaniCheckCategory::Property
+            matches!(check.class, KaniCheckClass::Other(_))
                 && check.status == KaniCheckStatus::Failure
         }) > 0
     }
 
-    fn count(&self, matching: impl Fn(&KaniCheck) -> bool) -> u32 {
+    fn count(&self, matching: impl Fn(&KaniCheckResult) -> bool) -> u32 {
         let count = self.checks.iter().filter(|check| matching(check)).count();
         u32::try_from(count).unwrap_or(u32::MAX)
     }
@@ -520,6 +599,89 @@ mod tests {
         );
     }
 
+    /// The per-check view of a real run names every check with its id, class, source location and
+    /// status, so a consumer can attribute each successful check to a source line.
+    ///
+    /// Trace: FR-017-AC-20, TC-027
+    #[test]
+    fn tc_027_real_kani_0_68_0_the_per_check_view_carries_id_class_location_and_status() {
+        let capture = capture!("falsified-with-playback");
+        let run = classify_kani_run(
+            capture.exited_successfully,
+            Some(capture.report.as_bytes()),
+            capture.stdout,
+            None,
+        )
+        .unwrap();
+        let at = |line| KaniCheckLocation {
+            file: "src/lib.rs".to_owned(),
+            line: Some(line),
+        };
+        assert_eq!(
+            run.checks,
+            [
+                KaniCheckResult {
+                    id: 1,
+                    class: KaniCheckClass::Cover,
+                    location: at(15),
+                    status: KaniCheckStatus::Satisfied,
+                },
+                KaniCheckResult {
+                    id: 2,
+                    class: KaniCheckClass::Other("assertion".to_owned()),
+                    location: at(16),
+                    status: KaniCheckStatus::Failure,
+                },
+            ]
+        );
+        let unwound = capture!("unwind-exhausted");
+        let run = classify_kani_run(
+            unwound.exited_successfully,
+            Some(unwound.report.as_bytes()),
+            unwound.stdout,
+            None,
+        )
+        .unwrap();
+        assert!(run
+            .checks
+            .iter()
+            .any(|check| check.class == KaniCheckClass::Unwind
+                && check.status == KaniCheckStatus::Failure
+                && check.location.line == Some(24)));
+    }
+
+    /// A location Kani leaves unknown has no line; a line that is neither a number nor Kani's
+    /// word for none is a malformed report, not a dropped location.
+    ///
+    /// Trace: FR-017-AC-20, TC-027
+    #[test]
+    fn tc_027_an_unknown_line_is_none_and_a_non_numeric_line_is_refused() {
+        let unknown = mutated(|report| {
+            report["verification_results"]["results"][0]["checks"][0]["location"]["line"] =
+                "unknown".into();
+        });
+        let parsed = KaniHarnessReport::parse(&unknown).unwrap();
+        assert_eq!(parsed.checks[0].location.line, None);
+        let bad = mutated(|report| {
+            report["verification_results"]["results"][0]["checks"][0]["location"]["line"] =
+                "12a".into();
+        });
+        assert!(matches!(
+            KaniHarnessReport::parse(&bad),
+            Err(KaniReportRefusal::Malformed { .. })
+        ));
+        let no_location = mutated(|report| {
+            report["verification_results"]["results"][0]["checks"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove("location");
+        });
+        assert!(matches!(
+            KaniHarnessReport::parse(&no_location),
+            Err(KaniReportRefusal::Malformed { .. })
+        ));
+    }
+
     /// A check category outside the two this module names is a property: an unknown category must
     /// still count against a proof, never be dropped.
     ///
@@ -533,6 +695,10 @@ mod tests {
         });
         let parsed = KaniHarnessReport::parse(&report).unwrap();
         assert!(parsed.failed_property());
+        assert_eq!(
+            parsed.checks[0].class,
+            KaniCheckClass::Other("pointer_dereference".to_owned())
+        );
     }
 
     /// Trace: FR-017-AC-5, FR-017-AC-12, TC-027

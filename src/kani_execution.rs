@@ -45,7 +45,8 @@ use serde::Serialize;
 use crate::{
     kani_obligations::{KaniObligationHarness, KaniScalarObligationHarness, ObligationKind},
     kani_transcript::{
-        counterexample_playback, KaniHarnessReport, KaniHarnessStatus, KaniReportRefusal,
+        counterexample_playback, KaniCheckResult, KaniHarnessReport, KaniHarnessStatus,
+        KaniReportRefusal,
     },
     oracle::Artifact,
     state_frame::{StateFrameHarness, StateFrameProperty},
@@ -375,6 +376,9 @@ pub struct KaniExecutionEvidence {
     /// Zero when the run produced no report. It is the SUCCESS-check count FR-029 carries into
     /// the terminal value.
     pub success_checks: u32,
+    /// Every check Kani reported, with its class, source location and status, in report order.
+    /// Empty when the run produced no report. A consumer attributes proof to source with it.
+    pub checks: Vec<KaniCheckResult>,
 }
 
 /// A classified run: the outcome and the check count it was classified from.
@@ -384,6 +388,8 @@ pub struct ClassifiedRun {
     pub outcome: KaniRunOutcome,
     /// The count [`KaniExecutionEvidence::success_checks`] documents.
     pub success_checks: u32,
+    /// The checks [`KaniExecutionEvidence::checks`] documents.
+    pub checks: Vec<KaniCheckResult>,
 }
 
 /// Runs the harness and reports the backend's own outcome.
@@ -426,6 +432,7 @@ pub fn execute_kani_obligation(
         exit_code,
         outcome: run.outcome,
         success_checks: run.success_checks,
+        checks: run.checks,
     })
 }
 
@@ -675,6 +682,7 @@ pub fn launch_evidence(
                     reason: KaniInconclusiveReason::TimedOut,
                 },
                 success_checks: 0,
+                checks: Vec::new(),
             },
             None,
         )),
@@ -720,6 +728,7 @@ pub fn classify_kani_run(
             Ok(ClassifiedRun {
                 outcome: inconclusive(KaniInconclusiveReason::NoVerdict),
                 success_checks: 0,
+                checks: Vec::new(),
             })
         };
     };
@@ -735,6 +744,7 @@ pub fn classify_kani_run(
     Ok(ClassifiedRun {
         outcome: classify_report(exited_successfully, &report, text, kind),
         success_checks,
+        checks: report.checks,
     })
 }
 
@@ -935,7 +945,15 @@ mod tests {
     fn report(status: &str, checks: &[(&str, &str)]) -> Vec<u8> {
         let checks: Vec<_> = checks
             .iter()
-            .map(|(status, category)| serde_json::json!({ "status": status, "category": category }))
+            .enumerate()
+            .map(|(index, (status, category))| {
+                serde_json::json!({
+                    "id": index + 1,
+                    "status": status,
+                    "category": category,
+                    "location": { "file": "src/lib.rs", "line": "10", "column": "5" },
+                })
+            })
             .collect();
         serde_json::to_vec(&serde_json::json!({
             "metadata": { "version": "1.0" },

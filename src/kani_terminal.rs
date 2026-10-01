@@ -7,7 +7,9 @@
 //! column. The terminal value type is QSL's (`qsl_replay::TerminalValue`); this crate defines
 //! none of its own.
 
-use qsl_replay::{IncompleteCause, ProofRefusalCause, TerminalValue, UnavailabilityCause};
+use qsl_replay::{
+    IncompleteCause, ProofCategory, ProofRefusalCause, TerminalValue, UnavailabilityCause,
+};
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
 /// The cause code Contract IR gives an `Unavailable` outcome whose solver is absent.
@@ -40,6 +42,12 @@ pub fn terminal_value(outcome: &KaniRunOutcome, success_checks: u32) -> Terminal
             | KaniInconclusiveReason::MissingCoverSummary => TerminalValue::Failed,
         },
     }
+}
+
+/// The ADR-013 O-16 category of an executed run: [`terminal_value`]'s value read through QSL's own
+/// `TerminalValue::category`, so the category is never derived here a second way.
+pub fn proof_category(outcome: &KaniRunOutcome, success_checks: u32) -> ProofCategory {
+    terminal_value(outcome, success_checks).category()
 }
 
 /// The terminal value of an outcome Contract IR produced and handed in, for a run this crate did
@@ -159,6 +167,56 @@ mod tests {
             let value = terminal_value(&inconclusive(reason), 5);
             assert_eq!(value, TerminalValue::Failed, "{reason:?}");
             assert_eq!(value.category(), ProofCategory::InternalFailure);
+        }
+    }
+
+    /// Every run outcome lands in the O-16 category the proof column assigns it.
+    ///
+    /// Trace: FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, TC-040
+    #[test]
+    fn tc_040_every_run_outcome_has_its_o16_proof_category() {
+        let cases = [
+            (KaniRunOutcome::Verified, ProofCategory::Success),
+            (
+                KaniRunOutcome::CoverUnsatisfied {
+                    satisfied: 0,
+                    total: 1,
+                },
+                ProofCategory::Inconclusive,
+            ),
+            (
+                KaniRunOutcome::Falsified {
+                    counterexample: "t".to_owned(),
+                },
+                ProofCategory::Violation,
+            ),
+            (
+                inconclusive(KaniInconclusiveReason::VacuousProof),
+                ProofCategory::Inconclusive,
+            ),
+            (
+                inconclusive(KaniInconclusiveReason::UnwindBoundExhausted),
+                ProofCategory::Incomplete,
+            ),
+            (
+                inconclusive(KaniInconclusiveReason::TimedOut),
+                ProofCategory::Incomplete,
+            ),
+            (
+                inconclusive(KaniInconclusiveReason::NoVerdict),
+                ProofCategory::InternalFailure,
+            ),
+            (
+                inconclusive(KaniInconclusiveReason::FailedWithoutCounterexample),
+                ProofCategory::InternalFailure,
+            ),
+            (
+                inconclusive(KaniInconclusiveReason::MissingCoverSummary),
+                ProofCategory::InternalFailure,
+            ),
+        ];
+        for (outcome, category) in cases {
+            assert_eq!(proof_category(&outcome, 4), category, "{outcome:?}");
         }
     }
 
