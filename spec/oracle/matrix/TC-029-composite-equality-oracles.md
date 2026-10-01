@@ -92,6 +92,17 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    that their outcomes are complementary on a vector whose operands differ. This
    is not the duplicate case of step 1: a duplicate is one node id under one
    descriptor.
+8. Generate an equality over a tuple whose member types are `bounded_domain`
+   nodes (FR-018-AC-16): the text position names a `text_bounds` node, and the
+   generated declaration is `Text(0, 16, Nfc)`; integer, decimal and rational
+   `bounded_domain` members generate source identical to members naming their
+   base scalars; with a second `text_bounds` node over the same text scalar,
+   naming either reads that node's own bounds. Then name a `text_bounds` node
+   over an integer scalar (refused as missing `integer_range`), and
+   `bounded_domain` nodes over a boolean scalar, over the base package's enum
+   declaration and over a record (each refused as unsupported `bounded_domain`).
+   Name a `float_rounding` node over a `float64` scalar as a member: it reads as the
+   float and the equality is refused as `OperatorIneligible`.
 
 ## Expected Results
 

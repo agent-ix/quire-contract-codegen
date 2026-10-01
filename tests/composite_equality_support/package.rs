@@ -705,6 +705,19 @@ impl PackageBuilder {
         self
     }
 
+    /// Replaces the body of the node `code` built by [`Self::code`].
+    pub fn set_body(&mut self, code: u32, body: Value) -> &mut Self {
+        let digest = key(code);
+        let node = self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("nodes")
+            .iter_mut()
+            .find(|node| node["node_id"]["digest"].as_str() == Some(digest.as_str()))
+            .unwrap_or_else(|| panic!("no node for code {code}"));
+        node["body"] = body;
+        self
+    }
+
     /// The reader's verdict on this package, admitted or refused, with the wire it read.
     pub fn read(&self) -> (CheckedPackageV2ReadResult, Value) {
         let wire = self.wire();
@@ -749,9 +762,94 @@ pub fn direct_reference_package() -> PackageBuilder {
     builder
 }
 
+/// [`corpus_package`] with `TUP_PAIR`'s members replaced by references to `members` (the text
+/// leaf must stay at position 1) and the variant nodes `extras` added first, so a test can
+/// reference a `bounded_domain` node, or a scalar, as a member's type (FR-018-AC-16).
+pub fn tuple_members_package(extras: &[u32], members: &[u32]) -> PackageBuilder {
+    let mut builder = corpus_package();
+    let text_members = |profile_member: bool| {
+        let mut bounds = vec![
+            bound_member("min", integer_literal(0)),
+            bound_member("max", integer_literal(16)),
+        ];
+        if profile_member {
+            bounds.push(bound_member("text_profile", literal("text", "nfc")));
+        }
+        aggregate(bounds)
+    };
+    for extra in extras {
+        match *extra {
+            BD_TEXT_SIBLING => builder.code(
+                BD_TEXT_SIBLING,
+                "bounded_domain",
+                "text_bounds",
+                T_TEXT,
+                aggregate(vec![
+                    bound_member("min", integer_literal(1)),
+                    bound_member("max", integer_literal(5)),
+                    bound_member("text_profile", literal("text", "nfc")),
+                ]),
+            ),
+            BD_INTEGER_WRONG_FORM => builder.code(
+                BD_INTEGER_WRONG_FORM,
+                "bounded_domain",
+                "text_bounds",
+                T_INTEGER_BOUNDED,
+                text_members(true),
+            ),
+            BD_BOOLEAN => builder.code(
+                BD_BOOLEAN,
+                "bounded_domain",
+                "integer_range",
+                T_BOOLEAN,
+                aggregate(vec![
+                    bound_member("min", integer_literal(0)),
+                    bound_member("max", integer_literal(1)),
+                ]),
+            ),
+            BD_ENUM => {
+                register_code(BD_ENUM, key(BD_ENUM));
+                builder.node(
+                    &key(BD_ENUM),
+                    "bounded_domain",
+                    "integer_range",
+                    &enum_type_digest(),
+                    aggregate(vec![
+                        bound_member("min", integer_literal(0)),
+                        bound_member("max", integer_literal(1)),
+                    ]),
+                )
+            }
+            BD_OVER_COMPOSITE => builder.code(
+                BD_OVER_COMPOSITE,
+                "bounded_domain",
+                "collection_bounds",
+                R_POINT,
+                text_members(false),
+            ),
+            BD_FLOAT_ROUNDING => builder.code(
+                BD_FLOAT_ROUNDING,
+                "bounded_domain",
+                "float_rounding",
+                T_FLOAT64,
+                aggregate(vec![bound_member(
+                    "rounding",
+                    literal("text", "nearest-even"),
+                )]),
+            ),
+            other => panic!("no variant node registered for code {other}"),
+        };
+    }
+    builder.set_body(
+        TUP_PAIR,
+        aggregate(members.iter().map(|member| reference(*member)).collect()),
+    );
+    builder
+}
+
 /// [`corpus_package`] plus [`E_SELF`]: `quire.op.structural.eq` over two `R_SELF` operands, a
 /// record `{ next: Option<R_SELF> }` reaching itself and no text. QSL emits `leaves: []` for it,
-/// which this builds. Contract IR 0a889f9 refuses any compared type that reaches itself
+/// which this builds. Contract IR refuses any compared type that reaches itself
 /// (`IllTyped`/`OperatorIneligible` at the operation's `leaves`), as the QSpec reference reader
 /// does, so it cannot be in the corpus; whether a cyclic type with no text should instead take 0
 /// leaves is the owner's question STD-129. `tc_029_a_cyclic_compared_type_is_refused_by_ir_today`
@@ -1041,7 +1139,10 @@ pub fn corpus_package() -> PackageBuilder {
             "composite_type",
             "tuple",
             T_BOOLEAN,
-            aggregate(vec![reference(T_INTEGER_BOUNDED), reference(T_TEXT)]),
+            // The text position names the `text_bounds` node, as QSL emits a text type: the
+            // checked operation catalog's leaf rule reads the profile pin from the type chain
+            // and refuses a text leaf whose type pins none.
+            aggregate(vec![reference(T_INTEGER_BOUNDED), reference(BD_TEXT)]),
         )
         .code(
             OPT_INT,
