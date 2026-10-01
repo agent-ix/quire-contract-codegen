@@ -56,7 +56,7 @@ then by how identity is asserted.
 | 4 | Corpus case: `CaseIdentity` over construct, profile, input, request, dependencies | CG | lowercase SHA-256 over its deterministic JSON, which also names the artifact paths; collisions refused by `EmittedCorpusIdentities` (`bounded_kani_corpus.rs`, `kani_corpus_identity_collision`) |
 | 5 | Launch: argument vector, ceilings, launcher, harness-in-crate check (`execute_kani_obligation`, `kani_launch_command`, `launch_evidence`) | CG | harness source must appear byte for byte in the crate before launch (`kani_execution.rs`, FR-017 step 1) |
 | 6 | Run classification: `classify_kani_run` over the typed transcript to `KaniRunOutcome` | CG | one parser module, `kani_transcript.rs`; Kani's wording read nowhere else |
-| 7 | Terminal value: (`KaniRunOutcome` or `KaniOutcome`, replay settlement) to `qsl_replay::TerminalValue`. The input is the pair, not the Kani outcome alone: a `Refuted` outcome whose replay disagrees becomes an inconclusive value with a typed replay-parity cause (ADR-013 O-16 inconclusive row and O-27; the cause's name is QSL's to give) | CG (map), QSL (type) | one total `match` each over the outcome, no wildcard arm (FR-029, FR-030; both `Planned`, and both written over the outcome alone today) |
+| 7 | Terminal value: (`KaniRunOutcome` or `KaniOutcome`, replay settlement) to `qsl_replay::TerminalValue`. The input is the pair, not the Kani outcome alone: a `Refuted` outcome whose replay disagrees becomes an inconclusive value with the cause `InconclusiveCause::ReplayParity` (code `replay-parity`), which carries the replay's `DisagreementCause` (ADR-013 O-16 inconclusive row and O-27; the variant lands with QSL-351, and its name is as QSL gave it, not yet in QSL's `main`) | CG (map), QSL (type) | one total `match` each over the outcome, no wildcard arm (FR-029, FR-030; both `Planned`, and both written over the outcome alone today) |
 | 8 | Counterexample join: decoded playback to QSL replay, with `ObligationIdentity` | CG builds, QSL consumes | see AD-002; `package_id` recomputed by QSL |
 | 9 | FR-331 `results` record | QSL type (`TerminalRecord`, `ProofResultEnvelope`), QSpec wire | none in CG (gap E-3) |
 
@@ -73,7 +73,7 @@ quire-integration (QSL-342).
 | 2 to 3 | one lowered claim per routed item | `GenerationErrorCode::UnsupportedObligations`, a `NoDerivableClaim` claim; no harness | CG |
 | 3 to 5 | harness source and options | `HarnessNotInCrate`; any argument vector is the identity's `options` verbatim | CG |
 | 5 to 6 | process output | `KaniInconclusiveReason::{NoVerdict, TimedOut, ...}`; a run with no verdict is not a proof | CG |
-| 6 to 7 | outcome, SUCCESS-check count and, for a falsified run, the replay settlement | none: the map is total (when built) | CG |
+| 6 to 7 | outcome, SUCCESS-check count and, for a falsified run, the replay settlement | none: the map is total (when built); a replay disagreement is `Inconclusive(ReplayParity)` | CG |
 | 7 to 9 | terminal value and item identity | not built (E-3) | n/a |
 
 Each failure state stays a distinct typed state (AD-001 Failure view). No state is converted to
@@ -122,7 +122,7 @@ authored).
 - E-3. Every run item has exactly one terminal value, and the map from `KaniRunOutcome` and from
   `KaniOutcomeKind` is one `match` with no wildcard arm (FR-029-AC-1 and FR-030-AC-7 are the
   existing form). A falsified run's value is a function of the outcome and the replay
-  settlement together (link 7).
+  settlement together (link 7): a replay disagreement is `Inconclusive(ReplayParity)`.
 - E-4. No outcome maps to `Tested`.
 - E-5. A run whose SUCCESS-check count is zero maps to a value QSL reads as non-success. A
   precondition harness counts its satisfied cover as its one SUCCESS check (question b).
@@ -160,7 +160,7 @@ Options and costs:
 | C. CG reports unsatisfied cover as `Failed` | CG only | blames the tool for a property of the model |
 
 Option B also gives a home to the replay-parity disagreement of link 7: the inconclusive value
-carries a replay-parity cause, which no existing `TerminalValue` variant can. This is QSL's and
+carries `InconclusiveCause::ReplayParity` (code `replay-parity`, carrying `DisagreementCause`), which no existing `TerminalValue` variant can. This is QSL's and
 QSpec's decision (routed R-Q1, R-S2); QSL's review says option B arrives as QSL-351. Until QSL decides, CG keeps option A's
 rows and states them as interim in FR-029 and FR-030; it adds nothing that would need to be
 removed (no shim).
@@ -286,7 +286,7 @@ To QSL (QSL reviews these rows):
 
 | Id | Stated need |
 | --- | --- |
-| R-Q1 | An inconclusive `TerminalValue` with a typed cause and a non-zero count in `Proved` (option B of (a); QSL-351, ahead of IR-465), and a typed request index in `TerminalRecord` (QSL-354 as relayed). |
+| R-Q1 | An inconclusive `TerminalValue` with typed causes including `ReplayParity`, and a non-zero count in `Proved` (option B of (a); QSL-351, ahead of IR-465), and a typed request index in `TerminalRecord` (QSL-354 as relayed). |
 | R-Q2 | Edit QSL's `ObligationIdentity` doc to point at ADR-013 O-09's member list instead of naming `KaniObligationIdentity`. |
 | R-Q3 | The one sentence of ADR-013 O-16 that says IR implements the proof-column map; CG owns it. |
 
