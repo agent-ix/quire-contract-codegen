@@ -26,8 +26,8 @@ use quire_contract_codegen::{
     IntegerOperator, OrderingOperandKind, QuantityOperator, RationalOperator,
 };
 use quire_contract_ir::{
-    CheckedArtifactLocator, CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult,
+    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
+    CheckedPackageV2ReadResult,
 };
 use quire_contract_runtime::exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
@@ -1029,50 +1029,15 @@ impl PackageBuilder {
     pub fn admit_with(&self, limits: CheckedPackageReadLimits) -> CheckedPackageV2 {
         let wire = self.wire();
         let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
-        match CheckedPackageV2::read(&bytes, limits, &evidence(&wire)) {
+        match CheckedPackageV2::read(&bytes, limits, &evidence()) {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
             other => panic!("expected V2 admission, got {other:?}"),
         }
     }
 }
 
-fn locator(artifact: &Value) -> CheckedArtifactLocator {
-    let text = |value: &Value| -> Box<str> { value.as_str().expect("locator member").into() };
-    CheckedArtifactLocator {
-        authority: text(&artifact["authority"]),
-        identity: text(&artifact["identity"]),
-        revision_namespace: text(&artifact["revision"]["namespace"]),
-        revision_value: text(&artifact["revision"]["value"]),
-        domain: text(&artifact["digest_domain"]),
-    }
-}
-
-fn evidence(package: &Value) -> CheckedPackageEvidence {
-    let lock = &package["lock"];
-    let mut artifacts = lock["sources"].as_array().cloned().unwrap_or_default();
-    artifacts.push(lock["edition"]["definition"].clone());
-    artifacts.extend(
-        lock["definition_selections"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default(),
-    );
-    artifacts.extend(
-        lock["profile_selections"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .map(|selection| selection["definition"].clone()),
-    );
-    artifacts.push(package["diagnostics"]["catalog"].clone());
+fn evidence() -> CheckedPackageEvidence {
     let mut evidence = CheckedPackageEvidence::new();
-    for artifact in &artifacts {
-        evidence.insert_artifact_digest(
-            locator(artifact),
-            artifact["digest"].as_str().expect("digest"),
-        );
-    }
     evidence.support_feature("quire.value.complete/v1");
     evidence
 }

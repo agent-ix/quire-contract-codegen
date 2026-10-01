@@ -21,8 +21,8 @@ use quire_contract_codegen::{
     CompositeEqualityItem, EqualityOperandDescriptor, EqualityOperatorKind,
 };
 use quire_contract_ir::{
-    CheckedArtifactLocator, CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult,
+    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
+    CheckedPackageV2ReadResult,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -481,7 +481,7 @@ impl PackageBuilder {
         match CheckedPackageV2::read(
             &bytes,
             CheckedPackageReadLimits::bounded(),
-            &evidence(&wire),
+            &evidence(),
         ) {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
             other => panic!("expected V2 admission, got {other:?}"),
@@ -489,35 +489,8 @@ impl PackageBuilder {
     }
 }
 
-fn locator(artifact: &Value) -> CheckedArtifactLocator {
-    let text = |value: &Value| -> Box<str> { value.as_str().expect("locator member").into() };
-    CheckedArtifactLocator {
-        authority: text(&artifact["authority"]),
-        identity: text(&artifact["identity"]),
-        revision_namespace: text(&artifact["revision"]["namespace"]),
-        revision_value: text(&artifact["revision"]["value"]),
-        domain: text(&artifact["digest_domain"]),
-    }
-}
-
-fn evidence(package: &Value) -> CheckedPackageEvidence {
-    let lock = &package["lock"];
-    let mut artifacts = lock["sources"].as_array().cloned().unwrap_or_default();
-    artifacts.push(lock["edition"]["definition"].clone());
-    artifacts.extend(
-        lock["definition_selections"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default(),
-    );
-    artifacts.push(package["diagnostics"]["catalog"].clone());
+fn evidence() -> CheckedPackageEvidence {
     let mut evidence = CheckedPackageEvidence::new();
-    for artifact in &artifacts {
-        evidence.insert_artifact_digest(
-            locator(artifact),
-            artifact["digest"].as_str().expect("digest"),
-        );
-    }
     evidence.support_feature("quire.value.complete/v1");
     evidence
 }
