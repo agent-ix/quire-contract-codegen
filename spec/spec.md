@@ -87,10 +87,10 @@ are in `assurance/`, decision records in `decisions/`, and every SpecReview in t
 | Core | `spec/core/` | The stakeholder need, the library and CLI interface and publication conformance, and the reproducibility, atomic-publication and provenance-boundary properties every subsystem shares | `lib` (crate root), `publication`, `oracle` (the shared lowering core, imported by strategy, kani and oracle modules) | AD-001, quire-contract-ir:ADR-0056 | Contract codegen lane |
 | Strategy | `spec/strategy/` | Tri-state proptest harnesses, bound numeric and state strategies, constructive populations, boundary campaigns and shrinking, and the strategy output consumable by Contract Runtime | `harness`, `strategy`, `bound`, `bound_strategy` | AD-001, ADR-001 | Contract codegen lane |
 | Oracle | `spec/oracle/` | Exact complete-V1 scalar, composite-equality and function-application oracle generation and its agreement with the runtime | `exact_scalar`, `composite_equality`, `exact_function`, `generation` | AD-001, ADR-001 | Contract codegen lane |
-| Kani | `spec/kani/` | Bounded Kani obligation generation, the generated subject ABI, proof ceilings, execution evidence, and the maps from a Kani run outcome and a Contract IR Kani outcome to QSL's terminal value | `kani`, `kani_obligations`, `kani_execution`, `kani_transcript`, `bounded_kani_profile`, `bounded_kani_corpus`, `definedness_arithmetic`, `bounded_collections`, `finite_reference_graphs`, `state_frame` | AD-001, ADR-002, ADR-003, ADR-004 | Contract codegen lane |
+| Kani | `spec/kani/` | Bounded Kani obligation generation, the generated subject ABI, proof ceilings, execution evidence, and the maps from a Kani run outcome and a Contract IR Kani outcome to QSL's terminal value | `kani`, `kani_obligations`, `kani_execution`, `kani_transcript`, `bounded_kani_profile`, `bounded_kani_corpus`, `definedness_arithmetic`, `bounded_collections`, `finite_reference_graphs`, `state_frame` | AD-001, AD-003, ADR-002, ADR-003, ADR-004 | Contract codegen lane |
 | Routed | `spec/routed/` | Capability settlement at one negotiation point, routed generation per backend kind, and the backend adapter contract | `capability`, `routed_generation` | AD-001, ADR-002 | Contract codegen lane |
-| Replay | `spec/replay/` | Witness decoding and native replay of Kani counterexamples, and their submission in QSL's counterexample envelope | `kani_witness_join`, `spine_replay`, `frame_replay` | AD-001, ADR-001 | Contract codegen lane |
-| Evidence | `spec/evidence/` | Vacuity and unexecuted-flow evidence | `vacuity`, `bound_coverage` | AD-001 | Contract codegen lane |
+| Replay | `spec/replay/` | Witness decoding and native replay of Kani counterexamples, and their submission in QSL's counterexample envelope | `kani_witness_join`, `spine_replay`, `frame_replay` | AD-001, AD-002, AD-003, ADR-001 | Contract codegen lane |
+| Evidence | `spec/evidence/` | Vacuity and unexecuted-flow evidence | `vacuity`, `bound_coverage` | AD-001, AD-003 | Contract codegen lane |
 
 Two recorded exceptions to the layout convention, both to be settled at the layout AD (IR-344):
 
@@ -104,4 +104,6 @@ Two recorded exceptions to the layout convention, both to be settled at the layo
 
 ## References
 
+- [CG to QSL replay seam](assurance/AD-002-cg-qsl-replay-seam.md).
+- [Evidence chain across IR, CG and QSL](assurance/AD-003-evidence-chain.md).
 - ISO/IEC/IEEE 29148 (requirements engineering), per `standards_alignment`.
