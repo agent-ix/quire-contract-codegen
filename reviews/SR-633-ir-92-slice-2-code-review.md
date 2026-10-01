@@ -84,3 +84,4 @@ non-argument binding accepted). The 5 survivors are listed in FND-002.
 | FND-002 | fixed | 6feece1: all 16 codes are asserted, plus negative, i64::MIN and i64::MAX. All 5 former surviving mutants are now killed, and 14 of 15 mutants are killed in total. |
 | FND-003 | fixed | 6feece1: `WitnessSchemaError` is private and is no longer re-exported from `lib.rs`. |
 | FND-004 | fixed | 6feece1: the test doc no longer names `Witness::parse`/`decode`. The module doc and PR body now call the decoder a behavioural port of IR's `Witness`. |
+| FND-005 | fixed | e4bad4e: `read_block` requires `: "` directly after the check kind (`strip_prefix(": \"")`). A new refusal case, a check line with quoted text but no colon plus a later quote in the block, kills the "first quote anywhere" and "old colon then quote" mutants. Real Kani 0.68 output still decodes. |
