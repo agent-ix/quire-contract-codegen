@@ -478,11 +478,7 @@ impl PackageBuilder {
     pub fn admit(&self) -> CheckedPackageV2 {
         let wire = self.wire();
         let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
-        match CheckedPackageV2::read(
-            &bytes,
-            CheckedPackageReadLimits::bounded(),
-            &evidence(),
-        ) {
+        match CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence()) {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
             other => panic!("expected V2 admission, got {other:?}"),
         }
