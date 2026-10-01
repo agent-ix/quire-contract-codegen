@@ -8,6 +8,8 @@ mod bounded_collections;
 mod bounded_kani_corpus;
 mod bounded_kani_profile;
 // The leaf directory: artifact, diagnostic, identity, profile and source-map (AD-004 step 2c).
+// `core` here is this crate's own layout module (the AD names the directory `core/`). In this
+// file it shadows the extern `core` crate, so `crate::core::` is the explicit spelling.
 mod core;
 mod definedness_arithmetic;
 mod finite_reference_graphs;
