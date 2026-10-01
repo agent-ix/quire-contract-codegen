@@ -315,7 +315,7 @@ Where the runner, report parser and witness decode sit. One module reads Kani's 
 | Report parse | `kani/output/report.rs` | the JSON file, typed |
 | Playback extraction | `kani/output/playback.rs` | the printed block, as a payload; Kani's report carries no concrete playback |
 | Run classification and vacuity | `kani/classify.rs` | typed report only; no text |
-| Terminal-value maps | `kani/terminal.rs` | typed outcomes only |
+| Terminal-value maps | `kani/terminal.rs` | typed outcomes and QSL's replay result only; total over the pair (step 5) |
 | Witness decode | `replay/witness.rs` | typed playback entries only |
 
 Today `kani_witness_join` also scans Kani's text (`check_clause`, `select_assertion_block`,
@@ -475,6 +475,16 @@ tickets in.
    `KaniRunOutcome` to `TerminalValue`, so both depend on QSL-351 (`Inconclusive(cause)`, a
    `NonZero` `Proved`, the tool pin gone) and on the rule that the terminal value also takes the
    replay settlement. Neither step 5's terminal map nor `kani/terminal.rs` merges before QSL-351.
+   The map is total over (Kani outcome, replay result), and the replay result has three cases
+   (relayed from QSL for QSL-354 and ADR-013 C-09, QSL #550; not verified here): (1) settled: a
+   refuted outcome with a replay disagreement gives `Inconclusive(InconclusiveCause::ReplayParity)`;
+   (2) replay refusal (identity mismatch, decode refusal, stale dependency, limit reached) gives
+   `Inconclusive(InconclusiveCause::ReplayRefused)`, carrying the `ReplayRefusal` code; (3) replay
+   fault (QSL `InternalFault`) gives `TerminalValue::Failed`, so a defect stays loud. A refuted Kani
+   outcome never becomes `Refuted` without a reproduced replay. The spellings are `replay_parity`
+   and `replay_refused`, and QSL-351 adds both causes. The map takes QSL's replay result type, not
+   CG's `replay/` module, so `kani/terminal.rs` imports `qsl-replay` and keeps `kani` free of any
+   import from `replay`.
 6. **V1 readers.** Each of `harness`, `strategy/bound`, `evidence/bound_coverage` and
    `oracle/boolean_v1.rs` is replaced and deleted with its V2 criteria. IR-364 (the V2 strategy
    chain: FR-002, FR-004 and FR-008 to FR-013 over `CheckedPackageV2`) is owned by the IR team and
