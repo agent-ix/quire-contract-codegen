@@ -26,7 +26,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     thread,
@@ -373,8 +373,8 @@ pub struct KaniExecutionEvidence {
     pub outcome: KaniRunOutcome,
     /// How many checks the report lists as holding: the non-cover checks with status success,
     /// plus, for a precondition harness, whose one property is its cover, the satisfied covers.
-    /// Zero when the run produced no report. It is the SUCCESS-check count FR-029 carries into
-    /// the terminal value.
+    /// Zero when the run produced no report. It is the SUCCESS-check count FR-017 defines; the
+    /// terminal map that will read it (FR-029) is not implemented yet.
     pub success_checks: u32,
     /// Every check Kani reported, with its class, source location and status, in report order.
     /// Empty when the run produced no report. A consumer attributes proof to source with it.
@@ -408,9 +408,9 @@ pub fn execute_kani_obligation(
             harness_path: harness.rust.path.clone(),
         });
     }
-    let report_path = report_path(request);
+    let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
-    let (arguments, command) = kani_launch_command(request);
+    let (arguments, command) = launch_command(request, &report_path);
     let launch =
         run_launcher_with_timeout(command, request.timeout).map_err(|error| KaniToolError::Io {
             tool: KaniTool::Launcher,
@@ -418,10 +418,12 @@ pub fn execute_kani_obligation(
             error,
         })?;
     let report = match launch {
-        LaunchOutcome::Completed { .. } => read_report(&report_path)?,
-        LaunchOutcome::TimedOut => None,
+        LaunchOutcome::Completed { .. } => read_report(&report_path),
+        LaunchOutcome::TimedOut => Ok(None),
     };
-    let (run, exit_code) = launch_evidence(launch, report.as_deref(), harness.kind)?;
+    // Only this run's own file is removed, whatever the read found.
+    let _ = fs::remove_file(&report_path);
+    let (run, exit_code) = launch_evidence(launch, report?.as_deref(), harness.kind)?;
     Ok(KaniExecutionEvidence {
         kind: harness.kind,
         harness_path: harness.rust.path.clone(),
@@ -441,15 +443,24 @@ pub fn execute_kani_obligation(
 /// launches exactly what `execute_kani_obligation` does.
 ///
 /// The vector is the harness identity's option vector followed by the flags that make Kani export
-/// its report to [`REPORT_FILE`] in the target directory, which is where the verdict is read from.
+/// its report to a file in the target directory, which is where the verdict is read from. The
+/// file's name is unique to this call (the last argument), so two runs sharing a target
+/// directory never write, remove or read each other's report.
 pub fn kani_launch_command(request: &KaniExecutionRequest<'_>) -> (Vec<String>, Command) {
+    launch_command(request, &fresh_report_path(request.target_directory))
+}
+
+fn launch_command(
+    request: &KaniExecutionRequest<'_>,
+    report_path: &Path,
+) -> (Vec<String>, Command) {
     let mut arguments = vec!["kani".to_owned()];
     arguments.extend(request.harness.view().options.iter().cloned());
     arguments.extend([
         "-Z".to_owned(),
         "unstable-options".to_owned(),
         "--export-json".to_owned(),
-        report_path(request).display().to_string(),
+        report_path.display().to_string(),
     ]);
     let mut command = Command::new(&request.installation.launcher);
     command
@@ -800,20 +811,29 @@ fn inconclusive(reason: KaniInconclusiveReason) -> KaniRunOutcome {
     KaniRunOutcome::Inconclusive { reason }
 }
 
-/// Name of the report Kani exports into the request's target directory.
-pub const REPORT_FILE: &str = "quire-kani-report.json";
+/// Stem of the report file Kani exports into the request's target directory. Each launch adds
+/// this process's id and a process-wide counter, so the name is unique to one launch among every
+/// run sharing the directory, in this process and in others running at the same time.
+const REPORT_FILE_STEM: &str = "quire-kani-report";
+
+static REPORT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Most bytes of the exported report this module reads. A report larger than this is refused,
 /// never truncated: a truncated report is not JSON, and reading part of one would invent a
 /// verdict.
 const REPORT_LIMIT: usize = 16 * 1024 * 1024;
 
-fn report_path(request: &KaniExecutionRequest<'_>) -> PathBuf {
-    request.target_directory.join(REPORT_FILE)
+fn fresh_report_path(target_directory: &Path) -> PathBuf {
+    let sequence = REPORT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    target_directory.join(format!(
+        "{REPORT_FILE_STEM}-{}-{sequence}.json",
+        std::process::id()
+    ))
 }
 
-/// Removes a report left by an earlier run into the same target directory, so a run that
-/// exports none can never be read as the run before it.
+/// Removes a file left under this launch's own report name (a crashed earlier process that had
+/// the same id and sequence), so a run that exports none can never be read as that one. Another
+/// run's file has another name and is never touched.
 fn remove_stale_report(path: &Path) -> Result<(), KaniReportRefusal> {
     match fs::remove_file(path) {
         Err(error) if error.kind() != io::ErrorKind::NotFound => {
@@ -1089,21 +1109,22 @@ mod tests {
             "zero successful checks must not be Verified merely because covers were satisfied"
         );
         assert_eq!(result.success_checks, 0);
-        // Checks that are not successes do not count toward the proof.
-        for status in ["Unreachable", "Undetermined", "Unknown"] {
-            assert_eq!(
-                classify(
-                    true,
-                    Some(&report("Success", &[(status, "assertion"), COVER_OK])),
-                    "",
-                    None
-                ),
-                KaniRunOutcome::Inconclusive {
-                    reason: KaniInconclusiveReason::VacuousProof
-                },
-                "{status}"
-            );
-        }
+        // Checks that are not successes do not count toward the proof. (A success report that lists
+        // an undetermined or unknown check is refused instead; see kani_transcript.)
+        assert_eq!(
+            classify(
+                true,
+                Some(&report(
+                    "Success",
+                    &[("Unreachable", "assertion"), COVER_OK]
+                )),
+                "",
+                None
+            ),
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::VacuousProof
+            },
+        );
         // One successful check is enough for the cover to decide.
         let proved = classify_kani_run(
             true,
@@ -1221,7 +1242,7 @@ mod tests {
     #[test]
     fn tc_027_the_report_is_read_bounded_and_refused_not_truncated() {
         let directory = discover_scratch("report-bound");
-        let path = directory.join(REPORT_FILE);
+        let path = directory.join("report.json");
         assert_eq!(read_report(&path), Ok(None));
         fs::write(&path, vec![b' '; REPORT_LIMIT]).unwrap();
         assert_eq!(
@@ -1249,20 +1270,42 @@ mod tests {
         exported: Option<&str>,
         stale: Option<&str>,
     ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+        run_stand_in_into(name, status, exported, stale, None)
+    }
+
+    /// [`run_stand_in`] with an optional target directory shared with other runs; a shared run
+    /// lingers before exporting so that runs sharing the directory overlap.
+    fn run_stand_in_into(
+        name: &str,
+        status: i32,
+        exported: Option<&str>,
+        stale: Option<&str>,
+        shared_target: Option<&Path>,
+    ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
         use std::os::unix::fs::PermissionsExt;
         let directory = discover_scratch(name);
         let crate_directory = directory.join("crate");
-        let target_directory = directory.join("target");
+        let target_directory =
+            shared_target.map_or_else(|| directory.join("target"), Path::to_path_buf);
         fs::create_dir_all(crate_directory.join("src")).unwrap();
         fs::create_dir_all(&target_directory).unwrap();
         fs::write(crate_directory.join("src/lib.rs"), "").unwrap();
         if let Some(stale) = stale {
-            fs::write(target_directory.join(REPORT_FILE), stale).unwrap();
+            fs::write(
+                target_directory.join("quire-kani-report-other-run.json"),
+                stale,
+            )
+            .unwrap();
         }
         if let Some(exported) = exported {
             fs::write(directory.join("exported.json"), exported).unwrap();
         }
         let launcher = directory.join("cargo-kani");
+        let linger = if shared_target.is_some() {
+            "sleep 1\n"
+        } else {
+            ""
+        };
         let copy = if exported.is_some() {
             format!(
                 "cp '{}' \"$last\"",
@@ -1273,7 +1316,7 @@ mod tests {
         };
         fs::write(
             &launcher,
-            format!("#!/bin/sh\nfor last; do :; done\n{copy}\nexit {status}\n"),
+            format!("#!/bin/sh\nfor last; do :; done\n{linger}{copy}\nexit {status}\n"),
         )
         .unwrap();
         fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
@@ -1291,6 +1334,22 @@ mod tests {
             target_directory: &target_directory,
             timeout: Duration::from_secs(30),
         });
+        if stale.is_some() {
+            assert!(
+                target_directory
+                    .join("quire-kani-report-other-run.json")
+                    .is_file(),
+                "another run's report is not this run's to remove"
+            );
+        }
+        if shared_target.is_none() {
+            let leftovers = fs::read_dir(&target_directory)
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name() != "quire-kani-report-other-run.json")
+                .count();
+            assert_eq!(leftovers, 0, "a run removes its own report file");
+        }
         let _ = fs::remove_dir_all(directory);
         result
     }
@@ -1356,14 +1415,52 @@ mod tests {
         let options = request.harness.view().options;
         assert_eq!(arguments[1..=options.len()], options[..]);
         assert_eq!(
-            arguments[options.len() + 1..],
-            [
-                "-Z",
-                "unstable-options",
-                "--export-json",
-                "/target/quire-kani-report.json"
-            ]
+            arguments[options.len() + 1..arguments.len() - 1],
+            ["-Z", "unstable-options", "--export-json"]
         );
+        let report = arguments.last().unwrap();
+        assert!(
+            report.starts_with("/target/quire-kani-report-") && report.ends_with(".json"),
+            "{report}"
+        );
+        // Two launches into one target directory never name the same report file.
+        let (again, _) = kani_launch_command(&request);
+        assert_ne!(again.last(), arguments.last());
+    }
+
+    /// Two runs sharing a target directory at the same time each read their own report: the
+    /// report of a run that is still going is neither read nor removed by another.
+    ///
+    /// Trace: FR-017-AC-19, TC-027
+    #[test]
+    fn tc_027_concurrent_runs_in_one_target_directory_keep_their_own_reports() {
+        let verified = String::from_utf8(report("Success", &[PASSED, COVER_OK])).unwrap();
+        let failed = String::from_utf8(report("Failure", &[("Failure", "assertion")])).unwrap();
+        let shared = discover_scratch("concurrent-target");
+        let outcomes: Vec<_> = std::thread::scope(|scope| {
+            let runs: Vec<_> = (0..4)
+                .map(|n| {
+                    let exported = if n % 2 == 0 { &verified } else { &failed };
+                    let (name, shared) = (format!("concurrent-{n}"), shared.as_path());
+                    scope.spawn(move || {
+                        run_stand_in_into(
+                            &name,
+                            i32::from(n % 2 == 1),
+                            Some(exported),
+                            None,
+                            Some(shared),
+                        )
+                        .unwrap()
+                        .outcome
+                    })
+                })
+                .collect();
+            runs.into_iter().map(|run| run.join().unwrap()).collect()
+        });
+        let _ = fs::remove_dir_all(shared);
+        assert_eq!(outcomes[0], KaniRunOutcome::Verified);
+        assert_eq!(outcomes[2], KaniRunOutcome::Verified);
+        assert!(matches!(outcomes[1], KaniRunOutcome::Inconclusive { .. }));
     }
 
     /// A scratch directory unique to this process and this call, so parallel tests never

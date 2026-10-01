@@ -2,7 +2,7 @@
 //! persisted obligation schema (`kani-obligations/{module}.json`), then proves the join actually
 //! depends on that persisted schema by mutating it on disk and showing the decode refuses.
 //!
-//! Like `tests/it/kani_obligations.rs`'s own Kani lane, this needs the real installed Kani 0.67.0
+//! Like `tests/it/kani_obligations.rs`'s own Kani lane, this needs the real installed Kani
 //! backend and is `#[ignore]`d by default. Run it with:
 //!
 //! ```text

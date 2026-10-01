@@ -69,6 +69,14 @@ pub enum KaniReportRefusal {
         /// How many harness results the report holds.
         found: usize,
     },
+    /// The harness status says every property held, but the report lists a check that did not
+    /// hold. Neither is trusted: a report that contradicts itself is not a verdict.
+    Inconsistent {
+        /// The first check that contradicts the harness status.
+        check_id: u64,
+        /// That check's status.
+        status: KaniCheckStatus,
+    },
 }
 
 impl fmt::Display for KaniReportRefusal {
@@ -91,6 +99,10 @@ impl fmt::Display for KaniReportRefusal {
             Self::HarnessCount { found } => write!(
                 formatter,
                 "the Kani report holds {found} harness results, not one"
+            ),
+            Self::Inconsistent { check_id, status } => write!(
+                formatter,
+                "the Kani report states success but check {check_id} is {status:?}"
             ),
         }
     }
@@ -143,8 +155,22 @@ pub enum KaniCheckClass {
     Cover,
     /// A loop-unwinding assertion.
     Unwind,
-    /// Any other class, as Kani spelled it.
-    Other(String),
+    /// Any other class, as Kani spelled it. It cannot hold `cover` or `unwind`: the only way to
+    /// make one is `KaniCheckClass::from`, which gives those spellings their own variants.
+    Other(OtherCheckClass),
+}
+
+/// The spelling of a check class that is neither a cover nor an unwinding assertion. The field
+/// is private so no caller can build one that shadows a named class.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OtherCheckClass(String);
+
+impl OtherCheckClass {
+    /// The class as Kani spelled it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl From<String> for KaniCheckClass {
@@ -152,7 +178,7 @@ impl From<String> for KaniCheckClass {
         match class.as_str() {
             COVER_CATEGORY => Self::Cover,
             UNWIND_CATEGORY => Self::Unwind,
-            _ => Self::Other(class),
+            _ => Self::Other(OtherCheckClass(class)),
         }
     }
 }
@@ -162,7 +188,7 @@ impl From<KaniCheckClass> for String {
         match class {
             KaniCheckClass::Cover => COVER_CATEGORY.to_owned(),
             KaniCheckClass::Unwind => UNWIND_CATEGORY.to_owned(),
-            KaniCheckClass::Other(class) => class,
+            KaniCheckClass::Other(class) => class.0,
         }
     }
 }
@@ -303,11 +329,40 @@ impl KaniHarnessReport {
         }
         let mut results = raw.verification_results.results;
         match (results.pop(), results.is_empty()) {
-            (Some(harness), true) => harness.try_into(),
+            (Some(harness), true) => {
+                let report = Self::try_from(harness)?;
+                report.refuse_contradiction()?;
+                Ok(report)
+            }
             (Some(_), false) => Err(KaniReportRefusal::HarnessCount {
                 found: results.len() + 1,
             }),
             (None, _) => Err(KaniReportRefusal::HarnessCount { found: 0 }),
+        }
+    }
+
+    /// A harness that states success must list no check that failed, errored or was left
+    /// undecided or unknown. Kani derives the harness status from its checks, so a report where
+    /// they disagree has changed shape or been altered, and reading either side would invent a
+    /// verdict.
+    fn refuse_contradiction(&self) -> Result<(), KaniReportRefusal> {
+        if self.status != KaniHarnessStatus::Success {
+            return Ok(());
+        }
+        match self.checks.iter().find(|check| {
+            matches!(
+                check.status,
+                KaniCheckStatus::Failure
+                    | KaniCheckStatus::Error
+                    | KaniCheckStatus::Undetermined
+                    | KaniCheckStatus::Unknown
+            )
+        }) {
+            Some(check) => Err(KaniReportRefusal::Inconsistent {
+                check_id: check.id,
+                status: check.status,
+            }),
+            None => Ok(()),
         }
     }
 
@@ -378,6 +433,7 @@ pub(crate) fn counterexample_playback(text: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::kani_execution::{classify_kani_run, KaniInconclusiveReason, KaniRunOutcome};
+    use crate::ObligationKind;
 
     /// A real Kani capture of one `--exact` harness: the exported report, its stdout, and
     /// whether it exited successfully.
@@ -629,6 +685,60 @@ mod tests {
         );
     }
 
+    /// A report whose harness says success but which lists a check that failed, errored, was
+    /// undetermined or unknown, or an unwinding assertion that failed, contradicts itself and is
+    /// refused with its own cause, for every obligation kind. It is never `Verified`.
+    ///
+    /// Trace: FR-017-AC-4, FR-017-AC-18, TC-027
+    #[test]
+    fn tc_027_a_success_report_listing_a_failed_check_is_refused_never_verified() {
+        for status in ["Failure", "Error", "Undetermined", "Unknown"] {
+            for category in ["assertion", "unwind", "cover"] {
+                let report = mutated(|report| {
+                    let checks = &mut report["verification_results"]["results"][0]["checks"];
+                    let last = checks.as_array().unwrap().len() - 1;
+                    checks[last]["status"] = status.into();
+                    checks[last]["category"] = category.into();
+                });
+                let found = KaniHarnessReport::parse(&report);
+                assert!(
+                    matches!(found, Err(KaniReportRefusal::Inconsistent { .. })),
+                    "{category} {status}: {found:?}"
+                );
+                for kind in [None, Some(ObligationKind::Precondition)] {
+                    let run = classify_kani_run(true, Some(&report), "", kind);
+                    assert!(
+                        matches!(run, Err(KaniReportRefusal::Inconsistent { .. })),
+                        "{category} {status} {kind:?}: {run:?}"
+                    );
+                }
+            }
+        }
+        let held = mutated(|_| {});
+        assert!(KaniHarnessReport::parse(&held).is_ok());
+    }
+
+    /// `Other` cannot shadow the named classes: a spelling of `cover` or `unwind` is always that
+    /// class, so its serialized form, its equality and its counting agree.
+    ///
+    /// Trace: FR-017-AC-20, TC-027
+    #[test]
+    fn tc_027_a_class_spelled_cover_or_unwind_is_never_other() {
+        assert_eq!(
+            KaniCheckClass::from("cover".to_owned()),
+            KaniCheckClass::Cover
+        );
+        assert_eq!(
+            KaniCheckClass::from("unwind".to_owned()),
+            KaniCheckClass::Unwind
+        );
+        let other = KaniCheckClass::from("assertion".to_owned());
+        assert!(matches!(&other, KaniCheckClass::Other(name) if name.as_str() == "assertion"));
+        assert_eq!(String::from(other), "assertion");
+        let decoded: KaniCheckClass = serde_json::from_str("\"cover\"").unwrap();
+        assert_eq!(decoded, KaniCheckClass::Cover);
+    }
+
     /// The per-check view of a real run names every check with its id, class, source location and
     /// status, so a consumer can attribute each successful check to a source line.
     ///
@@ -658,7 +768,7 @@ mod tests {
                 },
                 KaniCheckResult {
                     id: 2,
-                    class: KaniCheckClass::Other("assertion".to_owned()),
+                    class: KaniCheckClass::from("assertion".to_owned()),
                     location: at(16),
                     status: KaniCheckStatus::Failure,
                 },
@@ -699,7 +809,7 @@ mod tests {
             },
             KaniCheckResult {
                 id: 2,
-                class: KaniCheckClass::Other("assertion".to_owned()),
+                class: KaniCheckClass::from("assertion".to_owned()),
                 location: KaniCheckLocation {
                     file: "unknown".to_owned(),
                     line: None,
@@ -768,12 +878,13 @@ mod tests {
             report["verification_results"]["results"][0]["checks"][0]["category"] =
                 "pointer_dereference".into();
             report["verification_results"]["results"][0]["checks"][0]["status"] = "Failure".into();
+            report["verification_results"]["results"][0]["status"] = "Failure".into();
         });
         let parsed = KaniHarnessReport::parse(&report).unwrap();
         assert!(parsed.failed_property());
         assert_eq!(
             parsed.checks[0].class,
-            KaniCheckClass::Other("pointer_dereference".to_owned())
+            KaniCheckClass::from("pointer_dereference".to_owned())
         );
     }
 

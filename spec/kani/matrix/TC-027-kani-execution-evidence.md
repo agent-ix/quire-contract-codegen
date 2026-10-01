@@ -40,7 +40,11 @@ check's id, class, file, line and status; a line of `unknown` is absent and a no
 `id`, `class`, `location { file, line }` and `status`.
 
 Report file (FR-017-AC-19): the launch's arguments are the harness options then the export flags;
-a report left by an earlier run is not read; a file over the read bound is refused.
+two launches name different report files, a report another run left in the target directory is
+neither read nor removed, runs sharing one target directory concurrently each read their own, and
+a run removes its own file; a file over the read bound is refused. A success report listing a
+failed, errored, undetermined or unknown check (any class) is refused for every obligation kind
+(FR-017-AC-18), and a class spelled `cover` or `unwind` is always that class (FR-017-AC-20).
 
 Refusals: request a run against an installation whose launcher is absent.
 
@@ -71,7 +75,7 @@ Only the all-covers-satisfied success is verified. The unsatisfied and partial
 covers are cover-unsatisfied with their counts. The failed run with an
 assertion playback is falsified carrying that playback and not the cover
 playback; the failure with only a cover playback, the build failure, the
-unsuccessfully exited process, and the three unreadable cover summaries are
+unsuccessfully exited process, and the success report with no cover property are
 inconclusive with their own reasons. The failed unwinding assertion is
 inconclusive as an exhausted bound and not falsified, and the succeeded
 unwinding check in a listing is verified. The run with zero successful checks is inconclusive
@@ -79,13 +83,13 @@ with the vacuous-proof reason (FR-017-AC-13), unless it is a precondition harnes
 cover summary decides.
 
 The launcher, exercised with real short-lived processes: a run printing more than 8 MiB completes
-with its real exit status and a bounded text that still ends with the verdict; a `Duration::MAX`
+with its real exit status and a bounded text (the verdict is in the exported report, not the stream); a `Duration::MAX`
 timeout does not panic; a capture thread told to stop returns what is already in its pipe, stops
 while a write end is still open and idle, and stops within its drain limit while a straggler keeps
 writing; and a run that times out has a real grandchild killed with it (FR-017-AC-14 through
 FR-017-AC-17).
 
-Each capture parses to the expected typed transcript and classifies to verified, falsified with
+Each capture's exported report parses to the expected typed report and classifies to verified, falsified with
 the assertion playback passed through verbatim, exhausted bound, cover-unsatisfied 0 of 1,
 cover-unsatisfied 1 of 2 and missing cover summary respectively (FR-017-AC-12).
 
@@ -109,7 +113,7 @@ not contain the harness is refused with no run.
 ## Implementation
 
 `src/kani_execution.rs` unit tests for classification, including
-`a_zero_total_checks_summary_is_inconclusive_not_verified_even_with_every_cover_satisfied` for
+`a_report_with_no_successful_check_is_inconclusive_not_verified_even_with_every_cover_satisfied` for
 FR-017-AC-13, and the launcher tests (`a_stream_longer_than_the_capture_limit_keeps_only_its_tail`,
 `a_capture_thread_*`, `a_launcher_printing_more_than_the_limit_completes_with_bounded_text`,
 `a_timeout_of_duration_max_never_elapses_and_does_not_panic`,
@@ -125,8 +129,11 @@ the `src/kani_transcript.rs` tests `tc_027_a_report_that_changed_shape_is_refuse
 `tc_027_real_kani_*` capture tests for FR-017-AC-12 and FR-017-AC-18; the
 `src/kani_execution.rs` tests `tc_027_execution_reads_only_the_report_its_own_run_exported`,
 `tc_027_the_report_is_read_bounded_and_refused_not_truncated`,
-`tc_027_the_launch_exports_the_report_after_the_harness_options` and
-`tc_027_an_unreadable_or_missing_report_is_refused_never_inconclusive` for FR-017-AC-18 and FR-017-AC-19; and `tests/it/kani_obligations.rs` for the refusals, the
+`tc_027_the_launch_exports_the_report_after_the_harness_options`,
+`tc_027_concurrent_runs_in_one_target_directory_keep_their_own_reports` and
+`tc_027_an_unreadable_or_missing_report_is_refused_never_inconclusive` for FR-017-AC-18 and FR-017-AC-19, with the
+`src/kani_transcript.rs` tests `tc_027_a_success_report_listing_a_failed_check_is_refused_never_verified`
+(FR-017-AC-18) and `tc_027_a_class_spelled_cover_or_unwind_is_never_other` (FR-017-AC-20); and `tests/it/kani_obligations.rs` for the refusals, the
 generation/execution boundary and the `make kani` lane. The lane is `#[ignore]`d and runs through
 `make kani` under a host-wide lock, because Kani and CBMC are memory-heavy and must run one harness
 at a time.

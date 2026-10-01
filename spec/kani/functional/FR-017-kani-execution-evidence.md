@@ -78,8 +78,11 @@ the run and everything read back from it.
   instead classify the run by its cover summary alone, as verified, cover-unsatisfied or
   inconclusive under the cover rules above.
 - The generator shall launch Kani with `-Z unstable-options --export-json <file>`, the file in the
-  request's target directory, and shall remove any file an earlier run left there before launching,
-  so a run's verdict is never read from another run's report.
+  request's target directory under a name unique to that launch (the process id and a process-wide
+  sequence), and shall remove only that file, before launching and after reading it. Runs sharing a
+  target directory, in this process or in others at the same time, therefore never write, remove
+  or read each other's report, and a file left by an earlier run is never read as this run's
+  verdict.
 - The generator shall run the launcher as the leader of its own process group and, when the run
   does not conclude within the timeout, kill that group, so that the solver and every other
   process the launcher started in it are killed with it.
@@ -113,8 +116,9 @@ the run and everything read back from it.
   console text. The verdict, the check and cover counts and the unwinding failures come from
   Kani's exported report, whose members and status vocabulary that module reads exactly.
   A report that is absent after a successful exit, unreadable, over the read bound, not the one
-  schema version the module reads, malformed or of an unknown check status, or that does not hold exactly one harness
-  result, is a typed refusal with a stable cause and never an outcome: it is not classified
+  schema version the module reads, malformed or of an unknown check status, that does not hold exactly one harness
+  result, or whose harness states success while it lists a failed, errored, undetermined or
+  unknown check, is a typed refusal with a stable cause and never an outcome: it is not classified
   inconclusive. A run that exited unsuccessfully and exported no report is `NoVerdict`.
 - The generator shall retain, in the evidence and in the classified run, every check the report
   lists, each with its position in the report, its class, its source file and line and its status,
@@ -149,12 +153,12 @@ the run and everything read back from it.
 | FR-017-AC-11 | A routed FR-022/FR-014 exact-scalar harness (`KaniScalarObligationHarness`) runs through `execute_kani_obligation` and `kani_launch_command` the same way an FR-015 contract harness does: a crate whose library source lacks its generated source byte for byte is `HarnessNotInCrate`, its covers classify a run identically (all satisfied is verified, an unsatisfied one is cover-unsatisfied, none printed is inconclusive), and its evidence carries `None` for obligation kind, since an exact-scalar claim carries no contract role. | Test (TC-027) |
 | FR-017-AC-12 | Real Kani captures of a verified run, a falsified run with a playback, an exhausted unwind bound, a run whose only check is unreachable, a partly satisfied cover and a run with no cover each parse into the expected typed report of harness status, successful checks, cover counts and failed checks, and classify to the expected outcome; the falsifying playback block passes through verbatim. | Test (TC-027) |
 | FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified, except that a precondition harness, which asserts nothing beyond its cover, is decided by its cover summary. | Test (TC-027) |
-| FR-017-AC-14 | A launcher that prints more than 8 MiB completes with its real exit status and only the tail of each stream retained, the verdict lines included. | Test (TC-027) |
+| FR-017-AC-14 | A launcher that prints more than 8 MiB completes with its real exit status and only the tail of each stream retained. The verdict is read from the exported report, not from the stream, so truncating a stream never loses it. | Test (TC-027) |
 | FR-017-AC-15 | A timeout too large to add to the current instant never elapses and does not panic. | Test (TC-027) |
 | FR-017-AC-16 | The launcher's capture threads are stopped and joined on every outcome: they return what the launcher wrote before it ended, stop while a write end is still held open, and stop within their drain limit while a straggler keeps writing, so a process holding a pipe open does not delay the return. | Test (TC-027) |
 | FR-017-AC-17 | A run that times out has its whole process group killed, a real grandchild included. | Test (TC-027) |
-| FR-017-AC-18 | A report that is malformed, of an unknown check or harness status, of another schema version, or that holds other than one harness result is refused with its own typed cause and never classified; a run that exited successfully and exported no report is refused, and one that exited unsuccessfully and exported none is `NoVerdict`. | Test (TC-027) |
-| FR-017-AC-19 | The launch exports its report after the harness options; a report an earlier run left in the target directory is removed and never read as this run's; a report over the read bound is refused and not truncated. | Test (TC-027) |
+| FR-017-AC-18 | A report that is malformed, of an unknown check or harness status, of another schema version, that holds other than one harness result, or whose harness states success while it lists a failed, errored, undetermined or unknown check (of any class, including an unwinding assertion) is refused with its own typed cause and never classified, for every obligation kind; a run that exited successfully and exported no report is refused, and one that exited unsuccessfully and exported none is `NoVerdict`. | Test (TC-027) |
+| FR-017-AC-19 | The launch exports its report after the harness options; its report file name is unique to the launch, so a report another run left or is writing in the same target directory is never read, removed or overwritten by this run, and the run removes its own file; a report over the read bound is refused and not truncated. | Test (TC-027) |
 | FR-017-AC-20 | The evidence and the classified run list every check of a real run with its id, class, source file and line and status, a line stated as unknown is absent, and a non-numeric line or a check with no location is a refused report; the view serializes as `id`, `class`, `location { file, line }` and `status` and is not deserializable. | Test (TC-027) |
 
 ## Dependencies
