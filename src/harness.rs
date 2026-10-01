@@ -8,8 +8,8 @@ use quire_contract_model::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    artifact::Artifact,
-    diagnostic::{GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState},
+    core::artifact::Artifact,
+    core::diagnostic::{GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState},
     oracle::{
         bounded_readable_component, dependency_parameters, generate_named_boolean_oracle,
         oracle_symbol, reference_identifier, unique_pair, upper_camel,

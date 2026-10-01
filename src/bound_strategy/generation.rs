@@ -13,9 +13,9 @@ use super::{
     relation::{ComparisonOperator, Domain, OperandPosition, Relation},
 };
 use crate::{
-    artifact::Artifact,
     bound::BoundGenerationError,
-    diagnostic::{GenerationErrorCode, GenerationTerminalState},
+    core::artifact::Artifact,
+    core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
     generate_bound_oracles,
     oracle::{bounded_readable_component, oracle_symbol, reference_identifier, upper_camel},
     BoundOracleGeneration, GeneratedArtifactBundle, StrategyDiagnostic, StrategyErrorCode,

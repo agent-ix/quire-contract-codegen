@@ -71,14 +71,14 @@
 //! `bounded_domain` nodes, and reconstructing a concrete `QuantityUnit`
 //! requires walking a unit graph this generator does not read.
 
-use crate::artifact::Artifact;
+use crate::core::artifact::Artifact;
+use crate::core::profile::oracle_crate_manifest;
 use crate::exact_scalar::{
     aggregate_members, bound_members, literal_count, read_decimal_range, read_integer_range,
     read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
 };
 use crate::generation::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{unique_names, MAX_GENERATED_SOURCE_BYTES};
-use crate::profile::oracle_crate_manifest;
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,

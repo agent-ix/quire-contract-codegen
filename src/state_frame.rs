@@ -36,9 +36,9 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    artifact::Artifact,
+    core::artifact::Artifact,
+    core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     exact_scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
-    identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     kani::{adapter_options, i64_literal, KaniSolver},
     kani_identity::{
         StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,

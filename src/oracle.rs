@@ -10,9 +10,9 @@ use quire_contract_model::{
 use serde::Serialize;
 
 use crate::{
-    artifact::Artifact,
-    diagnostic::{GenerationDiagnostic, GenerationErrorCode},
-    source_map::{SourceProbe, SourceRegion},
+    core::artifact::Artifact,
+    core::diagnostic::{GenerationDiagnostic, GenerationErrorCode},
+    core::source_map::{SourceProbe, SourceRegion},
 };
 
 /// Maximum generated Rust bytes for one clause.

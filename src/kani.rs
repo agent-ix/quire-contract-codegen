@@ -12,8 +12,8 @@ use quire_contract_model::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    artifact::Artifact,
-    diagnostic::{GenerationErrorCode, GenerationTerminalState},
+    core::artifact::Artifact,
+    core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
     kani_census::{
         dependency_readiness, dependency_site, normalize_dependencies, ProofDependencyEdge,
         ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness,

@@ -57,14 +57,14 @@ use quire_contract_model::{
 use serde::Serialize;
 
 use crate::{
-    artifact::Artifact,
-    diagnostic::GenerationErrorCode,
+    core::artifact::Artifact,
+    core::diagnostic::GenerationErrorCode,
+    core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     exact_scalar::{
         aggregate_members, bound_members, literal_count, literal_integer, operand_ranges,
         OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
     },
     generate_boolean_oracle,
-    identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     kani::{
         adapter_options, i64_literal, readable_component, KaniBindingRole, KaniIntegerBounds,
         KaniPrimitiveType, KaniSolver,

@@ -6,8 +6,8 @@ use quire_contract_model::{ClauseRef, RequirementRef, SourceSpan};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    artifact::Artifact,
-    diagnostic::{GenerationErrorCode, GenerationTerminalState},
+    core::artifact::Artifact,
+    core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
     oracle::{bounded_readable_component, upper_camel},
     GeneratedArtifactBundle, MAX_GENERATED_SOURCE_BYTES,
 };

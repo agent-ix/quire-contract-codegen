@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::artifact::{
+use crate::core::artifact::{
     publication_diagnostic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
     PublicationErrorCode,
 };
@@ -264,8 +264,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        artifact::{Artifact, MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
-        diagnostic::GenerationTerminalState,
+        core::artifact::{Artifact, MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
+        core::diagnostic::GenerationTerminalState,
     };
 
     fn temporary(name: &str) -> PathBuf {

@@ -1,6 +1,6 @@
 //! Source-map records that trace generated source back to a requirement clause (AD-004 step 2a).
 //!
-//! This module becomes `core/source_map.rs`. `evidence` (coverage) and `oracle` both read these
+//! This module is `core/source_map.rs`. `evidence` (coverage) and `oracle` both read these
 //! records, so they live below both.
 
 use serde::{Deserialize, Serialize};

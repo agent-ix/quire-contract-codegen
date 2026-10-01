@@ -20,9 +20,9 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 
 use crate::{
-    artifact::Artifact,
+    core::artifact::Artifact,
+    core::identity::{HarnessPath, HarnessSymbol},
     derive_exact_scalar_items, generate_exact_scalar_oracles,
-    identity::{HarnessPath, HarnessSymbol},
     kani_identity::KaniScalarObligationHarness,
     negotiate_kani_obligations, BackendKind, Candidate, ClaimMap, ExactScalarClaim,
     ExactScalarOracles, InvalidObligationItem, KaniObligationError, KaniObligationOutcome,
@@ -395,8 +395,8 @@ fn derive_claim_map(
 mod tests {
     use super::{index_harnesses, RoutedGenerationError};
     use crate::{
-        artifact::Artifact,
-        identity::{HarnessSymbol, ModuleSymbol},
+        core::artifact::Artifact,
+        core::identity::{HarnessSymbol, ModuleSymbol},
         kani::KaniSolver,
         kani_identity::{KaniScalarObligationHarness, ScalarObligationIdentity},
     };
