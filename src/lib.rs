@@ -30,6 +30,8 @@ mod kani_transcript;
 mod kani_witness_join;
 // Implements: FR-016
 mod spine_replay;
+// Implements: FR-015-AC-33
+mod frame_replay;
 // Implements: FR-002
 mod strategy;
 // Shared generation-result and claim vocabulary (FR-014, FR-018, FR-021).
@@ -122,6 +124,7 @@ pub use routed_generation::{
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
 };
 
+pub use frame_replay::{FrameReplay, FrameReplayError, FrameReplayInputs, ProvidedDocument};
 pub use kani_obligations::{
     negotiate_kani_obligations, DerivedDomain, EmbeddedOracle, InvalidObligationItem,
     KaniObligationError, KaniObligationHarness, KaniObligationIdentity, KaniObligationOutcome,
@@ -135,9 +138,9 @@ pub use publication::{
     PublicationErrorCode, PublishedBundleIdentity,
 };
 pub use spine_replay::{
-    replay_counterexample, replay_falsification, DependencyLock, EvidenceFailureCause,
-    LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict,
-    SpineReplayError,
+    replay_counterexample, replay_falsification, DependencyLock, DependencyLockError,
+    EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError,
+    ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use state_frame::{
     generate_state_frame_obligations, StateComparison, StateFieldDomain, StateFrameHarness,

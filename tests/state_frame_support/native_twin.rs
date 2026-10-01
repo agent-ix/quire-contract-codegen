@@ -1,27 +1,26 @@
 //! The hand-mirrored QSL twin of the state-frame fixture: the `test/bank` domain package, the
 //! native unit whose `post` clause and operation frame mirror the checked package the harnesses
-//! are generated from, the invocation documents of one concrete run, and the `replay_frame`
-//! request and envelope that put that run before QSL.
+//! are generated from, and the invocation documents of one concrete run.
 //!
 //! The twin's fields, their ranges and the fields its frame grants come from `model`, the same
 //! source the Rust fixture's checked package is built from. The rest is tied to the Rust side only
-//! by names: the model `Bank`, its object `Account` and its operation `deposit`. The node
-//! identities a counterexample names come from the twin's own compile, because `qsl_replay` does
-//! not let a caller mint an occurrence key, so they are not the fixture package's node ids. The
-//! envelope's obligation and originating-counterexample identities are fixed stand-ins: CG
-//! computes no identity for a frame obligation, and QSL only requires that one be present.
+//! by names: the model `Bank`, its object `Account` and its operation `deposit`. The request and
+//! envelope that put a run before QSL are built by the crate under test
+//! (`quire_contract_codegen::FrameReplay`), which asks QSL for the node identities a
+//! counterexample names; they are not the fixture package's node ids. The envelope's obligation
+//! and originating-counterexample identities are fixed stand-ins: CG computes no identity for a
+//! frame obligation, and QSL only requires that one be present.
 
 use super::model;
 
-use std::collections::BTreeMap;
-
 use qsl_replay::{
-    replay_frame,
-    spine::{compile, default_accounting, Compiled, DependencyInput, SpineLimits},
-    ByteDigest, ClaimedChange, DigestDomain, DigestRecord, DocumentRef, FrameCounterexample,
-    FrameOperation, FrameReplayResult, Identifier, OccurrenceKey, ProfileSelection, QualifiedName,
-    ReplayRefusal, ReplayRequestWire, ReplaySource, SelectedObject, SourceIdentity, StageLimits,
-    StateEnvironment, WireNodeId, Witness, WitnessEnvelope, WitnessPacket, MAX_ENCODED_BYTES,
+    ClaimedChange, DigestDomain, DigestRecord, DocumentRef, FrameReplayResult, Identifier,
+    OccurrenceKey, OperationName, ReplayRefusal, ScalarLimits, SelectedObject, StageLimits,
+    WitnessEnvelope, MAX_ENCODED_BYTES,
+};
+use quire_contract_codegen::{
+    DependencyLock, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
+    ProvidedDocument, ReplayInputs,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -111,7 +110,8 @@ fn field(owner: &str, name: &str) -> Value {
 }
 
 /// The `test/bank` domain package: `Account` with the integer fields and ranges of `model`, one
-/// operation `deposit` whose frame modifies the fields `model` grants, and one closed population.
+/// operation `deposit` whose frame modifies the fields `model` grants, a declared operation
+/// `transfer` no clause names, and one closed population.
 fn domain_document() -> Vec<u8> {
     let account = account_type();
     let bound = |field: &str, keyword: &str, value: i64| {
@@ -139,21 +139,11 @@ fn domain_document() -> Vec<u8> {
             "constraints": [bound(field, "min", minimum), bound(field, "max", maximum)],
         })
     };
-    let mut types = model::FIELDS.map(value_type).to_vec();
-    types.push(json!({
-        "identity": account,
-        "displayName": account,
-        "kind": {"module": PACKAGE, "name": "object_type"},
-        "roles": [],
-        "origin": generated(&account),
-        "constraints": [],
-        "extensions": [],
-        "unknownPolicy": "reject",
-        "supertypes": [],
-        "fields": model::FIELDS.map(|(name, _)| field(&account, name)),
-        "operations": [{
-            "identity": format!("{account}/deposit"),
-            "name": "deposit",
+    // `transfer` is declared by the domain package, but no clause of the unit names it.
+    let operation = |name: &str| {
+        json!({
+            "identity": format!("{account}/{name}"),
+            "name": name,
             "params": [],
             "returns": {
                 "typeRef": "ix://quire/native/Boolean",
@@ -173,7 +163,21 @@ fn domain_document() -> Vec<u8> {
                 "creates": [],
                 "deletes": [],
             },
-        }],
+        })
+    };
+    let mut types = model::FIELDS.map(value_type).to_vec();
+    types.push(json!({
+        "identity": account,
+        "displayName": account,
+        "kind": {"module": PACKAGE, "name": "object_type"},
+        "roles": [],
+        "origin": generated(&account),
+        "constraints": [],
+        "extensions": [],
+        "unknownPolicy": "reject",
+        "supertypes": [],
+        "fields": model::FIELDS.map(|(name, _)| field(&account, name)),
+        "operations": [operation("deposit"), operation("transfer")],
     }));
     json!({
         "contractVersion": "2.0.0",
@@ -233,11 +237,10 @@ pub enum Tamper {
     Occurrence,
 }
 
-/// The compiled twin.
+/// The twin: the domain package and the native unit selecting it.
 pub struct Twin {
     unit: Vec<u8>,
     domain: Vec<u8>,
-    compiled: Compiled,
 }
 
 /// One invocation of `deposit` on account `account`, with its pre and post snapshots.
@@ -246,27 +249,34 @@ pub struct Invocation {
     documents: Vec<(DocumentRef, Vec<u8>)>,
 }
 
+fn limits(seed: u64) -> ScalarLimits {
+    ScalarLimits {
+        integer_bits: seed,
+        decimal_digits: seed,
+        scale_expansion: seed,
+        text_input_bytes: seed,
+        text_scalars: seed,
+        normalized_scalars: seed,
+        unit_edges: seed,
+        value_occurrences: seed,
+        work_units: seed,
+        result_units: seed,
+    }
+}
+
+fn document(reference: &DocumentRef, bytes: &[u8]) -> ProvidedDocument {
+    ProvidedDocument {
+        digest: DigestRecord::mint(DigestDomain::Sha256Jcs, reference.digest),
+        bytes: bytes.to_vec(),
+    }
+}
+
 impl Twin {
-    /// Compiles the twin.
-    pub fn compile() -> Self {
+    /// Builds the twin.
+    pub fn new() -> Self {
         let domain = domain_document();
-        let digest = jcs_digest(&domain);
-        let unit = unit_source(&hex(&digest)).into_bytes();
-        let packages = BTreeMap::from([(digest, domain.clone())]);
-        let compiled = compile(
-            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
-            IDENTITY,
-            &unit,
-            &packages,
-            &DependencyInput::default(),
-            SpineLimits::default(),
-        )
-        .unwrap_or_else(|refusal| panic!("the twin compiles: {refusal:?}"));
-        Self {
-            unit,
-            domain,
-            compiled,
-        }
+        let unit = unit_source(&hex(&jcs_digest(&domain))).into_bytes();
+        Self { unit, domain }
     }
 
     /// The invocation of `deposit` on `account` from `pre` to `post`, each `(balance, audit)`.
@@ -331,6 +341,73 @@ impl Twin {
         }
     }
 
+    /// The frame-replay request and envelope for `invocation` as a counterexample to the frame of
+    /// `deposit`, claiming `field` of `account` was written.
+    pub fn frame_replay(&self, invocation: &Invocation, account: &str, field: &str) -> FrameReplay {
+        self.try_frame_replay("deposit", invocation, account, field)
+            .expect("the twin's operation frame is located")
+    }
+
+    /// [`Self::frame_replay`] for the operation named `operation` of `Bank::Account`.
+    pub fn try_frame_replay(
+        &self,
+        operation: &str,
+        invocation: &Invocation,
+        account: &str,
+        field: &str,
+    ) -> Result<FrameReplay, FrameReplayError> {
+        let identifier = |name| Identifier::new(name).expect("identifier");
+        let unlimited = limits(u64::MAX);
+        let run = ReplayInputs {
+            source: LockedSource {
+                authority: AUTHORITY.to_owned(),
+                identity: IDENTITY.to_owned(),
+                namespace: "git".to_owned(),
+                revision: "1".to_owned(),
+                bytes: self.unit.clone(),
+            },
+            dependencies: Vec::<DependencyLock>::new(),
+            backend_manifest: DigestRecord::mint(DigestDomain::ToolManifestJcsV1, [3; 32]),
+            accounting_limits: limits(1_000_000),
+            stage_limits: StageLimits {
+                s1: ScalarLimits {
+                    text_input_bytes: u64::try_from(MAX_ENCODED_BYTES).expect("a small bound"),
+                    ..unlimited
+                },
+                s2: unlimited,
+                s3: unlimited,
+                s4: unlimited,
+            },
+        };
+        FrameReplay::new(FrameReplayInputs {
+            run,
+            packages: vec![ProvidedDocument {
+                digest: DigestRecord::mint(DigestDomain::Sha256Jcs, jcs_digest(&self.domain)),
+                bytes: self.domain.clone(),
+            }],
+            state_documents: invocation
+                .documents
+                .iter()
+                .map(|(reference, bytes)| document(reference, bytes))
+                .collect(),
+            operation: OperationName {
+                model: identifier("Bank"),
+                object: identifier("Account"),
+                operation: identifier(operation),
+            },
+            invocation: invocation.reference.clone(),
+            change: ClaimedChange::FieldWrite {
+                object: SelectedObject {
+                    population: population(),
+                    key: account.to_owned(),
+                },
+                field: field.to_owned(),
+            },
+            obligation_identity: [1; 32],
+            counterexample_identity: [2; 32],
+        })
+    }
+
     /// Replays `invocation` as a counterexample to the frame of `deposit`, claiming `field` of
     /// `account` was written.
     pub fn replay(
@@ -350,176 +427,27 @@ impl Twin {
         field: &str,
         tamper: Tamper,
     ) -> Result<FrameReplayResult, ReplayRefusal> {
-        let package_id = DigestRecord::mint(
-            DigestDomain::PackageSemanticV2,
-            *self.compiled.emitted.package_id().as_bytes(),
-        );
-        let graph = self.compiled.package.graph();
-        let identifier = |name| Identifier::new(name).expect("identifier");
-        let selection = graph
-            .resolve_operation(
-                &identifier("Bank"),
-                &identifier("Account"),
-                &identifier("deposit"),
-            )
-            .expect("Bank::Account resolves against the twin's model");
-        let (_, frame) = graph
-            .operation_frame(&selection)
-            .expect("deposit is named by BalanceNeverDrops");
-        let payload = FrameCounterexample {
-            operation: FrameOperation {
-                object: QualifiedName::new(vec![
-                    Identifier::new("Bank").expect("identifier"),
-                    Identifier::new("Account").expect("identifier"),
-                ])
-                .expect("a qualified name"),
-                operation: Identifier::new("deposit").expect("identifier"),
-            },
-            anchor: WireNodeId::from_digest(*frame.anchor().as_bytes()),
-            frame: WireNodeId::from_digest(*frame.frame().as_bytes()),
-            occurrence: OccurrenceKey::new(
-                WireNodeId::from_digest(*frame.frame().as_bytes()),
-                frame.frame_origin().clone(),
-            ),
-            invocation: invocation.reference.clone(),
-            change: ClaimedChange::FieldWrite {
-                object: SelectedObject {
-                    population: population(),
-                    key: account.to_owned(),
-                },
-                field: field.to_owned(),
-            },
-        };
-        let envelope = self.envelope(package_id, payload, tamper);
-        replay_frame(self.request(package_id, invocation), &envelope)
-    }
-
-    fn source_reference(&self) -> (String, String, String, String, Option<String>, String) {
-        let digest = DigestRecord::mint(
-            DigestDomain::SourceBytesV1,
-            ByteDigest::of(&self.unit).as_bytes(),
-        );
-        (
-            AUTHORITY.to_owned(),
-            IDENTITY.to_owned(),
-            "git".to_owned(),
-            "1".to_owned(),
-            Some(DigestDomain::SourceBytesV1.as_str().to_owned()),
-            digest.hex(),
-        )
-    }
-
-    fn envelope(
-        &self,
-        package_id: DigestRecord,
-        payload: FrameCounterexample,
-        tamper: Tamper,
-    ) -> WitnessEnvelope<FrameCounterexample> {
+        let FrameReplay { wire, mut packet } = self.frame_replay(invocation, account, field);
+        let payload = packet
+            .family_payload
+            .as_ref()
+            .expect("the payload is built");
         // The anchor node stands in for any node other than the frame.
         let other = payload.anchor;
-        let occurrence = match tamper {
-            Tamper::Occurrence => OccurrenceKey::new(other, payload.occurrence.origin().clone()),
-            Tamper::Nothing | Tamper::ClauseNode => payload.occurrence.clone(),
-        };
-        let clause_node = match tamper {
-            Tamper::ClauseNode => other,
-            Tamper::Nothing | Tamper::Occurrence => payload.frame,
-        };
-        let backend = (
-            "kani-backend-1".to_owned(),
-            Some(DigestDomain::ToolManifestJcsV1.as_str().to_owned()),
-            DigestRecord::mint(DigestDomain::ToolManifestJcsV1, [3; 32]).hex(),
-        );
-        WitnessEnvelope::reconstruct(WitnessPacket {
-            obligation_identity: Some([1; 32]),
-            occurrence_key: Some(occurrence),
-            clause_node: Some(clause_node),
-            selected_function: Some(
-                QualifiedName::new(vec![Identifier::new("deposit").expect("identifier")])
-                    .expect("a qualified name"),
-            ),
-            package_id: Some((
-                Some(DigestDomain::PackageSemanticV2.as_str().to_owned()),
-                package_id.hex(),
-            )),
-            package_contract_version: Some("quire.checked-package/v2".to_owned()),
-            source_digests: Some(vec![self.source_reference()]),
-            profile_selections: Some(vec![ProfileSelection::new(
-                "quire.profile.v1".to_owned(),
-                "finite-state".to_owned(),
-            )]),
-            run_limits: Some(default_accounting(1_000_000)),
-            declared_domains: Some(Vec::new()),
-            backend: Some(backend),
-            trace_position: Some(None),
-            source: Some(witness_source()),
-            family_payload: Some(payload),
-        })
-        .expect("a complete packet reconstructs")
-    }
-
-    fn request(&self, package_id: DigestRecord, invocation: &Invocation) -> ReplayRequestWire {
-        let jcs = |digest: [u8; 32]| {
-            (
-                Some(DigestDomain::Sha256Jcs.as_str().to_owned()),
-                DigestRecord::mint(DigestDomain::Sha256Jcs, digest).hex(),
-            )
-        };
-        let (source_domain, source_hex) = {
-            let reference = self.source_reference();
-            (reference.4, reference.5)
-        };
-        let mut byte_provision = vec![(source_domain, source_hex, self.unit.clone()), {
-            let (domain, hex) = jcs(jcs_digest(&self.domain));
-            (domain, hex, self.domain.clone())
-        }];
-        for (reference, bytes) in &invocation.documents {
-            let (domain, hex) = jcs(reference.digest);
-            byte_provision.push((domain, hex, bytes.clone()));
+        match tamper {
+            Tamper::Nothing => {}
+            Tamper::ClauseNode => packet.clause_node = Some(other),
+            Tamper::Occurrence => {
+                packet.occurrence_key = Some(OccurrenceKey::new(
+                    other,
+                    payload.occurrence.origin().clone(),
+                ));
+            }
         }
-        let unlimited = default_accounting(u64::MAX);
-        ReplayRequestWire {
-            contract_version: "quire.native-runtime/v1".to_owned(),
-            capability_vocabulary: Some("quire.capability-kind/v1".to_owned()),
-            profile_selections: Vec::new(),
-            package_id: (
-                Some(DigestDomain::PackageSemanticV2.as_str().to_owned()),
-                package_id.hex(),
-            ),
-            package_contract_version: "quire.checked-package/v2".to_owned(),
-            source_digests: vec![self.source_reference()],
-            dependencies: Vec::new(),
-            selected_function: QualifiedName::new(vec![
-                Identifier::new("deposit").expect("identifier")
-            ])
-            .expect("a qualified name"),
-            source: witness_source(),
-            originating_counterexample_identity: [2; 32],
-            backend: (
-                "kani-backend-1".to_owned(),
-                Some(DigestDomain::ToolManifestJcsV1.as_str().to_owned()),
-                DigestRecord::mint(DigestDomain::ToolManifestJcsV1, [3; 32]).hex(),
-            ),
-            state_environment: StateEnvironment::new(Vec::new()),
-            accounting_limits: default_accounting(1_000_000),
-            stage_limits: StageLimits {
-                s1: qsl_replay::ScalarLimits {
-                    text_input_bytes: u64::try_from(MAX_ENCODED_BYTES).expect("a small bound"),
-                    ..unlimited
-                },
-                s2: unlimited,
-                s3: unlimited,
-                s4: unlimited,
-            },
-            byte_provision,
-        }
+        let envelope =
+            WitnessEnvelope::reconstruct(packet).expect("a complete packet reconstructs");
+        qsl_replay::replay_frame(wire, &envelope)
     }
-}
-
-fn witness_source() -> ReplaySource {
-    ReplaySource::Witness(
-        Witness::parse("<<<assertion|frame_harness|frame|>>>").expect("a witness"),
-    )
 }
 
 fn label(name: &str) -> DocumentRef {

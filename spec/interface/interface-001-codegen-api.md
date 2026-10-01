@@ -151,9 +151,13 @@ operations:
     output: the qsl-replay WitnessArmResult | SpineReplayError (UnboundArgument{argument} | FieldDelimiter | Transcript(MalformedTranscript) | Refused(ReplayRefusal) | WrongArm)
     semantics: builds the backend-witness transcript keyed by parameter node id and calls qsl_replay::replay, returning QSL's own settlement; a Boolean value is replayed as 1 or 0 (FR-016)
   - name: ReplayPackage::new
-    inputs: [ReplayInputs (proved unit LockedSource, DependencyLock list, function name, backend manifest digest, accounting and stage limits)]
-    output: ReplayPackage | ReplayPackageError (InvalidFunction{function} | DuplicateDependency{identity} | CallSite(CallSiteRefusal))
-    semantics: compiles the proved unit through qsl_replay::call_site and keeps the package id and each parameter's node id; ReplayPackage::request builds the complete ReplayRequestWire, filling package.dependencies with one entry per lock dependency selection in ascending identity order (identity, version, package_id, the dependency's own sources); every source's bytes, the unit's and each dependency's, are provided by digest; the unit compiles standalone, so QSL nonetheless refuses a request naming a dependency the unit does not select (FR-016)
+    inputs: [ReplayInputs (proved unit LockedSource, DependencyLock list, backend manifest digest, accounting and stage limits), function name]
+    output: ReplayPackage | ReplayPackageError (InvalidFunction{function} | Dependencies(DependencyLockError: Duplicate{identity} | Input(DependencyInputRefusal)) | CallSite(CallSiteRefusal))
+    semantics: compiles the proved unit, together with the lock's dependency selections as its dependency input, through qsl_replay::call_site and keeps the package id and each parameter's node id; ReplayPackage::request builds the complete ReplayRequestWire from the same lock, filling package.dependencies with one entry per lock dependency selection in ascending identity order (identity, version, the lock's recorded package_id, the dependency's own source); every source's bytes, the unit's and each dependency's, are provided by digest; QSL refuses a request naming a dependency the unit does not import (FR-016)
+  - name: FrameReplay::new
+    inputs: [FrameReplayInputs (proving-run ReplayInputs, domain package ProvidedDocuments, invocation and snapshot ProvidedDocuments, qsl-replay OperationName, invocation DocumentRef, ClaimedChange, obligation and counterexample identities)]
+    output: FrameReplay (request ReplayRequestWire, envelope WitnessPacket) | FrameReplayError (Dependencies | CallSite(CallSiteRefusal) | Name | Transcript | Envelope | Refused)
+    semantics: compiles the proved unit with its domain packages and dependencies through qsl_replay::call_site selected by the operation's name, and builds the frame counterexample payload from the answer (anchor, frame, frame occurrence); the envelope's clause_node is the payload's frame node and its occurrence_key the payload's frame occurrence; FrameReplay::replay reconstructs the envelope and calls qsl_replay::replay_frame, returning QSL's result (FR-015)
   - name: replay_counterexample
     inputs: [KaniObligationIdentity, Kani playback transcript, ReplayPackage]
     output: ReplayVerdict (Reproduced | EvidenceFailure(Decode(DecodeFailure) | Domain | Verdict)) | SpineReplayError

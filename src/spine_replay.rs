@@ -10,10 +10,11 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DependencyEntryWire, DigestDomain,
-    DigestRecord, Identifier, MalformedTranscript, ProofCategory, QualifiedName, ReplayRefusal,
-    ReplayRequestWire, ReplayResult, ReplaySource, ScalarLimits, SourceIdentity, StageLimits,
-    StateEnvironment, Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
+    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DependencyEntryWire, DependencyInput,
+    DependencyInputRefusal, DigestDomain, DigestRecord, FunctionSite, Identifier,
+    MalformedTranscript, ProofCategory, QualifiedName, ReplayRefusal, ReplayRequestWire,
+    ReplayResult, ReplaySource, ScalarLimits, SourceIdentity, StageLimits, StateEnvironment,
+    SuppliedLibrary, Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
 };
 
 use crate::{
@@ -145,10 +146,19 @@ pub struct LockedSource {
 }
 
 impl LockedSource {
-    fn digest(&self) -> DigestRecord {
+    pub(crate) fn digest(&self) -> DigestRecord {
         DigestRecord::mint(
             DigestDomain::SourceBytesV1,
             ByteDigest::of(&self.bytes).as_bytes(),
+        )
+    }
+
+    pub(crate) fn source_identity(&self) -> SourceIdentity {
+        SourceIdentity::new(
+            &self.authority,
+            &self.identity,
+            &self.namespace,
+            &self.revision,
         )
     }
 
@@ -165,7 +175,7 @@ impl LockedSource {
 }
 
 /// One entry of the proved package lock's `dependency_selections`, with the dependency's own lock
-/// `sources`.
+/// source. QSL compiles a library from exactly one source unit.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DependencyLock {
     /// The library identity.
@@ -174,8 +184,8 @@ pub struct DependencyLock {
     pub version: String,
     /// The dependency's `package_id`, as the proving run recorded it.
     pub package_id: DigestRecord,
-    /// The dependency's lock `sources`.
-    pub sources: Vec<LockedSource>,
+    /// The dependency's lock source.
+    pub source: LockedSource,
 }
 
 /// Everything about the proving run a replay request repeats.
@@ -183,10 +193,8 @@ pub struct DependencyLock {
 pub struct ReplayInputs {
     /// The proved unit's source.
     pub source: LockedSource,
-    /// The proved package lock's dependency selections, each with its own sources.
+    /// The proved package lock's dependency selections, each with its own source.
     pub dependencies: Vec<DependencyLock>,
-    /// The selected function's name.
-    pub function: String,
     /// The digest of the tool manifest of the backend that found the counterexample.
     pub backend_manifest: DigestRecord,
     /// The limits the replay run itself is charged against.
@@ -194,6 +202,41 @@ pub struct ReplayInputs {
     /// The S1 to S4 stage limits of the proving run.
     pub stage_limits: StageLimits,
 }
+
+/// Why a lock's dependency selections are not a dependency input QSL admits.
+#[derive(Debug)]
+pub enum DependencyLockError {
+    /// Two dependency selections name the same library; QSL admits each identity once.
+    Duplicate {
+        /// The repeated library identity.
+        identity: String,
+    },
+    /// The selections are no dependency input: for example two libraries share a source owner.
+    /// A library sharing the unit's owner is refused later, by the call site, as
+    /// [`ReplayPackageError::CallSite`].
+    Input(DependencyInputRefusal),
+}
+
+impl fmt::Display for DependencyLockError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Duplicate { identity } => {
+                write!(
+                    f,
+                    "the lock selects the dependency `{identity}` more than once"
+                )
+            }
+            Self::Input(refusal) => {
+                write!(
+                    f,
+                    "the lock's dependencies are no dependency input: {refusal}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for DependencyLockError {}
 
 /// Why a [`ReplayPackage`] could not be built.
 #[derive(Debug)]
@@ -203,12 +246,9 @@ pub enum ReplayPackageError {
         /// The rejected name.
         function: String,
     },
-    /// Two dependency selections name the same library; QSL admits each identity once.
-    DuplicateDependency {
-        /// The repeated library identity.
-        identity: String,
-    },
-    /// QSL could not locate the function in the compiled unit.
+    /// The lock's dependency selections are not admitted.
+    Dependencies(DependencyLockError),
+    /// QSL could not compile the unit against its dependencies or locate the function in it.
     CallSite(Box<CallSiteRefusal>),
 }
 
@@ -218,12 +258,7 @@ impl fmt::Display for ReplayPackageError {
             Self::InvalidFunction { function } => {
                 write!(f, "`{function}` is not a valid function identifier")
             }
-            Self::DuplicateDependency { identity } => {
-                write!(
-                    f,
-                    "the lock selects the dependency `{identity}` more than once"
-                )
-            }
+            Self::Dependencies(cause) => cause.fmt(f),
             Self::CallSite(refusal) => write!(f, "the call site was not located: {refusal}"),
         }
     }
@@ -231,58 +266,148 @@ impl fmt::Display for ReplayPackageError {
 
 impl std::error::Error for ReplayPackageError {}
 
+impl ReplayInputs {
+    /// The lock with its dependencies in the strictly ascending identity order QSL admits, each
+    /// identity once, and the dependency input the same selections make.
+    pub(crate) fn admit(mut self) -> Result<(Self, DependencyInput), DependencyLockError> {
+        self.dependencies
+            .sort_by(|left, right| left.identity.cmp(&right.identity));
+        if let Some(pair) = self
+            .dependencies
+            .windows(2)
+            .find(|pair| pair[0].identity == pair[1].identity)
+        {
+            return Err(DependencyLockError::Duplicate {
+                identity: pair[0].identity.clone(),
+            });
+        }
+        let libraries = self
+            .dependencies
+            .iter()
+            .map(|dependency| SuppliedLibrary {
+                identity: dependency.identity.clone(),
+                version: dependency.version.clone(),
+                source: dependency.source.source_identity(),
+                path: dependency.source.identity.clone(),
+                bytes: dependency.source.bytes.clone(),
+            })
+            .collect::<Vec<_>>();
+        let input = DependencyInput::new(libraries).map_err(DependencyLockError::Input)?;
+        Ok((self, input))
+    }
+
+    /// The request QSL replays: this lock's package reference over `package_id`, selecting
+    /// `selected`, replaying `source`, with `documents` provided beside the unit's and the
+    /// dependencies' sources.
+    pub(crate) fn wire(
+        &self,
+        package_id: DigestRecord,
+        selected: QualifiedName,
+        source: ReplaySource,
+        counterexample_identity: [u8; 32],
+        documents: &[(DigestRecord, &[u8])],
+    ) -> ReplayRequestWire {
+        let dependencies = self
+            .dependencies
+            .iter()
+            .map(|dependency| DependencyEntryWire {
+                identity: dependency.identity.clone(),
+                version: dependency.version.clone(),
+                package_id: (
+                    Some(dependency.package_id.domain().as_str().to_owned()),
+                    dependency.package_id.hex(),
+                ),
+                sources: vec![dependency.source.wire()],
+            })
+            .collect();
+        // One entry per distinct digest, in digest order: a source shared between the unit and
+        // a dependency, or between dependencies, is provided once.
+        let sources = std::iter::once(&self.source)
+            .chain(
+                self.dependencies
+                    .iter()
+                    .map(|dependency| &dependency.source),
+            )
+            .map(|file| (file.digest(), file.bytes.as_slice()));
+        let byte_provision = sources
+            .chain(documents.iter().copied())
+            .map(|(digest, bytes)| {
+                (
+                    digest.hex(),
+                    (Some(digest.domain().as_str().to_owned()), bytes),
+                )
+            })
+            .collect::<BTreeMap<_, _>>()
+            .into_iter()
+            .map(|(hex, (domain, bytes))| (domain, hex, bytes.to_vec()))
+            .collect();
+        ReplayRequestWire {
+            contract_version: "quire.native-runtime/v1".to_owned(),
+            capability_vocabulary: Some("quire.capability-kind/v1".to_owned()),
+            profile_selections: Vec::new(),
+            package_id: (
+                Some(package_id.domain().as_str().to_owned()),
+                package_id.hex(),
+            ),
+            package_contract_version: "quire.checked-package/v2".to_owned(),
+            source_digests: vec![self.source.wire()],
+            dependencies,
+            selected_function: selected,
+            source,
+            originating_counterexample_identity: counterexample_identity,
+            backend: (
+                "kani".to_owned(),
+                Some(self.backend_manifest.domain().as_str().to_owned()),
+                self.backend_manifest.hex(),
+            ),
+            state_environment: StateEnvironment::new(Vec::new()),
+            accounting_limits: self.accounting_limits,
+            stage_limits: self.stage_limits,
+            byte_provision,
+        }
+    }
+}
+
 /// A compiled proving-run package: the facts QSL supplies about it (package id and parameter
 /// node ids, through [`qsl_replay::call_site`]) joined to the lock the request repeats.
 #[derive(Clone, Debug)]
 pub struct ReplayPackage {
     inputs: ReplayInputs,
     selection: QualifiedName,
-    site: CallSite,
+    site: CallSite<FunctionSite>,
     parameters: Vec<(String, String)>,
 }
 
 impl ReplayPackage {
-    /// Compiles `inputs.source` and locates the selected function in it.
+    /// Compiles `inputs.source` against the lock's dependencies and locates `function` in it.
+    /// A dependency the unit imports is compiled from its lock source; one the unit does not
+    /// import changes nothing.
     ///
     /// # Errors
     ///
     /// [`ReplayPackageError`] when the function name is not an identifier, a dependency identity
-    /// repeats, or QSL does not compile the unit or find the function. `call_site` compiles a
-    /// standalone unit, so a unit that imports a selected dependency is refused as
-    /// [`ReplayPackageError::CallSite`].
-    pub fn new(mut inputs: ReplayInputs) -> Result<Self, ReplayPackageError> {
-        // QSL admits dependency entries in strictly ascending identity order, each identity once.
-        inputs
-            .dependencies
-            .sort_by(|left, right| left.identity.cmp(&right.identity));
-        if let Some(pair) = inputs
-            .dependencies
-            .windows(2)
-            .find(|pair| pair[0].identity == pair[1].identity)
-        {
-            return Err(ReplayPackageError::DuplicateDependency {
-                identity: pair[0].identity.clone(),
-            });
-        }
+    /// repeats, the dependencies are no dependency input, or QSL does not compile the unit or
+    /// find the function.
+    pub fn new(inputs: ReplayInputs, function: &str) -> Result<Self, ReplayPackageError> {
+        let (inputs, dependency_input) =
+            inputs.admit().map_err(ReplayPackageError::Dependencies)?;
         let invalid = || ReplayPackageError::InvalidFunction {
-            function: inputs.function.clone(),
+            function: function.to_owned(),
         };
-        let identifier = Identifier::new(&inputs.function).map_err(|_| invalid())?;
+        let identifier = Identifier::new(function).map_err(|_| invalid())?;
         let selection = QualifiedName::new(vec![identifier]).map_err(|_| invalid())?;
         let source = &inputs.source;
         let site = call_site(
-            SourceIdentity::new(
-                &source.authority,
-                &source.identity,
-                &source.namespace,
-                &source.revision,
-            ),
+            source.source_identity(),
             &source.identity,
             &source.bytes,
+            [],
+            &dependency_input,
             &selection,
         )
         .map_err(ReplayPackageError::CallSite)?;
         let parameters = site
+            .site
             .parameters
             .iter()
             .map(|(name, node)| (name.as_str().to_owned(), node.to_string()))
@@ -308,68 +433,13 @@ impl ReplayPackage {
     /// The package reference's `dependencies` are the lock's dependency selections, one entry
     /// each, and the byte provision holds the proved unit's source and every dependency source.
     pub fn request(&self, counterexample: &str, source: ReplaySource) -> ReplayRequestWire {
-        let inputs = &self.inputs;
-        let dependencies = inputs
-            .dependencies
-            .iter()
-            .map(|dependency| DependencyEntryWire {
-                identity: dependency.identity.clone(),
-                version: dependency.version.clone(),
-                package_id: (
-                    Some(dependency.package_id.domain().as_str().to_owned()),
-                    dependency.package_id.hex(),
-                ),
-                sources: dependency.sources.iter().map(LockedSource::wire).collect(),
-            })
-            .collect();
-        // One entry per distinct digest, in digest order: a source shared between the unit and
-        // a dependency, or between dependencies, is provided once.
-        let byte_provision = std::iter::once(&inputs.source)
-            .chain(
-                inputs
-                    .dependencies
-                    .iter()
-                    .flat_map(|dependency| dependency.sources.iter()),
-            )
-            .map(|file| {
-                let digest = file.digest();
-                (
-                    digest.hex(),
-                    (
-                        Some(digest.domain().as_str().to_owned()),
-                        file.bytes.clone(),
-                    ),
-                )
-            })
-            .collect::<BTreeMap<_, _>>()
-            .into_iter()
-            .map(|(hex, (domain, bytes))| (domain, hex, bytes))
-            .collect();
-        ReplayRequestWire {
-            contract_version: "quire.native-runtime/v1".to_owned(),
-            capability_vocabulary: Some("quire.capability-kind/v1".to_owned()),
-            profile_selections: Vec::new(),
-            package_id: (
-                Some(self.site.package_id.domain().as_str().to_owned()),
-                self.site.package_id.hex(),
-            ),
-            package_contract_version: "quire.checked-package/v2".to_owned(),
-            source_digests: vec![inputs.source.wire()],
-            dependencies,
-            selected_function: self.selection.clone(),
+        self.inputs.wire(
+            self.site.package_id,
+            self.selection.clone(),
             source,
-            originating_counterexample_identity: ByteDigest::of(counterexample.as_bytes())
-                .as_bytes(),
-            backend: (
-                "kani".to_owned(),
-                Some(inputs.backend_manifest.domain().as_str().to_owned()),
-                inputs.backend_manifest.hex(),
-            ),
-            state_environment: StateEnvironment::new(Vec::new()),
-            accounting_limits: inputs.accounting_limits,
-            stage_limits: inputs.stage_limits,
-            byte_provision,
-        }
+            ByteDigest::of(counterexample.as_bytes()).as_bytes(),
+            &[],
+        )
     }
 }
 

@@ -102,7 +102,9 @@ unsatisfiable requires as `cover_unsatisfied`.
    backend verifies the healthy subject, falsifies the debiting subject, verifies the granted write,
    falsifies the ungranted write naming its field, falsifies the allowed subject against a frame
    regenerated with nothing granted, and QSL's `replay_frame` reproduces the forbidden write and
-   finds the allowed run inside its frame (FR-015-AC-30 to FR-015-AC-32).
+   finds the allowed run inside its frame (FR-015-AC-30 to FR-015-AC-32). The default suite builds that
+   replay's request and envelope through `qsl_replay::call_site` and settles a forbidden and a
+   granted write without Kani, and refuses an operation with no frame, declared or not (FR-015-AC-33 to FR-015-AC-36).
 
 ## Blocked
 
