@@ -1,0 +1,175 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "timestamp": "2026-10-01T02:40:54.460631808Z",
+    "kani_version": "0.68.0",
+    "target": "x86_64-unknown-linux-gnu",
+    "build_mode": "release"
+  },
+  "project": {
+    "crate_name": [
+      "fx"
+    ],
+    "workspace_root": "<CAPTURE_DIR>/fx",
+    "output_dir": "<CAPTURE_DIR>/fx-target/kani/x86_64-unknown-linux-gnu/debug/build/fx/e1c4ae9aeca710b0/out"
+  },
+  "tools": {
+    "kani": "0.68.0",
+    "rustc": "rustc 1.100.0-nightly (8925ea358 2026-08-20)",
+    "cbmc": "6.11.0 (cbmc-6.11.0)",
+    "goto_cc": "gcc (goto-cc 6.11.0 (cbmc-6.11.0)) 13.3.0",
+    "goto_instrument": "6.11.0 (cbmc-6.11.0)",
+    "solvers": [
+      {
+        "name": "cadical",
+        "version": null
+      }
+    ]
+  },
+  "harness_metadata": [
+    {
+      "pretty_name": "proofs::unwind_exhausted",
+      "mangled_name": "_RNvNtCsknN5xTaIH6P_2fx6proofs16unwind_exhausted",
+      "crate_name": "fx",
+      "source": {
+        "file": "src/lib.rs",
+        "start_line": 20,
+        "end_line": 28
+      },
+      "goto_file": "<CAPTURE_DIR>/fx-target/kani/x86_64-unknown-linux-gnu/debug/build/fx/e1c4ae9aeca710b0/out/fx-e1c4ae9aeca710b0__RNvNtCsknN5xTaIH6P_2fx6proofs16unwind_exhausted.symtab.out",
+      "attributes": {
+        "kind": "Proof",
+        "should_panic": false
+      },
+      "contract": {
+        "contracted_function_name": null,
+        "recursion_tracker": null
+      },
+      "has_loop_contracts": false,
+      "is_automatically_generated": false,
+      "is_bounded": false,
+      "is_ctor_based": false
+    }
+  ],
+  "error_details": [
+    {
+      "harness_id": "proofs::unwind_exhausted",
+      "has_errors": true,
+      "error_type": "verification_failure",
+      "failed_properties_type": "Other",
+      "exit_status": "properties_failed"
+    }
+  ],
+  "property_details": [
+    {
+      "harness_id": "proofs::unwind_exhausted",
+      "property_details": {
+        "total_properties": 4,
+        "passed": 0,
+        "failed": 1,
+        "unreachable": 0,
+        "undetermined": 2,
+        "solver_error": 0,
+        "satisfied": 1,
+        "unsatisfiable": 0,
+        "covered": 0,
+        "uncovered": 0
+      }
+    }
+  ],
+  "cbmc": [
+    {
+      "harness_id": "proofs::unwind_exhausted",
+      "cbmc_metadata": {
+        "version": "6.11.0",
+        "os_info": "x86_64 linux unix"
+      },
+      "configuration": {
+        "object_bits": 16,
+        "solver": "cadical"
+      },
+      "cbmc_stats": {
+        "runtime_symex_s": 0.00646916,
+        "size_program_expression": 218,
+        "slicing_removed_assignments": 4,
+        "vccs_generated": 13,
+        "vccs_remaining": 9,
+        "runtime_postprocess_equation_s": 0.000036798,
+        "runtime_convert_ssa_s": 0.000936294,
+        "runtime_post_process_s": 8.697e-6,
+        "runtime_solver_s": 0.000349421,
+        "runtime_decision_procedure_s": 0.000386016
+      }
+    }
+  ],
+  "verification_results": {
+    "summary": {
+      "total_harnesses": 1,
+      "executed": 1,
+      "status": "completed",
+      "successful": 0,
+      "failed": 1,
+      "duration_ms": 60
+    },
+    "results": [
+      {
+        "harness_id": "proofs::unwind_exhausted",
+        "status": "Failure",
+        "duration_ms": 60,
+        "checks": [
+          {
+            "id": 1,
+            "function": "proofs::unwind_exhausted",
+            "status": "Satisfied",
+            "description": "n can be large",
+            "location": {
+              "file": "src/lib.rs",
+              "line": "23",
+              "column": "9"
+            },
+            "category": "cover"
+          },
+          {
+            "id": 2,
+            "function": "proofs::unwind_exhausted",
+            "status": "Undetermined",
+            "description": "attempt to add with overflow",
+            "location": {
+              "file": "src/lib.rs",
+              "line": "25",
+              "column": "13"
+            },
+            "category": "assertion"
+          },
+          {
+            "id": 3,
+            "function": "proofs::unwind_exhausted",
+            "status": "Undetermined",
+            "description": "assertion failed: i == n",
+            "location": {
+              "file": "src/lib.rs",
+              "line": "27",
+              "column": "9"
+            },
+            "category": "assertion"
+          },
+          {
+            "id": 4,
+            "function": "proofs::unwind_exhausted",
+            "status": "Failure",
+            "description": "unwinding assertion loop 0",
+            "location": {
+              "file": "src/lib.rs",
+              "line": "24",
+              "column": "9"
+            },
+            "category": "unwind"
+          }
+        ]
+      }
+    ]
+  },
+  "coverage": {
+    "enabled": false
+  }
+}

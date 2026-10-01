@@ -353,15 +353,21 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
     // see a playback block at all: without them Kani never prints one, even for a genuine
     // falsification, and every run classifies Inconclusive rather than Falsified. adapter_options
     // (src/kani.rs) always includes these two for every production harness, plus --exact,
-    // --unwind, --solver and --output-format regular, which this invocation does not replicate --
-    // classify_kani_run parses `regular`-shaped output regardless, and --harness is already an
+    // --unwind and --solver, which this invocation does not replicate -- --harness is already an
     // effective exact match here (this crate writes exactly one harness), so the omission is
-    // inert today, not load-bearing.
+    // inert today, not load-bearing. --export-json is what the verdict is read from.
+    let report_path = directory.0.join("report.json");
     let output = Command::new("cargo")
         .args([
             "kani",
             "-Z",
             "concrete-playback",
+            "-Z",
+            "unstable-options",
+            "--export-json",
+        ])
+        .arg(&report_path)
+        .args([
             "--harness",
             "corpus_case_collection",
             "--concrete-playback",
@@ -381,19 +387,18 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
         "false generated corpus case must not be reported as a Kani proof"
     );
     // A nonzero exit alone does not prove the harness ran and was falsified: a harness-filter
-    // mismatch ("error: no harnesses matched the harness filter") also exits nonzero under
-    // Kani 0.67.0, and would pass a raw-banner check vacuously -- and CBMC prints the identical
-    // "VERIFICATION:- FAILED" banner on its own out-of-memory abort, where zero properties were
-    // ever decided (IR-220). Route through the same classifier production uses so any run that
-    // did not actually decide a property -- OOM, unwind exhaustion, filter mismatch, no verdict
-    // at all -- fails this test instead of passing it.
+    // mismatch ("error: no harnesses matched the harness filter") also exits nonzero, and CBMC
+    // exits nonzero on its own out-of-memory abort, where zero properties were ever decided
+    // (IR-220). Route through the same classifier production uses so any run that did not
+    // actually decide a property -- OOM, unwind exhaustion, filter mismatch, no verdict at all --
+    // fails this test instead of passing it.
+    let report = fs::read(&report_path).ok();
+    let classified = classify_kani_run(output.status.success(), report.as_deref(), &text, None)
+        .map(|run| run.outcome);
     assert!(
-        matches!(
-            classify_kani_run(output.status.success(), &text),
-            KaniRunOutcome::Falsified { .. }
-        ),
+        matches!(classified, Ok(KaniRunOutcome::Falsified { .. })),
         "expected a genuine Kani falsification (KaniRunOutcome::Falsified), not merely a \
-         nonzero exit or a VERIFICATION:- FAILED banner, either of which an inconclusive run \
+         nonzero exit, which an inconclusive run \
          (a harness-filter mismatch, CBMC out-of-memory, or an exhausted unwind bound) also \
          produces; got:\n{text}"
     );

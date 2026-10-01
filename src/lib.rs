@@ -25,6 +25,8 @@ mod routed_generation;
 mod state_frame;
 // Implements: FR-017
 mod kani_execution;
+// Implements: FR-029
+mod kani_terminal;
 mod kani_transcript;
 // IR-211: joins a real Kani witness to the generator's own persisted obligation schema.
 mod kani_witness_join;
@@ -115,10 +117,12 @@ pub use kani::{
 };
 pub use kani_execution::{
     classify_kani_run, execute_kani_obligation, kani_launch_command, launch_evidence,
-    run_launcher_with_timeout, KaniExecutableHarness, KaniExecutionEvidence, KaniExecutionRefusal,
-    KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation, KaniRunOutcome, KaniTool,
-    KaniToolError, LaunchOutcome,
+    run_launcher_with_timeout, ClassifiedRun, KaniExecutableHarness, KaniExecutionEvidence,
+    KaniExecutionRefusal, KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation,
+    KaniRunOutcome, KaniTool, KaniToolError, LaunchOutcome, REPORT_FILE,
 };
+pub use kani_terminal::terminal_value;
+pub use kani_transcript::KaniReportRefusal;
 pub use routed_generation::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,

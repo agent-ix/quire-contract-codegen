@@ -1785,7 +1785,10 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         );
         assert_eq!(evidence.outcome, KaniRunOutcome::Verified, "{label}");
         assert_eq!(evidence.exit_code, Some(0));
-        assert_eq!(evidence.arguments[1..], harness.identity.options[..]);
+        assert_eq!(
+            evidence.arguments[1..=harness.identity.options.len()],
+            harness.identity.options[..]
+        );
     }
 
     let evidence = run(
@@ -1952,27 +1955,36 @@ fn tc_027_a_routed_scalar_harness_run_classifies_like_a_contract_harness() {
         "the contract kind's shape"
     );
     let total = covers(&scalar.rust.contents);
-    let transcript = |satisfied: usize| {
-        format!(
-            "SUMMARY:\n ** 0 of 20 failed\n\n ** {satisfied} of {total} cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n"
-        )
+    let report = |checks: Vec<serde_json::Value>| {
+        serde_json::to_vec(&serde_json::json!({
+            "metadata": { "version": "1.0" },
+            "verification_results": { "results": [{
+                "harness_id": "h", "status": "Success", "checks": checks
+            }] }
+        }))
+        .unwrap()
     };
+    let check = |status: &str, category: &str| serde_json::json!({ "status": status, "category": category });
+    let classify = |checks: Vec<serde_json::Value>| {
+        classify_kani_run(true, Some(&report(checks)), "", None)
+            .unwrap()
+            .outcome
+    };
+    let covers = |status: &str| {
+        let mut checks = vec![check("Success", "assertion")];
+        checks.extend((0..total).map(|_| check(status, "cover")));
+        checks
+    };
+    assert_eq!(classify(covers("Satisfied")), KaniRunOutcome::Verified);
     assert_eq!(
-        classify_kani_run(true, &transcript(total)),
-        KaniRunOutcome::Verified
-    );
-    assert_eq!(
-        classify_kani_run(true, &transcript(0)),
+        classify(covers("Unsatisfiable")),
         KaniRunOutcome::CoverUnsatisfied {
             satisfied: 0,
             total: u64::try_from(total).unwrap()
         }
     );
     assert_eq!(
-        classify_kani_run(
-            true,
-            "SUMMARY:\n ** 0 of 20 failed\nVERIFICATION:- SUCCESSFUL\n"
-        ),
+        classify(vec![check("Success", "assertion")]),
         KaniRunOutcome::Inconclusive {
             reason: KaniInconclusiveReason::MissingCoverSummary
         }
@@ -2014,7 +2026,10 @@ fn tc_027_a_routed_scalar_harness_verifies() {
     assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
     assert_eq!(evidence.kind, None);
     assert_eq!(evidence.harness_path, harness.rust.path);
-    assert_eq!(evidence.arguments[1..], harness.identity.options[..]);
+    assert_eq!(
+        evidence.arguments[1..=harness.identity.options.len()],
+        harness.identity.options[..]
+    );
     assert_eq!(evidence.unwind, harness.identity.unwind);
 
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");

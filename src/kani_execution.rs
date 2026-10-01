@@ -1,11 +1,11 @@
 //! Execution of one generated Kani obligation harness (FR-017).
 //!
 //! For every outcome but one, the run outcome is read from the
-//! backend's own output -- read into a typed transcript by [`crate::kani_transcript`], the only
-//! place Kani's prose is parsed -- and is never defaulted: a harness this module did not
-//! observe verifying is not `verified`. The one exception is
-//! [`KaniInconclusiveReason::TimedOut`], which is never read from output at all —
-//! a timed-out run is killed before it prints one.
+//! backend's own exported report -- read into a typed value by [`crate::kani_transcript`], the
+//! only place Kani's output is read -- and is never defaulted: a harness this module did not
+//! observe verifying is not `verified`, and a report it cannot read is a typed refusal, not an
+//! outcome. The one exception is [`KaniInconclusiveReason::TimedOut`], which is never read from
+//! output at all — a timed-out run is killed before it writes a report.
 //!
 //! The caller states a wall-clock budget on every request
 //! ([`KaniExecutionRequest::timeout`]); nothing here defaults one. A run that does
@@ -45,7 +45,7 @@ use serde::Serialize;
 use crate::{
     kani_obligations::{KaniObligationHarness, KaniScalarObligationHarness, ObligationKind},
     kani_transcript::{
-        KaniBanner, KaniCoverSummary, KaniFailedCheck, KaniPlaybackTarget, KaniTranscript,
+        counterexample_playback, KaniHarnessReport, KaniHarnessStatus, KaniReportRefusal,
     },
     oracle::Artifact,
     state_frame::{StateFrameHarness, StateFrameProperty},
@@ -258,6 +258,9 @@ pub enum KaniExecutionRefusal {
         /// The generated artifact path.
         harness_path: String,
     },
+    /// The run exported a Kani report this crate cannot read exactly. The run proved nothing
+    /// and decided nothing; the refusal is never an outcome.
+    Report(KaniReportRefusal),
 }
 
 impl fmt::Display for KaniExecutionRefusal {
@@ -267,11 +270,18 @@ impl fmt::Display for KaniExecutionRefusal {
             Self::HarnessNotInCrate { harness_path } => {
                 write!(formatter, "the crate does not contain {harness_path}")
             }
+            Self::Report(refusal) => write!(formatter, "{refusal}"),
         }
     }
 }
 
 impl std::error::Error for KaniExecutionRefusal {}
+
+impl From<KaniReportRefusal> for KaniExecutionRefusal {
+    fn from(refusal: KaniReportRefusal) -> Self {
+        Self::Report(refusal)
+    }
+}
 
 impl From<KaniToolError> for KaniExecutionRefusal {
     fn from(error: KaniToolError) -> Self {
@@ -285,20 +295,20 @@ impl From<KaniToolError> for KaniExecutionRefusal {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KaniInconclusiveReason {
-    /// Kani reported failure but printed no concrete playback.
+    /// Kani reported failure but printed no concrete playback for a failed property.
     FailedWithoutCounterexample,
-    /// Kani printed no verification verdict: a build, launcher or solver failure.
+    /// Kani exported no verdict: a build, launcher or solver failure that ended the process
+    /// before a report was written, or a process that failed beside a report of success.
     NoVerdict,
-    /// Kani reported success without a readable, non-empty cover summary, so non-vacuity was
-    /// not observed.
+    /// Kani reported success with no cover property in the report, so non-vacuity was not
+    /// observed.
     MissingCoverSummary,
-    /// Kani's own `** <failed> of <total> failed` check summary reports zero SUCCESS checks:
-    /// no check in the obligation actually ran, so a `Proved`-looking run proved nothing. This
-    /// settles [`quire_contract_ir::kani::KaniOutcomeKind::Inconclusive`]'s
-    /// `kani_vacuous_proof` cause for the execution path, using the check count this module
-    /// itself reads from the backend's own printed output — never a generation-time value —
-    /// so it is an execution outcome this module observed, not a generation-time
-    /// classification reported as one (FR-017-CON-2).
+    /// Kani's report lists zero successful checks: no check in the obligation actually held, so
+    /// a `Proved`-looking run proved nothing. This settles
+    /// [`quire_contract_ir::kani::KaniOutcomeKind::Inconclusive`]'s `kani_vacuous_proof` cause
+    /// for the execution path, using the check count this module itself reads from the
+    /// backend's own report — never a generation-time value — so it is an execution outcome this
+    /// module observed, not a generation-time classification reported as one (FR-017-CON-2).
     VacuousProof,
     /// A loop-unwinding check failed: the loop bound was exhausted before the property
     /// could be decided, so no failure is a counterexample.
@@ -360,6 +370,20 @@ pub struct KaniExecutionEvidence {
     pub exit_code: Option<i32>,
     /// Backend-reported outcome.
     pub outcome: KaniRunOutcome,
+    /// How many checks the report lists as holding: the non-cover checks with status success,
+    /// plus, for a precondition harness, whose one property is its cover, the satisfied covers.
+    /// Zero when the run produced no report. It is the SUCCESS-check count FR-029 carries into
+    /// the terminal value.
+    pub success_checks: u32,
+}
+
+/// A classified run: the outcome and the check count it was classified from.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClassifiedRun {
+    /// The outcome.
+    pub outcome: KaniRunOutcome,
+    /// The count [`KaniExecutionEvidence::success_checks`] documents.
+    pub success_checks: u32,
 }
 
 /// Runs the harness and reports the backend's own outcome.
@@ -378,6 +402,8 @@ pub fn execute_kani_obligation(
             harness_path: harness.rust.path.clone(),
         });
     }
+    let report_path = report_path(request);
+    remove_stale_report(&report_path)?;
     let (arguments, command) = kani_launch_command(request);
     let launch =
         run_launcher_with_timeout(command, request.timeout).map_err(|error| KaniToolError::Io {
@@ -385,7 +411,11 @@ pub fn execute_kani_obligation(
             path: request.installation.launcher.clone(),
             error,
         })?;
-    let (outcome, exit_code) = launch_evidence(launch, harness.kind);
+    let report = match launch {
+        LaunchOutcome::Completed { .. } => read_report(&report_path)?,
+        LaunchOutcome::TimedOut => None,
+    };
+    let (run, exit_code) = launch_evidence(launch, report.as_deref(), harness.kind)?;
     Ok(KaniExecutionEvidence {
         kind: harness.kind,
         harness_path: harness.rust.path.clone(),
@@ -394,16 +424,26 @@ pub fn execute_kani_obligation(
         unwind: harness.unwind,
         solver: harness.solver.to_owned(),
         exit_code,
-        outcome,
+        outcome: run.outcome,
+        success_checks: run.success_checks,
     })
 }
 
 /// Builds the exact argument vector and [`Command`] [`execute_kani_obligation`] launches for
 /// `request`, without spawning it, so a caller driving [`run_launcher_with_timeout`] itself
 /// launches exactly what `execute_kani_obligation` does.
+///
+/// The vector is the harness identity's option vector followed by the flags that make Kani export
+/// its report to [`REPORT_FILE`] in the target directory, which is where the verdict is read from.
 pub fn kani_launch_command(request: &KaniExecutionRequest<'_>) -> (Vec<String>, Command) {
     let mut arguments = vec!["kani".to_owned()];
     arguments.extend(request.harness.view().options.iter().cloned());
+    arguments.extend([
+        "-Z".to_owned(),
+        "unstable-options".to_owned(),
+        "--export-json".to_owned(),
+        report_path(request).display().to_string(),
+    ]);
     let mut command = Command::new(&request.installation.launcher);
     command
         .args(&arguments)
@@ -436,8 +476,9 @@ pub enum LaunchOutcome {
 /// timeout in a test is still observed promptly, long enough not to spin.
 const LAUNCHER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
-/// Most bytes kept from each of the launcher's stdout and stderr. Kani prints its verdict, check
-/// summary, cover summary and playback last, so when a stream is longer its tail is what is kept.
+/// Most bytes kept from each of the launcher's stdout and stderr. Kani prints its concrete
+/// playback last, so when a stream is longer its tail is what is kept; the verdict is not in
+/// the stream at all, it is in the exported report.
 /// A stream is always drained to the end so the child never blocks on a full pipe; only what is
 /// retained is bounded.
 const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
@@ -607,132 +648,201 @@ fn kill_process_tree(child: &mut Child) {
     let _ = child.kill();
 }
 
-/// Maps a concluded [`LaunchOutcome`] to the `(outcome, exit_code)` pair
-/// [`KaniExecutionEvidence`] stores, exactly as `execute_kani_obligation` does. `kind` is the
-/// harness's contract role (`None` for an exact-scalar harness); see [`classify_kani_run`] for
-/// how it affects the zero-checks rule. Kept as its own pure function so the mapping is tested
-/// directly with a value rather than a real subprocess.
+/// Maps a concluded [`LaunchOutcome`] and the report its run exported to the `(run, exit_code)`
+/// pair [`KaniExecutionEvidence`] stores, exactly as `execute_kani_obligation` does. `report` is
+/// the exported report's bytes, `None` when the run exported none; a timed-out run is killed
+/// before it can, so its report is not consulted. `kind` is the harness's contract role (`None`
+/// for an exact-scalar harness); see [`classify_kani_run`] for how it affects the zero-checks
+/// rule. Kept as its own pure function so the mapping is tested directly with a value rather than
+/// a real subprocess.
 pub fn launch_evidence(
     launch: LaunchOutcome,
+    report: Option<&[u8]>,
     kind: Option<ObligationKind>,
-) -> (KaniRunOutcome, Option<i32>) {
+) -> Result<(ClassifiedRun, Option<i32>), KaniReportRefusal> {
     match launch {
         LaunchOutcome::Completed {
             exited_successfully,
             exit_code,
             text,
-        } => (
-            classify_transcript(exited_successfully, &KaniTranscript::parse(&text), kind),
+        } => Ok((
+            classify_kani_run(exited_successfully, report, &text, kind)?,
             exit_code,
-        ),
-        LaunchOutcome::TimedOut => (
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::TimedOut,
+        )),
+        LaunchOutcome::TimedOut => Ok((
+            ClassifiedRun {
+                outcome: KaniRunOutcome::Inconclusive {
+                    reason: KaniInconclusiveReason::TimedOut,
+                },
+                success_checks: 0,
             },
             None,
-        ),
+        )),
     }
 }
 
-/// Classifies one run. Every generated harness, of every kind, carries exactly the covers that
-/// witness its assumptions are satisfiable, so success without every cover satisfied is vacuous
-/// and never `Verified`.
+/// Classifies one run from the report Kani exported for it. Every generated harness, of every
+/// kind, carries exactly the covers that witness its assumptions are satisfiable, so success
+/// without every cover satisfied is vacuous and never `Verified`.
 ///
-/// Before consulting the cover summary at all, a `** <failed> of <total> failed` line, when
-/// present, is reduced to a SUCCESS-check count (`total - failed`) and routed through
-/// [`KaniOutcome::proved_from_checks`] — the one implementation of "a proof backed by zero
-/// checks proved nothing" that this module and `quire-contract-ir` both had before this shared
-/// call, disagreeing (agent-ix/quire-contract-codegen#99). A verdict of `Inconclusive` under
+/// `report` is the exported report's bytes and `text` the run's console output, used only to find
+/// the playback of a falsifying check. A run that exited unsuccessfully and exported no report
+/// never reached a verdict (a build, launcher or solver failure), which is
+/// [`KaniInconclusiveReason::NoVerdict`]. A run that exited successfully and exported none, or
+/// any report [`KaniReportRefusal`] describes, is a refusal: the run is not read as
+/// inconclusive, because that would let a change in Kani's output pass as a result.
+///
+/// Before consulting the covers, a report listing no successful check is routed through
+/// [`KaniOutcome::proved_from_checks`] -- the one implementation of "a proof backed by zero
+/// checks proved nothing" that this module and `quire-contract-ir` share
+/// (agent-ix/quire-contract-codegen#99). A verdict of `Inconclusive` under
 /// [`KaniOutcomeKind::Inconclusive`]'s `kani_vacuous_proof` cause is not reported as-is — that
 /// would violate FR-017-CON-2, which forbids reporting a generation-time classification as an
 /// execution outcome — it is mapped into this module's own [`KaniInconclusiveReason::VacuousProof`].
-/// The count it classifies is read from this run's own transcript, never from generation time, so
-/// the mapped result is still this module's own observation of what the backend printed, not a
-/// borrowed verdict. A transcript with no such line at all (older or differently shaped output)
-/// falls through unchanged to the cover-only classification below.
+/// The count it classifies is read from this run's own report, never from generation time.
 ///
-/// `pub` so a test asserting "this transcript proves falsification" can route through the same
-/// classifier production uses (IR-220), instead of re-implementing banner parsing that misreads
-/// an inconclusive run — CBMC out-of-memory among them — as a decided failure.
+/// `pub` so a test asserting "this run proves falsification" can route through the same
+/// classifier production uses (IR-220), instead of re-implementing the check and misreading an
+/// inconclusive run — CBMC out-of-memory among them — as a decided failure.
 ///
-/// This entry point classifies as a harness that asserts something, so it applies the
-/// zero-checks rule unconditionally; it is not for a precondition harness's run, which goes
-/// through [`launch_evidence`] with its kind. A precondition harness asserts nothing: its one property is
-/// its non-vacuity cover, which Kani reports outside the `** <failed> of <total> failed` count,
-/// so a run that proved the cover satisfied always prints `0 of 0`. [`launch_evidence`] exempts
-/// that kind from the rule and lets the cover decide.
-pub fn classify_kani_run(exited_successfully: bool, text: &str) -> KaniRunOutcome {
-    classify_transcript(exited_successfully, &KaniTranscript::parse(text), None)
+/// A precondition harness asserts nothing: its one property is its non-vacuity cover, so the
+/// zero-checks rule does not apply to it and the satisfied cover is its one successful check.
+pub fn classify_kani_run(
+    exited_successfully: bool,
+    report: Option<&[u8]>,
+    text: &str,
+    kind: Option<ObligationKind>,
+) -> Result<ClassifiedRun, KaniReportRefusal> {
+    let Some(report) = report else {
+        return if exited_successfully {
+            Err(KaniReportRefusal::Missing)
+        } else {
+            Ok(ClassifiedRun {
+                outcome: inconclusive(KaniInconclusiveReason::NoVerdict),
+                success_checks: 0,
+            })
+        };
+    };
+    let report = KaniHarnessReport::parse(report)?;
+    let success_checks =
+        report
+            .property_successes()
+            .saturating_add(if kind == Some(ObligationKind::Precondition) {
+                report.covers_satisfied()
+            } else {
+                0
+            });
+    Ok(ClassifiedRun {
+        outcome: classify_report(exited_successfully, &report, text, kind),
+        success_checks,
+    })
 }
 
-/// The classification rule (codegen#55), over the typed transcript only. Kani's prose is read in
-/// [`crate::kani_transcript`] and nowhere else.
-fn classify_transcript(
+/// The classification rule (codegen#55), over the typed report only.
+fn classify_report(
     exited_successfully: bool,
-    transcript: &KaniTranscript,
+    report: &KaniHarnessReport,
+    text: &str,
     kind: Option<ObligationKind>,
 ) -> KaniRunOutcome {
-    if exited_successfully && transcript.banner == KaniBanner::Successful {
-        let checks_gate = if kind == Some(ObligationKind::Precondition) {
-            None
-        } else {
-            transcript.checks_summary
-        };
-        if let Some(summary) = checks_gate {
-            let success_checks =
-                usize::try_from(summary.total.saturating_sub(summary.failed)).unwrap_or(usize::MAX);
-            let checks_outcome = KaniOutcome::proved_from_checks(
-                success_checks,
-                "kani_execution::classify_kani_run",
-                "checks_summary",
-            );
-            if checks_outcome.kind == KaniOutcomeKind::Inconclusive
-                && checks_outcome.code == "kani_vacuous_proof"
-            {
-                return KaniRunOutcome::Inconclusive {
-                    reason: KaniInconclusiveReason::VacuousProof,
-                };
-            }
+    match report.status {
+        KaniHarnessStatus::Success if exited_successfully => classify_success(report, kind),
+        KaniHarnessStatus::Success => inconclusive(KaniInconclusiveReason::NoVerdict),
+        KaniHarnessStatus::Failure if report.failed_unwinding() => {
+            inconclusive(KaniInconclusiveReason::UnwindBoundExhausted)
         }
-        return match transcript.cover_summary {
-            KaniCoverSummary::Counts {
-                satisfied, total, ..
-            } if total > 0 && satisfied == total => KaniRunOutcome::Verified,
-            KaniCoverSummary::Counts {
-                satisfied, total, ..
-            } if total > 0 => KaniRunOutcome::CoverUnsatisfied { satisfied, total },
-            KaniCoverSummary::Counts { .. }
-            | KaniCoverSummary::Malformed
-            | KaniCoverSummary::Absent => KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::MissingCoverSummary,
-            },
-        };
-    }
-    if matches!(transcript.banner, KaniBanner::Failed | KaniBanner::Both) {
-        if transcript
-            .failed_checks
-            .contains(&KaniFailedCheck::UnwindingAssertion)
+        KaniHarnessStatus::Failure => match report
+            .failed_property()
+            .then(|| counterexample_playback(text))
+            .flatten()
         {
-            return KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::UnwindBoundExhausted,
-            };
+            Some(counterexample) => KaniRunOutcome::Falsified { counterexample },
+            None => inconclusive(KaniInconclusiveReason::FailedWithoutCounterexample),
+        },
+    }
+}
+
+fn classify_success(report: &KaniHarnessReport, kind: Option<ObligationKind>) -> KaniRunOutcome {
+    if kind != Some(ObligationKind::Precondition) {
+        let checks_outcome = KaniOutcome::proved_from_checks(
+            usize::try_from(report.property_successes()).unwrap_or(usize::MAX),
+            "kani_execution::classify_kani_run",
+            "report_checks",
+        );
+        if checks_outcome.kind == KaniOutcomeKind::Inconclusive
+            && checks_outcome.code == "kani_vacuous_proof"
+        {
+            return inconclusive(KaniInconclusiveReason::VacuousProof);
         }
-        let counterexample = transcript
-            .playbacks
-            .iter()
-            .find(|playback| playback.target == KaniPlaybackTarget::Property);
-        return match counterexample {
-            Some(playback) => KaniRunOutcome::Falsified {
-                counterexample: playback.test.clone(),
-            },
-            None => KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::FailedWithoutCounterexample,
-            },
-        };
     }
-    KaniRunOutcome::Inconclusive {
-        reason: KaniInconclusiveReason::NoVerdict,
+    let (satisfied, total) = (report.covers_satisfied(), report.covers_total());
+    match (satisfied, total) {
+        (_, 0) => inconclusive(KaniInconclusiveReason::MissingCoverSummary),
+        (satisfied, total) if satisfied == total => KaniRunOutcome::Verified,
+        (satisfied, total) => KaniRunOutcome::CoverUnsatisfied {
+            satisfied: u64::from(satisfied),
+            total: u64::from(total),
+        },
     }
+}
+
+fn inconclusive(reason: KaniInconclusiveReason) -> KaniRunOutcome {
+    KaniRunOutcome::Inconclusive { reason }
+}
+
+/// Name of the report Kani exports into the request's target directory.
+pub const REPORT_FILE: &str = "quire-kani-report.json";
+
+/// Most bytes of the exported report this module reads. A report larger than this is refused,
+/// never truncated: a truncated report is not JSON, and reading part of one would invent a
+/// verdict.
+const REPORT_LIMIT: usize = 16 * 1024 * 1024;
+
+fn report_path(request: &KaniExecutionRequest<'_>) -> PathBuf {
+    request.target_directory.join(REPORT_FILE)
+}
+
+/// Removes a report left by an earlier run into the same target directory, so a run that
+/// exports none can never be read as the run before it.
+fn remove_stale_report(path: &Path) -> Result<(), KaniReportRefusal> {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => {
+            Err(KaniReportRefusal::Unreadable {
+                detail: error.to_string(),
+            })
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Reads the exported report, bounded by [`REPORT_LIMIT`]. `None` is a report that was never
+/// written; one that cannot be read, or is too large, is refused.
+fn read_report(path: &Path) -> Result<Option<Vec<u8>>, KaniReportRefusal> {
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(KaniReportRefusal::Unreadable {
+                detail: error.to_string(),
+            })
+        }
+    };
+    let mut bytes = Vec::new();
+    file.take(
+        u64::try_from(REPORT_LIMIT)
+            .unwrap_or(u64::MAX)
+            .saturating_add(1),
+    )
+    .read_to_end(&mut bytes)
+    .map_err(|error| KaniReportRefusal::Unreadable {
+        detail: error.to_string(),
+    })?;
+    if bytes.len() > REPORT_LIMIT {
+        return Err(KaniReportRefusal::TooLarge {
+            limit: REPORT_LIMIT,
+        });
+    }
+    Ok(Some(bytes))
 }
 
 fn read_file(tool: KaniTool, path: &Path) -> Result<Vec<u8>, KaniToolError> {
@@ -758,15 +868,11 @@ mod tests {
     const COVER_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `cover`: \"contract assumptions are jointly satisfiable\"\n\n#[test]\nfn kani_concrete_playback_h_1() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![0, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
     const ASSERTION_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `assertion`: \"|post_state: &i64| *post_state <= 5\"\n\n#[test]\nfn kani_concrete_playback_h_2() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![8, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
 
-    /// A state-clause harness reports the contract role of what it proves, so execution
-    /// evidence tells an operation-contract proof from a frame-effect proof.
-    ///
-    /// Trace: TC-027
-    #[test]
-    fn tc_027_a_state_frame_harness_reports_the_kind_of_what_it_proves() {
-        use crate::state_frame::{
-            StateComparison, StateFrameIdentity, StateFrameProperty, StateFrameScope,
-        };
+    fn state_frame_harness(
+        property: crate::state_frame::StateFrameProperty,
+        options: Vec<String>,
+    ) -> StateFrameHarness {
+        use crate::state_frame::{StateFrameIdentity, StateFrameScope};
         let id = |digit: &str| -> quire_contract_ir::CheckedNodeId {
             serde_json::from_value(serde_json::json!({
                 "domain": "quire.checked-semantic-node/v1",
@@ -774,7 +880,7 @@ mod tests {
             }))
             .expect("a node id")
         };
-        let harness = |property| StateFrameHarness {
+        StateFrameHarness {
             identity: StateFrameIdentity {
                 clause: id("1"),
                 scope: StateFrameScope {
@@ -791,11 +897,21 @@ mod tests {
                 harness_symbol: "check".to_owned(),
                 solver: "cadical".to_owned(),
                 unwind: 4,
-                options: Vec::new(),
+                options,
             },
             rust: Artifact::new("src/generated/m.rs".to_owned(), String::new()),
             record: Artifact::new("kani-obligations/m.json".to_owned(), String::new()),
-        };
+        }
+    }
+
+    /// A state-clause harness reports the contract role of what it proves, so execution
+    /// evidence tells an operation-contract proof from a frame-effect proof.
+    ///
+    /// Trace: TC-027
+    #[test]
+    fn tc_027_a_state_frame_harness_reports_the_kind_of_what_it_proves() {
+        use crate::state_frame::{StateComparison, StateFrameProperty};
+        let harness = |property| state_frame_harness(property, Vec::new());
         let contract = harness(StateFrameProperty::Postcondition {
             field: "balance".to_owned(),
             comparison: StateComparison::Ge,
@@ -815,36 +931,70 @@ mod tests {
         );
     }
 
-    /// Success is `Verified` only with every cover satisfied, for every obligation kind; a
-    /// vacuous run is `CoverUnsatisfied`. Summaries are Kani 0.67.0's own output. The parametrized
-    /// table's last case is the exact transcript measured running the IR-217 scalar harness for
-    /// node 1001 under `cargo kani --unwind 16` capped at 12 GB (IR-220): CBMC's own
-    /// out-of-memory abort prints the identical `VERIFICATION:- FAILED` banner a real
-    /// counterexample does, so a test asserting on that banner directly -- as
-    /// `bounded_kani_corpus.rs` did before IR-220 -- would report success on a run that decided
-    /// zero properties. Fed to `classify_kani_run` this transcript must not be `Falsified`.
+    /// A report of one harness, as the checks Kani listed for it.
+    fn report(status: &str, checks: &[(&str, &str)]) -> Vec<u8> {
+        let checks: Vec<_> = checks
+            .iter()
+            .map(|(status, category)| serde_json::json!({ "status": status, "category": category }))
+            .collect();
+        serde_json::to_vec(&serde_json::json!({
+            "metadata": { "version": "1.0" },
+            "verification_results": {
+                "results": [{ "harness_id": "m::h", "status": status, "checks": checks }]
+            }
+        }))
+        .unwrap()
+    }
+
+    fn classify(
+        exited_successfully: bool,
+        report: Option<&[u8]>,
+        text: &str,
+        kind: Option<ObligationKind>,
+    ) -> KaniRunOutcome {
+        classify_kani_run(exited_successfully, report, text, kind)
+            .expect("a readable report")
+            .outcome
+    }
+
+    const PASSED: (&str, &str) = ("Success", "assertion");
+    const COVER_OK: (&str, &str) = ("Satisfied", "cover");
+    const COVER_NO: (&str, &str) = ("Unsatisfiable", "cover");
+
+    /// Only a successful report with every cover satisfied is verified; each other shape of run
+    /// settles on its own outcome or reason.
     ///
     /// Trace: FR-017-AC-4, FR-017-AC-5, TC-027
     #[test]
     fn tc_027_run_classification_never_defaults_to_verified() {
-        let verified = format!(
-            "SUMMARY:\n ** 0 of 43 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n{COVER_PLAYBACK}"
-        );
-        assert_eq!(classify_kani_run(true, &verified), KaniRunOutcome::Verified);
-        // Jointly unsatisfiable requires: every check succeeds, the ensures is unreachable, and
-        // the cover after the contract call is unreachable. Reproduced under Kani 0.67.0.
-        let vacuous = "SUMMARY:\n ** 0 of 49 failed (1 unreachable)\n\n ** 0 of 1 cover properties satisfied (1 unreachable)\n\n\nVERIFICATION:- SUCCESSFUL\n";
+        let verified = report("Success", &[PASSED, COVER_OK]);
         assert_eq!(
-            classify_kani_run(true, vacuous),
+            classify(true, Some(&verified), COVER_PLAYBACK, None),
+            KaniRunOutcome::Verified
+        );
+        // A contract whose requires are jointly unsatisfiable: every check but one is reachable,
+        // and the cover after the contract call is not.
+        assert_eq!(
+            classify(
+                true,
+                Some(&report(
+                    "Success",
+                    &[PASSED, ("Unreachable", "assertion"), COVER_NO]
+                )),
+                "",
+                None
+            ),
             KaniRunOutcome::CoverUnsatisfied {
                 satisfied: 0,
                 total: 1
             }
         );
         assert_eq!(
-            classify_kani_run(
+            classify(
                 true,
-                " ** 1 of 2 cover properties satisfied\nVERIFICATION:- SUCCESSFUL"
+                Some(&report("Success", &[PASSED, COVER_OK, COVER_NO])),
+                "",
+                None
             ),
             KaniRunOutcome::CoverUnsatisfied {
                 satisfied: 1,
@@ -852,221 +1002,265 @@ mod tests {
             }
         );
         // The failure's counterexample is the assertion playback, not the cover playback.
-        let falsified = format!(
-            "SUMMARY:\n ** 1 of 43 failed\nFailed Checks: |post_state: &i64| *post_state <= 5\n\n ** 1 of 1 cover properties satisfied\n\nVERIFICATION:- FAILED\n{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"
-        );
+        let falsified = report("Failure", &[("Failure", "assertion"), COVER_OK]);
         assert!(matches!(
-            classify_kani_run(false, &falsified),
+            classify(false, Some(&falsified), &format!("{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"), None),
             KaniRunOutcome::Falsified { counterexample }
                 if counterexample.contains("Check for `assertion`") && !counterexample.contains("Check for `cover`")
         ));
-        for (success, text, expected) in [
+        for (success, report, text, expected) in [
             (
                 false,
-                format!("VERIFICATION:- FAILED\n{COVER_PLAYBACK}"),
+                Some(falsified.clone()),
+                COVER_PLAYBACK,
                 KaniInconclusiveReason::FailedWithoutCounterexample,
             ),
+            // A failed run with no failed property is not a counterexample, whatever it printed.
             (
                 false,
-                "error[E0308]: mismatched types".to_owned(),
+                Some(report("Failure", &[("Undetermined", "assertion"), COVER_OK])),
+                ASSERTION_PLAYBACK,
+                KaniInconclusiveReason::FailedWithoutCounterexample,
+            ),
+            // No report and a failed exit: a build or launcher failure.
+            (
+                false,
+                None,
+                "error[E0308]: mismatched types",
                 KaniInconclusiveReason::NoVerdict,
             ),
-            // Success text from a process that exited unsuccessfully is not success.
-            (false, verified.clone(), KaniInconclusiveReason::NoVerdict),
+            // A report of success from a process that exited unsuccessfully is not success.
+            (false, Some(verified.clone()), "", KaniInconclusiveReason::NoVerdict),
             (
                 true,
-                "VERIFICATION:- SUCCESSFUL".to_owned(),
+                Some(report("Success", &[PASSED])),
+                "",
                 KaniInconclusiveReason::MissingCoverSummary,
             ),
-            (
-                true,
-                " ** 0 of 0 cover properties satisfied\nVERIFICATION:- SUCCESSFUL".to_owned(),
-                KaniInconclusiveReason::MissingCoverSummary,
-            ),
-            (
-                true,
-                " ** 1 of 1 cover properties satisfied (garbage)\nVERIFICATION:- SUCCESSFUL"
-                    .to_owned(),
-                KaniInconclusiveReason::MissingCoverSummary,
-            ),
-            // CBMC's own out-of-memory abort prints the identical VERIFICATION:- FAILED banner
-            // a real counterexample does, with zero properties ever decided. Exact transcript
-            // measured running the IR-217 scalar harness for node 1001 under `cargo kani
-            // --unwind 16` capped at 12 GB (IR-220): fed to the raw-banner check this repo's
-            // own bounded_kani_corpus.rs test used before this change, this transcript passes;
-            // fed to classify_kani_run it must not be Falsified.
+            // CBMC's own out-of-memory abort writes no report and exits unsuccessfully, with zero
+            // properties ever decided (IR-220): it is never falsified.
             (
                 false,
-                "Runtime Symex: 294.218s\n\
-                 size of program expression: 980453 steps\n\
-                 Generated 41018 VCC(s), 12121 remaining after simplification\n\
-                 Runtime Convert SSA: 15.3149s\n\
-                 Running propositional reduction\n\
-                 Post-processing\n\
-                 Out of memory\n\
-                 \n\
-                 CBMC failed with status 6\n\
-                 VERIFICATION:- FAILED\n\
-                 \n\
-                 Manual Harness Summary:\n\
-                 Verification failed for - kob_n1001::proof\n\
-                 Complete - 0 successfully verified harnesses, 1 failures, 1 total.\n"
-                    .to_owned(),
-                KaniInconclusiveReason::FailedWithoutCounterexample,
+                None,
+                "Runtime Convert SSA: 15.3149s\nOut of memory\n\nCBMC failed with status 6\nVERIFICATION:- FAILED\n",
+                KaniInconclusiveReason::NoVerdict,
             ),
         ] {
             assert_eq!(
-                classify_kani_run(success, &text),
+                classify(success, report.as_deref(), text, None),
                 KaniRunOutcome::Inconclusive { reason: expected },
                 "{text}"
             );
         }
     }
 
-    /// A transcript reporting zero total checks (`** 0 of 0 failed`) alongside a satisfied 1-of-1
-    /// cover and `VERIFICATION:- SUCCESSFUL` is `Inconclusive` under the `VacuousProof` reason,
-    /// never `Verified`.
+    /// A report listing no successful check is inconclusive under `VacuousProof`, never verified,
+    /// even with every cover satisfied.
     ///
     /// Trace: FR-017-AC-13, TC-027
     #[test]
-    fn a_zero_total_checks_summary_is_inconclusive_not_verified_even_with_every_cover_satisfied() {
-        let vacuous_by_checks = "SUMMARY:\n ** 0 of 0 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
+    fn a_report_with_no_successful_check_is_inconclusive_not_verified_even_with_every_cover_satisfied(
+    ) {
+        let vacuous = report("Success", &[COVER_OK]);
+        let result = classify_kani_run(true, Some(&vacuous), "", None).unwrap();
         assert_eq!(
-            classify_kani_run(true, vacuous_by_checks),
+            result.outcome,
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::VacuousProof
             },
-            "zero total checks must not be Verified merely because covers were satisfied"
+            "zero successful checks must not be Verified merely because covers were satisfied"
         );
-
-        // A nonzero, fully-successful checks line does not trip the new gate: the existing
-        // cover-based classification still governs, unchanged.
-        let genuinely_verified = "SUMMARY:\n ** 0 of 5 failed\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
-        assert_eq!(
-            classify_kani_run(true, genuinely_verified),
-            KaniRunOutcome::Verified
-        );
-
-        // A transcript with no checks-failed line at all (older or differently shaped output) is
-        // unaffected: the cover-only classification still applies exactly as before.
-        let no_checks_line = " ** 1 of 1 cover properties satisfied\nVERIFICATION:- SUCCESSFUL";
-        assert_eq!(
-            classify_kani_run(true, no_checks_line),
-            KaniRunOutcome::Verified
-        );
+        assert_eq!(result.success_checks, 0);
+        // Checks that are not successes do not count toward the proof.
+        for status in ["Unreachable", "Undetermined", "Unknown"] {
+            assert_eq!(
+                classify(
+                    true,
+                    Some(&report("Success", &[(status, "assertion"), COVER_OK])),
+                    "",
+                    None
+                ),
+                KaniRunOutcome::Inconclusive {
+                    reason: KaniInconclusiveReason::VacuousProof
+                },
+                "{status}"
+            );
+        }
+        // One successful check is enough for the cover to decide.
+        let proved = classify_kani_run(
+            true,
+            Some(&report("Success", &[PASSED, PASSED, COVER_OK])),
+            "",
+            None,
+        )
+        .unwrap();
+        assert_eq!(proved.outcome, KaniRunOutcome::Verified);
+        assert_eq!(proved.success_checks, 2);
     }
 
-    /// A precondition harness asserts nothing; its only property is its cover, which Kani keeps out
-    /// of the checks count. The same `0 of 0` transcript that is a vacuous proof for any other
-    /// harness therefore decides by the cover alone for a precondition harness.
+    /// A precondition harness asserts nothing; its only property is its cover. The same report
+    /// that is a vacuous proof for any other harness therefore decides by the cover alone for a
+    /// precondition harness, whose satisfied cover is its one successful check.
     ///
     /// Trace: FR-017-AC-13, TC-027
     #[test]
     fn a_precondition_harness_with_no_checks_is_decided_by_its_cover_not_the_zero_checks_rule() {
-        let run = |kind: Option<ObligationKind>, cover: &str| {
-            let text =
-                format!("SUMMARY:\n ** 0 of 0 failed\n\n{cover}\n\n\nVERIFICATION:- SUCCESSFUL\n");
+        let run = |kind: Option<ObligationKind>, checks: &[(&str, &str)]| {
             launch_evidence(
                 LaunchOutcome::Completed {
                     exited_successfully: true,
                     exit_code: Some(0),
-                    text,
+                    text: String::new(),
                 },
+                Some(&report("Success", checks)),
                 kind,
             )
+            .unwrap()
             .0
         };
-        let satisfied = " ** 1 of 1 cover properties satisfied";
+        let satisfied = run(Some(ObligationKind::Precondition), &[COVER_OK]);
+        assert_eq!(satisfied.outcome, KaniRunOutcome::Verified);
+        assert_eq!(satisfied.success_checks, 1);
+        for kind in [Some(ObligationKind::Postcondition), None] {
+            assert_eq!(
+                run(kind, &[COVER_OK]).outcome,
+                KaniRunOutcome::Inconclusive {
+                    reason: KaniInconclusiveReason::VacuousProof
+                }
+            );
+        }
         assert_eq!(
-            run(Some(ObligationKind::Precondition), satisfied),
-            KaniRunOutcome::Verified
-        );
-        assert_eq!(
-            run(Some(ObligationKind::Postcondition), satisfied),
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::VacuousProof
-            }
-        );
-        assert_eq!(
-            run(None, satisfied),
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::VacuousProof
-            }
-        );
-        assert_eq!(
-            run(
-                Some(ObligationKind::Precondition),
-                " ** 0 of 1 cover properties satisfied"
-            ),
+            run(Some(ObligationKind::Precondition), &[COVER_NO]).outcome,
             KaniRunOutcome::CoverUnsatisfied {
                 satisfied: 0,
                 total: 1
             }
         );
         assert_eq!(
-            run(Some(ObligationKind::Precondition), ""),
+            run(Some(ObligationKind::Precondition), &[]).outcome,
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::MissingCoverSummary
             }
         );
     }
 
-    /// The checks-failed line's parenthetical is not always `unreachable`: this repository's own
-    /// `tc_027_an_exhausted_unwind_bound_is_inconclusive_not_falsified` fixture below carries a
-    /// real `(38 undetermined)` suffix on a *different* (failed) transcript. Before this test,
-    /// `checks_summary` only recognised `unreachable` — a zero-success `SUCCESS` transcript whose
-    /// parenthetical instead said `undetermined` would fail to parse, silently fall through past
-    /// the vacuity gate entirely, and be classified purely from the (here, satisfied) cover line
-    /// as `Verified`, the exact defect agent-ix/quire-contract-codegen#99 exists to close.
-    #[test]
-    fn a_checks_summary_with_an_undetermined_parenthetical_still_routes_through_the_vacuity_gate() {
-        let vacuous_with_undetermined_suffix = "SUMMARY:\n ** 0 of 0 failed (0 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
-        assert_eq!(
-            classify_kani_run(true, vacuous_with_undetermined_suffix),
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::VacuousProof
-            },
-            "an `undetermined` parenthetical must not be treated as an unparseable line"
-        );
-
-        // Nonzero success checks with an `undetermined` parenthetical still passes through to
-        // `Verified`, unaffected — the parenthetical is metadata, not itself a check outcome.
-        let genuinely_verified_with_undetermined_suffix = "SUMMARY:\n ** 0 of 5 failed (2 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
-        assert_eq!(
-            classify_kani_run(true, genuinely_verified_with_undetermined_suffix),
-            KaniRunOutcome::Verified
-        );
-
-        // A word this module does not recognise still falls through to the cover-only path,
-        // exactly like having no parenthetical at all — parsing stays fail-closed rather than
-        // guessing at Kani's full vocabulary.
-        let unrecognised_word = "SUMMARY:\n ** 0 of 0 failed (0 somethingelse)\n\n ** 1 of 1 cover properties satisfied\n\n\nVERIFICATION:- SUCCESSFUL\n";
-        assert_eq!(
-            classify_kani_run(true, unrecognised_word),
-            KaniRunOutcome::Verified
-        );
-    }
-
-    /// An exhausted unwind bound is inconclusive even when Kani prints a playback. The output
-    /// is Kani 0.67.0's for a loop past `--unwind 4`.
+    /// An exhausted unwind bound is inconclusive even when Kani prints a playback and a
+    /// property also failed; a succeeded unwinding check is not a failure.
     ///
     /// Trace: FR-017-AC-5, TC-027
     #[test]
     fn tc_027_an_exhausted_unwind_bound_is_inconclusive_not_falsified() {
-        let unwound = format!(
-            "VERIFICATION RESULT:\n ** 1 of 39 failed (38 undetermined)\n\n ** 1 of 1 cover properties satisfied\n\nFailed Checks: unwinding assertion loop 0\n File: \"src/lib.rs\", line 10, in looping\n\nVERIFICATION:- FAILED\n[Kani] info: Verification output shows one or more unwinding failures.\n{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"
+        let unwound = report(
+            "Failure",
+            &[
+                ("Failure", "unwind"),
+                ("Undetermined", "assertion"),
+                ("Failure", "assertion"),
+                COVER_OK,
+            ],
         );
         assert_eq!(
-            classify_kani_run(false, &unwound),
+            classify(
+                false,
+                Some(&unwound),
+                &format!("{COVER_PLAYBACK}{ASSERTION_PLAYBACK}"),
+                None
+            ),
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::UnwindBoundExhausted
             }
         );
-        // A succeeded unwinding check in the results listing is not a failure.
-        let listed = format!(
-            "Check 1: f.unwind.1\n\t - Status: SUCCESS\n\t - Description: \"unwinding assertion loop 0\"\n ** 1 of 1 cover properties satisfied\nVERIFICATION:- SUCCESSFUL\n{COVER_PLAYBACK}"
+        let listed = report("Success", &[("Success", "unwind"), PASSED, COVER_OK]);
+        assert_eq!(
+            classify(true, Some(&listed), COVER_PLAYBACK, None),
+            KaniRunOutcome::Verified
         );
-        assert_eq!(classify_kani_run(true, &listed), KaniRunOutcome::Verified);
+    }
+
+    /// A run that exits successfully but exports no report, and every report this crate cannot
+    /// read exactly, is a refusal rather than an outcome: the result is never
+    /// `Inconclusive` by default.
+    ///
+    /// Trace: FR-017-AC-18, TC-027
+    #[test]
+    fn tc_027_an_unreadable_or_missing_report_is_refused_never_inconclusive() {
+        assert_eq!(
+            classify_kani_run(true, None, "VERIFICATION:- SUCCESSFUL", None),
+            Err(KaniReportRefusal::Missing)
+        );
+        for exited in [true, false] {
+            assert!(matches!(
+                classify_kani_run(exited, Some(b"VERIFICATION:- SUCCESSFUL"), "", None),
+                Err(KaniReportRefusal::Malformed { .. })
+            ));
+        }
+    }
+
+    /// The exported report is read bounded: a file over the limit is refused, and a report that
+    /// was never written is `None`.
+    ///
+    /// Trace: FR-017-AC-19, TC-027
+    #[test]
+    fn tc_027_the_report_is_read_bounded_and_refused_not_truncated() {
+        let directory = discover_scratch("report-bound");
+        let path = directory.join(REPORT_FILE);
+        assert_eq!(read_report(&path), Ok(None));
+        fs::write(&path, vec![b' '; REPORT_LIMIT]).unwrap();
+        assert_eq!(
+            read_report(&path).map(|r| r.map(|b| b.len())),
+            Ok(Some(REPORT_LIMIT))
+        );
+        fs::write(&path, vec![b' '; REPORT_LIMIT + 1]).unwrap();
+        assert_eq!(
+            read_report(&path),
+            Err(KaniReportRefusal::TooLarge {
+                limit: REPORT_LIMIT
+            })
+        );
+        remove_stale_report(&path).unwrap();
+        assert_eq!(read_report(&path), Ok(None));
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    /// The command exports the report to the request's target directory after the harness
+    /// identity's options, which are passed unchanged.
+    ///
+    /// Trace: FR-017-AC-6, FR-017-AC-19, TC-027
+    #[test]
+    fn tc_027_the_launch_exports_the_report_after_the_harness_options() {
+        let harness = state_frame_harness(
+            crate::state_frame::StateFrameProperty::Frame {
+                granted: Vec::new(),
+                checked: Vec::new(),
+            },
+            vec![
+                "--harness".to_owned(),
+                "check".to_owned(),
+                "--exact".to_owned(),
+            ],
+        );
+        let installation = KaniInstallation {
+            launcher: PathBuf::from("cargo-kani"),
+        };
+        let request = KaniExecutionRequest {
+            installation: &installation,
+            harness: KaniExecutableHarness::from(&harness),
+            crate_directory: Path::new("/crate"),
+            target_directory: Path::new("/target"),
+            timeout: Duration::from_secs(1),
+        };
+        let (arguments, _) = kani_launch_command(&request);
+        let options = request.harness.view().options;
+        assert_eq!(arguments[1..=options.len()], options[..]);
+        assert_eq!(
+            arguments[options.len() + 1..],
+            [
+                "-Z",
+                "unstable-options",
+                "--export-json",
+                "/target/quire-kani-report.json"
+            ]
+        );
     }
 
     /// A scratch directory unique to this process and this call, so parallel tests never
@@ -1294,14 +1488,16 @@ mod tests {
     /// A timed-out launch maps to no exit code and `Inconclusive { reason: TimedOut }`.
     #[test]
     fn a_timed_out_launch_carries_no_exit_code_into_the_evidence() {
-        let (outcome, exit_code) = launch_evidence(LaunchOutcome::TimedOut, None);
+        // A timed-out run is killed before it writes a report, so none is consulted.
+        let (run, exit_code) = launch_evidence(LaunchOutcome::TimedOut, None, None).unwrap();
         assert_eq!(exit_code, None);
         assert_eq!(
-            outcome,
+            run.outcome,
             KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::TimedOut
             }
         );
+        assert_eq!(run.success_checks, 0);
     }
 
     /// Regression coverage for the polling/draining plumbing `run_launcher_with_timeout` added:
@@ -1331,7 +1527,7 @@ mod tests {
     }
 
     /// A stream longer than the capture limit is drained to its end but only its tail is kept,
-    /// because Kani prints its verdict last; the launcher's own memory is bounded by the limit,
+    /// because Kani prints the playback it ends with last; the launcher's own memory is bounded by the limit,
     /// not by what the child prints.
     ///
     /// Trace: FR-017-AC-14, TC-027
