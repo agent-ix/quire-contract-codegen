@@ -1222,6 +1222,92 @@ mod tests {
         let _ = fs::remove_dir_all(directory);
     }
 
+    /// Drives `execute_kani_obligation` against a launcher stand-in that exits with `status` and,
+    /// when given a report, writes it where `--export-json` names. `stale` is left in the target
+    /// directory beforehand, as an earlier run would leave it.
+    fn run_stand_in(
+        name: &str,
+        status: i32,
+        exported: Option<&str>,
+        stale: Option<&str>,
+    ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = discover_scratch(name);
+        let crate_directory = directory.join("crate");
+        let target_directory = directory.join("target");
+        fs::create_dir_all(crate_directory.join("src")).unwrap();
+        fs::create_dir_all(&target_directory).unwrap();
+        fs::write(crate_directory.join("src/lib.rs"), "").unwrap();
+        if let Some(stale) = stale {
+            fs::write(target_directory.join(REPORT_FILE), stale).unwrap();
+        }
+        if let Some(exported) = exported {
+            fs::write(directory.join("exported.json"), exported).unwrap();
+        }
+        let launcher = directory.join("cargo-kani");
+        let copy = if exported.is_some() {
+            format!(
+                "cp '{}' \"$last\"",
+                directory.join("exported.json").display()
+            )
+        } else {
+            ":".to_owned()
+        };
+        fs::write(
+            &launcher,
+            format!("#!/bin/sh\nfor last; do :; done\n{copy}\nexit {status}\n"),
+        )
+        .unwrap();
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+        let harness = state_frame_harness(
+            crate::state_frame::StateFrameProperty::Frame {
+                granted: Vec::new(),
+                checked: Vec::new(),
+            },
+            Vec::new(),
+        );
+        let result = execute_kani_obligation(&KaniExecutionRequest {
+            installation: &KaniInstallation { launcher },
+            harness: KaniExecutableHarness::from(&harness),
+            crate_directory: &crate_directory,
+            target_directory: &target_directory,
+            timeout: Duration::from_secs(30),
+        });
+        let _ = fs::remove_dir_all(directory);
+        result
+    }
+
+    /// A run's report is read from the file the launch names, the previous run's file is never
+    /// read in its place, and a successful exit without a report is refused.
+    ///
+    /// Trace: FR-017-AC-18, FR-017-AC-19, TC-027
+    #[test]
+    fn tc_027_execution_reads_only_the_report_its_own_run_exported() {
+        let verified = String::from_utf8(report("Success", &[PASSED, COVER_OK])).unwrap();
+        let evidence = run_stand_in("exported", 0, Some(&verified), None).unwrap();
+        assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
+        assert_eq!(evidence.success_checks, 1);
+        assert_eq!(evidence.exit_code, Some(0));
+        assert!(matches!(
+            run_stand_in("missing", 0, None, None),
+            Err(KaniExecutionRefusal::Report(KaniReportRefusal::Missing))
+        ));
+        let evidence = run_stand_in("stale", 1, None, Some(&verified)).unwrap();
+        assert_eq!(
+            evidence.outcome,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::NoVerdict
+            },
+            "a report left by an earlier run is not this run's verdict"
+        );
+        assert!(matches!(
+            run_stand_in("garbage", 1, Some("not json"), None),
+            Err(KaniExecutionRefusal::Report(
+                KaniReportRefusal::Malformed { .. }
+            ))
+        ));
+    }
+
     /// The command exports the report to the request's target directory after the harness
     /// identity's options, which are passed unchanged.
     ///
