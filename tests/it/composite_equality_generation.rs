@@ -546,6 +546,39 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     }
 }
 
+/// Trace: FR-018-AC-8, TC-029. UNBACKED today: an equality over a recursive record type (`R_SELF`,
+/// a record reaching itself through an option) is refused by Contract IR at admission, so no oracle
+/// is generated for it and the generated-crate agreement over a recursive type has no evidence.
+/// IR counts the text leaves of the compared type and treats a type that reaches itself as
+/// undecidable, although QSL emits a `recursion:<n>` leaf for it; unblocked by IR admitting a
+/// recursive compared type. This pins the exact refusal (code, cause, pointer, locus).
+#[test]
+fn tc_029_a_recursive_compared_type_is_refused_by_ir_today() {
+    let (result, wire) = recursive_self_package().read();
+    let node_id = code_id(E_SELF);
+    let position = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .expect("the node is in the wire");
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("IR now admits a recursive compared type ({result:?}); add it to the corpus");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::OperatorIneligible)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!(
+            "/semantic_graph/nodes/{position}/body/operation/leaves"
+        ))
+    );
+    assert_eq!(refusal.locus, Some(node_id));
+}
+
 /// Trace: FR-018-AC-7, TC-029. The direct `reference` composite form: an equality over two
 /// `REF_TYPE` operands is refused by Contract IR at admission, before this generator runs, so the
 /// generator's `QuireSpecLanguage120` blocker is not reached for it today. This pins the exact
@@ -660,7 +693,6 @@ pub(super) fn agreement_names(oracles: &CompositeEqualityOracles) -> String {
         (E_TUPLE, "equal", "e_tuple_equal"),
         (E_OPTION, "equal", "e_option_equal"),
         (E_COLLECTION, "equal", "e_collection_equal"),
-        (E_SELF, "equal", "e_self_equal"),
         (E_PAIR_OF_POINTS, "equal", "e_pair_of_points_equal"),
         (E_RECORD, "not_equal", "e_record_not_equal"),
         (E_TEXT, "equal", "e_text_equal"),

@@ -39,6 +39,10 @@ use generated::{
     rational_divide,
     binary32_numeric_equal,
     enum_equal,
+    enum_less,
+    enum_at_most,
+    enum_greater,
+    enum_at_least,
     integer_at_most,
     quantity_power,
     text_greater,
@@ -98,10 +102,14 @@ const TEXT_COMPARISONS: [Compare<Text>; 6] = [
     text_greater,
     text_at_least,
 ];
-/// Only `=` and `!=`: `enum.lt/le/gt/ge` need operand family `ordered_enum`, which Contract IR
-/// resolves for no node, so those four oracles are not generated today
-/// (`tc_024_text_admission_and_ordered_enum_corpus_is_refused_by_ir_today`).
-const ENUM_COMPARISONS: [Compare<EnumValue>; 2] = [enum_equal, enum_not_equal];
+const ENUM_COMPARISONS: [Compare<EnumValue>; 6] = [
+    enum_equal,
+    enum_not_equal,
+    enum_less,
+    enum_at_most,
+    enum_greater,
+    enum_at_least,
+];
 const QUANTITY_COMPARISONS: [Compare<Quantity>; 6] = [
     quantity_equal,
     quantity_not_equal,
@@ -387,7 +395,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
     const T14: [u64; 10] = [0, 0, 0, 5, 3, 0, 0, 2, 3, 1];
     // The six `[0, 4]` text admissions are not generated today: no catalogued `convert`
     // identity admits a text operand, so Contract IR refuses their nodes
-    // (`tc_024_text_admission_and_ordered_enum_corpus_is_refused_by_ir_today`).
+    // (`tc_024_text_admission_corpus_is_refused_by_ir_today`).
     let mut comparisons = 0_usize;
     for (o, compare) in TEXT_COMPARISONS.into_iter().enumerate() {
         for p in 0..6_usize {
@@ -451,7 +459,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
             }
         }
     }
-    assert_eq!(enums, 10 * 10 * 2 * 2);
+    assert_eq!(enums, 10 * 10 * 6 * 2);
     println!("TC-186 agreement: {comparisons} text comparisons, {enums} enum comparisons");
 }
 

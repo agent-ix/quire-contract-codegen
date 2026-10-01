@@ -28,7 +28,7 @@ type: TestMatrix
 | FR-013 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-4 | TC-022 | ✅ Covered |
 | FR-013 | FR-013-AC-5 | Inspection | ✅ Covered |
 | FR-014 | FR-014-AC-1, FR-014-AC-3, FR-014-AC-5 through FR-014-AC-11 | TC-024 | ✅ Covered |
-| FR-014 | FR-014-AC-2 | TC-024 | ⚠️ Partially covered; every family generates and agrees with the runtime except text admission and the four ordering enum comparisons (`enum.lt/le/gt/ge`), which are refused today and have no generated-crate evidence. Text admission: Contract IR refuses the node because no catalogued `convert` identity takes a `text` operand; unblocked by a catalogued text-admission operation. Ordering enums: the catalog requires operand family `ordered_enum`, which Contract IR resolves for no node; unblocked by Contract IR resolving an `ordered: true` enum to it. `tc_024_text_admission_and_ordered_enum_corpus_is_refused_by_ir_today` pins each refusal |
+| FR-014 | FR-014-AC-2 | TC-024 | ⚠️ Partially covered; every family generates and agrees with the runtime except text admission, which is refused today and has no generated-crate evidence: Contract IR refuses the node because no catalogued `convert` identity takes a `text` operand (QSL lowers no text admission); unblocked by a catalogued text-admission operation. `tc_024_text_admission_corpus_is_refused_by_ir_today` pins each refusal |
 | FR-014 | FR-014-AC-4 | TC-024 | ⚠️ Partially covered; byte identity across repeated runs and request permutations and the claim-map order are asserted by regeneration; the criterion's remaining clause has no test |
 | FR-014 | FR-014-AC-12 | TC-024 | ⚠️ Partially covered; a descriptor naming a different catalogued operation is discharged, but the clause covering a descriptor naming an operation the catalogue has no entry for is a defensive branch no fixture reaches -- the only such state is a same-width IEEE conversion, which the package builder refuses to construct |
 | FR-014 | FR-014-AC-13 | TC-024 | ✅ Covered |
@@ -91,7 +91,7 @@ before the generator runs, and `tc_029_ac7_a_direct_reference_operand_is_refused
 refusal), but carries no `relation` or `protocol` node, so two
 of the eight named forms are untested. AC-8 requires a declaration refusal for "both recursion passes
 and a duplicate record field"; only the duplicate-field half is tested; no vector produces
-`DeclarationCause::Recursion` in either pass. AC-9's conversion-charge clause ("each conversion charge
+`DeclarationCause::Recursion` in either pass. A recursive record type (`E_SELF`) is refused by Contract IR at admission (its text-leaf count is undecidable for a type that reaches itself, although QSL emits a recursion leaf), so no oracle is generated for it; `tc_029_a_recursive_compared_type_is_refused_by_ir_today` pins the refusal, and the recursive generated-crate agreement vector is unbacked until IR admits such a type. AC-9's conversion-charge clause ("each conversion charge
 point in turn") is backed: `E_CONV_CHARGE` admits four conversion charge points —
 `DecimalOperands`, `DecimalScaleExpansion`, `DecimalArithmetic`, `DecimalResultRetain` — and each is
 denied in turn. Its counter clause ("every counter equals those of the same run stopped immediately

@@ -1403,23 +1403,13 @@ pub struct Expression {
     pub bounds: Vec<Bound>,
 }
 
-/// Index in `ComparisonOperator::ALL` of the first ordering comparison (`<`); `=` and `!=` precede it.
-const ORDERED_ENUM_FIRST: usize = 2;
-
-/// The corpus expressions Contract IR refuses `IllTyped`/`OperatorIneligible` at admission today,
-/// so they are outside [`corpus`] (one such node refuses the whole package):
-///
-/// - the six `TextAdmission` codes ([`TEXT_ADMISSIONS`]): `quire.op.numeric.convert` over a
-///   text operand. No catalogued `convert` identity takes `text`, and QSL lowers no text
-///   admission. Unblocked by a catalogued text-admission operation (a spec change) or by
-///   dropping the operation.
-/// - the four ordering enum comparisons (`enum.lt/le/gt/ge`): the catalog requires operand
-///   family `ordered_enum`, which Contract IR's `resolve_family` yields for no node. Unblocked
-///   by Contract IR resolving an `ordered: true` enum to `ordered_enum`.
-///
-/// `tc_024_text_admission_and_ordered_enum_corpus_is_refused_by_ir_today` pins the exact
-/// refusal of each; FR-014-AC-2's text-admission case and the enum ordering oracles have no
-/// generated-crate evidence until then.
+/// The six `TextAdmission` codes ([`TEXT_ADMISSIONS`]): Contract IR refuses each
+/// `IllTyped`/`OperatorIneligible` at admission today, so they are outside [`corpus`] (one such
+/// node refuses the whole package). `quire.op.numeric.convert` over a text operand: no
+/// catalogued `convert` identity takes `text`, and QSL lowers no text admission. Unblocked by a
+/// catalogued text-admission operation (a spec change) or by dropping the operation.
+/// `tc_024_text_admission_corpus_is_refused_by_ir_today` pins the exact refusal of each;
+/// FR-014-AC-2's text-admission case has no generated-crate evidence until then.
 pub fn refused_corpus() -> Vec<Expression> {
     use ExactScalarOperation as Op;
     let mut refused = Vec::new();
@@ -1434,18 +1424,6 @@ pub fn refused_corpus() -> Vec<Expression> {
             },
             vec![Bound::Text(0, 4, profile.as_str())],
         ));
-    }
-    for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {
-        if index >= ORDERED_ENUM_FIRST {
-            refused.push(expression(
-                ENUM_COMPARISONS[index],
-                BINARY,
-                ENUM2,
-                "boolean",
-                Op::EnumComparison { operator },
-                Vec::new(),
-            ));
-        }
     }
     refused
 }
@@ -1890,17 +1868,14 @@ pub fn corpus() -> Vec<Expression> {
             Op::TextComparison { operator },
             vec![TEXT],
         ));
-        // The ordering comparisons are in `refused_corpus`.
-        if index < ORDERED_ENUM_FIRST {
-            corpus.push(expression(
-                ENUM_COMPARISONS[index],
-                BINARY,
-                ENUM2,
-                "boolean",
-                Op::EnumComparison { operator },
-                Vec::new(),
-            ));
-        }
+        corpus.push(expression(
+            ENUM_COMPARISONS[index],
+            BINARY,
+            ENUM2,
+            "boolean",
+            Op::EnumComparison { operator },
+            Vec::new(),
+        ));
         corpus.push(expression(
             QUANTITY_COMPARISONS[index],
             BINARY,
@@ -2377,13 +2352,9 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
         arguments[1] = literal("integer", "1014");
     }
     // No catalogued `convert` identity accepts a `text` operand family
-    // (see `corpus_operation`'s `TextAdmission` arm), so this operand
-    // KNOWN REFUSED (IR-480): since IR resolves a literal operand's family
-    // through `literal.type`, this operand (a text literal under `numeric.convert`,
-    // which takes `exact_numeric`) is `OperatorIneligible` at admission; no catalogued
-    // `convert` identity accepts text. The comment below predates that.
-    // must be a literal -- IR's operand-family check never resolves a
-    // family for a literal argument, so the mismatch is never reached.
+    // (see `corpus_operation`'s `TextAdmission` arm), so Contract IR refuses
+    // these nodes at admission: they are built only for `refused_corpus_package`.
+    // The operand is a literal.
     let text_admission_type = if matches!(expression.operation, Op::TextAdmission { .. }) {
         Some(builder.dedicated_text_admission_type(&expression.bounds[0]))
     } else {
@@ -2414,37 +2385,6 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
             "value_kind": "text",
             "value": format!("a{}", expression.code),
         })];
-    }
-    // No node this corpus builds has a `resolve_family` path to
-    // `ordered_enum` (the enum type's own `scalar_type` form resolves
-    // only to `enum`; see Contract IR's `resolve_family`
-    // in `checked_package/v2/operations.rs`), so `enum.lt/le/gt/ge`'s
-    // `ordered_enum` operand family can never be satisfied by a
-    // `reference` argument here. Substituting literals for exactly the
-    // ordering comparisons (never `eq`/`ne`, which accept the
-    // `enum_kind` group `enum_member()` already resolves to) bypasses the
-    // family check the same way `TextAdmission` does above.
-    // KNOWN REFUSED (IR-480): IR resolves a literal typed by the enum to the `enum`
-    // family, and no node resolves to `ordered_enum`, which `enum.lt/le/gt/ge` require, so
-    // these four are `OperatorIneligible` at admission although the base enum is
-    // declared `ordered: true`.
-    if let Op::EnumComparison { operator } = expression.operation {
-        if !matches!(
-            operator,
-            ComparisonOperator::Equal | ComparisonOperator::NotEqual
-        ) {
-            // As with the `TextAdmission` literal above: a fixed pair
-            // here would give every ordering-comparison code among
-            // `ENUM_COMPARISONS` the same body (the differing
-            // `operation.identity` this expression's own operator
-            // picks still varies below, but folding `code` in too
-            // keeps this resilient to that identity ever coinciding
-            // across two ordering operators).
-            arguments = vec![
-                literal("enum", "OPEN"),
-                literal("enum", &format!("OPEN{}", expression.code)),
-            ];
-        }
     }
     let (catalog_operator, operation) = corpus_operation(&expression);
     // `TextAdmission` gets a dedicated `semantic_type` (see

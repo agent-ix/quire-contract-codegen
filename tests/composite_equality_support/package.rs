@@ -206,7 +206,7 @@ fn family_of(code: u32) -> &'static str {
 /// `family` operands to: Contract IR checks every operand's family against the operation's
 /// declared operands, so the identity must match the operands' own type. `text` carries its
 /// `text_profile` law and mode, selected by [`PackageBuilder::select_definition`]; `structural`
-/// carries the one leaf Contract IR requires of `quire.op.structural.eq`.
+/// carries no leaves here, see [`operation_for`].
 fn equality_operation(family: &str) -> Value {
     let plain = |identity: &str| {
         json!({
@@ -225,13 +225,28 @@ fn equality_operation(family: &str) -> Value {
             "member": null,
             "leaves": [],
         }),
-        "structural" => {
-            let mut operation = plain("quire.op.structural.eq");
-            operation["leaves"] = json!([{"path": ["recursion:0"], "laws": [], "mode": null}]);
-            operation
-        }
         other => plain(&format!("quire.op.{other}.eq")),
     }
+}
+
+/// The equality operation for operands of type `code`. A structural equality lists one leaf
+/// per `text` leaf of the compared type (FR-322), each with the `text_profile` law and mode, and
+/// none for a type with no text; Contract IR counts them against the type.
+fn operation_for(code: u32) -> Value {
+    let family = family_of(code);
+    let mut operation = equality_operation(family);
+    if family == "structural" {
+        operation["leaves"] = match code {
+            // `Tuple<Int, Text>`: the one text leaf is position 1.
+            TUP_PAIR => json!([{
+                "path": ["position:1"],
+                "laws": [{"role": "text_profile", "definition": text_profile_definition()}],
+                "mode": {"kind": "text_profile", "value": "nfc"},
+            }]),
+            _ => json!([]),
+        };
+    }
+    operation
 }
 
 /// The catalog's `text_profile` law definition, read from the catalog's home.
@@ -264,7 +279,7 @@ fn typed_operand(type_ref: Value) -> Value {
 /// every caller of this function must pass the same two type codes its
 /// descriptor declares as `source_type`, or the item refuses before
 /// generation rather than after. The `operation` is the equality FR-093 lowers
-/// the left operand's family to ([`equality_operation`]): Contract IR checks each
+/// the left operand's family to ([`operation_for`]): Contract IR checks each
 /// literal operand's family against it, so a body whose operands are not of that
 /// family is refused `OperatorIneligible` at admission. `result_type`
 /// defaults to `T_BOOLEAN`, the body's actual result type;
@@ -280,7 +295,7 @@ pub fn binary_body(left_type: u32, right_type: u32) -> Value {
 pub fn binary_body_with_result(left_type: u32, right_type: u32, result_type: u32) -> Value {
     application(
         "binary",
-        equality_operation(family_of(left_type)),
+        operation_for(left_type),
         result_type,
         vec![
             typed_operand(node_ref(&key(left_type))),
@@ -310,7 +325,7 @@ pub fn binary_body_converting(source: u32, target: u32, right_type: u32) -> Valu
     );
     application(
         "binary",
-        equality_operation(family_of(right_type)),
+        operation_for(right_type),
         T_BOOLEAN,
         vec![convert, typed_operand(node_ref(&key(right_type)))],
     )
@@ -598,6 +613,17 @@ pub fn direct_reference_package() -> PackageBuilder {
         "binary",
         binary_body(REF_TYPE, REF_TYPE),
     );
+    builder
+}
+
+/// [`corpus_package`] plus [`E_SELF`]: `quire.op.structural.eq` over two `R_SELF` operands, a
+/// record reaching itself through an option. Contract IR refuses it (the leaf count of a compared
+/// type that reaches itself is undecidable: `IllTyped`/`OperatorIneligible` at the operation's
+/// `leaves`), although QSL emits a `recursion:<n>` leaf for such a type, so it cannot be in the
+/// corpus; `tc_029_a_recursive_compared_type_is_refused_by_ir_today` pins the refusal.
+pub fn recursive_self_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    builder.application_code(E_SELF, "binary", binary_body(R_SELF, R_SELF));
     builder
 }
 
@@ -903,7 +929,6 @@ pub fn corpus_package() -> PackageBuilder {
         )
         .application_code(E_REFERENCE, "binary", binary_body(R_WITH_REF, R_WITH_REF))
         .application_code(E_CALL, "call", binary_body(T_INTEGER, T_INTEGER))
-        .application_code(E_SELF, "binary", binary_body(R_SELF, R_SELF))
         .application_code(
             E_CONV,
             "binary",
@@ -1037,12 +1062,6 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
             EqualityOperatorKind::Equal,
             typed(R_PAIR_OF_POINTS),
             typed(R_PAIR_OF_POINTS),
-        ),
-        item(
-            E_SELF,
-            EqualityOperatorKind::Equal,
-            typed(R_SELF),
-            typed(R_SELF),
         ),
         item(
             E_CONV,
