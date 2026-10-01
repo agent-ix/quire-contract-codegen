@@ -192,7 +192,8 @@ src/
       playback.rs             typed extraction of the concrete-playback block
     classify.rs               KaniRunOutcome, KaniInconclusiveReason, vacuity rule
     run/                      launch, capture, timeout, execute_kani_obligation
-    terminal.rs               the terminal-value maps (FR-029, FR-030)
+    terminal.rs               the terminal-value maps (FR-029, FR-030) and the public C-09 entry the
+                              driver calls, with the replay-outcome input type it defines
   replay/                     FR-016, FR-024
     witness.rs                types extracted playback entries against persisted bindings
     function.rs               was spine_replay
@@ -200,8 +201,7 @@ src/
   routed/                     FR-019, FR-022, FR-026
     capability.rs             was capability
     generate.rs               was routed_generation
-    adapter.rs                the adapter trait, its one Kani implementation, and the pairing of a
-                              run outcome with a replay result
+    adapter.rs                the adapter trait and its one Kani implementation
   publication/                FR-005
     publish.rs                write_bundle_atomic, destination state, published identity
 ```
@@ -277,9 +277,9 @@ Rules, each checkable:
 
 - A directory imports only the directories to its right. `strategy`, `evidence` and `kani` are peers
   and import none of each other. `kani` and `replay` import nothing from `routed`, and the adapter
-  trait is defined in `routed/adapter.rs` with the Kani implementation beside it. `routed` is the one
-  place that calls into both `kani` and `replay`, so it is the only place that can pair a run
-  outcome with a replay result.
+  trait is defined in `routed/adapter.rs` with the Kani implementation beside it. The driver
+  (`quire-driver`, outside this crate) pairs a Kani outcome with a replay result, as QSL's merged
+  ADR-011 T-13 says; no module of this crate does.
 - Imports use a module path (`use crate::core::artifact::Artifact`), never an item re-exported
   from the crate root. `lib.rs` is the only file that names a root re-export.
 - Inside `kani/` the order is `abi`, `census`, `identity`, then `generate` and `output`, then
@@ -330,9 +330,11 @@ families exist only over V1 (see Current state). Deleting the V1 arm without a V
 delete the families that step 4e makes the public entry. So the V2 input is a step of its own,
 before 4e (step 4c). Its design intent: a clause claim names a precondition, postcondition or
 invariant clause node of an admitted `CheckedPackageV2`, and the contract lowering reads that node
-and embeds the FR-014 oracle of its Boolean connectives and bounded-integer comparisons, as the
-scalar family embeds the oracle of its claim and as `state_frame` already reads postcondition
-clause nodes from V2. The exact input type is the spec change's to define. That change is an
+and embeds the FR-014 oracle of its Boolean connectives, bounded-integer comparisons and the
+integer arithmetic expressions in the clause body (the control's shape is a population-rule
+postcondition, `amount < 1000` implies `amount + 1 <= 1000`, so arithmetic in a clause is in
+scope, or the control cannot move onto this arm), as the scalar family embeds the oracle of its
+claim and as `state_frame` already reads postcondition clause nodes from V2. The exact input type is the spec change's to define. That change is an
 FR-015 amendment in this repository's spec lane. IR-364 does not carry it: IR-364 covers the V2
 strategy chain (FR-002, FR-004, FR-005, FR-008 to FR-013), not FR-015. I found no ticket for the
 FR-015 V2 contract input; the planner should file one.
@@ -344,22 +346,25 @@ What happens to the other generators:
 | `generate_kani_bundle` | Deleted at step 4f, after step 4e, the QSL-owned move of the QI exemplars and the control passing on the V2 contract arm (4c). Its public entry leaves `interface-001`. FR-003's optional stubbing was dropped by the IR-311 ruling. |
 | `kani_obligations` scalar, precondition, contract renderers | Become family lowerers; the template text moves into `render.rs`. Until 4c the precondition and contract families keep their V1 input. |
 | `state_frame` renderers | Become the frame lowerer. |
-| `bounded_kani_corpus` renderer | Renders through `render.rs` until QSL-353 lands, then its hand-built package lowerer is retired (step 4g). It returns no `KaniOutcome` at generation time: a verdict comes only from a run. |
+| `bounded_kani_corpus` renderer | Keeps its own template until QSL-353 lands (an interim exception, no cover); then its hand-built package lowerer is retired and its cases render through `render.rs` (step 4g). It returns no `KaniOutcome` at generation time: a verdict comes only from a run. |
 
 **Requirement (regression test the one generator must keep passing).** QSL's real-Kani arithmetic
-control, in QSL's exemplar tests (4 of 4) and recorded as QSL-342 QI #10, passes at every step of
-the migration, on the path that serves it at that step. A lowered `+` mutated to return
-`left + right + 1` must classify `Falsified`, and `decode_falsification` must name
-`amount_current = 999`. The unmutated control must prove with every cover satisfied. The planner
-reports that the control currently passes through `generate_kani_bundle`, a V1 path. Until the
-V2 contract arm exists (4c), that path stays and is the one the control runs through; step 4a
-lands the control as a CG-side real-Kani test on it, in the `make kani` lane, before any
-generator is touched. At 4c the control moves onto the V2 contract arm and must pass there, and
-only then may 4f delete the V1 path. The control's package comes from QSL's facade
-(`call_site(...).package`, or the source plus `qsl_replay`), not from a copied QI test or a
-QSL-emitted package file. I did not determine whether the control's clause is a contract-family
-clause or a scalar claim; if it is a scalar claim, it already has a V2 path and 4a runs it there.
-This AD did not run the control.
+control, recorded as QSL-342 QI #10, passes at every step of the migration, on the path that
+serves it at that step. A lowered `+` mutated to return `left + right + 1` must classify
+`Falsified`, and `decode_falsification` must name `amount_current = 999`. The unmutated control
+must prove with every cover satisfied. The control already exists in quire-integration, the
+repository above both CG and QSL (`tests/qsl_kani_exemplar.rs`, 4 of 4 exemplar tests; relayed,
+not checked here). That test is the regression requirement: it runs in a repository above both, so
+it needs no CG-side copy and no copied fixture, and each step's PR runs it against CG's branch. The
+planner reports that it currently passes through `generate_kani_bundle`, a V1 path. Until the V2
+contract arm exists (4c), that path stays and is the one the control runs through. At 4c the
+control moves onto the V2 contract arm and must pass there, and only then may 4f delete the V1
+path. A CG-side copy of the control is described only if the `qsl-replay` facade offers a way to
+build the package: CG may depend on `qsl-replay` only (`Cargo.toml`, QSL arch-lint T12-A), and the
+V1 control's package is built by `quire_spec_language::lowering::lower_for(.., IntegerIrV1)` in
+QSL's root crate (as the SR-662 review found; not checked here), which CG cannot call. If the
+facade offers no way, a CG-side control is a need routed to QSL, not a fixture. This AD did not
+run the control.
 
 ### The Kani run, report and witness (questions c and d)
 
@@ -385,8 +390,10 @@ Where the runner, report parser and witness decode sit. One module reads Kani's 
 | Report parse | `kani/output/report.rs` | the JSON file, typed |
 | Playback extraction | `kani/output/playback.rs` | the printed block, as a payload; Kani's report carries no concrete playback |
 | Run classification and vacuity | `kani/classify.rs` | typed report only; no text |
-| Terminal-value maps | `kani/terminal.rs` | typed outcomes and QSL's replay result only; total over the pair (step 5) |
-| Pairing a run outcome with a replay result | `routed/adapter.rs` | calls `kani/terminal.rs` with both |
+| FR-029 map: `KaniRunOutcome` to a terminal value | `kani/terminal.rs` | typed run outcome only |
+| C-09 map: IR's `KaniOutcome` with the replay outcome to `TerminalValue` | `kani/terminal.rs`, a public entry | typed outcome and the replay-outcome type it defines; total over the pair (step 5) |
+| Pairing the two inputs | the driver, outside this crate | calls `replay/` for the replay outcome and the C-09 entry with both |
+| CG replay errors to the replay outcome | `replay/` | converts its own errors and QSL's result into `kani/terminal.rs`'s input type |
 | Witness decode | `replay/witness.rs` | typed playback entries only |
 
 Today `kani_witness_join` also scans Kani's text (`check_clause`, `select_assertion_block`,
@@ -427,10 +434,12 @@ records only the work order the ruling allows, because the code still has V1 rea
   `serde_json`-based `deterministic_json` copies are deleted, not kept; this changes the bytes of
   emitted JSON artifacts once, and regeneration stays byte-identical (NFR-001). The nine `artifact`
   wrappers are deleted and callers use `Artifact::new`. The corpus case digest moves to this module
-  too. CG writes no hash or encoding routine of its own. Coupling: QSL still pins `quire-canonical` by
-  tag (`quire-canonical-v0.3.0`), so a lock that pulls QSL together with CG or IR on `main`
-  (quire-integration, the driver) holds two copies until QSL moves to `branch = "main"`, which
-  waits on the owner. Step 1a must not merge into a two-copy lock; see its precondition.
+  too. CG writes no hash or encoding routine of its own. Coupling: CG's own `Cargo.lock` already
+  resolves `quire-canonical` from QSL's tag `quire-canonical-v0.3.0`, through `qsl-replay`
+  (`Cargo.lock:1345-1347`). A direct `branch = "main"` dependency adds a second entry, and CG's own
+  `make deny` one-copy check (`scripts/check_one_copy.awk`) fails on it. The same holds for any lock
+  that pulls QSL together with CG or IR on `main` (quire-integration, the driver), the second
+  consumers. See the step 1a precondition.
 - **One digest identity.** The only digest CG mints for a proof is the obligation digest that
   binds a proof to its content (AD-003, E-1). `ContentDigest` in `core/identity.rs` is a CG type over
   `quire-canonical`'s digest; it is built only by `core::canonical`, over the RFC 8785 preimage.
@@ -445,6 +454,13 @@ records only the work order the ruling allows, because the code still has V1 rea
   String` field. `generate_routed` keys by `HarnessPath` and a duplicate is a typed error, not a
   silent `collect` overwrite. Bounds travel as typed integers and are not re-parsed from decimal
   text.
+- **Model items come from `quire-contract-model` directly.** IR's merged AD-006 (the codegen
+  consumption seam; checked at IR `origin/main`) has codegen declare `quire-contract-model` for
+  model items and the IR root crate only for the rest, because the root crate re-exports model
+  items through a `pub use quire_contract_model::*` glob that IR removes (AD-006's R3-C2: codegen
+  first adds the direct dependency, then IR removes the glob). In this layout that touches
+  `core/ir`, `oracle/` and `kani/generate/`, the modules that name model types, and it is step 1d.
+  CG's lock then holds one `quire-contract-model` and one `quire-contract-ir` (`make deny`).
 - **One typed node-access layer** `core/ir/`: the only code in CG that opens a `CheckedPackageV2` body
   term. It exposes a node view with a typed tag, typed member accessors and typed errors, and
   carries the operator table (identifier, arity, reachable range) as one enum in place of the three
@@ -498,14 +514,18 @@ requirement is authored.
   pass when it lands.
 - L-3. `#[kani::proof]`, `#[kani::proof_for_contract]`, `kani::requires`, `kani::ensures`,
   `kani::any`, `kani::assume` and `kani::cover!` occur in string literals of non-test source in
-  `kani/generate/render.rs` only. Test: a literal scan that ignores comments.
+  `kani/generate/render.rs` only. Test: a literal scan that ignores comments. It lands after 4f and
+  4g. Until then the interim exceptions are the V1 arm and `generate_kani_bundle` (their own
+  templates until 4f) and the corpus template (until 4g); the scan lists them by file and each
+  entry is removed with its step.
 - L-4. A `HarnessSpec` has at least one cover, and `render.rs` places every cover after all
   assumptions and the subject call. Test: the constructor's refusal, and a real-Kani test that a
   harness with an unsatisfiable assumption does not classify `Verified`.
 - L-5. QSL's arithmetic control passes at every migration step, on the path that serves it: the
   `left + right + 1` mutant is `Falsified` with `amount_current = 999`, and the unmutated control
-  proves with every cover satisfied. Test: real Kani, in the `make kani` lane. Until step 4c the
-  path is the V1 bundle; from 4c it is the V2 contract arm.
+  proves with every cover satisfied. Test: quire-integration's exemplar tests (4 of 4), real Kani,
+  run against CG's branch by each step's PR; a CG-side copy only if the facade allows. Until step 4c
+  the path is the V1 bundle; from 4c it is the V2 contract arm.
 - L-6. Kani output is read in `kani/output/` only, and the classifier, the terminal maps and the
   witness decode take typed values. Test: a grep for Kani's banner, check and playback wording
   outside that directory.
@@ -529,13 +549,18 @@ Per the ruling there is no compatibility layer anywhere in it. It is the order I
 tickets in. The planner tracks these numbers: 4e is the public generator entry, 5 is the terminal
 map, 6 is the V1 reader deletions and 7 is the publication move.
 
-1. **Shared core, no moves.** Precondition for 1a: the driver's one-copy gate is checked first, and 1a (and IR-274)
-   does not merge into a lock that holds two `quire-canonical` copies (see Shared core). 1a:
+1. **Shared core, no moves.** Precondition for 1a, a testable condition: QSL's `quire-canonical`
+   dependency and CG's resolve to ONE lock entry, so `make deny` passes with the direct
+   dependency. That needs QSL to move `quire-canonical` to `branch = "main"`, which waits on the
+   owner. 1a (and IR-274) does not merge before it; the driver's lock is the second consumer to
+   check. 1a:
    `core/canonical` calling `quire-canonical` directly (RFC 8785, `to_vec` and `sha256`; AD-003
    pending), deletion of both `deterministic_json` definitions and the nine
    `artifact` wrappers, and the corpus case digest moved onto it. 1b: identity newtypes
    threaded through `kani_obligations`, `state_frame` and `routed_generation`, with the typed
-   duplicate error. 1c: `core/profile`, with `RUNTIME_REVISION` deleted.
+   duplicate error. 1c: `core/profile`, with `RUNTIME_REVISION` deleted. 1d: declare
+   `quire-contract-model` directly and import model items from it, before IR removes the root
+   glob (IR's AD-006, R3-C2).
 2. **Edge removal, then directories.** Precondition: PR 210 has landed, after this AD is approved
    and with a local `make kani` transcript from its head. 2a to 2b are definition moves in the flat
    layout, each removing an edge a rename cannot: 2a moves `ArtifactBundle`, its limits,
@@ -543,7 +568,10 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    `publication` and `oracle` into the modules that become `core`. 2b moves the proof-dependency
    census types to `census`, and the harness and identity record types (`KaniObligationHarness`,
    `KaniScalarObligationHarness`, `ObligationKind`, `ObligationBinding`,
-   `KaniObligationIdentity`, `StateFrameHarness`, `StateFrameProperty`) to `identity`, so
+   `KaniObligationIdentity`, `ScalarObligationIdentity`, `ScalarObligationArgument`,
+   `EmbeddedOracle`, `StateFrameHarness`, `StateFrameProperty`, `StateFrameIdentity`,
+   `StateFrameScope`, `StateFieldDomain`, `StateComparison`) to `identity`, since the harness
+   records hold them and `identity` would otherwise import `generate`, so
    `kani_execution`, `kani_witness_join` and `spine_replay` stop importing the generators. 2c to
    2g are `git mv` plus path fixes, imports by module path, no logic change, one PR per
    subsystem in leaf order: 2c `core`, 2d `oracle` (with `bound` landing as `oracle/bound_v1.rs`),
@@ -555,10 +583,11 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
 3. **Typed node access.** `core/ir` with the operator enum, then `state_frame`, `exact_scalar`,
    `composite_equality` and `exact_function` onto it, one PR each. L-8 lands with the last.
 4. **The one generator.**
-   - 4a: the CG-side arithmetic control (L-5), before anything else in this step, on the V1 path that
-     serves it today. The test builds its package through QSL's facade (`call_site(...).package`,
-     or the QSL source plus `qsl_replay`), never from a copied QI test or a QSL-emitted package
-     file.
+   - 4a: confirm the regression requirement (L-5) before anything else in this step: the
+     quire-integration exemplars pass against CG's branch on the V1 path that serves the control
+     today. A CG-side control is added only if the `qsl-replay` facade offers a way to build the
+     package (`call_site(...).package`, or QSL source plus `qsl_replay`); otherwise that is a need
+     routed to QSL. No copied QI test and no QSL-emitted package file.
    - 4b: `HarnessSpec`, `render` with the cover rule, and the scalar family ported.
    - 4c: the V2 contract arm. First a spec PR in this repository's spec lane amends FR-015 with the
      V2 clause input (design intent above; no ticket found, the planner should file one). Then
@@ -580,17 +609,20 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      passes on the V2 contract arm (4c) and the V2 census input exists (4d). FR-015's census and
      FR-015-AC-22 and AC-25 stay verbatim; if the V2 side does not back them by this step, their
      matrix rows go to planned or unbacked, and nothing is deleted or rewritten.
-   - 4g: the corpus. Until QSL-353 lands it renders through `render.rs` and stays as it is; then its
-     hand-built package lowerer is retired and the rows are backed from QSL-emitted packages built
-     through the facade. The corpus has no cover and no symbolic input today (a ground
-     `assert!` over literals), so it is not covered by L-4 and IR-464 stays open for it until
-     then; a case with no symbolic input is not rendered as a proof. The Kani family lowerings
+   - 4g: the corpus. Until QSL-353 lands the corpus stays as it is, with its own template: it has
+     no cover and no symbolic input (a ground `assert!` over literals), so `HarnessSpec`, which
+     refuses an empty cover list, cannot render it. It is therefore an interim exception to L-3
+     and outside L-4, and IR-464 stays open for it. When QSL-353 lands, the hand-built package
+     lowerer is retired, the rows are backed from QSL-emitted packages built through the facade,
+     and a corpus case with symbolic input is rendered through `render.rs` under the cover rule;
+     a case with no symbolic input is not rendered as a proof. L-3 lands after 4f and 4g. The Kani family lowerings
      move in from IR when IR-347 schedules it (relayed).
 5. **One output reader and the terminal map.** The playback scanning moves from `kani_witness_join`
    to `kani/output/playback.rs`; `replay/witness.rs` takes typed entries. Batching follows, in
    `run/` only. `ReplayInputs::backend_manifest` and the manifest members `spine_replay` builds
    from it are deleted here, with the tool pin QSL-351 drops. Step 5's reader and the C-09 map
-   (`kani/terminal.rs`) map `KaniRunOutcome` to `TerminalValue`, so both depend on QSL-351
+   (`kani/terminal.rs`) produce `TerminalValue` (the FR-029 map from `KaniRunOutcome`, and the
+   C-09 map from IR's `KaniOutcome` with the replay outcome), so both depend on QSL-351
    (`Inconclusive(cause)`, a `NonZero` `Proved`, the tool pin gone) and on the terminal value also
    taking the replay settlement. Neither merges before QSL-351.
    - The map follows QSL's merged ADR-013 C-09 and ADR-011 T-13 (QSL #550, QSL-354; checked at QSL
@@ -606,16 +638,32 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      fault (QSL `InternalFault`) gives `TerminalValue::Failed`. A refuted Kani outcome never
      becomes `Refuted` without a reproduced replay. The spellings are `replay_parity` and
      `replay_refused`.
-   - Closed-set rule (QSL's confirmation, relayed by the IR planner): `ReplayRefused` carries only
-     QSL `ReplayRefusal` codes, a closed set QSL owns. Every CG-origin failure is CG's own defect
-     and maps to `TerminalValue::Failed`, with no CG code inside `ReplayRefused`. That covers
+   - Closed-set rule (QSL's ruling, relayed by the IR planner; design intent following QSL's
+     merged C-09): `ReplayRefused` carries only QSL `ReplayRefusal` codes, a closed set QSL owns.
+     CG-origin defects map to `TerminalValue::Failed`, with no CG code inside `ReplayRefused`:
      `SpineReplayError::{UnboundArgument, FieldDelimiter, Transcript, WrongArm}`, the envelope
-     failure, `DependencyLockError`, the witness `DecodeFailure`, and a Kani playback outside the
-     harness proof bound, which CG checks before building the envelope. AD-001's Failure view keeps
-     each a distinct typed state before the map.
-   - The map takes QSL's replay result type, not CG's `replay/` module, so `kani/terminal.rs`
-     imports `qsl-replay` and `kani` imports nothing from `replay`. `routed/adapter.rs` converts
-     CG's failures and QSL's result into the map's input and calls it.
+     failure, and a Kani playback outside the harness proof bound, which CG checks before building
+     the envelope. AD-001's Failure view keeps each a distinct typed state before the map.
+   - Open question, routed to QSL (same wording as R-Q1 in CG PR 214, not decided here): QSL's
+     `Failed` is documented as the tool itself failing, and QSL maps invalid input to
+     `Declined(ProofRefusalCause)` (`qsl-replay/src/proof_result.rs`, about lines 118-126). A
+     refused caller lock (`DependencyLockError`), the harness identity mismatch and the witness
+     schema decode refusals are invalid input or the conditions QSL maps to
+     `Inconclusive(ReplayRefused)` when QSL detects them; only malformed Kani output fits `Failed`
+     clearly. Does a refused caller lock, or other CG-side invalid input, map to
+     `Declined(ProofRefusalCause)` or to a code in `ReplayRefusal`'s closed set, rather than
+     `Failed`? Until QSL answers, `DependencyLockError` and the witness `DecodeFailure` are treated as CG-origin
+     and map to `Failed`, per the closed-set ruling above.
+   - Layering. The C-09 map is a public entry in `kani/terminal.rs` that the driver calls; the
+     driver runs the obligation and the replay and pairs the two, as QSL's merged T-13 says. Its
+     first input is IR's `KaniOutcome` (ADR-013 C-09's `KaniOutcomeKind`); the FR-029 map from
+     CG's `KaniRunOutcome` is the other entry. Its second input is a replay-outcome type that
+     `kani/terminal.rs` defines from `qsl-replay` types (a QSL result, a QSL `ReplayRefusal`, a
+     QSL fault) plus one variant for a CG-origin defect, so `kani` imports nothing from `replay`.
+     `replay/` imports `kani` (downward) and owns the conversion: it turns its own errors
+     (`SpineReplayError`, the envelope failure, the out-of-bound playback) and QSL's result into
+     that type, so a CG-origin failure reaches the map as the CG-defect variant and becomes
+     `Failed` there. `routed/` does not pair.
 6. **V1 readers.** Each of `harness`, `strategy/bound`, `evidence/bound_coverage`,
    `oracle/bound_v1.rs` and `oracle/boolean_v1.rs` is replaced and deleted with its V2 criteria.
    IR-364 (the V2 strategy chain: FR-002, FR-004 and FR-008 to FR-013 over `CheckedPackageV2`) is
@@ -643,8 +691,8 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
 - Step 4f depends on a fact this AD could not verify: that QSL's exemplars can be moved onto the
   one public entry. The planner's record puts the arithmetic control on `generate_kani_bundle`. If
   the exemplars need something the contract family does not emit, 4f waits.
-- Step 1a waits on the one-copy gate: until QSL moves `quire-canonical` from its tag to
-  `branch = "main"` (waiting on the owner), a lock holding QSL plus CG or IR on `main` has two copies.
+- Step 1a is blocked in CG itself: until QSL moves `quire-canonical` from its tag to
+  `branch = "main"` (waiting on the owner), CG's lock would hold two entries and `make deny` fails.
 - Batching with per-harness ceilings (FR-028) needs a rule for the batch's wall clock. This AD
   puts batching in `run/` and leaves the rule to FR-017 and IR-277.
 - Typed node access depends on what IR exposes. If IR's decoder lands later than `core/ir`, the
@@ -671,9 +719,9 @@ what it could against the code; the checks are stated.
 | PR 210 | Lands before the directory moves, only after this AD is approved, and with a local `make kani` transcript from its head. A precondition of migration step 2. | IR planner, IR-344 |
 | V2 strategy criteria | FR-002, FR-004 and FR-008 to FR-013 over `CheckedPackageV2` are IR-364, IR team, ordered before step 6. | IR planner, IR-344, IR-364 |
 | One public entry before deletion | Migration step 4e: the one public generator entry exists. A QSL-owned follow-up moves QSL's quire-integration exemplars, which call `generate_kani_bundle` today, onto it. Only then does step 4f delete `generate_kani_bundle`. | QSL review of this PR |
-| Package source for tests | The arithmetic control (step 4a) and, after QSL-353, the corpus build packages through QSL's facade (`call_site(...).package`, or source plus `qsl_replay`). CG copies no QSL fixture and no QSL-emitted package file. | QSL review of this PR |
+| Package source for tests | After QSL-353 the corpus builds packages through QSL's facade (`call_site(...).package`, or source plus `qsl_replay`), and the arithmetic control (step 4a) is quire-integration's existing test, with a CG-side copy only if the facade allows. CG copies no QSL fixture and no QSL-emitted package file. | QSL review of this PR |
 | Terminal map dependency | Step 5's reader and the C-09 map (`kani/terminal.rs`) depend on QSL-351 (`Inconclusive(cause)`, a `NonZero` `Proved`, the tool pin gone) and on the terminal value also taking the replay settlement. | QSL review of this PR |
-| `ContentDigest` and the canonical encoding | CG depends on `quire-canonical` directly (`branch = "main"`, no `qsl-replay` re-export). `ContentDigest` is a CG type over its digest, with no `ByteDigest` wrapper except where a QSL API requires one. The obligation preimage is encoded by `quire-canonical` (RFC 8785), and `core::canonical` is the one place that calls it; the `serde_json` `deterministic_json` copies are deleted. QSL still pins it by tag, so step 1a waits on the driver's one-copy gate. Cites AD-003 (PR 214, pending); AD-003 is not edited here. | QSL; relayed by the IR planner |
+| `ContentDigest` and the canonical encoding | CG depends on `quire-canonical` directly (`branch = "main"`, no `qsl-replay` re-export). `ContentDigest` is a CG type over its digest, with no `ByteDigest` wrapper except where a QSL API requires one. The obligation preimage is encoded by `quire-canonical` (RFC 8785), and `core::canonical` is the one place that calls it; the `serde_json` `deterministic_json` copies are deleted. QSL still pins it by tag, so step 1a waits on CG's lock resolving it to one entry. Cites AD-003 (PR 214, pending); AD-003 is not edited here. | QSL; relayed by the IR planner |
 
 SuiteRegistry (SUR-001): moves to `spec/core/functional/suites.md` in step 7; ADR-0056 is not
 amended (IR planner, IR-344). No question remains open in this AD except the missing ticket for the

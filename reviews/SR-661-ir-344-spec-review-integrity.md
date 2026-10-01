@@ -2,7 +2,7 @@
 id: "SR-661"
 title: "CG PR 215 spec review (integrity): AD-004 CG crate layout"
 type: SpecReview
-scope: "agent-ix/quire-contract-codegen@bfaaa849a100aee4a49959554b4607f0410227b1; spec/assurance/AD-004-cg-crate-layout.md, spec/spec.md (References); measured against src/ at origin/main 2fad745"
+scope: "agent-ix/quire-contract-codegen@bfaaa849a100aee4a49959554b4607f0410227b1 (review), b0c000866656cb3f4044acd10ed15ccb53b5d463 (disposition pass 1), fe571ba8cc34b33a7beea59c6c00c4f902a25a96 (disposition pass 2); spec/assurance/AD-004-cg-crate-layout.md, spec/spec.md (References); measured against src/ at origin/main 2fad745"
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AD-004
     type: references
@@ -69,3 +69,60 @@ contradicted by existing edges that a rename cannot remove (FND-001, FND-002), a
 test is scheduled to land before it can pass (FND-003). The C-09 addition puts requirement
 behaviour into an AD that declares behaviour out of scope (FND-004). Not mergeable as an
 approved AD until FND-001 to FND-004 are fixed.
+
+## New findings (disposition pass 1)
+
+Re-reviewed at b0c0008 (fix commit 6303729 plus the quire-canonical edit b0c0008 over 83d8d97).
+`make spec` exits 0 with the 3 baseline warnings. The committed `reviews/SR-661` and `SR-662` are
+byte-identical to the review-pass files. The new direction rules were re-checked against every
+non-test and test `use crate::` edge at the base. With `bound` in oracle, the bundle, its limits and
+`PublicationDiagnostic` in core, and the harness records in `kani/identity.rs`, every edge points
+downward. The quire-canonical API names `to_vec(value, Limits)` and `sha256` exist at
+quire-canonical origin/main and at tag quire-canonical-v0.3.0. The digest type is `Sha256Digest`.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-012 | medium | Mapping every CG-side replay failure to `TerminalValue::Failed` is too loud in part, and it is inconsistent with the QSL cases the same step lists. QSL documents `Failed` as "the tool itself failed" and maps invalid or incomplete input to `Declined(ProofRefusalCause)` (`qsl-replay/src/proof_result.rs:118-126`). `DependencyLockError::{Duplicate, Input}` is a refused caller lock, which is invalid input, not a tool failure. `DecodeFailure` `cg_witness_harness_identity_mismatch` and the schema mismatches are the same conditions (identity mismatch, decode refusal) that case (2) maps to `Inconclusive(ReplayRefused)` when QSL detects them. So one condition gets two terminal values, depending on which side noticed it. Only malformed Kani output (`kani_witness_*` text codes) fits `Failed`. The "Decision" wording also contradicts "It adds no behaviour claim" two bullets earlier. Suggest: ask QSL-351 for a CG-side refusal cause, map the input refusals to `Declined` or to that cause, and keep `Failed` for a malformed backend output | spec/assurance/AD-004-cg-crate-layout.md:596-611 |
+| FND-013 | medium | Step 1a's precondition names the driver's and quire-integration's locks. CG's own lock already resolves `quire-canonical` from QSL's tag (`Cargo.lock:1345-1347`, `?tag=quire-canonical-v0.3.0`, through `qsl-replay`). Adding a direct `branch = "main"` dependency therefore gives CG's own `Cargo.lock` two entries and fails CG's own `make deny` one-copy gate (`scripts/check_one_copy.awk`). 1a is blocked in this repository until QSL moves to `branch = "main"`, unless CG spells the same tag, which is a pin. The precondition "the driver's one-copy gate is checked first" also does not say what must hold. State it as: 1a waits until QSL resolves `quire-canonical` from `branch = "main"`, verified by `make deny` here | spec/assurance/AD-004-cg-crate-layout.md:421-433, :532-534, :642-643 |
+| FND-014 | low | Step 2b's type list is incomplete. `KaniObligationIdentity` holds `EmbeddedOracle` (`kani_obligations.rs:456`, `:468`). `KaniScalarObligationHarness` holds `ScalarObligationIdentity`, which holds `ScalarObligationArgument` (`:513-550`). `StateFrameHarness` holds `StateFrameIdentity`, which holds `StateFrameScope`, `StateFieldDomain` and `StateFrameProperty`, and `StateFrameProperty` holds `StateComparison` (`state_frame.rs:95-218`). Unless these move to `identity` too, `kani/identity.rs` imports `generate`, which is the back-edge 2b exists to remove | spec/assurance/AD-004-cg-crate-layout.md:543-547 |
+| FND-015 | low | Cross-PR consistency, report only. AD-003 at PR 214 head 9b3ea58 still routes the encoder and digest "through the `qsl-replay` facade" and asks QSL to export them (AD-003:127, :275-277, R-Q2 at :339). AD-004 now depends on `quire-canonical` directly, with no re-export. One of them must change before both merge. Also, IR PR 241's AD-006 Decision A has codegen add a direct `quire-contract-model` dependency and read IR model items from it before IR removes its root glob (R3-C2). AD-004's `core/ir` and import rules do not mention it | spec/assurance/AD-004-cg-crate-layout.md:421-425, :448-453 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 6303729 |
+| FND-002 | fixed | 6303729 |
+| FND-003 | fixed | 6303729 |
+| FND-004 | fixed | 6303729 |
+| FND-005 | fixed | 6303729 |
+| FND-006 | fixed | 6303729 |
+| FND-007 | fixed | 6303729 |
+| FND-008 | fixed | 6303729 |
+| FND-009 | fixed | 6303729 |
+| FND-010 | fixed | 6303729 |
+| FND-011 | deferred | AD-001 is outside this PR's diff; AD-004 step 7 now names the stale AD-001 text as a follow-up for the step-7 spec PR (AD-004:624-627) |
+
+## New findings (disposition pass 2)
+
+Re-reviewed at fe571ba (step 5 rewritten against QSL's merged ADR-013 C-09 and ADR-011 T-13).
+The merged text was read at QSL origin/main b5ef6475 (QSL #550). It confirms the replay cases
+as stated. It also says that the orchestrating driver (`quire-driver`) "runs the Kani obligation
+and the replay and passes both" to CG's C-09 map, and that the map's first input is IR's
+`KaniOutcome` (ADR-013:629, C-09 row :967; ADR-011 E9 :262). The closed-set rule for CG-origin
+failures is relayed, not in the merged text. It is consistent with QSL's `Failed` ("the tool
+itself failed"): each listed failure is produced by CG on bytes that CG or the driver made, so
+none is a caller refusal. PR 214 at 0cbb45f now names `quire-canonical` directly, as AD-004 does.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-016 | medium | The pairing point contradicts the merged T-13 and C-09 text that step 5 itself now cites. QSL's ADR-013 C-09 says the orchestrating driver runs the Kani obligation and the E9 replay and passes both to the CG map. AD-004 still says `routed` "is the only place that can pair a run outcome with a replay result", and names `routed/adapter.rs` as the pairing point (tree, the run/report table and step 5). C-09's first input is IR's `KaniOutcome`, but step 5 says the C-09 map takes CG's `KaniRunOutcome` (that is FR-029's map; FR-030's takes IR's). Fix: `kani/terminal.rs` exports the C-09 map as a public entry over (IR `KaniOutcome`, QSL replay result), which the driver calls. Say where CG's own replay failures (`SpineReplayError`, `DependencyLockError`, `DecodeFailure`, all `replay/` types) become `Failed` for that caller. `kani` cannot import them, so either `replay/` exposes the conversion or the driver applies the closed-set rule | spec/assurance/AD-004-cg-crate-layout.md:278-282, :389, :590-595, :614-618 |
+
+## Dispositions (round 2)
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-012 | fixed | fe571ba |
+| FND-013 | still-open | fe571ba leaves step 1a's precondition unchanged: CG's own Cargo.lock resolves quire-canonical from QSL's tag, so a direct branch=main dependency fails CG's own make deny one-copy gate; the precondition still names only the driver's gate |
+| FND-014 | still-open | Step 2b's type list is unchanged at fe571ba; EmbeddedOracle, ScalarObligationIdentity/Argument, StateFrameIdentity/Scope/FieldDomain and StateComparison are still not listed |
+| FND-015 | still-open | The PR 214 half is resolved (AD-003 at 0cbb45f names quire-canonical directly); the IR PR 241 AD-006 decision A (direct quire-contract-model dependency, R3-C2) is still not reflected in AD-004 |
