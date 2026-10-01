@@ -62,10 +62,11 @@ obligation identity type, and neither does IR. CG's only QSL dependency is the `
 
 | Contract | Spelled by | Asserted by |
 | --- | --- | --- |
-| `qsl-replay` Rust API | QSL | The compiler. CG tracks QSL's `main` branch; there is no revision or digest assertion and none is needed: a changed type or removed function fails CG's build. |
+| `qsl-replay` Rust API | QSL | The compiler. CG's `Cargo.toml` names QSL's `main` branch and `Cargo.lock` selects the revision it builds against; the seam asserts nothing about that revision beyond compilation, and no digest or version check is needed: a changed type or removed function fails CG's build. |
 | Request `contract_version` `quire.native-runtime/v1`, `capability_vocabulary` `quire.capability-kind/v1`, `package_contract_version` `quire.checked-package/v2` | QSL's reader (private constants in `request.rs`) | QSL refuses a spelling it does not know. CG writes the literals itself (see Current state). |
 | `package_id` (`quire.package.semantic/v2`) | QSL | QSL recompiles the provided source and requires the recompiled `package_id` to equal the request's (`execute.rs`, "Rule 5"; `execute/frame.rs` for the frame path). This is the one canonical content-identity digest the whole replay seam rests on: it binds a replay to the content that was proved. |
-| Source bytes, counterexample identity | CG computes with QSL's `ByteDigest` | QSL checks each provided byte against its digest (`stale_dependency/byte-digest-mismatch`). |
+| Source bytes | CG computes the digest with QSL's `ByteDigest` | QSL checks each provided byte against its digest (`stale_dependency/byte-digest-mismatch`). |
+| Request obligation-identity slot (`originating_counterexample_identity` today) | CG fills it; today with the `ByteDigest` of the transcript | QSL does not check it against any content: `replay` passes it into witness decoding as a label (`execute.rs`, `arguments`). R-Q7 retires the transcript digest in favour of the obligation identity. |
 | Backend identity | request `backend` member | carried; QSL records it, does not interpret it |
 
 The obligation identity is the other content identity on the replay path; it is discussed in
@@ -87,7 +88,9 @@ anywhere on this seam, and none is proposed.
 | Condition | Reporter | Outcome |
 | --- | --- | --- |
 | A harness argument has no bound parameter, delimiter in harness or check text, transcript not admitted | CG (`SpineReplayError`) | typed refusal, no replay |
-| Dependency selections not admitted, call site not located | CG wrapping QSL (`ReplayPackageError`, `FrameReplayError`) | typed refusal, no replay |
+| Dependency selections not admitted, call site not located (`CallSiteRefusal`, a fault among them) | CG wrapping QSL (`ReplayPackageError`, `FrameReplayError`) | typed refusal, no replay; a wrapped fault is still a fault (AD-003, link 7) |
+| A qualified name built from the operation's identifiers is not admitted (`FrameReplayError::Name`) | CG | typed refusal, no replay |
+| The frame witness transcript or the envelope CG built is not admitted (`FrameReplayError::Transcript`, `FrameReplayError::Envelope`, from `WitnessEnvelope::reconstruct`) | CG | typed refusal, no replay; CG built a value its own contract says QSL admits, so AD-003 maps it to a failure |
 | `replay` / `replay_frame` refuses the request or envelope | QSL (`ReplayRefusal`) | CG carries it unchanged in `Refused`; it is not a verdict on the evidence |
 | Decoded value outside its declared domain (function path) | CG (`EvidenceFailureCause::Domain`) before any request is built | evidence failure |
 | Replay ran and did not settle `ReproducedWithEvaluatedWitness` in category `violation` | QSL settles; CG partitions (`verdict_of`) | evidence failure with QSL's settlement and category |

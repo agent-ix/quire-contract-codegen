@@ -52,13 +52,13 @@ then by how identity is asserted.
 | --- | --- | --- | --- |
 | 1 | Checked package, `package_id` (`quire.package.semantic/v2`) | QSpec wire, QSL emits, IR re-derives on read | digest over the package's identity preimage |
 | 2 | Finite profile and input (`ProfileSelection`, `ValidatedFiniteInput`, `KaniOutcome` for refusals) | IR | profile revision selected with the ABI and module revisions |
-| 3 | Obligation: harness, bound domains, ceilings, oracle symbols (`KaniObligationIdentity`, `ScalarObligationIdentity`) | CG | JSON record persisted beside the harness; no digest is computed from it (gap E-1) |
+| 3 | Obligation: harness, bound domains, ceilings, oracle symbols (`KaniObligationIdentity`, `ScalarObligationIdentity`, and for frame harnesses `StateFrameIdentity`, `state_frame.rs`) | CG | JSON record persisted beside the harness; no digest is computed from it (gap E-1) |
 | 4 | Corpus case: `CaseIdentity` over construct, profile, input, request, dependencies | CG | lowercase SHA-256 over its deterministic JSON, which also names the artifact paths; collisions refused by `EmittedCorpusIdentities` (`bounded_kani_corpus.rs`, `kani_corpus_identity_collision`) |
 | 5 | Launch: argument vector, ceilings, launcher, harness-in-crate check (`execute_kani_obligation`, `kani_launch_command`, `launch_evidence`) | CG | harness source must appear byte for byte in the crate before launch (`kani_execution.rs`, FR-017 step 1) |
 | 6 | Run classification: `classify_kani_run` over the typed transcript to `KaniRunOutcome` | CG | one parser module, `kani_transcript.rs`; Kani's wording read nowhere else |
-| 7 | Terminal value: (`KaniRunOutcome` or `KaniOutcome`, replay settlement) to `qsl_replay::TerminalValue`. The input is the pair, not the Kani outcome alone, and the map is total over the replay result, which is one of three. (1) Settled: a `Refuted` outcome whose replay disagrees becomes `Inconclusive(InconclusiveCause::ReplayParity)` (code `replay_parity`), carrying the replay's `DisagreementCause`. (2) Refused (identity mismatch, decode refusal, stale dependency, limit reached): `Inconclusive(InconclusiveCause::ReplayRefused)` (code `replay_refused`), carrying the `ReplayRefusal` code. (3) Fault (QSL `InternalFault`): `TerminalValue::Failed`, so a defect stays loud. A refuted Kani outcome never becomes `Refuted` without a reproduced replay. ADR-013 O-16's inconclusive row and O-27 support (1); both causes land with QSL-351 and their names are as QSL gave them, not yet in QSL's `main`. At this base `ReplayRefusal` has a `Fault(InternalFault)` variant beside the refusals, so CG separates (2) from (3) by variant | CG (map), QSL (type) | one total `match` each over the outcome, no wildcard arm (FR-029, FR-030; both `Planned`, and both written over the outcome alone today) |
+| 7 | Terminal value: (`KaniRunOutcome` or `KaniOutcome`, replay settlement) to `qsl_replay::TerminalValue`. The input is the pair, not the Kani outcome alone. For a falsified run the second member is the replay result, one of three. (1) Settled: a `Refuted` outcome whose replay disagrees becomes `Inconclusive(InconclusiveCause::ReplayParity)` (code `replay_parity`), carrying the replay's `DisagreementCause`. (2) Refused (identity mismatch, decode refusal, stale dependency, limit reached): `Inconclusive(InconclusiveCause::ReplayRefused)` (code `replay_refused`), carrying the refusal's code. (3) Fault: `TerminalValue::Failed`, so a defect stays loud. A refuted Kani outcome never becomes `Refuted` without a reproduced replay. A fault is a fault wherever it sits in the chain, not only as the variant `ReplayRefusal::Fault`: QSL also reports `ReplayRefusal::Admission(AdmissionFailure::Fault(_))` (catalog code `runtime_invariant`, `execute.rs`) and `CallSiteRefusal::Fault` (`call_site.rs`), which reaches CG directly and wrapped in `ReplayPackageError::CallSite` and `FrameReplayError::CallSite`; the map classifies by walking the whole error, not by its top variant. CG's own failures before any replay runs also need a value (below). ADR-013 O-16's inconclusive row and O-27 support (1); both causes land with QSL-351 and their names are as QSL gave them, not yet in QSL's `main`. CG provides the map and its typed inputs; the driver builds the terminal record (quire-driver PR 11) | CG (map), QSL (type) | one total `match` each over the outcome, no wildcard arm (FR-030-AC-7; FR-029 and FR-030 are `Planned`, written over the outcome alone today, and FR-029's unconditional `falsified` to `Refuted` row is to be amended) |
 | 8 | Counterexample join: decoded playback to QSL replay, with `ObligationIdentity` | CG builds, QSL consumes | see AD-002; `package_id` recomputed by QSL |
-| 9 | FR-331 `results` record | QSL type (`TerminalRecord`, `ProofResultEnvelope`), QSpec wire | none in CG (gap E-3) |
+| 9 | FR-331 `results` record | QSL type (`TerminalRecord`, `ProofResultEnvelope`), QSpec wire; the driver builds the record from CG's map and typed inputs (quire-driver PR 11) | none in CG: CG builds no record and is not required to (gap E-3) |
 
 Dependency direction: IR to nothing of QSL; CG to IR and `qsl-replay`; QSL's replay reads what CG
 builds and never calls CG. QSL depends on no CG, normal or test-time (QSL ADR-011 FB-11), so a
@@ -73,8 +73,9 @@ quire-integration (QSL-342).
 | 2 to 3 | one lowered claim per routed item | `GenerationErrorCode::UnsupportedObligations`, a `NoDerivableClaim` claim; no harness | CG |
 | 3 to 5 | harness source and options | `HarnessNotInCrate`; any argument vector is the identity's `options` verbatim | CG |
 | 5 to 6 | process output | `KaniInconclusiveReason::{NoVerdict, TimedOut, ...}`; a run with no verdict is not a proof | CG |
-| 6 to 7 | outcome, SUCCESS-check count and, for a falsified run, the replay settlement | none: the map is total (when built); a replay disagreement is `Inconclusive(ReplayParity)`, a replay refusal `Inconclusive(ReplayRefused)`, a replay fault `Failed` | CG |
-| 7 to 9 | terminal value and item identity | not built (E-3) | n/a |
+| 6 to 7 | outcome, SUCCESS-check count and, for a falsified run, the replay result | none: the map is total over (outcome, replay result) once every pre-replay failure below is classified; a replay disagreement is `Inconclusive(ReplayParity)`, a replay refusal `Inconclusive(ReplayRefused)`, a fault anywhere `Failed` | CG |
+| 6 to 7, falsified run stops in CG before any replay | `EvidenceFailureCause::{Decode, Domain}`, `SpineReplayError::{UnboundArgument, FieldDelimiter, Transcript, WrongArm}`, `ReplayPackageError::{InvalidFunction, Dependencies, CallSite}`, `FrameReplayError::{Dependencies, CallSite, Name, Transcript, Envelope}` | Decided here, QSL to confirm: the replay did not run, so the falsification is unconfirmed and `Refuted` is withheld. A failure that is a property of this run's data (`Decode`, `Domain`, `UnboundArgument`, `FieldDelimiter`, `InvalidFunction`, `Dependencies`, `Name`, a `CallSite` refusal that is not a fault) maps to `Inconclusive(ReplayRefused)`. A failure where CG built a value its own contract says QSL admits (`Transcript`, `Envelope`), a `WrongArm` settlement, and any fault (a `CallSite` fault included) map to `Failed`, so a CG defect stays loud. The refusal cause must be able to carry a CG-origin code (R-Q1). | CG |
+| 7 to 9 | terminal value and item identity | the driver's step; CG builds no record | driver |
 
 Each failure state stays a distinct typed state (AD-001 Failure view). No state is converted to
 success.
@@ -86,19 +87,27 @@ success.
   envelope as QSL's `ObligationIdentity` (E-1). It is the only digest CG mints for a proof, and no
   other digest, pin, SHA or version record is added to this chain.
 - The other digests on the chain already exist and bind content, not tools or versions:
-  `package_id` (QSL recomputes it on replay), the byte digests QSL checks on provided source, the
-  `CaseIdentity` name of a corpus case and the counterexample identity (`ByteDigest` of the
-  transcript).
-- There is no pin, SHA or digest over a file, version or tool, and none is proposed. In
+  `package_id` (QSL recomputes it on replay), the byte digests QSL checks on provided source and
+  the `CaseIdentity` name of a corpus case. The `ByteDigest` of the transcript that CG puts in the
+  request's identity slot today is not a content identity of the proof; R-Q7 retires it in favour
+  of the obligation identity, and QSL does not check it against anything (`execute.rs`, it is
+  passed to witness decoding as a label).
+- There is no pin, SHA or digest over a file, version or tool, and CG proposes none. In
   particular the Kani version is not pinned; classification reads Kani's output through the one
-  transcript parser.
+  transcript parser. QSL's `BackendProviderSource` has a public `tool_pin` string and ADR-013
+  O-24 says the envelope carries a tool pin; whether CG must supply one or QSL derives it is
+  routed to QSL (R-Q9), not decided here.
 - The seam to QSL is the `qsl-replay` Rust API, asserted by compilation. The seam to IR is IR's
-  root crate API, asserted by compilation.
+  crate API, asserted by compilation. CG reads model items through IR's root-crate glob today;
+  IR-347 (as relayed by the IR planner) moves the Kani family lowerings (`lower_checked_arithmetic`,
+  `lower_query`, `lower_reaches`) out of IR into CG and has IR delete them after, and CG then
+  reads the model crate for model items, so the glob goes away.
 - Cause codes cross IR to CG as strings (`KaniOutcome.code`). IR spells `kani_vacuous_proof` only
   inside `KaniOutcome::proved_from_checks`; `kani_solver_absent` and `kani_backend_absent` are
-  named in IR's and CG's specs but defined by no IR constant or enum, so CG spells them itself. A
-  typo is not a compile error. IR-347 (reopened) already covers the free-string cause codes; no
-  new ticket is filed.
+  named in IR's and CG's specs (FR-030) and defined by no IR constant or enum. CG code spells `kani_vacuous_proof` as a literal
+  (`kani_execution.rs:690`) and the other two nowhere yet, so CG's map will spell them itself. A
+  typo is not a compile error.
+  IR-347 (reopened) already covers the free-string cause codes; no new ticket is filed.
 
 ## Decisions
 
@@ -115,18 +124,27 @@ authored).
 - E-1. CG computes QSL's `ObligationIdentity` by one function over the ADR-013 O-09 members
   (the clause or application node id, its occurrence key, the obligation kind, and the
   arguments each as parameter node id and declared domain), excluding the source span, encoded
-  as RFC 8785 JSON by `quire_canonical` through the `qsl-replay` facade, never by `serde_json`; the value changes when any included member changes and does not when the
-  span changes. The scalar and the V1 obligation paths both use it.
+  as RFC 8785 JSON by `quire_canonical` through the `qsl-replay` facade, never by `serde_json`;
+  the value changes when any included member changes and does not when the span changes. The
+  V1 contract path, the scalar path and the frame path (`StateFrameIdentity`) all use it.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001).
-- E-3. Every run item has exactly one terminal value, and the map from `KaniRunOutcome` and from
-  `KaniOutcomeKind` is one `match` with no wildcard arm (FR-029-AC-1 and FR-030-AC-7 are the
-  existing form). A falsified run's value is a function of the outcome and the replay
-  settlement together (link 7): a replay disagreement is `Inconclusive(ReplayParity)`, a replay refusal is `Inconclusive(ReplayRefused)`, a replay fault is `Failed`, and a refuted outcome without a reproduced replay is never `Refuted`.
+- E-3. Every run item that reaches the map has exactly one terminal value, and the map from
+  `KaniRunOutcome` and from `KaniOutcomeKind` is one `match` with no wildcard arm (FR-030-AC-7 is
+  the existing form; FR-029-AC-1's unconditional `falsified` to `Refuted` is not, and is to be
+  amended). A falsified run's value is a function of the outcome and the replay result together
+  (link 7): a replay disagreement is `Inconclusive(ReplayParity)`, a replay refusal is
+  `Inconclusive(ReplayRefused)`, a fault anywhere in the chain is `Failed`, and a refuted
+  outcome without a reproduced replay is never `Refuted`. Every CG failure before replay is
+  classified by the link 7 rule, so no falsified run is left without a value.
 - E-4. No outcome maps to `Tested`.
 - E-5. A run whose SUCCESS-check count is zero maps to a value QSL reads as non-success. A
   precondition harness counts its satisfied cover as its one SUCCESS check (question b).
-- E-6. A stale report from a previous run cannot be read as this run's verdict.
+- E-6. A run is classified only from the output of the launch it made: a transcript or report
+  left from an earlier run is never read. Test: with a stale artifact in place from a run of
+  another verdict, a launcher that prints nothing classifies `NoVerdict`, not the stale verdict.
+  Today the reader takes captured process output; PR 210's JSON report must be read from a path
+  fresh to this launch.
 - E-7. The terminal value of a run is derived from the run's own transcript or report, never
   from generation-time classification (FR-017-CON-2).
 - E-8. No source in CG or IR defines `TerminalValue`, `TerminalRecord` or `ObligationIdentity`.
@@ -237,26 +255,43 @@ crate CG's lock selects.
   the obligation kind and the arguments (parameter node id and declared domain), source span
   excluded. CG's frame envelope takes a caller `[u8; 32]` (`frame_replay.rs:47`); the function
   path puts the transcript's byte digest in the request's obligation-identity slot (AD-002).
-  Neither CG identity struct carries the occurrence key: `KaniObligationIdentity` holds a
-  `ClauseRef`, and `ScalarObligationIdentity` holds a node id and no occurrence key, so each
-  must gain it before one function can compute the O-09 value. Recommendation below.
+  The work is larger than one missing field. Three identity structs exist and none carries what
+  O-09 needs. `KaniObligationIdentity` holds a `ClauseRef`, not the clause node id, and no
+  occurrence key; its `ObligationBinding` (`identifier`, `role`, `primitive_type`,
+  `integer_bounds`, `dependencies`) has no parameter node id. `ScalarObligationIdentity` holds a
+  node id but no occurrence key, and its `ScalarObligationArgument` (`identifier`, `minimum`,
+  `maximum`) has no parameter node id. `StateFrameIdentity` (`state_frame.rs`) holds the clause
+  node id and no occurrence key, and it is the identity of the frame harness whose
+  counterexample goes into an envelope today (`frame_replay.rs:47`). Each must gain the
+  missing members before one function can compute the O-09 value. Recommendation below.
 - Encoder gap (measured at `main`): CG has no obligation-identity digest code and no
-  `quire_canonical` use. The one content digest CG mints in `src` is the corpus case's, and it is
-  `serde_json::to_vec` plus a newline in `deterministic_json` (`kani.rs:1045-1046`; a second copy
-  at `oracle.rs:1111-1112`), then `ByteDigest::of` from the `qsl-replay` facade
-  (`bounded_kani_corpus.rs:340-342`). `serde_json` is not RFC 8785: key order is struct field
-  order, and integers above 2^53, floats and negative zero are not canonicalised. `sha2` is a
-  dev-dependency only. The obligation identity must not copy this: it is to be encoded by the
-  one canonical encoder, `quire_canonical` (RFC 8785), reached through the `qsl-replay` facade
-  (QSL's review says a `ContentDigest` wrapping `ByteDigest` is to be exported; it is not in
-  QSL's `main`), not through a CG encoder and not through a second one. The corpus case digest
-  moves to the same encoder. This is the CG layout AD's step 1a (`core/canonical`, CG PR #215,
-  open): one helper replaces the two `deterministic_json` definitions. Two encoders for one
-  identity is the tangle IR has with its own digest; no ticket is filed here.
-- E-3 gap: no CG code builds a `TerminalRecord` or the data an FR-331 `results` record needs.
-  QSL exposes `TerminalRecord::new` and `BackendProviderSource` publicly, so CG can build both.
-  QSL's review says `TerminalRecord.item` (a string today) becomes a typed request index; CG
-  follows when it lands. Which component writes the `results` wire is not established here.
+  `quire_canonical` use. The content digest of a corpus case is `serde_json::to_vec` plus a
+  newline in `deterministic_json` (`kani.rs:1045-1046`; a second copy at `oracle.rs:1111-1112`),
+  then `ByteDigest::of` from the `qsl-replay` facade (`bounded_kani_corpus.rs:340-342`). CG also
+  hashes bytes with `ByteDigest::of` for source files (`spine_replay.rs:149-152`) and the
+  transcript (`spine_replay.rs:440`); those hash given bytes and canonicalise nothing.
+  `serde_json` is not RFC 8785: key order is struct field order, and integers above 2^53, floats
+  and negative zero are not canonicalised. `sha2` is a dev-dependency only. The obligation
+  identity must not copy this. Target, agreed with QSL: a CG `ContentDigest` wraps QSL's
+  canonical digest reached through the `qsl-replay` facade (`ByteDigest`), and the O-09 preimage
+  is encoded by `quire_canonical` (RFC 8785), never by `serde_json`; QSL's `main` has no
+  `ContentDigest` export yet (R-Q2). The corpus case digest moves to the same encoder. The CG
+  layout AD (CG PR 215, open) defines `ContentDigest` as a CG type built by `core::canonical`,
+  which keeps the `serde_json` `deterministic_json`, and its step 1a only merges the two
+  `deterministic_json` copies. For the identity digest that step must instead adopt the target
+  above, one RFC 8785 encoder behind the facade. Two encoders for one identity is the tangle IR
+  has with its own digest; no ticket is filed here.
+- E-3 gap: no CG code builds a `TerminalRecord` or the data an FR-331 `results` record needs,
+  and CG is not required to. The driver owns the execute, replay and terminal-record chain
+  (quire-driver PR 11); CG provides the map and its typed inputs. QSL exposes
+  `TerminalRecord::new` and `BackendProviderSource` publicly. QSL's review says
+  `TerminalRecord.item` (a string today) becomes a typed request index; the driver follows when
+  it lands.
+- Resolved decision, preimage: AD-001's Decisions section defines the `ObligationIdentity`
+  preimage as "every `KaniObligationIdentity` member except `source_span`", and FR-024 repeats
+  it. That conflicts with ADR-013 O-09's member list that E-1 uses (node id, occurrence key,
+  kind, arguments as parameter node id and domain). Decision: O-09 wins. AD-001 and FR-024 are
+  to be corrected in the follow-up spec PR; neither is edited here.
 - Sequencing (QSL's review, not assumed): QSL-351 (an inconclusive value with a typed cause,
   and a non-zero count in `Proved`) and QSL-352 change `qsl-replay` types CG builds, so they
   land in step with CG, and QSL-351 lands before the IR-465 terminal map is written so that map
@@ -283,7 +318,7 @@ crate CG's lock selects.
 
 | Question | Owner | Recommendation |
 | --- | --- | --- |
-| What is the obligation-identity preimage, now that the V1 `KaniObligationIdentity` is superseded on the scalar path? | CG proposes, QSL and QSpec confirm | State it by ADR-013 O-09's member list, not by struct name: the node id, occurrence key, kind and arguments (parameter node id and domain), source span excluded, RFC 8785 encoded, one implementation in CG. This is the one canonical content-identity digest that binds a proof to its content; CG adds no other. QSL's `ObligationIdentity` stays opaque (it carries 32 bytes). CG writes E-1. QSL's doc says the digest domain is not in the closed FR-201 set; QSpec decides whether it needs a domain name (R-S3). |
+| What is the obligation-identity preimage, now that three CG identity structs exist and none carries the O-09 members? | CG proposes, QSL and QSpec confirm | State it by ADR-013 O-09's member list, not by struct name: the node id, occurrence key, kind and arguments (parameter node id and domain), source span excluded, RFC 8785 encoded by `quire_canonical`, one implementation in CG used by all three identities. This is the one canonical content-identity digest that binds a proof to its content; CG adds no other. QSL's `ObligationIdentity` stays opaque (it carries 32 bytes). CG writes E-1. QSL's doc says the digest domain is not in the closed FR-201 set; QSpec decides whether it needs a domain name (R-S3). |
 | Replace IR's `KaniProviderResult` map | IR | Delete the type and its map as FR-039 already says, together with the CG import change above (IR-347). |
 | IR cause codes as strings | IR | Export constants (or a typed cause enum) for the three codes (IR-347). |
 | One map instead of two | CG after QSL | After option B of (a). |
@@ -300,9 +335,10 @@ To QSL (QSL reviews these rows):
 
 | Id | Stated need |
 | --- | --- |
-| R-Q1 | An inconclusive `TerminalValue` with typed causes including `ReplayParity` and `ReplayRefused`, and a non-zero count in `Proved` (option B of (a); QSL-351, ahead of IR-465), and a typed request index in `TerminalRecord` (QSL-354 as relayed). |
+| R-Q1 | An inconclusive `TerminalValue` with typed causes including `ReplayParity` and `ReplayRefused`, and a non-zero count in `Proved` (option B of (a); QSL-351, ahead of IR-465), and a typed request index in `TerminalRecord` (QSL-354 as relayed). `ReplayRefused` must be able to carry a code for CG's own pre-replay failures (link 7), not only a `ReplayRefusal` code. QSL confirms the pre-replay classification of link 7. |
 | R-Q2 | Edit QSL's `ObligationIdentity` doc to point at ADR-013 O-09's member list instead of naming `KaniObligationIdentity`. Export the canonical digest (`quire_canonical`, RFC 8785; a `ContentDigest` wrapping `ByteDigest`) through `qsl-replay` so CG has one encoder to call. |
 | R-Q3 | The one sentence of ADR-013 O-16 that says IR implements the proof-column map; CG owns it. |
+| R-Q9 | The tool pin. `BackendProviderSource` has a public `tool_pin` string and ADR-013 O-24 says the envelope carries a tool pin; QSL-351 and the pin removal (F3) are relayed as dropping `ToolPin`. State what CG must supply or QSL derive. CG mints and proposes no pin. |
 
 To QSpec:
 
@@ -311,5 +347,11 @@ To QSpec:
 | R-S2 | FR-331-AC-8 wording of "SUCCESS check": the count is the backend adapter's. |
 | R-S3 | Whether the obligation identity needs a digest domain name. |
 
-IR-owned items R-I1 and R-I3 are in IR-347's reopened scope and R-I2 overlaps IR-347's
-free-string cause codes; no new ticket is filed for them.
+To IR (the AD owner; listed so they are not lost; wording as in IR PR 239; no new ticket is
+filed):
+
+| Id | Stated need |
+| --- | --- |
+| R-I1 | Delete `KaniProviderResult`, `KaniProviderRecord` and the `provider_result` map from the root crate (`src/kani/outcome.rs`, `src/kani/mod.rs:23`); they duplicate the terminal map CG owns. In IR-347's reopened scope. |
+| R-I2 | Export cause-code constants or a typed cause enum: the Kani cause codes cross as bare strings that consumers re-spell. Overlaps IR-347's free-string cause codes. |
+| R-I3 | Remove `pub use quire_contract_model::*` (`src/lib.rs:12`) together with CG adding a direct `quire-contract-model` dependency; CG imports model types through the glob. In IR-347's reopened scope. |
