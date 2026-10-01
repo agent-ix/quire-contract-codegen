@@ -126,7 +126,7 @@ impl ArtifactBundle {
 
     pub(crate) fn revalidate(&self) -> Result<(), PublicationDiagnostic> {
         if self.schema_version != BUNDLE_SCHEMA {
-            return Err(diagnostic(
+            return Err(publication_diagnostic(
                 PublicationErrorCode::InvalidBundle,
                 "bundle.schemaVersion",
                 "the artifact bundle schema version is unsupported",
@@ -138,7 +138,7 @@ impl ArtifactBundle {
             .windows(2)
             .any(|pair| pair[0].path >= pair[1].path)
         {
-            return Err(diagnostic(
+            return Err(publication_diagnostic(
                 PublicationErrorCode::InvalidBundle,
                 "bundle.artifacts",
                 "the artifact bundle is not sorted by path",
@@ -150,7 +150,7 @@ impl ArtifactBundle {
 
 fn validate_artifacts(artifacts: &[Artifact]) -> Result<(), PublicationDiagnostic> {
     if artifacts.is_empty() || artifacts.len() > MAX_ARTIFACTS {
-        return Err(diagnostic(
+        return Err(publication_diagnostic(
             PublicationErrorCode::InvalidBundle,
             "bundle.artifacts",
             "a bundle must contain between one and 4096 artifacts",
@@ -161,14 +161,14 @@ fn validate_artifacts(artifacts: &[Artifact]) -> Result<(), PublicationDiagnosti
     for (index, artifact) in artifacts.iter().enumerate() {
         validate_path(&artifact.path, index)?;
         if !paths.insert(artifact.path.as_str()) {
-            return Err(diagnostic(
+            return Err(publication_diagnostic(
                 PublicationErrorCode::DuplicateArtifactPath,
                 &format!("bundle.artifacts[{index}].path"),
                 "artifact paths must be unique",
             ));
         }
         if artifact.contents.len() > MAX_ARTIFACT_BYTES {
-            return Err(diagnostic(
+            return Err(publication_diagnostic(
                 PublicationErrorCode::InvalidBundle,
                 &format!("bundle.artifacts[{index}].contents"),
                 "one artifact exceeds the bounded size",
@@ -177,7 +177,7 @@ fn validate_artifacts(artifacts: &[Artifact]) -> Result<(), PublicationDiagnosti
         total = total.saturating_add(artifact.contents.len());
     }
     if total > MAX_BUNDLE_BYTES {
-        return Err(diagnostic(
+        return Err(publication_diagnostic(
             PublicationErrorCode::InvalidBundle,
             "bundle.artifacts",
             "the complete bundle exceeds the bounded size",
@@ -201,7 +201,7 @@ fn validate_path(path: &str, index: usize) -> Result<(), PublicationDiagnostic> 
     if valid {
         Ok(())
     } else {
-        Err(diagnostic(
+        Err(publication_diagnostic(
             PublicationErrorCode::UnsafeArtifactPath,
             &format!("bundle.artifacts[{index}].path"),
             "artifact paths must be canonical relative paths inside the generated boundary",
@@ -209,7 +209,7 @@ fn validate_path(path: &str, index: usize) -> Result<(), PublicationDiagnostic> 
     }
 }
 
-pub(crate) fn diagnostic(
+pub(crate) fn publication_diagnostic(
     code: PublicationErrorCode,
     path: &str,
     message: &str,

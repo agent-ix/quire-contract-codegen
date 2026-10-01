@@ -10,7 +10,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::artifact::{
-    diagnostic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
+    publication_diagnostic, ArtifactBundle, PublicationDestinationState, PublicationDiagnostic,
     PublicationErrorCode,
 };
 
@@ -57,7 +57,7 @@ fn publish(
 ) -> Result<PublishedBundleIdentity, PublicationDiagnostic> {
     bundle.revalidate()?;
     let parent = destination.parent().ok_or_else(|| {
-        diagnostic(
+        publication_diagnostic(
             PublicationErrorCode::InvalidBundle,
             "destination",
             "the destination must have an existing parent directory",
@@ -67,14 +67,14 @@ fn publish(
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| {
-            diagnostic(
+            publication_diagnostic(
                 PublicationErrorCode::InvalidBundle,
                 "destination",
                 "the destination must have a UTF-8 final component",
             )
         })?;
     if name.is_empty() || !parent.is_dir() {
-        return Err(diagnostic(
+        return Err(publication_diagnostic(
             PublicationErrorCode::InvalidBundle,
             "destination",
             "the destination must have an existing directory parent",
@@ -200,7 +200,7 @@ fn unique_sibling(parent: &Path, name: &str, role: &str) -> Result<PathBuf, Publ
             return Ok(candidate);
         }
     }
-    Err(diagnostic(
+    Err(publication_diagnostic(
         PublicationErrorCode::IoFailed,
         "destination",
         "no unused staging name was available",
@@ -222,7 +222,7 @@ fn cleanup(path: &Path, action: &str) -> Result<(), PublicationDiagnostic> {
 }
 
 fn io_diagnostic(path: &Path, action: &str, error: &std::io::Error) -> PublicationDiagnostic {
-    diagnostic(
+    publication_diagnostic(
         PublicationErrorCode::IoFailed,
         &path.to_string_lossy(),
         &format!("could not {action}: {error}"),
@@ -241,7 +241,7 @@ fn io_diagnostic_with_state(
 }
 
 fn injected(path: &Path, point: &str) -> PublicationDiagnostic {
-    diagnostic(
+    publication_diagnostic(
         PublicationErrorCode::IoFailed,
         &path.to_string_lossy(),
         &format!("injected publication failure {point}"),

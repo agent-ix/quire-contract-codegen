@@ -4,6 +4,7 @@
 #![deny(missing_docs)]
 
 // The generated file and the validated bundle every generator builds (AD-004 step 2a).
+// Implements: FR-005
 mod artifact;
 mod bound;
 mod bounded_collections;
@@ -19,6 +20,7 @@ mod source_map;
 // Proof-dependency census types (AD-004 step 2b); becomes `kani/census.rs`.
 mod kani_census;
 // Harness and identity record types (AD-004 step 2b); becomes `kani/identity.rs`.
+// Implements: FR-015
 mod kani_identity;
 mod oracle;
 // Implements: FR-005, NFR-001
