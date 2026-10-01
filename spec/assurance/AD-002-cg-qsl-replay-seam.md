@@ -50,7 +50,7 @@ and who reports each failure.
 | Backend-witness transcript, admitted by `Witness::parse` | CG to QSL | QSL grammar | CG renders it from decoded values, never from Kani text |
 | `ReplayRequestWire` (and `ReplaySource::{Witness, Input}`) | CG to QSL | QSL | CG fills it; `replay` reads it |
 | `WitnessEnvelope` / `WitnessPacket` (frame counterexamples) | CG to QSL | QSL | CG builds through `WitnessEnvelope::reconstruct` |
-| `ObligationIdentity` (32 bytes) | CG to QSL | QSL type; CG is to mint the value | see AD-003 |
+| `ObligationIdentity` (32 bytes), in the envelope and in the request's obligation-identity slot | CG to QSL | QSL type; CG is to mint the value | see AD-003 |
 | `ReplayResult`, `FrameReplayResult`, `WitnessSettlement`, `ProofCategory` | QSL to CG | QSL | CG reads; CG defines its own verdict only as a partition of QSL's (`ReplayVerdict`) |
 | `DeclaredDomain(ProofBound{DomainKey, FiniteBound})` | CG to QSL (in the envelope) | QSL (re-exported by `qsl-replay`) | CG is to build it from its argument bindings' bounds |
 
@@ -117,7 +117,7 @@ authored).
   (test: a stand-in that panics if called).
 - R-5. Only a `ReproducedWithEvaluatedWitness` settlement in category `violation` reproduces;
   every other settlement, including `Inconclusive` in any category, is evidence failure.
-- R-6. Every envelope CG builds carries a QSL `ObligationIdentity` computed by CG from the
+- R-6. Every envelope and every request CG builds carries, as its obligation identity, a QSL `ObligationIdentity` computed by CG from the
   obligation's identity members (blocked on AD-003, E-1).
 - R-7. A request names the `package_id` returned by `call_site` for the same source, and the
   replay is refused (not reproduced) when one source byte changes.
@@ -134,8 +134,12 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
 - Function path: `spine_replay.rs` `ReplayPackage::new` calls `qsl_replay::call_site` with a
   `FunctionSite` (`spine_replay.rs:400`); `replay_falsification` calls `replay` (:125);
   `replay_counterexample` decodes, domain-checks (:498, through `first_out_of_domain`) and
-  partitions (`verdict_of`, :517). This path builds no `WitnessEnvelope` and no
-  `ObligationIdentity`: it sends `ReplaySource::Witness` in the request.
+  partitions (`verdict_of`, :517). This path builds no `WitnessEnvelope`: it sends
+  `ReplaySource::Witness` in the request. The request has an obligation-identity slot (QSL's
+  reader names it `originating_counterexample_identity` and types it `ObligationIdentity`), and
+  CG fills it with the `ByteDigest` of the transcript (`spine_replay.rs:440`, `:357`): the slot
+  exists and holds the wrong value, not the obligation identity. QSL's review says the slot is
+  to be renamed `obligation_identity`; that is QSL's change and is not assumed here.
 - Frame path: `frame_replay.rs` calls `call_site` with an `OperationSite` (:115), builds the
   envelope with `WitnessEnvelope::reconstruct` (:186) and calls `replay_frame` (:187).
   `obligation_identity` is a caller-supplied `[u8; 32]` field (:47); the only value in the
@@ -143,10 +147,14 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   computes it.
 - No domain check precedes the frame path, and the frame envelope carries
   `declared_domains: Some(Vec::new())` (`frame_replay.rs:169`): the proof bound is not in the
-  envelope even though QSL's `DeclaredDomain` is buildable through the facade.
+  envelope even though QSL's `DeclaredDomain` is buildable through the facade. QSL's review
+  says an empty declared-domain list will be refused once its QSL-345 part 2 lands; CG's frame
+  path must then supply the bounds.
 - The contract spellings are written as literals in `spine_replay.rs:345-352`; the same string
   for `quire.capability-kind/v1` exists as a constant at `capability.rs:22` and is not used
-  there. QSL keeps its own spellings private, so CG has nothing to import.
+  there. QSL keeps its own spellings private. QSL's review says QSL removes the three version
+  and vocabulary members from the request (QSL-352), after which CG drops its copies; until
+  then CG's literals are required.
 - FR-024 requires the envelope for every replay and a domain check before it; only the frame
   path builds an envelope. The function path is therefore either outside FR-024 or short of it.
   This AD records the gap; it does not decide it. FR-024 is `Planned` in the replay matrix.
@@ -162,8 +170,8 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
 
 | Question | Owner | Recommendation | Cost of the alternative |
 | --- | --- | --- | --- |
-| Should the function path build a `WitnessEnvelope` with an `ObligationIdentity`, as FR-024 says? | CG | Yes if the envelope is the unit of evidence; otherwise amend FR-024 to scope it to frame and state-clause counterexamples. Decide in the CG spec PR. | Today the function path's evidence carries no obligation join, so a counterexample cannot be tied to the harness that produced it. |
-| Request contract spellings: should QSL export them as constants? | QSL | Yes (R-Q5). CG then drops its literals. | A second spelling of a QSL contract is a copy that drifts. |
+| What does the function path put in the request's obligation-identity slot, and does it also build a `WitnessEnvelope`, as FR-024 says? | CG | Put the obligation identity (AD-003, E-1) in the slot instead of the transcript digest. QSL's review says no separate envelope is wanted for the function path; if so, amend FR-024 to scope the envelope to frame and state-clause counterexamples. Decide in the CG spec PR. | Today the function path's request carries no obligation join, so a counterexample cannot be tied to the harness that produced it. |
+| Request contract spellings: QSL removes them (QSL-352) | QSL | CG drops its literals when that lands. | A second spelling of a QSL contract is a copy that drifts. |
 | `call_site` selection for state clauses (`ClauseSite`) has no CG consumer | CG | Leave until a state-clause harness needs it. | none now |
 | The domain check before replay exists on the function path only | CG with QSL | CG keeps its own pre-check: a playback outside the harness's proof bound is a CG harness defect, and a QSL-side check of admitted values against `DeclaredDomain`, if QSL adds one, would report it as an invalid input and hide the defect. Do not drop the CG check on QSL's account. | Without CG's check a QSL refusal would hide a CG defect. |
 
@@ -178,6 +186,6 @@ To QSL (QSL reviews these rows):
 
 | Id | Stated need |
 | --- | --- |
-| R-Q5 | Export the request contract spellings (`quire.native-runtime/v1`, `quire.capability-kind/v1`, `quire.checked-package/v2`) from `qsl-replay`; CG hand-writes them. |
-| R-Q7 | State whether the function path needs a `WitnessEnvelope` and an `ObligationIdentity`; CG follows. |
-| R-Q8 | Status note: CG's frame envelope sends no declared domains; CG keeps its own pre-check regardless of any QSL-side checking of admitted values. |
+| R-Q5 | QSL removes the three version and vocabulary members from the request (QSL-352); CG drops its hand-written copies. |
+| R-Q7 | Rename the request's `originating_counterexample_identity` to `obligation_identity` and have it hold the obligation-identity digest; no separate envelope for the function path (QSL's review, to be confirmed by QSL). CG then fills the slot with its obligation identity. |
+| R-Q8 | CG's frame envelope sends an empty declared-domain list, which QSL-345 part 2 will refuse; CG must supply the bounds. CG keeps its own pre-check regardless. |

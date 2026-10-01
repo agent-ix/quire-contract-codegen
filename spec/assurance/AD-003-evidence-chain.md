@@ -56,13 +56,14 @@ then by how identity is asserted.
 | 4 | Corpus case: `CaseIdentity` over construct, profile, input, request, dependencies | CG | lowercase SHA-256 over its deterministic JSON, which also names the artifact paths; collisions refused by `EmittedCorpusIdentities` (`bounded_kani_corpus.rs`, `kani_corpus_identity_collision`) |
 | 5 | Launch: argument vector, ceilings, launcher, harness-in-crate check (`execute_kani_obligation`, `kani_launch_command`, `launch_evidence`) | CG | harness source must appear byte for byte in the crate before launch (`kani_execution.rs`, FR-017 step 1) |
 | 6 | Run classification: `classify_kani_run` over the typed transcript to `KaniRunOutcome` | CG | one parser module, `kani_transcript.rs`; Kani's wording read nowhere else |
-| 7 | Terminal value: `KaniRunOutcome` and `KaniOutcome` to `qsl_replay::TerminalValue` | CG (map), QSL (type) | one total `match` each, no wildcard arm (FR-029, FR-030; both `Planned`) |
+| 7 | Terminal value: (`KaniRunOutcome` or `KaniOutcome`, replay settlement) to `qsl_replay::TerminalValue`. The input is the pair, not the Kani outcome alone: a `Refuted` outcome whose replay disagrees becomes an inconclusive value with a typed replay-parity cause (ADR-013 O-16 inconclusive row and O-27; the cause's name is QSL's to give) | CG (map), QSL (type) | one total `match` each over the outcome, no wildcard arm (FR-029, FR-030; both `Planned`, and both written over the outcome alone today) |
 | 8 | Counterexample join: decoded playback to QSL replay, with `ObligationIdentity` | CG builds, QSL consumes | see AD-002; `package_id` recomputed by QSL |
 | 9 | FR-331 `results` record | QSL type (`TerminalRecord`, `ProofResultEnvelope`), QSpec wire | none in CG (gap E-3) |
 
 Dependency direction: IR to nothing of QSL; CG to IR and `qsl-replay`; QSL's replay reads what CG
-builds and never calls CG. A test that needs both (QSL's own integration test) lives with QSL
-and uses CG as a consumer.
+builds and never calls CG. QSL depends on no CG, normal or test-time (QSL ADR-011 FB-11), so a
+test that needs both lives in a repository above both, not in QSL; QSL's review names
+quire-integration (QSL-342).
 
 ### What crosses each join, and who reports a failure
 
@@ -72,7 +73,7 @@ and uses CG as a consumer.
 | 2 to 3 | one lowered claim per routed item | `GenerationErrorCode::UnsupportedObligations`, a `NoDerivableClaim` claim; no harness | CG |
 | 3 to 5 | harness source and options | `HarnessNotInCrate`; any argument vector is the identity's `options` verbatim | CG |
 | 5 to 6 | process output | `KaniInconclusiveReason::{NoVerdict, TimedOut, ...}`; a run with no verdict is not a proof | CG |
-| 6 to 7 | outcome and SUCCESS-check count | none: the map is total (when built) | CG |
+| 6 to 7 | outcome, SUCCESS-check count and, for a falsified run, the replay settlement | none: the map is total (when built) | CG |
 | 7 to 9 | terminal value and item identity | not built (E-3) | n/a |
 
 Each failure state stays a distinct typed state (AD-001 Failure view). No state is converted to
@@ -111,14 +112,17 @@ before the subsystem restructure) is input here and is not at this base.
 Candidate statements (local labels; the repository assigns requirement ids when one is
 authored).
 
-- E-1. CG computes QSL's `ObligationIdentity` from the obligation's identity members, excluding
-  only the source span, by one function, and the value changes when any included member changes
-  and does not when the span changes.
+- E-1. CG computes QSL's `ObligationIdentity` by one function over the ADR-013 O-09 members
+  (the clause or application node id, its occurrence key, the obligation kind, and the
+  arguments each as parameter node id and declared domain), excluding the source span, encoded
+  as RFC 8785 JSON; the value changes when any included member changes and does not when the
+  span changes. The scalar and the V1 obligation paths both use it.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001).
 - E-3. Every run item has exactly one terminal value, and the map from `KaniRunOutcome` and from
   `KaniOutcomeKind` is one `match` with no wildcard arm (FR-029-AC-1 and FR-030-AC-7 are the
-  existing form).
+  existing form). A falsified run's value is a function of the outcome and the replay
+  settlement together (link 7).
 - E-4. No outcome maps to `Tested`.
 - E-5. A run whose SUCCESS-check count is zero maps to a value QSL reads as non-success. A
   precondition harness counts its satisfied cover as its one SUCCESS check (question b).
@@ -155,7 +159,9 @@ Options and costs:
 | B (recommended). QSL adds `TerminalValue::Inconclusive(InconclusiveCause)` with causes for the vacuous proof, the unsatisfied cover and no-qualified-interpretation, and `Proved` carries a non-zero count | QSL type, reader and FR-069; QSpec FR-331-AC-8 wording; CG's three rows (vacuous, cover-unsatisfied, `Inconclusive`-other) and TC-040 and TC-041 | one QSL change plus one CG follow-up; removes `Proved{0}` as a magic value |
 | C. CG reports unsatisfied cover as `Failed` | CG only | blames the tool for a property of the model |
 
-This is QSL's and QSpec's decision (routed R-Q1, R-S2). Until QSL decides, CG keeps option A's
+Option B also gives a home to the replay-parity disagreement of link 7: the inconclusive value
+carries a replay-parity cause, which no existing `TerminalValue` variant can. This is QSL's and
+QSpec's decision (routed R-Q1, R-S2); QSL's review says option B arrives as QSL-351. Until QSL decides, CG keeps option A's
 rows and states them as interim in FR-029 and FR-030; it adds nothing that would need to be
 removed (no shim).
 
@@ -225,16 +231,22 @@ crate CG's lock selects.
 
 ### Current state and gaps
 
-- E-1 gap: no code in CG computes `ObligationIdentity`. QSL's type states its preimage as every
-  `KaniObligationIdentity` member except `source_span` and says QSL never hashes it; CG's frame
-  envelope takes a caller `[u8; 32]` (`frame_replay.rs:47`) and the function path builds none
-  (AD-002). CG's V2 scalar path uses `ScalarObligationIdentity` (`kani_obligations.rs`), so
-  the preimage that FR-024 and AD-001 state is named by the V1 struct, which the scalar path does
-  not use. Recommendation below.
-- E-3 gap: no CG code builds an FR-331 `results` record or a `TerminalRecord`. QSL's
-  `ProofResultEnvelope` has a reader (`read_backend_provider_envelope`) as its only constructor.
-  `TerminalRecord::new` is public, but nothing serialises a record to the wire. Route to QSL
-  (where the writer belongs) and QSpec (FR-331 is both producer and consumer text).
+- E-1 gap: no code in CG computes `ObligationIdentity`. QSL's type says QSL never hashes it.
+  ADR-013 O-09 defines the preimage: the clause (or application) node id, its occurrence key,
+  the obligation kind and the arguments (parameter node id and declared domain), source span
+  excluded. CG's frame envelope takes a caller `[u8; 32]` (`frame_replay.rs:47`); the function
+  path puts the transcript's byte digest in the request's obligation-identity slot (AD-002).
+  Neither CG identity struct carries the occurrence key: `KaniObligationIdentity` holds a
+  `ClauseRef`, and `ScalarObligationIdentity` holds a node id and no occurrence key, so each
+  must gain it before one function can compute the O-09 value. Recommendation below.
+- E-3 gap: no CG code builds a `TerminalRecord` or the data an FR-331 `results` record needs.
+  QSL exposes `TerminalRecord::new` and `BackendProviderSource` publicly, so CG can build both.
+  QSL's review says `TerminalRecord.item` (a string today) becomes a typed request index; CG
+  follows when it lands. Which component writes the `results` wire is not established here.
+- Sequencing (QSL's review, not assumed): QSL-351 (an inconclusive value with a typed cause,
+  and a non-zero count in `Proved`) and QSL-352 change `qsl-replay` types CG builds, so they
+  land in step with CG, and QSL-351 lands before the IR-465 terminal map is written so that map
+  is written once.
 - At this base there is no terminal map at all: `TerminalValue` is named in no `src` file; FR-029
   and FR-030 and TC-040 and TC-041 are `Planned`. PR 210 (draft, unmerged) adds the map. The
   questions above read PR 210 as input only.
@@ -257,15 +269,13 @@ crate CG's lock selects.
 
 | Question | Owner | Recommendation |
 | --- | --- | --- |
-| What is the obligation-identity preimage, now that the V1 `KaniObligationIdentity` is superseded on the scalar path? | CG proposes, QSL and QSpec confirm | State it by content, not by struct name: the canonical JSON of the obligation's identity members minus the source span, with the digest taken over that. This is the one canonical content-identity digest that binds a proof to its content; CG adds no other. QSL's `ObligationIdentity` stays opaque (it carries 32 bytes). CG writes E-1. QSL's doc says the digest domain is not in the closed FR-201 set; QSpec decides whether it needs a domain name (R-S3). |
-| Who serialises a `TerminalRecord` to the FR-331 `results` wire? | QSL (type) with QSpec (wire) | The writer belongs beside the reader in `qsl-replay`; CG calls it. A CG-side serialiser would be a second copy of QSL's wire shape. |
+| What is the obligation-identity preimage, now that the V1 `KaniObligationIdentity` is superseded on the scalar path? | CG proposes, QSL and QSpec confirm | State it by ADR-013 O-09's member list, not by struct name: the node id, occurrence key, kind and arguments (parameter node id and domain), source span excluded, RFC 8785 encoded, one implementation in CG. This is the one canonical content-identity digest that binds a proof to its content; CG adds no other. QSL's `ObligationIdentity` stays opaque (it carries 32 bytes). CG writes E-1. QSL's doc says the digest domain is not in the closed FR-201 set; QSpec decides whether it needs a domain name (R-S3). |
 | Replace IR's `KaniProviderResult` map | IR | Delete the type and its map as FR-039 already says, together with the CG import change above (IR-347). |
 | IR cause codes as strings | IR | Export constants (or a typed cause enum) for the three codes (IR-347). |
 | One map instead of two | CG after QSL | After option B of (a). |
 
-No compatibility layer is proposed. If a seam above would need one (for example a CG-side
-serialiser of QSL's wire, or a CG copy of QSL's terminal type), it is a design smell and the
-answer is to put the code with its owner.
+No compatibility layer is proposed. If a seam above would need one (for example a CG copy of
+QSL's terminal type), it is a design smell and the answer is to put the code with its owner.
 
 ### Routed gaps
 
@@ -276,10 +286,9 @@ To QSL (QSL reviews these rows):
 
 | Id | Stated need |
 | --- | --- |
-| R-Q1 | A `TerminalValue` for a non-vacuous inconclusive run (option B of (a)). |
-| R-Q2 | Obligation identity preimage stated by content, not by struct name. |
+| R-Q1 | An inconclusive `TerminalValue` with a typed cause and a non-zero count in `Proved` (option B of (a); QSL-351, ahead of IR-465), and a typed request index in `TerminalRecord` (QSL-354 as relayed). |
+| R-Q2 | Edit QSL's `ObligationIdentity` doc to point at ADR-013 O-09's member list instead of naming `KaniObligationIdentity`. |
 | R-Q3 | The one sentence of ADR-013 O-16 that says IR implements the proof-column map; CG owns it. |
-| R-Q4 | A writer for the FR-331 `results` from a `TerminalRecord`, beside the reader. |
 
 To QSpec:
 
