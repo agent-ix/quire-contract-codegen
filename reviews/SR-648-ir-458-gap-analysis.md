@@ -44,3 +44,12 @@ FR-015-AC-11 and FR-015-AC-16 still hold. tc_025 checks the operand assumes, and
 tests now check the result bound through the `admitted` line. FR-017-AC-11 is still exercised by
 the routed verify, falsify and classification tests. The test matrix needs no change for the
 renamed test, because it lists TC ids, not function names.
+
+## Dispositions
+
+Round 1, reviewed at a03a883.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | a03a883: FR-015-AC-37 is added, with a TC-025 ✅ Covered matrix row, the TC-025 summary row and TC-025 procedure step 9. Both scalar native-relation tests and the Kani mutation control are tagged FR-015-AC-37. The new text is reviewed in SR-650 (clean). |
+| FND-002 | fixed | a03a883: the Kani mutation test is re-tagged `Trace: FR-015-AC-37, TC-025, FR-017-AC-11`, and FR-017-AC-7 is gone. |

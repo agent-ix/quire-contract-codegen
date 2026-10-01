@@ -105,3 +105,21 @@ Gates at 2bea27d:
   - `tc_027_a_routed_scalar_harness_verifies`: ok.
   - `tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified`: ok.
   - All six reviewer probes ran in the same pass: 9 passed, 4035 s, under high machine load.
+
+## Dispositions
+
+Round 1, reviewed at a03a883. The branch is rebased on main 94ab14d, which is still main.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | a03a883: `tc_025_every_rendered_operation_states_its_own_native_relation` renders every generated corpus claim (add, sub, mul, negate). For each, it asserts exactly one `let exact: i128 = ` line and the exact line written out in the test. I re-ran the three mutations: sub operands swapped, mul as `+`, and negate sign dropped are each red, on this test. No real-Kani run for sub, mul or negate was added; the text pin is sufficient for this finding. |
+| FND-002 | fixed | a03a883: the Kani mutation test now also asserts the counterexample contains "Check for `assertion`" and the `sound` assertion's message. |
+| FND-003 | fixed | a03a883: tc_025 asserts `_ => false,`. I mutated it to `_ => true` and the test went red. The arm appears once per harness in the rendered text. |
+| FND-004 | fixed | a03a883: one `ScalarOperation` enum with exhaustive `of`, `operand_names`, `native_expression` and `reachable`. The native expression is built from `operand_names`. Rendered output is byte-identical before (e46e823) and after for all four corpus harnesses (add, sub, mul, negate) and the routed `x + 1` harness. |
+
+Round-1 checks at a03a883:
+- Default-lane mutations, all red on the intended test: sub swapped, mul as `+`, negate sign
+  dropped, `_ => true`, `Refused => admitted`, and `assert!(sound, ..)` removed.
+- `make ci` with a private scratchpad TRUSTED_HOME exited 0: 101 unit and 239 integration tests
+  passed, 9 ignored, in both the MSRV and the test pass.
+- Real Kani: I re-ran the three scalar tests myself with `make kani` settings. All three passed in 908 s: `tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic`, which includes the new assertion-message check, `tc_027_a_routed_scalar_harness_verifies` and `tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified`.
