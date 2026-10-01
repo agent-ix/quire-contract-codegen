@@ -1,5 +1,5 @@
 ---
-id: SR-802
+id: REV-019
 title: "Base review of the numeric/state strategy slice"
 type: SpecReview
 analysis: base

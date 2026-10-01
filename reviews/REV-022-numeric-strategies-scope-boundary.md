@@ -1,5 +1,5 @@
 ---
-id: SR-805
+id: REV-022
 title: "Scope-boundary review of the numeric/state strategy slice"
 type: SpecReview
 analysis: scope-boundary

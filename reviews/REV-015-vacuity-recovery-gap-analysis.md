@@ -1,5 +1,5 @@
 ---
-id: SR-800
+id: REV-015
 title: "Vacuity primitive recovery and remaining binding gaps"
 type: SpecReview
 analysis: gap-analysis
