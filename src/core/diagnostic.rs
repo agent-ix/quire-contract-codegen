@@ -1,6 +1,6 @@
 //! The generation diagnostic vocabulary shared by every generator (AD-004 step 2a).
 //!
-//! This module becomes `core/diagnostic.rs`. `artifact` needs [`GenerationTerminalState`] for
+//! This module is `core/diagnostic.rs`. `artifact` needs [`GenerationTerminalState`] for
 //! `PublicationDiagnostic`, so the vocabulary moves out of `oracle` with it rather than leaving
 //! `core` importing the oracle subsystem.
 

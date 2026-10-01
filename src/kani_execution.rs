@@ -43,7 +43,7 @@ use rustix::{
 use serde::Serialize;
 
 use crate::{
-    artifact::Artifact,
+    core::artifact::Artifact,
     kani::KaniSolver,
     kani_identity::{
         KaniObligationHarness, KaniScalarObligationHarness, ObligationKind, StateFrameHarness,
@@ -906,7 +906,7 @@ mod tests {
         options: Vec<String>,
     ) -> StateFrameHarness {
         use crate::{
-            identity::{HarnessSymbol, ModuleSymbol},
+            core::identity::{HarnessSymbol, ModuleSymbol},
             kani_identity::{StateFrameIdentity, StateFrameScope},
         };
         let id = |digit: &str| -> quire_contract_model::CheckedNodeId {

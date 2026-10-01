@@ -17,7 +17,7 @@ use quire_contract_ir::kani::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    artifact::Artifact,
+    core::artifact::Artifact,
     kani::deterministic_json,
     kani_census::{
         dependency_readiness, normalize_dependencies, ProofDependencyEdge, ProofDependencyKind,

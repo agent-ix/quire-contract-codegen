@@ -3,10 +3,10 @@
 use quire_contract_model::{BoundPackage, ClauseRef};
 
 use crate::{
-    artifact::{
+    core::artifact::{
         ArtifactBundle, PublicationDiagnostic, MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES,
     },
-    diagnostic::GenerationDiagnostic,
+    core::diagnostic::GenerationDiagnostic,
     oracle::{generate_named_boolean_oracle, oracle_symbol, unique_names},
     OracleArtifactBundle, OracleRequest,
 };

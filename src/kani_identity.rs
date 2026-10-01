@@ -8,8 +8,8 @@ use quire_contract_model::{CheckedNodeId, ClauseRef, DependencyIdentity, SourceS
 use serde::Serialize;
 
 use crate::{
-    artifact::Artifact,
-    identity::{HarnessPath, HarnessSymbol, ModuleSymbol},
+    core::artifact::Artifact,
+    core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol},
     kani::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver},
 };
 

@@ -1,6 +1,6 @@
 //! Generated files and the validated bundle every generator builds (AD-004 step 2a).
 //!
-//! This module becomes `core/artifact.rs`: it depends on no generator, strategy, evidence, Kani
+//! This module is `core/artifact.rs`: it depends on no generator, strategy, evidence, Kani
 //! or publication module. The atomic writer that consumes a bundle lives in `publication`.
 
 use std::{
@@ -10,7 +10,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::diagnostic::GenerationTerminalState;
+use crate::core::diagnostic::GenerationTerminalState;
 
 const BUNDLE_SCHEMA: &str = "quire.artifact-bundle/v1";
 pub(crate) const MAX_ARTIFACTS: usize = 4096;

@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::source_map::SourceProbe;
+use crate::core::source_map::SourceProbe;
 
 /// Maximum accepted raw LLVM JSON size; checked before deserialization.
 pub const MAX_COVERAGE_BYTES: usize = 16 * 1024 * 1024;

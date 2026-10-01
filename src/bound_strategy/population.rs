@@ -13,7 +13,7 @@
 
 use super::relation::{ComparisonOperator, Domain, OperandPosition, Partner, Relation};
 use crate::{
-    diagnostic::GenerationErrorCode, StrategyDiagnostic, StrategyErrorCode,
+    core::diagnostic::GenerationErrorCode, StrategyDiagnostic, StrategyErrorCode,
     MAX_GENERATED_SOURCE_BYTES,
 };
 

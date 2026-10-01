@@ -8,7 +8,7 @@ use std::{collections::BTreeSet, fmt::Write as _};
 
 use super::relation::{Domain, Partner, Relation};
 use crate::{
-    diagnostic::{GenerationErrorCode, GenerationTerminalState},
+    core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
     StrategyDiagnostic, StrategyErrorCode, MAX_GENERATED_SOURCE_BYTES,
 };
 

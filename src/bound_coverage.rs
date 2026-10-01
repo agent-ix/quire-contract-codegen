@@ -6,9 +6,10 @@ use quire_contract_model::{BooleanOperator, BoundPackage, ClauseRef, Expression,
 use serde::Serialize;
 
 use crate::{
-    artifact::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
-    classify_clause, parse_llvm_coverage,
-    source_map::SourceRegion,
+    classify_clause,
+    core::artifact::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
+    core::source_map::SourceRegion,
+    parse_llvm_coverage,
     vacuity::normalize_path,
     BoundOracleGeneration, ClauseCoverage, CoverageDiagnostic, CoverageErrorCode,
     GeneratedBoundOracles, LlvmCoverage, MAX_COVERAGE_BYTES,
