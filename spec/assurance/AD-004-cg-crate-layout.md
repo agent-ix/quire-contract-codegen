@@ -593,22 +593,26 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    (`kani/terminal.rs`) map `KaniRunOutcome` to `TerminalValue`, so both depend on QSL-351
    (`Inconclusive(cause)`, a `NonZero` `Proved`, the tool pin gone) and on the terminal value also
    taking the replay settlement. Neither merges before QSL-351.
-   - The following is design intent, pending QSL-351 and QSL-354 (ADR-013 C-09, QSL #550), relayed
-     from QSL and not verified here. It adds no behaviour claim; FR-029 is amended by its own
-     ticket. The map is total over (Kani outcome, QSL replay result), with three replay cases: (1)
-     settled: a refuted outcome with a replay disagreement gives
-     `Inconclusive(InconclusiveCause::ReplayParity)`; (2) replay refusal (identity mismatch, decode
-     refusal, stale dependency, limit reached) gives `Inconclusive(InconclusiveCause::ReplayRefused)`
-     carrying QSL's `ReplayRefusal` code; (3) replay fault (QSL `InternalFault`) gives
-     `TerminalValue::Failed`, so a defect stays loud. A refuted Kani outcome never becomes
-     `Refuted` without a reproduced replay. The spellings are `replay_parity` and
-     `replay_refused`, and QSL-351 adds both causes.
-   - CG's own replay failures are not QSL's replay result: `SpineReplayError::{UnboundArgument,
-     FieldDelimiter, Transcript, WrongArm}`, `DependencyLockError` and the witness `DecodeFailure`.
-     Decision: each maps to `TerminalValue::Failed`. CG cannot mint a `ReplayRefusal` code, which is
-     QSL's, and each of these is a CG defect or a malformed backend output that must stay loud
-     (AD-001's Failure view keeps each a distinct typed state). The planner or QSL can relax this
-     if QSL offers a CG-side refusal cause.
+   - The map follows QSL's merged ADR-013 C-09 and ADR-011 T-13 (QSL #550, QSL-354; checked at QSL
+     `origin/main`: T-13 says the driver `quire-driver` owns the S6b run, the E9 replay
+     (`qsl_replay::replay`) and the FR-331 terminal record, CG owns the C-09 map and settles
+     dispositions, and parity is settled inside `replay`). It adds no behaviour claim of this AD;
+     FR-029 is amended by its own ticket, and QSL-351 adds the two causes. The map is total over
+     (Kani outcome, QSL replay result): a reproduced replay gives `Refuted`; a replay
+     disagreement, or one that completes no value, gives
+     `Inconclusive(InconclusiveCause::ReplayParity)`; a non-fault `ReplayRefusal` (identity
+     mismatch, decode refusal, stale dependency, limit reached) gives
+     `Inconclusive(InconclusiveCause::ReplayRefused)` carrying that refusal's catalog code; a
+     fault (QSL `InternalFault`) gives `TerminalValue::Failed`. A refuted Kani outcome never
+     becomes `Refuted` without a reproduced replay. The spellings are `replay_parity` and
+     `replay_refused`.
+   - Closed-set rule (QSL's confirmation, relayed by the IR planner): `ReplayRefused` carries only
+     QSL `ReplayRefusal` codes, a closed set QSL owns. Every CG-origin failure is CG's own defect
+     and maps to `TerminalValue::Failed`, with no CG code inside `ReplayRefused`. That covers
+     `SpineReplayError::{UnboundArgument, FieldDelimiter, Transcript, WrongArm}`, the envelope
+     failure, `DependencyLockError`, the witness `DecodeFailure`, and a Kani playback outside the
+     harness proof bound, which CG checks before building the envelope. AD-001's Failure view keeps
+     each a distinct typed state before the map.
    - The map takes QSL's replay result type, not CG's `replay/` module, so `kani/terminal.rs`
      imports `qsl-replay` and `kani` imports nothing from `replay`. `routed/adapter.rs` converts
      CG's failures and QSL's result into the map's input and calls it.
@@ -684,7 +688,8 @@ FR-015 V2 contract input (step 4c).
   build or test was run for this AD.
 - PR 210 was read as a description and file list, not built. It is not at this base.
 - Whether IR exposes a typed body-term decoder today was not checked; IR's layout AD is a separate
-  ticket. The IR-347 lowering move, IR's `BoundPackage` retirement and the C-09 terminal cases are
-  relayed and not verified.
+  ticket. The IR-347 lowering move and IR's `BoundPackage` retirement are relayed and not
+  verified. The C-09 terminal cases were checked against QSL's merged ADR-011 T-13; the closed-set
+  rule for `ReplayRefused` is relayed.
 - The `quire-canonical` API names (`to_vec`, `Limits`, `sha256`), QSL's tag pin and the driver's
   one-copy gate are relayed and were not checked.
