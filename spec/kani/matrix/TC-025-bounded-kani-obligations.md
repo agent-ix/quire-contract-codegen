@@ -114,7 +114,7 @@ unsatisfiable requires as `cover_unsatisfied`.
 
 10. Request one V2 clause claim each over a `precondition`, a `postcondition` and an
     `invariant` node of an admitted `CheckedPackageV2`. Each yields one harness of its own
-    kind with one drawn value per drawn input (the pre-state field reads and the
+    kind with one drawn value per drawn input (the pre-state of every field the body reads, bare or `pre(...)`, and the
     operation parameters, bounded by their declared domains; the postcondition's result
     and post-state come from the subject call and their domain is asserted), and none takes a
     bound from a caller (FR-015-AC-38, FR-015-AC-39). The invariant harness asserts the

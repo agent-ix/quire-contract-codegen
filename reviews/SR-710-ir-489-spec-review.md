@@ -81,6 +81,14 @@ FR-038 at IR origin/main, and against CG `src/state_frame.rs` at origin/main, wh
 | FND-014 | medium | AC-48 identifies a state field read "by the object type's field node". IR FR-040 says a field is named by its declaring node and its name, never by a node of its own. AC-48 also widens AD-003 E-1's "parameter node id" to non-parameter arguments while still claiming the identity is "formed by AD-003 E-1". | spec/kani/functional/FR-015-bounded-kani-obligations.md:271 |
 | FND-015 | medium | AC-46 says the cover states that "the clause's evaluation completes", "as FR-015-AC-7 does". For the precondition family, AC-7 and AD-004's cover rule (IR-464) say the cover states that the precondition holds, which is a different property. | spec/kani/functional/FR-015-bounded-kani-obligations.md:269 |
 
+## New findings (disposition pass 2)
+
+Reviewed at 45ba5c2a9b061853dbe8ae7990d5dc6d1cec99ea.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-016 | low | The Inputs bullet and AC-39 disagree on what a postcondition harness draws. The Inputs bullet says the harness "draws only the pre-state and the operation parameters". AC-39 draws only "each `pre(...)` state field read". Take a postcondition whose body reads a field only bare, such as `self.balance >= 0`: under AC-39 it draws no pre-state for that field, yet the subject call needs an input state for it. The fix is to draw the pre-state of every field the body reads, bare or `pre(...)`, or to defer the subject's input state to FR-025 explicitly. | spec/kani/functional/FR-015-bounded-kani-obligations.md:271, spec/kani/functional/FR-015-bounded-kani-obligations.md:60-62 |
+
 ## Dispositions
 
 | FND | Outcome | sha/reason |
@@ -96,3 +104,7 @@ FR-038 at IR origin/main, and against CG `src/state_frame.rs` at origin/main, wh
 | FND-009 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: AC-45 states order independence as an addition ("in addition, ..."). |
 | FND-010 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: the row names the single row holding AC-22 and AC-25 (FR-015-AC-19 through FR-015-AC-25). |
 | FND-011 | fixed | ec187e33afdc23e8991a3c0e5fd4b6e7493d2e09: the playback is `amount_current = 999` in AC-41 and TC-025. |
+| FND-012 | fixed | 45ba5c2a9b061853dbe8ae7990d5dc6d1cec99ea: only the pre-state reads and the operation parameters are drawn; a postcondition's result and post-state come from the subject call, with their domains asserted and never assumed (AC-39, consistent with AC-4, AC-11 and AC-27). The new Inputs and AC-39 mismatch is FND-016. |
+| FND-013 | fixed | 45ba5c2a9b061853dbe8ae7990d5dc6d1cec99ea: FR-014-AC-38 makes `project(deref(self), field)` and `pre(...)` of one operands, ranged by the member's `integer_range`, and keeps FR-014-AC-10 for every other operand. This matches state_frame.rs (`quire.op.record.project`, `quire.op.model.deref`, `quire.op.state.pre`). |
+| FND-014 | fixed | 45ba5c2a9b061853dbe8ae7990d5dc6d1cec99ea: AC-48 names a field read by declaring node id and field name, applies E-1 as written to parameters, and records E-1's scope as an open question for the AD-003 owner. |
+| FND-015 | fixed | 45ba5c2a9b061853dbe8ae7990d5dc6d1cec99ea: AC-46 states a cover per family. Precondition: it holds within the bounds. Postcondition: after the subject call, the requires (AC-43's anchor preconditions) and the bounds are jointly satisfiable, which matches AC-7 and Behavior. Invariant: the drawn state satisfies its assumptions. |
