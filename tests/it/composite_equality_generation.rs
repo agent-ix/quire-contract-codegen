@@ -1087,3 +1087,123 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
         other => panic!("expected exactly one Lowered record, found {other:?}"),
     }
 }
+
+/// The generated source of `E_TUPLE` over `TUP_PAIR` built from `extras` and `members`.
+fn tuple_source(extras: &[u32], members: &[u32]) -> (CompositeEqualityOracles, String) {
+    let package = tuple_members_package(extras, members).admit();
+    let items = vec![item(
+        E_TUPLE,
+        EqualityOperatorKind::Equal,
+        typed(TUP_PAIR),
+        typed(TUP_PAIR),
+    )];
+    let oracles = generate(&package, &items);
+    let lib = contents(&oracles, "src/lib.rs").to_owned();
+    (oracles, lib)
+}
+
+/// The refusal `E_TUPLE` gets over `TUP_PAIR` built from `extras` and `members`.
+fn tuple_refusal(extras: &[u32], members: &[u32]) -> CompositeEqualityRefusal {
+    let package = tuple_members_package(extras, members).admit();
+    let items = vec![item(
+        E_TUPLE,
+        EqualityOperatorKind::Equal,
+        typed(TUP_PAIR),
+        typed(TUP_PAIR),
+    )];
+    let oracles = generate(&package, &items);
+    refused(only_claim(&oracles, E_TUPLE)).clone()
+}
+
+/// Trace: FR-018-AC-16, TC-029. The corpus tuple `(Int[-100, 100], Text[0, 16; nfc])` names the
+/// `text_bounds` node as its text position, as QSL emits a text type; the generated declaration
+/// is that tuple, read from the bound's own members.
+#[test]
+fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
+    let (oracles, lib) = tuple_source(&[], &[T_INTEGER_BOUNDED, BD_TEXT]);
+    let _ = generated(only_claim(&oracles, E_TUPLE));
+    let int = "rt::ValueType::Int(rt::IntegerInterval::new(integer(\"-100\"), integer(\"100\")).expect(\"generation-time validation guarantees this bound reconstructs\"))";
+    let text = "rt::ValueType::Text(rt::TextType::new(0, 16, rt::TextProfile::Nfc).expect(\"generation-time validation guarantees this bound reconstructs\"))";
+    assert!(
+        lib.contains(&format!("rt::CompositeShape::Tuple(vec![{int}, {text}, ])")),
+        "the declaration must be Tuple[Int[-100,100], Text(0,16,Nfc)]:\n{lib}"
+    );
+}
+
+/// Trace: FR-018-AC-16, TC-029. A numeric member that names its `bounded_domain` node reads as
+/// the same type as one that names the base scalar the bound hangs off, for integer, decimal
+/// and rational bases.
+#[test]
+fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
+    let (_, through_scalars) = tuple_source(
+        &[],
+        &[
+            T_INTEGER_BOUNDED,
+            BD_TEXT,
+            T_DECIMAL_SMALL,
+            T_RATIONAL_NARROW,
+        ],
+    );
+    let (_, through_domains) =
+        tuple_source(&[], &[BD_INTEGER, BD_TEXT, BD_DECIMAL, BD_RATIONAL_NARROW]);
+    assert!(
+        through_scalars.contains("rt::ValueType::Decimal(")
+            && through_scalars.contains("rt::ValueType::Rational(")
+    );
+    assert_eq!(through_domains, through_scalars);
+}
+
+/// Trace: FR-018-AC-16, TC-029. A `bounded_domain` member reads its own bound and never a sibling
+/// bound over the same base: with a second `text_bounds` over the text scalar, naming either
+/// reads that node's `min` and `max`, neither is ambiguous.
+#[test]
+fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
+    let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT_SIBLING]);
+    let _ = generated(only_claim(&oracles, E_TUPLE));
+    assert!(lib.contains("rt::TextType::new(1, 5, rt::TextProfile::Nfc)"));
+    assert!(!lib.contains("rt::TextType::new(0, 16,"));
+    let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT]);
+    let _ = generated(only_claim(&oracles, E_TUPLE));
+    assert!(lib.contains("rt::TextType::new(0, 16, rt::TextProfile::Nfc)"));
+    assert!(!lib.contains("rt::TextType::new(1, 5,"));
+}
+
+/// Trace: FR-018-AC-16, TC-029. A bound whose form is not the one its base scalar reads is
+/// refused as missing the form the base needs, not read as an unbounded type.
+#[test]
+fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
+    let refusal = tuple_refusal(&[BD_INTEGER_WRONG_FORM], &[BD_INTEGER_WRONG_FORM, BD_TEXT]);
+    match refusal {
+        CompositeEqualityRefusal::MissingBound {
+            bounded_type,
+            expected_form,
+        } => {
+            assert_eq!(bounded_type, code_id(BD_INTEGER_WRONG_FORM));
+            assert_eq!(expected_form, "integer_range");
+        }
+        other => panic!("expected MissingBound, got {other:?}"),
+    }
+}
+
+/// Trace: FR-018-AC-16, TC-029. A `bounded_domain` over a boolean scalar (which reads no bound
+/// form), or over a base that is not a `scalar_type` (QSL's enum declaration, a record) is
+/// refused as unsupported, naming the bound node.
+#[test]
+fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
+    for (extra_nodes, bound) in [
+        (vec![BD_BOOLEAN], BD_BOOLEAN),
+        (vec![BD_ENUM], BD_ENUM),
+        (vec![BD_OVER_COMPOSITE], BD_OVER_COMPOSITE),
+    ] {
+        match tuple_refusal(&extra_nodes, &[bound, BD_TEXT]) {
+            CompositeEqualityRefusal::Unsupported {
+                unsupported_node_id,
+                node_tag,
+            } => {
+                assert_eq!(unsupported_node_id, code_id(bound));
+                assert_eq!(node_tag, "bounded_domain");
+            }
+            other => panic!("bound {bound}: expected Unsupported, got {other:?}"),
+        }
+    }
+}

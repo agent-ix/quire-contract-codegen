@@ -1022,10 +1022,26 @@ fn resolve_type(
         // same base (FR-018 §Inputs).
         Some(CheckedNodeTag::BoundedDomain) => {
             let base = lookup(graph, &node.semantic_type)?;
+            let unsupported = || CompositeEqualityRefusal::Unsupported {
+                unsupported_node_id: type_id.clone(),
+                node_tag: "bounded_domain",
+            };
             if CheckedNodeTag::from_wire(&base.node_tag) != Some(CheckedNodeTag::ScalarType) {
-                return Err(CompositeEqualityRefusal::Unsupported {
-                    unsupported_node_id: type_id.clone(),
-                    node_tag: "bounded_domain",
+                return Err(unsupported());
+            }
+            // The bound's form must be the one its base scalar reads; a base with no such
+            // form (boolean, float, enum) takes no bound here.
+            let expected_form = match &*base.semantic_form {
+                "integer" => "integer_range",
+                "rational" => "rational_range",
+                "decimal" => "decimal_range",
+                "text" => "text_bounds",
+                _ => return Err(unsupported()),
+            };
+            if &*node.semantic_form != expected_form {
+                return Err(CompositeEqualityRefusal::MissingBound {
+                    bounded_type: type_id.clone(),
+                    expected_form,
                 });
             }
             resolve_scalar(core::slice::from_ref(&node), type_id, base)

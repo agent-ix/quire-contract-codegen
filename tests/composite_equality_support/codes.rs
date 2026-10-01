@@ -67,6 +67,20 @@ pub const F_BARE: u32 = 41;
 pub const S_BARE: u32 = 42;
 pub const T_BARE: u32 = 43;
 
+/// Nodes only [`tuple_members_package`](super::tuple_members_package) adds, to exercise a
+/// `bounded_domain` member type (FR-018-AC-16). A second `text_bounds` over `T_TEXT`, beside
+/// `BD_TEXT`.
+pub const BD_TEXT_SIBLING: u32 = 60;
+/// A `text_bounds` bound over the integer scalar `T_INTEGER_BOUNDED`: the wrong form for its base.
+pub const BD_INTEGER_WRONG_FORM: u32 = 61;
+/// An `integer_range` bound over the boolean scalar `T_BOOLEAN`, which has no bound form.
+pub const BD_BOOLEAN: u32 = 62;
+/// An `integer_range` bound over the base package's enum declaration (QSL's enum type node,
+/// which is not a `scalar_type`).
+pub const BD_ENUM: u32 = 64;
+/// A `collection_bounds` bound over the record `R_POINT`, a base that is not a `scalar_type`.
+pub const BD_OVER_COMPOSITE: u32 = 65;
+
 pub const E_RECORD: u32 = 100;
 pub const E_NESTED_IEEE: u32 = 101;
 pub const E_TUPLE: u32 = 102;
