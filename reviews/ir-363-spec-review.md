@@ -69,3 +69,9 @@ AC-17 wording would be a small improvement.
 
 Not a finding against this PR: quire's `ac:vague-response` check flags the noun `process` as a
 verb. That is a checker false positive worth raising with quire.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | afec83085f0740b18b535c188c0b3756aadca720 |
