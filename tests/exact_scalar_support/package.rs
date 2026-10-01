@@ -2399,6 +2399,10 @@ pub fn corpus_package() -> PackageBuilder {
         }
         // No catalogued `convert` identity accepts a `text` operand family
         // (see `corpus_operation`'s `TextAdmission` arm), so this operand
+        // KNOWN REFUSED (IR-480): since IR resolves a literal operand's family
+        // through `literal.type`, this operand (a text literal under `numeric.convert`,
+        // which takes `exact_numeric`) is `OperatorIneligible` at admission; no catalogued
+        // `convert` identity accepts text. The comment below predates that.
         // must be a literal -- IR's operand-family check never resolves a
         // family for a literal argument, so the mismatch is never reached.
         let text_admission_type = if matches!(expression.operation, Op::TextAdmission { .. }) {
@@ -2441,6 +2445,10 @@ pub fn corpus_package() -> PackageBuilder {
         // ordering comparisons (never `eq`/`ne`, which accept the
         // `enum_kind` group `enum_member()` already resolves to) bypasses the
         // family check the same way `TextAdmission` does above.
+        // KNOWN REFUSED (IR-480): IR resolves a literal typed by the enum to the `enum`
+        // family, and no node resolves to `ordered_enum`, which `enum.lt/le/gt/ge` require, so
+        // these four are `OperatorIneligible` at admission although the base enum is
+        // declared `ordered: true`.
         if let Op::EnumComparison { operator } = expression.operation {
             if !matches!(
                 operator,
@@ -2819,21 +2827,21 @@ pub fn corpus_package() -> PackageBuilder {
             "binary",
             op("quire.op.integer.add"),
             &integer_type,
-            // A `reference(V_DECIMAL)` operand would resolve to the
-            // `decimal` family and `quire.op.integer.add`'s catalog entry
-            // requires `integer` in both positions, so IR would refuse the
-            // whole package `IllTyped`/`OperatorIneligible` at admission --
-            // this fixture exists to exercise CG's own operand-type check
-            // at generation time, over an already-admitted package, not
-            // IR's. `argument_family` only ever resolves a family for
-            // `reference`/`binding` arguments (a `literal` always resolves
-            // to `None`, per its own match arms in quire-contract-ir
-            // Contract IR's `checked_package/v2/operations.rs`), so a literal
-            // operand bypasses that admission-time check entirely while
-            // CG's `check_operand` still classifies it by its own
-            // `value_kind` and refuses the same `OperandTypeMismatch
-            // { position: 1, expected: Integer, found: Some("decimal") }`.
-            vec![reference(&wrong_operand_anchor), literal("decimal", "1.5")],
+            // Contract IR resolves a literal operand's family through `literal.type`, so a
+            // literal typed by `T_DECIMAL` would be `OperatorIneligible` at admission. It does
+            // not cross-check `literal.type` against `value_kind`, so a literal typed by the
+            // integer type but carrying the `decimal` value kind admits, while CG's
+            // `check_operand` classifies it by its own `value_kind` and refuses the same
+            // `OperandTypeMismatch { position: 1, expected: Integer, found: Some("decimal") }`.
+            vec![
+                reference(&wrong_operand_anchor),
+                json!({
+                    "term": "literal",
+                    "type": node_ref(&key(T_INTEGER)),
+                    "value_kind": "decimal",
+                    "value": "1.5",
+                }),
+            ],
         ),
         &[INT, DEC],
     );
