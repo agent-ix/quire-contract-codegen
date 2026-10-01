@@ -50,3 +50,11 @@ Backed and verified:
 - Nothing is over-claimed. `spec/test-matrix.md` is unchanged, the TC-023 row is still Planned, and
   no FR-015 AC text changed. interface-001 already described the collision refusal. The corpus
   replay retired in #205 stays retired.
+
+## Dispositions
+
+Round 1 was reviewed at 3c006b81292fb6e882649ba4d12e0bc9d78d54f5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 545d1bc: four table-driven tests vary one field at a time. They cover every arithmetic, graph and collection field (including the `ExistsEqual` payload), every finite-input field and the profile revision. I re-ran the round-0 removals at round 1, plus five more probes, 18 in all. Each one is caught by a TC-023 unit test. |

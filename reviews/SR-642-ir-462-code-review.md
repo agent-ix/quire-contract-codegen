@@ -78,3 +78,25 @@ test, deny, audit-unsafe, rustdoc and test all passed. Each test run gave 96 uni
 integration tests passed, with 8 ignored. Those runs include the three real-Kani corpus tests
 (`tc_023_kani_executes_the_generated_arithmetic_harness`, `..._graph_harness`,
 `tc_023_kani_falsifies_the_generated_false_collection_harness`) and the three new unit tests.
+
+## Dispositions
+
+Round 1 was reviewed at 3c006b81292fb6e882649ba4d12e0bc9d78d54f5, rebased on main 5a924e1.
+`make ci` exited 0 there, with a private TRUSTED_HOME. Each test run gave 101 unit and 238
+integration tests passed, with 8 ignored, including the three real-Kani `tc_023_kani_*` tests.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 545d1bc: `CheckedArithmeticRequest`, `GraphRequest` and `CollectionQuery`, and also `FiniteInput`, `FiniteObject` and `FiniteReference`, are destructured without `..`. A new field upstream is now a compile error. |
+| FND-002 | fixed | 545d1bc: `InputIdentity` sorts the object and reference tuples before hashing. Removing either sort makes `tc_023_identity_is_canonical_over_the_input_population_order` fail. |
+
+Round-1 mutation probes were scratch edits, reverted afterwards. Of 20 probes, 18 were caught.
+Two survived, and both are equivalent mutants:
+- Removing the top-level `profile` survives. `input.profile` is hashed inside `InputIdentity`, and
+  the guard at line 390 refuses `kani_profile_input_mismatch` before the identity is computed, so
+  the two values cannot differ on any case that reaches the hash. The field is redundant but
+  harmless.
+- Adding `dedup()` after both sorts survives. IR `FiniteInput::validate` (IR 54f9a48, `abi.rs`)
+  already refuses a duplicate object identity (`kani_population_invalid`) and a duplicate
+  `(source, field, target)` reference (`kani_reference_invalid`), so no validated input has a
+  duplicate. Not deduplicating is correct: the sort is enough, and nothing distinct is merged.

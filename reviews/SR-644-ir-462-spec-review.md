@@ -43,3 +43,11 @@ Correct:
 - interface-001 already names `kani_corpus_identity_collision`, so this PR makes the code match an
   existing interface clause rather than adding a new one.
 - The TC-023 matrix row stays Planned and no AC claims corpus identity, so nothing is over-claimed.
+
+## Dispositions
+
+Round 1 was reviewed at 3c006b81292fb6e882649ba4d12e0bc9d78d54f5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 482540b: TC-023 now says "carries its corpus case's name". It lists construct, every request field, the input with objects and references in sorted order, the profile selection and the census, and it states the permutation invariance. |
