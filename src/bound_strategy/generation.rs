@@ -249,7 +249,7 @@ pub fn generate_bound_strategy(
         ));
     }
     Ok(GeneratedArtifactBundle {
-        rust: artifact(path, source),
+        rust: Artifact::new(path, source),
     })
 }
 
@@ -915,8 +915,4 @@ fn bound_diagnostic(
         path: path.to_owned(),
         message: message.to_owned(),
     }
-}
-
-fn artifact(path: String, contents: String) -> Artifact {
-    Artifact::new(path, contents)
 }

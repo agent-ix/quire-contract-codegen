@@ -88,6 +88,28 @@ symbol! {
     HarnessSymbol
 }
 
+/// The SHA-256 of a value's RFC 8785 canonical bytes: the content digest that binds a proof to
+/// what it proved (AD-003 E-1).
+///
+/// It is CG's type over `quire-canonical`'s digest, not a wrapper of QSL's `ByteDigest`. Only
+/// `canonical::content_digest` builds one (AD-004 L-9), so every value has the one encoding.
+/// `Display` is lowercase hex, 64 characters.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct ContentDigest(quire_canonical::Sha256Digest);
+
+impl ContentDigest {
+    /// Wraps a digest `canonical::content_digest` computed. Called there only.
+    pub(crate) const fn new(digest: quire_canonical::Sha256Digest) -> Self {
+        Self(digest)
+    }
+}
+
+impl fmt::Display for ContentDigest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
 /// The `module::harness` path Kani records for a harness.
 ///
 /// The two halves are different types, so a swapped pair does not compile:

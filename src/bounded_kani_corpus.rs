@@ -8,7 +8,6 @@
 
 use std::{collections::BTreeSet, fmt::Write as _};
 
-use qsl_replay::ByteDigest;
 use quire_contract_ir::kani::{
     CheckedArithmeticRequest, CollectionQuery, DispatchIndex, FiniteInput, FiniteObject,
     FiniteReference, GraphRequest, KaniOutcome, KaniOutcomeKind, KaniProfile,
@@ -18,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     artifact::Artifact,
-    kani::deterministic_json,
+    canonical,
     kani_census::{
         dependency_readiness, normalize_dependencies, ProofDependencyEdge, ProofDependencyKind,
         ProofDependencyRequest, ProofReadiness,
@@ -176,6 +175,21 @@ struct CaseIdentity<'a> {
     dependencies: &'a [ProofDependencyEdge],
 }
 
+/// A request integer in the identity, written as its decimal text.
+///
+/// The canonical encoder carries a number as an IEEE 754 double and refuses an integer above
+/// 2^53, but a corpus request is `i128`: its own range is the case's domain. The encoder's
+/// documented route for an exact wide integer is a decimal string, so every request integer is
+/// one, and the identity of a large operand is exact rather than refused or rounded.
+#[derive(Clone, Copy)]
+struct Wide(i128);
+
+impl Serialize for Wide {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&self.0)
+    }
+}
+
 /// Every field of a [`BoundedCorpusRequest`], including those the rendered oracle does not read.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -183,10 +197,10 @@ enum RequestIdentity<'a> {
     Arithmetic {
         source_id: &'a str,
         operator: &'static str,
-        left: i128,
-        right: i128,
-        minimum: i128,
-        maximum: i128,
+        left: Wide,
+        right: Wide,
+        minimum: Wide,
+        maximum: Wide,
     },
     Graph {
         source_id: &'a str,
@@ -197,7 +211,7 @@ enum RequestIdentity<'a> {
     },
     Collection {
         source_id: &'a str,
-        values: &'a [i128],
+        values: Vec<Wide>,
         max_items: usize,
         kind: QueryKindIdentity,
     },
@@ -207,7 +221,7 @@ enum RequestIdentity<'a> {
 #[serde(rename_all = "camelCase")]
 enum QueryKindIdentity {
     ForAllNonNegative,
-    ExistsEqual(i128),
+    ExistsEqual(Wide),
 }
 
 impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
@@ -227,10 +241,10 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
                 Self::Arithmetic {
                     source_id,
                     operator: checked_method(*operator),
-                    left: *left,
-                    right: *right,
-                    minimum: *minimum,
-                    maximum: *maximum,
+                    left: Wide(*left),
+                    right: Wide(*right),
+                    minimum: Wide(*minimum),
+                    maximum: Wide(*maximum),
                 }
             }
             BoundedCorpusRequest::Graph(request) => {
@@ -258,12 +272,12 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
                 } = request;
                 Self::Collection {
                     source_id,
-                    values,
+                    values: values.iter().copied().map(Wide).collect(),
                     max_items: *max_items,
                     kind: match kind {
                         QueryKind::ForAllNonNegative => QueryKindIdentity::ForAllNonNegative,
                         QueryKind::ExistsEqual(expected) => {
-                            QueryKindIdentity::ExistsEqual(*expected)
+                            QueryKindIdentity::ExistsEqual(Wide(*expected))
                         }
                     },
                 }
@@ -339,11 +353,13 @@ impl<'a> From<&'a FiniteInput> for InputIdentity<'a> {
 }
 
 impl CaseIdentity<'_> {
-    /// Lowercase hex SHA-256 over this content's deterministic JSON bytes.
-    fn digest(&self) -> String {
-        let bytes = deterministic_json(self)
-            .expect("a corpus case identity is plain finite data with no fallible conversion");
-        format!("{:x}", ByteDigest::of(bytes.as_bytes()))
+    /// Lowercase hex SHA-256 over this content's RFC 8785 canonical JSON, or `None` when the
+    /// encoder refuses the content: a non-request integer above 2^53 in magnitude (request
+    /// integers are [`Wide`] decimal text) or an encoding over the artifact byte ceiling.
+    fn digest(&self) -> Option<String> {
+        canonical::content_digest(self)
+            .ok()
+            .map(|digest| digest.to_string())
     }
 }
 
@@ -445,14 +461,21 @@ pub fn generate_bounded_kani_corpus_case(
     }
     let normalized_dependencies = normalize_dependencies(dependencies);
     // Computed before lowering consumes the request; recorded only after lowering succeeds.
-    let identity = CaseIdentity {
+    let Some(identity) = (CaseIdentity {
         construct: family.construct(),
         profile: &profile.selection,
         input: InputIdentity::from(input.input()),
         request: RequestIdentity::from(&request),
         dependencies: &normalized_dependencies,
-    }
-    .digest();
+    })
+    .digest() else {
+        return Err(KaniOutcome::non_success(
+            KaniOutcomeKind::InvalidInput,
+            "kani_corpus_identity_unencodable",
+            request_source_id,
+            revision,
+        ));
+    };
     let (value, oracle_body) = match request {
         BoundedCorpusRequest::Arithmetic(request) => {
             let lowered = prepare_checked_arithmetic(profile, dispatch, input, request)?;
@@ -602,7 +625,7 @@ fn render_artifacts(
         readiness: dependency_readiness(dependencies),
         dependencies: dependencies.to_vec(),
     };
-    let proof_graph_contents = deterministic_json(&proof_graph_value)
+    let proof_graph_contents = canonical::json_file(&proof_graph_value)
         .expect("a corpus proof-dependency graph is plain finite data with no fallible conversion");
     BoundedCorpusArtifacts {
         oracle: Artifact::new(format!("corpus/{name}.oracle.rs"), oracle),
@@ -1048,6 +1071,51 @@ mod tests {
         .expect("a provable case with an operand outside i64's range generates");
         assert_eq!(generated.outcome.kind, KaniOutcomeKind::Proved);
         assert_eq!(generated.outcome.source_id, "out-of-i64-range");
+    }
+
+    /// Operands above 2^53 that a double would conflate name different cases: each `i128` request
+    /// value is identity text, not a number the encoder rounds or refuses.
+    ///
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_operands_a_double_cannot_tell_apart_name_different_cases() {
+        let fixture = fixture();
+        let arithmetic = |operand: i128| {
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "wide",
+                operator: NumericOperator::Add,
+                left: operand,
+                right: 0,
+                minimum: operand,
+                maximum: operand,
+            })
+        };
+        let below = 1_i128 << 60;
+        assert_ne!(
+            identity_of(&fixture, arithmetic(below)),
+            identity_of(&fixture, arithmetic(below + 1))
+        );
+    }
+
+    /// A bound above 2^53 is a number the encoder refuses, so the case is refused with a typed
+    /// outcome and emits nothing, and claims no identity.
+    ///
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_content_the_encoder_refuses_is_a_typed_refusal_that_claims_nothing() {
+        let fixture = fixture();
+        let mut emitted = EmittedCorpusIdentities::new();
+        let refusal = emit(
+            &fixture,
+            collection(1 << 60, "huge-bound"),
+            &[],
+            &mut emitted,
+        )
+        .expect_err("a bound above 2^53 has no canonical encoding");
+        assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
+        assert_eq!(refusal.code, "kani_corpus_identity_unencodable");
+        assert_eq!(refusal.source_id, "huge-bound");
+        assert!(emit(&fixture, collection(3, "huge-bound"), &[], &mut emitted).is_ok());
     }
 
     /// Trace: TC-023.

@@ -694,7 +694,7 @@ where\n\
         )]
     })?;
     Ok(GeneratedArtifactBundle {
-        rust: artifact(format!("src/generated/{base_symbol}.rs"), source),
+        rust: Artifact::new(format!("src/generated/{base_symbol}.rs"), source),
     })
 }
 
@@ -1071,8 +1071,4 @@ fn harness_symbol(
         bounded_readable_component(precondition),
         bounded_readable_component(postcondition)
     )
-}
-
-fn artifact(path: String, contents: String) -> Artifact {
-    Artifact::new(path, contents)
 }

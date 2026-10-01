@@ -24,6 +24,8 @@ quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-i
 # replay adapter in src/spine_replay.rs builds its requests from `call_site` and the crate's own
 # re-exports and goes through its `replay` entry. It tracks QSL `main`; Cargo.lock records the commit.
 qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", branch = "main" }
+# The one RFC 8785 encoder and digest; `src/canonical.rs` is the only module that calls it (AD-004 step 1a).
+quire-canonical = { git = "https://github.com/agent-ix/quire-canonical", branch = "main" }
 rustix = { version = "=1.1.5", default-features = false, features = ["std", "event", "process", "time"] }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"

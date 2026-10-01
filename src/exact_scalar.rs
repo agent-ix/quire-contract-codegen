@@ -780,9 +780,9 @@ pub fn generate_exact_scalar_oracles(
         String::from_utf8(map_bytes).map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     Ok(ExactScalarOracles {
         artifacts: vec![
-            artifact("Cargo.toml", oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME)),
-            artifact("src/lib.rs", lib),
-            artifact("claim-map.json", map_text),
+            Artifact::new("Cargo.toml", oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME)),
+            Artifact::new("src/lib.rs", lib),
+            Artifact::new("claim-map.json", map_text),
         ],
         claim_map,
     })
@@ -2809,10 +2809,6 @@ fn profile_path(profile: TextProfile) -> &'static str {
         TextProfile::BinaryUtf8 => "rt::TextProfile::BinaryUtf8",
         _ => unreachable!("TextProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
-}
-
-fn artifact(path: &str, contents: String) -> Artifact {
-    Artifact::new(path, contents)
 }
 
 // ---------------------------------------------------------------------------

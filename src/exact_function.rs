@@ -1087,13 +1087,13 @@ pub fn generate_exact_function_oracles(
 
     Ok(ExactFunctionOracles {
         artifacts: vec![
-            artifact(
+            Artifact::new(
                 "Cargo.toml",
                 oracle_crate_manifest(EXACT_FUNCTION_CRATE_NAME),
             ),
-            artifact("src/lib.rs", lib),
-            artifact("claim-map.json", map_text),
-            artifact("location-map.json", location_text),
+            Artifact::new("src/lib.rs", lib),
+            Artifact::new("claim-map.json", map_text),
+            Artifact::new("location-map.json", location_text),
         ],
         claim_map,
         location_map,
@@ -1373,8 +1373,4 @@ fn render_body(declaration: &ExactFunctionDeclaration) -> String {
             )
         }
     }
-}
-
-fn artifact(path: &str, contents: String) -> Artifact {
-    Artifact::new(path, contents)
 }

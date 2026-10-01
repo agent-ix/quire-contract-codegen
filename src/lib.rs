@@ -50,6 +50,8 @@ mod strategy;
 mod generation;
 // Identity newtypes of a generated harness (AD-004 step 1b).
 mod identity;
+// The one caller of quire-canonical's RFC 8785 encoder and digest (AD-004 step 1a).
+mod canonical;
 // The version profile: the emitted oracle crate manifest, written once (AD-004 step 1c).
 mod profile;
 // Implements: FR-014

@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     artifact::Artifact,
+    canonical,
     diagnostic::{GenerationErrorCode, GenerationTerminalState},
     kani_census::{
         dependency_readiness, dependency_site, normalize_dependencies, ProofDependencyEdge,
@@ -365,7 +366,7 @@ pub fn generate_kani_bundle(
             &error.to_string(),
         )
     })?;
-    let rust = artifact(format!("src/generated/{symbol}.rs"), source);
+    let rust = Artifact::new(format!("src/generated/{symbol}.rs"), source);
     let graph_value = ProofDependencyGraph {
         schema_version: "quire.kani-proof-graph/v2".to_owned(),
         proof_id: request.proof_id.to_owned(),
@@ -379,14 +380,14 @@ pub fn generate_kani_bundle(
         source_artifact_path: rust.path.clone(),
         dependencies: normalized_dependencies,
     };
-    let graph_contents = deterministic_json(&graph_value).map_err(|message| {
+    let graph_contents = canonical::json_file(&graph_value).map_err(|error| {
         single_diagnostic(
             KaniErrorCode::SerializationFailed,
             "generated.proof_graph",
-            &message,
+            &error.to_string(),
         )
     })?;
-    let proof_graph = artifact(format!("proof-graphs/{symbol}.json"), graph_contents);
+    let proof_graph = Artifact::new(format!("proof-graphs/{symbol}.json"), graph_contents);
     Ok(KaniArtifactBundle { rust, proof_graph })
 }
 
@@ -926,17 +927,4 @@ fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
 /// `value` as a readable snake-case name component of at most 12 characters.
 pub(crate) fn readable_component(value: &str) -> String {
     crate::oracle::readable_name_component(value, 12)
-}
-
-// `?Sized` so an unsized `[T]` slice (e.g. `&[ProofDependencyEdge]`) can be passed directly, with
-// no intermediate owned `Vec` allocation at the call site, alongside every already-`Sized` caller
-// (ir#80 review finding F10).
-pub(crate) fn deterministic_json(value: &(impl Serialize + ?Sized)) -> Result<String, String> {
-    let mut bytes = serde_json::to_vec(value).map_err(|error| error.to_string())?;
-    bytes.push(b'\n');
-    String::from_utf8(bytes).map_err(|error| error.to_string())
-}
-
-fn artifact(path: String, contents: String) -> Artifact {
-    Artifact::new(path, contents)
 }

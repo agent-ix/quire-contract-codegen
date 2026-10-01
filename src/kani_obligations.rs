@@ -1877,7 +1877,7 @@ fn render(
             error: error.to_string(),
         });
     }
-    let rust = artifact(
+    let rust = Artifact::new(
         format!("src/generated/{}.rs", lowered.symbols.module),
         source,
     );
@@ -2017,7 +2017,7 @@ mod {module} {{\n\
             error: error.to_string(),
         });
     }
-    let rust = artifact(
+    let rust = Artifact::new(
         format!("src/generated/{}.rs", lowered.module_symbol),
         source,
     );
@@ -2047,11 +2047,10 @@ fn record<T: Serialize>(
     })
     .map_err(|_| UnsupportedObligation::RenderFailed)?;
     json.push('\n');
-    Ok(artifact(format!("kani-obligations/{module}.json"), json))
-}
-
-fn artifact(path: String, contents: String) -> Artifact {
-    Artifact::new(path, contents)
+    Ok(Artifact::new(
+        format!("kani-obligations/{module}.json"),
+        json,
+    ))
 }
 
 /// `kani::any()` for every argument, constrained only by its IR integer bounds.

@@ -2,17 +2,16 @@
 
 use std::{collections::BTreeMap, fmt::Write as _};
 
+use crate::{
+    artifact::Artifact,
+    canonical,
+    diagnostic::{GenerationDiagnostic, GenerationErrorCode},
+    source_map::{SourceProbe, SourceRegion},
+};
 use quire_contract_model::{
     BooleanOperator, ClauseId, ComparisonOperator, DefinednessObligationKind, DependencyIdentity,
     DependencyKind, Expression, ExpressionKind, IntegerType, NumericOperator, RequirementRef,
     SourceSpan, StateObservation, TypedExpression, ValueType,
-};
-use serde::Serialize;
-
-use crate::{
-    artifact::Artifact,
-    diagnostic::{GenerationDiagnostic, GenerationErrorCode},
-    source_map::{SourceProbe, SourceRegion},
 };
 
 /// Maximum generated Rust bytes for one clause.
@@ -84,20 +83,6 @@ pub(crate) struct DependencyParameter {
     pub(crate) identifier: String,
     pub(crate) value_type: RustValueType,
     pub(crate) source: SourceSpan,
-}
-
-enum SerializationError {
-    Json(serde_json::Error),
-    Utf8(std::string::FromUtf8Error),
-}
-
-impl std::fmt::Display for SerializationError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Json(error) => write!(formatter, "{error}"),
-            Self::Utf8(error) => write!(formatter, "{error}"),
-        }
-    }
 }
 
 struct SourceBuilder {
@@ -301,8 +286,8 @@ fn generate_boolean_oracle_inner(
         region
     }));
 
-    let rust = artifact(source_path, source.source);
-    let source_map_contents = deterministic_json(&regions).map_err(|error| {
+    let rust = Artifact::new(source_path, source.source);
+    let source_map_contents = canonical::json_file(&regions).map_err(|error| {
         single_diagnostic(
             request,
             GenerationErrorCode::SerializationFailed,
@@ -310,7 +295,7 @@ fn generate_boolean_oracle_inner(
             error.to_string(),
         )
     })?;
-    let source_map = artifact(
+    let source_map = Artifact::new(
         format!("source-maps/{symbol_text}.json"),
         source_map_contents,
     );
@@ -930,16 +915,6 @@ pub(crate) fn oracle_symbol(requirement: &str, revision: u64, clause: &str) -> S
         bounded_readable_component(requirement),
         bounded_readable_component(clause)
     )
-}
-
-fn artifact(path: String, contents: String) -> Artifact {
-    Artifact::new(path, contents)
-}
-
-fn deterministic_json(value: &impl Serialize) -> Result<String, SerializationError> {
-    let mut bytes = serde_json::to_vec(value).map_err(SerializationError::Json)?;
-    bytes.push(b'\n');
-    String::from_utf8(bytes).map_err(SerializationError::Utf8)
 }
 
 fn line_count(value: &str) -> u32 {
