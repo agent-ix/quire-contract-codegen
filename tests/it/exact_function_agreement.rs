@@ -15,7 +15,7 @@
 //! FR-021-AC-18 (three-way agreement with the QSL authority) is not
 //! implemented here: this repository reaches QSL only through `qsl-replay`'s
 //! public API, not the `quire_spec_language::value::expression` API AC-18
-//! was written against (see `src/exact_function.rs`'s module doc). The
+//! was written against (see `src/oracle/function/mod.rs`'s module doc). The
 //! agreement legs are exactly two: the generated oracle and a direct
 //! Contract Runtime call.
 

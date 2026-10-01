@@ -1,8 +1,7 @@
 //! The oracle subsystem: generation of the Rust oracles (AD-004, FR-014, FR-018, FR-021).
 //!
 //! The shared generation-result and claim vocabulary, the V1 Boolean and bound oracles, and the
-//! exact scalar, composite equality and exact function oracle generators live here. The files are
-//! moved from the flat layout unchanged (AD-004 step 2d).
+//! exact scalar, composite equality and exact function oracle generators live here.
 
 // V1 Boolean oracle; retired with V1.
 pub(crate) mod boolean_v1;

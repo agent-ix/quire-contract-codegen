@@ -18,7 +18,7 @@ mod kani_census;
 // Harness and identity record types (AD-004 step 2b); becomes `kani/identity.rs`.
 // Implements: FR-015
 mod kani_identity;
-// The oracle subsystem (AD-004 step 2d).
+// The oracle subsystem.
 mod oracle;
 // Implements: FR-005, NFR-001
 mod publication;

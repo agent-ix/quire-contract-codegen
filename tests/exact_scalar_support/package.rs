@@ -796,7 +796,7 @@ impl PackageBuilder {
             self.add_dependency(&type_digest, &bound_digest);
             // The dedicated type depends on its own bound, and the bound's
             // `semantic_type` points straight back at the dedicated type (so
-            // `Bounds::equal`, src/exact_scalar.rs, finds it) -- a genuine
+            // `Bounds::equal`, src/oracle/scalar/mod.rs, finds it) -- a genuine
             // two-node cycle IR's own recursion check (`validate_recursion`,
             // `checked_package/v2/mod.rs`) refuses unless every member of
             // the cycle shares one explicit, non-empty `recursion_group`.
