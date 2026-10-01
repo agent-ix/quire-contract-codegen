@@ -1026,6 +1026,15 @@ impl PackageBuilder {
         self.admit_with(CheckedPackageReadLimits::bounded())
     }
 
+    /// The reader's verdict on this package, admitted or refused, with the wire it read.
+    pub fn read(&self) -> (CheckedPackageV2ReadResult, Value) {
+        let wire = self.wire();
+        let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
+        let result =
+            CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence());
+        (result, wire)
+    }
+
     pub fn admit_with(&self, limits: CheckedPackageReadLimits) -> CheckedPackageV2 {
         let wire = self.wire();
         let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
@@ -1392,6 +1401,42 @@ pub struct Expression {
     pub result: &'static str,
     pub operation: ExactScalarOperation,
     pub bounds: Vec<Bound>,
+}
+
+/// The six `TextAdmission` codes ([`TEXT_ADMISSIONS`]): Contract IR refuses each
+/// `IllTyped`/`OperatorIneligible` at admission today, so they are outside [`corpus`] (one such
+/// node refuses the whole package). `quire.op.numeric.convert` over a text operand: no
+/// catalogued `convert` identity takes `text`, and QSL lowers no text admission. Unblocked by a
+/// catalogued text-admission operation (a spec change) or by dropping the operation.
+/// `tc_024_text_admission_corpus_is_refused_by_ir_today` pins the exact refusal of each;
+/// FR-014-AC-2's text-admission case has no generated-crate evidence until then.
+pub fn refused_corpus() -> Vec<Expression> {
+    use ExactScalarOperation as Op;
+    let mut refused = Vec::new();
+    for (code, profile) in TEXT_ADMISSIONS.into_iter().zip(TextProfile::ALL) {
+        refused.push(expression(
+            code,
+            CONVERSION,
+            TEXT1,
+            "text",
+            Op::TextAdmission {
+                text_type: TextType::new(0, 4, profile).expect("text type"),
+            },
+            vec![Bound::Text(0, 4, profile.as_str())],
+        ));
+    }
+    refused
+}
+
+/// [`corpus_package`] plus the one [`refused_corpus`] expression `code`.
+pub fn refused_corpus_package(code: u32) -> PackageBuilder {
+    let mut builder = corpus_package();
+    let expression = refused_corpus()
+        .into_iter()
+        .find(|expression| expression.code == code)
+        .unwrap_or_else(|| panic!("{code} is not a refused corpus expression"));
+    add_corpus_expression(&mut builder, expression);
+    builder
 }
 
 fn expression(
@@ -1814,18 +1859,6 @@ pub fn corpus() -> Vec<Expression> {
             vec![INT],
         ),
     ];
-    for (code, profile) in TEXT_ADMISSIONS.into_iter().zip(TextProfile::ALL) {
-        corpus.push(expression(
-            code,
-            CONVERSION,
-            TEXT1,
-            "text",
-            Op::TextAdmission {
-                text_type: TextType::new(0, 4, profile).expect("text type"),
-            },
-            vec![Bound::Text(0, 4, profile.as_str())],
-        ));
-    }
     for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {
         corpus.push(expression(
             TEXT_COMPARISONS[index],
@@ -2236,6 +2269,158 @@ fn text_family_identity(family: &str, operator: ComparisonOperator) -> &'static 
     }
 }
 
+/// Adds one corpus `expression` to `builder`: its operand nodes, its bound anchors and the
+/// application node itself.
+fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
+    use ExactScalarOperation as Op;
+    // A form whose operand value is a fixed literal (`dedicated_operand`'s
+    // own match) gets a bound-set-dedicated node instead of the plain
+    // shared one whenever this expression declares a bound: see
+    // `dedicated_operand`'s own doc for why sharing would otherwise union
+    // unrelated expressions' bounds onto one reachable closure. "enum"
+    // operands are never paired with a varying bound in this corpus
+    // (every `EnumComparison` vector below declares `Vec::new()`), so
+    // they keep the plain shared node unconditionally. "unit" operands
+    // *do* get bounds here (`quantity.pow`'s `INT` domain, and the two
+    // `QuantityConversion` codes' `Decimal`/`INT` targets), so they are
+    // dedicated the same way via [`PackageBuilder::dedicated_unit_operand`]
+    // whenever `bound_keys` is non-empty, rather than kept on the shared
+    // `V_QUANTITY` node.
+    // `TextAdmission` never uses `bound_keys` below -- its one argument is
+    // always overridden to a fixed literal further down, and its own
+    // bound is registered by `dedicated_text_admission_type` instead
+    // (`application_bounded`'s doc explains why: a plain `builder.bound`
+    // call here would register the *same* `Bound::key()` digest with the
+    // shared `T_TEXT` as its `semantic_type`, a second, colliding node at
+    // the same node id `dedicated_text_admission_type` also builds).
+    let bound_keys: Vec<String> = if matches!(expression.operation, Op::TextAdmission { .. }) {
+        Vec::new()
+    } else {
+        expression
+            .bounds
+            .iter()
+            .map(|bound| builder.bound(bound))
+            .collect()
+    };
+    let mut unit_anchor: Option<String> = None;
+    let mut arguments = expression
+        .operands
+        .iter()
+        .map(|form| {
+            let node = if bound_keys.is_empty() || *form == "enum" {
+                operand(form)
+            } else if *form == "unit" {
+                // Dedicated rather than the plain shared `V_QUANTITY`
+                // (see the loop's own comment above): `V_QUANTITY` is
+                // shared by all 13 quantity-typed corpus items, so a
+                // bound wired onto it would be reachable from every one
+                // of them, not just the item that declared it.
+                let anchor = builder.dedicated_unit_operand(&bound_keys);
+                unit_anchor = Some(anchor.clone());
+                anchor
+            } else if expression.code == LITERAL_OPERAND {
+                // `LITERAL_OPERAND` needs an anchor nothing else in the
+                // corpus can ever share, because `CLAIM`/`CLAIM_ALT` are
+                // wired as dependencies of this exact node further below.
+                // The plain `dedicated_operand` call is keyed only by
+                // `(form, bound_keys)`, and nine other bounded-integer
+                // corpus expressions (add, mul, lt, le, ge, the three
+                // division profiles, and `quantity.pow`) share the
+                // identical `("integer", [INT])` pair, so without this
+                // salt `CLAIM`/`CLAIM_ALT` would be reachable from all of
+                // them too, not just from `LITERAL_OPERAND`.
+                builder.dedicated_operand_tagged(form, &bound_keys, "literal-operand-claim-anchor")
+            } else {
+                builder.dedicated_operand(form, &bound_keys)
+            };
+            reference(&node)
+        })
+        .collect::<Vec<_>>();
+    if expression.code == LITERAL_OPERAND {
+        arguments[1] = literal("integer", "3");
+    }
+    // Code 1014 is `division(1014, Truncating, -5, 5, INT5)`: same
+    // profile, operands and result as code 1011's
+    // `division(1011, Truncating, -1000, 1000, INT)`. The two exist to
+    // be distinguished only by which bound is reachable (`INT` vs
+    // `INT5`), but bounds aren't part of the node-id preimage, so
+    // without a body difference they'd collide on digest and IR's
+    // `validate_graph` would refuse the whole package as a duplicate
+    // node id. A literal second operand keeps 1014 a genuine, distinct
+    // node without touching the domain-mismatch behavior under test.
+    if expression.code == 1014 {
+        arguments[1] = literal("integer", "1014");
+    }
+    // No catalogued `convert` identity accepts a `text` operand family
+    // (see `corpus_operation`'s `TextAdmission` arm), so Contract IR refuses
+    // these nodes at admission: they are built only for `refused_corpus_package`.
+    // The operand is a literal.
+    let text_admission_type = if matches!(expression.operation, Op::TextAdmission { .. }) {
+        Some(builder.dedicated_text_admission_type(&expression.bounds[0]))
+    } else {
+        None
+    };
+    if let Some(type_key) = &text_admission_type {
+        // `corpus_operation`'s `TextAdmission` arm ignores which
+        // `TextProfile` this expression names (see its own comment),
+        // so every `TEXT_ADMISSIONS` code would otherwise get the
+        // identical `operator`/`operation`/`result_type` and, with
+        // this same fixed literal, an identical body -- and thus an
+        // identical node id, which IR's `validate_graph` refuses as a
+        // duplicate. Folding `code` into the literal keeps each one a
+        // distinct node without touching what's actually exercised
+        // (the literal's family/value, not its exact text).
+        //
+        // The literal's own `type` must be *this* code's dedicated type,
+        // not the shared `T_TEXT` the `literal()` helper always names:
+        // IR's lowering reaches a `literal.type` regardless of the join
+        // (`application_bounded`'s doc, and `V_QUANTITY`'s own comment
+        // above), so a plain `literal("text", ..)` here would still put
+        // `T_TEXT` in this code's closure and `require_bounds` would ask
+        // for a `T_TEXT`-typed bound this dedicated corpus item never
+        // registers.
+        arguments = vec![json!({
+            "term": "literal",
+            "type": node_ref(type_key),
+            "value_kind": "text",
+            "value": format!("a{}", expression.code),
+        })];
+    }
+    let (catalog_operator, operation) = corpus_operation(&expression);
+    // `TextAdmission` gets a dedicated `semantic_type` (see
+    // `dedicated_text_admission_type`'s own doc) instead of the shared
+    // `result_type(expression.result)` (== `T_TEXT`): its one argument is
+    // a fixed literal, so `application_bounded` has no `reference` target
+    // to anchor the expression's own `text_bounds` bound on, and `T_TEXT`
+    // is one node shared by every text-typed corpus expression -- six
+    // different bounds attached there would each be reachable from every
+    // one of them. The bound is wired onto the dedicated type directly,
+    // so `bounds` passed to `application_bounded` is empty here.
+    let (node_semantic_type, node_bounds): (String, &[Bound]) =
+        if let Some(type_key) = text_admission_type {
+            (type_key, &[])
+        } else {
+            (result_type(expression.result), &expression.bounds[..])
+        };
+    // `unit_anchor` (set above only when this expression's "unit" operand
+    // was dedicated) is passed explicitly rather than left for
+    // `application_bounded` to infer: `quantity.pow`'s body references
+    // both a dedicated "unit" node and a dedicated "integer" node, and
+    // `application_bounded`'s own inference picks whichever of the two
+    // sorts first by digest -- not necessarily the dedicated "unit" node
+    // -- which is exactly the bug this anchor makes explicit instead of
+    // leaving to chance.
+    builder.application_bounded_anchored(
+        expression.code,
+        "expression",
+        expression.form,
+        &node_semantic_type,
+        application(catalog_operator, operation, &node_semantic_type, arguments),
+        node_bounds,
+        unit_anchor.as_deref(),
+    );
+}
+
 /// The complete package: types, values, the corpus, and refused nodes.
 pub fn corpus_package() -> PackageBuilder {
     let mut builder = PackageBuilder::default();
@@ -2314,184 +2499,7 @@ pub fn corpus_package() -> PackageBuilder {
         .select_definition(ieee_profile_definition())
         .select_definition(text_profile_definition());
     for expression in corpus() {
-        use ExactScalarOperation as Op;
-        // A form whose operand value is a fixed literal (`dedicated_operand`'s
-        // own match) gets a bound-set-dedicated node instead of the plain
-        // shared one whenever this expression declares a bound: see
-        // `dedicated_operand`'s own doc for why sharing would otherwise union
-        // unrelated expressions' bounds onto one reachable closure. "enum"
-        // operands are never paired with a varying bound in this corpus
-        // (every `EnumComparison` vector below declares `Vec::new()`), so
-        // they keep the plain shared node unconditionally. "unit" operands
-        // *do* get bounds here (`quantity.pow`'s `INT` domain, and the two
-        // `QuantityConversion` codes' `Decimal`/`INT` targets), so they are
-        // dedicated the same way via [`PackageBuilder::dedicated_unit_operand`]
-        // whenever `bound_keys` is non-empty, rather than kept on the shared
-        // `V_QUANTITY` node.
-        // `TextAdmission` never uses `bound_keys` below -- its one argument is
-        // always overridden to a fixed literal further down, and its own
-        // bound is registered by `dedicated_text_admission_type` instead
-        // (`application_bounded`'s doc explains why: a plain `builder.bound`
-        // call here would register the *same* `Bound::key()` digest with the
-        // shared `T_TEXT` as its `semantic_type`, a second, colliding node at
-        // the same node id `dedicated_text_admission_type` also builds).
-        let bound_keys: Vec<String> = if matches!(expression.operation, Op::TextAdmission { .. }) {
-            Vec::new()
-        } else {
-            expression
-                .bounds
-                .iter()
-                .map(|bound| builder.bound(bound))
-                .collect()
-        };
-        let mut unit_anchor: Option<String> = None;
-        let mut arguments = expression
-            .operands
-            .iter()
-            .map(|form| {
-                let node = if bound_keys.is_empty() || *form == "enum" {
-                    operand(form)
-                } else if *form == "unit" {
-                    // Dedicated rather than the plain shared `V_QUANTITY`
-                    // (see the loop's own comment above): `V_QUANTITY` is
-                    // shared by all 13 quantity-typed corpus items, so a
-                    // bound wired onto it would be reachable from every one
-                    // of them, not just the item that declared it.
-                    let anchor = builder.dedicated_unit_operand(&bound_keys);
-                    unit_anchor = Some(anchor.clone());
-                    anchor
-                } else if expression.code == LITERAL_OPERAND {
-                    // `LITERAL_OPERAND` needs an anchor nothing else in the
-                    // corpus can ever share, because `CLAIM`/`CLAIM_ALT` are
-                    // wired as dependencies of this exact node further below.
-                    // The plain `dedicated_operand` call is keyed only by
-                    // `(form, bound_keys)`, and nine other bounded-integer
-                    // corpus expressions (add, mul, lt, le, ge, the three
-                    // division profiles, and `quantity.pow`) share the
-                    // identical `("integer", [INT])` pair, so without this
-                    // salt `CLAIM`/`CLAIM_ALT` would be reachable from all of
-                    // them too, not just from `LITERAL_OPERAND`.
-                    builder.dedicated_operand_tagged(
-                        form,
-                        &bound_keys,
-                        "literal-operand-claim-anchor",
-                    )
-                } else {
-                    builder.dedicated_operand(form, &bound_keys)
-                };
-                reference(&node)
-            })
-            .collect::<Vec<_>>();
-        if expression.code == LITERAL_OPERAND {
-            arguments[1] = literal("integer", "3");
-        }
-        // Code 1014 is `division(1014, Truncating, -5, 5, INT5)`: same
-        // profile, operands and result as code 1011's
-        // `division(1011, Truncating, -1000, 1000, INT)`. The two exist to
-        // be distinguished only by which bound is reachable (`INT` vs
-        // `INT5`), but bounds aren't part of the node-id preimage, so
-        // without a body difference they'd collide on digest and IR's
-        // `validate_graph` would refuse the whole package as a duplicate
-        // node id. A literal second operand keeps 1014 a genuine, distinct
-        // node without touching the domain-mismatch behavior under test.
-        if expression.code == 1014 {
-            arguments[1] = literal("integer", "1014");
-        }
-        // No catalogued `convert` identity accepts a `text` operand family
-        // (see `corpus_operation`'s `TextAdmission` arm), so this operand
-        // must be a literal -- IR's operand-family check never resolves a
-        // family for a literal argument, so the mismatch is never reached.
-        let text_admission_type = if matches!(expression.operation, Op::TextAdmission { .. }) {
-            Some(builder.dedicated_text_admission_type(&expression.bounds[0]))
-        } else {
-            None
-        };
-        if let Some(type_key) = &text_admission_type {
-            // `corpus_operation`'s `TextAdmission` arm ignores which
-            // `TextProfile` this expression names (see its own comment),
-            // so every `TEXT_ADMISSIONS` code would otherwise get the
-            // identical `operator`/`operation`/`result_type` and, with
-            // this same fixed literal, an identical body -- and thus an
-            // identical node id, which IR's `validate_graph` refuses as a
-            // duplicate. Folding `code` into the literal keeps each one a
-            // distinct node without touching what's actually exercised
-            // (the literal's family/value, not its exact text).
-            //
-            // The literal's own `type` must be *this* code's dedicated type,
-            // not the shared `T_TEXT` the `literal()` helper always names:
-            // IR's lowering reaches a `literal.type` regardless of the join
-            // (`application_bounded`'s doc, and `V_QUANTITY`'s own comment
-            // above), so a plain `literal("text", ..)` here would still put
-            // `T_TEXT` in this code's closure and `require_bounds` would ask
-            // for a `T_TEXT`-typed bound this dedicated corpus item never
-            // registers.
-            arguments = vec![json!({
-                "term": "literal",
-                "type": node_ref(type_key),
-                "value_kind": "text",
-                "value": format!("a{}", expression.code),
-            })];
-        }
-        // No node this corpus builds has a `resolve_family` path to
-        // `ordered_enum` (the enum type's own `scalar_type` form resolves
-        // only to `enum`; see Contract IR's `resolve_family`
-        // in `checked_package/v2/operations.rs`), so `enum.lt/le/gt/ge`'s
-        // `ordered_enum` operand family can never be satisfied by a
-        // `reference` argument here. Substituting literals for exactly the
-        // ordering comparisons (never `eq`/`ne`, which accept the
-        // `enum_kind` group `enum_member()` already resolves to) bypasses the
-        // family check the same way `TextAdmission` does above.
-        if let Op::EnumComparison { operator } = expression.operation {
-            if !matches!(
-                operator,
-                ComparisonOperator::Equal | ComparisonOperator::NotEqual
-            ) {
-                // As with the `TextAdmission` literal above: a fixed pair
-                // here would give every ordering-comparison code among
-                // `ENUM_COMPARISONS` the same body (the differing
-                // `operation.identity` this expression's own operator
-                // picks still varies below, but folding `code` in too
-                // keeps this resilient to that identity ever coinciding
-                // across two ordering operators).
-                arguments = vec![
-                    literal("enum", "OPEN"),
-                    literal("enum", &format!("OPEN{}", expression.code)),
-                ];
-            }
-        }
-        let (catalog_operator, operation) = corpus_operation(&expression);
-        // `TextAdmission` gets a dedicated `semantic_type` (see
-        // `dedicated_text_admission_type`'s own doc) instead of the shared
-        // `result_type(expression.result)` (== `T_TEXT`): its one argument is
-        // a fixed literal, so `application_bounded` has no `reference` target
-        // to anchor the expression's own `text_bounds` bound on, and `T_TEXT`
-        // is one node shared by every text-typed corpus expression -- six
-        // different bounds attached there would each be reachable from every
-        // one of them. The bound is wired onto the dedicated type directly,
-        // so `bounds` passed to `application_bounded` is empty here.
-        let (node_semantic_type, node_bounds): (String, &[Bound]) =
-            if let Some(type_key) = text_admission_type {
-                (type_key, &[])
-            } else {
-                (result_type(expression.result), &expression.bounds[..])
-            };
-        // `unit_anchor` (set above only when this expression's "unit" operand
-        // was dedicated) is passed explicitly rather than left for
-        // `application_bounded` to infer: `quantity.pow`'s body references
-        // both a dedicated "unit" node and a dedicated "integer" node, and
-        // `application_bounded`'s own inference picks whichever of the two
-        // sorts first by digest -- not necessarily the dedicated "unit" node
-        // -- which is exactly the bug this anchor makes explicit instead of
-        // leaving to chance.
-        builder.application_bounded_anchored(
-            expression.code,
-            "expression",
-            expression.form,
-            &node_semantic_type,
-            application(catalog_operator, operation, &node_semantic_type, arguments),
-            node_bounds,
-            unit_anchor.as_deref(),
-        );
+        add_corpus_expression(&mut builder, expression);
     }
     let integer_type = key(T_INTEGER);
     for (code, bounds) in [
@@ -2575,7 +2583,18 @@ pub fn corpus_package() -> PackageBuilder {
                 "binary",
                 op("quire.op.quantity.add"),
                 &unit_type(),
-                vec![reference(&key(V_QUANTITY)), literal("rational", "1")],
+                // A deliberate negative fixture QSL never emits (it builds no quantity literal).
+                // A quantity literal is typed by its unit: IR resolves a literal operand
+                // through `literal.type`, and `quantity.add` takes a quantity on both sides.
+                vec![
+                    reference(&key(V_QUANTITY)),
+                    json!({
+                        "term": "literal",
+                        "type": node_ref(&unit_type()),
+                        "value_kind": "rational",
+                        "value": "1",
+                    }),
+                ],
             ),
             &[],
         );
@@ -2809,21 +2828,23 @@ pub fn corpus_package() -> PackageBuilder {
             "binary",
             op("quire.op.integer.add"),
             &integer_type,
-            // A `reference(V_DECIMAL)` operand would resolve to the
-            // `decimal` family and `quire.op.integer.add`'s catalog entry
-            // requires `integer` in both positions, so IR would refuse the
-            // whole package `IllTyped`/`OperatorIneligible` at admission --
-            // this fixture exists to exercise CG's own operand-type check
-            // at generation time, over an already-admitted package, not
-            // IR's. `argument_family` only ever resolves a family for
-            // `reference`/`binding` arguments (a `literal` always resolves
-            // to `None`, per its own match arms in quire-contract-ir
-            // Contract IR's `checked_package/v2/operations.rs`), so a literal
-            // operand bypasses that admission-time check entirely while
-            // CG's `check_operand` still classifies it by its own
-            // `value_kind` and refuses the same `OperandTypeMismatch
-            // { position: 1, expected: Integer, found: Some("decimal") }`.
-            vec![reference(&wrong_operand_anchor), literal("decimal", "1.5")],
+            // Contract IR resolves a literal operand's family through `literal.type`, so a
+            // literal typed by `T_DECIMAL` would be `OperatorIneligible` at admission. It does
+            // not cross-check `literal.type` against `value_kind`, so a literal typed by the
+            // integer type but carrying the `decimal` value kind admits, while CG's
+            // `check_operand` classifies it by its own `value_kind` and refuses the same
+            // `OperandTypeMismatch { position: 1, expected: Integer, found: Some("decimal") }`.
+            // A deliberate negative fixture: the type and `value_kind` disagree, and QSL builds no
+            // decimal literal, so it never emits this shape.
+            vec![
+                reference(&wrong_operand_anchor),
+                json!({
+                    "term": "literal",
+                    "type": node_ref(&key(T_INTEGER)),
+                    "value_kind": "decimal",
+                    "value": "1.5",
+                }),
+            ],
         ),
         &[INT, DEC],
     );

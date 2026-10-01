@@ -22,7 +22,8 @@ use quire_contract_codegen::{
     RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_ir::{
-    CheckedNodeTag, CheckedPackageV2, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    CheckedNodeTag, CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
 use quire_contract_runtime::exact::{
     CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration, CompositeShape,
@@ -440,7 +441,120 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     assert!(!not_ieee_environment.contains_ieee(&not_float_sequence_type));
 }
 
-/// Trace: FR-018-AC-7, TC-029.
+/// Trace: FR-018-AC-15, TC-029. An operand is a `reference` to its own node. A reference to a
+/// conversion node is read as the type of what it converts: the descriptor's `source_type` must
+/// equal it, and a descriptor naming any other source refuses at that position, reporting the
+/// converted operand's type as found.
+#[test]
+fn tc_029_ac15_a_reference_to_a_conversion_is_read_as_the_type_it_converts() {
+    let package = corpus_package().admit();
+    let wrong_source = item(
+        E_CONV_CHARGE,
+        EqualityOperatorKind::Equal,
+        converted(T_INTEGER, T_DECIMAL_SMALL),
+        typed(T_DECIMAL_SMALL),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&wrong_source));
+    match refused(only_claim(&oracles, E_CONV_CHARGE)) {
+        CompositeEqualityRefusal::OperandTypeMismatch {
+            position,
+            expected,
+            found,
+        } => {
+            assert_eq!(*position, 0);
+            assert_eq!(*expected, code_id(T_INTEGER));
+            assert_eq!(*found, Some(code_id(T_INTEGER_BOUNDED)));
+        }
+        other => panic!("expected OperandTypeMismatch, got {other:?}"),
+    }
+    let right_source = item(
+        E_CONV_CHARGE,
+        EqualityOperatorKind::Equal,
+        converted(T_INTEGER_BOUNDED, T_DECIMAL_SMALL),
+        typed(T_DECIMAL_SMALL),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&right_source));
+    assert!(matches!(
+        only_claim(&oracles, E_CONV_CHARGE).result,
+        ClaimDisposition::Generated(_)
+    ));
+}
+
+/// Trace: FR-018-AC-15, TC-029. A conversion of a conversion is read through to the first node
+/// that is not a conversion: the source type is the innermost operand's, not the inner
+/// conversion's result type.
+#[test]
+fn tc_029_ac15_nested_conversions_are_read_through_to_the_innermost_operand() {
+    let package = nested_conversion_package().admit();
+    let innermost = item(
+        E_NESTED_CONV,
+        EqualityOperatorKind::Equal,
+        converted(T_INTEGER_BOUNDED, T_DECIMAL_WIDE),
+        typed(T_DECIMAL_WIDE),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&innermost));
+    assert!(matches!(
+        only_claim(&oracles, E_NESTED_CONV).result,
+        ClaimDisposition::Generated(_)
+    ));
+    let inner_result = item(
+        E_NESTED_CONV,
+        EqualityOperatorKind::Equal,
+        converted(T_RATIONAL_WIDE, T_DECIMAL_WIDE),
+        typed(T_DECIMAL_WIDE),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&inner_result));
+    match refused(only_claim(&oracles, E_NESTED_CONV)) {
+        CompositeEqualityRefusal::OperandTypeMismatch {
+            position,
+            expected,
+            found,
+        } => {
+            assert_eq!(*position, 0);
+            assert_eq!(*expected, code_id(T_RATIONAL_WIDE));
+            assert_eq!(*found, Some(code_id(T_INTEGER_BOUNDED)));
+        }
+        other => panic!("expected OperandTypeMismatch, got {other:?}"),
+    }
+}
+
+/// Trace: FR-018-AC-15, TC-029. A reference to an application that is not a conversion is read
+/// as that node's own `semantic_type`, never as its first argument's type.
+#[test]
+fn tc_029_ac15_a_non_conversion_application_operand_is_read_as_its_own_type() {
+    let package = application_operand_package().admit();
+    let own_type = item(
+        E_APPLICATION_OPERAND,
+        EqualityOperatorKind::Equal,
+        typed(T_RATIONAL_WIDE),
+        typed(T_RATIONAL_WIDE),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&own_type));
+    assert!(matches!(
+        only_claim(&oracles, E_APPLICATION_OPERAND).result,
+        ClaimDisposition::Generated(_)
+    ));
+    let first_argument_type = item(
+        E_APPLICATION_OPERAND,
+        EqualityOperatorKind::Equal,
+        typed(T_INTEGER),
+        typed(T_RATIONAL_WIDE),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&first_argument_type));
+    match refused(only_claim(&oracles, E_APPLICATION_OPERAND)) {
+        CompositeEqualityRefusal::OperandTypeMismatch {
+            position, found, ..
+        } => {
+            assert_eq!(*position, 0);
+            assert_eq!(*found, Some(code_id(T_RATIONAL_WIDE)));
+        }
+        other => panic!("expected OperandTypeMismatch, got {other:?}"),
+    }
+}
+
+/// Trace: FR-018-AC-7, TC-029. `E_REFERENCE` is the "operand reaching a `reference` composite"
+/// case (a record with a `REF_TYPE` field); the direct `REF_TYPE` operand is
+/// `tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today`.
 #[test]
 fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     let package = corpus_package().admit();
@@ -472,8 +586,8 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
         item(
             E_REFERENCE,
             EqualityOperatorKind::Equal,
-            typed(REF_TYPE),
-            typed(T_INTEGER),
+            typed(R_WITH_REF),
+            typed(R_WITH_REF),
         ),
         item(
             E_CALL,
@@ -502,6 +616,72 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
             .iter()
             .all(|claim| matches!(claim.result, ClaimDisposition::Refused { .. })));
     }
+}
+
+/// Trace: TC-029. UNBACKED today (FR-018-AC-2's recursive vectors): an equality over a record
+/// type that reaches itself (`R_SELF` = `{ next: Option<R_SELF> }`, no text) is refused by
+/// Contract IR 0a889f9 at admission, as any cyclic compared type is under the QSpec reference
+/// reader, so no oracle is generated for it and no generation or agreement test runs over any
+/// recursive composite. QSL emits `leaves: []` for this shape. Pending STD-129 (a cyclic type with
+/// no text: operator-ineligible or 0 leaves). This pins the exact refusal (code, cause, pointer,
+/// locus); it backs no clause of FR-018-AC-8, which concerns generation-time declaration
+/// refusals.
+#[test]
+fn tc_029_a_cyclic_compared_type_is_refused_by_ir_today() {
+    let (result, wire) = cyclic_self_package().read();
+    let node_id = code_id(E_SELF);
+    let position = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .expect("the node is in the wire");
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("IR now admits a cyclic compared type ({result:?}); add it back to the corpus");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::OperatorIneligible)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!(
+            "/semantic_graph/nodes/{position}/body/operation/leaves"
+        ))
+    );
+    assert_eq!(refusal.locus, Some(node_id));
+}
+
+/// Trace: FR-018-AC-7, TC-029. The direct `reference` composite form: an equality over two
+/// `REF_TYPE` operands is refused by Contract IR at admission, before this generator runs, so the
+/// generator's `QuireSpecLanguage120` blocker is not reached for it today. This pins the exact
+/// refusal (code, cause, pointer, locus); `quire.op.reference.eq` needs a `Reference<X>` naming a
+/// model object type of a selected document, which `REF_TYPE` does not. Unblocked by a corpus
+/// with such a model declaration.
+#[test]
+fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
+    let (result, wire) = direct_reference_package().read();
+    let node_id = code_id(E_REFERENCE_DIRECT);
+    let position = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .expect("the node is in the wire");
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("IR now admits a direct reference operand ({result:?}); add it to the corpus");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::OperatorIneligible)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!("/semantic_graph/nodes/{position}/body/arguments/0"))
+    );
+    assert_eq!(refusal.locus, Some(node_id));
 }
 
 /// Trace: FR-018-AC-8, TC-029 (generation-time half; the `check_type` guard
@@ -587,7 +767,6 @@ pub(super) fn agreement_names(oracles: &CompositeEqualityOracles) -> String {
         (E_TUPLE, "equal", "e_tuple_equal"),
         (E_OPTION, "equal", "e_option_equal"),
         (E_COLLECTION, "equal", "e_collection_equal"),
-        (E_SELF, "equal", "e_self_equal"),
         (E_PAIR_OF_POINTS, "equal", "e_pair_of_points_equal"),
         (E_RECORD, "not_equal", "e_record_not_equal"),
         (E_TEXT, "equal", "e_text_equal"),
