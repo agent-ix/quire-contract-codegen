@@ -78,3 +78,9 @@ not a finding. The remaining duplicate pairs were each added in a single commit,
 does not decide them.
 
 FND-001 is a style judgement; merging as is is acceptable.
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+|---|---|---|
+| FND-001 | fixed | ad53660: the six files are now REV-015/018/019/020/021/022-<slug>.md, with their REV ids restored. The Task-005 citation is reverted to REV-015, the REV-020 citation to REV-022, and the core gap analysis citation to "REV-019 through REV-022". Re-verified at ad53660 (rebased on 123e3ab): 101 files with unique ids, every prefix equal to its id, and no stale SR-800..805 or old-prefix reference outside history. `make spec` exits 0 with 0 warnings. |
