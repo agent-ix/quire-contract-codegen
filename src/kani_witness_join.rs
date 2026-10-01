@@ -12,9 +12,9 @@
 //! the emitted `kani::any()` calls, which is position *i* of the concrete bytes Kani's playback
 //! records.
 //!
-//! The block selection, the refusal codes and the comment cross-check are a behavioural port of
-//! `quire_contract_ir::kani::Witness`, which IR deletes; the code is rewritten, the behaviour is
-//! the same.
+//! The block selection, the refusal codes and the comment cross-check reproduce the behaviour of
+//! the witness reader Contract IR no longer carries; the code is rewritten, the behaviour is the
+//! same.
 //!
 //! The values come out as [`qsl_replay::WitnessValue`], the type QSL's replay envelope carries,
 //! so [`crate::spine_replay`] hands them to QSL without a conversion. The transcript grammar

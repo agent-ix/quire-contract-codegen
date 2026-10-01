@@ -128,14 +128,15 @@ failure is reported.
 | FR-016-AC-11 | The adapter refuses, with a distinct typed error each, a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript QSL does not admit, a request QSL refuses with any `ReplayRefusal` other than `Fault` (returned with its cause), and a witness-sourced request that settles on the input arm. | Test (TC-026) |
 | FR-016-AC-12 | A `replay` call that returns `ReplayRefusal::Fault` yields a typed unavailable result, and never a mismatch, a refusal or a failure; no other condition yields unavailable. | Test (TC-026) |
 | FR-016-AC-13 | A `Witness` arm that settles `reproduced-with-evaluated-witness` with a category other than `violation` yields a typed mismatch, and never a reproduced failure. | Test (TC-026) |
+| FR-016-AC-14 | A proved unit that imports a locked dependency is compiled by `qsl_replay::call_site` together with that dependency's lock source, the replay request's `package.dependencies` carries one entry per lock selection with the lock's recorded `package_id`, and `qsl_replay::replay` settles the unit's falsification through the imported function; a unit whose import no lock selection supplies is refused at the call site, a lock recording another identity for the dependency is refused by QSL as a dependency identity mismatch, and a lock selecting a library the unit does not import is refused by QSL as unselected. | Test (TC-026) |
 
 ## Dependencies
 
 - **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md); QSL's
   `qsl-replay` crate, the only QSL crate this
   repository depends on. The replay package takes a compiled unit's package id and
-  parameter node ids from `qsl_replay::call_site`, and the request's types from
-  `qsl-replay`'s re-exports.
+  parameter node ids from `qsl_replay::call_site`, which compiles the unit with its
+  locked dependencies, and the request's types from `qsl-replay`'s re-exports.
 - **Downstream**: [TC-026](../../test/complete-v1/TC-026-witness-native-replay.md),
   [FR-024](./FR-024-counterexample-envelope-intake.md), which carries the decoded
   values to QSL in QSL's counterexample envelope.

@@ -189,6 +189,7 @@ package.
 | FR-015-AC-30 | With the installed backend, the operation contract verifies for a healthy subject and is falsified, naming the postcondition, for a subject mutated to debit. | Test (TC-025) |
 | FR-015-AC-31 | With the installed backend, a frame-allowed effect verifies, a frame-forbidden effect is falsified naming the forbidden field, and regenerating the frame from a package whose `modifies` is mutated to grant nothing falsifies the allowed subject. | Test (TC-025) |
 | FR-015-AC-32 | The forbidden frame counterexample, executed natively, reproduces as a frame violation of that field through QSL's `replay_frame`, and the allowed run replays as a respected frame. | Test (TC-025) |
+| FR-015-AC-33 | The frame-replay request and envelope are built from `qsl_replay::call_site` over the operation's name: the payload's anchor, frame and frame occurrence are QSL's answer for the operation, the envelope's `clause_node` is the payload's frame node and its `occurrence_key` the payload's frame occurrence, and an operation the unit names no frame for is refused when the request is built. | Test (TC-025) |
 
 ## Dependencies
 

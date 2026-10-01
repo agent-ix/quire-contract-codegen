@@ -34,14 +34,14 @@ use package::{
     reference, Bound, PackageBuilder, NODE_DOMAIN, T_BOOLEAN, T_INTEGER,
 };
 use qsl_replay::{
-    DisagreementCause, FrameChange, FrameIdentityMismatch, ProofCategory, ReplayRefusal,
-    ReplayResult, Verdict, WitnessSettlement,
+    CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, ProofCategory,
+    ReplayRefusal, ReplayResult, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
-    execute_kani_obligation, generate_state_frame_obligations, KaniExecutionRequest,
-    KaniInstallation, KaniRunOutcome, StateComparison, StateFieldDomain, StateFrameHarness,
-    StateFrameObligations, StateFrameProperty, StateFrameRefusal, StateFrameRequest,
-    UnsupportedFrameEffect,
+    execute_kani_obligation, generate_state_frame_obligations, FrameReplayError,
+    KaniExecutionRequest, KaniInstallation, KaniRunOutcome, StateComparison, StateFieldDomain,
+    StateFrameHarness, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
+    StateFrameRequest, UnsupportedFrameEffect,
 };
 use quire_contract_ir::{CheckedNodeId, CheckedPackageV2, CompleteLoweringRecordV2};
 use serde_json::{json, Value};
@@ -763,7 +763,7 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
 /// Trace: TC-025
 #[test]
 fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
-    let twin = Twin::compile();
+    let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 0));
     assert!(twin
         .replay_tampered(&invocation, "account", "audit", Tamper::Nothing)
@@ -781,6 +781,66 @@ fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
         Err(ReplayRefusal::FrameIdentity(mismatch))
             if matches!(*mismatch, FrameIdentityMismatch::EnvelopeOccurrence { .. })
     ));
+}
+
+/// The frame-replay request is built from QSL's own answer for the operation: the envelope names
+/// the payload's frame node and frame occurrence, and a forbidden write replays to a reproduced
+/// violation while a write the frame grants does not, with no Kani run involved.
+///
+/// Trace: FR-015-AC-33, TC-025
+#[test]
+fn tc_025_the_frame_replay_request_is_built_from_the_call_site_and_settles() {
+    let twin = Twin::new();
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let replay = twin.frame_replay(&invocation, "account", "audit");
+    let payload = replay.packet.family_payload.as_ref().expect("a payload");
+    assert_eq!(replay.packet.clause_node, Some(payload.frame));
+    assert_eq!(
+        replay.packet.occurrence_key.as_ref(),
+        Some(&payload.occurrence)
+    );
+    assert_ne!(payload.anchor, payload.frame);
+    assert_eq!(payload.occurrence.node(), payload.frame);
+
+    let reproduced = replay.replay().expect("the replay settles");
+    let ReplayResult::Witness(arm) = reproduced.result() else {
+        panic!("a witness-sourced replay settles on the witness arm");
+    };
+    assert_eq!(
+        arm.settlement(),
+        WitnessSettlement::ReproducedWithEvaluatedWitness
+    );
+
+    let granted = twin.invocation("account", (5, 0), (6, 0));
+    let respected = twin
+        .replay(&granted, "account", "balance")
+        .expect("the replay settles");
+    let ReplayResult::Witness(arm) = respected.result() else {
+        panic!("a witness-sourced replay settles on the witness arm");
+    };
+    assert_eq!(arm.settlement(), WitnessSettlement::Inconclusive);
+}
+
+/// An operation the unit names no frame for is refused by the call site before any request is
+/// built, paired with the package it was looked up in.
+///
+/// Trace: FR-015-AC-33, TC-025
+#[test]
+fn tc_025_an_operation_with_no_frame_is_refused_when_the_request_is_built() {
+    let twin = Twin::new();
+    let invocation = twin.invocation("account", (5, 0), (6, 0));
+    let refusal = twin
+        .try_frame_replay("withdraw", &invocation, "account", "audit")
+        .err()
+        .expect("the unit names no frame for `withdraw`");
+    assert!(
+        matches!(
+            &refusal,
+            FrameReplayError::CallSite(cause)
+                if matches!(**cause, CallSiteRefusal::UnknownOperation { .. })
+        ),
+        "{refusal}"
+    );
 }
 
 // ---- kani lane ---------------------------------------------------------------
@@ -935,7 +995,7 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
     let fixture = fixture(&Shape::HEALTHY);
-    let twin = Twin::compile();
+    let twin = Twin::new();
 
     let forbidden = generate_over(&fixture, "deposit_touching_audit");
     let counterexample = falsified(

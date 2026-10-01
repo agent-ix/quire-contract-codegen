@@ -70,8 +70,13 @@ and verdict mismatches are one evidence-failure verdict with a typed cause. The
 decode size limit (AC-6), the charge, counter and limit comparison (AC-7) and the
 unavailable result for an executor fault (AC-12) are planned.
 
-Filling the replay request's `package.dependencies` from the proved lock is
-implemented (`ReplayPackage::request`) and its wire shape is tested, but no replay
-of a unit that imports a locked dependency is reachable: `qsl_replay::call_site`
-compiles a standalone unit, so QSL refuses a request naming a dependency as
-unselected, which `tests/it/skeleton_spine.rs` asserts.
+FR-016-AC-14 is implemented and tested in the default suite
+(`tests/it/skeleton_spine.rs`): `ReplayPackage::new` hands the lock's dependency
+selections to `qsl_replay::call_site` as its dependency input, and
+`ReplayPackage::request` fills the request's `package.dependencies` from the same
+lock. A unit that imports a locked dependency replays through `qsl_replay::replay`
+to a reproduced violation, and the same unit at an input the imported function
+holds settles `inconclusive`, so the dependency is evaluated and not assumed. An
+import with no lock selection is refused at the call site, a lock recording another
+`package_id` is refused by QSL as a dependency identity mismatch, and a lock
+selecting a library the unit does not import is refused by QSL as unselected.
