@@ -728,8 +728,14 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
 - Step 4f depends on a fact this AD could not verify: that QSL's exemplars can be moved onto the
   one public entry. The planner's record puts the arithmetic control on `generate_kani_bundle`. If
   the exemplars need something the contract family does not emit, 4f waits.
-- Step 1a is blocked in CG itself: until QSL moves `quire-canonical` from its tag to
-  `branch = "main"` (waiting on the owner), CG's lock would hold two entries and `make deny` fails.
+- Step 1a was blocked in CG itself until QSL moved `quire-canonical` from its tag to
+  `branch = "main"` (QSL PR #559, merged), because CG's lock would otherwise hold two entries and
+  `make deny` fails. It is unblocked: step 1a bumps CG's `qsl-*` lock entries to QSL `main`, so
+  both resolve one `quire-canonical` entry. Step 1a changed the corpus case digest and the bytes of
+  emitted JSON artifacts once (RFC 8785 for `serde_json` field order): TC-023 and the interface
+  record it. The encoder carries an integer above 2^53 only as a decimal string, so the corpus
+  identity writes every `i128` request value as decimal text, and content the encoder still
+  refuses is a typed refusal (`kani_corpus_identity_unencodable`).
 - Batching with per-harness ceilings (FR-028) needs a rule for the batch's wall clock. This AD
   puts batching in `run/` and leaves the rule to FR-017 and IR-277.
 - Typed node access depends on what IR exposes. If IR's decoder lands later than `core/ir`, the

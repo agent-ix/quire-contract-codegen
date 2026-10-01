@@ -38,7 +38,16 @@ non-success (unbacked). The dependency graph keeps Contract IR below codegen. Ev
 generated `#[kani::proof]` symbol carries its corpus case's name: the family label
 plus the SHA-256 of the case's canonical content (construct, every request field, the finite
 input with its objects and references in sorted order, the profile selection and the
-normalized dependency census), the same name its artifact paths carry. The same request
+normalized dependency census), the same name its artifact paths carry. The canonical content
+is encoded as RFC 8785 JSON by `quire-canonical` (sorted member names, ES6 numbers, no trailing
+newline), the one encoder CG calls (AD-004 step 1a); it is not `serde_json` field-order text. This
+changed every case name once, when the encoder moved: a name recorded before that change does
+not match the same request now. The encoder carries a number as an IEEE 754 double and refuses an
+integer whose magnitude exceeds 2^53, so every `i128` request value is encoded in the content as
+its decimal text: a request operand outside the `i64` range still generates, with an exact
+identity. Content the encoder refuses anyway (an integer above 2^53 elsewhere, or an encoding over
+the artifact byte ceiling) is refused with a typed `InvalidInput`
+`kani_corpus_identity_unencodable` result and emits nothing. The same request
 names the same artifacts in any emission order and any run, and the same graph offered in
 another object or reference order names the same ones. Varying any single one of those
 fields names different artifacts. A request emitted twice through one registry is refused

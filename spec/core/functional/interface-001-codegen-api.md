@@ -89,7 +89,7 @@ operations:
   - name: generate_bounded_kani_corpus_case
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
     output: BoundedCorpusCase | KaniOutcome
-    semantics: one bounded Kani corpus case and its proof dependency graph; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts
+    semantics: one bounded Kani corpus case and its proof dependency graph; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts; the case identity is the SHA-256 of the case content's RFC 8785 canonical JSON (quire-canonical), with every i128 request value encoded as decimal text (the encoder refuses integers above 2^53), and content the encoder still refuses is refused as kani_corpus_identity_unencodable
   - name: generate_exact_scalar_oracles
     inputs: [admitted CheckedPackageV2, ExactScalarItem list]
     output: ExactScalarOracles | OracleGenerationError
@@ -211,6 +211,7 @@ diagnostics:
   fields: [stable code, terminal state, stable input path, exact IR source span required for NonBooleanRoot/UnsupportedExpression/UnsupportedDependency/UnsupportedObligations and absent for non-expression failures, optional preserved lower-level generation code, human detail]
 oracle_slice:
   schemas: generated Rust and source-map outputs each identify and validate against their own versioned schema
+  json_encoding: every JSON artifact CG emits (source maps, proof graphs) is the RFC 8785 canonical encoding produced by quire-canonical, followed by one newline; member names are sorted and numbers are ES6, not serde_json field order; this changed the bytes of those artifacts once, and regeneration stays byte-identical (NFR-001)
   source_limit: 1048576 bytes per clause, enforced during rendering
   artifact_names: readable names built from the requirement, revision and clause names, used bare when one clause holds the name; clauses sharing a name are suffixed `_{n}`, numbered from 1 in ascending full-identity order; with per-clause source-map paths
   supported_expression_grammar: Boolean literals, Boolean direct value references, Boolean not/operators, bounded i64 literals, bounded i64 direct input/state value references, and all six comparisons with a Boolean clause root
