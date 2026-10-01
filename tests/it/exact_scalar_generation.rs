@@ -21,7 +21,7 @@ use quire_contract_ir::{
     CheckedPackageV2ReadResult,
 };
 use quire_contract_runtime::exact::{
-    ComparisonOperator, DivisionProfile, QuantityTarget, RoundingMode, TextProfile,
+    ComparisonOperator, DivisionProfile, QuantityTarget, RoundingMode,
 };
 use serde_json::{json, Value};
 
