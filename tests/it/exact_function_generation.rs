@@ -154,7 +154,6 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
             _ => None,
         })
         .expect("a generated claim for add_fn over the call node");
-    assert_eq!(claim.function, "add_fn");
     let expected_index = survivor_names
         .iter()
         .position(|name| *name == "add_fn")

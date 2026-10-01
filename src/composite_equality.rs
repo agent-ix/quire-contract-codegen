@@ -762,7 +762,7 @@ fn check_item<'r>(
     let arguments = application_arguments(&node.node.body)
         .filter(|arguments| arguments.len() == 2)
         .ok_or(CompositeEqualityRefusal::BodyMismatch)?;
-    check_operand_types(arguments, item)?;
+    check_operand_types(graph, arguments, item)?;
 
     let mut closure = TypeClosure::default();
     let left_source = resolve_type(graph, bounds_by_type, &mut closure, &item.left.source_type)?;
@@ -888,43 +888,56 @@ fn application_arguments(body: &Value) -> Option<&Vec<Value>> {
     body.get("arguments")?.as_array()
 }
 
-/// Each `binary` operand names its own static type through `literal.type`
-/// -- IR-216 requires that member on every literal and validates only that
-/// it resolves to a real node, never cross-checking it against `value_kind`,
-/// so it is free for this generator to read on its own terms. An operand
-/// that is an explicit `convert` application (how a checked package spells
-/// the `convert<T>` a `converted` descriptor names) is read through to the
-/// operand it converts, whose type is the descriptor's `source_type`; the
-/// application's own `result_type` is the conversion target. A `reference`
-/// operand is deliberately not read here.
+/// The type a `binary` operand stands for, read as QSL emits operands: each operand is its own
+/// node, and the equality's `arguments` hold a `reference` to it (FR-018). The operand's type is
+/// that node's `semantic_type`, except that a node that is an `expression` whose body is an
+/// `application` of operator `convert` is a conversion, and the operand is read through it: the
+/// type is that of the conversion's first argument, followed through nested conversions to the
+/// first node that is not one, which is the descriptor's `source_type`. The conversion's own
+/// `result_type` is not read: whether the descriptor's conversion is admitted is the runtime's
+/// `check_equality` verdict on the descriptor, never the body's. An inline term (a `literal`, an
+/// inline `application`) is not an operand QSL emits and reads as no type.
 ///
-/// This is the generator's only read of body content (FR-018's Behavior
-/// clause "disagrees with its descriptor's arity or operand types"): the
-/// type used to build the runtime call always comes from the descriptor,
-/// never from this value, so disagreement here is refused before either
-/// operand's type is resolved.
-fn operand_type_id(term: &Value) -> Option<CheckedNodeId> {
+/// This is the generator's only read of body content (FR-018's Behavior clause "disagrees with
+/// its descriptor's arity or operand types"): the type used to build the runtime call always
+/// comes from the descriptor, never from this value, so disagreement here is refused before
+/// either operand's type is resolved.
+fn operand_type_id(graph: &Graph<'_>, term: &Value) -> Option<CheckedNodeId> {
     let mut term = term;
-    loop {
-        match term.get("term")?.as_str()? {
-            "literal" => return serde_json::from_value(term.get("type")?.clone()).ok(),
-            "application" if term.get("operator")?.as_str()? == "convert" => {
-                term = term.get("arguments")?.as_array()?.first()?;
-            }
-            _ => return None,
+    // Each step follows one reference to a distinct-or-repeated node; the graph's size bounds a
+    // chain that does not cycle, and a cycle of conversions reads as no type.
+    for _ in 0..=graph.len() {
+        let target = read_reference(term)?;
+        let node = graph.get(&target)?;
+        let conversion = (&*node.node_tag == CheckedNodeTag::Expression.as_wire())
+            .then(|| application_of(&node.body, "convert"))
+            .flatten();
+        match conversion {
+            Some(arguments) => term = arguments.first()?,
+            None => return Some(node.semantic_type.clone()),
         }
     }
+    None
+}
+
+/// The `arguments` of a node body that is an `application` of `operator`.
+fn application_of<'b>(body: &'b Value, operator: &str) -> Option<&'b Vec<Value>> {
+    if body.get("term")?.as_str()? != "application" || body.get("operator")?.as_str()? != operator {
+        return None;
+    }
+    body.get("arguments")?.as_array()
 }
 
 /// Compare each body operand's declared type against the descriptor's for
 /// that position, left then right, refusing at the first disagreement.
 fn check_operand_types(
+    graph: &Graph<'_>,
     arguments: &[Value],
     item: &CompositeEqualityItem,
 ) -> Result<(), CompositeEqualityRefusal> {
     let expected = [&item.left.source_type, &item.right.source_type];
     for (position, (argument, expected_type)) in arguments.iter().zip(expected).enumerate() {
-        let found = operand_type_id(argument);
+        let found = operand_type_id(graph, argument);
         if found.as_ref() != Some(expected_type) {
             return Err(CompositeEqualityRefusal::OperandTypeMismatch {
                 position,

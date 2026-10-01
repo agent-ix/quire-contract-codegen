@@ -2583,6 +2583,7 @@ pub fn corpus_package() -> PackageBuilder {
                 "binary",
                 op("quire.op.quantity.add"),
                 &unit_type(),
+                // A deliberate negative fixture QSL never emits (it builds no quantity literal).
                 // A quantity literal is typed by its unit: IR resolves a literal operand
                 // through `literal.type`, and `quantity.add` takes a quantity on both sides.
                 vec![
@@ -2833,6 +2834,8 @@ pub fn corpus_package() -> PackageBuilder {
             // integer type but carrying the `decimal` value kind admits, while CG's
             // `check_operand` classifies it by its own `value_kind` and refuses the same
             // `OperandTypeMismatch { position: 1, expected: Integer, found: Some("decimal") }`.
+            // A deliberate negative fixture: the type and `value_kind` disagree, and QSL builds no
+            // decimal literal, so it never emits this shape.
             vec![
                 reference(&wrong_operand_anchor),
                 json!({

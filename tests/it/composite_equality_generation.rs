@@ -441,12 +441,12 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     assert!(!not_ieee_environment.contains_ieee(&not_float_sequence_type));
 }
 
-/// Trace: FR-018-AC-15, TC-029. A body operand that is a `convert` application over a literal is
-/// read as the literal's type: the descriptor's `source_type` must equal it, and a descriptor
-/// naming any other source refuses at that position, reporting the converted operand's type as
-/// found.
+/// Trace: FR-018-AC-15, TC-029. An operand is a `reference` to its own node. A reference to a
+/// conversion node is read as the type of what it converts: the descriptor's `source_type` must
+/// equal it, and a descriptor naming any other source refuses at that position, reporting the
+/// converted operand's type as found.
 #[test]
-fn tc_029_ac15_a_convert_operand_is_read_as_the_type_it_converts() {
+fn tc_029_ac15_a_reference_to_a_conversion_is_read_as_the_type_it_converts() {
     let package = corpus_package().admit();
     let wrong_source = item(
         E_CONV_CHARGE,
@@ -478,6 +478,78 @@ fn tc_029_ac15_a_convert_operand_is_read_as_the_type_it_converts() {
         only_claim(&oracles, E_CONV_CHARGE).result,
         ClaimDisposition::Generated(_)
     ));
+}
+
+/// Trace: FR-018-AC-15, TC-029. A conversion of a conversion is read through to the first node
+/// that is not a conversion: the source type is the innermost operand's, not the inner
+/// conversion's result type.
+#[test]
+fn tc_029_ac15_nested_conversions_are_read_through_to_the_innermost_operand() {
+    let package = nested_conversion_package().admit();
+    let innermost = item(
+        E_NESTED_CONV,
+        EqualityOperatorKind::Equal,
+        converted(T_INTEGER_BOUNDED, T_DECIMAL_WIDE),
+        typed(T_DECIMAL_WIDE),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&innermost));
+    assert!(matches!(
+        only_claim(&oracles, E_NESTED_CONV).result,
+        ClaimDisposition::Generated(_)
+    ));
+    let inner_result = item(
+        E_NESTED_CONV,
+        EqualityOperatorKind::Equal,
+        converted(T_RATIONAL_WIDE, T_DECIMAL_WIDE),
+        typed(T_DECIMAL_WIDE),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&inner_result));
+    match refused(only_claim(&oracles, E_NESTED_CONV)) {
+        CompositeEqualityRefusal::OperandTypeMismatch {
+            position,
+            expected,
+            found,
+        } => {
+            assert_eq!(*position, 0);
+            assert_eq!(*expected, code_id(T_RATIONAL_WIDE));
+            assert_eq!(*found, Some(code_id(T_INTEGER_BOUNDED)));
+        }
+        other => panic!("expected OperandTypeMismatch, got {other:?}"),
+    }
+}
+
+/// Trace: FR-018-AC-15, TC-029. A reference to an application that is not a conversion is read
+/// as that node's own `semantic_type`, never as its first argument's type.
+#[test]
+fn tc_029_ac15_a_non_conversion_application_operand_is_read_as_its_own_type() {
+    let package = application_operand_package().admit();
+    let own_type = item(
+        E_APPLICATION_OPERAND,
+        EqualityOperatorKind::Equal,
+        typed(T_RATIONAL_WIDE),
+        typed(T_RATIONAL_WIDE),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&own_type));
+    assert!(matches!(
+        only_claim(&oracles, E_APPLICATION_OPERAND).result,
+        ClaimDisposition::Generated(_)
+    ));
+    let first_argument_type = item(
+        E_APPLICATION_OPERAND,
+        EqualityOperatorKind::Equal,
+        typed(T_INTEGER),
+        typed(T_RATIONAL_WIDE),
+    );
+    let oracles = generate(&package, std::slice::from_ref(&first_argument_type));
+    match refused(only_claim(&oracles, E_APPLICATION_OPERAND)) {
+        CompositeEqualityRefusal::OperandTypeMismatch {
+            position, found, ..
+        } => {
+            assert_eq!(*position, 0);
+            assert_eq!(*found, Some(code_id(T_RATIONAL_WIDE)));
+        }
+        other => panic!("expected OperandTypeMismatch, got {other:?}"),
+    }
 }
 
 /// Trace: FR-018-AC-7, TC-029. `E_REFERENCE` is the "operand reaching a `reference` composite"
@@ -546,15 +618,17 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     }
 }
 
-/// Trace: FR-018-AC-8, TC-029. UNBACKED today: an equality over a recursive record type (`R_SELF`,
-/// a record reaching itself through an option) is refused by Contract IR at admission, so no oracle
-/// is generated for it and the generated-crate agreement over a recursive type has no evidence.
-/// IR counts the text leaves of the compared type and treats a type that reaches itself as
-/// undecidable, although QSL emits a `recursion:<n>` leaf for it; unblocked by IR admitting a
-/// recursive compared type. This pins the exact refusal (code, cause, pointer, locus).
+/// Trace: TC-029. UNBACKED today (FR-018-AC-2's recursive vectors): an equality over a record
+/// type that reaches itself (`R_SELF` = `{ next: Option<R_SELF> }`, no text) is refused by
+/// Contract IR 0a889f9 at admission, as any cyclic compared type is under the QSpec reference
+/// reader, so no oracle is generated for it and no generation or agreement test runs over any
+/// recursive composite. QSL emits `leaves: []` for this shape. Pending STD-129 (a cyclic type with
+/// no text: operator-ineligible or 0 leaves). This pins the exact refusal (code, cause, pointer,
+/// locus); it backs no clause of FR-018-AC-8, which concerns generation-time declaration
+/// refusals.
 #[test]
-fn tc_029_a_recursive_compared_type_is_refused_by_ir_today() {
-    let (result, wire) = recursive_self_package().read();
+fn tc_029_a_cyclic_compared_type_is_refused_by_ir_today() {
+    let (result, wire) = cyclic_self_package().read();
     let node_id = code_id(E_SELF);
     let position = wire["semantic_graph"]["nodes"]
         .as_array()
@@ -563,7 +637,7 @@ fn tc_029_a_recursive_compared_type_is_refused_by_ir_today() {
         .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
         .expect("the node is in the wire");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
-        panic!("IR now admits a recursive compared type ({result:?}); add it to the corpus");
+        panic!("IR now admits a cyclic compared type ({result:?}); add it back to the corpus");
     };
     assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
     assert_eq!(

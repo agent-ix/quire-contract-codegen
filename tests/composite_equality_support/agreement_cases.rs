@@ -1,7 +1,7 @@
 //! FR-018-AC-2, AC-8 (the `check_type` guard half), AC-9 and AC-11 (the
 //! complementary-outcomes half): generated composite-equality oracles agree
 //! with an independently assembled direct Contract Runtime call, across
-//! record, tuple, option, collection and recursive shapes; a malformed
+//! record, tuple, option and collection shapes; a malformed
 //! environment is refused with no charge; a denied charge surfaces as
 //! `Outcome::Incomplete`, never a completed Boolean; and the two operator
 //! variants over one expression node produce complementary outcomes.
@@ -51,7 +51,7 @@ use support::rt_side;
 /// changes what the generated `not_equal` oracle computes, and only executing
 /// it against the direct runtime call catches that.
 #[test]
-fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree() {
+fn tc_029_ac2_and_ac9_record_tuple_option_and_collection_oracles_agree() {
     // Record (E_RECORD, `equal`): equal and unequal points.
     for (lx, ly, rx, ry) in [(1, 2, 1, 2), (1, 2, 3, 4)] {
         agree2! {
@@ -161,8 +161,8 @@ fn tc_029_ac2_and_ac9_record_tuple_option_collection_and_recursive_oracles_agree
         };
     }
 
-    // The recursive type (E_SELF) is refused by Contract IR at admission, so it has no generated
-    // oracle (`tc_029_a_recursive_compared_type_is_refused_by_ir_today`).
+    // No recursive vector: IR refuses an equality over a type that reaches itself (E_SELF), so
+    // it has no generated oracle (`tc_029_a_cyclic_compared_type_is_refused_by_ir_today`).
 
     // Nested composite (E_PAIR_OF_POINTS): equal and unequal pairs of records.
     for (la, lb, ra, rb) in [

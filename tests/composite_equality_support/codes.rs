@@ -102,3 +102,9 @@ pub const E_CONV_DEC_INT: u32 = 120;
 /// An equality directly over `REF_TYPE` operands: refused by Contract IR at admission, so it is
 /// only in [`direct_reference_package`](super::direct_reference_package), never in the corpus.
 pub const E_REFERENCE_DIRECT: u32 = 121;
+/// An equality whose left operand is a conversion of a conversion, only in
+/// [`nested_conversion_package`](super::nested_conversion_package).
+pub const E_NESTED_CONV: u32 = 122;
+/// An equality whose left operand is a `rational.div` application node, only in
+/// [`application_operand_package`](super::application_operand_package).
+pub const E_APPLICATION_OPERAND: u32 = 123;

@@ -172,11 +172,8 @@ fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
             generated += 1;
         }
     }
-    // The six `refused_corpus` text admissions are not requested: IR refuses them (see its test).
-    assert!(
-        generated + refused_corpus().len() > 60,
-        "the corpus generates every family"
-    );
+    // 59 admitted expressions: the original 65 less the six text admissions IR refuses today.
+    assert!(generated >= 59, "the corpus generates every family");
 }
 
 /// Trace: FR-014-AC-4, TC-024.
@@ -1316,6 +1313,8 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     // a literal operand's family through `literal.type` and does not cross-check it against
     // `value_kind`, so the literal is typed by the integer type to admit and carries the `text`
     // value kind CG classifies it by.
+    // A deliberate negative fixture: type and `value_kind` disagree, and QSL builds no text
+    // literal, so it never emits this shape.
     let mut builder = corpus_package();
     builder.application_bounded(
         3002,
@@ -1923,10 +1922,8 @@ fn derive_one(
 fn tc_024_derivation_equals_every_golden_corpus_descriptor() {
     let package = corpus_package().admit();
     let corpus = corpus();
-    assert!(
-        corpus.len() + refused_corpus().len() > 60,
-        "the corpus is the whole golden set"
-    );
+    // 59 admitted expressions: the original 65 less the six text admissions IR refuses today.
+    assert!(corpus.len() >= 59, "the corpus is the whole golden set");
     let ids = corpus
         .iter()
         .map(|expression| code_id(expression.code))

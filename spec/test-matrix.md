@@ -36,7 +36,7 @@ type: TestMatrix
 | FR-014 | FR-014-AC-15 | TC-024 | ⚠️ Partially covered; the typed refusal and the withheld generated function are asserted, but no fixture requests a work-exhausted item alongside healthy ones, so the per-item isolation clause is unasserted |
 | FR-014 | FR-014-AC-16 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-17 | TC-024 | ✅ Covered |
-| FR-014 | FR-014-AC-18 | TC-024 | 🚧 Planned; the derivation test's refused-identity case is `integer.eq`, which FR-014-AC-35 makes derivable |
+| FR-014 | FR-014-AC-18 | TC-024 | 🚧 Planned; the derivation test's refused-identity case is `integer.eq`, which FR-014-AC-35 makes derivable. The text-admission selector case (`numeric.convert` with a text result) is no longer asserted: Contract IR refuses every text-admission node, so the TextAdmission derivation and emission paths (`src/exact_scalar.rs`) are reachable from no admitted package and untested, pending the owner's decision on text admission |
 | FR-014 | FR-014-AC-19 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-20 through FR-014-AC-25 | TC-024 | ✅ Covered |
 | FR-014 | FR-014-AC-26 through FR-014-AC-34 | TC-024 | ✅ Covered |
@@ -54,7 +54,8 @@ type: TestMatrix
 | FR-016 | FR-016-AC-6, FR-016-AC-7, FR-016-AC-12 | TC-026 | 🚧 Planned |
 | FR-017 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-12, FR-017-AC-13, FR-017-AC-14, FR-017-AC-15, FR-017-AC-16, FR-017-AC-17, FR-017-CON-2 | TC-027 | ✅ Covered |
 | FR-017 | FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-CON-1 | TC-027 | 🚧 Planned |
-| FR-018 | FR-018-AC-1 through FR-018-AC-3, FR-018-AC-6, FR-018-AC-11 through FR-018-AC-15 | TC-029 | ✅ Covered |
+| FR-018 | FR-018-AC-1, FR-018-AC-3, FR-018-AC-6, FR-018-AC-11 through FR-018-AC-15 | TC-029 | ✅ Covered |
+| FR-018 | FR-018-AC-2 | TC-029 | ⚠️ Partially covered; every admitted shape agrees with the runtime, but no recursive composite is generated or agreement-tested: Contract IR 0a889f9 refuses an equality over any type that reaches itself (as the QSpec reference reader does), so `E_SELF` (`{ next: Option<R_SELF> }`, no text, for which QSL emits `leaves: []`) is outside the corpus. Pending STD-129 (a cyclic type with no text: operator-ineligible or 0 leaves). `tc_029_a_cyclic_compared_type_is_refused_by_ir_today` pins the refusal |
 | FR-018 | FR-018-AC-10 | TC-029 | ⚠️ Partially covered; byte identity across repeated runs and request permutations, the descriptor-key order, and the generated crate compiled and executed at test time under AC-2 are asserted; the criterion's remaining clause has no test |
 | FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |
 | FR-019 | FR-019-AC-1 through FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | TC-030 | ✅ Covered |
@@ -91,7 +92,7 @@ before the generator runs, and `tc_029_ac7_a_direct_reference_operand_is_refused
 refusal), but carries no `relation` or `protocol` node, so two
 of the eight named forms are untested. AC-8 requires a declaration refusal for "both recursion passes
 and a duplicate record field"; only the duplicate-field half is tested; no vector produces
-`DeclarationCause::Recursion` in either pass. A recursive record type (`E_SELF`) is refused by Contract IR at admission (its text-leaf count is undecidable for a type that reaches itself, although QSL emits a recursion leaf), so no oracle is generated for it; `tc_029_a_recursive_compared_type_is_refused_by_ir_today` pins the refusal, and the recursive generated-crate agreement vector is unbacked until IR admits such a type. AC-9's conversion-charge clause ("each conversion charge
+`DeclarationCause::Recursion` in either pass. AC-9's conversion-charge clause ("each conversion charge
 point in turn") is backed: `E_CONV_CHARGE` admits four conversion charge points —
 `DecimalOperands`, `DecimalScaleExpansion`, `DecimalArithmetic`, `DecimalResultRetain` — and each is
 denied in turn. Its counter clause ("every counter equals those of the same run stopped immediately
