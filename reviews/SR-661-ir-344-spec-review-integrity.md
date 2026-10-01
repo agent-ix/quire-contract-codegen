@@ -1,0 +1,71 @@
+---
+id: "SR-661"
+title: "CG PR 215 spec review (integrity): AD-004 CG crate layout"
+type: SpecReview
+scope: "agent-ix/quire-contract-codegen@bfaaa849a100aee4a49959554b4607f0410227b1; spec/assurance/AD-004-cg-crate-layout.md, spec/spec.md (References); measured against src/ at origin/main 2fad745"
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/AD-004
+    type: references
+  - target: ix://agent-ix/quire-contract-codegen/AD-001
+    type: references
+---
+
+# SR-661: CG PR 215 spec review (integrity)
+
+## Summary
+
+Ticket: IR-344. PR: agent-ix/quire-contract-codegen#215 at bfaaa84 (re-read after the C-09
+step-5 addition; the earlier head ccb4394 was also read). Base origin/main 2fad745.
+
+Spec-only PR: one new ArchitectureDescription and one References line. This review checks
+structure, internal consistency, consistency with spec/spec.md, AD-001 and the requirements
+the AD cites, and every measured claim against the code at origin/main. The import edges were
+measured by reading every `use crate::` block in `src/`, including the 17 blocks that import
+through the crate root, and resolving each root item to the module that defines it (a
+grep-based script plus a manual read of the blocks; no compiler graph).
+
+Measured claims confirmed: 27 modules in `src/lib.rs`, all flat apart from `bound_strategy`;
+26,687 lines; no strongly connected component among non-test edges; the only test back-edge in
+the named pair is `kani_transcript.rs:261`; `kani_obligations` imports nothing from
+`kani_execution`; 17 files import through the crate root; 9 one-line `fn artifact(` wrappers;
+2 `deterministic_json` copies (`oracle.rs:1111`, `kani.rs:1045`); `RUNTIME_REVISION`
+(`oracle.rs:13`) read only by the three manifest templates and by tests (no other caller in
+the agent-ix GitHub code search); `CheckedNodeKind` unused; every renderer line cite
+(`kani.rs:314`, `:814`, `kani_obligations.rs:2016/2057/2082/2187/2190/2285/2288`,
+`state_frame.rs:1075/1099`, `bounded_kani_corpus.rs:588`) is exact; `kani.rs` and the corpus
+emit no `kani::cover!`, as IR-464 says. `make spec` exits 0 with the 3 baseline warnings
+(FR-017:137, FR-014:278 twice). AD-004 adds none. No requirement id is minted and none is
+removed. FR-015-AC-22/AC-25 stay verbatim. The AD adds no pin, SHA, version record or vendored
+file. `RUNTIME_REVISION` is deleted. The PR conflicts with PR #214 in `spec/spec.md`
+References only (merge-tree).
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | high | The dependency direction is false against the code at the base, and a rename-only step cannot fix it, so L-2's layout test cannot pass at step 2e as planned. The AD says `evidence --> core` only and that strategy, evidence and kani are peers. Non-test edges that break it: (1) `bound_coverage` (evidence) imports `BoundOracleGeneration` and `GeneratedBoundOracles` from `bound` (strategy), an evidence-to-strategy peer edge (`bound_coverage.rs:8-11`). (2) `bound` (strategy) imports `PublicationDiagnostic` (`bound.rs:9`, `:94`), and the target tree keeps publication diagnostics in `publication/publish.rs`: an upward strategy-to-publication edge. (3) `ArtifactBundle::new` returns `PublicationDiagnostic` (`publication.rs:86`), so moving the bundle and its limits to `core/artifact.rs` while the diagnostic stays in `publication/` makes core import publication. (4) In the spec, FR-004 (evidence) `depends_on` FR-014 (oracle), so the direction diagram also contradicts the requirements' own edges. The AD needs an evidence-to-oracle edge (or an explicit V1 exception until step 6), a decision on where `PublicationDiagnostic` lives, and a statement of which of these edges step 2 is allowed to keep | spec/assurance/AD-004-cg-crate-layout.md:217-249, :409-414, :447-452 |
+| FND-002 | medium | The order inside `kani/` says `run` imports `identity`, `output` and `classify`, not `generate`. Today `kani_execution` (target `kani/run/`, `kani/classify.rs`) imports `KaniObligationHarness`, `KaniScalarObligationHarness` and `ObligationKind` from `kani_obligations`, and `StateFrameHarness` and `StateFrameProperty` from `state_frame`, both of which become `kani/generate/` (`kani_execution.rs:45-52`). Its `#[cfg(test)]` module imports `state_frame` generators too (`:767`), and the AD says test modules obey the same direction. Step 2d is rename-only, so these harness types must move to `kani/identity.rs` in some step, and no step says so | spec/assurance/AD-004-cg-crate-layout.md:239-244, :449-452 |
+| FND-003 | medium | L-1's layout test "compares with the registry" and lands with step 2e. The registry gains its `publication` row and its per-directory owning-module column only in step 7. At 2e the test either fails (`src/publication/` has no registry row; the Owning crates/modules column still names flat modules) or compares with something other than the registry. Either land the registry rows with 2e or make L-1 compare with the AD's map until step 7 | spec/assurance/AD-004-cg-crate-layout.md:214-215, :409-411, :452, :492-497 |
+| FND-004 | medium | The C-09 addition to step 5 prescribes behaviour although the AD says "Out of scope: behaviour. Every requirement keeps its id and its criteria". FR-029 maps one Kani run outcome to one `TerminalValue` "in one match". Step 5 makes the map a function of the pair (outcome, replay result), with `ReplayParity`, `ReplayRefused` and `Failed` outcomes. Its spellings are relayed and marked "not verified here". That is a change to FR-029, and it should go to FR-029 by its ticket, with the AD citing it. The totality claim is also over QSL's replay result type only. CG's replay path has its own failure values before or around QSL: `SpineReplayError::{UnboundArgument, FieldDelimiter, Transcript, WrongArm}`, `DependencyLockError`, and the witness `DecodeFailure` that the AD itself moves to `replay/witness.rs`. The AD does not say who converts them into the QSL value the map takes, or which module pairs the two inputs (by the direction rules it can only be `routed`). The layering itself is acyclic and acceptable: `kani/terminal.rs` importing `qsl-replay` adds no kani-to-replay edge | spec/assurance/AD-004-cg-crate-layout.md:41-44, :318, :478-487 |
+| FND-005 | low | Counts that do not match their own text. "Five renderers emit Kani source, not three" heads a list of four numbered items. Item 2 alone holds three templates, and item 3 holds two, so the count is four files or seven templates, not five. "63 `.get(\"..\")` calls" is the number of matching lines. The calls number 70 (`exact_scalar` 25, `state_frame` 31, `composite_equality` 11, `exact_function` 3) | spec/assurance/AD-004-cg-crate-layout.md:80-90, :105-107, :367 |
+| FND-006 | low | Inconsistent V1 reader lists. Current state names `strategy` among the V1 readers. The module map marks `strategy` as plain "moved", not "V1 input", and step 6 does not list `strategy/campaign.rs`. The AD also does not address `pub mod bound_strategy` (`lib.rs:49`): it is the one public module path, and it changes when it moves to `strategy/bound/` | spec/assurance/AD-004-cg-crate-layout.md:94-96, :194, :488-491 |
+| FND-007 | low | L-3's grep gate is both too broad and too narrow. `kani::any` already appears in doc comments of `kani_witness_join.rs` (`:5`, `:9`, `:12`, `:75`, ...), which becomes `replay/witness.rs`, and `kani::proof` appears in `state_frame.rs` docs. A text grep would fail on prose. It does not name `kani::requires`, `kani::ensures` or `proof_for_contract`, which the contract templates emit (`kani.rs:806-807`, `kani_obligations.rs:2285`), so a second contract renderer would pass the gate. Scope it to string literals and include the contract attributes | spec/assurance/AD-004-cg-crate-layout.md:261-263, :415-416 |
+| FND-008 | low | The AD relies on AD-002 (R-Q5) and AD-003 (E-1, the obligation digest), which exist only in open PR #214, not at origin/main. If this merges first, those references dangle until #214 lands. AD-003 in #214 also fixes the digest preimage as RFC 8785 over the ADR-013 O-09 members, carried as QSL's opaque `ObligationIdentity`. AD-004 puts "deterministic JSON, the one content digest" in `core/canonical.rs`, where `deterministic_json` today is plain `serde_json::to_vec` (`kani.rs:1045`), not RFC 8785. It also adds `ContentDigest` beside QSL's `ObligationIdentity` without saying how the two relate | spec/assurance/AD-004-cg-crate-layout.md:270-271, :349-358, :376 |
+| FND-009 | low | Public repo. The V2 strategy row gives another team's milestone label and delivery slot ("IR-364 (M3, the V2 strategy chain), IR team"). Cite the public ticket only and drop the milestone label | spec/assurance/AD-004-cg-crate-layout.md:532 |
+| FND-010 | low | `core/ir` "becomes a thin re-export of IR's" decoder when IR exposes one. That is a forwarding layer kept for its call sites, which is the shim pattern the ruling and the repository forbid. Say instead that callers switch to IR's decoder and `core/ir` is deleted in the same change | spec/assurance/AD-004-cg-crate-layout.md:368-370 |
+| FND-011 | low | Outside the diff, a separate fix: AD-001's Current state and Risks are stale against what AD-004 records. AD-001 lists `bounded_kani_corpus.rs` and `bounded_kani_profile.rs` as V1 paths, but neither names `BoundPackage`, `BoundClause` or `TypedExpression` at the base. AD-001's risk "Kani publishes no machine-readable verdict" contradicts AD-004's `--export-json` report decision | spec/assurance/AD-001-codegen-architecture.md:198-201, :210-211 |
+
+## Verdict
+
+Structure is sound: a valid ArchitectureDescription with System Boundary, Views, Decisions
+(L-1 to L-12, each with a test), Migration order, Risks and an explicit "Not verified" list.
+`make spec` is clean against the baseline, no id is minted or removed, the two spec.md
+exceptions are settled consistently with the registry note, and no pin, SHA, version record,
+vendored file or compatibility layer is proposed, apart from the `core/ir` re-export wording
+(FND-010). Most measured claims are exact.
+
+The central design claim does not hold: the downward-only dependency direction is
+contradicted by existing edges that a rename cannot remove (FND-001, FND-002), and the layout
+test is scheduled to land before it can pass (FND-003). The C-09 addition puts requirement
+behaviour into an AD that declares behaviour out of scope (FND-004). Not mergeable as an
+approved AD until FND-001 to FND-004 are fixed.
