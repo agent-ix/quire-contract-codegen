@@ -36,7 +36,7 @@ AD-001's, and the replay seam and evidence chain are the seam descriptions of IR
 In scope: every file under `src/`, the import edges between them, the public entry points that
 `lib.rs` re-exports, and the helper, identity, node-access and version-profile code the modules
 share. Also in scope are the two layout exceptions recorded in `spec/spec.md` (FR-005 and the
-SuiteRegistry file), which the Subsystem Registry defers to this AD.
+SuiteRegistry file), which the Subsystem Registry defers to this AD and which this AD settles.
 
 Out of scope: behaviour. Every requirement keeps its id and its criteria. No requirement id is
 minted here; the labels `L-1` and onward are local to this document, as the labels in the other
@@ -152,7 +152,7 @@ src/
       render.rs               the one renderer: the only text that holds kani::proof or kani::cover!
       negotiate.rs            negotiate_kani_obligations, the one public generation entry
       scalar.rs  precondition.rs  contract.rs  frame.rs   family lowerers; each returns a HarnessSpec
-      corpus/                 corpus family, if IR-453 keeps it (see Decisions); renders through render.rs
+      corpus/                 corpus family; renders through render.rs (see Decisions taken from the planner)
     output/                   the one reader of Kani output
       report.rs               typed report parse (--export-json)
       playback.rs             typed extraction of the concrete-playback block
@@ -197,11 +197,11 @@ Migration order, not moved.
 | `vacuity` | evidence | `evidence/vacuity.rs` | moved |
 | `bound_coverage` | evidence | `evidence/bound_coverage.rs` | moved; V1 input |
 | `kani` (types, `adapter_options`, `i64_literal`, `readable_component`) | kani | `kani/abi.rs` | split |
-| `kani` (`generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependency*`, validation) | kani | none | retired (step 4e), unless FR-015 keeps a proof-dependency graph (Risks) |
+| `kani` (`generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependency*`, validation) | kani | none | retired (step 4f), unless the planner keeps a proof-dependency graph (Risks) |
 | `kani` (`deterministic_json`, `artifact`) | core | `core/canonical.rs` | merged into the one helper |
 | `kani_obligations` | kani | `kani/generate/{negotiate,scalar,precondition,contract}.rs`, `kani/identity.rs` | split |
 | `state_frame` | kani | `kani/generate/frame.rs` | moved; one entry with `negotiate` |
-| `bounded_kani_corpus` | kani | `kani/generate/corpus/` | moved, or retired by IR-453 |
+| `bounded_kani_corpus` | kani | `kani/generate/corpus/` | moved; its package lowerer retired after QSL-353 (step 4g) |
 | `bounded_kani_profile`, `bounded_collections`, `definedness_arithmetic`, `finite_reference_graphs` | kani | `kani/generate/corpus/` | moved with the corpus, their only `src/` caller; they forward to IR lowerings |
 | `kani_execution` | kani | `kani/run/`, `kani/classify.rs` | split |
 | `kani_transcript` | kani | `kani/output/` | moved; PR 210 replaces its parse |
@@ -245,7 +245,7 @@ Rules, each checkable:
 - `serde_json::Value` is named only in `core/ir`, `core/canonical` and the report parser. No other
   file reads a field of a body term.
 - `BoundPackage` and `BoundClause` are named only in `strategy/`, `evidence/`, `oracle/boolean_v1.rs`
-  and the V1 arm that step 4e deletes. After step 4e none is named in `kani/`, `routed/` or
+  and the V1 arm that step 4f deletes. After step 4f none is named in `kani/`, `routed/` or
   `replay/`.
 
 ### The one Kani generator
@@ -274,20 +274,22 @@ What happens to the other generators:
 
 | Generator | Fate |
 | --- | --- |
-| `generate_kani_bundle` | Deleted at step 4e. Its `proof_for_contract` harness is the contract family's output, and the contract family already emits a cover. Its public entry leaves `interface-001`. FR-003's optional stubbing was dropped by the IR-311 ruling. |
+| `generate_kani_bundle` | Deleted at step 4f, after step 4e and the QSL-owned move of the QI exemplars. Its `proof_for_contract` harness is the contract family's output, and the contract family already emits a cover. Its public entry leaves `interface-001`. FR-003's optional stubbing was dropped by the IR-311 ruling. |
 | `kani_obligations` scalar, precondition, contract renderers | Become family lowerers; the template text moves into `render.rs`. |
 | `state_frame` renderers | Become the frame lowerer. |
-| `bounded_kani_corpus` renderer | Renders through `render.rs` as a corpus family, or is deleted by IR-453. Either way it returns no `KaniOutcome` at generation time: a verdict comes only from a run. |
+| `bounded_kani_corpus` renderer | Renders through `render.rs` as a corpus family until QSL-353 lands, then its hand-built package lowerer is retired (step 4g). It returns no `KaniOutcome` at generation time: a verdict comes only from a run. |
 
 **Requirement (regression test the one generator must keep passing).** QSL's real-Kani arithmetic
 control, in QSL's exemplar tests (4 of 4) and recorded as QSL-342 QI #10, stays green on the
 surviving generator at every step of the migration. A lowered `+` mutated to return
 `left + right + 1` must classify `Falsified`, and `decode_falsification` must name
 `amount_current = 999`. The unmutated control must prove with every cover satisfied. The planner
-reports that the control currently passes through `generate_kani_bundle`, the path step 4e
+reports that the control currently passes through `generate_kani_bundle`, the path step 4f
 deletes. Step 4a therefore lands the control as a CG-side real-Kani test on the FR-015 path, in the
-`make kani` lane, before any generator is touched, and step 4e is not merged until the QSL
-exemplars have been shown to route through the surviving path. This AD did not run the control.
+`make kani` lane, before any generator is touched, and step 4f is not merged until the QSL
+exemplars have moved onto the one public entry. The control's package comes from QSL's facade
+(`call_site(...).package`, or the source plus `qsl_replay`), not from a copied QI test or a
+QSL-emitted package file. This AD did not run the control.
 
 ### The Kani run, report and witness (questions c and d)
 
@@ -332,7 +334,7 @@ entirely, no side-by-side path and no adapter, and each V1 path is replaced and 
 change. This AD follows it and keeps no V1 boundary as a design goal. It records only the
 work order the ruling allows, because the code still has V1 readers:
 
-- Kani side: V1 has no consumer once the contract family exists. Step 4e deletes the
+- Kani side: V1 has no consumer once the contract family exists. Step 4f deletes the
   `BoundClause` arm of `ObligationItem`, `ObligationSubject::BoundClause`, `MixedBoundPackages` and
   `generate_kani_bundle`.
 - Oracle, strategy and evidence side: `harness`, `strategy/bound`, `evidence/bound_coverage` and
@@ -367,8 +369,10 @@ work order the ruling allows, because the code still has V1 readers:
   until IR exposes one, `core/ir` is the single place that spells the member names, and when IR
   does, it becomes a thin re-export of IR's. That is one access layer, not a bridge between two.
 - **The version profile in one place** `core/profile.rs`: the emitted oracle crate's manifest
-  template (written once, called by the three emitters), the runtime dependency spelling and
-  `RUNTIME_REVISION`, and every contract and schema spelling listed under Current state. A
+  template (written once, called by the three emitters), whose runtime dependency names the
+  runtime source the way CG's own `Cargo.toml` does (git URL and branch), and every contract and
+  schema spelling listed under Current state. `RUNTIME_REVISION` is deleted (see Decisions taken
+  from the planner). A
   spelling QSL will export (AD-002's R-Q5) leaves this file when it does. The profile holds
   spellings this build emits or requires; it records no tool version and asserts no digest
   over a file.
@@ -376,18 +380,19 @@ work order the ruling allows, because the code still has V1 readers:
 ### The two recorded exceptions
 
 **FR-005 (CLI conformance; TC-001, TC-002, TC-007).** FR-005 is in `core` but depends on FR-002
-(strategy), FR-015 (kani) and FR-004 (evidence), against ADR-0056 rule 4. Recommendation: a
-`publication` subsystem, `spec/publication/`, owning FR-005 and its three test cases, and the code
-directory `publication/`.
+(strategy), FR-015 (kani) and FR-004 (evidence), against ADR-0056 rule 4. Decision (the IR
+planner, on IR-344): a `publication` subsystem, `spec/publication/`, owning FR-005 and its three
+test cases, and the code directory `publication/`. There is no FR-005 exception. The move is a
+follow-up PR (migration step 7), and the registry note in `spec/spec.md` that records the
+exception becomes obsolete when it lands.
 
-| | Publication subsystem (recommended) | Accepted core exceptions |
+| | Publication subsystem (decided) | Accepted core exceptions (not taken) |
 | --- | --- | --- |
 | Benefit | Rule 4 holds everywhere. `core` shrinks to shared primitives, which is what rule 4 says it is. The requirement sits in the top layer where it depends on the lower ones, the same direction the code takes. The code needs no upward import: bundle construction and its limits move to `core/artifact.rs`, and only the atomic writer is `publication/`. | No spec movement. |
 | Cost | One registry row, one directory, one matrix index row; `git mv` of FR-005 and TC-001, TC-002, TC-007 with ids unchanged (ADR-0056 identifier rules); the `Owning crates/modules` column changes for `publication`. FR-005-AC-5 describes bundle limits enforced in `core/artifact.rs` but lives in `publication/`, a split the criterion's verification (TC-002) already spans. | The exception stays for as long as the requirement spans subsystems, and "core depends on nothing" stops being checkable. The next cross-cutting requirement has a precedent. |
 
-Not recommended: splitting FR-005 into a core publication requirement and an integration
-requirement, because that mints ids. The owner can still choose it; the `integration/` directory
-and the Integration Test Matrix of ADR-0056 are the slots.
+Splitting FR-005 into a core publication requirement and an integration requirement was not
+taken, because it mints ids.
 
 **`core/matrix/suites.md` (SUR-001, a SuiteRegistry).** ADR-0056 has no matrix slot for it.
 Recommendation: `spec/core/functional/suites.md`, by analogy with ADR-0056 rule 5, which puts "a
@@ -439,8 +444,9 @@ tickets in.
 1. **Shared core, no moves.** 1a: `core/canonical` and deletion of the nine `artifact`
    wrappers and the two `deterministic_json` definitions. 1b: identity newtypes
    threaded through `kani_obligations`, `state_frame` and `routed_generation`, with the typed
-   duplicate error. 1c: `core/profile`.
-2. **Directories, rename-only.** `git mv` plus path fixes, imports by module path, no logic change,
+   duplicate error. 1c: `core/profile`, with `RUNTIME_REVISION` deleted.
+2. **Directories, rename-only.** Precondition: PR 210 has landed, after this AD is approved and
+   with a local `make kani` transcript from its head. `git mv` plus path fixes, imports by module path, no logic change,
    one PR per subsystem in leaf order: 2a `core` (extract from `oracle.rs`), 2b `oracle`, 2c
    `evidence` and `strategy`, 2d `kani` (including the `run`, `output`, `classify` split of
    `kani_execution` and `kani_transcript`, and the test back-edge), 2e `replay`, `routed`,
@@ -448,22 +454,35 @@ tickets in.
 3. **Typed node access.** `core/ir` with the operator enum, then `state_frame`, `exact_scalar`,
    `composite_equality` and `exact_function` onto it, one PR each. L-8 lands with the last.
 4. **The one generator.** 4a the CG-side arithmetic control (L-5), before anything else in this
-   step. 4b `HarnessSpec` and `render`, with the scalar family ported. 4c precondition and
+   step. The test builds its package through QSL's facade (`call_site(...).package`, or the QSL
+   source plus `qsl_replay`), never from a copied QI test or a QSL-emitted package file. 4b `HarnessSpec` and `render`, with the scalar family ported. 4c precondition and
    contract. 4d frame, and `generate_state_frame_obligations` becomes an `ObligationItem` arm.
-   4e deletion of `generate_kani_bundle`, the V1 obligation arm and, unless FR-015 keeps it, the
-   proof-dependency graph, with the matching `interface-001` edit; merged only once the QSL
-   exemplars route through the surviving path. 4f the corpus family renders through `render`, or
-   is deleted by IR-453.
-5. **One output reader.** The playback scanning moves from `kani_witness_join` to
-   `kani/output/playback.rs`; `replay/witness.rs` takes typed entries. PR 210's report parse
-   lands here or before; either order works because step 2d is rename-only, and landing PR 210
-   first avoids rebasing its diff over moved files. Batching follows, in `run/` only.
+   4e **CG's one public generator entry exists** (`negotiate_kani_obligations` with the contract
+   and frame arms, ported in 4b to 4d, is the public path a caller can use for everything
+   `generate_kani_bundle` served). This is the step the leader reports to the planner when it
+   lands. A QSL-owned follow-up then moves QSL's quire-integration exemplars, which call
+   `generate_kani_bundle` today, onto that entry; it is a QSL ticket, not CG work. 4f deletion of
+   `generate_kani_bundle`, the V1 obligation arm and, unless the planner keeps it (see Decisions
+   taken from the planner), the proof-dependency graph, with the matching `interface-001` edit.
+   4f is merged only after 4e has landed and the QSL follow-up has moved the exemplars. 4g the
+   corpus (see Decisions taken from the planner).
+5. **One output reader.** Precondition: PR 210 has landed before the directory moves (it is a
+   precondition of step 2, not of step 5), and it lands only after this AD is approved and with a
+   local `make kani` transcript from its head. The playback scanning then moves from
+   `kani_witness_join` to `kani/output/playback.rs`; `replay/witness.rs` takes typed entries.
+   Batching follows, in `run/` only. Step 5's reader and the C-09 map (`kani/terminal.rs`) map
+   `KaniRunOutcome` to `TerminalValue`, so both depend on QSL-351 (`Inconclusive(cause)`, a
+   `NonZero` `Proved`, the tool pin gone) and on the rule that the terminal value also takes the
+   replay settlement. Neither step 5's terminal map nor `kani/terminal.rs` merges before QSL-351.
 6. **V1 readers.** Each of `harness`, `strategy/bound`, `evidence/bound_coverage` and
-   `oracle/boolean_v1.rs` is replaced and deleted with its V2 criteria. Blocked on spec work
-   over `CheckedPackageV2` for FR-002, FR-004 and FR-008 to FR-013.
+   `oracle/boolean_v1.rs` is replaced and deleted with its V2 criteria. IR-364 (the V2 strategy
+   chain: FR-002, FR-004 and FR-008 to FR-013 over `CheckedPackageV2`) is owned by the IR team and
+   is ordered before this step; no V1 reader is deleted until its criteria exist.
 7. **Spec follows the code.** One spec PR: the registry rows by directory; FR-005 and
    TC-001, TC-002, TC-007 to `spec/publication/`; SUR-001 to `core/functional/`; `interface-001`
-   and `tests.md` fixed. `git mv`, ids unchanged.
+   and `tests.md` fixed. `git mv`, ids unchanged. When this step lands, the registry note in
+   `spec/spec.md` that records the FR-005 exception becomes obsolete and is deleted in the same
+   PR, as is the SUR-001 note.
 
 ## Risks
 
@@ -472,9 +491,9 @@ tickets in.
 - The layout test reads `use` lines, not the compiler's graph. A path in a macro or a
   `super::` import would escape it. The measured edge list in this AD was made the same way
   and has the same blind spot.
-- Step 4e depends on a fact this AD could not verify: that QSL's exemplars can be routed through
-  the FR-015 path. The planner's record puts the arithmetic control on `generate_kani_bundle`. If
-  the exemplars need something the contract family does not emit, 4e waits.
+- Step 4f depends on a fact this AD could not verify: that QSL's exemplars can be moved onto the
+  one public entry. The planner's record puts the arithmetic control on `generate_kani_bundle`. If
+  the exemplars need something the contract family does not emit, 4f waits.
 - Batching with per-harness ceilings (FR-028) needs a rule for the batch's wall clock. This AD
   puts batching in `run/` and leaves the rule to FR-017 and IR-277.
 - Typed node access depends on what IR exposes. If IR's decoder lands later than `core/ir`, the
@@ -486,15 +505,27 @@ tickets in.
   The typed operator enum is in this AD because the audit assigned it to IR-344, though the
   ticket text does not list it.
 
-### Open questions for the owner
+### Decisions taken from the planner
 
-| Question | Recommendation | Cost of the alternative |
+The IR planner answered the questions this AD first raised. Each is now a decision, with its
+source. The planner's answers and QSL's review of this PR are inputs the AD adopted after checking
+what it could against the code; the checks are stated.
+
+| Topic | Decision | Source |
 | --- | --- | --- |
-| Publication subsystem or accepted FR-005 exceptions? | Publication subsystem (above). | A standing rule 4 exception. |
-| Corpus: keep as a family lowerer or retire? IR-453 decides; this AD only requires that it render through the one renderer and return no verdict at generation time. | Keep only if IR-453 backs it with real replay. | A fifth renderer, or the pass-through modules kept for no caller. |
-| Does FR-015 keep a proof-dependency graph? `ProofDependency*` lives in the V1 bundle and is named by TC-005. | Retire with the bundle unless an FR-015 criterion names it. | A graph type with no generator behind it. |
-| `RUNTIME_REVISION` is read by emitted crate manifests. Is it load-bearing (generated crates must build against that runtime) or provenance? | Spell it once in `core/profile.rs`; do not add a new assertion over it. | Three copies drift apart. |
-| Land PR 210 before the directory moves? | Yes: the moves are rename-only. | Rebasing its diff over moved files. |
+| Publication subsystem | Yes. FR-005 with TC-001, TC-002 and TC-007 moves to `publication`; no FR-005 exception. The move is migration step 7, and the spec.md registry note becomes obsolete when it lands. | IR planner, IR-344 |
+| Corpus | CG's hand-built package lowerer is retired once QSL-353 (QSL's emission-to-admission corpus) lands, and the corpus rows are backed from QSL-emitted packages (IR-453). No requirement row is removed; until QSL-353 lands the rows and the corpus stay as they are. CG obtains those packages by calling QSL's facade on source, never from QSL test fixtures or copied package files. | IR planner, IR-344, IR-453, QSL-353 |
+| Proof-dependency graph | Retire it with the V1 bundle unless a current requirement names it. Checked: FR-015 does. Its Inputs and Behavior name an optional declared proof-dependency census per obligation, folded into the harness identity, and FR-015-AC-22 and AC-25 are the criteria TC-005 traces. So those requirements stay as planned and are not touched. Ask the planner: the census is a V2 request input, while `ProofDependencyGraph` is the V1 bundle's output type, so whether the graph type survives in `kani/` to carry the census or is replaced by identity members is the planner's to say. Step 4f leaves the type in place until it answers. | IR planner, IR-344 |
+| `RUNTIME_REVISION` | Deleted, not spelled once. Checked: the constant is read by the three emitters' manifest templates (a `rev = "..."` on the runtime dependency) and by tests (failure messages and `manifest.contains`). Nothing else decides on it: no code compares it with the runtime CG itself builds against, and CG's own `Cargo.toml` names the runtime by branch with the lockfile recording the commit. The emitted manifest needs a runtime source, not a pin, so the template names it the way `Cargo.toml` does. The cost is that an emitted crate follows the runtime branch as CG does. I did not build an emitted crate to confirm. | IR planner, IR-344; QSL concurs; repository CLAUDE.md |
+| PR 210 | Lands before the directory moves, only after this AD is approved, and with a local `make kani` transcript from its head. A precondition of migration step 2. | IR planner, IR-344 |
+| V2 strategy criteria | FR-002, FR-004 and FR-008 to FR-013 over `CheckedPackageV2` are IR-364 (M3, the V2 strategy chain), IR team, ordered before step 6. | IR planner, IR-344, IR-364 |
+| One public entry before deletion | Migration step 4e: the one public generator entry exists. A QSL-owned follow-up moves QSL's quire-integration exemplars, which call `generate_kani_bundle` today, onto it. Only then does step 4f delete `generate_kani_bundle`. | QSL review of this PR |
+| Package source for tests | The arithmetic control (step 4a) and, after QSL-353, the corpus build packages through QSL's facade (`call_site(...).package`, or source plus `qsl_replay`). CG copies no QSL fixture and no QSL-emitted package file. | QSL review of this PR |
+| Terminal map dependency | Step 5's reader and the C-09 map (`kani/terminal.rs`) depend on QSL-351 (`Inconclusive(cause)`, a `NonZero` `Proved`, the tool pin gone) and on the terminal value also taking the replay settlement. | QSL review of this PR |
+| `ContentDigest` | Wraps QSL's `ByteDigest` through the facade. | QSL review of this PR |
+
+Still open: the SuiteRegistry home (`spec/core/functional/suites.md` is the recommendation; the
+planner has not ruled), and the planner's answer on the proof-dependency graph type.
 
 ### Not verified in this AD
 
