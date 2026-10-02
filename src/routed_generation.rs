@@ -309,7 +309,9 @@ fn generate_kani(
         } => (records, index_harnesses(scalar_harnesses)?, false),
         KaniObligationOutcome::Rejected { records } => (records, BTreeMap::new(), true),
     };
-    debug_assert_eq!(
+    // A real assertion, not `debug_assert_eq!`: in a release build the `zip` below would otherwise
+    // silently truncate to the shorter of the two and drop items or records.
+    assert_eq!(
         records.len(),
         group.len(),
         "FR-015 reports one record per item"
@@ -323,11 +325,10 @@ fn generate_kani(
                 reason: InvalidObligationItem::DuplicateItem { first_index },
             } = &mut record.disposition
             {
-                let first = driver.get(*first_index).copied();
-                debug_assert!(first.is_some(), "FR-015 names an earlier position");
-                if let Some(first) = first {
-                    *first_index = first;
-                }
+                // FR-015 names an earlier position in the group; an
+                // out-of-range index is an invariant violation, so index
+                // directly and panic rather than leave it unmapped.
+                *first_index = driver[*first_index];
             }
             let harness = match &record.disposition {
                 ObligationDisposition::Supported { harness_symbol } => {
