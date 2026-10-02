@@ -208,7 +208,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
 
 /// Trace: TC-023.
 #[test]
-#[ignore = "runs cargo kani; make kani"]
+#[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_executes_the_generated_arithmetic_harness() {
     let (profile, dispatch, input) = fixture();
     let generated = generate_bounded_kani_corpus_case(
@@ -261,7 +261,7 @@ fn tc_023_kani_executes_the_generated_arithmetic_harness() {
 
 /// Trace: TC-023.
 #[test]
-#[ignore = "runs cargo kani; make kani"]
+#[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_executes_the_generated_graph_harness() {
     let (profile, dispatch, input) = fixture();
     let generated = generate_bounded_kani_corpus_case(
@@ -313,7 +313,7 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
 
 /// Trace: TC-023.
 #[test]
-#[ignore = "runs cargo kani; make kani"]
+#[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
     let (profile, dispatch, input) = fixture();
     let generated = generate_bounded_kani_corpus_case(

@@ -392,6 +392,7 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
 
 /// TC-014
 #[test]
+#[ignore = "kani lane: run serially through `make kani`"]
 fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
     let bounded = integer_type(0, 1000);
     let environment = numeric_environment(&[
@@ -858,6 +859,7 @@ fn declaration_and_dependency_order_do_not_change_the_normalized_bundle() {
 
 /// TC-014
 #[test]
+#[ignore = "kani lane: run serially through `make kani`"]
 fn kani_proves_identity_and_prints_numeric_counterexamples() {
     let version = Command::new("cargo")
         .args(["kani", "--version"])
@@ -1422,6 +1424,7 @@ fn generated_kani_predicates_are_the_exact_executable_oracles_for_the_boolean_co
 
 /// TC-007
 #[test]
+#[ignore = "kani lane: run serially through `make kani`"]
 fn kani_executes_the_generated_contract_proof() {
     let version = Command::new("cargo")
         .args(["kani", "--version"])
