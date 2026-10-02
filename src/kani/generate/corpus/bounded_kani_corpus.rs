@@ -395,17 +395,17 @@ pub fn generate_bounded_kani_corpus_case(
     dependencies: &[ProofDependencyRequest<'_>],
     emitted: &mut EmittedCorpusIdentities,
 ) -> Result<BoundedCorpusCase, KaniOutcome> {
-    if profile.selection != input.input().profile {
+    if *profile.selection() != input.input().profile {
         return Err(KaniOutcome::non_success(
             KaniOutcomeKind::InvalidInput,
             "kani_profile_input_mismatch",
             request.source_id(),
-            profile.selection.revision.clone(),
+            profile.selection().revision.clone(),
         ));
     }
     let family = request.family();
     let request_source_id = request.source_id().to_owned();
-    let revision = profile.selection.revision.clone();
+    let revision = profile.selection().revision.clone();
     // The declared census is validated, and its normalized/sorted form is fixed, before any
     // lowering begins: an invalid census is refused before the generator does any semantic work,
     // and the single normalized form computed here is the one the emitted proof-dependency-graph
@@ -451,7 +451,7 @@ pub fn generate_bounded_kani_corpus_case(
     // Computed before lowering consumes the request; recorded only after lowering succeeds.
     let identity = CaseIdentity {
         construct: family.construct(),
-        profile: &profile.selection,
+        profile: profile.selection(),
         input: InputIdentity::from(input.input()),
         request: RequestIdentity::from(&request),
         dependencies: &normalized_dependencies,
@@ -495,12 +495,12 @@ pub fn generate_bounded_kani_corpus_case(
     let outcome = if value {
         KaniOutcome::proved(
             request_source_id.clone(),
-            profile.selection.revision.clone(),
+            profile.selection().revision.clone(),
         )
     } else {
         KaniOutcome::counterexample(
             request_source_id.clone(),
-            profile.selection.revision.clone(),
+            profile.selection().revision.clone(),
         )
     };
     if !emitted.claim(&identity) {
