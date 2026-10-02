@@ -15,7 +15,7 @@
 //! `CheckedEquality::evaluate` is the only equality. This generator therefore
 //! never compares two values itself: it reconstructs the record/tuple
 //! declaration closure reachable from each operand's type, admits it through
-//! `TypeEnvironment::new` (refusing per [`DeclarationRefusal`] on failure),
+//! `TypeEnvironment::new` (refusing per [`CompositeEqualityRefusal::Declaration`] on failure),
 //! checks the descriptor through `TypeEnvironment::check_equality` (refusing
 //! per [`IllTypedCauseKind`] on failure), and emits two functions per
 //! surviving item: an environment constructor

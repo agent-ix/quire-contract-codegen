@@ -128,7 +128,7 @@ audit-unsafe: audit-unsafe-selftest
 
 .PHONY: rustdoc
 rustdoc:
-	RUSTDOCFLAGS=-Dwarnings $(CARGO) doc $(LOCKED) --no-deps
+	RUSTDOCFLAGS=-Dwarnings $(CARGO) doc $(LOCKED) --no-deps --document-private-items
 
 # =============================================================================
 # Local development against sibling checkouts
