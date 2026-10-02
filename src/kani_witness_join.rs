@@ -89,7 +89,7 @@ const fn byte_width(primitive: KaniPrimitiveType) -> usize {
 }
 
 /// Decodes one real `cargo kani --concrete-playback print` transcript -- an obligation harness's
-/// [`crate::KaniRunOutcome::Falsified`] `counterexample` text -- into typed values, using this
+/// [`crate::kani::classify::KaniRunOutcome::Falsified`] `counterexample` text -- into typed values, using this
 /// obligation's own persisted argument schema.
 ///
 /// `harness_symbol`, `module_symbol` and `arguments` are the three fields of one

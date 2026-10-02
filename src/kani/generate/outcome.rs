@@ -170,7 +170,7 @@ pub enum UnsupportedObligation {
     RenderFailed,
     /// A frame is not a clause oracle, so this renderer has no encoding for one. The frame
     /// obligations of an operation are generated from its `state_clause` by
-    /// [`crate::generate_state_frame_obligations`].
+    /// [`crate::kani::generate::frame::generate_state_frame_obligations`].
     FrameNotClauseRendered,
     /// The generated harness source exceeds
     /// [`MAX_GENERATED_SOURCE_BYTES`](crate::core::artifact::MAX_GENERATED_SOURCE_BYTES), the same
@@ -184,7 +184,7 @@ pub enum UnsupportedObligation {
     /// invalid Rust rather than a resource ceiling. Distinct from [`Self::ResourceLimitExceeded`]
     /// for the same reason.
     ///
-    /// Known narrowing: the analogous [`crate::KaniErrorCode::InvalidGeneratedSyntax`] is
+    /// Known narrowing: the analogous [`crate::kani::generate::census_validation::KaniErrorCode::InvalidGeneratedSyntax`] is
     /// classified `Inconclusive` by its `terminal_state` (a generator defect, not an honest
     /// refusal), distinct from `ResourceLimitExceeded`'s `Unsupported`. [`ObligationDisposition`]
     /// has no inconclusive-equivalent arm, so this variant is reported through the same

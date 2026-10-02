@@ -27,7 +27,7 @@ pub enum UpstreamBlocker {
     /// The generator classified the item from its body and the request's own
     /// descriptor and did not confirm the node's catalogued operation, so it
     /// reports the descriptor-derived identity instead. The cases are listed
-    /// on [`crate::OperationProvenance::CallerDeclared`].
+    /// on [`crate::oracle::scalar::OperationProvenance::CallerDeclared`].
     #[serde(rename = "operation identity not consumed by codegen's generators")]
     OperationIdentityNotConsumed,
 }
@@ -72,7 +72,7 @@ pub struct ClaimMap<C> {
 /// result in doubt, not just the one that surfaced it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OracleGenerationError {
-    /// The generated source exceeds [`crate::MAX_GENERATED_SOURCE_BYTES`].
+    /// The generated source exceeds [`crate::core::artifact::MAX_GENERATED_SOURCE_BYTES`].
     SourceTooLarge {
         /// Generated size.
         bytes: usize,

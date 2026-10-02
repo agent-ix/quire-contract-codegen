@@ -19,7 +19,7 @@ use crate::{
 /// One validated clause supplied to the oracle lowering core.
 ///
 /// This low-level boundary does not establish complete package binding. Normal package consumers
-/// use [`crate::generate_bound_oracles`] with the IR-owned validated projection.
+/// use [`crate::oracle::bound_v1::generate_bound_oracles`] with the IR-owned validated projection.
 pub struct OracleRequest<'a> {
     /// Requirement identity and revision.
     pub requirement: &'a RequirementRef,
