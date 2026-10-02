@@ -309,7 +309,9 @@ fn generate_kani(
         } => (records, index_harnesses(scalar_harnesses)?, false),
         KaniObligationOutcome::Rejected { records } => (records, BTreeMap::new(), true),
     };
-    debug_assert_eq!(
+    // A real assertion, not `debug_assert_eq!`: in a release build the `zip` below would otherwise
+    // silently truncate to the shorter of the two and drop items or records.
+    assert_eq!(
         records.len(),
         group.len(),
         "FR-015 reports one record per item"
