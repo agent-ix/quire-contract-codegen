@@ -63,3 +63,12 @@ Then correct the PR body's evidence line either way.
 | --- | --- | --- | --- |
 | FND-001 | high | Three non-ignored default-lane tests in `kani_generation.rs` still launch real `cargo kani` and assert success, so default `cargo test` / `make test` still fails on a host without Kani. That is IR-467's stated defect, and the PR says `Closes IR-467` | tests/it/kani_generation.rs:579,862-866,1426-1441 |
 | FND-002 | high | PR body's "PATH holding only cargo and rustc (no cargo-kani)" evidence is invalid. Cargo resolves external subcommands from `$CARGO_HOME/bin` as well as PATH. The same log shows the three `kani_generation` real-Kani tests passing, so Kani was reachable during the "Kani-less" run | tests/it/kani_generation.rs:862-866 |
+
+## Dispositions
+
+Round 1, reviewed at 13ec9a62cfeda68d3bb15200cc4a66c477de016c (rebased onto main 1629715).
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | bc32ac7: the three `kani_generation` tests (`numeric_state_bindings_are_normalized_bounded_and_schema_valid`, `kani_proves_identity_and_prints_numeric_counterexamples`, `kani_executes_the_generated_contract_proof`) are `#[ignore]`d and `kani_generation` is added to the `make kani` filter. A re-sweep finds no other `cargo kani` launch or `KaniInstallation::discover` outside an ignored test. `cg-233-kani.log` at 13ec9a6: 15 passed, 246 filtered out, all six newly ignored tests `ok`. The 15 ignored tests in the default lane equal the 15 the kani lane runs, so none is dropped from every gate |
+| FND-002 | fixed | 13ec9a6: PR body re-measured with a fresh `CARGO_HOME` (no `bin/`) and a trimmed PATH. The reviewer repeated the measurement independently at 13ec9a6, with the reviewer's own CARGO_HOME (registry and git symlinked, `bin/` holding rustup proxies but no `cargo-kani`/`kani`), PATH set to that bin plus `/usr/local/bin:/usr/bin:/bin`, and a fresh target dir. `cargo kani --version` gave "no such command: `kani`", and `cargo test --locked --test it` gave 246 passed, 0 failed, 15 ignored, rc=0, with the six tests reported `ignored`. The coder's `cg-467-nokani2.log` does not record its environment, but its counts match |

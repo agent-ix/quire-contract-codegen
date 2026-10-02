@@ -53,3 +53,12 @@ PR (ticket intent not met, evidence claim false) are in the gap analysis, SR-836
 | --- | --- | --- | --- |
 | FND-001 | low | `tests/it/main.rs` module doc still says the `kani` target runs `cargo test --test it kani_obligations -- --ignored --test-threads=1`. The target now passes four filters after `--`, and the PR added one of them without updating the doc that points readers at the target | tests/it/main.rs:12-15 |
 | FND-002 | low | The new ignore reason `"runs cargo kani; make kani"` uses different wording from the 8 sibling real-prover tests in kani_obligations, kani_obligations_state_frame and skeleton_spine (`"kani lane: run serially through \`make kani\`"`). A grep for the lane's reason string misses these three | tests/it/bounded_kani_corpus.rs:211,264,316 |
+
+## Dispositions
+
+Round 1, reviewed at 13ec9a62cfeda68d3bb15200cc4a66c477de016c (rebased onto main 1629715).
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | bc32ac7: `tests/it/main.rs:14-16` now names `cargo test --test it -- --ignored --test-threads=1` with all five filters, matching the Makefile `kani` target |
+| FND-002 | fixed | bc32ac7: all six new ignores read `kani lane: run serially through \`make kani\``, the same text as the 8 siblings (kani_witness_join's longer pre-existing wording is unchanged and out of scope) |
