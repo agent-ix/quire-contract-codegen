@@ -325,11 +325,10 @@ fn generate_kani(
                 reason: InvalidObligationItem::DuplicateItem { first_index },
             } = &mut record.disposition
             {
-                let first = driver.get(*first_index).copied();
-                debug_assert!(first.is_some(), "FR-015 names an earlier position");
-                if let Some(first) = first {
-                    *first_index = first;
-                }
+                // FR-015 names an earlier position in the group; an
+                // out-of-range index is an invariant violation, so index
+                // directly and panic rather than leave it unmapped.
+                *first_index = driver[*first_index];
             }
             let harness = match &record.disposition {
                 ObligationDisposition::Supported { harness_symbol } => {
