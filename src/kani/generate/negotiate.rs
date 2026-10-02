@@ -476,7 +476,7 @@ fn classify_node<'a>(
 /// map assembled by another caller names only node ids [`CheckedPackageV2::graph`] also carries --
 /// that invariant holds only for a claim map this crate's own
 /// [`crate::oracle::scalar::generate_exact_scalar_oracles`] produced. A hand-assembled claim map
-/// whose [`GeneratedScalarClaim`] bounds still resolve can therefore reach
+/// whose [`GeneratedScalarClaim`](crate::oracle::scalar::GeneratedScalarClaim) bounds still resolve can therefore reach
 /// [`Outcome::LoweredScalar`] for a `node_id` this crate never checked is in the graph at all, so
 /// that case is refused here too, as [`InvalidObligationItem::UnknownNode`] -- the same code
 /// [`ExactScalarRefusal::InvalidInput`] ("the node is not in the admitted graph") already reports

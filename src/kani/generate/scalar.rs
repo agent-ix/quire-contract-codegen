@@ -131,7 +131,7 @@ pub(super) fn scalar_stem(operation: &str) -> String {
 }
 
 /// Why [`lower_scalar_claim`] could not lower an IR-confirmed claim -- two distinct causes that
-/// [`classify_claim`] reports as two distinct [`UnsupportedObligation`] reasons, rather than
+/// `classify_claim` reports as two distinct [`UnsupportedObligation`] reasons, rather than
 /// folding them into one the way a single `Option` return would. A third and fourth candidate
 /// cause -- `check_parameters` recording no `checked_bounds` entry, or recording one whose own
 /// derived domain is not an `integer_range` -- are not represented here: [`ScalarOperation::of`] only

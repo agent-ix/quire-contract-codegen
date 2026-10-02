@@ -21,7 +21,8 @@ use rustix::{
     time::Timespec,
 };
 
-/// How the launcher's run within its caller-declared budget ([`KaniExecutionRequest::timeout`])
+/// How the launcher's run within its caller-declared budget
+/// ([`KaniExecutionRequest::timeout`](super::execute::KaniExecutionRequest::timeout))
 /// concluded.
 #[non_exhaustive]
 pub enum LaunchOutcome {
