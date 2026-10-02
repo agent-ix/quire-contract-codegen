@@ -328,11 +328,11 @@ impl ScalarForm {
         })
     }
 
-    fn of_width(width: IeeeWidth) -> Self {
+    fn of_width(width: IeeeWidth) -> Result<Self, OracleGenerationError> {
         match width {
-            IeeeWidth::Binary32 => Self::Float32,
-            IeeeWidth::Binary64 => Self::Float64,
-            _ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+            IeeeWidth::Binary32 => Ok(Self::Float32),
+            IeeeWidth::Binary64 => Ok(Self::Float64),
+            _ => Err(OracleGenerationError::unknown_variant("IeeeWidth")),
         }
     }
 }
@@ -665,18 +665,20 @@ pub fn generate_exact_scalar_oracles(
                     // consumed an identity the node does not carry. Reading it
                     // first keeps the two apart: absent is refused, present and
                     // disagreeing is caller-declared.
-                    let confirmed_identity =
-                        catalogued_operation_identity(node).map(|catalogued| {
-                            operation_confirmed(node, operation).then_some(catalogued)
-                        });
+                    let confirmed_identity = match catalogued_operation_identity(node) {
+                        Ok(catalogued) => {
+                            Ok(operation_confirmed(node, operation)?.then_some(catalogued))
+                        }
+                        Err(refusal) => Err(refusal),
+                    };
                     match confirmed_identity {
-                        Err(refusal) => refused_claim(operation_identity(operation), refusal),
+                        Err(refusal) => refused_claim(operation_identity(operation)?, refusal),
                         Ok(maybe_identity) => {
                             let confirmed = maybe_identity.is_some();
                             let (identity, provenance) = match maybe_identity {
                                 Some(identity) => (identity, OperationProvenance::IrConfirmed),
                                 None => (
-                                    operation_identity(operation),
+                                    operation_identity(operation)?,
                                     OperationProvenance::CallerDeclared {
                                         blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
                                     },
@@ -710,7 +712,7 @@ pub fn generate_exact_scalar_oracles(
                     }
                 }
                 Err(ItemCheckError::Refusal(refusal)) => {
-                    refused_claim(operation_identity(operation), refusal)
+                    refused_claim(operation_identity(operation)?, refusal)
                 }
                 // An RT `#[non_exhaustive]` enum yielded a variant
                 // `check_parameters`'s own exhaustive match does not know:
@@ -722,7 +724,11 @@ pub fn generate_exact_scalar_oracles(
             // Every copy is refused. The entry is named by the least identity
             // so that it does not depend on which copy arrived first.
             copies => {
-                let Some(identity) = copies.iter().map(|op| operation_identity(op)).min() else {
+                let identities = copies
+                    .iter()
+                    .map(|op| operation_identity(op))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let Some(identity) = identities.into_iter().min() else {
                     continue;
                 };
                 refused_claim(identity, ExactScalarRefusal::DuplicateRequest)
@@ -741,19 +747,19 @@ pub fn generate_exact_scalar_oracles(
         pending
             .iter()
             .map(|oracle| {
-                (
-                    format!("oracle_{}", operation_name(oracle.operation)),
+                Ok((
+                    format!("oracle_{}", operation_name(oracle.operation)?),
                     claims[oracle.claim].node_id.clone(),
-                )
+                ))
             })
-            .collect(),
+            .collect::<Result<Vec<_>, OracleGenerationError>>()?,
     );
     for (oracle, symbol) in pending.iter().zip(names) {
-        source.oracle(&symbol, &oracle.identity, oracle.operation);
+        source.oracle(&symbol, &oracle.identity, oracle.operation)?;
         if let ClaimDisposition::Generated(generated) = &mut claims[oracle.claim].result {
             if oracle.confirmed {
                 generated.oracle_source =
-                    standalone_oracle_source(&symbol, &oracle.identity, oracle.operation);
+                    standalone_oracle_source(&symbol, &oracle.identity, oracle.operation)?;
             }
             generated.symbol = symbol;
         }
@@ -829,7 +835,7 @@ fn check_item<'r>(
         }
         .into());
     }
-    let shape = Shape::of(operation);
+    let shape = Shape::of(operation).map_err(ItemCheckError::Generation)?;
     if &*node.node.semantic_form != shape.form {
         return Err(ExactScalarRefusal::FormMismatch {
             expected: shape.form,
@@ -1706,9 +1712,9 @@ impl Shape {
         }
     }
 
-    fn of(operation: &ExactScalarOperation) -> Self {
+    fn of(operation: &ExactScalarOperation) -> Result<Self, OracleGenerationError> {
         use ScalarForm as F;
-        match operation {
+        Ok(match operation {
             ExactScalarOperation::IntegerArithmetic { operator, .. } => match operator {
                 IntegerOperator::Negate => Self::unary(&[F::Integer], F::Integer),
                 IntegerOperator::Add | IntegerOperator::Subtract | IntegerOperator::Multiply => {
@@ -1749,20 +1755,20 @@ impl Shape {
             ExactScalarOperation::IeeeArithmetic { width, .. } => match width {
                 IeeeWidth::Binary32 => Self::binary(&[F::Float32, F::Float32], F::Float32),
                 IeeeWidth::Binary64 => Self::binary(&[F::Float64, F::Float64], F::Float64),
-                &_ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                &_ => return Err(OracleGenerationError::unknown_variant("IeeeWidth")),
             },
             ExactScalarOperation::IeeeComparison { width, .. } => match width {
                 IeeeWidth::Binary32 => Self::binary_call(&[F::Float32, F::Float32], F::Boolean),
                 IeeeWidth::Binary64 => Self::binary_call(&[F::Float64, F::Float64], F::Boolean),
-                &_ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                &_ => return Err(OracleGenerationError::unknown_variant("IeeeWidth")),
             },
             ExactScalarOperation::IeeeWidthConversion { source, target, .. } => {
                 let operand: &'static [ScalarForm; 1] = match source {
                     IeeeWidth::Binary32 => &[F::Float32],
                     IeeeWidth::Binary64 => &[F::Float64],
-                    &_ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                    &_ => return Err(OracleGenerationError::unknown_variant("IeeeWidth")),
                 };
-                Self::conversion(operand, F::of_width(*target))
+                Self::conversion(operand, F::of_width(*target)?)
             }
             ExactScalarOperation::TextAdmission { .. } => Self::conversion(&[F::Text], F::Text),
             ExactScalarOperation::TextComparison { .. } => {
@@ -1786,11 +1792,11 @@ impl Shape {
                     QuantityTarget::Exact => F::Rational,
                     QuantityTarget::Decimal(_) => F::Decimal,
                     QuantityTarget::Integer { .. } => F::Integer,
-                    &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                    &_ => return Err(OracleGenerationError::unknown_variant("QuantityTarget")),
                 };
                 Self::conversion(&[F::Unit], result)
             }
-        }
+        })
     }
 }
 
@@ -1893,9 +1899,11 @@ fn with_rounding(identity: &'static str, rounding: RoundingMode) -> Option<Catal
     })
 }
 
-fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOperation> {
+fn catalogued_operation(
+    operation: &ExactScalarOperation,
+) -> Result<Option<CataloguedOperation>, OracleGenerationError> {
     use ExactScalarOperation as Op;
-    match operation {
+    Ok(match operation {
         Op::IntegerArithmetic { operator, .. } => plain(match operator {
             IntegerOperator::Add => "quire.op.integer.add",
             IntegerOperator::Subtract => "quire.op.integer.sub",
@@ -1914,28 +1922,7 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
             RationalOperator::Divide | RationalOperator::IntegerDivide => "quire.op.rational.div",
             RationalOperator::Negate => "quire.op.rational.negate",
         }),
-        Op::Ordering { operator, operands } => {
-            let family = match operands {
-                OrderingOperandKind::Integer => "integer",
-                OrderingOperandKind::Rational => "rational",
-                OrderingOperandKind::Decimal => "decimal",
-            };
-            plain(match (family, ordering_suffix(*operator)) {
-                ("integer", "lt") => "quire.op.integer.lt",
-                ("integer", "le") => "quire.op.integer.le",
-                ("integer", "gt") => "quire.op.integer.gt",
-                ("integer", "ge") => "quire.op.integer.ge",
-                ("rational", "lt") => "quire.op.rational.lt",
-                ("rational", "le") => "quire.op.rational.le",
-                ("rational", "gt") => "quire.op.rational.gt",
-                ("rational", "ge") => "quire.op.rational.ge",
-                ("decimal", "lt") => "quire.op.decimal.lt",
-                ("decimal", "le") => "quire.op.decimal.le",
-                ("decimal", "gt") => "quire.op.decimal.gt",
-                ("decimal", "ge") => "quire.op.decimal.ge",
-                _ => unreachable!("every (family, suffix) pair is covered above"),
-            })
-        }
+        Op::Ordering { operator, operands } => plain(ordering_identity(operands, operator)?),
         Op::DecimalArithmetic { operator, target } => match operator {
             DecimalOperator::Add => with_rounding("quire.op.decimal.add", target.rounding()),
             DecimalOperator::Subtract => with_rounding("quire.op.decimal.sub", target.rounding()),
@@ -1971,8 +1958,8 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
                 }
                 (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
                     "quire.op.ieee.float64.div"
-                },
-                (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                }
+                (&_, _) => return Err(OracleGenerationError::unknown_variant("IeeeWidth")),
             };
             with_rounding(identity, *rounding)
         }
@@ -1980,7 +1967,7 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
             IeeeComparison::NumericEqual => "quire.op.ieee.numeric_equal",
             IeeeComparison::TotalOrder => "quire.op.ieee.total_order",
             IeeeComparison::BitIdentical => "quire.op.ieee.bit_identical",
-            &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+            &_ => return Err(OracleGenerationError::unknown_variant("IeeeComparison")),
         }),
         Op::IeeeWidthConversion {
             source,
@@ -1995,14 +1982,18 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
             // descriptor naming one can never be confirmed.
             (IeeeWidth::Binary32, IeeeWidth::Binary32)
             | (IeeeWidth::Binary64, IeeeWidth::Binary64) => None,
-            (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+            (&_, _) => return Err(OracleGenerationError::unknown_variant("IeeeWidth")),
         },
         Op::TextAdmission { .. } => plain("quire.op.numeric.convert"),
         // `text.*`/`enum.*` comparisons carry a catalogued `text_profile` mode
         // (`"nfc"`), but the descriptor itself has no profile-bearing field to
         // compare it against, so only the identity is checked.
-        Op::TextComparison { operator } => plain(text_family_identity("text", *operator)),
-        Op::EnumComparison { operator } => plain(text_family_identity("enum", *operator)),
+        Op::TextComparison { operator } => {
+            plain(comparison_identity(ComparisonFamily::Text, operator)?)
+        }
+        Op::EnumComparison { operator } => {
+            plain(comparison_identity(ComparisonFamily::Enum, operator)?)
+        }
         Op::QuantityArithmetic { operator } => plain(match operator {
             QuantityOperator::Add => "quire.op.quantity.add",
             QuantityOperator::Subtract => "quire.op.quantity.sub",
@@ -2010,7 +2001,9 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
             QuantityOperator::Divide => "quire.op.quantity.div",
             QuantityOperator::Power => "quire.op.quantity.pow",
         }),
-        Op::QuantityComparison { operator } => plain(text_family_identity("quantity", *operator)),
+        Op::QuantityComparison { operator } => {
+            plain(comparison_identity(ComparisonFamily::Quantity, operator)?)
+        }
         Op::QuantityConversion { target } => {
             let identity = "quire.op.quantity.convert";
             match target {
@@ -2021,57 +2014,75 @@ fn catalogued_operation(operation: &ExactScalarOperation) -> Option<CataloguedOp
                 QuantityTarget::Exact => plain(identity),
                 QuantityTarget::Decimal(decimal) => with_rounding(identity, decimal.rounding()),
                 QuantityTarget::Integer { rounding, .. } => with_rounding(identity, *rounding),
-                &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                &_ => return Err(OracleGenerationError::unknown_variant("QuantityTarget")),
             }
         }
-    }
+    })
 }
 
-/// `lt`/`le`/`gt`/`ge` per [`OrderingOperator`] variant, shared by
-/// [`catalogued_operation`]'s integer/rational/decimal `Ordering` arm.
-fn ordering_suffix(operator: OrderingOperator) -> &'static str {
-    match operator {
-        OrderingOperator::Less => "lt",
-        OrderingOperator::LessOrEqual => "le",
-        OrderingOperator::Greater => "gt",
-        OrderingOperator::GreaterOrEqual => "ge",
-        _ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
-    }
+/// `quire.op.<family>.<lt|le|gt|ge>` for an integer, rational or decimal
+/// `Ordering` descriptor, one catalogued identity per (operands, operator).
+fn ordering_identity(
+    operands: &OrderingOperandKind,
+    operator: &OrderingOperator,
+) -> Result<&'static str, OracleGenerationError> {
+    use OrderingOperandKind as Kind;
+    use OrderingOperator as Op;
+    Ok(match (operands, operator) {
+        (Kind::Integer, Op::Less) => "quire.op.integer.lt",
+        (Kind::Integer, Op::LessOrEqual) => "quire.op.integer.le",
+        (Kind::Integer, Op::Greater) => "quire.op.integer.gt",
+        (Kind::Integer, Op::GreaterOrEqual) => "quire.op.integer.ge",
+        (Kind::Rational, Op::Less) => "quire.op.rational.lt",
+        (Kind::Rational, Op::LessOrEqual) => "quire.op.rational.le",
+        (Kind::Rational, Op::Greater) => "quire.op.rational.gt",
+        (Kind::Rational, Op::GreaterOrEqual) => "quire.op.rational.ge",
+        (Kind::Decimal, Op::Less) => "quire.op.decimal.lt",
+        (Kind::Decimal, Op::LessOrEqual) => "quire.op.decimal.le",
+        (Kind::Decimal, Op::Greater) => "quire.op.decimal.gt",
+        (Kind::Decimal, Op::GreaterOrEqual) => "quire.op.decimal.ge",
+        (_, &_) => return Err(OracleGenerationError::unknown_variant("OrderingOperator")),
+    })
+}
+
+/// The catalog's comparison families that carry all six of
+/// `eq`/`ne`/`lt`/`le`/`gt`/`ge`.
+#[derive(Clone, Copy)]
+enum ComparisonFamily {
+    Text,
+    Enum,
+    Quantity,
 }
 
 /// `quire.op.<family>.<suffix>` for one of the catalog's six comparison
-/// identities per family (`eq`/`ne`/`lt`/`le`/`gt`/`ge`).
-fn text_family_identity(family: &'static str, operator: ComparisonOperator) -> &'static str {
-    let suffix = match operator {
-        ComparisonOperator::Equal => "eq",
-        ComparisonOperator::NotEqual => "ne",
-        ComparisonOperator::Less => "lt",
-        ComparisonOperator::LessOrEqual => "le",
-        ComparisonOperator::Greater => "gt",
-        ComparisonOperator::GreaterOrEqual => "ge",
-        _ => unreachable!("ComparisonOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
-    };
-    match (family, suffix) {
-        ("text", "eq") => "quire.op.text.eq",
-        ("text", "ne") => "quire.op.text.ne",
-        ("text", "lt") => "quire.op.text.lt",
-        ("text", "le") => "quire.op.text.le",
-        ("text", "gt") => "quire.op.text.gt",
-        ("text", "ge") => "quire.op.text.ge",
-        ("enum", "eq") => "quire.op.enum.eq",
-        ("enum", "ne") => "quire.op.enum.ne",
-        ("enum", "lt") => "quire.op.enum.lt",
-        ("enum", "le") => "quire.op.enum.le",
-        ("enum", "gt") => "quire.op.enum.gt",
-        ("enum", "ge") => "quire.op.enum.ge",
-        ("quantity", "eq") => "quire.op.quantity.eq",
-        ("quantity", "ne") => "quire.op.quantity.ne",
-        ("quantity", "lt") => "quire.op.quantity.lt",
-        ("quantity", "le") => "quire.op.quantity.le",
-        ("quantity", "gt") => "quire.op.quantity.gt",
-        ("quantity", "ge") => "quire.op.quantity.ge",
-        _ => unreachable!("every (family, suffix) pair is covered above"),
-    }
+/// identities per family.
+fn comparison_identity(
+    family: ComparisonFamily,
+    operator: &ComparisonOperator,
+) -> Result<&'static str, OracleGenerationError> {
+    use ComparisonFamily as F;
+    use ComparisonOperator as Op;
+    Ok(match (family, operator) {
+        (F::Text, Op::Equal) => "quire.op.text.eq",
+        (F::Text, Op::NotEqual) => "quire.op.text.ne",
+        (F::Text, Op::Less) => "quire.op.text.lt",
+        (F::Text, Op::LessOrEqual) => "quire.op.text.le",
+        (F::Text, Op::Greater) => "quire.op.text.gt",
+        (F::Text, Op::GreaterOrEqual) => "quire.op.text.ge",
+        (F::Enum, Op::Equal) => "quire.op.enum.eq",
+        (F::Enum, Op::NotEqual) => "quire.op.enum.ne",
+        (F::Enum, Op::Less) => "quire.op.enum.lt",
+        (F::Enum, Op::LessOrEqual) => "quire.op.enum.le",
+        (F::Enum, Op::Greater) => "quire.op.enum.gt",
+        (F::Enum, Op::GreaterOrEqual) => "quire.op.enum.ge",
+        (F::Quantity, Op::Equal) => "quire.op.quantity.eq",
+        (F::Quantity, Op::NotEqual) => "quire.op.quantity.ne",
+        (F::Quantity, Op::Less) => "quire.op.quantity.lt",
+        (F::Quantity, Op::LessOrEqual) => "quire.op.quantity.le",
+        (F::Quantity, Op::Greater) => "quire.op.quantity.gt",
+        (F::Quantity, Op::GreaterOrEqual) => "quire.op.quantity.ge",
+        (_, &_) => return Err(OracleGenerationError::unknown_variant("ComparisonOperator")),
+    })
 }
 
 /// Whether the checked node's own catalogued operation genuinely confirms the
@@ -2090,17 +2101,20 @@ fn text_family_identity(family: &'static str, operator: ComparisonOperator) -> &
 /// no more than one catalogued law definition (`ieee_profile`,
 /// `text_profile`) or none at all, so its shape and identity/mode checks are
 /// already the whole story for it.
-fn operation_confirmed(node: &CompleteContractNodeV2, operation: &ExactScalarOperation) -> bool {
-    let Some(catalogued) = catalogued_operation(operation) else {
-        return false;
+fn operation_confirmed(
+    node: &CompleteContractNodeV2,
+    operation: &ExactScalarOperation,
+) -> Result<bool, OracleGenerationError> {
+    let Some(catalogued) = catalogued_operation(operation)? else {
+        return Ok(false);
     };
     if node.node.body["operation"]["identity"].as_str() != Some(catalogued.identity) {
-        return false;
+        return Ok(false);
     }
     if let Some((kind, value)) = catalogued.mode {
         let mode = &node.node.body["operation"]["mode"];
         if mode["kind"].as_str() != Some(kind) || mode["value"].as_str() != Some(value) {
-            return false;
+            return Ok(false);
         }
     }
     if let ExactScalarOperation::IntegerDivision { profile, .. } = operation {
@@ -2112,10 +2126,10 @@ fn operation_confirmed(node: &CompleteContractNodeV2, operation: &ExactScalarOpe
                 law["definition"]["identity"].as_str() == Some(profile.definition_identity())
             });
         if !law_confirmed {
-            return false;
+            return Ok(false);
         }
     }
-    true
+    Ok(true)
 }
 
 /// One oracle's function, self-contained for direct embedding in a generated
@@ -2128,10 +2142,10 @@ fn standalone_oracle_source(
     symbol: &str,
     identity: &str,
     operation: &ExactScalarOperation,
-) -> String {
+) -> Result<String, OracleGenerationError> {
     let mut builder = SourceBuilder::default();
-    builder.oracle(symbol, identity, operation);
-    builder.finish()
+    builder.oracle(symbol, identity, operation)?;
+    Ok(builder.finish())
 }
 
 /// A generated claim whose oracle is named and rendered after every claim is checked.
@@ -2145,13 +2159,15 @@ struct PendingOracle<'o> {
 }
 
 /// The readable operation family of `operation`, such as `integer_add`, for generated names.
-fn operation_name(operation: &ExactScalarOperation) -> String {
-    let identity = operation_identity(operation);
-    bounded_readable_component(identity.split(' ').next().unwrap_or_default())
+fn operation_name(operation: &ExactScalarOperation) -> Result<String, OracleGenerationError> {
+    let identity = operation_identity(operation)?;
+    Ok(bounded_readable_component(
+        identity.split(' ').next().unwrap_or_default(),
+    ))
 }
 
-fn operation_identity(operation: &ExactScalarOperation) -> String {
-    match operation {
+fn operation_identity(operation: &ExactScalarOperation) -> Result<String, OracleGenerationError> {
+    Ok(match operation {
         ExactScalarOperation::IntegerArithmetic { operator, domain } => {
             let name = match operator {
                 IntegerOperator::Add => "add",
@@ -2159,15 +2175,15 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
                 IntegerOperator::Multiply => "multiply",
                 IntegerOperator::Negate => "negate",
             };
-            format!("integer.{name} domain={}", integer_domain_identity(domain))
+            format!("integer.{name} domain={}", integer_domain_identity(domain)?)
         }
         ExactScalarOperation::IntegerDivision { profile, domain } => format!(
             "{} domain={}",
             profile.definition_identity(),
-            integer_domain_identity(domain)
+            integer_domain_identity(domain)?
         ),
         ExactScalarOperation::IntegerModulo { domain } => {
-            format!("integer.modulo domain={}", integer_domain_identity(domain))
+            format!("integer.modulo domain={}", integer_domain_identity(domain)?)
         }
         ExactScalarOperation::RationalArithmetic { operator, domain } => {
             let name = match operator {
@@ -2196,7 +2212,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
                 OrderingOperator::LessOrEqual => "less_or_equal",
                 OrderingOperator::Greater => "greater",
                 OrderingOperator::GreaterOrEqual => "greater_or_equal",
-                &_ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                &_ => return Err(OracleGenerationError::unknown_variant("OrderingOperator")),
             };
             let kind = match operands {
                 OrderingOperandKind::Integer => "integer",
@@ -2245,7 +2261,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
                 IeeeComparison::NumericEqual => "numeric_equal",
                 IeeeComparison::TotalOrder => "total_order",
                 IeeeComparison::BitIdentical => "bit_identical",
-                &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                &_ => return Err(OracleGenerationError::unknown_variant("IeeeComparison")),
             };
             format!("ieee.{name} width={}", width.as_str())
         }
@@ -2266,10 +2282,10 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
             text_type.profile().as_str()
         ),
         ExactScalarOperation::TextComparison { operator } => {
-            format!("text.compare.{}", comparison_name(*operator))
+            format!("text.compare.{}", comparison_name(*operator)?)
         }
         ExactScalarOperation::EnumComparison { operator } => {
-            format!("enum.compare.{}", comparison_name(*operator))
+            format!("enum.compare.{}", comparison_name(*operator)?)
         }
         ExactScalarOperation::QuantityArithmetic { operator } => {
             let name = match operator {
@@ -2282,7 +2298,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
             format!("quantity.{name}")
         }
         ExactScalarOperation::QuantityComparison { operator } => {
-            format!("quantity.compare.{}", comparison_name(*operator))
+            format!("quantity.compare.{}", comparison_name(*operator)?)
         }
         ExactScalarOperation::QuantityConversion { target } => match target {
             QuantityTarget::Exact => "quantity.convert target=exact".to_owned(),
@@ -2299,28 +2315,28 @@ fn operation_identity(operation: &ExactScalarOperation) -> String {
                 interval_identity(domain),
                 rounding.as_str()
             ),
-            &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+            &_ => return Err(OracleGenerationError::unknown_variant("QuantityTarget")),
         },
-    }
+    })
 }
 
-fn comparison_name(operator: ComparisonOperator) -> &'static str {
+fn comparison_name(operator: ComparisonOperator) -> Result<&'static str, OracleGenerationError> {
     match operator {
-        ComparisonOperator::Equal => "equal",
-        ComparisonOperator::NotEqual => "not_equal",
-        ComparisonOperator::Less => "less",
-        ComparisonOperator::LessOrEqual => "less_or_equal",
-        ComparisonOperator::Greater => "greater",
-        ComparisonOperator::GreaterOrEqual => "greater_or_equal",
-        _ => unreachable!("ComparisonOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+        ComparisonOperator::Equal => Ok("equal"),
+        ComparisonOperator::NotEqual => Ok("not_equal"),
+        ComparisonOperator::Less => Ok("less"),
+        ComparisonOperator::LessOrEqual => Ok("less_or_equal"),
+        ComparisonOperator::Greater => Ok("greater"),
+        ComparisonOperator::GreaterOrEqual => Ok("greater_or_equal"),
+        _ => Err(OracleGenerationError::unknown_variant("ComparisonOperator")),
     }
 }
 
-fn integer_domain_identity(domain: &IntegerDomain) -> String {
+fn integer_domain_identity(domain: &IntegerDomain) -> Result<String, OracleGenerationError> {
     match domain {
-        IntegerDomain::Mathematical => "mathematical".to_owned(),
-        IntegerDomain::Bounded(interval) => interval_identity(interval),
-        &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+        IntegerDomain::Mathematical => Ok("mathematical".to_owned()),
+        IntegerDomain::Bounded(interval) => Ok(interval_identity(interval)),
+        &_ => Err(OracleGenerationError::unknown_variant("IntegerDomain")),
     }
 }
 
@@ -2378,8 +2394,13 @@ struct SourceBuilder {
 }
 
 impl SourceBuilder {
-    fn oracle(&mut self, symbol: &str, identity: &str, operation: &ExactScalarOperation) {
-        let body = self.body(operation);
+    fn oracle(
+        &mut self,
+        symbol: &str,
+        identity: &str,
+        operation: &ExactScalarOperation,
+    ) -> Result<(), OracleGenerationError> {
+        let body = self.body(operation)?;
         let parameters = body
             .parameters
             .iter()
@@ -2397,6 +2418,7 @@ impl SourceBuilder {
         self.functions.push_str("    ");
         self.functions.push_str(&body.call);
         self.functions.push_str("\n}\n");
+        Ok(())
     }
 
     fn finish(self) -> String {
@@ -2411,13 +2433,14 @@ impl SourceBuilder {
         source
     }
 
-    fn integer_domain(&mut self, domain: &IntegerDomain) -> String {
+    fn integer_domain(&mut self, domain: &IntegerDomain) -> Result<String, OracleGenerationError> {
         match domain {
-            IntegerDomain::Mathematical => "rt::IntegerDomain::Mathematical".to_owned(),
-            IntegerDomain::Bounded(interval) => {
-                format!("rt::IntegerDomain::Bounded({})", self.interval(interval))
-            },
-            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+            IntegerDomain::Mathematical => Ok("rt::IntegerDomain::Mathematical".to_owned()),
+            IntegerDomain::Bounded(interval) => Ok(format!(
+                "rt::IntegerDomain::Bounded({})",
+                self.interval(interval)
+            )),
+            &_ => Err(OracleGenerationError::unknown_variant("IntegerDomain")),
         }
     }
 
@@ -2427,14 +2450,17 @@ impl SourceBuilder {
     /// interval it already had (`quire-contract-runtime` `src/exact/numeric.rs`). Unlike
     /// [`Self::integer_domain`], which still emits the wrapper for `rt::divide`/`rt::modulo`,
     /// this is only for `evaluate_integer_arithmetic`'s call site.
-    fn integer_arithmetic_bound(&mut self, domain: &IntegerDomain) -> (Vec<String>, String) {
+    fn integer_arithmetic_bound(
+        &mut self,
+        domain: &IntegerDomain,
+    ) -> Result<(Vec<String>, String), OracleGenerationError> {
         match domain {
-            IntegerDomain::Mathematical => (Vec::new(), "None".to_owned()),
-            IntegerDomain::Bounded(interval) => (
+            IntegerDomain::Mathematical => Ok((Vec::new(), "None".to_owned())),
+            IntegerDomain::Bounded(interval) => Ok((
                 vec![format!("let domain = {};", self.interval(interval))],
                 "Some(&domain)".to_owned(),
-            ),
-            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+            )),
+            &_ => Err(OracleGenerationError::unknown_variant("IntegerDomain")),
         }
     }
 
@@ -2447,22 +2473,22 @@ impl SourceBuilder {
         )
     }
 
-    fn decimal_type(&mut self, decimal: &DecimalType) -> String {
+    fn decimal_type(&mut self, decimal: &DecimalType) -> Result<String, OracleGenerationError> {
         self.needs_integer = true;
-        format!(
+        Ok(format!(
             "rt::DecimalType::new(integer(\"{}\")?, integer(\"{}\")?, {}, {}, {}).map_err(|_| OracleStop::InvalidConstant)?",
             decimal.lower(),
             decimal.upper(),
             decimal.min_scale(),
             decimal.max_scale(),
-            rounding_path(decimal.rounding())
-        )
+            rounding_path(decimal.rounding())?
+        ))
     }
 
-    fn body(&mut self, operation: &ExactScalarOperation) -> Body {
-        match operation {
+    fn body(&mut self, operation: &ExactScalarOperation) -> Result<Body, OracleGenerationError> {
+        Ok(match operation {
             ExactScalarOperation::IntegerArithmetic { operator, domain } => {
-                let (prelude, domain_argument) = self.integer_arithmetic_bound(domain);
+                let (prelude, domain_argument) = self.integer_arithmetic_bound(domain)?;
                 let (parameters, operation) = match operator {
                     IntegerOperator::Negate => (unary("&rt::Integer"), "Negate(operand)"),
                     IntegerOperator::Add => (binary("&rt::Integer"), "Add(left, right)"),
@@ -2479,12 +2505,12 @@ impl SourceBuilder {
                 }
             }
             ExactScalarOperation::IntegerDivision { profile, domain } => {
-                let domain = self.integer_domain(domain);
+                let domain = self.integer_domain(domain)?;
                 let profile = match profile {
                     DivisionProfile::Truncating => "Truncating",
                     DivisionProfile::Floor => "Floor",
                     DivisionProfile::Euclidean => "Euclidean",
-                    &_ => unreachable!("DivisionProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                    &_ => return Err(OracleGenerationError::unknown_variant("DivisionProfile")),
                 };
                 Body {
                     parameters: binary("&rt::Integer"),
@@ -2496,7 +2522,7 @@ impl SourceBuilder {
                 }
             }
             ExactScalarOperation::IntegerModulo { domain } => {
-                let domain = self.integer_domain(domain);
+                let domain = self.integer_domain(domain)?;
                 Body {
                     parameters: binary("&rt::Integer"),
                     output: "rt::Integer",
@@ -2567,7 +2593,7 @@ impl SourceBuilder {
                     OrderingOperator::LessOrEqual => "LessOrEqual",
                     OrderingOperator::Greater => "Greater",
                     OrderingOperator::GreaterOrEqual => "GreaterOrEqual",
-                    &_ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                    &_ => return Err(OracleGenerationError::unknown_variant("OrderingOperator")),
                 };
                 let (ty, kind) = match operands {
                     OrderingOperandKind::Integer => ("&rt::Integer", "Integers"),
@@ -2584,7 +2610,7 @@ impl SourceBuilder {
                 }
             }
             ExactScalarOperation::DecimalArithmetic { operator, target } => {
-                let target = self.decimal_type(target);
+                let target = self.decimal_type(target)?;
                 let (parameters, operation) = match operator {
                     DecimalOperator::Negate => (unary("&rt::Decimal"), "Negate(operand)"),
                     DecimalOperator::Round => (unary("&rt::Decimal"), "Round(operand)"),
@@ -2614,7 +2640,7 @@ impl SourceBuilder {
                     IeeeArithmeticOperator::Multiply => "Multiply",
                     IeeeArithmeticOperator::Divide => "Divide",
                 };
-                let width = width_path(*width);
+                let width = width_path(*width)?;
                 Body {
                     parameters: binary("rt::IeeeValue"),
                     output: "rt::IeeeResult",
@@ -2624,7 +2650,7 @@ impl SourceBuilder {
                     ],
                     call: format!(
                         "rt::evaluate_ieee(rt::IeeeOperation::{operator}(left, right), {}, meter).map_err(OracleStop::IllTyped)",
-                        rounding_path(*rounding)
+                        rounding_path(*rounding)?
                     ),
                 }
             }
@@ -2634,9 +2660,9 @@ impl SourceBuilder {
                     IeeeComparison::NumericEqual => "NumericEqual",
                     IeeeComparison::TotalOrder => "TotalOrder",
                     IeeeComparison::BitIdentical => "BitIdentical",
-                    &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                    &_ => return Err(OracleGenerationError::unknown_variant("IeeeComparison")),
                 };
-                let width = width_path(*width);
+                let width = width_path(*width)?;
                 Body {
                     parameters: binary("rt::IeeeValue"),
                     output: "bool",
@@ -2660,12 +2686,12 @@ impl SourceBuilder {
                     output: "rt::IeeeResult",
                     prelude: vec![format!(
                         "let operand = expect_width(operand, {})?;",
-                        width_path(*source)
+                        width_path(*source)?
                     )],
                     call: format!(
                         "Ok(rt::convert_ieee_width(operand, {}, {}, meter))",
-                        width_path(*target),
-                        rounding_path(*rounding)
+                        width_path(*target)?,
+                        rounding_path(*rounding)?
                     ),
                 }
             }
@@ -2676,7 +2702,7 @@ impl SourceBuilder {
                     "let text_type = rt::TextType::new({}, {}, {}).map_err(|_| OracleStop::InvalidConstant)?;",
                     text_type.min(),
                     text_type.max(),
-                    profile_path(text_type.profile())
+                    profile_path(text_type.profile())?
                 )],
                 call: "Ok(rt::admit_text(operand, &text_type, meter))".to_owned(),
             },
@@ -2684,17 +2710,17 @@ impl SourceBuilder {
                 "&rt::Text",
                 "compare_text",
                 *operator,
-            ),
+            )?,
             ExactScalarOperation::EnumComparison { operator } => comparison_body(
                 "&rt::EnumValue",
                 "compare_enum",
                 *operator,
-            ),
+            )?,
             ExactScalarOperation::QuantityComparison { operator } => comparison_body(
                 "&rt::Quantity",
                 "compare_quantity",
                 *operator,
-            ),
+            )?,
             ExactScalarOperation::QuantityArithmetic { operator } => {
                 let (parameters, operation) = match operator {
                     QuantityOperator::Add => (binary("&rt::Quantity"), "Add(left, right)"),
@@ -2723,14 +2749,14 @@ impl SourceBuilder {
                 let target = match target {
                     QuantityTarget::Exact => "rt::QuantityTarget::Exact".to_owned(),
                     QuantityTarget::Decimal(decimal) => {
-                        format!("rt::QuantityTarget::Decimal({})", self.decimal_type(decimal))
+                        format!("rt::QuantityTarget::Decimal({})", self.decimal_type(decimal)?)
                     }
                     QuantityTarget::Integer { domain, rounding } => format!(
                         "rt::QuantityTarget::Integer {{ domain: {}, rounding: {} }}",
                         self.interval(domain),
-                        rounding_path(*rounding)
+                        rounding_path(*rounding)?
                     ),
-                    &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                    &_ => return Err(OracleGenerationError::unknown_variant("QuantityTarget")),
                 };
                 Body {
                     parameters: vec![("operand", "&rt::Quantity"), ("unit", "&rt::QuantityUnit")],
@@ -2740,7 +2766,7 @@ impl SourceBuilder {
                         .to_owned(),
                 }
             }
-        }
+        })
     }
 }
 
@@ -2759,7 +2785,11 @@ fn binary(ty: &'static str) -> Vec<(&'static str, &'static str)> {
     vec![("left", ty), ("right", ty)]
 }
 
-fn comparison_body(ty: &'static str, function: &str, operator: ComparisonOperator) -> Body {
+fn comparison_body(
+    ty: &'static str,
+    function: &str,
+    operator: ComparisonOperator,
+) -> Result<Body, OracleGenerationError> {
     let operator = match operator {
         ComparisonOperator::Equal => "Equal",
         ComparisonOperator::NotEqual => "NotEqual",
@@ -2767,47 +2797,47 @@ fn comparison_body(ty: &'static str, function: &str, operator: ComparisonOperato
         ComparisonOperator::LessOrEqual => "LessOrEqual",
         ComparisonOperator::Greater => "Greater",
         ComparisonOperator::GreaterOrEqual => "GreaterOrEqual",
-        _ => unreachable!("ComparisonOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+        _ => return Err(OracleGenerationError::unknown_variant("ComparisonOperator")),
     };
-    Body {
+    Ok(Body {
         parameters: binary(ty),
         output: "bool",
         prelude: Vec::new(),
         call: format!(
             "rt::{function}(rt::ComparisonOperator::{operator}, left, right, meter).map_err(OracleStop::IllTyped)"
         ),
-    }
+    })
 }
 
-fn rounding_path(rounding: RoundingMode) -> &'static str {
+fn rounding_path(rounding: RoundingMode) -> Result<&'static str, OracleGenerationError> {
     match rounding {
-        RoundingMode::Exact => "rt::RoundingMode::Exact",
-        RoundingMode::TowardZero => "rt::RoundingMode::TowardZero",
-        RoundingMode::TowardPositive => "rt::RoundingMode::TowardPositive",
-        RoundingMode::TowardNegative => "rt::RoundingMode::TowardNegative",
-        RoundingMode::NearestEven => "rt::RoundingMode::NearestEven",
-        RoundingMode::NearestAway => "rt::RoundingMode::NearestAway",
-        _ => unreachable!("RoundingMode gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+        RoundingMode::Exact => Ok("rt::RoundingMode::Exact"),
+        RoundingMode::TowardZero => Ok("rt::RoundingMode::TowardZero"),
+        RoundingMode::TowardPositive => Ok("rt::RoundingMode::TowardPositive"),
+        RoundingMode::TowardNegative => Ok("rt::RoundingMode::TowardNegative"),
+        RoundingMode::NearestEven => Ok("rt::RoundingMode::NearestEven"),
+        RoundingMode::NearestAway => Ok("rt::RoundingMode::NearestAway"),
+        _ => Err(OracleGenerationError::unknown_variant("RoundingMode")),
     }
 }
 
-fn width_path(width: IeeeWidth) -> &'static str {
+fn width_path(width: IeeeWidth) -> Result<&'static str, OracleGenerationError> {
     match width {
-        IeeeWidth::Binary32 => "rt::IeeeWidth::Binary32",
-        IeeeWidth::Binary64 => "rt::IeeeWidth::Binary64",
-        _ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+        IeeeWidth::Binary32 => Ok("rt::IeeeWidth::Binary32"),
+        IeeeWidth::Binary64 => Ok("rt::IeeeWidth::Binary64"),
+        _ => Err(OracleGenerationError::unknown_variant("IeeeWidth")),
     }
 }
 
-fn profile_path(profile: TextProfile) -> &'static str {
+fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationError> {
     match profile {
-        TextProfile::UnicodeScalars => "rt::TextProfile::UnicodeScalars",
-        TextProfile::Nfc => "rt::TextProfile::Nfc",
-        TextProfile::Nfd => "rt::TextProfile::Nfd",
-        TextProfile::Nfkc => "rt::TextProfile::Nfkc",
-        TextProfile::Nfkd => "rt::TextProfile::Nfkd",
-        TextProfile::BinaryUtf8 => "rt::TextProfile::BinaryUtf8",
-        _ => unreachable!("TextProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+        TextProfile::UnicodeScalars => Ok("rt::TextProfile::UnicodeScalars"),
+        TextProfile::Nfc => Ok("rt::TextProfile::Nfc"),
+        TextProfile::Nfd => Ok("rt::TextProfile::Nfd"),
+        TextProfile::Nfkc => Ok("rt::TextProfile::Nfkc"),
+        TextProfile::Nfkd => Ok("rt::TextProfile::Nfkd"),
+        TextProfile::BinaryUtf8 => Ok("rt::TextProfile::BinaryUtf8"),
+        _ => Err(OracleGenerationError::unknown_variant("TextProfile")),
     }
 }
 
@@ -3939,6 +3969,7 @@ mod tests {
         for operation in &operations {
             let family = expected_family(operation).expect("every descriptor here is catalogued");
             let identity = catalogued_operation(operation)
+                .expect("every descriptor here is a known RT variant")
                 .expect("every descriptor here has a catalogued identity")
                 .identity;
             assert_eq!(

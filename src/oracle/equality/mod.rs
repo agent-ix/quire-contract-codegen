@@ -230,9 +230,11 @@ pub enum IllTypedCauseKind {
     AmbiguousLiteral,
 }
 
-impl From<IllTypedCause> for IllTypedCauseKind {
-    fn from(cause: IllTypedCause) -> Self {
-        match cause {
+impl TryFrom<IllTypedCause> for IllTypedCauseKind {
+    type Error = OracleGenerationError;
+
+    fn try_from(cause: IllTypedCause) -> Result<Self, Self::Error> {
+        Ok(match cause {
             IllTypedCause::DistinctTextProfiles => Self::DistinctTextProfiles,
             IllTypedCause::DistinctEnumDeclarations => Self::DistinctEnumDeclarations,
             IllTypedCause::UnorderedEnumOrdering => Self::UnorderedEnumOrdering,
@@ -246,8 +248,8 @@ impl From<IllTypedCause> for IllTypedCauseKind {
             IllTypedCause::TypeMismatch => Self::TypeMismatch,
             IllTypedCause::OperatorIneligible => Self::OperatorIneligible,
             IllTypedCause::AmbiguousLiteral => Self::AmbiguousLiteral,
-            _ => unreachable!("IllTypedCause gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
-        }
+            _ => return Err(OracleGenerationError::unknown_variant("IllTypedCause")),
+        })
     }
 }
 
@@ -261,12 +263,14 @@ pub enum RecursionEdgesKind {
     NonEscaping,
 }
 
-impl From<rt::RecursionEdges> for RecursionEdgesKind {
-    fn from(edges: rt::RecursionEdges) -> Self {
+impl TryFrom<rt::RecursionEdges> for RecursionEdgesKind {
+    type Error = OracleGenerationError;
+
+    fn try_from(edges: rt::RecursionEdges) -> Result<Self, Self::Error> {
         match edges {
-            rt::RecursionEdges::Unnamed => Self::Unnamed,
-            rt::RecursionEdges::NonEscaping => Self::NonEscaping,
-            _ => unreachable!("RecursionEdges gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+            rt::RecursionEdges::Unnamed => Ok(Self::Unnamed),
+            rt::RecursionEdges::NonEscaping => Ok(Self::NonEscaping),
+            _ => Err(OracleGenerationError::unknown_variant("RecursionEdges")),
         }
     }
 }
@@ -301,23 +305,25 @@ pub enum DeclarationRefusalCause {
     },
 }
 
-impl From<rt::DeclarationCause> for DeclarationRefusalCause {
-    fn from(cause: rt::DeclarationCause) -> Self {
-        match cause {
+impl TryFrom<rt::DeclarationCause> for DeclarationRefusalCause {
+    type Error = OracleGenerationError;
+
+    fn try_from(cause: rt::DeclarationCause) -> Result<Self, Self::Error> {
+        Ok(match cause {
             rt::DeclarationCause::DuplicateKey => Self::DuplicateKey,
             rt::DeclarationCause::DuplicateMember(name) => Self::DuplicateMember { name },
             rt::DeclarationCause::UnknownDeclaration(key) => Self::UnknownDeclaration {
                 key: hex_digest(&key),
             },
             rt::DeclarationCause::Type(cause) => Self::Type {
-                cause: cause.into(),
+                cause: cause.try_into()?,
             },
             rt::DeclarationCause::Recursion { edges, cycle } => Self::Recursion {
-                edges: edges.into(),
+                edges: edges.try_into()?,
                 cycle,
             },
-            _ => unreachable!("DeclarationCause gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
-        }
+            _ => return Err(OracleGenerationError::unknown_variant("DeclarationCause")),
+        })
     }
 }
 
@@ -475,14 +481,16 @@ pub enum RecordedSchedule {
     Plan,
 }
 
-impl From<EqualitySchedule> for RecordedSchedule {
-    fn from(schedule: EqualitySchedule) -> Self {
+impl TryFrom<EqualitySchedule> for RecordedSchedule {
+    type Error = OracleGenerationError;
+
+    fn try_from(schedule: EqualitySchedule) -> Result<Self, Self::Error> {
         match schedule {
-            EqualitySchedule::Text => Self::Text,
-            EqualitySchedule::Enum => Self::Enum,
-            EqualitySchedule::Quantity => Self::Quantity,
-            EqualitySchedule::Plan => Self::Plan,
-            _ => unreachable!("EqualitySchedule gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+            EqualitySchedule::Text => Ok(Self::Text),
+            EqualitySchedule::Enum => Ok(Self::Enum),
+            EqualitySchedule::Quantity => Ok(Self::Quantity),
+            EqualitySchedule::Plan => Ok(Self::Plan),
+            _ => Err(OracleGenerationError::unknown_variant("EqualitySchedule")),
         }
     }
 }
@@ -530,8 +538,10 @@ pub struct CompositeEqualityOracles {
 
 /// Generate composite equality oracles for `items` from an admitted package.
 ///
-/// Fails as a whole only with `SourceTooLarge` or `ClaimMapSerialization`;
-/// every per-item problem is a refusal in the claim map.
+/// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization` or
+/// `UnknownRuntimeVariant` (a Contract Runtime `#[non_exhaustive]` enum
+/// yielded a variant this generator does not know); every per-item problem is
+/// a refusal in the claim map.
 pub fn generate_composite_equality_oracles(
     package: &CheckedPackageV2,
     items: &[CompositeEqualityItem],
@@ -598,12 +608,17 @@ pub fn generate_composite_equality_oracles(
                                 .iter()
                                 .map(|id| id.digest.to_lowercase())
                                 .collect(),
-                            schedule: generated.checked.schedule().into(),
+                            schedule: generated.checked.schedule().try_into()?,
                         }));
                     pending.push((claims.len(), key, item, generated));
                     claim
                 }
-                Err(refusal) => ClaimDisposition::Refused { refusal },
+                Err(ItemCheckError::Refusal(refusal)) => ClaimDisposition::Refused { refusal },
+                // An RT `#[non_exhaustive]` enum yielded a variant this
+                // generator does not know: not this one item's refusal, so it
+                // aborts the whole generation (see
+                // `OracleGenerationError::UnknownRuntimeVariant`'s own doc).
+                Err(ItemCheckError::Generation(error)) => return Err(error),
             }
         };
         claims.push(CompositeEqualityClaim {
@@ -626,7 +641,7 @@ pub fn generate_composite_equality_oracles(
             .collect(),
     );
     for ((claim, _, item, generated), symbol) in pending.into_iter().zip(names) {
-        source.item(&symbol, item, &generated);
+        source.item(&symbol, item, &generated)?;
         if let ClaimDisposition::Generated(claim) = &mut claims[claim].result {
             claim.environment_symbol = format!("environment_{symbol}");
             claim.oracle_symbol = format!("oracle_{symbol}");
@@ -738,29 +753,52 @@ struct CheckedItem<'r> {
     declaration_keys: Vec<CheckedNodeId>,
 }
 
+/// Why [`check_item`] produced no [`CheckedItem`]: a per-item refusal, or an
+/// RT `#[non_exhaustive]` enum yielding a variant this generator does not
+/// know, which aborts the whole generation.
+enum ItemCheckError {
+    Refusal(CompositeEqualityRefusal),
+    Generation(OracleGenerationError),
+}
+
+impl From<CompositeEqualityRefusal> for ItemCheckError {
+    fn from(refusal: CompositeEqualityRefusal) -> Self {
+        Self::Refusal(refusal)
+    }
+}
+
+impl From<OracleGenerationError> for ItemCheckError {
+    fn from(error: OracleGenerationError) -> Self {
+        Self::Generation(error)
+    }
+}
+
 fn check_item<'r>(
     graph: &Graph<'_>,
     bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
     record: &'r CompleteLoweringRecordV2,
     item: &CompositeEqualityItem,
-) -> Result<CheckedItem<'r>, CompositeEqualityRefusal> {
+) -> Result<CheckedItem<'r>, ItemCheckError> {
     let node = lowered(record)?;
     if node.node_tag != CheckedNodeTag::Expression {
         return Err(CompositeEqualityRefusal::NotExpression {
             node_tag: node.node_tag.as_wire(),
-        });
+        }
+        .into());
     }
     if &*node.node.semantic_form == "call" {
         return Err(CompositeEqualityRefusal::BlockedOnUpstream {
             unsupported_node_id: node.node.node_id.clone(),
             node_tag: "expression.call",
             issue: UpstreamBlocker::QuireContractRuntime34,
-        });
+        }
+        .into());
     }
     if &*node.node.semantic_form != "binary" {
         return Err(CompositeEqualityRefusal::FormMismatch {
             found: node.node.semantic_form.to_string(),
-        });
+        }
+        .into());
     }
     let arguments = application_arguments(&node.node.body)
         .filter(|arguments| arguments.len() == 2)
@@ -785,13 +823,16 @@ fn check_item<'r>(
 
     let declaration_keys = closure.node_ids.clone();
     let composites: Vec<CompositeDeclaration> = closure.composites.values().cloned().collect();
-    let environment =
-        TypeEnvironment::new(composites.clone(), std::iter::empty()).map_err(|invalid| {
-            CompositeEqualityRefusal::Declaration {
+    let environment = match TypeEnvironment::new(composites.clone(), std::iter::empty()) {
+        Ok(environment) => environment,
+        Err(invalid) => {
+            return Err(CompositeEqualityRefusal::Declaration {
                 declaration: invalid.declaration,
-                cause: invalid.cause.into(),
+                cause: invalid.cause.try_into()?,
             }
-        })?;
+            .into())
+        }
+    };
 
     let left_operand = match left_target.clone() {
         Some(target) => EqualityOperand::converted(left_source.clone(), target),
@@ -801,11 +842,16 @@ fn check_item<'r>(
         Some(target) => EqualityOperand::converted(right_source.clone(), target),
         None => EqualityOperand::typed(right_source.clone()),
     };
-    let checked = environment
-        .check_equality(item.operator.to_runtime(), left_operand, right_operand)
-        .map_err(|ill_typed| CompositeEqualityRefusal::IllTyped {
-            cause: ill_typed.cause.into(),
-        })?;
+    let checked =
+        match environment.check_equality(item.operator.to_runtime(), left_operand, right_operand) {
+            Ok(checked) => checked,
+            Err(ill_typed) => {
+                return Err(CompositeEqualityRefusal::IllTyped {
+                    cause: ill_typed.cause.try_into()?,
+                }
+                .into())
+            }
+        };
 
     Ok(CheckedItem {
         node,
@@ -1375,27 +1421,35 @@ struct SourceBuilder {
 }
 
 impl SourceBuilder {
-    fn item(&mut self, symbol: &str, item: &CompositeEqualityItem, generated: &CheckedItem<'_>) {
+    fn item(
+        &mut self,
+        symbol: &str,
+        item: &CompositeEqualityItem,
+        generated: &CheckedItem<'_>,
+    ) -> Result<(), OracleGenerationError> {
         // Every reachable record/tuple declaration, in the same `NodeKey`
         // order `TypeEnvironment::new` admitted at generation time.
         let composites: String = generated
             .composites
             .iter()
-            .map(|declaration| format!("{},\n        ", render_composite_declaration(declaration)))
-            .collect();
+            .map(|declaration| {
+                render_composite_declaration(declaration)
+                    .map(|rendered| format!("{rendered},\n        "))
+            })
+            .collect::<Result<_, _>>()?;
 
         self.functions.push_str(&format!(
             "\nfn composites_{symbol}() -> Vec<rt::CompositeDeclaration> {{\n    vec![{composites}]\n}}\n"
         ));
 
-        let left_source = render_value_type(&generated.left_source);
+        let left_source = render_value_type(&generated.left_source)?;
         let left_target = match &generated.left_target {
-            Some(target) => format!("Some({})", render_value_type(target)),
+            Some(target) => format!("Some({})", render_value_type(target)?),
             None => "None".to_owned(),
         };
-        let right_source = render_value_type(&generated.right_source);
+        let right_source = render_value_type(&generated.right_source)?;
         let right_target = match &generated.right_target {
-            Some(target) => format!("Some({})", render_value_type(target)),
+            Some(target) => format!("Some({})", render_value_type(target)?),
             None => "None".to_owned(),
         };
         self.functions.push_str(&format!(
@@ -1436,6 +1490,7 @@ impl SourceBuilder {
             item.operator.identity(),
             item.operator.path()
         ));
+        Ok(())
     }
 
     fn finish(self) -> String {
@@ -1450,36 +1505,38 @@ impl SourceBuilder {
 
 /// Render one admitted `CompositeDeclaration` as a Rust expression of type
 /// `rt::CompositeDeclaration`.
-fn render_composite_declaration(declaration: &CompositeDeclaration) -> String {
+fn render_composite_declaration(
+    declaration: &CompositeDeclaration,
+) -> Result<String, OracleGenerationError> {
     let key = render_key(declaration.key());
     let shape = match declaration.shape() {
         CompositeShape::Record(fields) => {
             let rendered: String = fields
                 .iter()
                 .map(|field| {
-                    format!(
+                    Ok(format!(
                         "rt::FieldDeclaration::new({:?}, {}, {}), ",
                         field.name(),
-                        render_value_type(field.value_type()),
+                        render_value_type(field.value_type())?,
                         presence_path(field.presence())
-                    )
+                    ))
                 })
-                .collect();
+                .collect::<Result<_, OracleGenerationError>>()?;
             format!("rt::CompositeShape::Record(vec![{rendered}])")
         }
         CompositeShape::Tuple(positions) => {
             let rendered: String = positions
                 .iter()
-                .map(|value_type| format!("{}, ", render_value_type(value_type)))
-                .collect();
+                .map(|value_type| Ok(format!("{}, ", render_value_type(value_type)?)))
+                .collect::<Result<_, OracleGenerationError>>()?;
             format!("rt::CompositeShape::Tuple(vec![{rendered}])")
-        },
-        &_ => unreachable!("CompositeShape gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+        }
+        &_ => return Err(OracleGenerationError::unknown_variant("CompositeShape")),
     };
-    format!(
+    Ok(format!(
         "rt::CompositeDeclaration::new({key}, {:?}, {shape})",
         declaration.name()
-    )
+    ))
 }
 
 fn presence_path(presence: Presence) -> &'static str {
@@ -1490,8 +1547,8 @@ fn presence_path(presence: Presence) -> &'static str {
 }
 
 /// Render one `ValueType` as a Rust expression of type `rt::ValueType`.
-fn render_value_type(value_type: &ValueType) -> String {
-    match value_type {
+fn render_value_type(value_type: &ValueType) -> Result<String, OracleGenerationError> {
+    Ok(match value_type {
         ValueType::Boolean => "rt::ValueType::Boolean".to_owned(),
         ValueType::Integer => "rt::ValueType::Integer".to_owned(),
         ValueType::Int(interval) => format!(
@@ -1505,7 +1562,7 @@ fn render_value_type(value_type: &ValueType) -> String {
         ),
         ValueType::Decimal(decimal) => format!(
             "rt::ValueType::Decimal({})",
-            render_decimal_type(decimal)
+            render_decimal_type(decimal)?
         ),
         ValueType::Float(rt::IeeeWidth::Binary32) => {
             "rt::ValueType::Float(rt::IeeeWidth::Binary32)".to_owned()
@@ -1520,25 +1577,25 @@ fn render_value_type(value_type: &ValueType) -> String {
             "rt::ValueType::Text(rt::TextType::new({}, {}, {}).expect(\"generation-time validation guarantees this bound reconstructs\"))",
             text_type.min(),
             text_type.max(),
-            profile_path(text_type.profile())
+            profile_path(text_type.profile())?
         ),
         ValueType::Enum(key) => format!("rt::ValueType::Enum({})", render_key(*key)),
         ValueType::Option(payload) => {
-            format!("rt::ValueType::option({})", render_value_type(payload))
+            format!("rt::ValueType::option({})", render_value_type(payload)?)
         }
         ValueType::Composite(key) => format!("rt::ValueType::Composite({})", render_key(*key)),
         ValueType::Collection(collection) => format!(
             "rt::ValueType::collection(rt::CollectionType::new({}, {}, rt::CardinalityBound::new({}, {}).expect(\"generation-time validation guarantees this bound reconstructs\")))",
-            collection_kind_path(collection.kind()),
-            render_value_type(collection.element()),
+            collection_kind_path(collection.kind())?,
+            render_value_type(collection.element())?,
             collection.bound().minimum(),
             collection.bound().maximum()
         ),
         ValueType::Reference(_) => {
             unreachable!("reference operands are refused at generation time")
         },
-        &_ => unreachable!("ValueType gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
-    }
+        &_ => return Err(OracleGenerationError::unknown_variant("ValueType")),
+    })
 }
 
 fn render_interval(interval: &IntegerInterval) -> String {
@@ -1549,15 +1606,15 @@ fn render_interval(interval: &IntegerInterval) -> String {
     )
 }
 
-fn render_decimal_type(decimal: &DecimalType) -> String {
-    format!(
+fn render_decimal_type(decimal: &DecimalType) -> Result<String, OracleGenerationError> {
+    Ok(format!(
         "rt::DecimalType::new(integer(\"{}\"), integer(\"{}\"), {}, {}, {}).expect(\"generation-time validation guarantees this bound reconstructs\")",
         decimal.lower(),
         decimal.upper(),
         decimal.min_scale(),
         decimal.max_scale(),
-        rounding_path(decimal.rounding())
-    )
+        rounding_path(decimal.rounding())?
+    ))
 }
 
 fn render_key(key: NodeKey) -> String {
@@ -1570,37 +1627,37 @@ fn render_key(key: NodeKey) -> String {
     format!("rt::NodeKey::from_bytes([{bytes}])")
 }
 
-fn collection_kind_path(kind: CollectionKind) -> &'static str {
+fn collection_kind_path(kind: CollectionKind) -> Result<&'static str, OracleGenerationError> {
     match kind {
-        CollectionKind::Sequence => "rt::CollectionKind::Sequence",
-        CollectionKind::Set => "rt::CollectionKind::Set",
-        CollectionKind::Bag => "rt::CollectionKind::Bag",
-        CollectionKind::OrderedSet => "rt::CollectionKind::OrderedSet",
-        _ => unreachable!("CollectionKind gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+        CollectionKind::Sequence => Ok("rt::CollectionKind::Sequence"),
+        CollectionKind::Set => Ok("rt::CollectionKind::Set"),
+        CollectionKind::Bag => Ok("rt::CollectionKind::Bag"),
+        CollectionKind::OrderedSet => Ok("rt::CollectionKind::OrderedSet"),
+        _ => Err(OracleGenerationError::unknown_variant("CollectionKind")),
     }
 }
 
-fn rounding_path(rounding: RoundingMode) -> &'static str {
+fn rounding_path(rounding: RoundingMode) -> Result<&'static str, OracleGenerationError> {
     match rounding {
-        RoundingMode::Exact => "rt::RoundingMode::Exact",
-        RoundingMode::TowardZero => "rt::RoundingMode::TowardZero",
-        RoundingMode::TowardPositive => "rt::RoundingMode::TowardPositive",
-        RoundingMode::TowardNegative => "rt::RoundingMode::TowardNegative",
-        RoundingMode::NearestEven => "rt::RoundingMode::NearestEven",
-        RoundingMode::NearestAway => "rt::RoundingMode::NearestAway",
-        _ => unreachable!("RoundingMode gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+        RoundingMode::Exact => Ok("rt::RoundingMode::Exact"),
+        RoundingMode::TowardZero => Ok("rt::RoundingMode::TowardZero"),
+        RoundingMode::TowardPositive => Ok("rt::RoundingMode::TowardPositive"),
+        RoundingMode::TowardNegative => Ok("rt::RoundingMode::TowardNegative"),
+        RoundingMode::NearestEven => Ok("rt::RoundingMode::NearestEven"),
+        RoundingMode::NearestAway => Ok("rt::RoundingMode::NearestAway"),
+        _ => Err(OracleGenerationError::unknown_variant("RoundingMode")),
     }
 }
 
-fn profile_path(profile: TextProfile) -> &'static str {
+fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationError> {
     match profile {
-        TextProfile::UnicodeScalars => "rt::TextProfile::UnicodeScalars",
-        TextProfile::Nfc => "rt::TextProfile::Nfc",
-        TextProfile::Nfd => "rt::TextProfile::Nfd",
-        TextProfile::Nfkc => "rt::TextProfile::Nfkc",
-        TextProfile::Nfkd => "rt::TextProfile::Nfkd",
-        TextProfile::BinaryUtf8 => "rt::TextProfile::BinaryUtf8",
-        _ => unreachable!("TextProfile gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+        TextProfile::UnicodeScalars => Ok("rt::TextProfile::UnicodeScalars"),
+        TextProfile::Nfc => Ok("rt::TextProfile::Nfc"),
+        TextProfile::Nfd => Ok("rt::TextProfile::Nfd"),
+        TextProfile::Nfkc => Ok("rt::TextProfile::Nfkc"),
+        TextProfile::Nfkd => Ok("rt::TextProfile::Nfkd"),
+        TextProfile::BinaryUtf8 => Ok("rt::TextProfile::BinaryUtf8"),
+        _ => Err(OracleGenerationError::unknown_variant("TextProfile")),
     }
 }
 

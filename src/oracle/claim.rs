@@ -87,3 +87,12 @@ pub enum OracleGenerationError {
         enum_name: &'static str,
     },
 }
+
+impl OracleGenerationError {
+    /// The refusal for a variant of the Contract Runtime enum `enum_name`
+    /// that a closed generator match does not know. Every catch-all arm over
+    /// an RT `#[non_exhaustive]` enum returns this instead of panicking.
+    pub(crate) const fn unknown_variant(enum_name: &'static str) -> Self {
+        Self::UnknownRuntimeVariant { enum_name }
+    }
+}
