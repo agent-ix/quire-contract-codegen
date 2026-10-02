@@ -6,15 +6,10 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    bound_strategy::{
-        census::{
-            compute_census, render_boundary_constants, render_edge_constants, BoundaryCensus,
-            CensusEdge, CensusNames, CensusRead, CensusTag, EdgeDirection, OutOfDomainCase,
-            UnrepresentableEdge,
-        },
-        relation::{ComparisonOperator, Domain, OperandPosition, Partner, Relation},
-    },
-    GenerationErrorCode, GenerationTerminalState, StrategyErrorCode,
+    compute_census, render_boundary_constants, render_edge_constants, BoundaryCensus, CensusEdge,
+    CensusNames, CensusRead, CensusTag, ComparisonOperator, Domain, EdgeDirection,
+    GenerationErrorCode, GenerationTerminalState, OperandPosition, OutOfDomainCase, Partner,
+    Relation, StrategyErrorCode, UnrepresentableEdge,
 };
 
 struct TemporaryDirectory(PathBuf);

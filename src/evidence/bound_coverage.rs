@@ -6,20 +6,20 @@ use quire_contract_model::{BooleanOperator, BoundPackage, ClauseRef, Expression,
 use serde::Serialize;
 
 use crate::{
-    classify_clause,
     core::artifact::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
     core::source_map::SourceRegion,
-    parse_llvm_coverage,
-    vacuity::normalize_path,
-    BoundOracleGeneration, ClauseCoverage, CoverageDiagnostic, CoverageErrorCode,
-    GeneratedBoundOracles, LlvmCoverage, MAX_COVERAGE_BYTES,
+    evidence::vacuity::{
+        classify_clause, normalize_path, parse_llvm_coverage, ClauseCoverage, CoverageDiagnostic,
+        CoverageErrorCode, LlvmCoverage, MAX_COVERAGE_BYTES,
+    },
+    oracle::bound_v1::{BoundOracleGeneration, GeneratedBoundOracles},
 };
 
 /// Domain observation format, not a native-run result or attestation format.
 pub const BOUND_COVERAGE_FORMAT: &str = "codegen.bound-coverage-observations/v1";
 /// Strict output schema for the domain observations emitted here.
 pub const BOUND_COVERAGE_SCHEMA: &str =
-    include_str!("../schemas/bound-coverage-observations-v1.schema.json");
+    include_str!("../../schemas/bound-coverage-observations-v1.schema.json");
 /// Maximum serialized analysis bytes, including explicit refusal outcomes.
 pub const MAX_ANALYSIS_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SOURCE_ROOT_BYTES: usize = 4096;

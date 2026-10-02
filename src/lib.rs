@@ -22,8 +22,6 @@ mod kani_identity;
 mod oracle;
 // Implements: FR-005, NFR-001
 mod publication;
-// Implements: FR-002
-mod harness;
 // Implements: FR-015
 mod kani_obligations;
 // Implements: FR-019
@@ -41,15 +39,26 @@ mod kani_witness_join;
 mod spine_replay;
 // Implements: FR-015-AC-33
 mod frame_replay;
-// Implements: FR-002
+// The evidence subsystem.
+mod evidence;
+// The strategy subsystem.
 mod strategy;
-// Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
-mod vacuity;
-// Implements: FR-004 (complete domain observations, always unqualified).
-mod bound_coverage;
-pub mod bound_strategy;
 
-pub use bound_strategy::{generate_bound_strategy, BoundStrategyPopulation, BoundStrategyRequest};
+pub use strategy::bound::census::{
+    compute_census, render_boundary_constants, render_edge_constants, BoundaryCensus, CensusCase,
+    CensusEdge, CensusNames, CensusRead, CensusTag, EdgeDirection, OutOfDomainCase,
+    UnrepresentableEdge,
+};
+pub use strategy::bound::generation::{
+    generate_bound_strategy, BoundStrategyPopulation, BoundStrategyRequest,
+};
+pub use strategy::bound::population::{
+    render_population, side_values, Interval, PartnerRule, Population, PopulationRequest,
+    PopulationSide, RenderedPopulation, SideValues, ValueSet, EXPECTATION_FIELD,
+};
+pub use strategy::bound::relation::{
+    ComparisonOperator, Domain, OperandPosition, Partner, Relation,
+};
 
 pub use bounded_collections::prepare_bounded_collection_query;
 pub use bounded_kani_corpus::{
@@ -86,12 +95,12 @@ pub use oracle::function::{
     RecordedOrigin, EXACT_FUNCTION_CRATE_NAME, EXACT_FUNCTION_LOWERING_WORK_LIMIT,
 };
 
-pub use bound_coverage::{
+pub use evidence::bound_coverage::{
     analyze_bound_coverage, ArtifactBytes, BoundAnalysisState, BoundCoverageAnalysis,
     BoundCoverageInputs, BOUND_COVERAGE_FORMAT, BOUND_COVERAGE_SCHEMA, MAX_ANALYSIS_BYTES,
 };
 
-pub use vacuity::{
+pub use evidence::vacuity::{
     classify_clause, parse_llvm_coverage, ClauseCoverage, CoverageDiagnostic, CoverageErrorCode,
     LlvmCoverage, ProbeObservation, MAX_COVERAGE_BYTES,
 };
@@ -109,7 +118,6 @@ pub use capability::{
     ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
     CAPABILITY_VOCABULARY,
 };
-pub use harness::{generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest};
 pub use kani::{
     generate_kani_bundle, KaniArtifactBundle, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
     KaniIntegerBounds, KaniPrimitiveType, KaniRequest, KaniSolver, KaniSubjectBinding,
@@ -132,6 +140,9 @@ pub use kani_transcript::{
 pub use routed_generation::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
+};
+pub use strategy::harness::{
+    generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest,
 };
 
 pub use crate::core::artifact::{
@@ -166,7 +177,7 @@ pub use state_frame::{
     generate_state_frame_obligations, StateFrameObligations, StateFrameRefusal, StateFrameRequest,
     UnsupportedFrameEffect,
 };
-pub use strategy::{
+pub use strategy::campaign::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,
 };

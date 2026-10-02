@@ -8,14 +8,9 @@ use std::{
 };
 
 use quire_contract_codegen::{
-    bound_strategy::{
-        population::{
-            render_population, side_values, Population, PopulationRequest, PopulationSide,
-            RenderedPopulation, SideValues, ValueSet,
-        },
-        relation::{ComparisonOperator, Domain, OperandPosition, Partner, Relation},
-    },
-    GenerationTerminalState, StrategyErrorCode,
+    render_population, side_values, ComparisonOperator, Domain, GenerationTerminalState,
+    OperandPosition, Partner, Population, PopulationRequest, PopulationSide, Relation,
+    RenderedPopulation, SideValues, StrategyErrorCode, ValueSet,
 };
 
 struct TemporaryDirectory(PathBuf);

@@ -9,7 +9,7 @@ use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
     core::naming::{bounded_readable_component, upper_camel},
-    GeneratedArtifactBundle,
+    oracle::boolean_v1::GeneratedArtifactBundle,
 };
 
 /// Supported integer constraint shape for one generated strategy.

@@ -5,12 +5,10 @@
 //! that model.
 
 // Implements: FR-010
-pub mod census;
+pub(crate) mod census;
 // Implements: FR-008 through FR-013
-mod generation;
+pub(crate) mod generation;
 // Implements: FR-009, FR-012
-pub mod population;
+pub(crate) mod population;
 // Implements: FR-010
-pub mod relation;
-
-pub use generation::{generate_bound_strategy, BoundStrategyPopulation, BoundStrategyRequest};
+pub(crate) mod relation;
