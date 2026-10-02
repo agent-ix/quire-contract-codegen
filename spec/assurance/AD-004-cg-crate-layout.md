@@ -205,12 +205,14 @@ src/
                               (ObligationItem, UnsupportedObligation, ObligationRecord, ...); a leaf
                               inside generate/: it imports no family
       scalar.rs  precondition.rs  contract.rs  frame.rs   family lowerers; each returns a HarnessSpec
-                              from step 4b on. At step 2f each holds what its family lowers and
+                              once its family is ported (scalar at 4b, precondition and contract at
+                              4c, frame at 4d). At step 2f each holds what its family lowers and
                               renders today, moved verbatim
       clause.rs               the V1 clause lowering that precondition.rs and contract.rs share
                               (ClauseOracle, the subject ABI, slots); interim, reshaped by step 4c
       record.rs               the validated harness path and the persisted per-harness record every
-                              family's render step builds last; interim, absorbed by step 4b
+                              family's render step builds last; holds today's items only, and later
+                              steps may move them
       v1_bundle.rs            INTERIM: `generate_kani_bundle` and what only it uses; deleted whole by
                               step 4f
       census_validation.rs    INTERIM: `validate_dependencies`, the V1 bundle's error type it returns,
@@ -332,10 +334,11 @@ Rules, each checkable:
   `output` and `classify` (and `abi`, for `KaniSolver`), not `generate`: the harness and identity
   record types it needs live in `kani/identity.rs` (step 2b), so a harness is run from its identity
   and its source text.
-- Inside `kani/generate/` the order is `outcome`, `record`, then the families (`scalar`, `clause`,
-  then `precondition` and `contract`, `frame`, `lower`, `corpus`, `v1_bundle`, `census_validation`),
-  then `negotiate`, which imports every family and is imported by none. A family file imports
-  `outcome` and `record` and never `negotiate`: the passes that read the whole request
+- Inside `kani/generate/` the order is `outcome`, `record`, `census_validation`, then the families
+  (`scalar`, `clause`, then `precondition` and `contract`, `frame`, `lower`, `corpus`, `v1_bundle`),
+  then `negotiate`, which imports `outcome`, `record`, `scalar`, `clause`, `precondition` and
+  `contract` (none of `frame`, `lower`, `corpus`, `v1_bundle` or `census_validation`) and is
+  imported by none. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
   (classification, name settlement, assumption resolution) are `negotiate`'s, and what lowers or
   renders one item is its family's. `corpus` imports `lower` and `census_validation`; `v1_bundle`
   imports `census_validation`; `frame` imports `outcome` only. `kani/test_support.rs` is
@@ -636,7 +639,10 @@ requirement is authored.
 - L-11. The oracle crate manifest template, the runtime dependency spelling and every contract
   and schema spelling are defined in `core/profile.rs` once.
 - L-12. `BoundPackage` and `BoundClause` are named nowhere in `kani/`, `routed/` or `replay/`, and
-  after the last V1 reader is replaced nowhere.
+  after the last V1 reader is replaced nowhere. Until step 4f the interim exceptions, listed by
+  file, are the V1 arm: `kani/generate/outcome.rs` (`ObligationItem::BoundClause` holds a
+  `&BoundPackage`), `negotiate.rs` (including its test fixture) and `clause.rs`; each entry is
+  removed with its step.
 
 ### Migration order
 
@@ -744,7 +750,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      `KaniErrorCode`, the helpers and `deterministic_json`, in `kani/generate/census_validation.rs`,
      and everything else of the bundle in `kani/generate/v1_bundle.rs`, so 4f deletes `v1_bundle.rs`
      whole and edits nothing in `census_validation.rs` (the V1-only variants of `KaniErrorCode` it
-     leaves unused are 4f's to prune). Merged only after 4e has landed, the QSL follow-up has moved the exemplars and the control
+     leaves unused stay there until 4g or the V2 census input removes the file). Merged only after 4e has landed, the QSL follow-up has moved the exemplars and the control
      passes on the V2 contract arm (4c), and the V2 census input exists (4d). FR-015's census and
      FR-015-AC-22 and AC-25 stay verbatim; if the V2 side does not back them by this step, their
      matrix rows go to planned or unbacked, and nothing is deleted or rewritten.
@@ -873,21 +879,24 @@ tables; each table states the count it covers, and the per-destination rows add 
   it would be a behaviour edit.
 - What may change: `use` lines and module paths; an item's visibility, widened to the narrowest form
   its new boundary needs (`pub(super)` for use inside the directory, `pub(crate)` for use outside
-  it), as the Visibility column states, with the fields of a widened struct widened the same way; the
-  `//!` header of a split file, divided between its successors; and intra-doc link paths. A row that
+  it), as the Visibility column states, with only the fields the row names widened; the
+  `//!` header of a split file, divided between its successors; the INTERIM header sentence that
+  `v1_bundle.rs` and `census_validation.rs` each carry (the step that deletes the file); and
+  intra-doc link paths. A row that
   says "unchanged" widens nothing.
 - Files created: every file this map names, and the `mod.rs` of `kani/`, `kani/generate/`,
   `kani/generate/lower/`, `kani/generate/corpus/`, `kani/output/` and `kani/run/`. A `mod.rs` holds
   only module declarations and their comments, as the 2e `mod.rs` files do. Files not created:
   `generate/spec.rs` and `generate/render.rs` (step 4b) and `terminal.rs` (step 5). Template text
   stays where it is today (`render_scalar`, `render_precondition`, `render_contract`, and the
-  state-frame and corpus templates); it moves into `render.rs` at 4b.
+  state-frame and corpus templates); where it goes later is for the steps that own it.
 - `lib.rs` replaces the flat `mod` lines of the moved files with `mod kani;` and points its
   `pub use` list at the new module paths (`kani::generate::outcome::...`, `kani::run::...` and so
   on). The set of re-exported names does not change, so no file under `tests/` changes.
 - Files outside the move whose imports of moved items are rewritten to the new module paths:
   `spine_replay.rs` (`kani_identity` and the `DecodeFailure` import), `routed_generation.rs`
-  (`kani_identity`), the flat `kani_witness_join.rs` (`kani::abi`, `kani::identity`,
+  (`kani_identity`, and the test module's `kani::KaniSolver`, which becomes `kani::abi::KaniSolver`),
+  the inline `crate::kani::validate_dependencies` calls in the corpus, the flat `kani_witness_join.rs` (`kani::abi`, `kani::identity`,
   `kani::output::playback`), and the intra-doc links in `oracle/scalar/mod.rs` that name
   `kani_obligations::render_scalar`.
 - `kani_census.rs` becomes `kani/census.rs` and `kani_identity.rs` becomes `kani/identity.rs`,
@@ -931,8 +940,10 @@ tables; each table states the count it covers, and the per-destination rows add 
   renderer. The first form of this AD named four files (`negotiate`, `scalar`, `precondition`,
   `contract`) and no home for the items several families use. The split is by dependency, not by
   count, because the family files and `negotiate.rs` must not import each other (L-2): `Outcome`
-  holds the lowered form of every family, the family files build those lowered forms, so if
-  `Outcome` lived in a family the family files and `negotiate.rs` would form a cycle. Three
+  holds the lowered clause form and the lowered scalar form (`Lowered` and `LoweredScalar`), the
+  family files build those forms, so if `Outcome` lived in a family the family files and
+  `negotiate.rs` would form a cycle. `Outcome` itself is `negotiate.rs`'s; `outcome.rs` holds the
+  vocabulary the families name. Three
   rules settle every item. (1) What the entry returns or takes, and so what every family names
   (`UnsupportedObligation`, `DerivedDomain`, `ObligationItem`, the dispositions, the limits), is a
   leaf, `outcome.rs`. (2) What reads the whole request is the entry's, in `negotiate.rs`: the
@@ -951,7 +962,8 @@ tables; each table states the count it covers, and the per-destination rows add 
   trims. The three items that `render_scalar` and `render` both call (`harness_path`, `record` and
   `artifact`) are in `record.rs`, below both files: in `negotiate.rs` they would be imported by
   `scalar.rs` against the order, and in `scalar.rs` they would be a helper of one family that the
-  other's dispatch borrows. Step 4b absorbs them into `HarnessSpec`. `generate/mod.rs` holds declarations only.
+  other's dispatch borrows. `record.rs` holds today's items only; later steps may move them.
+  `generate/mod.rs` holds declarations only.
 - **D-4. `kani_execution.rs`.** Classification is `kani/classify.rs` (`KaniInconclusiveReason`,
   `KaniRunOutcome`, `ClassifiedRun`, `classify_kani_run`, `classify_report`, `classify_success`,
   `inconclusive`). `run/` holds five files: `tool.rs` (the backend and its location), `harness.rs`
@@ -977,8 +989,12 @@ tables; each table states the count it covers, and the per-destination rows add 
   relative to the file that holds the macro, so they change with the file: from
   `src/kani_transcript.rs` the path is `../tests/fixtures/kani-report/<name>.{json,stdout,exit}`;
   from `src/kani/classify.rs` it is `../../tests/fixtures/kani-report/<name>.{json,stdout,exit}`.
-  Only `classify.rs` includes them. `tc_027_a_report_without_exactly_one_harness_is_refused` is a
-  pure parse test that uses `mutated`, so it goes with the fixtures, not with `report.rs`.
+  Only `classify.rs` includes them. Three parse-only tests call `mutated`, which reads a fixture,
+  so they go with the fixtures, not with `report.rs`:
+  `tc_027_a_report_without_exactly_one_harness_is_refused`,
+  `tc_027_an_unknown_line_is_none_and_a_non_numeric_line_is_refused` and
+  `tc_027_an_unnamed_check_category_is_a_property`. `real_capture` thus holds 13 tests and 5
+  helpers, `output/report.rs` 2 tests, `output/playback.rs` 1.
 - **D-7. Test helpers shared by several new files.** `kani_execution`'s tests share helpers with each
   other across what become five files and `classify.rs`. A helper used by the tests of one new file
   stays in that file's test module. A helper used by the tests of more than one goes to
@@ -1012,8 +1028,8 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | `DecodeFailure` is defined in `kani/output/playback.rs`, where the scan raises it | `kani/output/playback.rs` | step 5 (the reader gets its own typed refusal; `DecodeFailure` moves to `replay/witness.rs`) |
 | The V1 bundle generator, still live | `kani/generate/v1_bundle.rs` | step 4f deletes the file |
 | `validate_dependencies`, the V1 error type it returns and `deterministic_json` | `kani/generate/census_validation.rs` | 4g or the V2 census input for the first two; step 1a for `deterministic_json` |
-| The shared V1 clause lowering and the V1 arm of the classifiers | `kani/generate/clause.rs`, `classify_clause` in `negotiate.rs` | step 4c reshapes the lowering for the V2 input; 4f deletes the V1 arm |
-| The persisted-record helpers | `kani/generate/record.rs` | step 4b (into `HarnessSpec`); `artifact` by step 1a |
+| The shared V1 clause lowering and the V1 arm (`ObligationItem::BoundClause` in `outcome.rs`, `classify_clause` in `negotiate.rs`) | `kani/generate/clause.rs`, `outcome.rs`, `negotiate.rs` | step 4c reshapes the lowering for the V2 input; 4f deletes the V1 arm |
+| The persisted-record helpers | `kani/generate/record.rs` | not scheduled; `artifact` by step 1a |
 | Each family renders its own template; the corpus keeps its own, with no cover | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4g for the corpus |
 | The IR-forwarding thin modules | `kani/generate/lower/*` | IR-347 schedules the move |
 | `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |
@@ -1050,11 +1066,12 @@ Rows add to 6 + 3 + 3 + 1 + 3 + 1 + 4 + 1 + 16 = 38.
 | `assign_names`, `named_oracle_source`, `reject_duplicates_and_mixtures`, `anchor_operation`, `resolve_assumptions`, `SubjectGroup`, `unify_subject_signatures` | 7 | `kani/generate/negotiate.rs` | unchanged | private; passes over every item of the request |
 | `kind_name`, `render` | 2 | `kani/generate/negotiate.rs` | unchanged | private; `render` is the clause renderer's dispatch (rule 2); `kind_name` has `render` as its one caller |
 | `harness_path`, `record`, `artifact` | 3 | `kani/generate/record.rs` | pub(super) | `render_scalar` and `render` call them |
-| `LoweredClause`, `ClauseOracle`, `Parameter`, `Symbols` | 4 | `kani/generate/clause.rs` | pub(super), fields pub(super) | the lowered V1 form; `negotiate`, `precondition` and `contract` read the fields |
+| `LoweredClause`, `ClauseOracle`, `Symbols` | 3 | `kani/generate/clause.rs` | pub(super), fields pub(super), except `ClauseOracle.parameters`, which stays private | the lowered V1 form; `negotiate`, `precondition` and `contract` read the fields |
+| `Parameter` | 1 | `kani/generate/clause.rs` | unchanged | private; only `abi` and `call`, in `clause.rs`, read it, so a private field of private type compiles |
 | `obligation_kind`, `lower_clause`, `clause_stem`, `symbols`, `contract_contexts`, `abi`, `call`, `symbolic_arguments` | 8 | `kani/generate/clause.rs` | pub(super) | called from `negotiate`, `precondition` and `contract` |
 | `SlotContext`, `Abi`, `impl Abi` | 3 | `kani/generate/clause.rs` | pub(super), fields and `access` pub(super) | `negotiate` and `contract` read them |
 | `oracle_function_symbol`, `slot` | 2 | `kani/generate/clause.rs` | unchanged | private, one file's helpers |
-| `LoweredScalarClaim` | 1 | `kani/generate/scalar.rs` | pub(super), fields pub(super) | `negotiate`'s `Outcome::LoweredScalar` and `assign_names` read the fields |
+| `LoweredScalarClaim` | 1 | `kani/generate/scalar.rs` | pub(super), fields `node_id`, `operation_identity`, `module_symbol` and `harness_symbol` pub(super), the rest private | `negotiate`'s `Outcome::LoweredScalar` and `assign_names` read those four; widening `operation` would expose the private `ScalarOperation` (`private_interfaces`) |
 | `scalar_stem`, `ScalarLoweringRefusal`, `lower_scalar_claim`, `derive_domain`, `unsatisfiable`, `render_scalar` | 6 | `kani/generate/scalar.rs` | pub(super) | `classify_claim`, `assign_names` and `negotiate` call them |
 | `ScalarOperation`, `impl ScalarOperation`, `not_symbolic`, `count_bounds` | 4 | `kani/generate/scalar.rs` | unchanged | private to the scalar family |
 | `render_precondition` | 1 | `kani/generate/precondition.rs` | pub(super) | called by `render` |
@@ -1104,11 +1121,11 @@ Rows add to 6 + 4 + 2 + 2 + 7 + 3 + 3 + 7 + 3 + 2 + 4 + 3 = 46 production items,
 | `PLAYBACK_HEADER`, `PLAYBACK_FENCE`, `PLAYBACK_ENTRY_POINT`, `PLAYBACK_COVER_MARKER` | 4 | `kani/output/playback.rs` | unchanged | private |
 | `counterexample_playback` | 1 | `kani/output/playback.rs` | unchanged | `pub(crate)`; `classify.rs` calls it (interim) |
 | Tests: `Capture`, `capture` (the `macro_rules!`), `classified`, `report`, `mutated` | 5 | `classify.rs` tests, `real_capture` module | n/a | the fixtures and their helpers (D-6) |
-| Tests: `tc_027_real_kani_success_with_a_satisfied_cover_is_verified`, `tc_027_real_kani_failure_carries_the_assertion_playback_not_the_cover_one`, `tc_027_real_kani_unwinding_failure_is_inconclusive_not_falsified`, `tc_027_real_kani_a_run_with_no_successful_check_is_a_vacuous_proof`, `tc_027_real_kani_partly_satisfied_covers_are_cover_unsatisfied`, `tc_027_real_kani_success_without_a_cover_is_inconclusive`, `tc_027_the_console_banner_never_decides_the_verdict`, `tc_027_a_report_that_changed_shape_is_refused_not_classified`, `tc_027_a_report_without_exactly_one_harness_is_refused`, `tc_027_a_success_report_listing_a_failed_check_is_refused_never_verified`, `tc_027_real_kani_the_per_check_view_carries_id_class_location_and_status` | 11 | `classify.rs` tests, `real_capture` module | n/a | each calls `classify_kani_run` or `classified`, or uses `mutated` or `capture!`; include path `../../tests/fixtures/kani-report/` |
-| Tests: `tc_027_a_class_spelled_cover_or_unwind_is_never_other`, `tc_027_the_per_check_view_has_one_serialized_wire_shape`, `tc_027_an_unknown_line_is_none_and_a_non_numeric_line_is_refused`, `tc_027_an_unnamed_check_category_is_a_property` | 4 | `output/report.rs` tests | n/a | report types only, no fixture |
+| Tests: `tc_027_real_kani_success_with_a_satisfied_cover_is_verified`, `tc_027_real_kani_failure_carries_the_assertion_playback_not_the_cover_one`, `tc_027_real_kani_unwinding_failure_is_inconclusive_not_falsified`, `tc_027_real_kani_a_run_with_no_successful_check_is_a_vacuous_proof`, `tc_027_real_kani_partly_satisfied_covers_are_cover_unsatisfied`, `tc_027_real_kani_success_without_a_cover_is_inconclusive`, `tc_027_the_console_banner_never_decides_the_verdict`, `tc_027_a_report_that_changed_shape_is_refused_not_classified`, `tc_027_a_report_without_exactly_one_harness_is_refused`, `tc_027_a_success_report_listing_a_failed_check_is_refused_never_verified`, `tc_027_real_kani_the_per_check_view_carries_id_class_location_and_status`, `tc_027_an_unknown_line_is_none_and_a_non_numeric_line_is_refused`, `tc_027_an_unnamed_check_category_is_a_property` | 13 | `classify.rs` tests, `real_capture` module | n/a | each calls `classify_kani_run` or `classified`, or uses `mutated` or `capture!`; the last two are parse tests that call `mutated`; include path `../../tests/fixtures/kani-report/` |
+| Tests: `tc_027_a_class_spelled_cover_or_unwind_is_never_other`, `tc_027_the_per_check_view_has_one_serialized_wire_shape` | 2 | `output/report.rs` tests | n/a | report types only, no fixture and no `mutated` |
 | Tests: `tc_027_playback_scanning_returns_the_property_block_and_stops_at_an_unterminated_fence` | 1 | `output/playback.rs` tests | n/a | calls `counterexample_playback` |
 
-Rows add to 10 + 16 + 4 + 1 = 31 production items, and 5 + 11 + 4 + 1 = 21 tests.
+Rows add to 10 + 16 + 4 + 1 = 31 production items, and 5 + 13 + 2 + 1 = 21 tests.
 
 **`kani_witness_join.rs` (19 production items, 15 test items).**
 
