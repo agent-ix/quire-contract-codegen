@@ -1,8 +1,8 @@
-//! The harness and identity record types of a generated Kani obligation (AD-004 step 2b).
+//! The harness and identity record types of a generated Kani obligation.
 //!
-//! This module becomes `kani/identity.rs`. The generators build these records and the runner,
-//! the witness join and the replay read them, so they live below both: a harness is run from its
-//! identity and its source text, and no reader imports a generator.
+//! The generators build these records and the runner, the witness join and the replay read
+//! them, so they live below both: a harness is run from its identity and its source text, and
+//! no reader imports a generator.
 
 use quire_contract_model::{CheckedNodeId, ClauseRef, DependencyIdentity, SourceSpan};
 use serde::Serialize;
@@ -10,7 +10,7 @@ use serde::Serialize;
 use crate::{
     core::artifact::Artifact,
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol},
-    kani::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver},
+    kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver},
 };
 
 /// The contract role of one obligation.
