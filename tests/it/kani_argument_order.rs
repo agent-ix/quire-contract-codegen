@@ -1,5 +1,5 @@
 //! IR-213: couples `symbolic_arguments`'s `kani::any()` emission order
-//! (`src/kani_obligations.rs:1450`) to the order persisted in `identity.arguments`. That coupling
+//! (`src/kani/generate/clause.rs`) to the order persisted in `identity.arguments`. That coupling
 //! is what `decode_falsification` (`src/kani_witness_join.rs`) depends on: it binds
 //! `identity.arguments` *positionally* onto Kani's concrete playback bytes, which is only sound
 //! if position *i* of the persisted arguments is position *i* of the emitted `kani::any()` calls.
@@ -25,8 +25,8 @@
 //!
 //! It asserts this over every harness `withdraw_harnesses` negotiates — precondition,
 //! postcondition and invariant — because `symbolic_arguments` is called from two independent
-//! sites (`render_precondition` at `src/kani_obligations.rs:1487` and `render_contract`, serving
-//! both Postcondition and Invariant, at `src/kani_obligations.rs:1586`), and a divergence at
+//! sites (`render_precondition` in `src/kani/generate/precondition.rs` and `render_contract`,
+//! serving both Postcondition and Invariant, in `src/kani/generate/contract.rs`), and a divergence at
 //! either is the same silent misbind in `decode_falsification` this test exists to exclude.
 //!
 //! Trace: FR-016-AC-8, TC-026.
@@ -92,7 +92,7 @@ fn kani_any_binding_identifier(local: &Local) -> Option<String> {
     (segments == ["kani", "any"]).then(|| pat_ident.ident.to_string())
 }
 
-/// Parses `source` as a Rust file — the same parser `render()` (`src/kani_obligations.rs`) itself
+/// Parses `source` as a Rust file — the same parser `render()` (`src/kani/generate/negotiate.rs`) itself
 /// uses to validate generated source before returning it — and returns every `kani::any()`-bound
 /// identifier found, in the order it appears in the source.
 fn kani_any_identifiers_in_source_order(source: &str) -> Vec<String> {

@@ -349,7 +349,7 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
     // -Z concrete-playback / --concrete-playback print are required for classify_kani_run below to
     // see a playback block at all: without them Kani never prints one, even for a genuine
     // falsification, and every run classifies Inconclusive rather than Falsified. adapter_options
-    // (src/kani.rs) always includes these two for every production harness, plus --exact,
+    // (src/kani/abi.rs) always includes these two for every production harness, plus --exact,
     // --unwind and --solver, which this invocation does not replicate -- --harness is already an
     // effective exact match here (this crate writes exactly one harness), so the omission is
     // inert today, not load-bearing. --export-json is what the verdict is read from.

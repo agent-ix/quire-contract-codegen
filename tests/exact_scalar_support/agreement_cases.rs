@@ -133,7 +133,7 @@ fn typed<T>(result: Result<Outcome<T>, OracleStop>) -> Result<Outcome<T>, IllTyp
     })
 }
 
-// Deliberately untraced: this exists as `render_scalar`'s (`src/kani_obligations.rs`) F1
+// Deliberately untraced: this exists as `render_scalar`'s (`src/kani/generate/scalar.rs`) F1
 // mutation-testing vehicle, not to satisfy a numbered acceptance criterion. It runs the real
 // generated oracle directly -- no Kani/CBMC involved -- to prove, by actual execution, that
 // `quire.op.integer.add` over `[-1000,1000]` refuses an out-of-domain result rather than

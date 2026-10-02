@@ -23,7 +23,7 @@ use crate::{
     core::artifact::Artifact,
     core::identity::{HarnessPath, HarnessSymbol},
     derive_exact_scalar_items, generate_exact_scalar_oracles,
-    kani_identity::KaniScalarObligationHarness,
+    kani::identity::KaniScalarObligationHarness,
     negotiate_kani_obligations, BackendKind, Candidate, ClaimMap, ExactScalarClaim,
     ExactScalarOracles, InvalidObligationItem, KaniObligationError, KaniObligationOutcome,
     KaniObligationRequest, ObligationDisposition, ObligationItem, ObligationRecord,
@@ -397,8 +397,8 @@ mod tests {
     use crate::{
         core::artifact::Artifact,
         core::identity::{HarnessSymbol, ModuleSymbol},
-        kani::KaniSolver,
-        kani_identity::{KaniScalarObligationHarness, ScalarObligationIdentity},
+        kani::abi::KaniSolver,
+        kani::identity::{KaniScalarObligationHarness, ScalarObligationIdentity},
     };
 
     fn harness(module: &str, symbol: &str) -> KaniScalarObligationHarness {
