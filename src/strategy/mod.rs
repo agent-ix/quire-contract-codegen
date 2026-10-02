@@ -6,7 +6,7 @@
 
 // The bound numeric strategy generation; V1 input, retired with V1.
 pub(crate) mod bound;
-// Enum and `i64` strategy campaigns (was `strategy`); no V1 input.
+// Enum and `i64` strategy campaigns; no V1 input.
 // Implements: FR-002
 pub(crate) mod campaign;
 // Tri-state harness generation; V1 input.

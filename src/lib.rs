@@ -39,9 +39,9 @@ mod kani_witness_join;
 mod spine_replay;
 // Implements: FR-015-AC-33
 mod frame_replay;
-// The evidence subsystem (AD-004 step 2e).
+// The evidence subsystem.
 mod evidence;
-// The strategy subsystem (AD-004 step 2e).
+// The strategy subsystem.
 mod strategy;
 
 pub use strategy::bound::census::{
