@@ -609,8 +609,9 @@ pub struct ExactScalarOracles {
 /// Generate exact scalar oracles for `items` from an admitted package.
 ///
 /// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization`, or
-/// `UnknownRuntimeVariant` (`check_parameters` matching an RT
-/// `#[non_exhaustive]` enum against a variant its own exhaustive match does
+/// `UnknownRuntimeVariant` (any of the roughly two dozen scalar sites that
+/// match an RT `#[non_exhaustive]` enum, in `check_parameters` and in shape,
+/// identity and rendering, against a variant the generator's own match does
 /// not know); every per-item problem is a refusal in the claim map.
 pub fn generate_exact_scalar_oracles(
     package: &CheckedPackageV2,
@@ -809,8 +810,8 @@ type CheckedItem<'r> = (&'r CompleteContractNodeV2, Vec<CheckedNodeId>);
 
 /// Either [`ExactScalarRefusal`] (a per-item business refusal, folded into
 /// the claim map) or [`OracleGenerationError`] (an RT `#[non_exhaustive]`
-/// enum yielding a variant `check_parameters`'s own exhaustive match does not
-/// know -- see [`OracleGenerationError::UnknownRuntimeVariant`]'s own doc for
+/// enum yielding a variant this generator's own match (in `check_parameters`
+/// or one of the other scalar sites) does not know -- see [`OracleGenerationError::UnknownRuntimeVariant`]'s own doc for
 /// why that aborts the whole generation instead of refusing one item).
 enum ItemCheckError {
     Refusal(ExactScalarRefusal),
@@ -1223,9 +1224,7 @@ fn check_parameters(
                 IntegerDomain::Mathematical => None,
                 &_ => {
                     return Err(ItemCheckError::Generation(
-                        OracleGenerationError::UnknownRuntimeVariant {
-                            enum_name: "IntegerDomain",
-                        },
+                        OracleGenerationError::unknown_variant("IntegerDomain"),
                     ))
                 }
             };
@@ -1271,9 +1270,7 @@ fn check_parameters(
             }
             &_ => {
                 return Err(ItemCheckError::Generation(
-                    OracleGenerationError::UnknownRuntimeVariant {
-                        enum_name: "QuantityTarget",
-                    },
+                    OracleGenerationError::unknown_variant("QuantityTarget"),
                 ))
             }
         },
