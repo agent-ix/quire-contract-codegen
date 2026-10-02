@@ -18,18 +18,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     core::artifact::Artifact,
-    kani::deterministic_json,
-    kani_census::{
+    kani::census::{
         dependency_readiness, normalize_dependencies, ProofDependencyEdge, ProofDependencyKind,
         ProofDependencyRequest, ProofReadiness,
     },
-    prepare_bounded_collection_query, prepare_checked_arithmetic, prepare_finite_graph_reaches,
+    kani::generate::census_validation::{deterministic_json, validate_dependencies},
+    kani::generate::lower::{
+        bounded_collections::prepare_bounded_collection_query,
+        definedness_arithmetic::prepare_checked_arithmetic,
+        finite_reference_graphs::prepare_finite_graph_reaches,
+    },
 };
 
 /// Stable schema identity for [`CorpusProofDependencyGraph`].
 ///
-/// Deliberately distinct from `src/kani.rs`'s `quire.kani-proof-graph/v2`
-/// ([`crate::kani::ProofDependencyGraph`], validated against
+/// Deliberately distinct from the V1 bundle's `quire.kani-proof-graph/v2`
+/// ([`crate::kani::generate::v1_bundle::ProofDependencyGraph`], validated against
 /// `schemas/kani-proof-graph-v2.schema.json`): that schema requires a Contract-IR `requirementId`/
 /// `requirementRevision` this corpus's finite-ABI input has no analogue for, and requires a
 /// cargo-kani CLI `options` array of at least fifteen entries that this generator never builds
@@ -117,7 +121,7 @@ pub struct BoundedCorpusArtifacts {
 /// `#[kani::proof]` symbol, its semantic family/construct, its case name (the same name its
 /// sibling artifact paths carry), the derived readiness, and the sorted declared
 /// dependency census. See [`CORPUS_PROOF_GRAPH_SCHEMA`] for why this is a distinct envelope from
-/// `src/kani.rs`'s `quire.kani-proof-graph/v2`.
+/// `src/kani/generate/v1_bundle.rs`'s `quire.kani-proof-graph/v2`.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CorpusProofDependencyGraph {
@@ -367,7 +371,7 @@ pub struct BoundedCorpusCase {
 ///
 /// `dependencies` is the caller-declared proof-dependency census for this exact case. It is
 /// validated with the same rules `generate_kani_bundle` applies to its own census
-/// (`crate::kani::validate_dependencies`),
+/// (`crate::kani::generate::census_validation::validate_dependencies`),
 /// plus a Required-only rule this corpus adds on top: the corpus's generated harnesses are
 /// self-contained by construction (literal operands/edges baked in at generation time, no external
 /// call, no `// proof-dependency-site:` marker, no `kani::assume`, no `#[kani::stub]`), so any
@@ -407,7 +411,7 @@ pub fn generate_bounded_kani_corpus_case(
     // and the single normalized form computed here is the one the emitted proof-dependency-graph
     // artifact (`render_artifacts`) carries.
     //
-    // Validation is two layers. First, the shared rules (`crate::kani::validate_dependencies`)
+    // Validation is two layers. First, the shared rules (`validate_dependencies`)
     // -- non-empty and unique declared identities, and a closed kind/state/path shape per entry.
     // Second, this corpus's own Required-only rule (ir#80 review finding F1): the corpus's
     // generated harnesses are self-contained by construction -- rendering no
@@ -427,14 +431,14 @@ pub fn generate_bounded_kani_corpus_case(
     let declared_dependencies_invalid = dependencies
         .iter()
         .any(|dependency| dependency.kind != ProofDependencyKind::Required)
-        || crate::kani::validate_dependencies(dependencies, "").is_err();
+        || validate_dependencies(dependencies, "").is_err();
     if declared_dependencies_invalid {
         // The failing diagnostic's own `path` (which census index) and `message` (which rule) are
         // not carried into this refusal: `KaniOutcome::non_success`'s `source_id`/`context` fields
         // already carry `request_source_id`/`revision` -- the request's own identity, not the
         // census's -- and folding diagnostic detail into either would conflate two different
         // things this outcome identifies. A caller that needs the failing census index re-runs
-        // `crate::kani::validate_dependencies` directly over the same census for the full
+        // `validate_dependencies` directly over the same census for the full
         // diagnostic list (ir#80 review finding F7).
         return Err(KaniOutcome::non_success(
             KaniOutcomeKind::InvalidInput,
@@ -628,7 +632,7 @@ mod tests {
         generate_bounded_kani_corpus_case, BoundedCorpusRequest, CorpusProofDependencyGraph,
         EmittedCorpusIdentities, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
     };
-    use crate::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
+    use crate::kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
     type InputEdit = Box<dyn Fn(&mut FiniteInput)>;
 

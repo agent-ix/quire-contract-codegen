@@ -1,73 +1,35 @@
-//! Deterministic Kani proof lowering.
+//! INTERIM: the V1 bounded Boolean Kani bundle generator, still live. `generate_kani_bundle`
+//! and what only it uses; step 4f deletes this file whole (AD-004).
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Write as _,
-};
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use quire_contract_model::{
-    ClauseId, DependencyIdentity, DependencyKind, IntegerDomain, OverflowPolicy, RequirementRef,
-    SourceSpan, StateObservation, TypedExpression,
+    ClauseId, DependencyIdentity, DependencyKind, RequirementRef, SourceSpan, StateObservation,
+    TypedExpression,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
-    core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
     core::naming::{bounded_readable_component, oracle_symbol, unique_pair},
-    kani_census::{
-        dependency_readiness, dependency_site, normalize_dependencies, ProofDependencyEdge,
-        ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness,
+    kani::abi::{
+        adapter_options, i64_literal, KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType,
+        KaniSolver,
     },
+    kani::census::{
+        dependency_readiness, dependency_site, normalize_dependencies, ProofDependencyEdge,
+        ProofDependencyKind, ProofDependencyRequest, ProofReadiness,
+    },
+    kani::generate::census_validation::{
+        deterministic_json, single_diagnostic, validate_dependencies, validate_path,
+        validate_plain_identity, KaniDiagnostic, KaniErrorCode,
+    },
+    kani::generate::outcome::MAX_OBLIGATION_UNWIND,
     oracle::boolean_v1::{
         generate_named_boolean_oracle, typed_dependency_parameters, DependencyParameter,
-        RustValueType,
+        OracleRequest, RustValueType,
     },
-    OracleRequest, MAX_OBLIGATION_UNWIND,
 };
-
-/// Position of one primitive dependency in the generated subject ABI.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KaniBindingRole {
-    /// A copied current/pre value passed to the customer subject.
-    Argument,
-    /// A copied post-state value returned by the customer subject.
-    Result,
-}
-
-/// Rust primitive used for one generated Kani subject binding.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KaniPrimitiveType {
-    /// Rust `bool`.
-    Boolean,
-    /// Rust `i64`.
-    I64,
-}
-
-impl KaniPrimitiveType {
-    pub(crate) const fn source_name(self) -> &'static str {
-        match self {
-            Self::Boolean => "bool",
-            Self::I64 => "i64",
-        }
-    }
-}
-
-/// Exact checked IR domain retained for one bounded-integer binding.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct KaniIntegerBounds {
-    /// Signed or unsigned checked IR domain.
-    pub domain: IntegerDomain,
-    /// Inclusive checked minimum.
-    pub minimum: i64,
-    /// Inclusive checked maximum.
-    pub maximum: i64,
-    /// Checked overflow policy; generation never replaces it.
-    pub overflow: OverflowPolicy,
-}
 
 /// One normalized primitive argument or result in the generated subject ABI.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -85,22 +47,6 @@ pub struct KaniSubjectBinding {
     pub integer_bounds: Option<KaniIntegerBounds>,
     /// Every authored occurrence contributing this normalized binding.
     pub source_spans: Vec<SourceSpan>,
-}
-
-/// Supported solver choice for the Kani adapter.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KaniSolver {
-    /// Kani's CaDiCaL SAT solver.
-    Cadical,
-}
-
-impl KaniSolver {
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Cadical => "cadical",
-        }
-    }
 }
 
 /// Explicit inputs for one bounded Boolean Kani proof bundle.
@@ -125,65 +71,6 @@ pub struct KaniRequest<'a> {
     pub solver: KaniSolver,
     /// Complete caller-owned dependency census.
     pub dependencies: &'a [ProofDependencyRequest<'a>],
-}
-
-/// Stable reason a Kani bundle could not be generated.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KaniErrorCode {
-    /// A proof, subject, assumption, or stub identity is invalid or duplicated.
-    InvalidIdentity,
-    /// A dependency kind/state/path combination is invalid.
-    InvalidDependency,
-    /// The first slice cannot bind the supplied clause dependencies to `fn(bool, bool) -> bool`.
-    UnsupportedBinding,
-    /// A Boolean clause could not be lowered without approximation.
-    ClauseGenerationFailed,
-    /// The explicit unwind value is zero or exceeds the first-slice bound.
-    InvalidUnwind,
-    /// Generated Rust did not parse.
-    InvalidGeneratedSyntax,
-    /// A deterministic graph could not be serialized.
-    SerializationFailed,
-    /// The generated source exceeds the bounded artifact size.
-    ResourceLimitExceeded,
-}
-
-impl KaniErrorCode {
-    /// Maps a Kani diagnostic category to interface-001 terminal state.
-    #[must_use]
-    pub const fn terminal_state(self) -> GenerationTerminalState {
-        match self {
-            Self::InvalidIdentity | Self::InvalidDependency | Self::InvalidUnwind => {
-                GenerationTerminalState::InvalidInput
-            }
-            Self::UnsupportedBinding | Self::ResourceLimitExceeded => {
-                GenerationTerminalState::Unsupported
-            }
-            Self::ClauseGenerationFailed
-            | Self::InvalidGeneratedSyntax
-            | Self::SerializationFailed => GenerationTerminalState::Inconclusive,
-        }
-    }
-}
-
-/// Structured Kani-generation failure returned without a partial bundle.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct KaniDiagnostic {
-    /// Stable Kani diagnostic category.
-    pub code: KaniErrorCode,
-    /// Interface-001 terminal state.
-    pub terminal_state: GenerationTerminalState,
-    /// Preserved Boolean-lowering code, when the failure originated in an oracle clause.
-    pub generation_code: Option<GenerationErrorCode>,
-    /// Stable path to the rejected request element.
-    pub path: String,
-    /// Exact IR-owned locus when clause lowering identified one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_span: Option<SourceSpan>,
-    /// Human-readable detail not used as machine identity.
-    pub message: String,
 }
 
 /// Deterministic Kani proof-dependency graph.
@@ -410,102 +297,6 @@ fn validate_request(request: &KaniRequest<'_>) -> Result<(), Vec<KaniDiagnostic>
     }
     validate_dependencies(request.dependencies, request.proof_id)?;
     Ok(())
-}
-
-/// Validates one caller-declared proof-dependency census: every declared identity is non-empty,
-/// unique within the census, and distinct from `proof_id` (the root proof this census is declared
-/// against), and its kind/state/path combination is one of the three closed shapes (`Required`,
-/// `Assumed`, `Stubbed`).
-///
-/// Shared by [`generate_kani_bundle`]'s request validation and the bounded-Kani corpus's
-/// declared-census validation, so there is exactly one definition of what a valid
-/// proof-dependency census looks like rather than two that can drift apart.
-pub(crate) fn validate_dependencies(
-    dependencies: &[ProofDependencyRequest<'_>],
-    proof_id: &str,
-) -> Result<(), Vec<KaniDiagnostic>> {
-    let mut identities = BTreeSet::new();
-    for (index, dependency) in dependencies.iter().enumerate() {
-        let base_path = format!("dependencies[{index}]");
-        validate_plain_identity(dependency.proof_id, &format!("{base_path}.proof_id"))?;
-        if dependency.proof_id == proof_id || !identities.insert(dependency.proof_id) {
-            return Err(single_diagnostic(
-                KaniErrorCode::InvalidDependency,
-                &format!("{base_path}.proof_id"),
-                "dependency identities must be unique and distinct from the root proof",
-            ));
-        }
-        match (dependency.kind, dependency.state) {
-            (
-                ProofDependencyKind::Required,
-                ProofDependencyState::Passed
-                | ProofDependencyState::Missing
-                | ProofDependencyState::Failed,
-            ) if dependency.original_path.is_none() && dependency.replacement_path.is_none() => {}
-            (ProofDependencyKind::Assumed, ProofDependencyState::Assumed) => {
-                let Some(original_path) = dependency.original_path else {
-                    return Err(single_diagnostic(
-                        KaniErrorCode::InvalidDependency,
-                        &base_path,
-                        "an assumed dependency requires exactly one predicate path",
-                    ));
-                };
-                if dependency.replacement_path.is_some() {
-                    return Err(single_diagnostic(
-                        KaniErrorCode::InvalidDependency,
-                        &base_path,
-                        "an assumed dependency cannot declare a replacement path",
-                    ));
-                }
-                validate_path(original_path, &format!("{base_path}.original_path"))?;
-            }
-            (ProofDependencyKind::Stubbed, ProofDependencyState::Stubbed) => {
-                let (Some(original_path), Some(replacement_path)) =
-                    (dependency.original_path, dependency.replacement_path)
-                else {
-                    return Err(single_diagnostic(
-                        KaniErrorCode::InvalidDependency,
-                        &base_path,
-                        "a stubbed dependency requires original and replacement paths",
-                    ));
-                };
-                validate_path(original_path, &format!("{base_path}.original_path"))?;
-                validate_path(replacement_path, &format!("{base_path}.replacement_path"))?;
-            }
-            _ => {
-                return Err(single_diagnostic(
-                    KaniErrorCode::InvalidDependency,
-                    &base_path,
-                    "dependency kind, state, and source paths are inconsistent",
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn validate_plain_identity(value: &str, path: &str) -> Result<(), Vec<KaniDiagnostic>> {
-    if value.is_empty() || value.chars().any(char::is_control) {
-        Err(single_diagnostic(
-            KaniErrorCode::InvalidIdentity,
-            path,
-            "identity must be non-empty and contain no control characters",
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn validate_path(value: &str, path: &str) -> Result<(), Vec<KaniDiagnostic>> {
-    if syn::parse_str::<syn::Path>(value).is_err() {
-        Err(single_diagnostic(
-            KaniErrorCode::InvalidIdentity,
-            path,
-            "value must be a valid Rust path",
-        ))
-    } else {
-        Ok(())
-    }
 }
 
 fn derive_subject_abi(
@@ -849,42 +640,6 @@ fn render_result_bounds(results: &[KaniSubjectBinding]) -> String {
         .join(" && ")
 }
 
-pub(crate) fn i64_literal(value: i64) -> String {
-    match value {
-        i64::MIN => "i64::MIN".to_owned(),
-        i64::MAX => "i64::MAX".to_owned(),
-        _ => format!("{value}_i64"),
-    }
-}
-
-pub(crate) fn adapter_options(
-    harness: &str,
-    unwind: u32,
-    solver: KaniSolver,
-    uses_stubbing: bool,
-) -> Vec<String> {
-    let mut options = vec!["-Z".to_owned(), "function-contracts".to_owned()];
-    if uses_stubbing {
-        options.extend(["-Z".to_owned(), "stubbing".to_owned()]);
-    }
-    options.extend([
-        "-Z".to_owned(),
-        "concrete-playback".to_owned(),
-        "--harness".to_owned(),
-        harness.to_owned(),
-        "--exact".to_owned(),
-        "--unwind".to_owned(),
-        unwind.to_string(),
-        "--solver".to_owned(),
-        solver.as_str().to_owned(),
-        "--output-format".to_owned(),
-        "regular".to_owned(),
-        "--concrete-playback".to_owned(),
-        "print".to_owned(),
-    ]);
-    options
-}
-
 fn map_clause_diagnostics(
     role: &str,
     diagnostics: Vec<crate::GenerationDiagnostic>,
@@ -902,17 +657,6 @@ fn map_clause_diagnostics(
         .collect()
 }
 
-fn single_diagnostic(code: KaniErrorCode, path: &str, message: &str) -> Vec<KaniDiagnostic> {
-    vec![KaniDiagnostic {
-        code,
-        terminal_state: code.terminal_state(),
-        generation_code: None,
-        path: path.to_owned(),
-        source_span: None,
-        message: message.to_owned(),
-    }]
-}
-
 /// The generated module, contract and proof name stem, read from the requirement, revision and
 /// proof id. Kani synthesizes contract symbols and object-file names from these names, so each
 /// readable component is bounded; the complete identity remains in framing and the graph.
@@ -922,20 +666,6 @@ fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
         bounded_readable_component(requirement),
         bounded_readable_component(proof_id)
     )
-}
-
-/// `value` as a readable snake-case name component of at most 12 characters.
-pub(crate) fn readable_component(value: &str) -> String {
-    crate::core::naming::readable_name_component(value, 12)
-}
-
-// `?Sized` so an unsized `[T]` slice (e.g. `&[ProofDependencyEdge]`) can be passed directly, with
-// no intermediate owned `Vec` allocation at the call site, alongside every already-`Sized` caller
-// (ir#80 review finding F10).
-pub(crate) fn deterministic_json(value: &(impl Serialize + ?Sized)) -> Result<String, String> {
-    let mut bytes = serde_json::to_vec(value).map_err(|error| error.to_string())?;
-    bytes.push(b'\n');
-    String::from_utf8(bytes).map_err(|error| error.to_string())
 }
 
 fn artifact(path: String, contents: String) -> Artifact {

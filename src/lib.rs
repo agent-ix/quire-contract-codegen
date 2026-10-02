@@ -3,36 +3,20 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-mod bounded_collections;
-mod bounded_kani_corpus;
-mod bounded_kani_profile;
-// The leaf directory: artifact, diagnostic, identity, profile and source-map (AD-004 step 2c).
+// The leaf directory: artifact, diagnostic, identity, profile and source-map.
 // `core` here is this crate's own layout module (the AD names the directory `core/`). In this
 // file it shadows the extern `core` crate, so `crate::core::` is the explicit spelling.
 mod core;
-mod definedness_arithmetic;
-mod finite_reference_graphs;
+// The Kani subsystem.
 mod kani;
-// Proof-dependency census types (AD-004 step 2b); becomes `kani/census.rs`.
-mod kani_census;
-// Harness and identity record types (AD-004 step 2b); becomes `kani/identity.rs`.
-// Implements: FR-015
-mod kani_identity;
 // The oracle subsystem.
 mod oracle;
 // Implements: FR-005, NFR-001
 mod publication;
-// Implements: FR-015
-mod kani_obligations;
 // Implements: FR-019
 mod capability;
 // Implements: FR-022
 mod routed_generation;
-// Implements: FR-015 (IR-412: state-clause operation contract and frame effects).
-mod state_frame;
-// Implements: FR-017
-mod kani_execution;
-mod kani_transcript;
 // IR-211: joins a real Kani witness to the generator's own persisted obligation schema.
 mod kani_witness_join;
 // Implements: FR-016
@@ -60,15 +44,17 @@ pub use strategy::bound::relation::{
     ComparisonOperator, Domain, OperandPosition, Partner, Relation,
 };
 
-pub use bounded_collections::prepare_bounded_collection_query;
-pub use bounded_kani_corpus::{
+pub use kani::generate::corpus::bounded_kani_corpus::{
     generate_bounded_kani_corpus_case, BoundedCorpusArtifacts, BoundedCorpusCase,
     BoundedCorpusFamily, BoundedCorpusRequest, CorpusProofDependencyGraph, EmittedCorpusIdentities,
     CORPUS_PROOF_GRAPH_SCHEMA,
 };
-pub use bounded_kani_profile::{classify_bounded_kani_profile, BoundedKaniProfile};
-pub use definedness_arithmetic::prepare_checked_arithmetic;
-pub use finite_reference_graphs::prepare_finite_graph_reaches;
+pub use kani::generate::lower::bounded_collections::prepare_bounded_collection_query;
+pub use kani::generate::lower::bounded_kani_profile::{
+    classify_bounded_kani_profile, BoundedKaniProfile,
+};
+pub use kani::generate::lower::definedness_arithmetic::prepare_checked_arithmetic;
+pub use kani::generate::lower::finite_reference_graphs::prepare_finite_graph_reaches;
 pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 pub use oracle::scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
@@ -118,25 +104,29 @@ pub use capability::{
     ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
     CAPABILITY_VOCABULARY,
 };
-pub use kani::{
-    generate_kani_bundle, KaniArtifactBundle, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
-    KaniIntegerBounds, KaniPrimitiveType, KaniRequest, KaniSolver, KaniSubjectBinding,
-    ProofDependencyGraph,
-};
-pub use kani_census::{
+pub use kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver};
+pub use kani::census::{
     ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
     ProofReadiness,
 };
-pub use kani_execution::{
-    classify_kani_run, execute_kani_obligation, kani_launch_command, launch_evidence,
-    run_launcher_with_timeout, ClassifiedRun, KaniExecutableHarness, KaniExecutionEvidence,
-    KaniExecutionRefusal, KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation,
-    KaniRunOutcome, KaniTool, KaniToolError, LaunchOutcome,
+pub use kani::classify::{
+    classify_kani_run, ClassifiedRun, KaniInconclusiveReason, KaniRunOutcome,
 };
-pub use kani_transcript::{
+pub use kani::generate::census_validation::{KaniDiagnostic, KaniErrorCode};
+pub use kani::generate::v1_bundle::{
+    generate_kani_bundle, KaniArtifactBundle, KaniRequest, KaniSubjectBinding, ProofDependencyGraph,
+};
+pub use kani::output::report::{
     KaniCheckClass, KaniCheckLocation, KaniCheckResult, KaniCheckStatus, KaniReportRefusal,
     OtherCheckClass,
 };
+pub use kani::run::execute::{
+    execute_kani_obligation, kani_launch_command, launch_evidence, KaniExecutionEvidence,
+    KaniExecutionRefusal, KaniExecutionRequest,
+};
+pub use kani::run::harness::KaniExecutableHarness;
+pub use kani::run::launch::{run_launcher_with_timeout, LaunchOutcome};
+pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
 pub use routed_generation::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
@@ -154,28 +144,29 @@ pub use crate::core::diagnostic::{
 };
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
 pub use frame_replay::{FrameReplay, FrameReplayError, FrameReplayInputs, ProvidedDocument};
-pub use kani_identity::{
+pub use kani::generate::frame::{
+    generate_state_frame_obligations, StateFrameObligations, StateFrameRefusal, StateFrameRequest,
+    UnsupportedFrameEffect,
+};
+pub use kani::generate::negotiate::negotiate_kani_obligations;
+pub use kani::generate::outcome::{
+    DerivedDomain, InvalidObligationItem, KaniObligationError, KaniObligationOutcome,
+    KaniObligationRequest, ObligationDisposition, ObligationItem, ObligationRecord,
+    ObligationSubject, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+};
+pub use kani::identity::{
     EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
     ObligationBinding, ObligationKind, ScalarObligationArgument, ScalarObligationIdentity,
     StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
     StateFrameScope,
 };
-pub use kani_obligations::{
-    negotiate_kani_obligations, DerivedDomain, InvalidObligationItem, KaniObligationError,
-    KaniObligationOutcome, KaniObligationRequest, ObligationDisposition, ObligationItem,
-    ObligationRecord, ObligationSubject, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
-    MAX_OBLIGATION_UNWIND,
-};
-pub use kani_witness_join::{decode_falsification, DecodeFailure};
+pub use kani::output::playback::DecodeFailure;
+pub use kani_witness_join::decode_falsification;
 pub use publication::{write_bundle_atomic, PublishedBundleIdentity};
 pub use spine_replay::{
     replay_counterexample, replay_falsification, DependencyLock, DependencyLockError,
     EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError,
     ReplayParameter, ReplayVerdict, SpineReplayError,
-};
-pub use state_frame::{
-    generate_state_frame_obligations, StateFrameObligations, StateFrameRefusal, StateFrameRequest,
-    UnsupportedFrameEffect,
 };
 pub use strategy::campaign::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,

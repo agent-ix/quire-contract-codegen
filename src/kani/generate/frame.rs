@@ -38,13 +38,13 @@ use serde_json::Value;
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
-    kani::{adapter_options, i64_literal, KaniSolver},
-    kani_identity::{
+    kani::abi::{adapter_options, i64_literal, KaniSolver},
+    kani::generate::outcome::MAX_OBLIGATION_UNWIND,
+    kani::identity::{
         StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
         StateFrameProperty, StateFrameScope,
     },
     oracle::scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
-    MAX_OBLIGATION_UNWIND,
 };
 
 /// Work budget for lowering one clause and its closure.

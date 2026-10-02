@@ -1830,7 +1830,7 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
     // directory, so 1ms cannot possibly be enough even to compile it, let alone run CBMC. The
     // proof that the run was actually killed, rather than merely misclassified after being
     // allowed to run to completion, is the mutation test against
-    // `run_launcher_with_timeout`'s deadline check in `src/kani_execution.rs`: disabling that
+    // `run_launcher_with_timeout`'s deadline check in `src/kani/run/launch.rs`: disabling that
     // check turns this same assertion red, because the run then completes for real and
     // verifies. This call's own wall-clock elapsed time is not that proof — a real run that
     // happened to finish quickly would satisfy an elapsed-time bound too — so none is asserted

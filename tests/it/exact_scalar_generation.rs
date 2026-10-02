@@ -1136,7 +1136,7 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 /// One fixture per `ExactScalarRefusal` variant, each checked against
 /// `refusal_variant_name`'s exhaustive match (see its own doc). What this
 /// test adds is not novel exhaustiveness protection for `ExactScalarRefusal`
-/// -- `src/kani_obligations.rs` already has its own wildcard-free match over
+/// -- `src/kani/generate/negotiate.rs` already has its own wildcard-free match over
 /// the same enum in production code, so a twenty-first variant would already
 /// break that build today whether or not this test exists. What this test
 /// adds is the variant<->fixture pairing: proof that every variant names a

@@ -575,7 +575,7 @@ pub struct GeneratedScalarClaim {
     /// file. Process-internal: not part of the `quire.codegen.exact-scalar-
     /// claim-map/v1` wire schema (this struct has no `Deserialize`, so
     /// nothing round-trips it through `claim-map.json`), consumed only by
-    /// `kani_obligations::render_scalar` from the live claim map this
+    /// `kani::generate::scalar::render_scalar` from the live claim map this
     /// generation produced.
     #[serde(skip)]
     pub oracle_source: String,
@@ -2119,7 +2119,7 @@ fn operation_confirmed(node: &CompleteContractNodeV2, operation: &ExactScalarOpe
 }
 
 /// One oracle's function, self-contained for direct embedding in a generated
-/// Kani harness file (`kani_obligations::render_scalar`): unlike
+/// Kani harness file (`kani::generate::scalar::render_scalar`): unlike
 /// [`SourceBuilder::finish`]'s crate-wide accumulation (one set of shared
 /// helpers for every oracle in the crate), this always includes whatever
 /// preamble helpers its own body needs, even when that duplicates them

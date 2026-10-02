@@ -67,7 +67,7 @@ fn balance(line: u64, maximum: i64) -> Value {
     json!({"name":"balance","kind":"state","value_type":int(0, maximum),"source":span(line)})
 }
 
-/// An input with no bounds at all: `abi()` (`src/kani_obligations.rs`) gives a `Boolean`-typed
+/// An input with no bounds at all: `abi()` (`src/kani/generate/clause.rs`) gives a `Boolean`-typed
 /// dependency `integer_bounds: None`, unlike every `Integer`-typed one in this fixture.
 fn priority(line: u64) -> Value {
     json!({"name":"priority","kind":"input","value_type":{"kind":"boolean"},"source":span(line)})

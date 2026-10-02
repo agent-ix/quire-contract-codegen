@@ -1,8 +1,7 @@
-//! The proof-dependency census types (AD-004 step 2b).
+//! The proof-dependency census types.
 //!
-//! This module becomes `kani/census.rs`: the FR-015 census input and the corpus use these types,
-//! and they survive the retirement of the V1 bundle in `kani`. It depends on no other module of
-//! this crate.
+//! The FR-015 census input and the corpus use these types, and they survive the retirement of
+//! the V1 bundle in `kani`. This module depends on no other module of this crate.
 
 use serde::{Deserialize, Serialize};
 

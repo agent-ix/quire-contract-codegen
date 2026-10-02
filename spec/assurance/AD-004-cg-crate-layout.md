@@ -892,7 +892,7 @@ tables; each table states the count it covers, and the per-destination rows add 
   state-frame and corpus templates); where it goes later is for the steps that own it.
 - `lib.rs` replaces the flat `mod` lines of the moved files with `mod kani;` and points its
   `pub use` list at the new module paths (`kani::generate::outcome::...`, `kani::run::...` and so
-  on). The set of re-exported names does not change, so no file under `tests/` changes.
+  on). The set of re-exported names does not change, so no test code under `tests/` changes (comment lines that cite a deleted source path may be updated).
 - Files outside the move whose imports of moved items are rewritten to the new module paths:
   `spine_replay.rs` (`kani_identity` and the `DecodeFailure` import), `routed_generation.rs`
   (`kani_identity`, and the test module's `kani::KaniSolver`, which becomes `kani::abi::KaniSolver`),
@@ -1210,7 +1210,7 @@ assigned to that one file. The names are the full item list.
 **What a reviewer checks for 2f.** For each row, the item's text at its new path equals its text at
 the old path, apart from `use` lines, paths and the visibility the row states
 (`git diff --color-moved` shows it); the generated output of every existing test is unchanged and
-`make test` passes with no file under `tests/` edited (the root re-exports keep their names); the
+`make test` passes with no test code under `tests/` edited, comment-only path updates aside (the root re-exports keep their names); the
 six `mod.rs` files hold declarations only; none of `spec.rs`, `render.rs` or `terminal.rs` exists;
 and each interim file carries a header naming the step that deletes it.
 
