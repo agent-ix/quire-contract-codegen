@@ -2124,7 +2124,7 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
 ///
 /// Lines that are `//` comments are skipped.
 #[test]
-fn scalar_and_equality_generators_have_no_panicking_arms_over_runtime_enums() {
+fn oracle_generators_have_no_unexcused_panicking_arms() {
     const MACROS: [&str; 4] = ["unreachable", "panic", "todo", "unimplemented"];
     /// (file, arm text that identifies the excused line, exact number of such lines)
     const EXCUSED: [(&str, &str, usize); 4] = [

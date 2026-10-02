@@ -111,6 +111,31 @@ The test can fail on the ordinary forms, so it is not vacuous. It has three gaps
 | FND-003 | low | The two exclusions are matched by message text on any line in either file, and nothing asserts how many lines they excused. A copy of `unreachable!("reference operands are refused at generation time")` added anywhere passes (measured). The doc says "exactly two exclusions", but the test does not enforce that. Pin them by file plus the arm (`ValueType::Quantity` / `ValueType::Reference`), or assert that exactly 2 lines were excused | tests/it/exact_scalar_generation.rs:2125-2139 |
 | FND-004 | low | `src/oracle/function/mod.rs` is excluded as a whole file, not by its 3 known lines (the 2 `Ok(_) => unreachable!` arms in emitted source and `IntegerOperator::Negate`). A new generator-time `unreachable!`/`panic!` in the function generator is not detected. The planner decision recorded on IR-352 (data) asks for zero such arms in "CG generator code and in emitted source". Scanning function/mod.rs with those 3 lines excused would cover the rest of that generator now | tests/it/exact_scalar_generation.rs:2113-2135, src/oracle/function/mod.rs:1320,1333,1365 |
 
+## New findings (disposition pass 2)
+
+Re-measured at a18acf6bd452807e8c312a9b5cfb342b829ea4f0. `git range-diff` shows the two earlier
+commits are unchanged by the rebase onto main 6033269, and the one new commit is a18acf6.
+
+I built the `it` binary and ran the test unmutated: it passes. I then ran 16 probes, appending
+to the source file and restoring it after each run.
+
+- Fail, as wanted:
+  - `unreachable!{}`, `unreachable! {}`, `unreachable!["x"]`, `core::unreachable!()`,
+    `std::panic!("x")`
+  - a copied `reference operands` message, in equality.rs (excused count becomes 2) and in
+    scalar.rs (excusal is pinned to the equality file)
+  - `panic!("x")`, `unimplemented!()` and a copied `Negate` arm in function.rs
+  - `todo!()` in scalar.rs
+- Pass, as wanted: a `///` doc line, a `//` comment line, and
+  `#[allow(clippy::panic, unreachable_code)]` with an `is_panic` identifier.
+- Fail, as conservative false positives: a string literal containing `panic!(` and a
+  `/* unreachable!() */` block comment. Flagging emitted text that panics is in the spirit of
+  the requirement, so these are not defects.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The test is still named `scalar_and_equality_generators_have_no_panicking_arms_over_runtime_enums`, but it now also scans `src/oracle/function/mod.rs`, and three of its excused arms are named-variant arms, not runtime-enum arms. Someone looking for the function generator's no-panic evidence by name will not find it. A name such as `oracle_generators_have_no_unexcused_panicking_arms` fits | tests/it/exact_scalar_generation.rs:2127 |
+
 ## Dispositions
 
 Round 1, reviewed at 8d19fa726dcc5f31ef3c4e85e2d7773f1f0a461d (only the a482240..8d19fa7 delta
@@ -119,3 +144,8 @@ over the rebase).
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | deferred | The resolution belongs on IR-352, as the finding asked. The planner's decision is recorded there (data, 2026-10-02): keep the requirement and change the evidence. 8d19fa7 supplies part (a) for the scalar and equality generator source, with three gaps (FND-002 to FND-004). Part (a) for emitted source and for function/mod.rs stays with the open function `Ok(_)` arms. For part (b), no CG-local seam exists: every mapper takes the RT enum directly, which I confirmed in the diff. That is stated in the PR body and test doc, but it is not yet noted on IR-352. IR-352 stays open |
+| FND-002 | fixed | a18acf6 |
+| FND-003 | fixed | a18acf6 |
+| FND-004 | fixed | a18acf6 |
+
+Round 2 (reviewed at a18acf6bd452807e8c312a9b5cfb342b829ea4f0): FND-002, FND-003 and FND-004 rows above.
