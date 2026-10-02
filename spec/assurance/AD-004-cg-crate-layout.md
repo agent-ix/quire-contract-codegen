@@ -1082,7 +1082,7 @@ Rows add to 6 + 3 + 3 + 1 + 3 + 1 + 4 + 1 + 16 = 38.
 | Tests: `render_probe_package`, `render_probe_clause`, `render_probe_request`, `render_probe_lowered`, `render_refuses_a_generated_source_over_the_byte_ceiling`, `render_refuses_a_generated_source_that_fails_to_parse`, `render_refuses_a_frame_as_not_a_clause_oracle` | 7 | `negotiate.rs` tests | n/a | call `classify` and `render`; they build a `BoundPackage` fixture, which `kani/` may name until 4f |
 
 Rows add to 13 (`outcome.rs`) + 23 (`negotiate.rs`: 1 + 8 + 5 + 7 + 2) + 3 (`record.rs`) + 17
-(`clause.rs`: 4 + 8 + 3 + 2) + 11 (`scalar.rs`: 1 + 6 + 4) + 1 (`precondition.rs`) + 2 (`contract.rs`) =
+(`clause.rs`: 3 + 1 + 8 + 3 + 2) + 11 (`scalar.rs`: 1 + 6 + 4) + 1 (`precondition.rs`) + 2 (`contract.rs`) =
 70 production items, and 1 + 4 + 7 = 12 tests.
 
 **`kani_execution.rs` (46 production items, 37 test items).**
