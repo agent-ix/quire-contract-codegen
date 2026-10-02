@@ -90,3 +90,9 @@ mergeable as is.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | AD-004 step 2f says "The set of re-exported names does not change, so no file under `tests/` changes" and its reviewer checklist requires "`make test` passes with no file under `tests/` edited". The PR edits six files under `tests/` (the PR body says seven): comment-only rewrites of old-path mentions such as `src/kani_obligations.rs:1450` to the new files. No test code changed. The AD's rule reads as code-only but does not say so, so the step as merged contradicts its own spec text. | spec/assurance/AD-004-cg-crate-layout.md:895, spec/assurance/AD-004-cg-crate-layout.md:1213, tests/it/kani_argument_order.rs:2, tests/it/kani_obligations.rs:1833 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | dd224b3 (round 1, reviewed at dd224b3: `git diff 5603204..dd224b3` touches only `spec/assurance/AD-004-cg-crate-layout.md` (two lines) and adds the two SR files; the code tree outside `spec/` and `reviews/` is byte-identical to 5603204. AD-004:895 now reads "no test code under `tests/` changes (comment lines that cite a deleted source path may be updated)" and AD-004:1213 "with no test code under `tests/` edited, comment-only path updates aside". The PR's six `tests/` edits are all comment lines, so the step now agrees with its spec; the PR body now says six files.) |
