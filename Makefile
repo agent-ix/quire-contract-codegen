@@ -59,12 +59,15 @@ test:
 # target directory.
 #
 # Integration tests live in the single `it` binary (`tests/it/main.rs`); the
-# `kani_obligations`, `skeleton_spine` and `kani_witness_join` filters select
-# those modules' tests, and `--ignored` runs only their `#[ignore]`d real-prover
-# tests: the real-Kani obligation runs, the skeleton spine (one Boolean clause
-# through the real prover and native replay through QSL) and the witness join
-# (a real counterexample replayed natively). The filters follow `--` because
-# libtest accepts several; cargo's own positional filter takes one.
+# `kani_obligations`, `skeleton_spine`, `kani_witness_join`,
+# `bounded_kani_corpus` and `kani_generation` filters select those modules'
+# tests, and `--ignored` runs only their `#[ignore]`d real-prover tests: the
+# real-Kani obligation runs, the skeleton spine (one Boolean clause through the
+# real prover and native replay through QSL), the witness join (a real
+# counterexample replayed natively), the bounded corpus cases and the
+# generation adapter proofs run through `cargo kani`. The filters
+# follow `--` because libtest accepts several; cargo's own positional filter
+# takes one.
 # The test suite drives real tools: the native-coverage tests run `cargo +stable
 # llvm-cov` and read llvm-cov/llvm-profdata from the stable sysroot, and the Kani
 # tests run `cargo kani`. Install them once per machine.
@@ -79,7 +82,7 @@ tools:
 kani:
 	flock /tmp/agent-e-heavy-build.lock $(CARGO) +$(MSRV) test $(LOCKED) -j 4 \
 		--test it --target-dir target-codex-backends \
-		-- --ignored --test-threads=1 kani_obligations skeleton_spine kani_witness_join
+		-- --ignored --test-threads=1 kani_obligations skeleton_spine kani_witness_join bounded_kani_corpus kani_generation
 
 .PHONY: build
 build:

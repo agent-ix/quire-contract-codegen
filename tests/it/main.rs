@@ -11,8 +11,9 @@
 //!
 //! Tests that need their own process (a real, unshimmed `cargo kani` run under the host-wide
 //! `flock`) are `#[ignore]`d here exactly as they were before the merge and stay reachable by
-//! name filter: see `Makefile`'s `kani` target, which now runs
-//! `cargo test --test it kani_obligations -- --ignored --test-threads=1`.
+//! name filter: see `Makefile`'s `kani` target, which runs
+//! `cargo test --test it -- --ignored --test-threads=1` with the `kani_obligations`,
+//! `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus` and `kani_generation` filters.
 //!
 //! `common` is `mod`-included by six former top-level files. Cargo tolerated that -- each file
 //! used to be its own crate, so each had its own copy -- but `clippy::duplicate_mod` correctly
