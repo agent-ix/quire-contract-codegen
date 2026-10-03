@@ -642,7 +642,7 @@ fn render_result_bounds(results: &[KaniSubjectBinding]) -> String {
 
 fn map_clause_diagnostics(
     role: &str,
-    diagnostics: Vec<crate::GenerationDiagnostic>,
+    diagnostics: Vec<crate::core::diagnostic::GenerationDiagnostic>,
 ) -> Vec<KaniDiagnostic> {
     diagnostics
         .into_iter()

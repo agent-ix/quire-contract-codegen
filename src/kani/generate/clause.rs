@@ -9,7 +9,7 @@ use quire_contract_model::{
 };
 
 use crate::{
-    core::diagnostic::GenerationErrorCode,
+    core::diagnostic::{GenerationDiagnostic, GenerationErrorCode},
     core::naming::reference_identifier,
     kani::abi::{
         i64_literal, readable_component, KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType,
@@ -83,7 +83,7 @@ pub(super) fn lower_clause(
         expression: clause.expression(),
     };
     let first_code =
-        |diagnostics: Vec<crate::GenerationDiagnostic>| UnsupportedObligation::ClauseLowering {
+        |diagnostics: Vec<GenerationDiagnostic>| UnsupportedObligation::ClauseLowering {
             generation_code: diagnostics
                 .first()
                 .map_or(GenerationErrorCode::UnsupportedExpression, |diagnostic| {

@@ -24,7 +24,8 @@ pub enum ObligationKind {
     /// Lowered to a `kani::requires`/`kani::ensures` preservation contract.
     Invariant,
     /// A frame's effects; generated from its operation's `state_clause` by
-    /// [`crate::generate_state_frame_obligations`], never by the clause renderer.
+    /// [`generate_state_frame_obligations`](crate::kani::generate::frame::generate_state_frame_obligations),
+    /// never by the clause renderer.
     Frame,
 }
 

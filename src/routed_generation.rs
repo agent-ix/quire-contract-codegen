@@ -20,14 +20,20 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 
 use crate::{
+    capability::{BackendKind, Candidate},
     core::artifact::Artifact,
     core::identity::{HarnessPath, HarnessSymbol},
-    derive_exact_scalar_items, generate_exact_scalar_oracles,
+    kani::generate::negotiate::negotiate_kani_obligations,
+    kani::generate::outcome::{
+        InvalidObligationItem, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
+        ObligationDisposition, ObligationItem, ObligationRecord,
+    },
     kani::identity::KaniScalarObligationHarness,
-    negotiate_kani_obligations, BackendKind, Candidate, ClaimMap, ExactScalarClaim,
-    ExactScalarOracles, InvalidObligationItem, KaniObligationError, KaniObligationOutcome,
-    KaniObligationRequest, ObligationDisposition, ObligationItem, ObligationRecord,
-    OracleGenerationError,
+    oracle::claim::{ClaimMap, OracleGenerationError},
+    oracle::scalar::{
+        derive_exact_scalar_items, generate_exact_scalar_oracles, ExactScalarClaim,
+        ExactScalarOracles,
+    },
 };
 
 /// One item the driver routed to a backend.
