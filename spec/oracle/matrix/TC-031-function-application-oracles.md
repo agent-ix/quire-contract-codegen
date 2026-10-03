@@ -102,7 +102,9 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    and the zero counts are the evidence.
 9. 🚧 Planned (FR-021-AC-22): request two declarations sharing one declaring node id in each of
    four fixtures: (i) both bodies admissible; (ii) one body refused in Stage 1 and its same-node
-   sibling admissible; (iii) the two also sharing one name; (iv) a third declaration whose nested
+   sibling admissible; (iii) the two also sharing one name, plus a third declaration with its own distinct node id and
+   the same name (refused as `AmbiguousFunctionName`, absent from `checked_package()`, while items
+   naming the shared name are `DuplicateDeclaringNode`); (iv) a third declaration whose nested
    `call` names one of the pair, plus a distinct-node-id function, with an item naming each
    function. Generate each fixture twice, with the pair in both request orders. Assert, in every
    case and both orders: neither declaration of the pair appears in the emitted
