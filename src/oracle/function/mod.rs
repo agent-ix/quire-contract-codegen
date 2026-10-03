@@ -1065,13 +1065,14 @@ pub fn generate_exact_function_oracles(
     // declaration always resolves to the same (highest-sorted) node id
     // regardless of what order the caller passed its declarations in --
     // keeping AC-13's determinism-across-permutations guarantee even for an
-    // item naming an ambiguous function.
+    // item naming an ambiguous function. (A refused duplicate-node name keys
+    // by its own name as well, see `ItemKey::refused_name`.)
     let function_node_id_by_name: BTreeMap<&str, &CheckedNodeId> = ordered_functions
         .iter()
         .map(|declaration| (declaration.name.as_str(), &declaration.node_id))
         .collect();
     for item in items {
-        let key = ItemKey::of(item, &function_node_id_by_name);
+        let key = ItemKey::of(item, &function_node_id_by_name, &names);
         *counts.entry(key.clone()).or_insert(0) += 1;
         by_key.entry(key).or_insert(item);
     }
@@ -1089,7 +1090,11 @@ pub fn generate_exact_function_oracles(
     let mut pending = Vec::new();
     for ((key, item), record) in by_key.into_iter().zip(&call_lowering.records) {
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
-        let result = if duplicate {
+        // An item naming a refused duplicate-node function carries that
+        // refusal even when it was also requested more than once (AC-22).
+        let result = if let Some(refusal) = names.duplicate_node_refusal(&item.function) {
+            ClaimDisposition::Refused { refusal }
+        } else if duplicate {
             ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::DuplicateRequest,
             }
@@ -1245,13 +1250,22 @@ impl<'a> FunctionNames<'a> {
         self.unique_node_id.get(name).copied()
     }
 
+    /// `DuplicateDeclaringNode` when a declaration sharing its node id holds
+    /// `name`: the refusal that takes precedence over every other item
+    /// disposition, `DuplicateRequest` included.
+    fn duplicate_node_refusal(&self, name: &str) -> Option<ExactFunctionRefusal> {
+        self.duplicate_node_by_name.get(name).map(|node_id| {
+            ExactFunctionRefusal::DuplicateDeclaringNode {
+                node_id: (*node_id).clone(),
+            }
+        })
+    }
+
     /// The declaring node id an item naming `name` applies, or the refusal
     /// for it: the node-id check first, then absence, then name ambiguity.
     fn resolve(&self, name: &str) -> Result<&'a CheckedNodeId, ExactFunctionRefusal> {
-        if let Some(node_id) = self.duplicate_node_by_name.get(name) {
-            return Err(ExactFunctionRefusal::DuplicateDeclaringNode {
-                node_id: (*node_id).clone(),
-            });
+        if let Some(refusal) = self.duplicate_node_refusal(name) {
+            return Err(refusal);
         }
         if self.is_ambiguous(name) {
             return Err(ExactFunctionRefusal::AmbiguousFunctionName {
@@ -1349,12 +1363,18 @@ struct ItemKey {
     call_node_id: CheckedNodeId,
     function_node_id: Option<CheckedNodeId>,
     argument_node_ids: Vec<CheckedNodeId>,
+    /// The item's function name, set only when a declaration sharing its
+    /// declaring node id holds that name (FR-021-AC-22). Declarations sharing
+    /// a node id also share `function_node_id`, so without the name two items
+    /// naming different members of such a pair would collapse into one claim.
+    refused_name: Option<String>,
 }
 
 impl ItemKey {
     fn of(
         item: &ExactFunctionItem,
         function_node_id_by_name: &BTreeMap<&str, &CheckedNodeId>,
+        names: &FunctionNames<'_>,
     ) -> Self {
         Self {
             call_node_id: item.call_node_id.clone(),
@@ -1362,6 +1382,9 @@ impl ItemKey {
                 .get(item.function.as_str())
                 .map(|id| (*id).clone()),
             argument_node_ids: item.argument_node_ids.clone(),
+            refused_name: names
+                .duplicate_node_refusal(&item.function)
+                .map(|_| item.function.clone()),
         }
     }
 }

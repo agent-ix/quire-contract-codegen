@@ -100,26 +100,29 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    `src/oracle/function/mod.rs` and assert zero (FR-021-AC-21). The unknown variant itself cannot
    be built from a test crate because the runtime enum is `#[non_exhaustive]`, so the arm's text
    and the zero counts are the evidence.
-9. (FR-021-AC-22): request two declarations sharing one declaring node id in each of
-   four fixtures: (i) both bodies admissible; (ii) one body refused in Stage 1 and its same-node
-   sibling admissible; (iii) the two also sharing one name, plus a third declaration with its own distinct node id and
-   the same name (refused as `AmbiguousFunctionName`, absent from `checked_package()`, while items
-   naming the shared name are `DuplicateDeclaringNode`); (iv) a third declaration whose nested
-   `call` names one of the pair, plus a distinct-node-id function, with an item naming each
-   function. Generate each fixture twice, with the pair in both request orders. Assert, in every
-   case and both orders: neither declaration of the pair appears in the emitted
-   `checked_package()`, source or `location-map.json`; every item naming one of them is refused
-   with `ExactFunctionRefusal::DuplicateDeclaringNode` carrying the shared node id (the smallest in
-   node-id order when the item's name is held by duplicate groups on several node ids) (never `UnknownFunction`, and in fixture
-   (iii) never `AmbiguousFunctionName`); no claim-map entry records another function's name,
-   symbol or `Origin::Body` index; the third declaration of (iv) is refused as `UnknownCallee`;
-   and each item over a distinct-node-id function has a claim-map entry equal to the entry the
-   same request produces with the duplicate declarations removed. The tests are
-   `tc_031_ac22_fixture_i_both_bodies_admissible`,
+9. Request two declarations sharing one declaring node id (FR-021-AC-22) in each of six
+   fixtures: (i) both bodies admissible; (ii) one body refused in Stage 1 and its same-node
+   sibling admissible; (iii) the two also sharing one name, plus a third declaration with its own
+   distinct node id and the same name (absent from `checked_package()` and the location map, while
+   items naming the shared name are `DuplicateDeclaringNode`); (iv) a third declaration whose
+   nested `call` names one of the pair, plus a distinct-node-id function, with an item naming each
+   function; (v) one name held by two duplicate groups on different node ids, with an item naming
+   it; (vi) two items on one `call` node naming the two members of a pair, and one such item
+   requested twice. Generate each fixture under every permutation of the declaration order, which
+   includes both orders of the pair. Assert, in every case and order: neither declaration of the
+   pair appears in the emitted `checked_package()`, source or `location-map.json`; every item
+   naming one of them is refused with `ExactFunctionRefusal::DuplicateDeclaringNode` carrying the
+   shared node id (never `UnknownFunction`, never `DuplicateRequest`, and in fixture (iii) never
+   `AmbiguousFunctionName`), and in fixture (v) the smaller of the two node ids; no claim-map
+   entry records another function's name, symbol or `Origin::Body` index; the third declaration of
+   (iv) is refused as `UnknownCallee`; and each item over a distinct-node-id function has a
+   claim-map entry equal to the entry the same request produces with the duplicate declarations
+   removed. The tests are `tc_031_ac22_fixture_i_both_bodies_admissible`,
    `tc_031_ac22_fixture_ii_one_body_refused_and_sibling_admissible`,
-   `tc_031_ac22_fixture_iii_shared_name_takes_the_node_id_refusal` and
-   `tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee`, each over every
-   permutation of the declaration order. The comments in `src/oracle/function/mod.rs` (module doc
+   `tc_031_ac22_fixture_iii_shared_name_takes_the_node_id_refusal`,
+   `tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee`,
+   `tc_031_ac22_fixture_v_two_duplicate_groups_report_the_smallest_node_id` and
+   `tc_031_ac22_fixture_vi_same_call_node_items_over_a_pair_each_keep_the_node_refusal`. The comments in `src/oracle/function/mod.rs` (module doc
    "Package assembly" and the `own_shape`/`bodies` comment) no longer claim node-id keying alone
    prevents collapse, which does not hold for duplicate node ids.
 10. Grep the generated crate's source and its claim map for any read of, branch on, or non-emptiness

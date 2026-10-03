@@ -832,6 +832,63 @@ fn tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee()
     }
 }
 
+/// Trace: FR-021-AC-22, TC-031 step 9 fixture (v). One name is held by two duplicate groups, on
+/// `FN_ADD` and on `FN_EQ`: an item naming it is refused `DuplicateDeclaringNode` carrying the
+/// smaller of the two node ids, under every order of the declarations.
+#[test]
+fn tc_031_ac22_fixture_v_two_duplicate_groups_report_the_smallest_node_id() {
+    let package = ext_corpus_package().admit();
+    let smallest = std::cmp::min(code_id(FN_ADD), code_id(FN_EQ));
+    let functions = vec![
+        function_add("shared"),
+        function_add("shared"),
+        function_eq("shared"),
+        function_eq("shared"),
+    ];
+    let requested = vec![item(ITEM_CALL_ADD, "shared")];
+    for order in permutations(&functions) {
+        let oracles = generate(&package, &order, &requested);
+        match disposition_for(&oracles, ITEM_CALL_ADD) {
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::DuplicateDeclaringNode { node_id },
+            } => assert_eq!(*node_id, smallest),
+            other => panic!("expected DuplicateDeclaringNode, got {other:?}"),
+        }
+        assert!(oracles.location_map.is_empty());
+    }
+}
+
+/// Trace: FR-021-AC-22, TC-031 step 9 fixture (vi). Two items on one call node naming the two
+/// members of a duplicate pair, and one such item requested twice, each get
+/// `DuplicateDeclaringNode`: the refusal takes precedence over the duplicate-request collapse.
+#[test]
+fn tc_031_ac22_fixture_vi_same_call_node_items_over_a_pair_each_keep_the_node_refusal() {
+    let package = ext_corpus_package().admit();
+    let functions = vec![function_add("pair_one"), function_add("pair_two")];
+    let requested = vec![
+        item(ITEM_CALL_ADD, "pair_one"),
+        item(ITEM_CALL_ADD, "pair_two"),
+        item(ITEM_CALL_EQ, "pair_one"),
+        item(ITEM_CALL_EQ, "pair_one"),
+    ];
+    for order in permutations(&functions) {
+        let oracles = generate(&package, &order, &requested);
+        assert_eq!(oracles.claim_map.items.len(), 3);
+        for claim in &oracles.claim_map.items {
+            assert!(
+                matches!(
+                    &claim.result,
+                    ClaimDisposition::Refused {
+                        refusal: ExactFunctionRefusal::DuplicateDeclaringNode { node_id }
+                    } if *node_id == code_id(FN_ADD)
+                ),
+                "{:?}",
+                claim.result
+            );
+        }
+    }
+}
+
 /// Trace: FR-021-AC-19, TC-031. The emitted `src/lib.rs` of the main corpus
 /// (scalar `add_fn`, equality `eq_fn`, nested-call `call_fn`) and of the chain
 /// corpus contains no `.unwrap(`, no `.expect(` and no panicking macro in any
