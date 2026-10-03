@@ -15,6 +15,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::common::panic_scan::{non_test_code, panic_tokens_in};
 use crate::scratch_crate::{runtime_dependency, seed_lock};
 use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
@@ -883,7 +884,7 @@ fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_d
 
 /// Trace: FR-018-AC-12, TC-029.
 ///
-/// The `integer()` reconstruction helper is emitted only when some rendered
+/// The `rebuild_integer` reconstruction helper is emitted only when some rendered
 /// bound actually calls it (a reachable bounded `Int` or `Decimal`).
 /// Unconditional emission would be unused, and hence dead code, for a
 /// request that reaches neither — which would fail this same test's
@@ -901,8 +902,8 @@ fn tc_029_ac12_integer_helper_omitted_when_unreached() {
     let oracles = generate(&package, &request);
     let lib = contents(&oracles, "src/lib.rs");
     assert!(
-        !lib.contains("fn integer("),
-        "no reachable bounded Int/Decimal in this request; `integer()` must be omitted:\n{lib}"
+        !lib.contains("fn rebuild_integer(") && !lib.contains("fn rebuild_interval("),
+        "no reachable bounded Int/Decimal in this request; the integer helpers must be omitted:\n{lib}"
     );
 }
 
@@ -931,8 +932,7 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     }
 
     // The oracle function bodies specifically must contain none of the
-    // panic surface the FR forbids; the environment/composites helpers are
-    // allowed the disclosed `.expect(...)` on already-validated literals.
+    // panic surface the FR forbids (the whole crate's scan is AC-17's).
     for symbol_line in lib
         .lines()
         .filter(|line| line.starts_with("pub fn oracle_"))
@@ -1122,8 +1122,8 @@ fn tuple_refusal(extras: &[u32], members: &[u32]) -> CompositeEqualityRefusal {
 fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
     let (oracles, lib) = tuple_source(&[], &[T_INTEGER_BOUNDED, BD_TEXT]);
     let _ = generated(only_claim(&oracles, E_TUPLE));
-    let int = "rt::ValueType::Int(rt::IntegerInterval::new(integer(\"-100\"), integer(\"100\")).expect(\"generation-time validation guarantees this bound reconstructs\"))";
-    let text = "rt::ValueType::Text(rt::TextType::new(0, 16, rt::TextProfile::Nfc).expect(\"generation-time validation guarantees this bound reconstructs\"))";
+    let int = "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)";
+    let text = "rt::ValueType::Text(rebuild_text(0, 16, rt::TextProfile::Nfc)?)";
     assert!(
         lib.contains(&format!("rt::CompositeShape::Tuple(vec![{int}, {text}, ])")),
         "the declaration must be Tuple[Int[-100,100], Text(0,16,Nfc)]:\n{lib}"
@@ -1160,12 +1160,12 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
 fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
     let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT_SIBLING]);
     let _ = generated(only_claim(&oracles, E_TUPLE));
-    assert!(lib.contains("rt::TextType::new(1, 5, rt::TextProfile::Nfc)"));
-    assert!(!lib.contains("rt::TextType::new(0, 16,"));
+    assert!(lib.contains("rebuild_text(1, 5, rt::TextProfile::Nfc)?"));
+    assert!(!lib.contains("rebuild_text(0, 16,"));
     let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT]);
     let _ = generated(only_claim(&oracles, E_TUPLE));
-    assert!(lib.contains("rt::TextType::new(0, 16, rt::TextProfile::Nfc)"));
-    assert!(!lib.contains("rt::TextType::new(1, 5,"));
+    assert!(lib.contains("rebuild_text(0, 16, rt::TextProfile::Nfc)?"));
+    assert!(!lib.contains("rebuild_text(1, 5,"));
 }
 
 /// Trace: FR-018-AC-16, TC-029. A bound whose form is not the one its base scalar reads is
@@ -1219,4 +1219,410 @@ fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
             other => panic!("bound {bound}: expected Unsupported, got {other:?}"),
         }
     }
+}
+
+/// One `fn` of the emitted source: its name, its signature (up to the body's `{`), its body, and
+/// where it starts.
+struct EmittedFn<'s> {
+    name: &'s str,
+    signature: &'s str,
+    body: &'s str,
+    start: usize,
+}
+
+/// The offset of the delimiter closing the one opened at `open_at` in `text`.
+fn matching_close(text: &str, open_at: usize, open: char, close: char) -> Option<usize> {
+    let mut depth = 0usize;
+    for (offset, character) in text.get(open_at..)?.char_indices() {
+        if character == open {
+            depth += 1;
+        } else if character == close {
+            depth = depth.checked_sub(1)?;
+            if depth == 0 {
+                return Some(open_at + offset);
+            }
+        }
+    }
+    None
+}
+
+/// Every top-level `fn` and `pub fn` of the emitted source.
+fn emitted_fns(lib: &str) -> Vec<EmittedFn<'_>> {
+    let mut fns = Vec::new();
+    let mut start = 0;
+    for line in lib.split_inclusive('\n') {
+        let declaration = line.strip_prefix("pub ").unwrap_or(line);
+        if let Some(rest) = declaration.strip_prefix("fn ") {
+            let name_end = rest
+                .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .unwrap_or(rest.len());
+            let body_open = lib[start..].find('{').map(|at| start + at);
+            let body_close = body_open.and_then(|open| matching_close(lib, open, '{', '}'));
+            if let (Some(open), Some(close)) = (body_open, body_close) {
+                fns.push(EmittedFn {
+                    name: &rest[..name_end],
+                    signature: &lib[start..open],
+                    body: &lib[open..=close],
+                    start,
+                });
+            }
+        }
+        start += line.len();
+    }
+    fns
+}
+
+/// The helpers the emitted source reconstructs a bound through.
+const REBUILD_HELPERS: [&str; 6] = [
+    "rebuild_integer",
+    "rebuild_interval",
+    "rebuild_rational",
+    "rebuild_decimal",
+    "rebuild_text",
+    "rebuild_cardinality",
+];
+
+/// The `ReconstructionError` variant each helper fails with, and nothing else.
+const HELPER_VARIANTS: [(&str, &str); 6] = [
+    ("rebuild_integer", "Integer"),
+    ("rebuild_interval", "Interval"),
+    ("rebuild_rational", "Rational"),
+    ("rebuild_decimal", "Decimal"),
+    ("rebuild_text", "Text"),
+    ("rebuild_cardinality", "Cardinality"),
+];
+
+/// The emitted functions that return `Result<_, ReconstructionError>`: the helpers, and the
+/// per-item functions that build a declaration or a type from them.
+fn returns_reconstruction(name: &str) -> bool {
+    [
+        "rebuild_",
+        "composites_",
+        "left_source_",
+        "left_target_",
+        "right_source_",
+        "right_target_",
+    ]
+    .iter()
+    .any(|prefix| name.starts_with(prefix))
+}
+
+/// Every way `lib` departs from FR-018-AC-17's structural clauses, by description.
+fn structural_violations(lib: &str) -> Vec<String> {
+    let mut violations = Vec::new();
+    let fns = emitted_fns(lib);
+    let reconstructing: Vec<&EmittedFn<'_>> = fns
+        .iter()
+        .filter(|function| returns_reconstruction(function.name))
+        .collect();
+    for function in &reconstructing {
+        let returns = function
+            .signature
+            .rsplit_once("->")
+            .map(|(_, ret)| ret.trim());
+        if !returns.is_some_and(|ret| {
+            ret.starts_with("Result<") && ret.ends_with(", ReconstructionError>")
+        }) {
+            violations.push(format!(
+                "`{}` does not return Result<_, ReconstructionError>",
+                function.name
+            ));
+        }
+        let call = format!("{}(", function.name);
+        for (at, _) in lib.match_indices(&call) {
+            let before = &lib[..at];
+            let own_signature = before.ends_with("fn ");
+            let inside_name = before
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_');
+            if own_signature || inside_name {
+                continue;
+            }
+            let Some(close) = matching_close(lib, at + function.name.len(), '(', ')') else {
+                violations.push(format!("call of `{}` has no closing paren", function.name));
+                continue;
+            };
+            let after = &lib[close + 1..];
+            if after.starts_with('?') {
+                continue;
+            }
+            let block_open = after
+                .trim_start()
+                .starts_with('{')
+                .then(|| close + 1 + (after.len() - after.trim_start().len()));
+            let block = block_open
+                .and_then(|open| matching_close(lib, open, '{', '}').map(|end| &lib[open..=end]));
+            let handled = before.ends_with("match ")
+                && block.is_some_and(|block| {
+                    block.contains("Err(")
+                        && (block.contains("EnvironmentError::Reconstruction")
+                            || (block.contains("Outcome::Refused(")
+                                && block.contains("Refusal::CheckedInvariant")))
+                });
+            if !handled {
+                violations.push(format!(
+                    "call of `{}` is not followed by `?` or a match refusing the failure",
+                    function.name
+                ));
+            }
+        }
+    }
+    for constructor in [
+        "IntegerInterval::new",
+        "RationalDomain::new",
+        "TextType::new",
+        "CardinalityBound::new",
+        "DecimalType::new",
+        ".parse(",
+    ] {
+        for (at, _) in lib.match_indices(constructor) {
+            let enclosing = fns.iter().rfind(|function| function.start <= at);
+            if !enclosing.is_some_and(|function| function.name.starts_with("rebuild_")) {
+                violations.push(format!("`{constructor}` outside a reconstruction helper"));
+            }
+        }
+    }
+    for function in &fns {
+        let Some((_, variant)) = HELPER_VARIANTS
+            .iter()
+            .find(|(helper, _)| *helper == function.name)
+        else {
+            continue;
+        };
+        let body: String = function
+            .body
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect();
+        if body
+            .matches(&format!(".map_err(|_|ReconstructionError::{variant})"))
+            .count()
+            != 1
+            || body.matches("ReconstructionError::").count() != 1
+        {
+            violations.push(format!(
+                "`{}` does not fail with exactly ReconstructionError::{variant}",
+                function.name
+            ));
+        }
+        for combinator in [
+            "or_else",
+            "unwrap_or",
+            ".or(",
+            ".ok(",
+            "map_or",
+            "match",
+            "Ok(",
+            "Err(",
+        ] {
+            if body.contains(combinator) {
+                violations.push(format!(
+                    "`{}` handles its failure with `{combinator}`",
+                    function.name
+                ));
+            }
+        }
+    }
+    violations
+}
+
+/// The offsets of a `[` that directly follows an identifier character, `)` or `]`: an index or
+/// slice expression.
+fn index_expressions(lib: &str) -> Vec<usize> {
+    lib.char_indices()
+        .filter(|(at, character)| {
+            *character == '['
+                && lib[..*at]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|before| before.is_alphanumeric() || "_)]".contains(before))
+        })
+        .map(|(at, _)| at)
+        .collect()
+}
+
+/// The text of the emitted `pub enum name { .. }`.
+fn emitted_enum<'l>(lib: &'l str, name: &str) -> &'l str {
+    let header = format!("pub enum {name} {{");
+    let open = lib
+        .find(&header)
+        .unwrap_or_else(|| panic!("the emitted source defines no `{header}`"))
+        + header.len()
+        - 1;
+    let close = matching_close(lib, open, '{', '}').expect("enum body closes");
+    &lib[open..=close]
+}
+
+/// Trace: FR-018-AC-17, TC-029. The `src/lib.rs` the generator returns for the corpus request
+/// (every generated item) holds no panic token, no silent fallback, and no index or slice
+/// expression.
+#[test]
+fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
+    let oracles = corpus_oracles();
+    let lib = contents(&oracles, "src/lib.rs");
+    assert!(
+        lib.matches("pub fn oracle_").count() > 1,
+        "the corpus must generate more than one item"
+    );
+    assert_eq!(panic_tokens_in(lib), Vec::<String>::new());
+    for fallback in [".ok()", ".unwrap_or(", ".unwrap_or_default("] {
+        assert!(
+            !lib.contains(fallback),
+            "the emitted source holds `{fallback}`"
+        );
+    }
+    assert_eq!(
+        index_expressions(lib),
+        Vec::<usize>::new(),
+        "an index or slice expression in the emitted source"
+    );
+}
+
+/// Trace: FR-018-AC-17, TC-029. Every reconstruction in the corpus crate goes through a helper
+/// returning `Result<_, ReconstructionError>`, every call of one is propagated or refused, no
+/// runtime constructor or integer parse is called outside a helper, and the two error enums have
+/// the variants the criterion lists.
+#[test]
+fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
+    let oracles = corpus_oracles();
+    let lib = contents(&oracles, "src/lib.rs");
+    let fns = emitted_fns(lib);
+    for helper in REBUILD_HELPERS {
+        assert!(
+            fns.iter().any(|function| function.name == helper),
+            "the corpus crate does not exercise `{helper}`"
+        );
+    }
+    assert_eq!(structural_violations(lib), Vec::<String>::new());
+    // The refusal paths exist: the environment constructors map a failure to
+    // `EnvironmentError::Reconstruction`, and the oracle functions to `CheckedInvariant`.
+    let environments: Vec<_> = fns
+        .iter()
+        .filter(|function| function.name.starts_with("environment_"))
+        .collect();
+    assert!(!environments.is_empty());
+    for function in environments {
+        assert!(function
+            .signature
+            .contains("Result<rt::TypeEnvironment, EnvironmentError>"));
+        assert!(function
+            .body
+            .contains("Err(error) => return Err(EnvironmentError::Reconstruction(error))"));
+    }
+    for function in fns
+        .iter()
+        .filter(|function| function.name.starts_with("oracle_"))
+    {
+        assert!(function
+            .body
+            .contains("Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant)"));
+    }
+
+    let environment_error = emitted_enum(lib, "EnvironmentError");
+    assert!(environment_error.contains("Declaration(rt::InvalidDeclaration),"));
+    assert!(environment_error.contains("Reconstruction(ReconstructionError),"));
+    let variants: Vec<&str> = emitted_enum(lib, "ReconstructionError")
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with("///") && *line != "{" && *line != "}")
+        .collect();
+    assert_eq!(
+        variants,
+        [
+            "Integer,",
+            "Interval,",
+            "Rational,",
+            "Decimal,",
+            "Text,",
+            "Cardinality,"
+        ],
+        "ReconstructionError must have exactly these unit variants"
+    );
+}
+
+/// Trace: FR-018-AC-17, TC-029. The structural checker names each way a source can depart from
+/// the criterion, so the corpus test above is a check that can fail.
+#[test]
+fn tc_029_ac17_the_structural_checker_names_each_departure() {
+    let wrong_return = "fn rebuild_interval(a: &str) -> rt::IntegerInterval {\n    todo_body\n}\n";
+    assert!(structural_violations(wrong_return)
+        .iter()
+        .any(|violation| violation.contains("does not return Result")));
+
+    let unpropagated = "fn rebuild_text() -> Result<rt::TextType, ReconstructionError> {\n    Err(ReconstructionError::Text)\n}\n\
+                        fn composites_x() -> Result<Vec<u8>, ReconstructionError> {\n    let t = rebuild_text();\n    Ok(Vec::new())\n}\n";
+    assert!(structural_violations(unpropagated)
+        .iter()
+        .any(|violation| violation.contains("not followed by `?`")));
+
+    let silent_match = "fn rebuild_text() -> Result<rt::TextType, ReconstructionError> {\n    Err(ReconstructionError::Text)\n}\n\
+                        fn composites_x() -> Result<Vec<u8>, ReconstructionError> {\n    let t = match rebuild_text() {\n        Ok(t) => t,\n        Err(_) => rt::TextType::unbounded(),\n    };\n    Ok(Vec::new())\n}\n";
+    assert!(structural_violations(silent_match)
+        .iter()
+        .any(|violation| violation.contains("not followed by `?`")));
+
+    let inline_constructor = "fn composites_x() -> Result<Vec<u8>, ReconstructionError> {\n    let t = rt::TextType::new(0, 1, p);\n    Ok(Vec::new())\n}\n";
+    assert!(structural_violations(inline_constructor)
+        .iter()
+        .any(|violation| violation.contains("outside a reconstruction helper")));
+
+    let inline_parse = "fn oracle_x() -> u8 {\n    \"1\".parse()\n}\n";
+    assert!(structural_violations(inline_parse)
+        .iter()
+        .any(|violation| violation.contains(".parse(")));
+
+    let helper = |name: &str, body: &str| {
+        format!("fn {name}(a: u64) -> Result<rt::X, ReconstructionError> {{\n    {body}\n}}\n")
+    };
+    let wrong_variant = helper(
+        "rebuild_text",
+        "rt::TextType::new(a).map_err(|_| ReconstructionError::Cardinality)",
+    );
+    assert!(structural_violations(&wrong_variant)
+        .iter()
+        .any(|violation| violation.contains("exactly ReconstructionError::Text")));
+    let silent_widen = helper(
+        "rebuild_cardinality",
+        "rt::CardinalityBound::new(a, 1).or_else(|_| rt::CardinalityBound::new(0, u64::MAX)).map_err(|_| ReconstructionError::Cardinality)",
+    );
+    assert!(structural_violations(&silent_widen)
+        .iter()
+        .any(|violation| violation.contains("`or_else`")));
+    let swallowed = helper(
+        "rebuild_rational",
+        "Ok(rt::RationalDomain::new(a).ok().unwrap_or_default()) // map_err(|_| ReconstructionError::Rational)",
+    );
+    assert!(structural_violations(&swallowed)
+        .iter()
+        .any(|violation| violation.contains("`.ok(`")));
+    let good = helper(
+        "rebuild_text",
+        "rt::TextType::new(a).map_err(|_| ReconstructionError::Text)",
+    );
+    assert_eq!(structural_violations(&good), Vec::<String>::new());
+
+    assert_eq!(
+        index_expressions("let a = v[0]; let b = f()[1]; let c = x[1][2];").len(),
+        4
+    );
+    assert!(index_expressions("let a = vec![1]; let b = f([1]); let c = [1];").is_empty());
+}
+
+/// Trace: FR-018-AC-19, TC-029. The composite-equality generator's non-test code holds no panic
+/// token, counting the string literals it emits.
+#[test]
+fn tc_029_ac19_the_equality_generator_source_holds_no_panic_token() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/oracle/equality/mod.rs");
+    let source = fs::read_to_string(path).expect("read the generator source");
+    let code = non_test_code(&source);
+    // The scan must have removed the test module and nothing before it: the last generator
+    // function sits just above the module, and the module's own tests are gone.
+    assert!(code.contains("fn artifact(") && code.contains("fn render_value_type("));
+    assert!(!code.contains("mod tests") && !code.contains("fn tc_029_"));
+    assert_eq!(
+        panic_tokens_in(&code),
+        Vec::<String>::new(),
+        "src/oracle/equality/mod.rs"
+    );
 }

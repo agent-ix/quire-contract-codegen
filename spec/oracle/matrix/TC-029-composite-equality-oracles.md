@@ -117,7 +117,12 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    `Decimal`, `Text` and `Cardinality`, and no call of `IntegerInterval::new`,
    `RationalDomain::new`, `TextType::new`, `CardinalityBound::new`,
    `DecimalType::new` or an integer `.parse()` appears outside a reconstruction
-   helper. No valid request makes a reconstruction fail, so the failure path is verified
+   helper. Assert each of `rebuild_integer`, `rebuild_interval`, `rebuild_rational`,
+   `rebuild_decimal`, `rebuild_text` and `rebuild_cardinality` fails with exactly
+   its own `ReconstructionError` variant through one `map_err`, with no other
+   variant and no `or_else`, `or`, `ok`, `unwrap_or`, `map_or` or `match`, and show
+   by hand-written snippets (a wrong variant, a silent widen, a swallowed failure)
+   that the check names each departure. No valid request makes a reconstruction fail, so the failure path is verified
    structurally here and not by execution.
 10. Render unit test (FR-018-AC-18). In the `#[cfg(test)]` tests of
     `src/oracle/equality/mod.rs`, call `render_value_type` with
@@ -134,11 +139,16 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     quantity operand is refused earlier as `CompositeEqualityRefusal::Unsupported`
     and a reference operand by Contract IR, which AC-7 already covers.
 11. Generator-source scan (FR-018-AC-19). Read the non-test text of
-    `src/oracle/equality/mod.rs` (everything before its `#[cfg(test)]` module,
-    comment lines dropped, string literals kept) and assert zero occurrences of
-    `.unwrap(`, `.expect(`, `.unwrap_unchecked(`, `panic!`, `unreachable!`,
-    `todo!`, `unimplemented!`, `assert!`, `assert_eq!`, `assert_ne!`,
-    `debug_assert!` and `process::abort`, the macros in any delimiter form.
+    `src/oracle/equality/mod.rs` (comments and every `#[cfg(test)]` item removed
+    wherever the item sits, string literals kept), assert the scan removed the test
+    module and nothing before it, and assert zero panic tokens as FR-018-AC-19
+    defines them: `unwrap`, `expect`, `unwrap_unchecked`, `unwrap_err`,
+    `expect_err`, `unwrap_err_unchecked`, `panic_any` and `resume_unwind` however
+    written (including `Option::unwrap` and `.unwrap ()`), the macros `panic`,
+    `unreachable`, `todo`, `unimplemented`, `assert`, `assert_eq`, `assert_ne`,
+    `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form,
+    and `abort` anywhere but as a method call. The scan is shown to name each spelling by
+    the TC-024 panic-scan snippet test, which shares it.
 
 ## Expected Results
 

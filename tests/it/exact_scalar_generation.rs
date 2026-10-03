@@ -9,6 +9,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::common::panic_scan::{comments_stripped, non_test_code, panic_tokens_in};
 use crate::scratch_crate::seed_lock;
 use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
@@ -57,8 +58,13 @@ impl Drop for TemporaryDirectory {
     }
 }
 
+/// Generate, and scan the `src/lib.rs` it produced for a panic site (FR-014-AC-39). Every crate
+/// this module's TC-024 tests generate comes through here, so each one is scanned.
 fn generate(package: &CheckedPackageV2, items: &[ExactScalarItem]) -> ExactScalarOracles {
-    generate_exact_scalar_oracles(package, items).expect("generation succeeds")
+    let oracles = generate_exact_scalar_oracles(package, items).expect("generation succeeds");
+    let found = panic_tokens_in(contents(&oracles, "src/lib.rs"));
+    assert!(found.is_empty(), "generated src/lib.rs holds {found:?}");
+    oracles
 }
 
 fn contents<'o>(oracles: &'o ExactScalarOracles, path: &str) -> &'o str {
@@ -2108,6 +2114,133 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
     ));
 }
 
+/// Trace: FR-014-AC-39, FR-018-AC-19, TC-024, TC-029. The shared scan names every token the two
+/// criteria list, in each delimiter form and with whitespace before the `!`, and does not name
+/// the allowed lookalikes, so a scan test built on it can fail on each and only on those.
+#[test]
+fn tc_024_ac39_the_panic_scan_names_every_banned_token_and_no_lookalike() {
+    for banned in [
+        "x.unwrap()",
+        "x.unwrap ()",
+        "x\n    .unwrap()",
+        "x.map(Option::unwrap)",
+        "Result::expect(x, \"m\")",
+        "use std::option::Option::unwrap;",
+        "x.expect(\"m\")",
+        "x.expect_err(\"m\")",
+        "x.unwrap_err()",
+        "x.unwrap_err_unchecked()",
+        "std::panic::panic_any(1)",
+        "std::panic::resume_unwind(b)",
+        "x.unwrap_unchecked()",
+        "panic!(\"m\")",
+        "panic![]",
+        "panic!{}",
+        "panic !(\"m\")",
+        "std::panic!(\"m\")",
+        "unreachable!()",
+        "todo!()",
+        "unimplemented!()",
+        "assert!(a)",
+        "assert_eq!(a, b)",
+        "assert_ne!(a, b)",
+        "debug_assert!(a)",
+        "debug_assert_eq!(a, b)",
+        "debug_assert_ne!(a, b)",
+        "std::process::abort()",
+        "use std::process::abort;\nfn f() { abort() }",
+        "use std::process::{abort};",
+    ] {
+        assert!(
+            !panic_tokens_in(banned).is_empty(),
+            "the scan missed `{banned}`"
+        );
+    }
+    for allowed in [
+        "x.unwrap_or_else(f)",
+        "x.unwrap_or(1)",
+        "x.unwrap_or_default()",
+        "let assertion = 1;",
+        "fn panic_free() {}",
+        "a != b && todo != 1",
+        "handle.abort()",
+    ] {
+        assert_eq!(
+            panic_tokens_in(allowed),
+            Vec::<String>::new(),
+            "the scan named `{allowed}`"
+        );
+    }
+}
+
+/// Trace: FR-014-AC-39, FR-018-AC-19, TC-024, TC-029. `non_test_code` removes the items a
+/// `#[cfg(test)]` attribute governs by structure, wherever they sit, and keeps everything else:
+/// an earlier mention of the attribute in a comment or a literal cuts nothing, code after a test
+/// module is kept, braces in literals do not end the module early, and comments are dropped
+/// without mistaking `//` inside a string for one.
+#[test]
+fn tc_024_ac39_non_test_code_strips_test_items_by_structure() {
+    let source = "\
+// the module below is #[cfg(test)]
+fn before() { a.unwrap() }
+/* #[cfg(test)] fn commented() { todo!() } */
+fn literal() -> &'static str { \"#[cfg(test)] http://x\" }
+#[cfg(test)]
+mod tests {
+    fn t() { let s = \"}\"; let c = '{'; todo!() }
+}
+fn after() { b.expect(1) }
+#[cfg(test)]
+use helper::only_in_tests;
+fn last() { c.unwrap_or(1) }
+";
+    let code = non_test_code(source);
+    for kept in [
+        "fn before()",
+        "a.unwrap()",
+        "fn literal()",
+        "http://x",
+        "fn after()",
+        "b.expect(1)",
+        "fn last()",
+    ] {
+        assert!(code.contains(kept), "`{kept}` was dropped from:\n{code}");
+    }
+    for dropped in [
+        "mod tests",
+        "todo!",
+        "only_in_tests",
+        "commented",
+        "the module below",
+    ] {
+        assert!(!code.contains(dropped), "`{dropped}` survived in:\n{code}");
+    }
+    assert_eq!(
+        panic_tokens_in(&code),
+        vec!["expect".to_owned(), "unwrap".to_owned()]
+    );
+}
+
+/// Trace: FR-014-AC-39, TC-024. The scalar generator's non-test code holds no panic site, and
+/// neither does the `src/lib.rs` of the corpus crate (every other crate this module generates
+/// is scanned inside [`generate`] as it is produced).
+#[test]
+fn tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let source = fs::read_to_string(root.join("src/oracle/scalar/mod.rs")).expect("read generator");
+    assert_eq!(
+        panic_tokens_in(&non_test_code(&source)),
+        Vec::<String>::new(),
+        "src/oracle/scalar/mod.rs"
+    );
+    let oracles = corpus_oracles();
+    assert_eq!(
+        panic_tokens_in(contents(&oracles, "src/lib.rs")),
+        Vec::<String>::new(),
+        "the TC-024 corpus crate"
+    );
+}
+
 /// The panicking macros no generator or generated oracle may invoke.
 const PANICKING_MACROS: [&str; 4] = ["unreachable", "panic", "todo", "unimplemented"];
 
@@ -2133,51 +2266,31 @@ pub(crate) fn invokes_panicking_macro(text: &str) -> bool {
 /// variant. The RT enums are `#[non_exhaustive]` and foreign to this crate, so a test cannot build
 /// an unknown variant to drive `OracleGenerationError::UnknownRuntimeVariant`, and every mapper
 /// takes the RT enum directly (there is no CG-local seam to inject one through). The evidence is
-/// therefore the source itself: the exact-scalar, composite-equality and function generators
+/// therefore the source itself: the exact-scalar and composite-equality generators minus comments
+/// and any `#[cfg(test)]` item wherever it sits (`non_test_code`, as their ACs say), and the
+/// function generator whole, minus comments only (`comments_stripped`, as FR-021-AC-21 says),
 /// contain no `unreachable!`, `panic!`, `todo!` or `unimplemented!` invocation (any delimiter,
-/// any path prefix) except two distinct arms, each pinned by file and arm text and required to
-/// appear once:
-/// - equality: the `ValueType::Quantity` and `ValueType::Reference` arms, named variants refused
-///   earlier at generation time (not unknown variants).
-///
-/// `src/oracle/function/mod.rs` has no excusal: it holds zero invocations (FR-021-AC-21).
-///
-/// Lines that are `//` comments are skipped.
+/// any path prefix) and no excused arm. The equality generator's two former `unreachable!` arms,
+/// for `ValueType::Quantity` and `ValueType::Reference`, now return a typed render error
+/// (FR-018-AC-18).
 #[test]
-fn oracle_generators_have_no_unexcused_panicking_arms() {
-    /// (file, arm text that identifies the excused line, exact number of such lines)
-    const EXCUSED: [(&str, &str, usize); 2] = [
-        (
-            "src/oracle/equality/mod.rs",
-            "unreachable!(\"quantity leaves are refused at generation time\")",
-            1,
-        ),
-        (
-            "src/oracle/equality/mod.rs",
-            "unreachable!(\"reference operands are refused at generation time\")",
-            1,
-        ),
-    ];
-
+fn oracle_generators_have_no_panicking_arms() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut offending = Vec::new();
-    let mut excused_counts = vec![0usize; EXCUSED.len()];
-    for file in [
-        "src/oracle/scalar/mod.rs",
-        "src/oracle/equality/mod.rs",
-        "src/oracle/function/mod.rs",
+    for (file, whole_file) in [
+        ("src/oracle/scalar/mod.rs", false),
+        ("src/oracle/equality/mod.rs", false),
+        ("src/oracle/function/mod.rs", true),
     ] {
         let source = fs::read_to_string(root.join(file)).expect("read generator source");
-        for (index, line) in source.lines().enumerate() {
-            if line.trim_start().starts_with("//") || !invokes_panicking_macro(line) {
-                continue;
-            }
-            let excuse = EXCUSED
-                .iter()
-                .position(|(path, text, _)| *path == file && line.contains(text));
-            match excuse {
-                Some(position) => excused_counts[position] += 1,
-                None => offending.push(format!("{file}:{}: {}", index + 1, line.trim())),
+        let counted = if whole_file {
+            comments_stripped(&source)
+        } else {
+            non_test_code(&source)
+        };
+        for line in counted.lines() {
+            if invokes_panicking_macro(line) {
+                offending.push(format!("{file}: {}", line.trim()));
             }
         }
     }
@@ -2185,10 +2298,16 @@ fn oracle_generators_have_no_unexcused_panicking_arms() {
         offending.is_empty(),
         "panicking arms in generator source: {offending:#?}"
     );
-    for (position, (file, text, expected)) in EXCUSED.iter().enumerate() {
-        assert_eq!(
-            excused_counts[position], *expected,
-            "excused arm `{text}` in {file} must appear exactly {expected} time(s)"
-        );
-    }
+}
+
+/// Trace: FR-021-AC-21, TC-031. The whole-file scan of the function generator counts a
+/// `#[cfg(test)]` module: a banned macro inside one survives `comments_stripped` and is named,
+/// where `non_test_code` would drop it, and a banned word inside a comment is not counted.
+#[test]
+fn tc_031_ac21_the_whole_file_scan_counts_a_test_module_and_not_a_comment() {
+    let source = "fn real() {}\n// todo!()\n#[cfg(test)]\nmod probe_tests {\n    fn p() { unreachable!(\"probe\") }\n}\n";
+    let whole = comments_stripped(source);
+    assert!(whole.lines().any(invokes_panicking_macro));
+    assert_eq!(panic_tokens_in(&whole), vec!["unreachable!".to_owned()]);
+    assert!(!non_test_code(source).lines().any(invokes_panicking_macro));
 }

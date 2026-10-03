@@ -19,7 +19,7 @@
 //! checks the descriptor through `TypeEnvironment::check_equality` (refusing
 //! per [`IllTypedCauseKind`] on failure), and emits two functions per
 //! surviving item: an environment constructor
-//! (`Result<TypeEnvironment, InvalidDeclaration>`) and an oracle function
+//! (`Result<TypeEnvironment, EnvironmentError>`) and an oracle function
 //! (`(&TypeEnvironment, &Value, &Value, &mut Meter) -> Outcome<bool>`). The
 //! oracle calls `TypeEnvironment::check_type` on each operand's comparison
 //! type before `check_equality`, so a caller-supplied environment that does
@@ -38,26 +38,18 @@
 //! | `sequence`, `set`, `bag`, `ordered_set` | a `reference` to the element type node, then a `reference` to the `collection_bounds` domain node |
 //! | `collection_bounds` | two canonical decimal `integer` literals: minimum, maximum |
 //!
-//! Every runtime constructor this generator or its emitted source calls to
+//! Neither this generator nor the source it emits panics (FR-018-AC-17,
+//! FR-018-AC-19). Every runtime constructor the emitted source calls to
 //! rebuild a bound (`IntegerInterval::new`, `RationalDomain::new`,
-//! `DecimalType::new`, `TextType::new`, `CardinalityBound::new`) is fallible
-//! only on values this generator has already validated once, at generation
-//! time, through the identical pure constructor over the identical canonical
-//! literal. The emitted **oracle function** never calls any of them and never
-//! panics, exactly as FR-018-AC-8 and FR-018-AC-9 require: it receives its
-//! `ValueType` trees from a private per-item helper. That helper, and the
-//! public environment constructor's `composites_*` helper, both call these
-//! constructors through a generated `.expect("generation-time validation
-//! guarantees this bound reconstructs")` — a narrow, disclosed exception to
-//! "no panic" that is textually scoped to construction the emitted crate
-//! shares with its already-validated generation-time twin, not to the oracle
-//! function's own control flow, which the FR's no-panic sentence names
-//! explicitly. `TypeEnvironment::new` itself is not wrapped this way: its
-//! `Result<TypeEnvironment, InvalidDeclaration>` is the environment
-//! constructor's own declared return type and is propagated unchanged, because
-//! a caller may reasonably want to observe a declaration refusal rather than
-//! have it hidden behind a panic that can never fire in this generator's own
-//! use.
+//! `DecimalType::new`, `TextType::new`, `CardinalityBound::new`, and the integer
+//! parse) is called only inside a `rebuild_*` helper returning
+//! `Result<_, ReconstructionError>`. The per-item `ValueType` functions
+//! propagate that `Result`; the environment constructor turns a failure into
+//! `EnvironmentError::Reconstruction`, and the oracle function into
+//! `Outcome::Refused(Refusal::CheckedInvariant)`. A runtime that tightens a
+//! constructor therefore refuses; it never panics a generated oracle and never
+//! widens a type. `TypeEnvironment::new`'s own refusal is the constructor's
+//! `EnvironmentError::Declaration`.
 //!
 //! Model graph, identity and reachability oracles
 //! (agent-ix/quire-spec-language#120), function application oracles
@@ -632,21 +624,7 @@ pub fn generate_composite_equality_oracles(
             result,
         });
     }
-    // Each oracle is named by its operator; oracles sharing one are numbered in key order, so a
-    // refused or differently requested sibling never renames one.
-    let names = unique_names(
-        pending
-            .iter()
-            .map(|(_, key, item, _)| (item.operator.identity().replace('.', "_"), key.clone()))
-            .collect(),
-    );
-    for ((claim, _, item, generated), symbol) in pending.into_iter().zip(names) {
-        source.item(&symbol, item, &generated)?;
-        if let ClaimDisposition::Generated(claim) = &mut claims[claim].result {
-            claim.environment_symbol = format!("environment_{symbol}");
-            claim.oracle_symbol = format!("oracle_{symbol}");
-        }
-    }
+    render_and_emit(&mut claims, &mut source, pending, render_item)?;
 
     let claim_map = ClaimMap {
         package_id: lowering.package.source_package_id().clone(),
@@ -1395,25 +1373,245 @@ const SOURCE_HEADER: &str = "\
 // so that it can be `include!`d; the manifest forbids unsafe code instead.
 
 use quire_contract_runtime::exact as rt;
-";
 
-/// Reconstructs a canonical decimal integer literal at generation-time
-/// output. Emitted only when a rendered bound actually calls `integer(...)`
-/// (a bounded `Int` or `Decimal` value type reached by some generated item);
-/// unconditional emission would be unused, and hence dead code under the
-/// generated crate's own `-D warnings` build, for a request that reaches
-/// neither.
-const INTEGER_HELPER: &str = "\n\
-/// A canonical decimal integer literal, re-parsed from generation-time
-/// output. Reconstructing it can fail only if the emitted spelling does not
-/// round-trip through `rt::Integer`'s own parser, which generation already
-/// validated once through the identical parser over the identical spelling.
-fn integer(spelling: &str) -> rt::Integer {
-    spelling
-        .parse()
-        .expect(\"generation-time validation guarantees this literal reconstructs\")
+/// Why an emitted bound could not be rebuilt from its generation-time spelling. Each variant
+/// names the `rebuild_*` helper that failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReconstructionError {
+    /// `rebuild_integer` could not parse a canonical integer literal.
+    Integer,
+    /// `rebuild_interval` was given an empty interval.
+    Interval,
+    /// `rebuild_rational` was given a domain the runtime refuses.
+    Rational,
+    /// `rebuild_decimal` was given a decimal type the runtime refuses.
+    Decimal,
+    /// `rebuild_text` was given a text type the runtime refuses.
+    Text,
+    /// `rebuild_cardinality` was given an empty cardinality bound.
+    Cardinality,
+}
+
+/// Why an environment constructor returned no environment.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EnvironmentError {
+    /// The runtime refused the declaration closure.
+    Declaration(rt::InvalidDeclaration),
+    /// A bound of a declaration did not reconstruct.
+    Reconstruction(ReconstructionError),
 }
 ";
+
+/// One emitted reconstruction helper: its name, its source, and the names of the helpers its
+/// source calls. A helper is emitted only when the rendered functions call it, or when an
+/// emitted helper does: an unused one would be dead code under the generated crate's own
+/// `-D warnings` build. A runtime constructor, or an integer parse, appears only in one of these.
+struct ReconstructionHelper {
+    name: &'static str,
+    source: &'static str,
+    calls: &'static [&'static str],
+}
+
+/// The reconstruction helpers, callees before callers.
+const RECONSTRUCTION_HELPERS: &[ReconstructionHelper] = &[
+    ReconstructionHelper {
+        name: "rebuild_integer",
+        source: "\n\
+/// A canonical decimal integer literal, re-parsed from generation-time output.
+fn rebuild_integer(spelling: &str) -> Result<rt::Integer, ReconstructionError> {
+    spelling.parse().map_err(|_| ReconstructionError::Integer)
+}
+",
+        calls: &[],
+    },
+    ReconstructionHelper {
+        name: "rebuild_interval",
+        source: "\n\
+/// An integer interval over two canonical integer literals.
+fn rebuild_interval(lower: &str, upper: &str) -> Result<rt::IntegerInterval, ReconstructionError> {
+    rt::IntegerInterval::new(rebuild_integer(lower)?, rebuild_integer(upper)?)
+        .map_err(|_| ReconstructionError::Interval)
+}
+",
+        calls: &["rebuild_integer"],
+    },
+    ReconstructionHelper {
+        name: "rebuild_rational",
+        source: "\n\
+/// A rational domain over a numerator and a denominator interval.
+fn rebuild_rational(
+    numerator: rt::IntegerInterval,
+    denominator: rt::IntegerInterval,
+) -> Result<rt::RationalDomain, ReconstructionError> {
+    rt::RationalDomain::new(numerator, denominator).map_err(|_| ReconstructionError::Rational)
+}
+",
+        calls: &[],
+    },
+    ReconstructionHelper {
+        name: "rebuild_decimal",
+        source: "\n\
+/// A decimal type over two canonical integer literals, a scale range and a rounding mode.
+fn rebuild_decimal(
+    lower: &str,
+    upper: &str,
+    min_scale: u64,
+    max_scale: u64,
+    rounding: rt::RoundingMode,
+) -> Result<rt::DecimalType, ReconstructionError> {
+    rt::DecimalType::new(
+        rebuild_integer(lower)?,
+        rebuild_integer(upper)?,
+        min_scale,
+        max_scale,
+        rounding,
+    )
+    .map_err(|_| ReconstructionError::Decimal)
+}
+",
+        calls: &["rebuild_integer"],
+    },
+    ReconstructionHelper {
+        name: "rebuild_text",
+        source: "\n\
+/// A text type over a length range and a profile.
+fn rebuild_text(
+    min: u64,
+    max: u64,
+    profile: rt::TextProfile,
+) -> Result<rt::TextType, ReconstructionError> {
+    rt::TextType::new(min, max, profile).map_err(|_| ReconstructionError::Text)
+}
+",
+        calls: &[],
+    },
+    ReconstructionHelper {
+        name: "rebuild_cardinality",
+        source: "\n\
+/// A collection cardinality bound.
+fn rebuild_cardinality(
+    minimum: u64,
+    maximum: u64,
+) -> Result<rt::CardinalityBound, ReconstructionError> {
+    rt::CardinalityBound::new(minimum, maximum).map_err(|_| ReconstructionError::Cardinality)
+}
+",
+        calls: &[],
+    },
+];
+
+/// Why one item could not be rendered. Private: the public failure type is
+/// [`OracleGenerationError`], which the item boundary maps this onto.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RenderError {
+    /// A `ValueType` family this generator never reconstructs: the item is refused as
+    /// [`CompositeEqualityRefusal::Unsupported`] naming the family.
+    UnsupportedValueType {
+        /// The family, as the refusal's `node_tag`.
+        family: &'static str,
+    },
+    /// A whole-call failure, an unknown runtime variant, that renders no item.
+    Generation(OracleGenerationError),
+}
+
+impl From<OracleGenerationError> for RenderError {
+    fn from(error: OracleGenerationError) -> Self {
+        Self::Generation(error)
+    }
+}
+
+/// The rendered Rust expressions of one item, before it is named.
+struct RenderedItem {
+    composites: String,
+    left_source: String,
+    left_target: Option<String>,
+    right_source: String,
+    right_target: Option<String>,
+}
+
+fn render_item(generated: &CheckedItem<'_>) -> Result<RenderedItem, RenderError> {
+    // Every reachable record/tuple declaration, in the same `NodeKey`
+    // order `TypeEnvironment::new` admitted at generation time.
+    let composites: String = generated
+        .composites
+        .iter()
+        .map(|declaration| {
+            render_composite_declaration(declaration)
+                .map(|rendered| format!("{rendered},\n        "))
+        })
+        .collect::<Result<_, _>>()?;
+    let target = |target: &Option<ValueType>| -> Result<Option<String>, RenderError> {
+        target.as_ref().map(render_value_type).transpose()
+    };
+    Ok(RenderedItem {
+        composites,
+        left_source: render_value_type(&generated.left_source)?,
+        left_target: target(&generated.left_target)?,
+        right_source: render_value_type(&generated.right_source)?,
+        right_target: target(&generated.right_target)?,
+    })
+}
+
+/// Render every pending item, then name and emit the ones that rendered. `pending` holds, per
+/// item, the position of its claim, its descriptor key, the request and what `render` reads.
+///
+/// Every item is rendered before any is named, so an item the render refuses never takes a number
+/// from a sibling: oracles sharing an operator stem are numbered in key order among the items that
+/// rendered. An unrenderable item becomes a per-item refusal on its own claim
+/// ([`settle_render`]); a whole-call failure aborts.
+fn render_and_emit<T>(
+    claims: &mut [CompositeEqualityClaim],
+    source: &mut SourceBuilder,
+    pending: Vec<(usize, DescriptorKey, &CompositeEqualityItem, T)>,
+    render: impl Fn(&T) -> Result<RenderedItem, RenderError>,
+) -> Result<(), OracleGenerationError> {
+    let mut rendered = Vec::with_capacity(pending.len());
+    for (claim, key, item, checked) in pending {
+        let result = render(&checked);
+        if let Some(rendered_item) = settle_render(&mut claims[claim], result)? {
+            rendered.push((claim, key, item, rendered_item));
+        }
+    }
+    let names = unique_names(
+        rendered
+            .iter()
+            .map(|(_, key, item, _)| (item.operator.identity().replace('.', "_"), key.clone()))
+            .collect(),
+    );
+    for ((claim, _, item, rendered_item), symbol) in rendered.into_iter().zip(names) {
+        source.item(&symbol, item, &rendered_item);
+        if let ClaimDisposition::Generated(claim) = &mut claims[claim].result {
+            claim.environment_symbol = format!("environment_{symbol}");
+            claim.oracle_symbol = format!("oracle_{symbol}");
+        }
+    }
+    Ok(())
+}
+
+/// Settle one rendered item against its claim, at the item boundary. A render that failed with
+/// [`RenderError::UnsupportedValueType`] turns the item's claim into the per-item refusal
+/// [`CompositeEqualityRefusal::Unsupported`], whose `node_tag` is the family and whose
+/// `unsupported_node_id` is the item's expression node (a `ValueType` carries no node id, and the
+/// expression node is the one every call site knows), and renders nothing; any sibling is
+/// untouched. A [`RenderError::Generation`] still fails the whole call.
+fn settle_render(
+    claim: &mut CompositeEqualityClaim,
+    rendered: Result<RenderedItem, RenderError>,
+) -> Result<Option<RenderedItem>, OracleGenerationError> {
+    match rendered {
+        Ok(rendered) => Ok(Some(rendered)),
+        Err(RenderError::UnsupportedValueType { family }) => {
+            claim.result = ClaimDisposition::Refused {
+                refusal: CompositeEqualityRefusal::Unsupported {
+                    unsupported_node_id: claim.node_id.clone(),
+                    node_tag: family,
+                },
+            };
+            Ok(None)
+        }
+        Err(RenderError::Generation(error)) => Err(error),
+    }
+}
 
 #[derive(Default)]
 struct SourceBuilder {
@@ -1421,68 +1619,74 @@ struct SourceBuilder {
 }
 
 impl SourceBuilder {
-    fn item(
-        &mut self,
-        symbol: &str,
-        item: &CompositeEqualityItem,
-        generated: &CheckedItem<'_>,
-    ) -> Result<(), OracleGenerationError> {
-        // Every reachable record/tuple declaration, in the same `NodeKey`
-        // order `TypeEnvironment::new` admitted at generation time.
-        let composites: String = generated
-            .composites
-            .iter()
-            .map(|declaration| {
-                render_composite_declaration(declaration)
-                    .map(|rendered| format!("{rendered},\n        "))
-            })
-            .collect::<Result<_, _>>()?;
+    fn item(&mut self, symbol: &str, item: &CompositeEqualityItem, rendered: &RenderedItem) {
+        let RenderedItem {
+            composites,
+            left_source,
+            left_target,
+            right_source,
+            right_target,
+        } = rendered;
+        let optional = |target: &Option<String>| match target {
+            Some(target) => format!("Some({target})"),
+            None => "None".to_owned(),
+        };
+        let left_target = optional(left_target);
+        let right_target = optional(right_target);
 
         self.functions.push_str(&format!(
-            "\nfn composites_{symbol}() -> Vec<rt::CompositeDeclaration> {{\n    vec![{composites}]\n}}\n"
+            "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    Ok(vec![{composites}])\n}}\n"
         ));
 
-        let left_source = render_value_type(&generated.left_source)?;
-        let left_target = match &generated.left_target {
-            Some(target) => format!("Some({})", render_value_type(target)?),
-            None => "None".to_owned(),
-        };
-        let right_source = render_value_type(&generated.right_source)?;
-        let right_target = match &generated.right_target {
-            Some(target) => format!("Some({})", render_value_type(target)?),
-            None => "None".to_owned(),
-        };
         self.functions.push_str(&format!(
-            "\nfn left_source_{symbol}() -> rt::ValueType {{\n    {left_source}\n}}\n\
-             fn left_target_{symbol}() -> Option<rt::ValueType> {{\n    {left_target}\n}}\n\
-             fn right_source_{symbol}() -> rt::ValueType {{\n    {right_source}\n}}\n\
-             fn right_target_{symbol}() -> Option<rt::ValueType> {{\n    {right_target}\n}}\n"
+            "\nfn left_source_{symbol}() -> Result<rt::ValueType, ReconstructionError> {{\n    Ok({left_source})\n}}\n\
+             fn left_target_{symbol}() -> Result<Option<rt::ValueType>, ReconstructionError> {{\n    Ok({left_target})\n}}\n\
+             fn right_source_{symbol}() -> Result<rt::ValueType, ReconstructionError> {{\n    Ok({right_source})\n}}\n\
+             fn right_target_{symbol}() -> Result<Option<rt::ValueType>, ReconstructionError> {{\n    Ok({right_target})\n}}\n"
         ));
 
         self.functions.push_str(&format!(
             "\n/// `{}`. Its operation identity is caller-declared: CheckedPackage V2 carries\n\
              /// an operator class, not this operator law.\n\
-             pub fn environment_{symbol}() -> Result<rt::TypeEnvironment, rt::InvalidDeclaration> {{\n\
-             \x20   rt::TypeEnvironment::new(composites_{symbol}(), core::iter::empty::<rt::ObjectTypeDeclaration>())\n}}\n",
+             pub fn environment_{symbol}() -> Result<rt::TypeEnvironment, EnvironmentError> {{\n\
+             \x20   let composites = match composites_{symbol}() {{\n\
+             \x20       Ok(composites) => composites,\n\
+             \x20       Err(error) => return Err(EnvironmentError::Reconstruction(error)),\n\x20   }};\n\
+             \x20   rt::TypeEnvironment::new(composites, core::iter::empty::<rt::ObjectTypeDeclaration>())\n\
+             \x20       .map_err(EnvironmentError::Declaration)\n}}\n",
             item.operator.identity()
         ));
 
         self.functions.push_str(&format!(
             "\n/// Environment-checked oracle for `{}`.\npub fn oracle_{symbol}(\n    environment: &rt::TypeEnvironment,\n    left: &rt::Value,\n    right: &rt::Value,\n    meter: &mut rt::Meter,\n) -> rt::Outcome<bool> {{\n\
-             \x20   let left_target = left_target_{symbol}();\n\
-             \x20   let left_comparison = left_target.clone().unwrap_or_else(left_source_{symbol});\n\
+             \x20   let left_source = match left_source_{symbol}() {{\n\
+             \x20       Ok(value_type) => value_type,\n\
+             \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20   let left_target = match left_target_{symbol}() {{\n\
+             \x20       Ok(value_type) => value_type,\n\
+             \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20   let left_comparison = match &left_target {{\n\
+             \x20       Some(target) => target.clone(),\n\
+             \x20       None => left_source.clone(),\n\x20   }};\n\
              \x20   if environment.check_type(&left_comparison).is_err() {{\n\
              \x20       return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);\n\x20   }}\n\
-             \x20   let right_target = right_target_{symbol}();\n\
-             \x20   let right_comparison = right_target.clone().unwrap_or_else(right_source_{symbol});\n\
+             \x20   let right_source = match right_source_{symbol}() {{\n\
+             \x20       Ok(value_type) => value_type,\n\
+             \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20   let right_target = match right_target_{symbol}() {{\n\
+             \x20       Ok(value_type) => value_type,\n\
+             \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20   let right_comparison = match &right_target {{\n\
+             \x20       Some(target) => target.clone(),\n\
+             \x20       None => right_source.clone(),\n\x20   }};\n\
              \x20   if environment.check_type(&right_comparison).is_err() {{\n\
              \x20       return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);\n\x20   }}\n\
              \x20   let left_operand = match left_target {{\n\
-             \x20       Some(target) => rt::EqualityOperand::converted(left_source_{symbol}(), target),\n\
-             \x20       None => rt::EqualityOperand::typed(left_source_{symbol}()),\n\x20   }};\n\
+             \x20       Some(target) => rt::EqualityOperand::converted(left_source, target),\n\
+             \x20       None => rt::EqualityOperand::typed(left_source),\n\x20   }};\n\
              \x20   let right_operand = match right_target {{\n\
-             \x20       Some(target) => rt::EqualityOperand::converted(right_source_{symbol}(), target),\n\
-             \x20       None => rt::EqualityOperand::typed(right_source_{symbol}()),\n\x20   }};\n\
+             \x20       Some(target) => rt::EqualityOperand::converted(right_source, target),\n\
+             \x20       None => rt::EqualityOperand::typed(right_source),\n\x20   }};\n\
              \x20   let checked = match environment.check_equality({}, left_operand, right_operand) {{\n\
              \x20       Ok(checked) => checked,\n\
              \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
@@ -1490,13 +1694,25 @@ impl SourceBuilder {
             item.operator.identity(),
             item.operator.path()
         ));
-        Ok(())
     }
 
     fn finish(self) -> String {
         let mut source = SOURCE_HEADER.to_owned();
-        if self.functions.contains("integer(\"") {
-            source.push_str(INTEGER_HELPER);
+        // A helper is needed when the item functions call it or a needed helper does. The table
+        // lists callees first, so one pass from the last helper to the first settles the
+        // transitive closure.
+        let mut needed: BTreeSet<&str> = BTreeSet::new();
+        for helper in RECONSTRUCTION_HELPERS.iter().rev() {
+            if self.functions.contains(&format!("{}(", helper.name)) || needed.contains(helper.name)
+            {
+                needed.insert(helper.name);
+                needed.extend(helper.calls);
+            }
+        }
+        for helper in RECONSTRUCTION_HELPERS {
+            if needed.contains(helper.name) {
+                source.push_str(helper.source);
+            }
         }
         source.push_str(&self.functions);
         source
@@ -1505,9 +1721,7 @@ impl SourceBuilder {
 
 /// Render one admitted `CompositeDeclaration` as a Rust expression of type
 /// `rt::CompositeDeclaration`.
-fn render_composite_declaration(
-    declaration: &CompositeDeclaration,
-) -> Result<String, OracleGenerationError> {
+fn render_composite_declaration(declaration: &CompositeDeclaration) -> Result<String, RenderError> {
     let key = render_key(declaration.key());
     let shape = match declaration.shape() {
         CompositeShape::Record(fields) => {
@@ -1521,17 +1735,17 @@ fn render_composite_declaration(
                         presence_path(field.presence())
                     ))
                 })
-                .collect::<Result<_, OracleGenerationError>>()?;
+                .collect::<Result<_, RenderError>>()?;
             format!("rt::CompositeShape::Record(vec![{rendered}])")
         }
         CompositeShape::Tuple(positions) => {
             let rendered: String = positions
                 .iter()
                 .map(|value_type| Ok(format!("{}, ", render_value_type(value_type)?)))
-                .collect::<Result<_, OracleGenerationError>>()?;
+                .collect::<Result<_, RenderError>>()?;
             format!("rt::CompositeShape::Tuple(vec![{rendered}])")
         }
-        &_ => return Err(OracleGenerationError::unknown_variant("CompositeShape")),
+        &_ => return Err(OracleGenerationError::unknown_variant("CompositeShape").into()),
     };
     Ok(format!(
         "rt::CompositeDeclaration::new({key}, {:?}, {shape})",
@@ -1547,23 +1761,25 @@ fn presence_path(presence: Presence) -> &'static str {
 }
 
 /// Render one `ValueType` as a Rust expression of type `rt::ValueType`.
-fn render_value_type(value_type: &ValueType) -> Result<String, OracleGenerationError> {
+///
+/// Every bound is rebuilt through an emitted `rebuild_*` helper whose `Result` the expression
+/// propagates with `?`, so the expression belongs in a function returning
+/// `Result<_, ReconstructionError>`.
+fn render_value_type(value_type: &ValueType) -> Result<String, RenderError> {
     Ok(match value_type {
         ValueType::Boolean => "rt::ValueType::Boolean".to_owned(),
         ValueType::Integer => "rt::ValueType::Integer".to_owned(),
-        ValueType::Int(interval) => format!(
-            "rt::ValueType::Int({})",
-            render_interval(interval)
-        ),
+        ValueType::Int(interval) => {
+            format!("rt::ValueType::Int({})", render_interval(interval))
+        }
         ValueType::Rational(domain) => format!(
-            "rt::ValueType::Rational(rt::RationalDomain::new({}, {}).expect(\"generation-time validation guarantees this bound reconstructs\"))",
+            "rt::ValueType::Rational(rebuild_rational({}, {})?)",
             render_interval(domain.numerator()),
             render_interval(domain.denominator())
         ),
-        ValueType::Decimal(decimal) => format!(
-            "rt::ValueType::Decimal({})",
-            render_decimal_type(decimal)?
-        ),
+        ValueType::Decimal(decimal) => {
+            format!("rt::ValueType::Decimal({})", render_decimal_type(decimal)?)
+        }
         ValueType::Float(rt::IeeeWidth::Binary32) => {
             "rt::ValueType::Float(rt::IeeeWidth::Binary32)".to_owned()
         }
@@ -1571,10 +1787,10 @@ fn render_value_type(value_type: &ValueType) -> Result<String, OracleGenerationE
             "rt::ValueType::Float(rt::IeeeWidth::Binary64)".to_owned()
         }
         ValueType::Quantity(_) => {
-            unreachable!("quantity leaves are refused at generation time")
+            return Err(RenderError::UnsupportedValueType { family: "quantity" });
         }
         ValueType::Text(text_type) => format!(
-            "rt::ValueType::Text(rt::TextType::new({}, {}, {}).expect(\"generation-time validation guarantees this bound reconstructs\"))",
+            "rt::ValueType::Text(rebuild_text({}, {}, {})?)",
             text_type.min(),
             text_type.max(),
             profile_path(text_type.profile())?
@@ -1585,22 +1801,24 @@ fn render_value_type(value_type: &ValueType) -> Result<String, OracleGenerationE
         }
         ValueType::Composite(key) => format!("rt::ValueType::Composite({})", render_key(*key)),
         ValueType::Collection(collection) => format!(
-            "rt::ValueType::collection(rt::CollectionType::new({}, {}, rt::CardinalityBound::new({}, {}).expect(\"generation-time validation guarantees this bound reconstructs\")))",
+            "rt::ValueType::collection(rt::CollectionType::new({}, {}, rebuild_cardinality({}, {})?))",
             collection_kind_path(collection.kind())?,
             render_value_type(collection.element())?,
             collection.bound().minimum(),
             collection.bound().maximum()
         ),
         ValueType::Reference(_) => {
-            unreachable!("reference operands are refused at generation time")
-        },
-        &_ => return Err(OracleGenerationError::unknown_variant("ValueType")),
+            return Err(RenderError::UnsupportedValueType {
+                family: "reference",
+            });
+        }
+        &_ => return Err(OracleGenerationError::unknown_variant("ValueType").into()),
     })
 }
 
 fn render_interval(interval: &IntegerInterval) -> String {
     format!(
-        "rt::IntegerInterval::new(integer(\"{}\"), integer(\"{}\")).expect(\"generation-time validation guarantees this bound reconstructs\")",
+        "rebuild_interval(\"{}\", \"{}\")?",
         interval.lower(),
         interval.upper()
     )
@@ -1608,7 +1826,7 @@ fn render_interval(interval: &IntegerInterval) -> String {
 
 fn render_decimal_type(decimal: &DecimalType) -> Result<String, OracleGenerationError> {
     Ok(format!(
-        "rt::DecimalType::new(integer(\"{}\"), integer(\"{}\"), {}, {}, {}).expect(\"generation-time validation guarantees this bound reconstructs\")",
+        "rebuild_decimal(\"{}\", \"{}\", {}, {}, {})?",
         decimal.lower(),
         decimal.upper(),
         decimal.min_scale(),
@@ -1785,5 +2003,270 @@ mod tests {
             ]),
             None
         );
+    }
+
+    fn quantity() -> ValueType {
+        ValueType::Quantity(rt::QuantityUnit::Compound(rt::CompoundUnit::dimensionless()))
+    }
+
+    fn reference() -> ValueType {
+        ValueType::Reference(NodeKey::from_bytes([7; 32]))
+    }
+
+    fn node_id(digit: char) -> CheckedNodeId {
+        CheckedNodeId {
+            domain: "quire.checked-semantic-node/v1".into(),
+            digest: digit.to_string().repeat(64).into(),
+        }
+    }
+
+    fn semantic_id(digit: char) -> CheckedSemanticId {
+        CheckedSemanticId {
+            domain: "quire.checked-semantic/v1".into(),
+            algorithm: "sha256".into(),
+            digest: digit.to_string().repeat(64).into(),
+        }
+    }
+
+    /// A generated claim for the expression node `node`, as the item loop records it before
+    /// rendering.
+    fn generated_claim(node: char) -> CompositeEqualityClaim {
+        CompositeEqualityClaim {
+            node_id: node_id(node),
+            operation: CompositeOperationClaim {
+                identity: "equality.equal".to_owned(),
+                provenance: CompositeOperationProvenance::CallerDeclared {
+                    blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+                },
+            },
+            result: ClaimDisposition::Generated(Box::new(GeneratedCompositeEqualityClaim {
+                environment_symbol: String::new(),
+                oracle_symbol: String::new(),
+                ir_id: semantic_id('a'),
+                package_id: semantic_id('b'),
+                semantic_type: node_id('c'),
+                source_map: Vec::new(),
+                claims: Vec::new(),
+                descriptor: RecordedDescriptor {
+                    operator: EqualityOperatorKind::Equal,
+                    left_source_type: node_id('d'),
+                    left_conversion_target: None,
+                    right_source_type: node_id('d'),
+                    right_conversion_target: None,
+                },
+                declaration_keys: Vec::new(),
+                declaration_runtime_keys: Vec::new(),
+                schedule: RecordedSchedule::Plan,
+            })),
+        }
+    }
+
+    fn rendered_item() -> RenderedItem {
+        RenderedItem {
+            composites: String::new(),
+            left_source: "rt::ValueType::Integer".to_owned(),
+            left_target: None,
+            right_source: "rt::ValueType::Integer".to_owned(),
+            right_target: None,
+        }
+    }
+
+    /// `render_value_type` returns the typed error for `ValueType::Quantity` and for
+    /// `ValueType::Reference`, directly, nested in an option, and inside a composite declaration
+    /// (the second call site, beside an operand's own types). It does not panic.
+    ///
+    /// Trace: FR-018-AC-18, TC-029.
+    #[test]
+    fn tc_029_ac18_render_value_type_refuses_quantity_and_reference_with_a_typed_error() {
+        for (value_type, family) in [(quantity(), "quantity"), (reference(), "reference")] {
+            let expected = Err(RenderError::UnsupportedValueType { family });
+            assert_eq!(render_value_type(&value_type), expected);
+            assert_eq!(
+                render_value_type(&ValueType::option(value_type.clone())),
+                expected,
+                "{family} nested in an option"
+            );
+            let declaration = CompositeDeclaration::new(
+                NodeKey::from_bytes([1; 32]),
+                "D",
+                CompositeShape::Tuple(vec![ValueType::Integer, value_type]),
+            );
+            assert_eq!(
+                render_composite_declaration(&declaration),
+                expected,
+                "{family} in a composite declaration"
+            );
+        }
+    }
+
+    /// The item boundary turns `RenderError::UnsupportedValueType` into the per-item refusal,
+    /// naming the family and the item's expression node, renders no code for it, and leaves a
+    /// sibling's claim unchanged; `RenderError::Generation` still fails the whole call, with the
+    /// carried error, and touches no claim.
+    ///
+    /// Trace: FR-018-AC-18, TC-029.
+    #[test]
+    fn tc_029_ac18_the_item_boundary_refuses_the_item_and_fails_the_call_on_a_generation_error() {
+        for family in ["quantity", "reference"] {
+            let mut item = generated_claim('1');
+            let settled =
+                settle_render(&mut item, Err(RenderError::UnsupportedValueType { family }));
+            assert!(
+                matches!(settled, Ok(None)),
+                "no code is rendered for the item"
+            );
+            assert_eq!(
+                item.result,
+                ClaimDisposition::Refused {
+                    refusal: CompositeEqualityRefusal::Unsupported {
+                        unsupported_node_id: node_id('1'),
+                        node_tag: family,
+                    }
+                }
+            );
+        }
+
+        let mut item = generated_claim('1');
+        let error = OracleGenerationError::UnknownRuntimeVariant {
+            enum_name: "CollectionKind",
+        };
+        assert_eq!(
+            settle_render(&mut item, Err(RenderError::Generation(error))).err(),
+            Some(error)
+        );
+        assert_eq!(
+            item,
+            generated_claim('1'),
+            "a whole-call failure refuses no item"
+        );
+
+        let mut item = generated_claim('1');
+        assert!(matches!(
+            settle_render(&mut item, Ok(rendered_item())),
+            Ok(Some(_))
+        ));
+        assert_eq!(
+            item,
+            generated_claim('1'),
+            "a rendered item stays generated"
+        );
+    }
+
+    fn request(node: char) -> CompositeEqualityItem {
+        CompositeEqualityItem {
+            node_id: node_id(node),
+            operator: EqualityOperatorKind::Equal,
+            left: EqualityOperandDescriptor::typed(node_id('d')),
+            right: EqualityOperandDescriptor::typed(node_id('d')),
+        }
+    }
+
+    /// Run [`render_and_emit`] over two items, `1` then `2`, sharing one operator stem; an item
+    /// whose flag is true fails to render with `error`.
+    fn emit_two(
+        fails: [bool; 2],
+        error: RenderError,
+    ) -> (
+        Result<(), OracleGenerationError>,
+        Vec<CompositeEqualityClaim>,
+        String,
+    ) {
+        let requests = [request('1'), request('2')];
+        let mut claims = vec![generated_claim('1'), generated_claim('2')];
+        let pending = requests
+            .iter()
+            .zip(fails)
+            .enumerate()
+            .map(|(position, (item, fails))| (position, DescriptorKey::of(item), item, fails))
+            .collect();
+        let mut source = SourceBuilder::default();
+        let result = render_and_emit(&mut claims, &mut source, pending, |fails| {
+            if *fails {
+                Err(error)
+            } else {
+                Ok(rendered_item())
+            }
+        });
+        (result, claims, source.finish())
+    }
+
+    fn symbols(claim: &CompositeEqualityClaim) -> Option<(&str, &str)> {
+        match &claim.result {
+            ClaimDisposition::Generated(generated) => Some((
+                generated.environment_symbol.as_str(),
+                generated.oracle_symbol.as_str(),
+            )),
+            ClaimDisposition::Refused { .. } => None,
+        }
+    }
+
+    fn unsupported(
+        node: char,
+        family: &'static str,
+    ) -> ClaimDisposition<GeneratedCompositeEqualityClaim, CompositeEqualityRefusal> {
+        ClaimDisposition::Refused {
+            refusal: CompositeEqualityRefusal::Unsupported {
+                unsupported_node_id: node_id(node),
+                node_tag: family,
+            },
+        }
+    }
+
+    /// An item that fails to render is refused on its own claim, emits no code, and leaves its
+    /// sibling's claim and symbols unchanged, whichever of the two fails; the sibling keeps the
+    /// bare stem the refused item would otherwise have shared. A whole-call render error aborts.
+    ///
+    /// Trace: FR-018-AC-18, TC-029.
+    #[test]
+    fn tc_029_ac18_a_render_failure_refuses_only_its_item_and_never_renames_a_sibling() {
+        let quantity = RenderError::UnsupportedValueType { family: "quantity" };
+
+        // Both render: the stem is shared, so the two are numbered in key order.
+        let (result, claims, lib) = emit_two([false, false], quantity);
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            symbols(&claims[0]),
+            Some(("environment_equality_equal_1", "oracle_equality_equal_1"))
+        );
+        assert_eq!(
+            symbols(&claims[1]),
+            Some(("environment_equality_equal_2", "oracle_equality_equal_2"))
+        );
+        assert_eq!(lib.matches("pub fn environment_").count(), 2);
+
+        // The second fails: the first is untouched in claim, and holds the bare stem.
+        let (result, claims, lib) = emit_two([false, true], quantity);
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            symbols(&claims[0]),
+            Some(("environment_equality_equal", "oracle_equality_equal"))
+        );
+        assert_eq!(claims[1].result, unsupported('2', "quantity"));
+        assert_eq!(claims[1].node_id, node_id('2'));
+        assert_eq!(lib.matches("pub fn environment_").count(), 1);
+
+        // The first fails: the second is the one that survives, under the bare stem.
+        let (result, claims, lib) = emit_two([true, false], quantity);
+        assert_eq!(result, Ok(()));
+        assert_eq!(claims[0].result, unsupported('1', "quantity"));
+        assert_eq!(
+            symbols(&claims[1]),
+            Some(("environment_equality_equal", "oracle_equality_equal"))
+        );
+        assert_eq!(lib.matches("pub fn environment_").count(), 1);
+
+        // Neither renders: both are refused, with no code.
+        let (result, claims, lib) = emit_two([true, true], quantity);
+        assert_eq!(result, Ok(()));
+        assert_eq!(claims[0].result, unsupported('1', "quantity"));
+        assert_eq!(claims[1].result, unsupported('2', "quantity"));
+        assert_eq!(lib.matches("pub fn environment_").count(), 0);
+
+        // A whole-call error aborts the call, however the other item fares.
+        let error = OracleGenerationError::UnknownRuntimeVariant {
+            enum_name: "TextProfile",
+        };
+        let (result, _, _) = emit_two([false, true], RenderError::Generation(error));
+        assert_eq!(result, Err(error));
     }
 }
