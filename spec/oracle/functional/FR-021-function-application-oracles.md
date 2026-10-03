@@ -173,6 +173,26 @@ come from the request, not from this generator's own inference.
   and `Meter`, returning its `Result<Evaluation, InputRefusal>` outcome field unchanged as
   `Outcome<Value>` and its refusal unchanged as `InputRefusal`. It shall contain no `unwrap`,
   `expect`, index or arithmetic that can panic.
+- The generator shall emit function-oracle source, every item function, every lowered function body
+  and `checked_package()`, that contains no `unwrap`, `expect`, `unreachable!`, `panic!`,
+  `todo!` or `unimplemented!`, the macros in any delimiter form.
+- When the generator emits `checked_package()`, it shall build the empty `TypeEnvironment` with
+  `TypeEnvironment::default()` and not with `TypeEnvironment::new(..).expect(..)`, so the
+  function's return type stays `Result<CheckedPackage, Vec<CheckRefusal>>` and an admission
+  failure is its `Err`, never a panic.
+- When a lowered scalar or equality body forwards a runtime operator's result, the generated
+  `match` over `Result<Outcome<_>, Refusal>` shall return `Completed`, `Undefined`, `Refused` and
+  `Incomplete` through their own variants and `Err(refusal)` as `Outcome::Refused(refusal)`.
+- When that `match` meets an `rt::Outcome` variant this generator does not know (`rt::Outcome` is
+  `#[non_exhaustive]`), the generated body shall return `Outcome::Refused(Refusal::CheckedInvariant)`:
+  the runtime's existing refusal for a checked-program invariant that failed during evaluation,
+  and the one this requirement already names for an unreachable `check` failure. No new outcome
+  or refusal type is added.
+- If a function body's integer operator is not one of the binary `Add`, `Subtract` or
+  `Multiply` (the unary `Negate`), then the generator shall refuse the body with
+  `ExactFunctionRefusal::UnsupportedOperator` and omit that function from `checked_package()`.
+- The generator's own `src/oracle/function/mod.rs` shall contain no invocation of `unreachable!`,
+  `panic!`, `todo!` or `unimplemented!`, anywhere in the file; comment lines are not counted.
 - If a function's declared parameter type or result type reaches a `composite_type` of form
   `reference` at any depth, then the generator shall refuse every item naming that function as
   blocked on quire-spec-language#120, for the same reason FR-018-AC-7 refuses a `reference` operand:
@@ -222,6 +242,9 @@ come from the request, not from this generator's own inference.
 | FR-021-AC-16 | `Evaluation.location` and `Evaluation.losses`, as returned by every generated oracle's call into `CheckedPackage::call`, are never read, asserted non-empty, or otherwise relied on by the generated crate or its claim map: under Contract Runtime they are always `None`/empty regardless of what the applied body computed, so no generated code branches on either field. | Inspection (TC-031) |
 | FR-021-AC-17 | Each location map entry's `origin` field equals the `Origin::Body { function, index }` the runtime itself reports for that function, read from the `CheckRefusal`s `PackageDeclarations::check` returns when the same assembled package is re-submitted with that function's measure undischarged, so the generator's function indexing is confirmed against a runtime-authored value and not only against its own re-derivation. | Test (TC-031) |
 | FR-021-AC-18 | On every vector of the function-application corpus, the generated oracle's outcome, refusal and charge sequence are equal to `quire_spec_language::value::expression::CheckedPackage::call` this requirement's third agreement leg alongside AC-2's generated and native legs. | Test (TC-031) |
+| FR-021-AC-19 | The emitted `src/lib.rs` of the main corpus of `tests/it/exact_function_generation.rs` (`main_oracles()`, whose generated functions include the scalar `add_fn`, the equality `eq_fn` and the nested-call `call_fn`) and of its chain corpus (`chain_oracles()`) contains zero occurrences of `.unwrap(`, `.expect(`, `unreachable!`, `panic!`, `todo!` and `unimplemented!`, the macros in any delimiter form. | Test (TC-031) |
+| FR-021-AC-20 | In the emitted body of `add_fn` and of `eq_fn`, the `match` over the runtime operator's `Result<Outcome<_>, Refusal>` has arms for `Ok(Completed)` (rewrapped as `Value::Integer` or `Value::Boolean`), `Ok(Undefined)`, `Ok(Refused)`, `Ok(Incomplete)` and `Err(refusal)` (returned as `Outcome::Refused(refusal)`), and a final `Ok(_)` arm whose value is `Outcome::Refused(Refusal::CheckedInvariant)`. | Test (TC-031) |
+| FR-021-AC-21 | A request whose scalar body has operator `Negate` is refused with `ExactFunctionRefusal::UnsupportedOperator`, and that function does not appear in the emitted `checked_package()`; `src/oracle/function/mod.rs` contains zero invocations of `unreachable!`, `panic!`, `todo!` and `unimplemented!`, comment lines not counted. | Test (TC-031) |
 
 ### Mutations these criteria detect
 
@@ -248,6 +271,9 @@ written.
 | FR-021-AC-16 | Add a check that treats a non-`None` `Evaluation.location` as a defensive branch, silently depending on a runtime capability that does not exist yet. |
 | FR-021-AC-17 | Index the assembled functions by request ordinal rather than by the position `PackageDeclarations` gives them, so the generator's own re-derivation (AC-15) agrees with the mutated emitter and only the runtime's own `CheckRefusal` disagrees. |
 | FR-021-AC-18 | Agree with the runtime port alone and inherit any divergence the port carries from the authority, which is the divergence FR-273-AC-5 exists to catch and which AC-2's two legs cannot see. |
+| FR-021-AC-19 | Leave an `Ok(_) => unreachable!(..)` arm in a body template, or an `.expect(..)` in `checked_package()`, so a runtime release that adds an `Outcome` variant, or an unforeseen admission failure, panics a generated oracle instead of refusing. |
+| FR-021-AC-20 | Replace the catch-all with a `Completed` fallthrough or a different refusal, so an unknown variant is reported as a value or as a refusal that names no checked-program invariant. |
+| FR-021-AC-21 | Keep a defensive `Negate => unreachable!(..)` arm after the earlier refusal, so a change to the refusal turns a bad request into a generator panic. |
 
 ## Dependencies
 

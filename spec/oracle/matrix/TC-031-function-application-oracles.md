@@ -20,7 +20,13 @@ to the request's own expression trees without executing anything. It also verifi
 generated code depends on `Evaluation.location`/`.losses` becoming non-empty, since Contract
 Runtime never populates either field.
 
-The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
+It also verifies that the emitted function-oracle source has no panicking path (no `.unwrap(`,
+`.expect(` or panic macro), that an unknown `rt::Outcome` variant is returned as
+`Refused(CheckedInvariant)`, and that a `Negate` body is refused rather than reaching a panic
+(FR-021-AC-19 to AC-21).
+
+The authority-agreement leg (FR-021-AC-18) and the no-panic criteria (FR-021-AC-19 to AC-21) are
+🚧 Planned.
 
 ## Test Procedure
 
@@ -80,7 +86,19 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    the runtime builds every `Location` through `location_at`, which always sets an empty `path` — so
    step 7's request-side re-derivation is the only check `path` can have, and this test states that
    rather than implying a runtime cross-check covers both fields.
-8. Grep the generated crate's source and its claim map for any read of, branch on, or non-emptiness
+8. Count `.unwrap(`, `.expect(`, `unreachable!`, `panic!`, `todo!` and `unimplemented!`, the macros in
+   any delimiter form, in the emitted `src/lib.rs` of `main_oracles()` (it holds the scalar
+   `add_fn`, the equality `eq_fn` and the nested-call `call_fn`) and of `chain_oracles()`, and
+   assert zero (FR-021-AC-19). Assert that the emitted bodies of `add_fn` and `eq_fn` match
+   `Ok(Completed)` (rewrapped), `Ok(Undefined)`, `Ok(Refused)`, `Ok(Incomplete)` and `Err(refusal)`,
+   then end with an `Ok(_)` arm valued `Outcome::Refused(Refusal::CheckedInvariant)`
+   (FR-021-AC-20). Request a `Negate` body and assert
+   `ExactFunctionRefusal::UnsupportedOperator` and that the function is absent from the emitted
+   `checked_package()`; count invocations of `unreachable!`, `panic!`, `todo!` and `unimplemented!`, comment lines not counted, in
+   `src/oracle/function/mod.rs` and assert zero (FR-021-AC-21). The unknown variant itself cannot
+   be built from a test crate because the runtime enum is `#[non_exhaustive]`, so the arm's text
+   and the zero counts are the evidence. 🚧 Planned.
+9. Grep the generated crate's source and its claim map for any read of, branch on, or non-emptiness
    assertion against `Evaluation.location` or `Evaluation.losses`; confirm none exists, and that
    both fields are simply discarded by the emitted oracle function's return path, since the
    runtime never populates either one regardless of what the applied body computed.
@@ -97,7 +115,9 @@ crate, while the authority leg is 🚧 Planned; every injected denial yields `In
 without applying that charge; the depth bound refuses `CheckedInvariant` once exceeded and no
 generated oracle ever applies a `CheckMode::Kernel` package; the location map round-trips to the
 request's own expression trees with no execution required; and no generated code reads or depends
-on `Evaluation.location`/`.losses` becoming non-empty.
+on `Evaluation.location`/`.losses` becoming non-empty; the emitted corpus source has zero
+`.unwrap(`, `.expect(` and panic macros, every unknown `Outcome` variant refuses
+`CheckedInvariant`, and a `Negate` body is refused with `UnsupportedOperator` (all 🚧 Planned).
 
 Function-body semantics beyond what FR-014's and FR-018's own oracles already verify are not
 separately asserted here: a function body is a delegation to those same generators' lowering, so
