@@ -1240,8 +1240,9 @@ and each interim file carries a header naming the step that deletes it.
   member names are spelled in CG once, which is still fewer than today's 70 call sites plus string
   tags, but not zero duplication with IR.
 - Uncovered here, each already a finding in the CG design audit (SR-645): the error envelope (23
-  public error-like types), the 37 `unreachable!` arms on RT enums, release-build truncation in
-  `generate_routed`, and test conventions. A layout does not fix them; IR-348 carries them.
+  public error-like types), the `unreachable!` arms on RT enums (37 at the audit, converted by #232;
+  the remaining arms are tracked by IR-352), release-build truncation in
+  `generate_routed`, and test conventions. A layout does not fix them; IR-348 carries the rest.
   The typed operator enum is in this AD because the audit assigned it to IR-344, though the
   ticket text does not list it.
 
