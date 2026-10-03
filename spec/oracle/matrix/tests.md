@@ -30,8 +30,8 @@ type: TestMatrix
 | FR-018 | FR-018-AC-16 | TC-029 | ⚠️ Partially covered; the text, integer, decimal and rational bases (read as their bounded scalars), the never-a-sibling-bound rule, the form-mismatch refusal, the boolean, enum and record base refusals, and a `float_rounding` member's OperatorIneligible refusal are each asserted. The form-mismatch refusal is exercised over an integer base only: a mismatched bound over a rational, decimal, text, `float32` or `float64` base shares the one form table but has no test of its own |
 | FR-018 | FR-018-AC-10 | TC-029 | ⚠️ Partially covered; byte identity across repeated runs and request permutations, the descriptor-key order, and the generated crate compiled and executed at test time under AC-2 are asserted; the criterion's remaining clause has no test |
 | FR-018 | FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 | TC-029 | 🚧 Planned |
-| FR-018 | FR-018-AC-17 through FR-018-AC-19 | TC-029 | 🚧 Planned; the scan tests and the render unit test (IR-538) are not written: the equality generator emits six `.expect` calls and carries two `unreachable!` arms today |
-| FR-014 | FR-014-AC-39 | TC-024 | 🚧 Planned; the scalar generator has no production panic site today, and the scan test that keeps it so (IR-538) is not written |
+| FR-018 | FR-018-AC-17 through FR-018-AC-19 | TC-029 | ✅ Covered |
+| FR-014 | FR-014-AC-39 | TC-024 | ✅ Covered |
 | FR-021 | FR-021-AC-1 through FR-021-AC-3, FR-021-AC-5 through FR-021-AC-14, FR-021-AC-17 | TC-031 | ✅ Covered |
 | FR-021 | FR-021-AC-4 | TC-031 | ⚠️ Partially covered; only `InputRefusal::WrongValueKind` is asserted -- `::DanglingReference` is structurally unreachable for any oracle this generator can produce, since `validate_arguments` checks `WrongValueKind` before it ever walks a value for a dangling reference, and a reference-typed parameter is refused at generation time (AC-10) |
 | FR-021 | FR-021-AC-15 | TC-031 | 🚧 Planned; the `origin` half is implemented and tested, but under this V1's scoped one-node body vocabulary `path` can never be non-empty by construction, so the `path`-non-empty case this AC also describes is not implemented |

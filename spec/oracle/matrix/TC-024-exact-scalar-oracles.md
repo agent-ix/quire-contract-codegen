@@ -162,5 +162,4 @@ and are counted separately from the three-way vectors.
    (everything before its `#[cfg(test)]` module, comment lines dropped, string literals kept), and
    assert zero occurrences of `.unwrap(`, `.expect(`, `.unwrap_unchecked(`, `panic!`,
    `unreachable!`, `todo!`, `unimplemented!`, `assert!`, `assert_eq!`, `assert_ne!`,
-   `debug_assert!` and `process::abort`, the macros in any delimiter form. Planned until the scan
-   test lands.
+   `debug_assert!` and `process::abort`, the macros in any delimiter form.
