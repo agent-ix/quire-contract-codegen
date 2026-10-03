@@ -27,10 +27,16 @@ size limit, an out-of-domain witness, a witness whose native value or charges
 disagree with the harness, a witness whose native replay is unavailable, and
 a witness whose replay agrees in a category other than `violation`.
 
-For FR-016-AC-21 to AC-23, build the replay request for two functions with the same parameters
-and compare the `obligation_identity` slots, recompile one with comments and blank lines inserted,
-change its harness source span, then change its obligation kind and one argument domain in turn,
-and scan `src/` for any computation of a function node id or occurrence key.
+For FR-016-AC-21 to AC-23, build the replay request for a function with two parameters declared
+in an order that differs from their ascending identifier order. Recompute the O-09 digest from
+the `FunctionSite`'s `function` and `declaration`, the requested kind and the arguments ascending
+by identifier, through `quire-canonical`, and compare it with the request's `obligation_identity`
+slot (AC-21). Then build the request for a second function with the same parameters, recompile
+the first with comments and blank lines inserted, change its harness source span, replay it under
+its other existing kind, and change one argument domain, comparing slots each time. Replay a
+function whose body has two conjuncts under one kind and count its identities (AC-22). Run the
+lexical scan of the non-test code under `src/replay/` for `OccurrenceKey`, `NodeKey`,
+`CheckedNodeId` and `node_tag` (AC-23).
 
 ## Expected Results
 
@@ -45,13 +51,15 @@ mismatch and unavailable results respectively. The disagreeing witnesses are
 never reported unavailable, and the unavailable replay is never reported as a
 mismatch. The witness that agrees in a category other than `violation` is a
 mismatch and never a failure.
-The two functions' identities differ, comments and blank lines and the span change leave one
-unchanged, the kind change and the domain change each alter it, and `src/` computes no node id or
-occurrence key (FR-016-AC-21 to AC-23).
+The slot equals the recomputed digest (AC-21). The two functions' identities differ, comments and
+blank lines and the span change leave one unchanged, the kind change and the domain change each
+alter it, and the two-conjunct function has one identity (AC-22). The scan finds none of the four
+identifiers (AC-23).
 
 ## Status
 
-FR-016-AC-21 to AC-23 are planned: the function path still passes the transcript digest, and
+FR-016-AC-21 to AC-23 are planned (the O-09 amendment is quire-spec-language commit f6c3974,
+QSL-352; informational): the function path still passes the transcript digest, and
 QSL's `FunctionSite` `function` and `declaration` members are not yet in the `qsl-replay` CG
 builds against.
 

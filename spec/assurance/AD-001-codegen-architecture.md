@@ -157,8 +157,8 @@ success fallback, and no requirement converts one into another.
   no copy of them. CG uses QSL's `ObligationIdentity` and QSL's envelope, and keeps the Kani
   transcript parser as part of its backend adapter. The authority is the `qsl-replay` API, which
   defines all five types.
-- CG builds QSL's `ObligationIdentity` from every `KaniObligationIdentity` member except
-  `source_span` (AD-016 arrow 5), and builds its envelopes as QSL's `WitnessEnvelope` (FR-024).
+- CG builds QSL's `ObligationIdentity` as the ADR-013 O-09 digest of the subject node id,
+  occurrence key, obligation kind and arguments, with no `source_span` (AD-003 E-1), and builds its envelopes as QSL's `WitnessEnvelope` (FR-024).
 - CG replays only through `qsl_replay::replay`, the layer-6 facade (QSL ADR-013 TK-01), and frame
   counterexamples only through `qsl_replay::replay_frame` (QSL FR-116). No replay path takes a
   caller-supplied executor (QSL ADR-011 FB-07).

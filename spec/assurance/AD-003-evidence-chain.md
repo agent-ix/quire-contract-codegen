@@ -131,8 +131,9 @@ authored).
   V1 contract path, the scalar path and the frame path (`StateFrameIdentity`) all use it. The
   function path (`call_site` over a `QualifiedName`, ADR-013 O-09 as amended by QSL-352) uses it
   too, with the checked function node id and its `declaration` occurrence key in place of the
-  clause's, both read from `FunctionSite` and never derived by CG, and a CG function-contract
-  kind distinct from every other kind (FR-016-AC-21 to AC-23, planned).
+  clause's, both read from `FunctionSite` and never derived by CG, and the existing `ObligationKind` of the
+  harness replayed (O-09 adds no subject tag and no new kind: one identity per kind the function
+  requests; FR-016-AC-21 to AC-23, planned).
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001).
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from
@@ -307,8 +308,7 @@ crate CG's lock selects.
 - Resolved decision, preimage: AD-001's Decisions section defines the `ObligationIdentity`
   preimage as "every `KaniObligationIdentity` member except `source_span`", and FR-024 repeats
   it. That conflicts with ADR-013 O-09's member list that E-1 uses (node id, occurrence key,
-  kind, arguments as parameter node id and domain). Decision: O-09 wins. AD-001 and FR-024 are
-  to be corrected in the follow-up spec PR; neither is edited here.
+  kind, arguments as parameter node id and domain). Decision: O-09 wins. AD-001 and FR-024 state the O-09 preimage (IR-553).
 - Sequencing (QSL's review, not assumed): QSL-351 (an inconclusive value with a typed cause,
   and a non-zero count in `Proved`) and QSL-352 change `qsl-replay` types CG builds, so they
   land in step with CG, and QSL-351 lands before the IR-465 terminal map is written so that map
