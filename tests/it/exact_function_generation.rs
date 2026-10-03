@@ -571,6 +571,41 @@ fn tc_031_ac21_unsupported_operator_refuses_unary_negate_scalar_body() {
     );
 }
 
+/// The text of `function`'s `rt::FunctionDeclaration` literal in an emitted `src/lib.rs`.
+fn declaration_text<'a>(lib: &'a str, function: &str) -> &'a str {
+    let name = format!("name: {function:?}.to_owned(),");
+    let start = lib
+        .find(&name)
+        .unwrap_or_else(|| panic!("{function} is not declared"));
+    let rest = &lib[start + name.len()..];
+    &rest[..rest.find("rt::FunctionDeclaration {").unwrap_or(rest.len())]
+}
+
+/// Trace: FR-021-AC-1, FR-021-AC-12, TC-031. Two declarations that share one
+/// declaring node id (a malformed request: AC-12's per-declaration isolation
+/// is the nearest owning criterion) neither panic the generator nor swap
+/// bodies: each function renders its own body under its own name.
+#[test]
+fn tc_031_ac12_two_declarations_on_one_node_id_each_render_their_own_body() {
+    let package = ext_corpus_package().admit();
+    let mut eq_on_add_node = function_eq("eq_same_node");
+    eq_on_add_node.node_id = code_id(FN_ADD);
+    let functions = vec![function_add("add_first"), eq_on_add_node];
+    let items = vec![
+        item(ITEM_CALL_ADD, "add_first"),
+        item(ITEM_CALL_EQ, "eq_same_node"),
+    ];
+    let oracles = generate(&package, &functions, &items);
+    let lib = contents(&oracles, "src/lib.rs");
+
+    let add = declaration_text(&lib, "add_first");
+    assert!(add.contains("rt::IntegerArithmetic::Add("));
+    assert!(!add.contains("EqualityOperator"));
+    let eq = declaration_text(&lib, "eq_same_node");
+    assert!(eq.contains("rt::EqualityOperator::Equal"));
+    assert!(!eq.contains("IntegerArithmetic"));
+}
+
 /// Trace: FR-021-AC-19, TC-031. The emitted `src/lib.rs` of the main corpus
 /// (scalar `add_fn`, equality `eq_fn`, nested-call `call_fn`) and of the chain
 /// corpus contains no `.unwrap(`, no `.expect(` and no panicking macro in any

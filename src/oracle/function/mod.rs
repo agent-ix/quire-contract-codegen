@@ -851,8 +851,12 @@ pub fn generate_exact_function_oracles(
     // Stage 1: per-function classification, with a bounded fixed-point pass
     // for `Call` bodies (a nested call's own validity depends on its
     // callee's classification, per AC-12).
-    let mut own_shape: BTreeMap<&CheckedNodeId, Result<ClassifiedBody<'_>, ExactFunctionRefusal>> =
-        BTreeMap::new();
+    // `own_shape` is keyed by node id (as `resolved` is); `bodies` holds each
+    // declaration's own classified body by position, so two declarations that
+    // share a node id can never swap bodies.
+    let mut own_shape: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
+    let mut bodies: Vec<Result<ClassifiedBody<'_>, ExactFunctionRefusal>> =
+        Vec::with_capacity(ordered_functions.len());
     for (declaration, record) in ordered_functions.iter().zip(&lowering.records) {
         let result = (|| -> Result<ClassifiedBody<'_>, ExactFunctionRefusal> {
             if name_counts[declaration.name.as_str()] > 1 {
@@ -880,7 +884,11 @@ pub fn generate_exact_function_oracles(
             validate_signature(declaration, &parameter_kinds, result_kind)?;
             Ok(body)
         })();
-        own_shape.insert(&declaration.node_id, result);
+        own_shape.insert(
+            &declaration.node_id,
+            result.as_ref().map(|_| ()).map_err(Clone::clone),
+        );
+        bodies.push(result);
     }
 
     let mut resolved: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
@@ -893,7 +901,7 @@ pub fn generate_exact_function_oracles(
             let own = own_shape.get(&declaration.node_id).unwrap();
             let outcome = match (&declaration.body, own) {
                 (_, Err(refusal)) => Some(Err(refusal.clone())),
-                (ExactFunctionBody::Call { callee }, Ok(_)) => {
+                (ExactFunctionBody::Call { callee }, Ok(())) => {
                     match unique_name_node_id.get(callee.as_str()) {
                         None => Some(Err(ExactFunctionRefusal::UnknownCallee {
                             callee: callee.clone(),
@@ -907,7 +915,7 @@ pub fn generate_exact_function_oracles(
                         },
                     }
                 }
-                (_, Ok(_)) => Some(Ok(())),
+                (_, Ok(())) => Some(Ok(())),
             };
             if let Some(outcome) = outcome {
                 resolved.insert(&declaration.node_id, outcome);
@@ -934,9 +942,9 @@ pub fn generate_exact_function_oracles(
     // Stage 2: assemble one package from every surviving function, in
     // order, and admit it once.
     let mut classified: Vec<ClassifiedFunction<'_>> = Vec::with_capacity(ordered_functions.len());
-    for declaration in &ordered_functions {
+    for (declaration, body) in ordered_functions.iter().zip(bodies) {
         // A refused function (its own Stage 1 refusal, or a callee's) is left out.
-        let Some(Ok(body)) = own_shape.remove(&declaration.node_id) else {
+        let Ok(body) = body else {
             continue;
         };
         if !matches!(resolved.get(&declaration.node_id), Some(Ok(()))) {
@@ -1079,12 +1087,20 @@ pub fn generate_exact_function_oracles(
                 record,
             ) {
                 Ok((stem, claim)) => {
-                    let declaration = survivors
+                    match survivors
                         .iter()
                         .find(|declaration| declaration.name == item.function)
-                        .expect("item_disposition only returns Ok for a surviving function");
-                    pending.push((claims.len(), stem, key.clone(), *declaration));
-                    ClaimDisposition::Generated(Box::new(claim))
+                    {
+                        Some(declaration) => {
+                            pending.push((claims.len(), stem, key.clone(), *declaration));
+                            ClaimDisposition::Generated(Box::new(claim))
+                        }
+                        None => ClaimDisposition::Refused {
+                            refusal: ExactFunctionRefusal::UnknownFunction {
+                                name: item.function.clone(),
+                            },
+                        },
+                    }
                 }
                 Err(refusal) => ClaimDisposition::Refused { refusal },
             }
