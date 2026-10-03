@@ -104,7 +104,46 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    Name a `float_rounding` node over a `float64` scalar as a member: it reads as the
    float and the equality is refused as `OperatorIneligible`.
 
+9. Emitted-source scan (FR-018-AC-17). Read the `src/lib.rs` that
+   `generate_composite_equality_oracles` returns for the step 1 package and assert
+   zero occurrences of the panic tokens of step 11, no `.ok()`, `.unwrap_or(` or
+   `.unwrap_or_default(`, and no `[` index or slice expression directly after an
+   identifier character, `)` or `]`. Assert every reconstruction helper returns
+   `Result<_, ReconstructionError>`, every call of one is followed by `?` or a
+   `match` whose `Err` arm yields `EnvironmentError::Reconstruction` or
+   `Outcome::Refused(Refusal::CheckedInvariant)`, and `EnvironmentError` has the
+   variants `Declaration(InvalidDeclaration)` and `Reconstruction(ReconstructionError)`,
+   `ReconstructionError` has the unit variants `Integer`, `Interval`, `Rational`,
+   `Decimal`, `Text` and `Cardinality`, and no call of `IntegerInterval::new`,
+   `RationalDomain::new`, `TextType::new`, `CardinalityBound::new`,
+   `DecimalType::new` or an integer `.parse()` appears outside a reconstruction
+   helper. No valid request makes a reconstruction fail, so the failure path is verified
+   structurally here and not by execution.
+10. Render unit test (FR-018-AC-18). In the `#[cfg(test)]` tests of
+    `src/oracle/equality/mod.rs`, call `render_value_type` with
+    `ValueType::Quantity` and with `ValueType::Reference` and assert each returns
+    `Err(RenderError::UnsupportedValueType { family })` with `family`
+    `"quantity"` and `"reference"` respectively. Then feed a `RenderError` through
+    the item-boundary mapping and assert it yields
+    `CompositeEqualityRefusal::Unsupported` with `node_tag` equal to `family` and
+    `unsupported_node_id` equal to the item's expression node id (for an operand
+    type and for a composite declaration alike), with the
+    item's siblings unchanged. Feed a `RenderError::Generation` carrying
+    `UnknownRuntimeVariant` through the same mapping and assert the whole call
+    fails with it. A public-API request cannot reach either arm: a
+    quantity operand is refused earlier as `CompositeEqualityRefusal::Unsupported`
+    and a reference operand by Contract IR, which AC-7 already covers.
+11. Generator-source scan (FR-018-AC-19). Read the non-test text of
+    `src/oracle/equality/mod.rs` (everything before its `#[cfg(test)]` module,
+    comment lines dropped, string literals kept) and assert zero occurrences of
+    `.unwrap(`, `.expect(`, `.unwrap_unchecked(`, `panic!`, `unreachable!`,
+    `todo!`, `unimplemented!`, `assert!`, `assert_eq!`, `assert_ne!`,
+    `debug_assert!` and `process::abort`, the macros in any delimiter form.
+
 ## Expected Results
+
+The source scans find zero panic sites, and the render function returns a typed
+error for a quantity or reference type rather than panicking.
 
 Every admitted shape and schedule is generated; every refused item is absent
 from the source and carries its own typed reason; bytes are identical across

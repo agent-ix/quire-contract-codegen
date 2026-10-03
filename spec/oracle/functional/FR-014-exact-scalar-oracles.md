@@ -305,6 +305,10 @@ otherwise.
   (FR-014-AC-7 stands). Its field reads are `project(deref(self), field)` terms and
   `pre(...)` of them, and FR-014-AC-10 stays in force for every other operand
   (FR-014-AC-38).
+- The scalar generator, `src/oracle/scalar/mod.rs`, and every crate it emits shall
+  contain no `.unwrap(`, `.expect(`, `.unwrap_unchecked(`, `panic!`, `unreachable!`,
+  `todo!`, `unimplemented!`, `assert!`, `assert_eq!`, `assert_ne!`,
+  `debug_assert!` or `process::abort` in non-test code (FR-014-AC-39).
 
 ## Acceptance Criteria
 
@@ -348,6 +352,7 @@ otherwise.
 | FR-014-AC-36 | Every oracle's source map declares the node's implication-consequent count, one evaluation-entry probe on the function-entry line disjoint from every consequent region, and one entry-token probe inside the exact region of each consequent; a dropped or duplicated region does not change the declared count. | Test (TC-024) |
 | FR-014-AC-37 | A differential corpus covering every node FR-014-AC-35 names compiles against the runtime alone, and each oracle's outcome, admitted charges and consumed counters equal direct runtime execution and the QSL value authority. | Test (TC-024) |
 | FR-014-AC-38 | PLANNED (IR-489). The Boolean condition of a `state`/`state_clause` node, addressed by the clause node id, derives a descriptor and generates an `ir_confirmed` oracle over its connectives, integer comparisons and integer add, subtract, multiply and negate, returning `Outcome<bool>`. A `project(deref(self), field)` term is an operand that takes a value in the object member's `integer_range` as a state field read, and a `pre(...)` of one takes the pre-state value of that field. FR-014-AC-10 is not weakened: an operand that is neither a literal, a reference nor one of those two terms is still refused. The `state` node itself stays refused as FR-014-AC-7 states. | Test (TC-024) |
+| FR-014-AC-39 | The generated `src/lib.rs` of every crate the TC-024 corpus generates, and the non-test code of `src/oracle/scalar/mod.rs` (everything before its `#[cfg(test)]` module, comment lines not counted, string literals the generator emits counted), contain zero occurrences of `.unwrap(`, `.expect(`, `.unwrap_unchecked(`, `panic!`, `unreachable!`, `todo!`, `unimplemented!`, `assert!`, `assert_eq!`, `assert_ne!`, `debug_assert!` and `process::abort`, the macros in any delimiter form. | Test (TC-024) |
 
 ## Dependencies
 

@@ -154,3 +154,13 @@ and are counted separately from the three-way vectors.
    count, one evaluation-entry probe on the function-entry line outside every consequent region and
    one entry-token probe inside each consequent's region; dropping or duplicating a region leaves the
    declared count unchanged (FR-014-AC-36).
+
+## Panic-free source scan
+
+1. Source-level scan (FR-014-AC-39). Read the `src/lib.rs` of every crate any step of this
+   test case generates (all sections above) and the non-test text of `src/oracle/scalar/mod.rs`
+   (everything before its `#[cfg(test)]` module, comment lines dropped, string literals kept), and
+   assert zero occurrences of `.unwrap(`, `.expect(`, `.unwrap_unchecked(`, `panic!`,
+   `unreachable!`, `todo!`, `unimplemented!`, `assert!`, `assert_eq!`, `assert_ne!`,
+   `debug_assert!` and `process::abort`, the macros in any delimiter form. Planned until the scan
+   test lands.

@@ -109,7 +109,13 @@ in the `NODE_KEY_DOMAIN` domain.
 
 - A generated crate: `Cargo.toml` (`publish = false`, the Contract Runtime
   dependency this repository's `Cargo.toml` names, with the `exact` feature) and `src/lib.rs` holding, per generated item, one
-  environment constructor returning `Result<TypeEnvironment, InvalidDeclaration>`
+  environment constructor returning `Result<TypeEnvironment, EnvironmentError>`
+  (`EnvironmentError` and `ReconstructionError` are enums the generated crate
+  defines, not runtime types. `EnvironmentError` has a
+  `Declaration(InvalidDeclaration)` variant carrying the runtime's refusal and a
+  `Reconstruction(ReconstructionError)` variant. `ReconstructionError` has the
+  payload-free variants `Integer`, `Interval`, `Rational`, `Decimal`, `Text` and
+  `Cardinality`, each naming the reconstruction helper that failed)
   and one oracle function
   `(&TypeEnvironment, &Value, &Value, &mut Meter) -> Outcome<bool>`.
 - A typed claim map with one entry per requested item: node id, Contract IR
@@ -131,7 +137,9 @@ in the `NODE_KEY_DOMAIN` domain.
   of its descriptor's two operand comparison types, then `check_equality` with
   the item's descriptor, then `CheckedEquality::evaluate` on the caller's two
   values and `Meter`, returning its `Outcome<bool>` unchanged. It shall contain
-  no `unwrap`, `expect`, index or arithmetic that can panic: an `IllTyped` from
+  no `.unwrap(`, `.expect(`, `.unwrap_unchecked(`, `assert!`-family macro,
+  `process::abort`, panic macro (`panic!`, `unreachable!`, `todo!`,
+  `unimplemented!`), index or arithmetic that can panic: an `IllTyped` from
   either `check_type` or `check_equality` becomes
   `Outcome::Refused(Refusal::CheckedInvariant)`, before any charge.
 - If `TypeEnvironment::new` refuses the item's declaration closure — duplicate
@@ -202,8 +210,45 @@ in the `NODE_KEY_DOMAIN` domain.
 - The generator shall use a stem that one item holds bare.
 - The generator shall suffix items that share a stem with `_{n}`, numbered from 1
   in ascending descriptor-key order.
+- The composite-equality generator, `src/oracle/equality/mod.rs`, shall contain no
+  `.unwrap(`, `.expect(`, `.unwrap_unchecked(`, `panic!`, `unreachable!`,
+  `todo!`, `unimplemented!`, `assert!`, `assert_eq!`, `assert_ne!`,
+  `debug_assert!` or `process::abort` in its non-test code.
+- When emitted code reconstructs a literal or a bound, it shall do so only inside
+  helpers returning `Result<_, ReconstructionError>`.
+- When a reconstruction fails, the emitted environment constructor shall return
+  `EnvironmentError::Reconstruction` and the emitted oracle function shall return
+  `Outcome::Refused(Refusal::CheckedInvariant)`.
+- If `render_value_type` is given `ValueType::Quantity` or `ValueType::Reference`,
+  then it shall return `Err(RenderError::UnsupportedValueType { family })`, `family`
+  being `"quantity"` or `"reference"`. `RenderError` is a private type of
+  `src/oracle/equality/mod.rs`, not public API. It has a second variant,
+  `Generation(OracleGenerationError)`, which carries the whole-call
+  `UnknownRuntimeVariant` that `render_value_type`, `collection_kind_path`,
+  `rounding_path` and `profile_path` return for a runtime enum variant this
+  generator does not know.
+- When the generator receives `RenderError::UnsupportedValueType` while rendering an
+  item, it shall refuse that item as `CompositeEqualityRefusal::Unsupported` with
+  `node_tag` equal to the error's `family` and `unsupported_node_id` equal to the
+  item's expression node id, emit no code for it, and leave its siblings unchanged.
+  Rendering takes a `ValueType`, which carries no node id, and runs both for an
+  operand's source and target types and inside `render_composite_declaration`, so
+  the expression node is the one node every call site knows.
+- When the generator receives `RenderError::Generation`, it shall fail the whole call
+  with the carried `OracleGenerationError`, as it does for `UnknownRuntimeVariant`
+  today.
 - If the generated source exceeds its size ceiling, then the generator shall
   return a typed error and no partial output.
+
+The runtime's `DeclarationCause` has no cause for an empty interval, a zero
+denominator or an empty cardinality bound, which is why the emitted constructor
+does not report a failed reconstruction as `InvalidDeclaration`. The public
+`OracleGenerationError` is shared by the scalar, function and equality
+generators and matched exhaustively by its consumers, and no existing variant
+describes a known but unsupported `ValueType` (`UnknownRuntimeVariant` would
+misreport it as an unknown one), so the render failure uses the private
+`RenderError` and reaches callers only as the per-item refusal above. No request
+reaches it today, so the mapping is asserted where reachable.
 
 ## Acceptance Criteria
 
@@ -225,6 +270,9 @@ in the `NODE_KEY_DOMAIN` domain.
 | FR-018-AC-14 | The `bounded_domain` nodes an operand type reaches (`integer_range`, `rational_range`, `decimal_range`, `text_bounds`, `collection_bounds`) are read from `binding` members looked up by name as FR-014 lists them, in any order; a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-029) |
 | FR-018-AC-15 | A `binary` node's operand is read through its `reference`: a reference to a `convert` expression node is read as the type of what it converts, following nested conversions to the first node that is not a conversion, and a reference to any other node, including a non-`convert` application, as that node's own `semantic_type`. A descriptor whose `source_type` is the read type generates, and any other source is refused as an operand-type disagreement at that position, reporting the read type as found. | Test (TC-029) |
 | FR-018-AC-16 | A tuple position whose type node is a `text_bounds` `bounded_domain` node generates the declaration `Text(min, max, profile)` read from that node's own members, an integer, decimal or rational `bounded_domain` member reads as the same type as a member naming its base scalar, and a second bound over the same base is never read: naming either of two `text_bounds` nodes over one text scalar reads that node's own `min` and `max`. A `bounded_domain` member whose form does not fit its base scalar is refused as missing the form the base reads, and one over a boolean scalar, over QSL's enum declaration or over a record is refused as unsupported `bounded_domain`, naming the bound node, in every case with no code emitted for the item. A member whose type is a `float_rounding` `bounded_domain` over a float scalar reads as that float, and the equality is refused as `IllTypedCause::OperatorIneligible`. | Test (TC-029) |
+| FR-018-AC-17 | The `src/lib.rs` that `generate_composite_equality_oracles` returns for the TC-029 step 1 package (every generated item) contains zero occurrences of the panic tokens FR-018-AC-19 lists, no `.ok()`, `.unwrap_or(` or `.unwrap_or_default(` anywhere, and no `[` index or slice expression directly after an identifier character, `)` or `]`; every reconstruction helper in it returns `Result<_, ReconstructionError>`, every call of one is followed by `?` or a `match` whose `Err` arm yields `EnvironmentError::Reconstruction` or `Outcome::Refused(Refusal::CheckedInvariant)`, `EnvironmentError` has the variants `Declaration(InvalidDeclaration)` and `Reconstruction(ReconstructionError)`, `ReconstructionError` has the unit variants `Integer`, `Interval`, `Rational`, `Decimal`, `Text` and `Cardinality`, and no call of `IntegerInterval::new`, `RationalDomain::new`, `TextType::new`, `CardinalityBound::new`, `DecimalType::new` or an integer `.parse()` appears outside a reconstruction helper. | Test (TC-029) |
+| FR-018-AC-18 | `render_value_type` called with `ValueType::Quantity` and with `ValueType::Reference` returns `Err(RenderError::UnsupportedValueType { family })` with `family` equal to `"quantity"` and `"reference"` respectively and does not panic, and the item-boundary mapping turns `RenderError::UnsupportedValueType` into `CompositeEqualityRefusal::Unsupported` with `node_tag` equal to `family` and `unsupported_node_id` equal to the item's expression node id, emitting no code for the item and leaving its siblings unchanged, while `RenderError::Generation(OracleGenerationError::UnknownRuntimeVariant { .. })` still fails the whole call. No request reaches these arms through `generate_composite_equality_oracles`: a quantity operand is refused earlier as `CompositeEqualityRefusal::Unsupported { node_tag: "quantity" }` and a reference operand by Contract IR (FR-018-AC-7), each a per-item refusal that leaves its siblings unchanged, so the criterion is asserted by a unit test in the module's own `#[cfg(test)]` tests. | Test (TC-029) |
+| FR-018-AC-19 | The non-test code of `src/oracle/equality/mod.rs` (everything before its `#[cfg(test)]` module, comment lines not counted, string literals the generator emits counted) contains zero occurrences of `.unwrap(`, `.expect(`, `.unwrap_unchecked(`, `panic!`, `unreachable!`, `todo!`, `unimplemented!`, `assert!`, `assert_eq!`, `assert_ne!`, `debug_assert!` and `process::abort`, the macros in any delimiter form. | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -256,6 +304,9 @@ without one is not written.
 | FR-018-AC-14 | Read bound members by position, or accept a bare literal in place of a `binding` member, so a QSL-shaped or wrongly named bound is read as some other range. |
 | FR-018-AC-15 | Read a conversion's own `result_type` or its first nested conversion's result as the source type, or read every application operand through to its first argument, so a descriptor naming the conversion target (or the inner result) as its source type is accepted over a body that converts from another type, or a `rational.div` operand is typed as its integer argument. |
 | FR-018-AC-16 | Read a `bounded_domain` member as its base scalar's unbounded type or through the union of every bound over that base, take the first sibling bound, or skip the form check, so a mismatched bound (`text_bounds` over an integer, a bound over a boolean) generates as an unbounded type instead of being refused, or refuse a `float_rounding` member as unsupported so the IEEE refusal never fires. |
+| FR-018-AC-17 | Emit `.expect(..)` in the `integer` helper or in a rendered `RationalDomain`, `TextType`, `CardinalityBound`, `IntegerInterval` or `DecimalType` reconstruction, so a runtime release that tightens a constructor panics a generated oracle; or replace it with `.ok()` or `.unwrap_or(..)` to an unbounded type, so a failed reconstruction silently widens the compared type; or report it as an `InvalidDeclaration` with a cause the runtime does not state. |
+| FR-018-AC-18 | Keep a defensive `ValueType::Quantity => unreachable!(..)` or `ValueType::Reference => unreachable!(..)` arm after the earlier refusal, so a change to that refusal turns a bad request into a generator panic. |
+| FR-018-AC-19 | Add an `assert!`, `debug_assert!`, `process::abort()` or `.unwrap_unchecked()` to the generator, or re-add an `.expect(..)` template, none of which a scan limited to `unwrap`, `expect` and four macros catches. |
 
 ## Dependencies
 
