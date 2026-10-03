@@ -104,6 +104,27 @@ pub fn replay_falsification(
     parameters: &[ReplayParameter<'_>],
     request: impl FnOnce(ReplaySource) -> ReplayRequestWire,
 ) -> Result<WitnessArmResult, SpineReplayError> {
+    replay_falsification_through(
+        harness,
+        check_text,
+        values,
+        parameters,
+        request,
+        &mut replay,
+    )
+}
+
+/// What executes a built request: [`qsl_replay::replay`], or a caller's wrapper around it.
+type Execute<'a> = &'a mut dyn FnMut(ReplayRequestWire) -> Result<ReplayResult, ReplayRefusal>;
+
+fn replay_falsification_through(
+    harness: &str,
+    check_text: &str,
+    values: &[(String, WitnessValue)],
+    parameters: &[ReplayParameter<'_>],
+    request: impl FnOnce(ReplaySource) -> ReplayRequestWire,
+    execute: Execute<'_>,
+) -> Result<WitnessArmResult, SpineReplayError> {
     if [harness, check_text]
         .iter()
         .any(|field| field.contains(['|', '<', '>']))
@@ -130,7 +151,7 @@ pub fn replay_falsification(
         "<<<assertion|{harness}|{check_text}|{}>>>",
         bindings.join(";")
     ))?;
-    match replay(request(ReplaySource::Witness(witness))) {
+    match execute(request(ReplaySource::Witness(witness))) {
         Ok(ReplayResult::Witness(result)) => Ok(result),
         Ok(ReplayResult::Input(_)) => Err(SpineReplayError::WrongArm),
         Err(refusal) => Err(SpineReplayError::Refused(Box::new(refusal))),
@@ -438,9 +459,22 @@ impl ReplayPackage {
     /// The package reference's `dependencies` are the lock's dependency selections, one entry
     /// each, and the byte provision holds the proved unit's source and every dependency source.
     ///
-    /// The request's `obligation_identity` slot holds `obligation`, the identity
-    /// [`ReplayPackage::obligation_identity`] returns for the harness replayed.
+    /// The request's `obligation_identity` slot holds the identity
+    /// [`ReplayPackage::obligation_identity`] returns for `identity`, the harness replayed, so a
+    /// slot that is not that harness's identity is not representable here.
+    ///
+    /// # Errors
+    ///
+    /// [`ObligationIdentityError`] when `identity` has no function-contract identity.
     pub fn request(
+        &self,
+        identity: &KaniObligationIdentity,
+        source: ReplaySource,
+    ) -> Result<ReplayRequestWire, ObligationIdentityError> {
+        Ok(self.request_for(self.obligation_identity(identity)?, source))
+    }
+
+    fn request_for(
         &self,
         obligation: ObligationIdentity,
         source: ReplaySource,
@@ -518,6 +552,22 @@ pub fn replay_counterexample(
     transcript: &str,
     package: &ReplayPackage,
 ) -> Result<ReplayVerdict, SpineReplayError> {
+    replay_counterexample_through(identity, transcript, package, replay)
+}
+
+/// [`replay_counterexample`] with the request handed to `execute` instead of straight to
+/// [`qsl_replay::replay`]: a caller that records or wraps the request QSL receives passes a
+/// closure that ends in `qsl_replay::replay`.
+///
+/// # Errors
+///
+/// As [`replay_counterexample`].
+pub fn replay_counterexample_through(
+    identity: &KaniObligationIdentity,
+    transcript: &str,
+    package: &ReplayPackage,
+    mut execute: impl FnMut(ReplayRequestWire) -> Result<ReplayResult, ReplayRefusal>,
+) -> Result<ReplayVerdict, SpineReplayError> {
     let failure = |cause| Ok(ReplayVerdict::EvidenceFailure(cause));
     let values = match decode_falsification(
         identity.harness_symbol.as_str(),
@@ -537,12 +587,13 @@ pub fn replay_counterexample(
         .obligation_identity(identity)
         .map_err(SpineReplayError::Identity)?;
     let harness = identity.harness_path().to_string();
-    let result = replay_falsification(
+    let result = replay_falsification_through(
         &harness,
         identity.clause.clause().as_str(),
         &values,
         &package.parameters(),
-        |source| package.request(obligation, source),
+        |source| package.request_for(obligation, source),
+        &mut execute,
     )?;
     Ok(verdict_of(result.settlement(), result.category()))
 }

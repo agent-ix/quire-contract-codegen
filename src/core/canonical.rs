@@ -22,8 +22,9 @@ impl fmt::Display for DigestError {
 
 impl std::error::Error for DigestError {}
 
-/// The SHA-256 digest of the RFC 8785 encoding of `preimage`, with no domain label: ADR-013 O-09
-/// says the obligation identity's digest domain is not in the closed FR-201 set.
+/// The SHA-256 digest of the RFC 8785 encoding of `preimage`, with no domain label. This is
+/// interim: ADR-013 O-09 records that the obligation identity's digest domain is not in the closed
+/// FR-201 set today, and QC-4 / TK-07 may add one, which would change every identity.
 ///
 /// # Errors
 ///

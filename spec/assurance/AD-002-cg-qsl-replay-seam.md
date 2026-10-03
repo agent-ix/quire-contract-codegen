@@ -140,13 +140,12 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   partitions (`verdict_of`, :520). This path builds no `WitnessEnvelope`: it sends
   `ReplaySource::Witness` in the request. The request has an obligation-identity slot (QSL
   renamed it from `originating_counterexample_identity` to `obligation_identity`, R-Q7, and it
-  is typed `ObligationIdentity`). At this base `ReplayPackage::request` (`function.rs:438`) fills
-  it with the `ByteDigest` of the transcript. That is a placeholder, recorded here as wrong and
-  replaced by the ADR-013 O-09 function-contract obligation identity (QSL-352, merged in
-  quire-spec-language #618; IR-553 carries the CG work), not as the design. The function node id
-  and `declaration` occurrence key reach CG through `FunctionSite`'s `function` and
-  `declaration` members, and CG never derives a node id. Until QSL's queued code PR adds those
-  members, the code cannot land; FR-016-AC-21 to AC-23 are implemented.
+  is typed `ObligationIdentity`). `ReplayPackage::request` fills it with the ADR-013 O-09
+  function-contract obligation identity of the harness replayed (QSL-352, merged in
+  quire-spec-language #618; IR-553; FR-016-AC-21 to AC-23, implemented); the `ByteDigest` of the
+  transcript that stood there before is gone. The function node id and `declaration` occurrence
+  key reach CG through `FunctionSite`'s `function` and `declaration` members, and CG never
+  derives a node id.
 - Frame path: `src/replay/frame.rs` calls `call_site` with an `OperationSite` (:112), builds the
   envelope with `WitnessEnvelope::reconstruct` (:182) and calls `replay_frame` (:183).
   `obligation_identity` is a caller-supplied `[u8; 32]` field (:47) that the request and the

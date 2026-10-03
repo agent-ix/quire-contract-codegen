@@ -31,6 +31,23 @@ pub enum ObligationIdentityError {
         /// The harness argument's identifier.
         argument: String,
     },
+    /// A parameter of the function has no harness argument: O-09's `arguments` are the
+    /// function's parameters, and replay refuses a parameter with no value.
+    UnboundParameter {
+        /// The parameter's declared identifier.
+        parameter: String,
+    },
+    /// A harness argument declares no finite domain: an integer with no bound is
+    /// `requires-bound` and is never narrowed implicitly (AD-016 arrow 5).
+    UnboundedDomain {
+        /// The harness argument's identifier.
+        argument: String,
+    },
+    /// A harness argument is a Boolean that carries integer bounds.
+    BoundedBoolean {
+        /// The harness argument's identifier.
+        argument: String,
+    },
     /// The preimage has no RFC 8785 encoding.
     Digest(DigestError),
 }
@@ -42,6 +59,18 @@ impl fmt::Display for ObligationIdentityError {
                 write!(
                     f,
                     "the harness argument `{argument}` names no parameter of the function"
+                )
+            }
+            Self::UnboundParameter { parameter } => {
+                write!(f, "the parameter `{parameter}` has no harness argument")
+            }
+            Self::UnboundedDomain { argument } => {
+                write!(f, "the harness argument `{argument}` declares no bound")
+            }
+            Self::BoundedBoolean { argument } => {
+                write!(
+                    f,
+                    "the Boolean harness argument `{argument}` carries integer bounds"
                 )
             }
             Self::Digest(cause) => cause.fmt(f),
@@ -68,17 +97,25 @@ pub(crate) enum ArgumentDomain {
 }
 
 impl ArgumentDomain {
-    /// The domain `binding` declares: its IR integer bounds, or its primitive type's range when it
-    /// declares none.
-    pub(crate) fn of(binding: &ObligationBinding) -> Self {
-        let range = |minimum: i64, maximum: i64| Self::IntegerRange {
-            minimum: minimum.to_string(),
-            maximum: maximum.to_string(),
-        };
+    /// The domain `binding` declares: its IR integer bounds, or both values of a Boolean.
+    ///
+    /// # Errors
+    ///
+    /// [`ObligationIdentityError::UnboundedDomain`] for an integer with no bound and
+    /// [`ObligationIdentityError::BoundedBoolean`] for a Boolean with bounds.
+    pub(crate) fn of(binding: &ObligationBinding) -> Result<Self, ObligationIdentityError> {
         match (&binding.integer_bounds, binding.primitive_type) {
-            (Some(bounds), _) => range(bounds.minimum, bounds.maximum),
-            (None, KaniPrimitiveType::Boolean) => Self::Boolean,
-            (None, KaniPrimitiveType::I64) => range(i64::MIN, i64::MAX),
+            (Some(bounds), KaniPrimitiveType::I64) => Ok(Self::IntegerRange {
+                minimum: bounds.minimum.to_string(),
+                maximum: bounds.maximum.to_string(),
+            }),
+            (None, KaniPrimitiveType::Boolean) => Ok(Self::Boolean),
+            (None, KaniPrimitiveType::I64) => Err(ObligationIdentityError::UnboundedDomain {
+                argument: binding.identifier.clone(),
+            }),
+            (Some(_), KaniPrimitiveType::Boolean) => Err(ObligationIdentityError::BoundedBoolean {
+                argument: binding.identifier.clone(),
+            }),
         }
     }
 }
@@ -96,16 +133,19 @@ pub(crate) struct ContractArgument {
 }
 
 /// The arguments of the obligation `bindings` declare, each joined by identifier to the
-/// parameter of `parameters` it names.
+/// parameter of `parameters` it names. O-09's `arguments` are the function's parameters, so the
+/// bindings must cover every parameter.
 ///
 /// # Errors
 ///
-/// [`ObligationIdentityError::UnboundArgument`] when a binding names no parameter.
+/// [`ObligationIdentityError::UnboundArgument`] when a binding names no parameter,
+/// [`ObligationIdentityError::UnboundParameter`] when a parameter has no binding, and the
+/// domain refusals of [`ArgumentDomain::of`].
 pub(crate) fn contract_arguments(
     parameters: &[(Identifier, WireNodeId)],
     bindings: &[ObligationBinding],
 ) -> Result<Vec<ContractArgument>, ObligationIdentityError> {
-    bindings
+    let arguments = bindings
         .iter()
         .map(|binding| {
             let (_, parameter) = parameters
@@ -117,10 +157,20 @@ pub(crate) fn contract_arguments(
             Ok(ContractArgument {
                 identifier: binding.identifier.clone(),
                 parameter: *parameter,
-                domain: ArgumentDomain::of(binding),
+                domain: ArgumentDomain::of(binding)?,
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    match parameters.iter().find(|(name, _)| {
+        !arguments
+            .iter()
+            .any(|argument| argument.identifier == name.as_str())
+    }) {
+        Some((name, _)) => Err(ObligationIdentityError::UnboundParameter {
+            parameter: name.as_str().to_owned(),
+        }),
+        None => Ok(arguments),
+    }
 }
 
 #[derive(Serialize, FixedShape)]
@@ -281,5 +331,34 @@ mod tests {
             range(&i64::MIN.to_string(), &(i64::MAX - 1).to_string()),
         )];
         assert_ne!(identity(7, 7, kind, &extreme), identity(7, 7, kind, &near));
+    }
+
+    /// Ascending by identifier is not ascending by node id: with `a` bound to a node id above
+    /// `b`'s, the digest equals the hand-written text that lists `a` first. A sort by node id
+    /// would list `b` first and fail.
+    ///
+    /// Trace: FR-016-AC-21, TC-026
+    #[test]
+    fn tc_026_arguments_are_ordered_by_identifier_not_by_node_id() {
+        use sha2::{Digest, Sha256};
+        let hex = |byte: u8| format!("{byte:02x}").repeat(32);
+        let arguments = [
+            argument("b", 1, ArgumentDomain::Boolean),
+            argument("a", 9, range("0", "9")),
+        ];
+        let text = format!(
+            "{{\"arguments\":[{{\"domain\":{{\"maximum\":\"9\",\"minimum\":\"0\",\
+             \"type\":\"integerRange\"}},\"parameter\":\"{}\"}},\
+             {{\"domain\":{{\"type\":\"boolean\"}},\"parameter\":\"{}\"}}],\
+             \"declaration\":{{\"node\":\"{}\",\"ordinal\":0,\"role\":\"declaration\"}},\
+             \"function\":\"{}\",\"kind\":\"frame\"}}",
+            hex(9),
+            hex(1),
+            hex(7),
+            hex(7),
+        );
+        let expected: [u8; 32] = Sha256::digest(text.as_bytes()).into();
+        let built = identity(7, 7, ObligationKind::Frame, &arguments);
+        assert_eq!(*built.as_bytes(), expected);
     }
 }

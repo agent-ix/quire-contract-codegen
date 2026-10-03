@@ -158,9 +158,9 @@ pub use kani::output::playback::DecodeFailure;
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
 pub use replay::frame::{FrameReplay, FrameReplayError, FrameReplayInputs, ProvidedDocument};
 pub use replay::function::{
-    replay_counterexample, replay_falsification, DependencyLock, DependencyLockError,
-    EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError,
-    ReplayParameter, ReplayVerdict, SpineReplayError,
+    replay_counterexample, replay_counterexample_through, replay_falsification, DependencyLock,
+    DependencyLockError, EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage,
+    ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use replay::obligation::ObligationIdentityError;
 pub use replay::witness::decode_falsification;
