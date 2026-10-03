@@ -104,7 +104,20 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    Name a `float_rounding` node over a `float64` scalar as a member: it reads as the
    float and the equality is refused as `OperatorIneligible`.
 
+9. Source-level scan (FR-018-AC-17, FR-018-AC-18). Read the emitted `src/lib.rs`
+   of this corpus and of the FR-014 scalar corpus, and the non-test text of
+   `src/oracle/equality/mod.rs` and `src/oracle/scalar/mod.rs` (everything before
+   the `#[cfg(test)]` module, comment lines dropped, string literals kept), and
+   assert zero occurrences of `.unwrap(`, `.expect(`, `unreachable!`, `panic!`,
+   `todo!` and `unimplemented!`, the macros in any delimiter form. Then request an
+   equality whose operand type is rendered with a `ValueType::Quantity` and one
+   with a `ValueType::Reference`, and assert each is refused with a typed
+   `OracleGenerationError` and absent from the emitted crate.
+
 ## Expected Results
+
+The source scan finds zero panic sites, and a quantity or reference operand is a
+typed refusal rather than a generator panic.
 
 Every admitted shape and schedule is generated; every refused item is absent
 from the source and carries its own typed reason; bytes are identical across

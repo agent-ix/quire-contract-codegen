@@ -202,6 +202,17 @@ in the `NODE_KEY_DOMAIN` domain.
 - The generator shall use a stem that one item holds bare.
 - The generator shall suffix items that share a stem with `_{n}`, numbered from 1
   in ascending descriptor-key order.
+- The generator shall emit no `unwrap`, `expect` or panic macro (`panic!`,
+  `unreachable!`, `todo!`, `unimplemented!`) in any emitted source, and its own
+  generation code shall contain none. Where emitted code reconstructs a literal or
+  a bound, a failed reconstruction is a typed value: the environment constructor's
+  `Err(InvalidDeclaration)` or the oracle function's
+  `Outcome::Refused(Refusal::CheckedInvariant)`, whichever site the reconstruction
+  is in.
+- If an operand type reaches `ValueType::Quantity` or `ValueType::Reference` when
+  its type expression is rendered, then the generator shall refuse the item with a
+  typed `OracleGenerationError` and emit no code for it, rather than asserting that
+  an earlier stage already refused it.
 - If the generated source exceeds its size ceiling, then the generator shall
   return a typed error and no partial output.
 
@@ -225,6 +236,8 @@ in the `NODE_KEY_DOMAIN` domain.
 | FR-018-AC-14 | The `bounded_domain` nodes an operand type reaches (`integer_range`, `rational_range`, `decimal_range`, `text_bounds`, `collection_bounds`) are read from `binding` members looked up by name as FR-014 lists them, in any order; a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-029) |
 | FR-018-AC-15 | A `binary` node's operand is read through its `reference`: a reference to a `convert` expression node is read as the type of what it converts, following nested conversions to the first node that is not a conversion, and a reference to any other node, including a non-`convert` application, as that node's own `semantic_type`. A descriptor whose `source_type` is the read type generates, and any other source is refused as an operand-type disagreement at that position, reporting the read type as found. | Test (TC-029) |
 | FR-018-AC-16 | A tuple position whose type node is a `text_bounds` `bounded_domain` node generates the declaration `Text(min, max, profile)` read from that node's own members, an integer, decimal or rational `bounded_domain` member reads as the same type as a member naming its base scalar, and a second bound over the same base is never read: naming either of two `text_bounds` nodes over one text scalar reads that node's own `min` and `max`. A `bounded_domain` member whose form does not fit its base scalar is refused as missing the form the base reads, and one over a boolean scalar, over QSL's enum declaration or over a record is refused as unsupported `bounded_domain`, naming the bound node, in every case with no code emitted for the item. A member whose type is a `float_rounding` `bounded_domain` over a float scalar reads as that float, and the equality is refused as `IllTypedCause::OperatorIneligible`. | Test (TC-029) |
+| FR-018-AC-17 | The emitted `src/lib.rs` of the TC-029 corpus crate and of the generated crate of the FR-014 scalar corpus (TC-024) contains zero occurrences of `.unwrap(`, `.expect(`, `unreachable!`, `panic!`, `todo!` and `unimplemented!`, the macros in any delimiter form; a literal or bound that fails to reconstruct in emitted code yields the environment constructor's `Err(InvalidDeclaration)` or the oracle function's `Outcome::Refused(Refusal::CheckedInvariant)`, never a panic. | Test (TC-029) |
+| FR-018-AC-18 | An operand type reaching `ValueType::Quantity` or `ValueType::Reference` at type-expression rendering is refused with a typed `OracleGenerationError`, and that item does not appear in the emitted crate; `src/oracle/equality/mod.rs` and `src/oracle/scalar/mod.rs` contain zero invocations of `unreachable!`, `panic!`, `todo!` and `unimplemented!` and zero `.unwrap(` and `.expect(` outside `#[cfg(test)]` modules, comment lines not counted and string literals the generator emits counted. | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -256,6 +269,8 @@ without one is not written.
 | FR-018-AC-14 | Read bound members by position, or accept a bare literal in place of a `binding` member, so a QSL-shaped or wrongly named bound is read as some other range. |
 | FR-018-AC-15 | Read a conversion's own `result_type` or its first nested conversion's result as the source type, or read every application operand through to its first argument, so a descriptor naming the conversion target (or the inner result) as its source type is accepted over a body that converts from another type, or a `rational.div` operand is typed as its integer argument. |
 | FR-018-AC-16 | Read a `bounded_domain` member as its base scalar's unbounded type or through the union of every bound over that base, take the first sibling bound, or skip the form check, so a mismatched bound (`text_bounds` over an integer, a bound over a boolean) generates as an unbounded type instead of being refused, or refuse a `float_rounding` member as unsupported so the IEEE refusal never fires. |
+| FR-018-AC-17 | Emit `.expect(..)` in the `integer` helper or in a rendered `RationalDomain`, `TextType`, `CardinalityBound`, `IntegerInterval` or `DecimalType` reconstruction, so a runtime release that tightens a constructor panics a generated oracle instead of returning a typed refusal. |
+| FR-018-AC-18 | Keep a defensive `ValueType::Quantity => unreachable!(..)` or `ValueType::Reference => unreachable!(..)` arm after the earlier refusal, so a change to that refusal turns a bad request into a generator panic. |
 
 ## Dependencies
 
