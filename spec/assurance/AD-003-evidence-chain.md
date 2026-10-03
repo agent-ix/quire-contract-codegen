@@ -89,10 +89,9 @@ success.
 - The other digests on the chain already exist and bind content, not tools or versions:
   `package_id` (QSL recomputes it on replay), the byte digests QSL checks on provided source and
   the `CaseIdentity` name of a corpus case. The `ByteDigest` of the transcript that the function path
-  puts in the request's identity slot at this base is not a content identity of the proof. It is
-  recorded as wrong and replaced by the O-09 function-contract obligation identity (R-Q7,
-  IR-553); QSL does not check the slot against anything (`execute.rs`, it is passed to witness
-  decoding as a label).
+  once put in the request's identity slot was not a content identity of the proof; it is replaced
+  by the O-09 function-contract obligation identity (R-Q7, IR-553). QSL does not check the slot
+  against anything (`execute.rs`, it is passed to witness decoding as a label).
 - There is no pin, SHA or digest over a file, version or tool, and CG proposes none. In
   particular the Kani version is not pinned; classification reads Kani's output through the one
   transcript parser. QSL's `BackendProviderSource` has a public `tool_pin` string and ADR-013
@@ -133,7 +132,8 @@ authored).
   too, with the checked function node id and its `declaration` occurrence key in place of the
   clause's, both read from `FunctionSite` and never derived by CG, and the existing `ObligationKind` of the
   harness replayed (O-09 adds no subject tag and no new kind: one identity per kind the function
-  requests; FR-016-AC-21 to AC-23, planned).
+  requests; FR-016-AC-21 to AC-23, implemented for the function path only: the V1 contract, scalar
+  and frame paths do not compute it yet).
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001).
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from
@@ -261,7 +261,11 @@ crate CG's lock selects.
 
 ### Current state and gaps
 
-- E-1 gap: no code in CG computes `ObligationIdentity`. QSL's type says QSL never hashes it.
+- E-1 gap, function path closed (IR-553): `ReplayPackage::obligation_identity` computes the
+  function-contract identity through `core::canonical` (`quire-canonical`, a direct
+  `branch = "main"` dependency) and the function path's request carries it. The V1 contract, scalar
+  and frame paths still compute none, and the rest of this entry describes them.
+  No code on those paths computes `ObligationIdentity`. QSL's type says QSL never hashes it.
   ADR-013 O-09 defines the preimage: the clause (or application) node id, its occurrence key,
   the obligation kind and the arguments (parameter node id and declared domain), source span
   excluded. CG's frame envelope takes a caller `[u8; 32]` (`frame_replay.rs:47`); the function

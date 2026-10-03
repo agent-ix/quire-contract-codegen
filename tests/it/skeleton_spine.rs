@@ -21,9 +21,9 @@ use std::{fs, path::PathBuf};
 use qsl_replay::WitnessValue;
 use qsl_replay::{
     call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, DependencyInput,
-    DependencySelectionsCause, DigestDomain, DigestRecord, Identifier, QualifiedName,
-    ReplayRefusal, ReplaySource, ScalarLimits, SourceIdentity, StageLimits, Verdict, WireNodeId,
-    WitnessSettlement, MAX_ENCODED_BYTES,
+    DependencySelectionsCause, DigestDomain, DigestRecord, Identifier, ObligationIdentity,
+    QualifiedName, ReplayRefusal, ReplaySource, ScalarLimits, SourceIdentity, StageLimits, Verdict,
+    WireNodeId, WitnessSettlement, MAX_ENCODED_BYTES,
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample, replay_falsification,
@@ -102,6 +102,12 @@ fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     }
 }
 
+/// An obligation identity for the tests whose subject is not the identity: any fixed value fills
+/// the request's slot. The tests of the slot itself derive it from the harness.
+fn slot() -> ObligationIdentity {
+    ObligationIdentity::from_digest([1; 32])
+}
+
 /// Compiles the hand-mirrored native twin `source` and locates `function` in it.
 fn compile_native_twin(source: &str, function: &str) -> ReplayPackage {
     ReplayPackage::new(inputs(source, Vec::new()), function)
@@ -119,7 +125,7 @@ fn replay_against(
         "balance-never-grows",
         values,
         &package.parameters(),
-        |source| package.request("counterexample", source),
+        |source| package.request(slot(), source),
     )
 }
 
@@ -223,7 +229,7 @@ fn tc_026_a_boolean_value_replays_as_zero_or_one() {
             "flag",
             &[("b".to_owned(), WitnessValue::Boolean(value))],
             &package.parameters(),
-            |witness| package.request("flag", witness),
+            |witness| package.request(slot(), witness),
         )
         .expect("the replay settles")
     };
@@ -244,7 +250,7 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
     let native = native_source(VIOLATING_TWIN);
     let package = compile_native_twin(&native, FUNCTION);
     let parameters = package.parameters();
-    let build = |witness| package.request("x", witness);
+    let build = |witness| package.request(slot(), witness);
 
     let delimiter = replay_falsification("a|b", "c", &values(1, 5), &parameters, build);
     assert!(matches!(delimiter, Err(SpineReplayError::FieldDelimiter)));
@@ -264,9 +270,9 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
 
     let stale = compile_native_twin(&native_source(HEALTHY_TWIN), FUNCTION);
     let refused = replay_falsification("h", "c", &values(1, 5), &parameters, |witness| {
-        let mut wire = package.request("x", witness);
+        let mut wire = package.request(slot(), witness);
         wire.package_id = stale
-            .request("x", ReplaySource::Input(Vec::new()))
+            .request(slot(), ReplaySource::Input(Vec::new()))
             .package_id;
         wire
     });
@@ -282,7 +288,7 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
                 value: WitnessValue::Integer(value),
             })
             .collect();
-        package.request("x", ReplaySource::Input(input))
+        package.request(slot(), ReplaySource::Input(input))
     });
     assert!(matches!(wrong_arm, Err(SpineReplayError::WrongArm)));
 }
@@ -319,7 +325,7 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     let mut lock_inputs = inputs(&native, vec![lock.clone(), shared, earlier]);
     lock_inputs.backend_manifest = DigestRecord::mint(DigestDomain::VerificationJcs, [9; 32]);
     let package = ReplayPackage::new(lock_inputs, FUNCTION).expect("the twin compiles");
-    let wire = package.request("counterexample", ReplaySource::Input(Vec::new()));
+    let wire = package.request(slot(), ReplaySource::Input(Vec::new()));
 
     let identities: Vec<_> = wire
         .dependencies
@@ -365,8 +371,8 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
         .collect();
     assert_eq!(digests.len(), 2, "{digests:?}");
 
-    let without = compile_native_twin(&native, FUNCTION)
-        .request("counterexample", ReplaySource::Input(Vec::new()));
+    let without =
+        compile_native_twin(&native, FUNCTION).request(slot(), ReplaySource::Input(Vec::new()));
     assert!(without.dependencies.is_empty());
 }
 
@@ -451,7 +457,7 @@ fn replay_q(
         "q",
         &[("x".to_owned(), WitnessValue::Integer(x))],
         &package.parameters(),
-        |source| package.request("counterexample", source),
+        |source| package.request(slot(), source),
     )
 }
 
@@ -465,7 +471,7 @@ fn tc_026_a_unit_importing_a_locked_dependency_replays_to_a_reproduced_verdict()
     let (lock_inputs, _) = importing_inputs(&units_library(BIG));
     let package =
         ReplayPackage::new(lock_inputs, "q").expect("the unit compiles with its dependency");
-    let wire = package.request("counterexample", ReplaySource::Input(Vec::new()));
+    let wire = package.request(slot(), ReplaySource::Input(Vec::new()));
     assert_eq!(wire.dependencies.len(), 1);
 
     let reproduced = replay_q(&package, 3).expect("the replay settles");
@@ -537,7 +543,7 @@ fn tc_026_qsl_refuses_a_dependency_the_unit_does_not_select() {
         "balance-never-grows",
         &values(1, 5),
         &package.parameters(),
-        |source| package.request("counterexample", source),
+        |source| package.request(slot(), source),
     )
     .expect_err("QSL refuses the unselected dependency");
     assert!(
@@ -594,6 +600,215 @@ fn tc_026_a_library_sharing_the_units_source_owner_is_refused() {
         ),
         "{refusal}"
     );
+}
+
+// ---- The function-contract obligation identity (FR-016-AC-21 to AC-23) -------------------------
+
+/// A second function over the same parameters as [`FUNCTION`], and a two-conjunct function.
+const SIBLING: &str = "balance_never_shrinks";
+const TWO_CONJUNCTS: &str = "balance_within_limit";
+
+/// A unit declaring `FUNCTION`, a sibling with the same parameters and a two-conjunct function,
+/// with `preface` before the first declaration.
+fn identity_unit(preface: &str) -> String {
+    let parameters = "amount_current: Int[0, 1000], balance_pre: Int[0, 1000]";
+    format!(
+        "language \"ix:native\" edition \"1-draft\";\n{PROFILE}{preface}\
+         function {FUNCTION} using v({parameters}): Boolean pure {{ balance_pre - amount_current <= balance_pre }}\n\
+         function {SIBLING} using v({parameters}): Boolean pure {{ balance_pre <= balance_pre + amount_current }}\n\
+         function {TWO_CONJUNCTS} using v({parameters}): Boolean pure \
+         {{ balance_pre - amount_current <= balance_pre and amount_current <= 1000 }}\n"
+    )
+}
+
+/// The identity of `function` in `source` for the harness `identity`.
+fn identity_of(
+    source: &str,
+    function: &str,
+    identity: &quire_contract_codegen::KaniObligationIdentity,
+) -> ObligationIdentity {
+    compile_native_twin(source, function)
+        .obligation_identity(identity)
+        .expect("the harness's arguments name the function's parameters")
+}
+
+/// The `FunctionSite` QSL itself locates for `function`, read without CG.
+fn site_of(source: &str, function: &str) -> qsl_replay::FunctionSite {
+    let selection = QualifiedName::new(vec![Identifier::new(function).unwrap()]).unwrap();
+    call_site(
+        SourceIdentity::new(AUTHORITY, IDENTITY, NAMESPACE, REVISION),
+        IDENTITY,
+        source.as_bytes(),
+        [],
+        &DependencyInput::default(),
+        &selection,
+    )
+    .expect("the unit compiles and declares the function")
+    .site
+}
+
+/// O-09's digest recomputed without CG's encoder: the RFC 8785 text written out by hand, members
+/// in key order, hashed with SHA-256. `kind` is the harness kind's spelling and `domains` the
+/// `(minimum, maximum)` of `amount_current` and `balance_pre`, the parameters' order by identifier.
+fn recomputed(site: &qsl_replay::FunctionSite, kind: &str, domains: [(i64, i64); 2]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let parameter = |name: &str| {
+        site.parameters
+            .iter()
+            .find(|(declared, _)| declared.as_str() == name)
+            .map(|(_, node)| node.to_string())
+            .expect("the function declares the parameter")
+    };
+    let argument = |name: &str, (minimum, maximum): (i64, i64)| {
+        format!(
+            "{{\"domain\":{{\"maximum\":\"{maximum}\",\"minimum\":\"{minimum}\",\
+             \"type\":\"integerRange\"}},\"parameter\":\"{}\"}}",
+            parameter(name)
+        )
+    };
+    let text = format!(
+        "{{\"arguments\":[{},{}],\"declaration\":{{\"node\":\"{}\",\"ordinal\":0,\
+         \"role\":\"declaration\"}},\"function\":\"{}\",\"kind\":\"{kind}\"}}",
+        argument("amount_current", domains[0]),
+        argument("balance_pre", domains[1]),
+        site.function,
+        site.function,
+    );
+    Sha256::digest(text.as_bytes()).into()
+}
+
+/// The `(minimum, maximum)` of each of `identity`'s two arguments.
+fn domains_of(identity: &quire_contract_codegen::KaniObligationIdentity) -> [(i64, i64); 2] {
+    let bounds = |index: usize| {
+        let bounds = identity.arguments[index]
+            .integer_bounds
+            .as_ref()
+            .expect("the argument is bounded");
+        (bounds.minimum, bounds.maximum)
+    };
+    [bounds(0), bounds(1)]
+}
+
+/// The request's `obligation_identity` slot holds the O-09 function-contract digest recomputed
+/// independently from the members QSL's `FunctionSite` carries, the harness's kind and its
+/// arguments, and it is not the digest of the transcript.
+///
+/// Trace: FR-016-AC-21, TC-026
+#[test]
+fn tc_026_the_request_slot_is_the_recomputed_function_contract_digest() {
+    let harness = spine_harness();
+    let source = identity_unit("");
+    let package = compile_native_twin(&source, FUNCTION);
+    let obligation = package
+        .obligation_identity(&harness.identity)
+        .expect("the identity is built");
+    let wire = package.request(obligation, ReplaySource::Input(Vec::new()));
+    let site = site_of(&source, FUNCTION);
+    let kind = serde_json::to_value(harness.identity.kind).unwrap();
+    let expected = recomputed(
+        &site,
+        kind.as_str().expect("the kind is a string"),
+        domains_of(&harness.identity),
+    );
+    assert_eq!(wire.obligation_identity, expected);
+    let transcript = playback(&harness, 1, 5);
+    assert_ne!(
+        wire.obligation_identity,
+        ByteDigest::of(transcript.as_bytes()).as_bytes()
+    );
+}
+
+/// Two functions with the same parameters have different identities; the identity of one function
+/// is the same across a recompile that adds only comments and blank lines and across a change of
+/// the harness's source span; it differs between two kinds over the same function and when an
+/// argument's domain differs.
+///
+/// Trace: FR-016-AC-22, TC-026
+#[test]
+fn tc_026_the_identity_separates_functions_kinds_and_domains_and_ignores_text_and_span() {
+    let harnesses = supported_contract_harnesses(&bound_package(1000), SUBJECT_PATH);
+    let base = &harnesses[1].identity;
+    let source = identity_unit("");
+    let identity = identity_of(&source, FUNCTION, base);
+
+    assert_eq!(
+        site_of(&source, FUNCTION).parameters,
+        site_of(&source, SIBLING).parameters,
+        "the two functions share their parameters"
+    );
+    assert_ne!(identity, identity_of(&source, SIBLING, base));
+
+    let commented = identity_unit("// a comment\n\n\n// another\n");
+    assert_ne!(commented, source, "the recompiled bytes differ");
+    assert_eq!(identity, identity_of(&commented, FUNCTION, base));
+
+    let mut respanned = base.clone();
+    respanned.source_span = harnesses[0].identity.source_span.clone();
+    assert_ne!(respanned.source_span, base.source_span);
+    assert_eq!(identity, identity_of(&source, FUNCTION, &respanned));
+
+    let other_kind = harnesses
+        .iter()
+        .map(|harness| &harness.identity)
+        .find(|other| other.kind != base.kind && other.arguments == base.arguments)
+        .expect("a harness of another kind over the same arguments");
+    assert_ne!(identity, identity_of(&source, FUNCTION, other_kind));
+
+    let mut narrowed = base.clone();
+    narrowed.arguments[1]
+        .integer_bounds
+        .as_mut()
+        .expect("the argument is bounded")
+        .maximum -= 1;
+    assert_ne!(identity, identity_of(&source, FUNCTION, &narrowed));
+}
+
+/// A function whose body has two conjuncts, replayed under one kind, has one identity: the
+/// identity is the digest of the function, declaration, kind and arguments, so it equals the
+/// recomputed digest, which has no conjunct member.
+///
+/// Trace: FR-016-AC-22, TC-026
+#[test]
+fn tc_026_a_two_conjunct_function_has_one_identity_per_kind() {
+    let harness = spine_harness();
+    let source = identity_unit("");
+    let kind = serde_json::to_value(harness.identity.kind).unwrap();
+    let expected = recomputed(
+        &site_of(&source, TWO_CONJUNCTS),
+        kind.as_str().expect("the kind is a string"),
+        domains_of(&harness.identity),
+    );
+    let package = compile_native_twin(&source, TWO_CONJUNCTS);
+    let obligation = package.obligation_identity(&harness.identity).unwrap();
+    assert_eq!(*obligation.as_bytes(), expected);
+    assert_eq!(
+        obligation,
+        package.obligation_identity(&harness.identity).unwrap()
+    );
+}
+
+/// With the function, declaration, kind and arguments fixed, an unrelated declaration added to
+/// the unit leaves the identity unchanged, and a harness argument that names no parameter is
+/// refused rather than guessed.
+///
+/// Trace: FR-016-AC-23, TC-026
+#[test]
+fn tc_026_an_unrelated_declaration_does_not_change_the_identity() {
+    let harness = spine_harness();
+    let alone = native_source("balance_pre - amount_current");
+    let before = identity_of(&alone, FUNCTION, &harness.identity);
+    let extended =
+        format!("{alone}function unrelated using v(z: Int[0, 5]): Boolean pure {{ z <= 5 }}\n");
+    assert_eq!(before, identity_of(&extended, FUNCTION, &harness.identity));
+
+    let mut unbound = harness.identity.clone();
+    unbound.arguments[0].identifier = "not_a_parameter".to_owned();
+    let package = compile_native_twin(&alone, FUNCTION);
+    assert!(matches!(
+        package.obligation_identity(&unbound),
+        Err(quire_contract_codegen::ObligationIdentityError::UnboundArgument { argument })
+            if argument == "not_a_parameter"
+    ));
 }
 
 /// The harness of the hand-built package, the obligation the synthetic transcripts name.

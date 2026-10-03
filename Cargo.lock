@@ -1379,6 +1379,7 @@ dependencies = [
  "jsonschema 0.17.1",
  "proptest",
  "qsl-replay",
+ "quire-canonical",
  "quire-contract-ir",
  "quire-contract-model",
  "quire-contract-runtime",

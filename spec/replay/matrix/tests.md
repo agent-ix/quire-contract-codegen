@@ -10,8 +10,8 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-016 | FR-016-AC-1 through FR-016-AC-5, FR-016-AC-8 through FR-016-AC-11, FR-016-AC-13, FR-016-AC-14 through FR-016-AC-20 | TC-026 | ✅ Covered |
-| FR-016 | FR-016-AC-6, FR-016-AC-7, FR-016-AC-12, FR-016-AC-21 through FR-016-AC-23 | TC-026 | 🚧 Planned |
+| FR-016 | FR-016-AC-1 through FR-016-AC-5, FR-016-AC-8 through FR-016-AC-11, FR-016-AC-13, FR-016-AC-14 through FR-016-AC-23 | TC-026 | ✅ Covered |
+| FR-016 | FR-016-AC-6, FR-016-AC-7, FR-016-AC-12 | TC-026 | 🚧 Planned |
 | FR-024 | FR-024-AC-1 through FR-024-AC-10 | TC-035 | 🚧 Planned |
 
 ## Test Case Summary

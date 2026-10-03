@@ -13,15 +13,18 @@ use std::{collections::BTreeMap, fmt};
 use qsl_replay::{
     call_site, replay, ByteDigest, CallSite, CallSiteRefusal, Category, DependencyEntryWire,
     DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, FunctionSite, Identifier,
-    MalformedTranscript, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult,
-    ReplaySource, ScalarLimits, SourceIdentity, StageLimits, StateEnvironment, SuppliedLibrary,
-    Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
+    MalformedTranscript, ObligationIdentity, QualifiedName, ReplayRefusal, ReplayRequestWire,
+    ReplayResult, ReplaySource, ScalarLimits, SourceIdentity, StageLimits, StateEnvironment,
+    SuppliedLibrary, Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
 };
 
 use crate::{
     kani::identity::KaniObligationIdentity,
     kani::output::playback::DecodeFailure,
-    replay::witness::{decode_falsification, first_out_of_domain},
+    replay::{
+        obligation::{contract_arguments, function_contract_identity, ObligationIdentityError},
+        witness::{decode_falsification, first_out_of_domain},
+    },
 };
 
 /// One parameter of the function the replay selects: the harness argument name a decoded value
@@ -50,6 +53,8 @@ pub enum SpineReplayError {
     Refused(Box<ReplayRefusal>),
     /// A witness-sourced request settled on the input arm.
     WrongArm,
+    /// The harness has no function-contract obligation identity.
+    Identity(ObligationIdentityError),
 }
 
 impl fmt::Display for SpineReplayError {
@@ -67,6 +72,7 @@ impl fmt::Display for SpineReplayError {
             Self::Transcript(cause) => write!(f, "the witness transcript is not admitted: {cause}"),
             Self::Refused(refusal) => write!(f, "the replay was refused: {refusal}"),
             Self::WrongArm => f.write_str("a witness-sourced request settled on the input arm"),
+            Self::Identity(cause) => write!(f, "the obligation identity was not built: {cause}"),
         }
     }
 }
@@ -432,16 +438,40 @@ impl ReplayPackage {
     /// The package reference's `dependencies` are the lock's dependency selections, one entry
     /// each, and the byte provision holds the proved unit's source and every dependency source.
     ///
-    /// The request's `obligation_identity` slot holds the `ByteDigest` of `counterexample`, a
-    /// placeholder and not the obligation's ADR-013 O-09 identity: no code in this crate computes
-    /// that identity yet (AD-002, AD-003 gap E-1).
-    pub fn request(&self, counterexample: &str, source: ReplaySource) -> ReplayRequestWire {
+    /// The request's `obligation_identity` slot holds `obligation`, the identity
+    /// [`ReplayPackage::obligation_identity`] returns for the harness replayed.
+    pub fn request(
+        &self,
+        obligation: ObligationIdentity,
+        source: ReplaySource,
+    ) -> ReplayRequestWire {
         self.inputs.wire(
             self.site.package_id,
             self.selection.clone(),
             source,
-            ByteDigest::of(counterexample.as_bytes()).as_bytes(),
+            *obligation.as_bytes(),
             &[],
+        )
+    }
+
+    /// The ADR-013 O-09 function-contract obligation identity of the selected function for the
+    /// harness `identity`: its kind and its arguments, each joined by identifier to the
+    /// parameter node id of this package's `FunctionSite`. The function node id and its
+    /// `declaration` occurrence key are the site's own, never derived here.
+    ///
+    /// # Errors
+    ///
+    /// [`ObligationIdentityError`] when a harness argument names no parameter of the function.
+    pub fn obligation_identity(
+        &self,
+        identity: &KaniObligationIdentity,
+    ) -> Result<ObligationIdentity, ObligationIdentityError> {
+        let arguments = contract_arguments(&self.site.site.parameters, &identity.arguments)?;
+        function_contract_identity(
+            self.site.site.function,
+            &self.site.site.declaration,
+            identity.kind,
+            &arguments,
         )
     }
 }
@@ -503,13 +533,16 @@ pub fn replay_counterexample(
             argument: argument.to_owned(),
         });
     }
+    let obligation = package
+        .obligation_identity(identity)
+        .map_err(SpineReplayError::Identity)?;
     let harness = identity.harness_path().to_string();
     let result = replay_falsification(
         &harness,
         identity.clause.clause().as_str(),
         &values,
         &package.parameters(),
-        |source| package.request(transcript, source),
+        |source| package.request(obligation, source),
     )?;
     Ok(verdict_of(result.settlement(), result.category()))
 }
@@ -535,6 +568,125 @@ fn verdict_of(settlement: WitnessSettlement, category: Category) -> ReplayVerdic
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kani::{
+        abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType},
+        identity::ObligationBinding,
+    };
+    use qsl_replay::{OccurrenceKey, WireNodeId};
+    use quire_contract_model::{IntegerDomain, OverflowPolicy};
+
+    const UNIT: &str = "language \"ix:native\" edition \"1-draft\";\n\
+        profile v = \"quire.value.complete/v1\";\n\
+        function f using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a <= b }\n";
+
+    fn unlimited() -> ScalarLimits {
+        let max = u64::MAX;
+        ScalarLimits {
+            integer_bits: max,
+            decimal_digits: max,
+            scale_expansion: max,
+            text_input_bytes: max,
+            text_scalars: max,
+            normalized_scalars: max,
+            unit_edges: max,
+            value_occurrences: max,
+            work_units: max,
+            result_units: max,
+        }
+    }
+
+    fn package() -> ReplayPackage {
+        let limits = unlimited();
+        let inputs = ReplayInputs {
+            source: LockedSource {
+                authority: "agent-ix".to_owned(),
+                identity: "unit".to_owned(),
+                namespace: "git".to_owned(),
+                revision: "r1".to_owned(),
+                bytes: UNIT.as_bytes().to_vec(),
+            },
+            dependencies: Vec::new(),
+            backend_manifest: DigestRecord::mint(DigestDomain::ToolManifestJcsV1, [0; 32]),
+            accounting_limits: limits,
+            stage_limits: StageLimits {
+                s1: ScalarLimits {
+                    text_input_bytes: 1 << 20,
+                    ..limits
+                },
+                s2: limits,
+                s3: limits,
+                s4: limits,
+            },
+        };
+        ReplayPackage::new(inputs, "f").expect("the unit compiles and declares `f`")
+    }
+
+    fn binding(identifier: &str) -> ObligationBinding {
+        ObligationBinding {
+            identifier: identifier.to_owned(),
+            role: KaniBindingRole::Argument,
+            primitive_type: KaniPrimitiveType::I64,
+            integer_bounds: Some(KaniIntegerBounds {
+                domain: IntegerDomain::Signed,
+                minimum: 0,
+                maximum: 9,
+                overflow: OverflowPolicy::Reject,
+            }),
+            dependencies: Vec::new(),
+        }
+    }
+
+    /// With the function, declaration, kind and arguments fixed, reordering `FunctionSite.parameters`
+    /// leaves the identity unchanged, and a perturbed `function` or `declaration` changes it.
+    ///
+    /// Trace: FR-016-AC-23, TC-026
+    #[test]
+    fn tc_026_the_identity_ignores_the_declared_order_of_the_site_parameters() {
+        use crate::kani::identity::ObligationKind;
+
+        let arguments = [binding("a"), binding("b")];
+        let arguments_of = |package: &ReplayPackage| {
+            contract_arguments(&package.site.site.parameters, &arguments).unwrap()
+        };
+        let identity = |package: &ReplayPackage, arguments: &[_]| {
+            function_contract_identity(
+                package.site.site.function,
+                &package.site.site.declaration,
+                ObligationKind::Postcondition,
+                arguments,
+            )
+            .unwrap()
+        };
+        let original = package();
+        let baseline = identity(&original, &arguments_of(&original));
+
+        let mut reordered = original.clone();
+        reordered.site.site.parameters.reverse();
+        assert_ne!(
+            reordered.site.site.parameters, original.site.site.parameters,
+            "the site's declared order changed"
+        );
+        assert_eq!(baseline, identity(&reordered, &arguments_of(&reordered)));
+        let mut harness_order = arguments_of(&original);
+        harness_order.reverse();
+        assert_eq!(baseline, identity(&original, &harness_order));
+
+        let mut other_function = original.clone();
+        other_function.site.site.function = WireNodeId::from_digest([9; 32]);
+        assert_ne!(
+            baseline,
+            identity(&other_function, &arguments_of(&other_function))
+        );
+        let mut other_declaration = original.clone();
+        other_declaration.site.site.declaration = OccurrenceKey::new(
+            original.site.site.function,
+            qsl_replay::Origin::new(qsl_replay::Role::new("declaration"), 1),
+        );
+        assert_ne!(
+            baseline,
+            identity(&other_declaration, &arguments_of(&other_declaration))
+        );
+    }
 
     /// A reproduced settlement in any category other than `violation` is not a reproduced
     /// failure, and an inconclusive settlement never is, whatever its category.
