@@ -8,9 +8,19 @@
 //! string and character literals), wherever they sit in the file.
 
 /// The identifiers the scan bans wherever they appear: the panicking `Option` and `Result`
-/// methods, called, named on a path or imported. `unwrap_or`, `unwrap_or_else` and `expect_err`
-/// are different identifiers and are not banned.
-const PANIC_METHODS: [&str; 3] = ["unwrap", "expect", "unwrap_unchecked"];
+/// methods and the std functions that panic on purpose, called, named on a path or imported.
+/// `unwrap_or`, `unwrap_or_else` and `unwrap_or_default` never panic, are different identifiers,
+/// and are not banned.
+const PANIC_METHODS: [&str; 8] = [
+    "unwrap",
+    "expect",
+    "unwrap_unchecked",
+    "unwrap_err",
+    "expect_err",
+    "unwrap_err_unchecked",
+    "panic_any",
+    "resume_unwind",
+];
 
 /// The macros the scan bans, in any delimiter form and with any path prefix: the identifier,
 /// optional whitespace, then `!` (not `!=`).
@@ -229,6 +239,20 @@ fn item_end(bytes: &[u8], kinds: &[Kind], from: usize) -> usize {
         }
     }
     bytes.len()
+}
+
+/// A Rust source file with its comments removed and everything else kept, test items included:
+/// the text FR-021-AC-21 counts.
+pub fn comments_stripped(source: &str) -> String {
+    let kinds = classify(source);
+    let kept: Vec<u8> = source
+        .as_bytes()
+        .iter()
+        .zip(&kinds)
+        .filter(|(_, kind)| **kind != Kind::Comment)
+        .map(|(byte, _)| *byte)
+        .collect();
+    String::from_utf8_lossy(&kept).into_owned()
 }
 
 /// The non-test code of a Rust source file: comments removed, and every item an attribute

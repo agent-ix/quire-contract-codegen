@@ -142,11 +142,12 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     `src/oracle/equality/mod.rs` (comments and every `#[cfg(test)]` item removed
     wherever the item sits, string literals kept), assert the scan removed the test
     module and nothing before it, and assert zero panic tokens as FR-018-AC-19
-    defines them: `unwrap`, `expect` and `unwrap_unchecked` however written
-    (including `Option::unwrap` and `.unwrap ()`), the macros `panic`,
+    defines them: `unwrap`, `expect`, `unwrap_unchecked`, `unwrap_err`,
+    `expect_err`, `unwrap_err_unchecked`, `panic_any` and `resume_unwind` however
+    written (including `Option::unwrap` and `.unwrap ()`), the macros `panic`,
     `unreachable`, `todo`, `unimplemented`, `assert`, `assert_eq`, `assert_ne`,
     `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form,
-    and `abort` other than as a method. The scan is shown to name each spelling by
+    and `abort` anywhere but as a method call. The scan is shown to name each spelling by
     the TC-024 panic-scan snippet test, which shares it.
 
 ## Expected Results

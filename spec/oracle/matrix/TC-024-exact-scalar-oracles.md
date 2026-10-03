@@ -160,10 +160,11 @@ and are counted separately from the three-way vectors.
 1. Source-level scan (FR-014-AC-39). Read the `src/lib.rs` of every crate any step of this
    test case generates (all sections above) and the non-test text of `src/oracle/scalar/mod.rs`
    (comments and every `#[cfg(test)]` item removed wherever the item sits, string literals kept),
-   and assert zero panic tokens as FR-014-AC-39 defines them: `unwrap`, `expect` and
-   `unwrap_unchecked` however written (including `Option::unwrap` and `.unwrap ()`), the macros
+   and assert zero panic tokens as FR-014-AC-39 defines them: `unwrap`, `expect`,
+   `unwrap_unchecked`, `unwrap_err`, `expect_err`, `unwrap_err_unchecked`, `panic_any` and
+   `resume_unwind` however written (including `Option::unwrap` and `.unwrap ()`), the macros
    `panic`, `unreachable`, `todo`, `unimplemented`, `assert`, `assert_eq`, `assert_ne`,
    `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form, and `abort`
-   other than as a method. Run the scan over hand-written snippets of each spelling to show it
+   anywhere but as a method call. Run the scan over hand-written snippets of each spelling to show it
    names each, and over a source with an earlier mention of the attribute to show it cuts
    nothing early.

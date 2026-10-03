@@ -9,7 +9,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::common::panic_scan::{non_test_code, panic_tokens_in};
+use crate::common::panic_scan::{comments_stripped, non_test_code, panic_tokens_in};
 use crate::scratch_crate::seed_lock;
 use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
@@ -2127,6 +2127,11 @@ fn tc_024_ac39_the_panic_scan_names_every_banned_token_and_no_lookalike() {
         "Result::expect(x, \"m\")",
         "use std::option::Option::unwrap;",
         "x.expect(\"m\")",
+        "x.expect_err(\"m\")",
+        "x.unwrap_err()",
+        "x.unwrap_err_unchecked()",
+        "std::panic::panic_any(1)",
+        "std::panic::resume_unwind(b)",
         "x.unwrap_unchecked()",
         "panic!(\"m\")",
         "panic![]",
@@ -2154,7 +2159,7 @@ fn tc_024_ac39_the_panic_scan_names_every_banned_token_and_no_lookalike() {
     for allowed in [
         "x.unwrap_or_else(f)",
         "x.unwrap_or(1)",
-        "x.expect_err(e)",
+        "x.unwrap_or_default()",
         "let assertion = 1;",
         "fn panic_free() {}",
         "a != b && todo != 1",
@@ -2261,23 +2266,29 @@ pub(crate) fn invokes_panicking_macro(text: &str) -> bool {
 /// variant. The RT enums are `#[non_exhaustive]` and foreign to this crate, so a test cannot build
 /// an unknown variant to drive `OracleGenerationError::UnknownRuntimeVariant`, and every mapper
 /// takes the RT enum directly (there is no CG-local seam to inject one through). The evidence is
-/// therefore the source itself: each of the exact-scalar, composite-equality and function
-/// generators, whole file, minus comments and any `#[cfg(test)]` item wherever it sits
-/// (`non_test_code`), contains no `unreachable!`, `panic!`, `todo!` or `unimplemented!`
-/// invocation (any delimiter, any path prefix) and no excused arm. The equality generator's two
-/// former `unreachable!` arms, for `ValueType::Quantity` and `ValueType::Reference`, now return a
-/// typed render error (FR-018-AC-18).
+/// therefore the source itself: the exact-scalar and composite-equality generators minus comments
+/// and any `#[cfg(test)]` item wherever it sits (`non_test_code`, as their ACs say), and the
+/// function generator whole, minus comments only (`comments_stripped`, as FR-021-AC-21 says),
+/// contain no `unreachable!`, `panic!`, `todo!` or `unimplemented!` invocation (any delimiter,
+/// any path prefix) and no excused arm. The equality generator's two former `unreachable!` arms,
+/// for `ValueType::Quantity` and `ValueType::Reference`, now return a typed render error
+/// (FR-018-AC-18).
 #[test]
 fn oracle_generators_have_no_panicking_arms() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut offending = Vec::new();
-    for file in [
-        "src/oracle/scalar/mod.rs",
-        "src/oracle/equality/mod.rs",
-        "src/oracle/function/mod.rs",
+    for (file, whole_file) in [
+        ("src/oracle/scalar/mod.rs", false),
+        ("src/oracle/equality/mod.rs", false),
+        ("src/oracle/function/mod.rs", true),
     ] {
         let source = fs::read_to_string(root.join(file)).expect("read generator source");
-        for line in non_test_code(&source).lines() {
+        let counted = if whole_file {
+            comments_stripped(&source)
+        } else {
+            non_test_code(&source)
+        };
+        for line in counted.lines() {
             if invokes_panicking_macro(line) {
                 offending.push(format!("{file}: {}", line.trim()));
             }
@@ -2287,4 +2298,16 @@ fn oracle_generators_have_no_panicking_arms() {
         offending.is_empty(),
         "panicking arms in generator source: {offending:#?}"
     );
+}
+
+/// Trace: FR-021-AC-21, TC-031. The whole-file scan of the function generator counts a
+/// `#[cfg(test)]` module: a banned macro inside one survives `comments_stripped` and is named,
+/// where `non_test_code` would drop it, and a banned word inside a comment is not counted.
+#[test]
+fn tc_031_ac21_the_whole_file_scan_counts_a_test_module_and_not_a_comment() {
+    let source = "fn real() {}\n// todo!()\n#[cfg(test)]\nmod probe_tests {\n    fn p() { unreachable!(\"probe\") }\n}\n";
+    let whole = comments_stripped(source);
+    assert!(whole.lines().any(invokes_panicking_macro));
+    assert_eq!(panic_tokens_in(&whole), vec!["unreachable!".to_owned()]);
+    assert!(!non_test_code(source).lines().any(invokes_panicking_macro));
 }
