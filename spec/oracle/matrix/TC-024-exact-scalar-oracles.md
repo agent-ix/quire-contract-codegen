@@ -164,8 +164,7 @@ and are counted separately from the three-way vectors.
    `consumed`, none is `LoweringWorkExhausted`, and no function is generated (FR-014-AC-40).
 2. In the scalar module's `#[cfg(test)]` seam, hand the module's `Failed` arm a
    `Failed { limit_kind: Bytes }` record and read `LoweringByteLimitExceeded` with the record's
-   `limit` and `consumed`; hand it the record beside a lowered record and read that the lowered
-   record keeps its own disposition. The per-node case of Contract IR FR-038-AC-95 is not reachable
+   `limit` and `consumed`. The per-node case of Contract IR FR-038-AC-95 is not reachable
    through the public API (FR-014-AC-40).
 3. Lower a package past the 65,536-unit work ceiling and read `LoweringWorkExhausted` with its
    ceiling and counter (FR-014-AC-41, with FR-014-AC-15). In the same seam, hand the scalar

@@ -155,8 +155,7 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     and request every node: every item is refused `LoweringByteLimitExceeded` with `limit` equal to
     that ceiling and one shared `consumed`, none `LoweringWorkExhausted`, and none generates. In
     the equality module's `#[cfg(test)]` seam, hand its `Failed` arm hand-built records: `bytes`
-    gives `LoweringByteLimitExceeded` with the record's `limit` and `consumed` and leaves a
-    sibling lowered record's item alone (the per-node case of Contract IR FR-038-AC-95, not
+    gives `LoweringByteLimitExceeded` with the record's `limit` and `consumed` (the per-node case of Contract IR FR-038-AC-95, not
     reachable through the public API); `work` gives `LoweringWorkExhausted`; each of `depth`,
     `nodes`, `edges`, `occurrences` and `diagnostics` gives `LoweringLimitUnrecognised` with that
     snake_case `limit_kind`, with no panic and never `LoweringWorkExhausted`.
