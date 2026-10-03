@@ -118,6 +118,89 @@ fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {
     }
 }
 
+/// Trace: FR-018-AC-20, TC-029.
+///
+/// A call whose lowered contract package is longer than the checked package, read under a ceiling
+/// that admits the checked package and is one byte below that lowered package, fails every
+/// requested record for bytes (Contract IR FR-038-AC-95): every item is refused as
+/// `LoweringByteLimitExceeded` with the ceiling as `limit` and one shared `consumed` above it,
+/// never as `LoweringWorkExhausted`, and none generates. The per-node case and each other limit
+/// kind are asserted on hand-built records in the module's own tests.
+#[test]
+fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal() {
+    use crate::common::byte_ceiling::{
+        limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
+    };
+    const CHAIN: u32 = 150;
+
+    let mut builder = corpus_package();
+    builder.boolean_equality_chain(CHAIN);
+    let requested = (0..CHAIN)
+        .map(|offset| code_id(BYTE_CHAIN_BASE + offset))
+        .collect::<Vec<_>>();
+    let items = (0..CHAIN)
+        .map(|offset| {
+            item(
+                BYTE_CHAIN_BASE + offset,
+                EqualityOperatorKind::Equal,
+                typed(T_BOOLEAN),
+                typed(T_BOOLEAN),
+            )
+        })
+        .collect::<Vec<_>>();
+    let generate_under =
+        |ceiling: u64| generate(&builder.admit_with(limits_under(ceiling)), &items);
+    let byte_refusal = |claim: &CompositeEqualityClaim| match &claim.result {
+        ClaimDisposition::Refused {
+            refusal: CompositeEqualityRefusal::LoweringByteLimitExceeded { limit, consumed },
+        } => Some((*limit, *consumed)),
+        _ => None,
+    };
+
+    let checked_length = u64::try_from(serde_json::to_vec(&builder.wire()).unwrap().len()).unwrap();
+    let lowered_length = lowered_package_length(
+        &builder.admit_with(limits_under(LARGEST_CEILING)),
+        &requested,
+        &measuring_profile(false),
+    );
+    let ceiling = lowered_length - 1;
+    assert!(
+        ceiling >= checked_length,
+        "the lowered package ({lowered_length} bytes) is longer than the checked package \
+         ({checked_length} bytes), so a ceiling one byte below it admits the checked package"
+    );
+    // At the lowered package's own length no record fails for bytes: the ceiling is exact.
+    assert!(generate_under(lowered_length)
+        .claim_map
+        .items
+        .iter()
+        .all(|claim| byte_refusal(claim).is_none()));
+
+    let oracles = generate_under(ceiling);
+    assert_eq!(oracles.claim_map.items.len(), items.len());
+    let mut consumed_seen = BTreeSet::new();
+    for claim in &oracles.claim_map.items {
+        let Some((limit, consumed)) = byte_refusal(claim) else {
+            panic!("expected a byte-ceiling refusal: {claim:?}");
+        };
+        assert_eq!(limit, ceiling);
+        assert!(
+            consumed > ceiling,
+            "{consumed} is above the ceiling {ceiling}"
+        );
+        consumed_seen.insert(consumed);
+    }
+    assert_eq!(
+        consumed_seen.len(),
+        1,
+        "one shared `consumed`: {consumed_seen:?}"
+    );
+    assert!(
+        !contents(&oracles, "src/lib.rs").contains("pub fn oracle_"),
+        "none generates"
+    );
+}
+
 /// Trace: FR-018-AC-1, TC-029.
 #[test]
 fn tc_029_ac1_every_item_gets_one_disposition_refused_siblings_unchanged() {
@@ -620,41 +703,6 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     }
 }
 
-/// Trace: TC-029. UNBACKED today (FR-018-AC-2's recursive vectors): an equality over a record
-/// type that reaches itself (`R_SELF` = `{ next: Option<R_SELF> }`, no text) is refused by
-/// Contract IR at admission, as any cyclic compared type is under the QSpec reference
-/// reader, so no oracle is generated for it and no generation or agreement test runs over any
-/// recursive composite. QSL emits `leaves: []` for this shape. Pending STD-129 (a cyclic type with
-/// no text: operator-ineligible or 0 leaves). This pins the exact refusal (code, cause, pointer,
-/// locus); it backs no clause of FR-018-AC-8, which concerns generation-time declaration
-/// refusals.
-#[test]
-fn tc_029_a_cyclic_compared_type_is_refused_by_ir_today() {
-    let (result, wire) = cyclic_self_package().read();
-    let node_id = code_id(E_SELF);
-    let position = wire["semantic_graph"]["nodes"]
-        .as_array()
-        .expect("nodes")
-        .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
-        .expect("the node is in the wire");
-    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
-        panic!("IR now admits a cyclic compared type ({result:?}); add it back to the corpus");
-    };
-    assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
-    assert_eq!(
-        refusal.cause,
-        Some(CheckedPackageRefusalCause::OperatorIneligible)
-    );
-    assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
-        Some(format!(
-            "/semantic_graph/nodes/{position}/body/operation/leaves"
-        ))
-    );
-    assert_eq!(refusal.locus, Some(node_id));
-}
-
 /// Trace: FR-018-AC-7, TC-029. The direct `reference` composite form: an equality over two
 /// `REF_TYPE` operands is refused by Contract IR at admission, before this generator runs, so the
 /// generator's `QuireSpecLanguage120` blocker is not reached for it today. This pins the exact
@@ -769,6 +817,7 @@ pub(super) fn agreement_names(oracles: &CompositeEqualityOracles) -> String {
         (E_TUPLE, "equal", "e_tuple_equal"),
         (E_OPTION, "equal", "e_option_equal"),
         (E_COLLECTION, "equal", "e_collection_equal"),
+        (E_SELF, "equal", "e_self_equal"),
         (E_PAIR_OF_POINTS, "equal", "e_pair_of_points_equal"),
         (E_RECORD, "not_equal", "e_record_not_equal"),
         (E_TEXT, "equal", "e_text_equal"),

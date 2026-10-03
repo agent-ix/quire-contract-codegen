@@ -580,12 +580,24 @@ impl PackageBuilder {
         semantic_type: &str,
         body: Value,
     ) -> &mut Self {
-        const TAG: &str = "expression";
+        self.application_node_tagged(code, "expression", form, semantic_type, body)
+    }
+
+    /// As [`Self::application_node`], with the node under `tag` rather than `expression`: the
+    /// `temporal` clause and formula nodes carry an application body too.
+    pub fn application_node_tagged(
+        &mut self,
+        code: u32,
+        tag: &str,
+        form: &str,
+        semantic_type: &str,
+        body: Value,
+    ) -> &mut Self {
         let label = code.to_string();
-        let declaration = declaration_for(TAG, form, &label);
+        let declaration = declaration_for(tag, form, &label);
         let preimage = json!({
             "version": APPLICATION_NODE_VERSION,
-            "node_tag": TAG,
+            "node_tag": tag,
             "semantic_form": form,
             "semantic_type": node_ref(semantic_type),
             "declaration": declaration,
@@ -595,12 +607,41 @@ impl PackageBuilder {
         let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("preimage"));
         register_code(code, digest.clone());
         let dependencies = application_dependencies(&body);
-        self.node_in_group_labeled(&digest, &label, TAG, form, semantic_type, body, None);
+        self.node_in_group_labeled(&digest, &label, tag, form, semantic_type, body, None);
         let node = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .and_then(|nodes| nodes.last_mut())
             .expect("the node just added");
         node["dependencies"] = Value::Array(dependencies.iter().map(|d| node_ref(d)).collect());
+        self
+    }
+
+    /// Adds `count` Boolean equalities, node `BYTE_CHAIN_BASE + k` comparing node
+    /// `BYTE_CHAIN_BASE + k - 1` with itself (the first compares a literal with itself). Each node
+    /// reaches every node before it, so a lowered node lists its whole chain in `dependencies`:
+    /// the lowered contract package of a call requesting the chain grows quadratically in `count`
+    /// while the checked package grows linearly (FR-018-AC-20).
+    pub fn boolean_equality_chain(&mut self, count: u32) -> &mut Self {
+        self.boolean_equality_chain_from(BYTE_CHAIN_BASE, count, "true")
+    }
+
+    /// As [`Self::boolean_equality_chain`], numbering the chain from `base` and starting it from
+    /// the Boolean literal `seed`. Two chains in one package need different seeds: a node's id is
+    /// derived from its body, and two first nodes over one literal would share an id.
+    pub fn boolean_equality_chain_from(&mut self, base: u32, count: u32, seed: &str) -> &mut Self {
+        let equality = |operand: Value| {
+            application(
+                "binary",
+                equality_operation("boolean"),
+                T_BOOLEAN,
+                vec![operand.clone(), operand],
+            )
+        };
+        self.application_code(base, "binary", equality(literal("boolean", seed)));
+        for offset in 1..count {
+            let previous = registered_digest(base + offset - 1);
+            self.application_code(base + offset, "binary", equality(reference_to(&previous)));
+        }
         self
     }
 
@@ -690,6 +731,22 @@ impl PackageBuilder {
         package
     }
 
+    /// Registers `definition` under `role` in `lock.profile_selections` and the identity
+    /// preimage's copy (deduplicated): IR admits a `temporal_profile` law only when the lock
+    /// selected its definition under that role.
+    pub fn select_profile(&mut self, role: &str, definition: Value) -> &mut Self {
+        let selection = json!({"role": role, "definition": definition});
+        for path in ["lock", "identity_preimage"] {
+            let selections = self.value[path]["profile_selections"]
+                .as_array_mut()
+                .expect("profile_selections");
+            if !selections.contains(&selection) {
+                selections.push(selection.clone());
+            }
+        }
+        self
+    }
+
     /// Registers `definition` in `lock.definition_selections` and the identity preimage's copy
     /// (deduplicated): Contract IR refuses an operation law whose definition the lock did not
     /// select.
@@ -728,9 +785,14 @@ impl PackageBuilder {
     }
 
     pub fn admit(&self) -> CheckedPackageV2 {
+        self.admit_with(CheckedPackageReadLimits::bounded())
+    }
+
+    /// As [`Self::admit`], reading under `limits`.
+    pub fn admit_with(&self, limits: CheckedPackageReadLimits) -> CheckedPackageV2 {
         let wire = self.wire();
         let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
-        match CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence()) {
+        match CheckedPackageV2::read(&bytes, limits, &evidence()) {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
             other => panic!("expected V2 admission, got {other:?}"),
         }
@@ -844,19 +906,6 @@ pub fn tuple_members_package(extras: &[u32], members: &[u32]) -> PackageBuilder 
         TUP_PAIR,
         aggregate(members.iter().map(|member| reference(*member)).collect()),
     );
-    builder
-}
-
-/// [`corpus_package`] plus [`E_SELF`]: `quire.op.structural.eq` over two `R_SELF` operands, a
-/// record `{ next: Option<R_SELF> }` reaching itself and no text. QSL emits `leaves: []` for it,
-/// which this builds. Contract IR refuses any compared type that reaches itself
-/// (`IllTyped`/`OperatorIneligible` at the operation's `leaves`), as the QSpec reference reader
-/// does, so it cannot be in the corpus; whether a cyclic type with no text should instead take 0
-/// leaves is the owner's question STD-129. `tc_029_a_cyclic_compared_type_is_refused_by_ir_today`
-/// pins the refusal.
-pub fn cyclic_self_package() -> PackageBuilder {
-    let mut builder = corpus_package();
-    builder.application_code(E_SELF, "binary", binary_body(R_SELF, R_SELF));
     builder
 }
 
@@ -1218,14 +1267,57 @@ pub fn corpus_package() -> PackageBuilder {
             T_BOOLEAN,
             aggregate(vec![]),
         )
-        .code(S_BARE, "state", "snapshot", T_BOOLEAN, aggregate(vec![]))
-        .code(
-            T_BARE,
-            "temporal",
-            "temporal_clause",
+        .code(S_BARE, "state", "snapshot", T_BOOLEAN, aggregate(vec![]));
+
+    // IR admits a `temporal_clause` only as a `temporal`-operator application over a declared
+    // `parameter` with one `temporal_profile` law and a `temporal` formula argument (the QSpec
+    // temporal-clause rule), so `T_BARE` is that minimal clause. CG refuses it as an
+    // unsupported temporal family. The formula is registered first: the clause's reference to
+    // it reads its node id.
+    let clause_profile = json!({
+        "authority": "agent-ix",
+        "identity": "quire.temporal.event-position.false-extension/v1",
+    });
+    builder.select_profile("temporal_profile", clause_profile.clone());
+    builder.application_node_tagged(
+        T_BARE_FORMULA,
+        "temporal",
+        "formula",
+        &key(T_BOOLEAN),
+        application(
+            "temporal_formula",
+            json!({
+                "identity": "quire.op.temporal.true",
+                "laws": [], "mode": null, "member": null, "leaves": [],
+            }),
             T_BOOLEAN,
-            aggregate(vec![]),
-        );
+            Vec::new(),
+        ),
+    );
+    let clause_formula = registered_digest(T_BARE_FORMULA);
+    builder.application_node_tagged(
+        T_BARE,
+        "temporal",
+        "temporal_clause",
+        &key(T_BOOLEAN),
+        application(
+            "temporal",
+            json!({
+                "identity": "quire.op.temporal.clause",
+                "laws": [{"role": "temporal_profile", "definition": clause_profile}],
+                "mode": null, "member": null, "leaves": [],
+            }),
+            T_BOOLEAN,
+            vec![
+                reference(parameter_code(T_INTEGER)),
+                literal("text", "c"),
+                aggregate(vec![]),
+                aggregate(vec![]),
+                aggregate(vec![]),
+                reference_to(&clause_formula),
+            ],
+        ),
+    );
 
     builder
         .application_code(E_RECORD, "binary", binary_body(R_POINT, R_POINT))
@@ -1249,6 +1341,7 @@ pub fn corpus_package() -> PackageBuilder {
         )
         .application_code(E_REFERENCE, "binary", binary_body(R_WITH_REF, R_WITH_REF))
         .application_code(E_CALL, "call", binary_body(T_INTEGER, T_INTEGER))
+        .application_code(E_SELF, "binary", binary_body(R_SELF, R_SELF))
         .converting_equality(E_CONV, T_INTEGER_BOUNDED, T_INTEGER, T_INTEGER)
         .application_code(E_COLLECTION, "binary", binary_body(SEQ_INT, SEQ_INT))
         .application_code(
@@ -1374,6 +1467,12 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
             EqualityOperatorKind::Equal,
             typed(R_PAIR_OF_POINTS),
             typed(R_PAIR_OF_POINTS),
+        ),
+        item(
+            E_SELF,
+            EqualityOperatorKind::Equal,
+            typed(R_SELF),
+            typed(R_SELF),
         ),
         item(
             E_CONV,

@@ -11,11 +11,11 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DependencyEntryWire, DependencyInput,
-    DependencyInputRefusal, DigestDomain, DigestRecord, FunctionSite, Identifier,
-    MalformedTranscript, ProofCategory, QualifiedName, ReplayRefusal, ReplayRequestWire,
-    ReplayResult, ReplaySource, ScalarLimits, SourceIdentity, StageLimits, StateEnvironment,
-    SuppliedLibrary, Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
+    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, Category, DependencyEntryWire,
+    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, FunctionSite, Identifier,
+    MalformedTranscript, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult,
+    ReplaySource, ScalarLimits, SourceIdentity, StageLimits, StateEnvironment, SuppliedLibrary,
+    Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
 };
 
 use crate::{
@@ -306,7 +306,7 @@ impl ReplayInputs {
         package_id: DigestRecord,
         selected: QualifiedName,
         source: ReplaySource,
-        counterexample_identity: [u8; 32],
+        obligation_identity: [u8; 32],
         documents: &[(DigestRecord, &[u8])],
     ) -> ReplayRequestWire {
         let dependencies = self
@@ -344,19 +344,16 @@ impl ReplayInputs {
             .map(|(hex, (domain, bytes))| (domain, hex, bytes.to_vec()))
             .collect();
         ReplayRequestWire {
-            contract_version: "quire.native-runtime/v1".to_owned(),
-            capability_vocabulary: Some("quire.capability-kind/v1".to_owned()),
             profile_selections: Vec::new(),
             package_id: (
                 Some(package_id.domain().as_str().to_owned()),
                 package_id.hex(),
             ),
-            package_contract_version: "quire.checked-package/v2".to_owned(),
             source_digests: vec![self.source.wire()],
             dependencies,
             selected_function: selected,
             source,
-            originating_counterexample_identity: counterexample_identity,
+            obligation_identity,
             backend: (
                 "kani".to_owned(),
                 Some(self.backend_manifest.domain().as_str().to_owned()),
@@ -434,6 +431,10 @@ impl ReplayPackage {
     ///
     /// The package reference's `dependencies` are the lock's dependency selections, one entry
     /// each, and the byte provision holds the proved unit's source and every dependency source.
+    ///
+    /// The request's `obligation_identity` slot holds the `ByteDigest` of `counterexample`, a
+    /// placeholder and not the obligation's ADR-013 O-09 identity: no code in this crate computes
+    /// that identity yet (AD-002, AD-003 gap E-1).
     pub fn request(&self, counterexample: &str, source: ReplaySource) -> ReplayRequestWire {
         self.inputs.wire(
             self.site.package_id,
@@ -461,7 +462,7 @@ pub enum EvidenceFailureCause {
         /// The settlement QSL reached.
         settlement: WitnessSettlement,
         /// The category QSL evaluated.
-        category: ProofCategory,
+        category: Category,
     },
 }
 
@@ -516,9 +517,9 @@ pub fn replay_counterexample(
 /// The verdict one witness-arm settlement decides: only an agreement with backend evidence in
 /// the `violation` category reproduces the backend's falsification; every other settlement is
 /// evidence failure.
-fn verdict_of(settlement: WitnessSettlement, category: ProofCategory) -> ReplayVerdict {
+fn verdict_of(settlement: WitnessSettlement, category: Category) -> ReplayVerdict {
     match (settlement, category) {
-        (WitnessSettlement::ReproducedWithEvaluatedWitness, ProofCategory::Violation) => {
+        (WitnessSettlement::ReproducedWithEvaluatedWitness, Category::Violation) => {
             ReplayVerdict::Reproduced
         }
         (
@@ -543,13 +544,13 @@ mod tests {
     fn only_a_reproduced_violation_reproduces() {
         use WitnessSettlement::{Inconclusive, ReproducedWithEvaluatedWitness as Reproduced};
         assert_eq!(
-            verdict_of(Reproduced, ProofCategory::Violation),
+            verdict_of(Reproduced, Category::Violation),
             ReplayVerdict::Reproduced
         );
         for (settlement, category) in [
-            (Reproduced, ProofCategory::Success),
-            (Inconclusive, ProofCategory::Violation),
-            (Inconclusive, ProofCategory::Success),
+            (Reproduced, Category::Success),
+            (Inconclusive, Category::Violation),
+            (Inconclusive, Category::Success),
         ] {
             assert_eq!(
                 verdict_of(settlement, category),

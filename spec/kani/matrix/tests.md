@@ -18,7 +18,7 @@ type: TestMatrix
 | FR-015 | FR-015-AC-15 | TC-033 | 🚧 Planned; the test's underivable claim is `integer.eq`, which FR-014-AC-35 makes derivable |
 | FR-015 | FR-015-AC-16 through FR-015-AC-18 | TC-033 | ✅ Covered |
 | FR-015 | FR-015-AC-19 through FR-015-AC-25 | TC-025 | 🚧 Planned |
-| FR-015 | FR-015-AC-50 | TC-025 | 🚧 Planned; negotiate reports a byte-ceiling and an unrecognised lowering refusal as `OracleRefused`, unchanged (IR-547, spec then code) |
+| FR-015 | FR-015-AC-50 | TC-025 | ✅ Covered; negotiate reports a byte-ceiling and an unrecognised lowering refusal as `OracleRefused`, unchanged (IR-547) |
 | FR-015 | FR-015-AC-26 through FR-015-AC-36 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-37 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-38 through FR-015-AC-49 | TC-025 | 🚧 Planned; the V2 clause claim and V2 census inputs (IR-489, AD-004 steps 4c and 4d). FR-015-AC-44 and FR-015-AC-45 back FR-015-AC-22 and FR-015-AC-25 once `ProofDependencyGraph` retires at step 4f; if they are not implemented by then, the row above holding AC-22 and AC-25 (FR-015-AC-19 through FR-015-AC-25) stays planned and unbacked, and no criterion is deleted or rewritten |

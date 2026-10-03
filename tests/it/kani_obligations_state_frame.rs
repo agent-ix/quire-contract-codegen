@@ -34,7 +34,7 @@ use package::{
     reference, Bound, PackageBuilder, NODE_DOMAIN, T_BOOLEAN, T_INTEGER,
 };
 use qsl_replay::{
-    CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, ProofCategory,
+    CallSiteRefusal, Category, DisagreementCause, FrameChange, FrameIdentityMismatch,
     ReplayRefusal, ReplayResult, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
@@ -802,6 +802,19 @@ fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
     );
 }
 
+/// The frame replay's request and envelope both carry the `obligation_identity` the caller
+/// supplied in `FrameReplayInputs` (the twin supplies `[1; 32]`), not a placeholder.
+///
+/// Trace: TC-025
+#[test]
+fn tc_025_the_frame_replay_request_and_envelope_carry_the_supplied_obligation_identity() {
+    let twin = Twin::new();
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let replay = twin.frame_replay(&invocation, "account", "audit");
+    assert_eq!(replay.wire.obligation_identity, [1; 32]);
+    assert_eq!(replay.packet.obligation_identity, Some([1; 32]));
+}
+
 /// `FrameReplay::replay` returns QSL's result without Kani: a forbidden write settles a reproduced
 /// violation that names the written field, and a write the frame grants is a respected frame.
 ///
@@ -821,7 +834,7 @@ fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
         arm.settlement(),
         WitnessSettlement::ReproducedWithEvaluatedWitness
     );
-    assert_eq!(arm.category(), ProofCategory::Violation);
+    assert_eq!(arm.category(), Category::Violation);
     let Some(FrameChange::FieldWrite { object, field, .. }) =
         result.found().map(|found| &found.change)
     else {
@@ -840,9 +853,9 @@ fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
     assert_eq!(arm.settlement(), WitnessSettlement::Inconclusive);
     assert_eq!(
         arm.disagreement(),
-        Some(DisagreementCause::Verdicts {
-            proved: Verdict::from_category(ProofCategory::Violation),
-            replayed: Verdict::from_category(ProofCategory::Success),
+        Some(&DisagreementCause::Verdicts {
+            proved: Verdict::from_category(Category::Violation),
+            replayed: Verdict::from_category(Category::Success),
         })
     );
     assert!(result.found().is_none());
@@ -1058,7 +1071,7 @@ fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
         arm.settlement(),
         WitnessSettlement::ReproducedWithEvaluatedWitness
     );
-    assert_eq!(arm.category(), ProofCategory::Violation);
+    assert_eq!(arm.category(), Category::Violation);
     let Some(FrameChange::FieldWrite { object, field, .. }) =
         result.found().map(|found| &found.change)
     else {
@@ -1084,9 +1097,9 @@ fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
     assert_eq!(arm.settlement(), WitnessSettlement::Inconclusive);
     assert_eq!(
         arm.disagreement(),
-        Some(DisagreementCause::Verdicts {
-            proved: Verdict::from_category(ProofCategory::Violation),
-            replayed: Verdict::from_category(ProofCategory::Success),
+        Some(&DisagreementCause::Verdicts {
+            proved: Verdict::from_category(Category::Violation),
+            replayed: Verdict::from_category(Category::Success),
         })
     );
     assert!(result.found().is_none());

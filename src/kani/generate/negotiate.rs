@@ -652,6 +652,8 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
             | ExactScalarRefusal::InvalidBody { .. }
             | ExactScalarRefusal::BodyIncomplete { .. }
             | ExactScalarRefusal::LoweringWorkExhausted { .. }
+            | ExactScalarRefusal::LoweringByteLimitExceeded { .. }
+            | ExactScalarRefusal::LoweringLimitUnrecognised { .. }
             | ExactScalarRefusal::NotExpression { .. }
             | ExactScalarRefusal::FormMismatch { .. }
             | ExactScalarRefusal::BodyMismatch { .. }

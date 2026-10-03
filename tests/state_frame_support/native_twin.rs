@@ -30,8 +30,6 @@ const IDENTITY: &str = "test:state-frame-twin";
 const PACKAGE: &str = "test/bank";
 const PLACEHOLDER_DIGEST: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
-const PROFILE_DIGEST: &str =
-    "sha256:c8c7ae9fbe783286369ecc83f006190f83be4c3c8fc585766617c90f27a25b16";
 
 fn account_type() -> String {
     format!("ix://{PACKAGE}/Account")
@@ -219,7 +217,7 @@ fn domain_document() -> Vec<u8> {
 fn unit_source(model_digest: &str) -> String {
     format!(
         "language \"ix:native\" edition \"1-draft\";\n\
-         profile v = \"quire.value.complete/v1\" version \"1-draft.2\" digest \"{PROFILE_DIGEST}\";\n\
+         profile v = \"quire.value.complete/v1\";\n\
          model Bank = {PACKAGE:?} version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n\
          post BalanceNeverDrops using v on Bank::Account::deposit {{ \
          self.balance >= pre(self.balance) }}\n"
@@ -404,7 +402,6 @@ impl Twin {
                 field: field.to_owned(),
             },
             obligation_identity: [1; 32],
-            counterexample_identity: [2; 32],
         })
     }
 

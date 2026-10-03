@@ -460,7 +460,9 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             blocked(RELATION, "relation", UpstreamBlocker::QuireSpecLanguage120),
         ),
         (STATE, unsupported(STATE, "state")),
-        (TEMPORAL, unsupported(TEMPORAL, "temporal")),
+        // IR names the first unsupported node the lowering reaches, and the clause's formula
+        // dependency is reached before the clause itself.
+        (TEMPORAL, unsupported(TEMPORAL_FORMULA, "temporal")),
         (PROTOCOL, unsupported(PROTOCOL, "protocol")),
         (MISSING, ExactScalarRefusal::InvalidInput),
         (
@@ -1099,6 +1101,89 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
     assert!(!contents(&oracles, "src/lib.rs").contains(code_id(3001).digest.as_ref()));
 }
 
+/// Trace: FR-014-AC-40, TC-024.
+///
+/// A call whose lowered contract package is longer than the checked package, read under a ceiling
+/// that admits the checked package and is one byte below that lowered package, fails every
+/// requested record for bytes (Contract IR FR-038-AC-95): every item is refused as
+/// `LoweringByteLimitExceeded` with the ceiling as `limit` and one shared `consumed` above it,
+/// never as `LoweringWorkExhausted`, and no function is generated. The per-node case and each
+/// other limit kind are asserted on hand-built records in the module's own tests.
+#[test]
+fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal() {
+    use crate::common::byte_ceiling::{
+        limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
+    };
+    const CHAIN: u32 = 150;
+
+    let mut builder = corpus_package();
+    integer_add_chain(&mut builder, CHAIN);
+    let requested = (0..CHAIN)
+        .map(|offset| code_id(CHAIN_BASE + offset))
+        .collect::<Vec<_>>();
+    let items = requested
+        .iter()
+        .map(|node_id| ExactScalarItem {
+            node_id: node_id.clone(),
+            operation: package::integer_add(),
+        })
+        .collect::<Vec<_>>();
+    let generate_under = |ceiling: u64| {
+        generate_exact_scalar_oracles(&builder.admit_with(limits_under(ceiling)), &items)
+            .expect("generation succeeds")
+    };
+    let byte_refusal =
+        |result: &ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal>| match result {
+            ClaimDisposition::Refused {
+                refusal: ExactScalarRefusal::LoweringByteLimitExceeded { limit, consumed },
+            } => Some((*limit, *consumed)),
+            _ => None,
+        };
+
+    let checked_length = u64::try_from(serde_json::to_vec(&builder.wire()).unwrap().len()).unwrap();
+    let lowered_length = lowered_package_length(
+        &builder.admit_with(limits_under(LARGEST_CEILING)),
+        &requested,
+        &measuring_profile(true),
+    );
+    let ceiling = lowered_length - 1;
+    assert!(
+        ceiling >= checked_length,
+        "the lowered package ({lowered_length} bytes) is longer than the checked package \
+         ({checked_length} bytes), so a ceiling one byte below it admits the checked package"
+    );
+    // At the lowered package's own length no record fails for bytes: the ceiling is exact.
+    assert!(generate_under(lowered_length)
+        .claim_map
+        .items
+        .iter()
+        .all(|claim| byte_refusal(&claim.result).is_none()));
+
+    let oracles = generate_under(ceiling);
+    assert_eq!(oracles.claim_map.items.len(), items.len());
+    let mut consumed_seen = BTreeSet::new();
+    for claim in &oracles.claim_map.items {
+        let Some((limit, consumed)) = byte_refusal(&claim.result) else {
+            panic!("expected a byte-ceiling refusal: {claim:?}");
+        };
+        assert_eq!(limit, ceiling);
+        assert!(
+            consumed > ceiling,
+            "{consumed} is above the ceiling {ceiling}"
+        );
+        consumed_seen.insert(consumed);
+    }
+    assert_eq!(
+        consumed_seen.len(),
+        1,
+        "one shared `consumed`: {consumed_seen:?}"
+    );
+    assert!(
+        !contents(&oracles, "src/lib.rs").contains("pub fn oracle_"),
+        "no function is generated"
+    );
+}
+
 /// Every `ExactScalarRefusal` variant's name, matched with **no `_` arm**.
 /// This is the guard IR-229 exists for: FR-014-AC-11 and its two Behavior
 /// bullets used to name `check_item`'s checks in prose, three separate
@@ -1127,6 +1212,8 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
         ExactScalarRefusal::InvalidBody { .. } => "InvalidBody",
         ExactScalarRefusal::BodyIncomplete { .. } => "BodyIncomplete",
         ExactScalarRefusal::LoweringWorkExhausted { .. } => "LoweringWorkExhausted",
+        ExactScalarRefusal::LoweringByteLimitExceeded { .. } => "LoweringByteLimitExceeded",
+        ExactScalarRefusal::LoweringLimitUnrecognised { .. } => "LoweringLimitUnrecognised",
         ExactScalarRefusal::NotExpression { .. } => "NotExpression",
         ExactScalarRefusal::FormMismatch { .. } => "FormMismatch",
         ExactScalarRefusal::BodyMismatch { .. } => "BodyMismatch",
@@ -1247,6 +1334,25 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
             body_node_id: code_id(V_BOOLEAN),
         }),
         "BodyIncomplete"
+    );
+    // The byte-ceiling refusal is driven through a whole call by
+    // `tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal`; an
+    // unrecognised limit kind only through the hand-built records of the module's own
+    // `tc_024_a_failed_record_is_refused_by_its_limit_kind`. These lines exercise the name arms.
+    assert_eq!(
+        refusal_variant_name(&ExactScalarRefusal::LoweringByteLimitExceeded {
+            limit: 1,
+            consumed: 2,
+        }),
+        "LoweringByteLimitExceeded"
+    );
+    assert_eq!(
+        refusal_variant_name(&ExactScalarRefusal::LoweringLimitUnrecognised {
+            limit_kind: "depth",
+            limit: 1,
+            consumed: 2,
+        }),
+        "LoweringLimitUnrecognised"
     );
 }
 
@@ -2239,6 +2345,72 @@ fn tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site() {
         Vec::<String>::new(),
         "the TC-024 corpus crate"
     );
+}
+
+/// Trace: FR-014-AC-42, TC-024.
+///
+/// The non-test code of the three oracle generators reads no `failed` record's limit kind: it
+/// names no `CheckedPackageLimit`, accesses no `.limit_kind`, and meets a `Failed` record only at
+/// an arm that binds nothing (`Failed { .. }`) and hands the record to
+/// `classify_lowering_failure`. The refusal enums' own `limit_kind` field, which the criterion's
+/// "holds no `limit_kind`" cannot mean literally, is the one place the name may appear, and only
+/// in the unrecognised-kind refusal and the conversion into it. The shared module, which does
+/// read the kind, is the control: it names `CheckedPackageLimit`.
+#[test]
+fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let code_of = |path: &str| {
+        let source = fs::read_to_string(root.join(path)).expect("read generator source");
+        non_test_code(&comments_stripped(&source))
+    };
+
+    let shared = code_of("src/oracle/mod.rs");
+    assert!(
+        shared.contains("CheckedPackageLimit") && shared.contains("fn classify_lowering_failure"),
+        "the shared module owns the classifier"
+    );
+
+    for path in [
+        "src/oracle/scalar/mod.rs",
+        "src/oracle/equality/mod.rs",
+        "src/oracle/function/mod.rs",
+    ] {
+        let code = code_of(path);
+        assert!(
+            !code.contains("CheckedPackageLimit"),
+            "{path} names a limit kind type"
+        );
+        assert!(
+            !code.contains(".limit_kind"),
+            "{path} accesses a limit kind"
+        );
+
+        let lines = code.lines().collect::<Vec<_>>();
+        for (at, line) in lines.iter().enumerate() {
+            if line.contains("limit_kind") {
+                let near = lines[at.saturating_sub(3)..=at]
+                    .iter()
+                    .any(|earlier| earlier.contains("LimitUnrecognised"));
+                assert!(
+                    near,
+                    "{path}:{} names `limit_kind` outside the refusal: {line}",
+                    at + 1
+                );
+            }
+        }
+
+        let arms = code.matches("CompleteLoweringRecordV2::Failed").count();
+        assert_eq!(arms, 1, "{path} has one `Failed` arm");
+        let arm = &code[code
+            .find("CompleteLoweringRecordV2::Failed")
+            .expect("the arm")..];
+        let arm = &arm[..arm.len().min(160)];
+        assert!(
+            arm.starts_with("CompleteLoweringRecordV2::Failed { .. }")
+                && arm.contains("classify_lowering_failure("),
+            "{path}'s `Failed` arm must bind nothing and call the classifier: {arm}"
+        );
+    }
 }
 
 /// The panicking macros no generator or generated oracle may invoke.

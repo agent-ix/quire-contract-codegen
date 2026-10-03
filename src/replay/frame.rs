@@ -45,8 +45,6 @@ pub struct FrameReplayInputs {
     pub change: ClaimedChange,
     /// The identity of the obligation the counterexample falsified.
     pub obligation_identity: [u8; 32],
-    /// The identity of the counterexample itself.
-    pub counterexample_identity: [u8; 32],
 }
 
 /// Why a frame replay produced no result.
@@ -109,7 +107,6 @@ impl FrameReplay {
             invocation,
             change,
             obligation_identity,
-            counterexample_identity,
         } = inputs;
         let (run, dependencies) = run.admit().map_err(FrameReplayError::Dependencies)?;
         let site = call_site(
@@ -153,7 +150,7 @@ impl FrameReplay {
             site.package_id,
             selected.clone(),
             ReplaySource::Witness(witness.clone()),
-            counterexample_identity,
+            obligation_identity,
             &documents,
         );
         let packet = WitnessPacket {
@@ -162,7 +159,6 @@ impl FrameReplay {
             clause_node: Some(payload.frame),
             selected_function: Some(selected),
             package_id: Some(wire.package_id.clone()),
-            package_contract_version: Some(wire.package_contract_version.clone()),
             source_digests: Some(wire.source_digests.clone()),
             profile_selections: Some(Vec::new()),
             run_limits: Some(run.accounting_limits),
