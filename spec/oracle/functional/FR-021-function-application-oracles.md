@@ -214,11 +214,15 @@ come from the request, not from this generator's own inference.
   so none enters the assembled package, and shall refuse every item naming one of them with that
   same reason. This check precedes the name-ambiguity check: a function that shares a declaring
   node id and also a name with another declaration is refused as `DuplicateDeclaringNode`, and an
-  item naming a name that any such declaration holds is refused as `DuplicateDeclaringNode`
-  rather than `AmbiguousFunctionName` (which remains the reason for a name shared by
-  declarations whose node ids are all distinct). A third declaration with its own distinct node
-  id that shares a name with one of the duplicate-node pair is refused as `AmbiguousFunctionName`
-  (the name is shared) and does not enter `checked_package()`. A declared function whose own
+  item whose function name is held by any such declaration is refused as
+  `DuplicateDeclaringNode` rather than `AmbiguousFunctionName` (which remains the reason for a
+  name shared by declarations whose node ids are all distinct). When the item's function name is
+  held by duplicate groups on more than one node id, the refusal carries the smallest of those
+  node ids in node-id order. This refusal also takes precedence over the duplicate-request
+  refusal: two items on one `call` node naming different members of a duplicate-node pair, or one
+  such item requested twice, each get `DuplicateDeclaringNode`. A third declaration with its own
+  distinct node id that shares a name with one of the duplicate-node pair is not classified: it
+  does not enter `checked_package()` or the location map. A declared function whose own
   nested `call` body names a function refused this way is refused as `UnknownCallee`, the reason
   `ExactFunctionRefusal::UnknownCallee` documents for a callee absent from the request or one that
   itself failed to classify.
@@ -258,7 +262,7 @@ come from the request, not from this generator's own inference.
 | FR-021-AC-19 | The emitted `src/lib.rs` of the main corpus of `tests/it/exact_function_generation.rs` (`main_oracles()`, whose generated functions include the scalar `add_fn`, the equality `eq_fn` and the nested-call `call_fn`) and of its chain corpus (`chain_oracles()`) contains zero occurrences of `.unwrap(`, `.expect(`, `unreachable!`, `panic!`, `todo!` and `unimplemented!`, the macros in any delimiter form. | Test (TC-031) |
 | FR-021-AC-20 | In the emitted body of `add_fn` and of `eq_fn`, the `match` over the runtime operator's `Result<Outcome<_>, Refusal>` has arms for `Ok(Completed)` (rewrapped as `Value::Integer` or `Value::Boolean`), `Ok(Undefined)`, `Ok(Refused)`, `Ok(Incomplete)` and `Err(refusal)` (returned as `Outcome::Refused(refusal)`), and a final `Ok(_)` arm whose value is `Outcome::Refused(Refusal::CheckedInvariant)`. | Test (TC-031) |
 | FR-021-AC-21 | A request whose scalar body has operator `Negate` is refused with `ExactFunctionRefusal::UnsupportedOperator`, and that function does not appear in the emitted `checked_package()`; `src/oracle/function/mod.rs` contains zero invocations of `unreachable!`, `panic!`, `todo!` and `unimplemented!`, comment lines not counted. | Test (TC-031) |
-| FR-021-AC-22 | 🚧 Planned. When two or more declarations share one declaring node id, none of them appears in the emitted `checked_package()` or in `location-map.json`, and every item naming one of them is refused with `ExactFunctionRefusal::DuplicateDeclaringNode { node_id }` before Stage 1 classification: never `UnknownFunction`, never `AmbiguousFunctionName` (the node-id refusal takes precedence when the declarations also share a name), and no claim-map entry records another function's name, oracle symbol or `Origin::Body` index. A declaration with its own distinct node id that shares a name with one of them is refused as `AmbiguousFunctionName` and is absent from `checked_package()`. A declared function whose nested `call` names such a function is refused as `UnknownCallee`. The refusal and these outputs are identical under every permutation of the request order. Every item naming a function with a distinct declaring node id, and not a duplicate name, has a claim-map entry equal to the one the same request produces with the duplicate declarations removed. | Test (TC-031) |
+| FR-021-AC-22 | When two or more declarations share one declaring node id, none of them appears in the emitted `checked_package()` or in `location-map.json`, and every item naming one of them is refused with `ExactFunctionRefusal::DuplicateDeclaringNode { node_id }` (the shared node id; the smallest in node-id order when the item's name is held by duplicate groups on several node ids) before Stage 1 classification: never `UnknownFunction`, never `AmbiguousFunctionName` (the node-id refusal takes precedence when the declarations also share a name), never `DuplicateRequest` (two items on one `call` node naming different members, or one such item requested twice, each carry the node-id refusal), and no claim-map entry records another function's name, oracle symbol or `Origin::Body` index. A declaration with its own distinct node id that shares a name with one of them is absent from `checked_package()` and from `location-map.json`. A declared function whose nested `call` names such a function is refused as `UnknownCallee`. The refusal and these outputs are identical under every permutation of the request order. Every item naming a function with a distinct declaring node id, and not a duplicate name, has a claim-map entry equal to the one the same request produces with the duplicate declarations removed. | Test (TC-031) |
 
 ### Mutations these criteria detect
 
