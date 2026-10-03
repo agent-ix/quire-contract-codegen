@@ -836,11 +836,16 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    (see the `oracle` naming and V1 rows of the module map).
 7. **Spec follows the code.** One spec PR: the registry rows by directory; FR-005 and
    TC-001, TC-002, TC-007 to `spec/publication/`; SUR-001 to `core/functional/`; `interface-001`
-   and `tests.md` fixed. The same PR repoints the prose that still cites flat source paths deleted
-   by steps 2c to 2g (`src/spine_replay.rs`, `src/kani_witness_join.rs`, `src/frame_replay.rs`,
-   `src/capability.rs`, `src/routed_generation.rs`, `src/publication.rs` and the like) in FR-016,
-   FR-024, TC-026, TC-035, ADR-002, AD-001, AD-002 and AD-003, and the registry's module column.
-   `git mv`, ids unchanged. When this step lands, the registry note in
+   and `tests.md` fixed. The same PR repoints every spec document that cites a flat source path
+   deleted by steps 2a to 2g (`src/spine_replay.rs`, `src/kani_witness_join.rs`,
+   `src/frame_replay.rs`, `src/capability.rs`, `src/routed_generation.rs`, `src/kani_transcript.rs`,
+   `src/kani_execution.rs`, `src/oracle.rs`, `src/exact_scalar.rs` and the like), and the
+   registry's module column. The list measured at step 2g, by a grep of `spec/` for each deleted
+   flat file name: FR-016, FR-017, FR-021, FR-024, TC-026, TC-027, TC-035, ADR-002, AD-001,
+   AD-002, AD-003, `interface-001` and `spec/oracle/matrix/tests.md`. Paths that name another
+   repository's files (AD-003's `src/kani/outcome.rs` is IR's; FR-021's
+   `src/exact/expression.rs` is RT's) are not stale. The step re-greps before it starts, because
+   later steps delete more flat paths. `git mv`, ids unchanged. When this step lands, the registry note in
    `spec/spec.md` that records the FR-005 exception becomes obsolete and is deleted in the same
    PR, as is the SUR-001 note. A separate follow-up, not edited here: AD-001's Current state and
    Risks are stale against this AD (it lists the corpus and profile modules as V1, and says Kani

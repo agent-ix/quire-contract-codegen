@@ -552,6 +552,7 @@ fn generate_order_violation(importer: &str, imported: &str) -> Option<String> {
 fn kani_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
     match importer {
         "output" | "test_support" => Some(&["identity", "abi"]),
+        "run" => Some(&["identity", "output", "classify", "abi"]),
         _ => None,
     }
 }
