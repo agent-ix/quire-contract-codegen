@@ -118,6 +118,89 @@ fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {
     }
 }
 
+/// Trace: FR-018-AC-20, TC-029.
+///
+/// A call whose lowered contract package is longer than the checked package, read under a ceiling
+/// that admits the checked package and is one byte below that lowered package, fails every
+/// requested record for bytes (Contract IR FR-038-AC-95): every item is refused as
+/// `LoweringByteLimitExceeded` with the ceiling as `limit` and one shared `consumed` above it,
+/// never as `LoweringWorkExhausted`, and none generates. The per-node case and each other limit
+/// kind are asserted on hand-built records in the module's own tests.
+#[test]
+fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal() {
+    use crate::common::byte_ceiling::{
+        limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
+    };
+    const CHAIN: u32 = 150;
+
+    let mut builder = corpus_package();
+    builder.boolean_equality_chain(CHAIN);
+    let requested = (0..CHAIN)
+        .map(|offset| code_id(BYTE_CHAIN_BASE + offset))
+        .collect::<Vec<_>>();
+    let items = (0..CHAIN)
+        .map(|offset| {
+            item(
+                BYTE_CHAIN_BASE + offset,
+                EqualityOperatorKind::Equal,
+                typed(T_BOOLEAN),
+                typed(T_BOOLEAN),
+            )
+        })
+        .collect::<Vec<_>>();
+    let generate_under =
+        |ceiling: u64| generate(&builder.admit_with(limits_under(ceiling)), &items);
+    let byte_refusal = |claim: &CompositeEqualityClaim| match &claim.result {
+        ClaimDisposition::Refused {
+            refusal: CompositeEqualityRefusal::LoweringByteLimitExceeded { limit, consumed },
+        } => Some((*limit, *consumed)),
+        _ => None,
+    };
+
+    let checked_length = u64::try_from(serde_json::to_vec(&builder.wire()).unwrap().len()).unwrap();
+    let lowered_length = lowered_package_length(
+        &builder.admit_with(limits_under(LARGEST_CEILING)),
+        &requested,
+        &measuring_profile(false),
+    );
+    let ceiling = lowered_length - 1;
+    assert!(
+        ceiling >= checked_length,
+        "the lowered package ({lowered_length} bytes) is longer than the checked package \
+         ({checked_length} bytes), so a ceiling one byte below it admits the checked package"
+    );
+    // At the lowered package's own length no record fails for bytes: the ceiling is exact.
+    assert!(generate_under(lowered_length)
+        .claim_map
+        .items
+        .iter()
+        .all(|claim| byte_refusal(claim).is_none()));
+
+    let oracles = generate_under(ceiling);
+    assert_eq!(oracles.claim_map.items.len(), items.len());
+    let mut consumed_seen = BTreeSet::new();
+    for claim in &oracles.claim_map.items {
+        let Some((limit, consumed)) = byte_refusal(claim) else {
+            panic!("expected a byte-ceiling refusal: {claim:?}");
+        };
+        assert_eq!(limit, ceiling);
+        assert!(
+            consumed > ceiling,
+            "{consumed} is above the ceiling {ceiling}"
+        );
+        consumed_seen.insert(consumed);
+    }
+    assert_eq!(
+        consumed_seen.len(),
+        1,
+        "one shared `consumed`: {consumed_seen:?}"
+    );
+    assert!(
+        !contents(&oracles, "src/lib.rs").contains("pub fn oracle_"),
+        "none generates"
+    );
+}
+
 /// Trace: FR-018-AC-1, TC-029.
 #[test]
 fn tc_029_ac1_every_item_gets_one_disposition_refused_siblings_unchanged() {

@@ -66,6 +66,8 @@ pub const M_BARE: u32 = 40;
 pub const F_BARE: u32 = 41;
 pub const S_BARE: u32 = 42;
 pub const T_BARE: u32 = 43;
+/// The first code of the Boolean-equality chain `PackageBuilder::boolean_equality_chain` adds.
+pub const BYTE_CHAIN_BASE: u32 = 20_000;
 /// The `temporal` formula the `T_BARE` clause names as its formula argument.
 pub const T_BARE_FORMULA: u32 = 44;
 

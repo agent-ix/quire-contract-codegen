@@ -137,6 +137,7 @@ use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::scalar::IntegerOperator;
+use crate::oracle::{classify_lowering_failure, LoweringFailure};
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
@@ -362,11 +363,28 @@ pub enum ExactFunctionRefusal {
         /// Requested argument count.
         found: usize,
     },
-    /// Lowering exceeded [`EXACT_FUNCTION_LOWERING_WORK_LIMIT`].
+    /// Lowering exceeded [`EXACT_FUNCTION_LOWERING_WORK_LIMIT`]; the refusal of the work ceiling
+    /// and of nothing else.
     LoweringWorkExhausted {
         /// The ceiling.
         limit: u64,
         /// Counter at the failed charge.
+        consumed: u64,
+    },
+    /// The package's byte ceiling failed the lowering (Contract IR FR-038-AC-95).
+    LoweringByteLimitExceeded {
+        /// The ceiling the package was read under.
+        limit: u64,
+        /// The canonical byte count the encoder needed.
+        consumed: u64,
+    },
+    /// A `failed` lowering record names a limit kind that is neither `work` nor `bytes`.
+    LoweringLimitUnrecognised {
+        /// The snake_case name of the `CheckedPackageLimit` variant.
+        limit_kind: &'static str,
+        /// The record's ceiling.
+        limit: u64,
+        /// The record's counter.
         consumed: u64,
     },
     /// A reachable node's family has no finite exact encoding this
@@ -670,13 +688,11 @@ fn lowered_binary_body(
                 type_node_id: body_node_id.clone(),
             })
         }
-        CompleteLoweringRecordV2::Failed {
-            limit, consumed, ..
-        } => {
-            return Err(ExactFunctionRefusal::LoweringWorkExhausted {
-                limit: *limit,
-                consumed: *consumed,
-            })
+        CompleteLoweringRecordV2::Failed { .. } => {
+            return Err(classify_lowering_failure(record).map_or(
+                ExactFunctionRefusal::InvalidInput,
+                ExactFunctionRefusal::from,
+            ))
         }
     };
     if node.node_tag != CheckedNodeTag::Expression {
@@ -685,6 +701,28 @@ fn lowered_binary_body(
         });
     }
     Ok(node)
+}
+
+impl From<LoweringFailure> for ExactFunctionRefusal {
+    fn from(failure: LoweringFailure) -> Self {
+        match failure {
+            LoweringFailure::WorkExhausted { limit, consumed } => {
+                Self::LoweringWorkExhausted { limit, consumed }
+            }
+            LoweringFailure::ByteLimitExceeded { limit, consumed } => {
+                Self::LoweringByteLimitExceeded { limit, consumed }
+            }
+            LoweringFailure::LimitUnrecognised {
+                limit_kind,
+                limit,
+                consumed,
+            } => Self::LoweringLimitUnrecognised {
+                limit_kind,
+                limit,
+                consumed,
+            },
+        }
+    }
 }
 
 fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> ExactFunctionRefusal {
@@ -1541,4 +1579,47 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
 
 fn artifact(path: &str, contents: String) -> Artifact {
     Artifact::new(path, contents)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::oracle::failed_records::{failed_record, UNRECOGNISED_KINDS};
+    use quire_contract_model::CheckedPackageLimit;
+
+    /// A `failed` record is refused by its limit kind through the one shared classifier: `work`
+    /// as `LoweringWorkExhausted`, `bytes` as `LoweringByteLimitExceeded` with the record's own
+    /// `limit` and `consumed`, and every other kind as `LoweringLimitUnrecognised` under its
+    /// snake_case name, never as work exhaustion and without a panic. Per-function isolation is
+    /// FR-021-AC-12's, asserted by the `tc_031_ac12_*` tests through the classification loop.
+    ///
+    /// Trace: FR-021-AC-23, TC-031.
+    #[test]
+    fn tc_031_a_failed_record_is_refused_by_its_limit_kind() {
+        assert_eq!(
+            lowered_binary_body(&failed_record(CheckedPackageLimit::Work, 65_536, 65_537)).err(),
+            Some(ExactFunctionRefusal::LoweringWorkExhausted {
+                limit: 65_536,
+                consumed: 65_537
+            })
+        );
+        assert_eq!(
+            lowered_binary_body(&failed_record(CheckedPackageLimit::Bytes, 1_000, 1_001)).err(),
+            Some(ExactFunctionRefusal::LoweringByteLimitExceeded {
+                limit: 1_000,
+                consumed: 1_001
+            })
+        );
+        for (kind, name) in UNRECOGNISED_KINDS {
+            assert_eq!(
+                lowered_binary_body(&failed_record(kind, 7, 9)).err(),
+                Some(ExactFunctionRefusal::LoweringLimitUnrecognised {
+                    limit_kind: name,
+                    limit: 7,
+                    consumed: 9
+                }),
+                "{name}"
+            );
+        }
+    }
 }

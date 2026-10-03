@@ -28,13 +28,14 @@ use package::{
 use quire_contract_codegen::{
     classify_kani_run, execute_kani_obligation, generate_exact_scalar_oracles, generate_routed,
     negotiate_kani_obligations, BackendKind, Candidate, ClaimDisposition, ClaimMap,
-    ExactScalarClaim, ExactScalarItem, ExactScalarOperation, GenerationContexts, IntegerOperator,
-    InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest, KaniGenerationContext,
-    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
-    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniScalarObligationHarness,
-    KaniSolver, KaniTool, KaniToolError, KindOutput, ObligationDisposition, ObligationItem,
-    ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance, RoutedGenerationItem,
-    UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarRefusal,
+    GenerationContexts, IntegerOperator, InvalidObligationItem, KaniExecutionRefusal,
+    KaniExecutionRequest, KaniGenerationContext, KaniInconclusiveReason, KaniInstallation,
+    KaniObligationError, KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest,
+    KaniRunOutcome, KaniScalarObligationHarness, KaniSolver, KaniTool, KaniToolError, KindOutput,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
+    OperationProvenance, RoutedGenerationItem, UnsupportedObligation, UpstreamBlocker,
+    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -1064,6 +1065,44 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
             semantic_form: "transition".to_owned(),
         }
     );
+}
+
+/// A scalar refusal of the byte ceiling or of an unrecognised lowering limit kind is reported as
+/// `OracleRefused` carrying that refusal unchanged, field for field, as a work-ceiling refusal
+/// is: never another `UnsupportedObligation` variant and never `LoweringWorkExhausted`. Each
+/// refusal is placed in a claim map by hand, as `ClaimMap` and `ExactScalarClaim` are fully
+/// `pub`; the generator's own byte-ceiling refusal is FR-014-AC-40's.
+///
+/// Trace: FR-015-AC-50, TC-025
+#[test]
+fn tc_025_a_byte_ceiling_and_an_unrecognised_lowering_refusal_are_oracle_refused_unchanged() {
+    let (package, claim_map) = scalar_package();
+    for refusal in [
+        ExactScalarRefusal::LoweringByteLimitExceeded {
+            limit: 1_000,
+            consumed: 1_001,
+        },
+        ExactScalarRefusal::LoweringLimitUnrecognised {
+            limit_kind: "depth",
+            limit: 128,
+            consumed: 129,
+        },
+    ] {
+        let mut hand_built = claim_map.clone();
+        let claim = hand_built
+            .items
+            .iter_mut()
+            .find(|claim| claim.node_id == code_id(UNBOUNDED))
+            .expect("the corpus claims the unbounded node");
+        claim.result = ClaimDisposition::Refused {
+            refusal: refusal.clone(),
+        };
+        let records = scalar_records(&package, &hand_built, &[UNBOUNDED]);
+        assert_eq!(
+            unsupported(&records[0]),
+            &UnsupportedObligation::OracleRefused { refusal }
+        );
+    }
 }
 
 /// IR-81 follow-up (PR review F2): the module doc's own claim that a node absent from the graph

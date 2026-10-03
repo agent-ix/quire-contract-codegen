@@ -616,6 +616,35 @@ impl PackageBuilder {
         self
     }
 
+    /// Adds `count` Boolean equalities, node `BYTE_CHAIN_BASE + k` comparing node
+    /// `BYTE_CHAIN_BASE + k - 1` with itself (the first compares a literal with itself). Each node
+    /// reaches every node before it, so a lowered node lists its whole chain in `dependencies`:
+    /// the lowered contract package of a call requesting the chain grows quadratically in `count`
+    /// while the checked package grows linearly (FR-018-AC-20).
+    pub fn boolean_equality_chain(&mut self, count: u32) -> &mut Self {
+        self.boolean_equality_chain_from(BYTE_CHAIN_BASE, count, "true")
+    }
+
+    /// As [`Self::boolean_equality_chain`], numbering the chain from `base` and starting it from
+    /// the Boolean literal `seed`. Two chains in one package need different seeds: a node's id is
+    /// derived from its body, and two first nodes over one literal would share an id.
+    pub fn boolean_equality_chain_from(&mut self, base: u32, count: u32, seed: &str) -> &mut Self {
+        let equality = |operand: Value| {
+            application(
+                "binary",
+                equality_operation("boolean"),
+                T_BOOLEAN,
+                vec![operand.clone(), operand],
+            )
+        };
+        self.application_code(base, "binary", equality(literal("boolean", seed)));
+        for offset in 1..count {
+            let previous = registered_digest(base + offset - 1);
+            self.application_code(base + offset, "binary", equality(reference_to(&previous)));
+        }
+        self
+    }
+
     /// An equality node `code` whose left operand is a conversion, spelled as QSL spells
     /// `convert<T>`: a `quire.op.numeric.convert` `expression` node of its own (node
     /// `CONVERSION_BASE + code`, typed `target`, with the `type_argument` member naming the
@@ -756,9 +785,14 @@ impl PackageBuilder {
     }
 
     pub fn admit(&self) -> CheckedPackageV2 {
+        self.admit_with(CheckedPackageReadLimits::bounded())
+    }
+
+    /// As [`Self::admit`], reading under `limits`.
+    pub fn admit_with(&self, limits: CheckedPackageReadLimits) -> CheckedPackageV2 {
         let wire = self.wire();
         let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
-        match CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence()) {
+        match CheckedPackageV2::read(&bytes, limits, &evidence()) {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
             other => panic!("expected V2 admission, got {other:?}"),
         }

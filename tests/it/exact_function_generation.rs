@@ -76,6 +76,102 @@ fn disposition_for(
         .result
 }
 
+/// Trace: FR-021-AC-23, TC-031.
+///
+/// The generator lowers twice, the declared functions' bodies and then the requested `call`
+/// nodes. Read under a ceiling that admits the checked package and is one byte below the shorter
+/// of the two lowered packages, both lowerings fail for bytes (Contract IR FR-038-AC-95): every
+/// function is absent from `checked_package()` and the location map, and every item is refused as
+/// `LoweringByteLimitExceeded` with the ceiling as `limit` and the call-node lowering's
+/// `consumed`, which the fixture makes differ from the body lowering's, so the call-node-first
+/// order is asserted through the call. Never `LoweringWorkExhausted`. The mapping of a record to
+/// a refusal is asserted on hand-built records in the module's own tests; per-function isolation
+/// is FR-021-AC-12's.
+#[test]
+fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal() {
+    use crate::common::byte_ceiling::{
+        limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
+    };
+    use quire_contract_model::{CheckedNodeId, CheckedPackageLimit, CompleteLoweringRecordV2};
+
+    let builder = byte_ceiling_package();
+    let functions = byte_ceiling_functions();
+    let items = byte_ceiling_items();
+    let body_nodes = functions
+        .iter()
+        .map(|function| function.node_id.clone())
+        .collect::<Vec<_>>();
+    let call_nodes = items
+        .iter()
+        .map(|item| item.call_node_id.clone())
+        .collect::<Vec<_>>();
+    let byte_refusal = |claim: &quire_contract_codegen::ExactFunctionClaim| match &claim.result {
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::LoweringByteLimitExceeded { limit, consumed },
+        } => Some((*limit, *consumed)),
+        _ => None,
+    };
+
+    let checked_length = u64::try_from(serde_json::to_vec(&builder.wire()).unwrap().len()).unwrap();
+    let generous = builder.admit_with(limits_under(LARGEST_CEILING));
+    let profile = measuring_profile(false);
+    let body_length = lowered_package_length(&generous, &body_nodes, &profile);
+    let call_length = lowered_package_length(&generous, &call_nodes, &profile);
+    let ceiling = body_length.min(call_length) - 1;
+    assert!(
+        ceiling >= checked_length,
+        "both lowered packages ({body_length}, {call_length} bytes) are longer than the checked \
+         package ({checked_length} bytes), so a ceiling one byte below the shorter admits it"
+    );
+
+    // Each lowering alone, under the same ceiling: both fail for bytes, with different `consumed`.
+    let package = builder.admit_with(limits_under(ceiling));
+    let consumed_alone =
+        |requested: &[CheckedNodeId]| match &package.lower(requested, &profile).records[..] {
+            [CompleteLoweringRecordV2::Failed {
+                limit_kind: CheckedPackageLimit::Bytes,
+                limit,
+                consumed,
+                ..
+            }, ..] => {
+                assert_eq!(*limit, ceiling);
+                *consumed
+            }
+            other => panic!("expected a byte-ceiling failure, got {other:?}"),
+        };
+    let body_consumed = consumed_alone(&body_nodes);
+    let call_consumed = consumed_alone(&call_nodes);
+    assert_ne!(body_consumed, call_consumed);
+
+    let oracles = generate(&package, &functions, &items);
+    assert_eq!(oracles.claim_map.items.len(), items.len());
+    for claim in &oracles.claim_map.items {
+        assert_eq!(
+            byte_refusal(claim),
+            Some((ceiling, call_consumed)),
+            "the call-node lowering's refusal is checked first: {claim:?}"
+        );
+    }
+    assert!(oracles.location_map.is_empty(), "no function is located");
+    let lib = oracles
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .expect("src/lib.rs");
+    assert!(
+        !lib.contents.contains("byte_fn_"),
+        "every function is absent from checked_package()"
+    );
+
+    // At the longer lowered package's own length neither lowering fails for bytes.
+    let exact = builder.admit_with(limits_under(body_length.max(call_length)));
+    assert!(generate(&exact, &functions, &items)
+        .claim_map
+        .items
+        .iter()
+        .all(|claim| byte_refusal(claim).is_none()));
+}
+
 /// Trace: FR-021-AC-1, TC-031. Every requested item receives exactly one
 /// generated or typed-refused disposition; a refused item (naming an
 /// unknown function) contributes nothing, while its siblings generate

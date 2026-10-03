@@ -3068,6 +3068,51 @@ pub fn bounded_increment_package() -> PackageBuilder {
     builder
 }
 
+/// The first code of the integer-addition chain [`integer_add_chain`] adds.
+pub const CHAIN_BASE: u32 = 20_000;
+
+/// Adds `count` integer additions, node `CHAIN_BASE + k` adding node `CHAIN_BASE + k - 1`'s result
+/// to a bounded literal (the first adds the literal to itself). Each node reaches every node
+/// before it, so a lowered node lists its whole chain in `dependencies`: the lowered contract
+/// package of a call requesting the chain grows quadratically in `count` while the checked
+/// package grows linearly (FR-014-AC-40).
+pub fn integer_add_chain(builder: &mut PackageBuilder, count: u32) -> &mut PackageBuilder {
+    let integer_type = key(T_INTEGER);
+    let anchor = {
+        let bound = builder.bound(&INT);
+        builder.dedicated_operand_tagged("integer", &[bound], "byte-ceiling-chain")
+    };
+    let add = |left: &str| {
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &integer_type,
+            vec![reference(left), reference(&anchor)],
+        )
+    };
+    builder.application_bounded_anchored(
+        CHAIN_BASE,
+        "expression",
+        "binary",
+        &integer_type,
+        add(&anchor),
+        &[INT],
+        Some(&anchor),
+    );
+    for offset in 1..count {
+        let previous = code_id(CHAIN_BASE + offset - 1).digest.to_string();
+        builder.application_code_with(
+            CHAIN_BASE + offset,
+            "expression",
+            "binary",
+            &integer_type,
+            add(&previous),
+            &[previous.clone(), anchor.clone()],
+        );
+    }
+    builder
+}
+
 /// Two parameters typed by distinct integer bounds, `a: Int[0, 9]` and `b: Int[10, 20]`.
 pub const V_PARAM_A: u32 = 112;
 pub const V_PARAM_B: u32 = 113;

@@ -71,6 +71,7 @@ use crate::oracle::scalar::{
     aggregate_members, bound_members, literal_count, read_decimal_range, read_integer_range,
     read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
 };
+use crate::oracle::{classify_lowering_failure, LoweringFailure};
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
@@ -350,11 +351,28 @@ pub enum CompositeEqualityRefusal {
         /// The stopped node.
         body_node_id: CheckedNodeId,
     },
-    /// Lowering exceeded [`COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT`].
+    /// Lowering exceeded [`COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT`]; the refusal of the work
+    /// ceiling and of nothing else.
     LoweringWorkExhausted {
         /// The ceiling.
         limit: u64,
         /// Counter at the failed charge.
+        consumed: u64,
+    },
+    /// The package's byte ceiling failed the lowering (Contract IR FR-038-AC-95).
+    LoweringByteLimitExceeded {
+        /// The ceiling the package was read under.
+        limit: u64,
+        /// The canonical byte count the encoder needed.
+        consumed: u64,
+    },
+    /// A `failed` lowering record names a limit kind that is neither `work` nor `bytes`.
+    LoweringLimitUnrecognised {
+        /// The snake_case name of the `CheckedPackageLimit` variant.
+        limit_kind: &'static str,
+        /// The record's ceiling.
+        limit: u64,
+        /// The record's counter.
         consumed: u64,
     },
     /// A named type node id is not in the admitted graph.
@@ -872,12 +890,32 @@ fn lowered(
                 body_node_id: body_node_id.clone(),
             })
         }
-        CompleteLoweringRecordV2::Failed {
-            limit, consumed, ..
-        } => Err(CompositeEqualityRefusal::LoweringWorkExhausted {
-            limit: *limit,
-            consumed: *consumed,
-        }),
+        CompleteLoweringRecordV2::Failed { .. } => Err(classify_lowering_failure(record).map_or(
+            CompositeEqualityRefusal::InvalidInput,
+            CompositeEqualityRefusal::from,
+        )),
+    }
+}
+
+impl From<LoweringFailure> for CompositeEqualityRefusal {
+    fn from(failure: LoweringFailure) -> Self {
+        match failure {
+            LoweringFailure::WorkExhausted { limit, consumed } => {
+                Self::LoweringWorkExhausted { limit, consumed }
+            }
+            LoweringFailure::ByteLimitExceeded { limit, consumed } => {
+                Self::LoweringByteLimitExceeded { limit, consumed }
+            }
+            LoweringFailure::LimitUnrecognised {
+                limit_kind,
+                limit,
+                consumed,
+            } => Self::LoweringLimitUnrecognised {
+                limit_kind,
+                limit,
+                consumed,
+            },
+        }
     }
 }
 
@@ -2017,6 +2055,45 @@ mod tests {
         CheckedNodeId {
             domain: "quire.checked-semantic-node/v1".into(),
             digest: digit.to_string().repeat(64).into(),
+        }
+    }
+
+    /// A `failed` record is refused by its limit kind through the one shared classifier: `work`
+    /// as `LoweringWorkExhausted`, `bytes` as `LoweringByteLimitExceeded` with the record's own
+    /// `limit` and `consumed` (the per-node case Contract IR's FR-038-AC-95 defines and CG's
+    /// public API cannot reach), and every other kind as `LoweringLimitUnrecognised` under its
+    /// snake_case name, never as work exhaustion and without a panic.
+    ///
+    /// Trace: FR-018-AC-20, TC-029.
+    #[test]
+    fn tc_029_a_failed_record_is_refused_by_its_limit_kind() {
+        use crate::oracle::failed_records::{failed_record, UNRECOGNISED_KINDS};
+        use quire_contract_model::CheckedPackageLimit;
+
+        assert_eq!(
+            lowered(&failed_record(CheckedPackageLimit::Work, 65_536, 65_537)).err(),
+            Some(CompositeEqualityRefusal::LoweringWorkExhausted {
+                limit: 65_536,
+                consumed: 65_537
+            })
+        );
+        assert_eq!(
+            lowered(&failed_record(CheckedPackageLimit::Bytes, 1_000, 1_001)).err(),
+            Some(CompositeEqualityRefusal::LoweringByteLimitExceeded {
+                limit: 1_000,
+                consumed: 1_001
+            })
+        );
+        for (kind, name) in UNRECOGNISED_KINDS {
+            assert_eq!(
+                lowered(&failed_record(kind, 7, 9)).err(),
+                Some(CompositeEqualityRefusal::LoweringLimitUnrecognised {
+                    limit_kind: name,
+                    limit: 7,
+                    consumed: 9
+                }),
+                "{name}"
+            );
         }
     }
 

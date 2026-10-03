@@ -319,3 +319,52 @@ pub fn item(call_code: u32, function: &str) -> ExactFunctionItem {
         argument_node_ids: vec![code_id(T_INTEGER), code_id(T_INTEGER)],
     }
 }
+
+// ---------------------------------------------------------------------------
+// The byte-ceiling fixture (FR-021-AC-23)
+// ---------------------------------------------------------------------------
+
+/// The first code of the chain of nodes the byte-ceiling fixture declares as function bodies, and
+/// how many it has.
+pub const BYTE_BODY_BASE: u32 = 30_000;
+pub const BYTE_BODY_COUNT: u32 = 220;
+/// The first code of the chain of nodes it requests as `call` items, and how many it has. The
+/// two chains differ in length so the body lowering and the call-node lowering of one call give
+/// different `consumed` under one ceiling.
+pub const BYTE_CALL_BASE: u32 = 40_000;
+pub const BYTE_CALL_COUNT: u32 = 190;
+
+/// [`ext_corpus_package`] plus the two chains of the byte-ceiling fixture. Each chain node
+/// reaches every node before it, so each lowered package (the function bodies, and the requested
+/// call nodes) lists its chain's closure in `dependencies` and is longer than the checked
+/// package, which grows linearly.
+pub fn byte_ceiling_package() -> PackageBuilder {
+    let mut builder = ext_corpus_package();
+    builder
+        .boolean_equality_chain_from(BYTE_BODY_BASE, BYTE_BODY_COUNT, "true")
+        .boolean_equality_chain_from(BYTE_CALL_BASE, BYTE_CALL_COUNT, "false");
+    builder
+}
+
+/// One function per body-chain node of [`byte_ceiling_package`].
+pub fn byte_ceiling_functions() -> Vec<ExactFunctionDeclaration> {
+    (0..BYTE_BODY_COUNT)
+        .map(|offset| ExactFunctionDeclaration {
+            node_id: code_id(BYTE_BODY_BASE + offset),
+            name: format!("byte_fn_{offset}"),
+            parameters: vec![parameter("a", T_INTEGER), parameter("b", T_INTEGER)],
+            result_type: code_id(T_INTEGER),
+            body: ExactFunctionBody::Scalar {
+                operator: quire_contract_codegen::IntegerOperator::Add,
+            },
+            capability_requirements: Vec::new(),
+        })
+        .collect()
+}
+
+/// One item per call-chain node of [`byte_ceiling_package`], each applying its own function.
+pub fn byte_ceiling_items() -> Vec<ExactFunctionItem> {
+    (0..BYTE_CALL_COUNT)
+        .map(|offset| item(BYTE_CALL_BASE + offset, &format!("byte_fn_{offset}")))
+        .collect()
+}
