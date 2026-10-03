@@ -1270,9 +1270,10 @@ pub fn corpus_package() -> PackageBuilder {
         .code(S_BARE, "state", "snapshot", T_BOOLEAN, aggregate(vec![]));
 
     // IR admits a `temporal_clause` only as a `temporal`-operator application over a declared
-    // `parameter` with one `temporal_profile` law and a `temporal` formula argument (QSpec
-    // FR-370), so `T_BARE` is that minimal clause. CG still refuses it on its `temporal` tag
-    // alone. The formula is registered first: the clause's reference to it reads its node id.
+    // `parameter` with one `temporal_profile` law and a `temporal` formula argument (the QSpec
+    // temporal-clause rule), so `T_BARE` is that minimal clause. CG refuses it as an
+    // unsupported temporal family. The formula is registered first: the clause's reference to
+    // it reads its node id.
     let clause_profile = json!({
         "authority": "agent-ix",
         "identity": "quire.temporal.event-position.false-extension/v1",

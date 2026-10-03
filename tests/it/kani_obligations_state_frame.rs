@@ -802,6 +802,19 @@ fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
     );
 }
 
+/// The frame replay's request and envelope both carry the `obligation_identity` the caller
+/// supplied in `FrameReplayInputs` (the twin supplies `[1; 32]`), not a placeholder.
+///
+/// Trace: TC-025
+#[test]
+fn tc_025_the_frame_replay_request_and_envelope_carry_the_supplied_obligation_identity() {
+    let twin = Twin::new();
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let replay = twin.frame_replay(&invocation, "account", "audit");
+    assert_eq!(replay.wire.obligation_identity, [1; 32]);
+    assert_eq!(replay.packet.obligation_identity, Some([1; 32]));
+}
+
 /// `FrameReplay::replay` returns QSL's result without Kani: a forbidden write settles a reproduced
 /// violation that names the written field, and a write the frame grants is a respected frame.
 ///

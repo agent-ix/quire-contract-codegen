@@ -890,6 +890,10 @@ fn lowered(
                 body_node_id: body_node_id.clone(),
             })
         }
+        // FR-014-AC-42 keeps this arm from binding the record's fields, so the typed outcome is
+        // read back through the classifier, which returns `None` for a record that is not
+        // `Failed`. This arm only runs for a `Failed` record, so the `InvalidInput` fallback is
+        // unreachable; it exists because the arm cannot hand the classifier a narrower type.
         CompleteLoweringRecordV2::Failed { .. } => Err(classify_lowering_failure(record).map_or(
             CompositeEqualityRefusal::InvalidInput,
             CompositeEqualityRefusal::from,

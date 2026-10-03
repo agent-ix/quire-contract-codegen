@@ -2753,8 +2753,9 @@ pub fn corpus_package() -> PackageBuilder {
         .code(STATE, "state", "snapshot", &boolean, aggregate())
         // IR admits a `temporal_clause` only as a `temporal`-operator application over a
         // declared `parameter` with one `temporal_profile` law and a `temporal` formula argument
-        // (QSpec FR-370), so this node is that minimal clause rather than a `boolean.not`
-        // stand-in. CG still refuses it on its `temporal` tag alone.
+        // (the QSpec temporal-clause rule), so this node is that minimal clause rather than a
+        // `boolean.not` stand-in. CG refuses it as an unsupported `temporal` family; the refusal
+        // names `TEMPORAL_FORMULA`, the first unsupported node IR reaches from the clause.
         .application_code_with(
             TEMPORAL,
             "temporal",

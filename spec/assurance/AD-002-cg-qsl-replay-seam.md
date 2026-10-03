@@ -4,7 +4,7 @@ title: "CG to QSL replay seam: call_site, replay, replay_frame and the counterex
 type: ArchitectureDescription
 status: proposed
 owner: codegen-maintainers
-system: quire-contract-codegen replay adapter (spine_replay, frame_replay, kani_witness_join) and the qsl-replay facade it calls
+system: quire-contract-codegen replay adapter (`src/replay/function.rs`, `frame.rs`, `witness.rs`) and the qsl-replay facade it calls
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/AD-001
     type: references
@@ -134,23 +134,23 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
 
 ### Current state and gaps
 
-- Function path: `spine_replay.rs` `ReplayPackage::new` calls `qsl_replay::call_site` with a
-  `FunctionSite` (`spine_replay.rs:400`); `replay_falsification` calls `replay` (:125);
-  `replay_counterexample` decodes, domain-checks (:498, through `first_out_of_domain`) and
-  partitions (`verdict_of`, :517). This path builds no `WitnessEnvelope`: it sends
+- Function path: `src/replay/function.rs` `ReplayPackage::new` calls `qsl_replay::call_site` with a
+  `FunctionSite` (`function.rs:399`); `replay_falsification` calls `replay` (:127);
+  `replay_counterexample` decodes, domain-checks (:501, through `first_out_of_domain`) and
+  partitions (`verdict_of`, :520). This path builds no `WitnessEnvelope`: it sends
   `ReplaySource::Witness` in the request. The request has an obligation-identity slot (QSL
   renamed it from `originating_counterexample_identity` to `obligation_identity`, R-Q7, and it
   is typed `ObligationIdentity`), and CG fills it on this path with the `ByteDigest` of the
-  transcript (`ReplayPackage::request`): the slot exists and holds a placeholder, not the
+  transcript (`ReplayPackage::request`, `function.rs:438`): the slot exists and holds a placeholder, not the
   obligation identity, until AD-003 E-1 gives CG one to pass.
-- Frame path: `frame_replay.rs` calls `call_site` with an `OperationSite` (:115), builds the
-  envelope with `WitnessEnvelope::reconstruct` (:186) and calls `replay_frame` (:187).
+- Frame path: `src/replay/frame.rs` calls `call_site` with an `OperationSite` (:112), builds the
+  envelope with `WitnessEnvelope::reconstruct` (:182) and calls `replay_frame` (:183).
   `obligation_identity` is a caller-supplied `[u8; 32]` field (:47) that the request and the
   envelope both carry; the only value in the repository is `[1; 32]` in a test
   (`tests/state_frame_support/native_twin.rs`). No code computes it. The frame inputs no longer
   carry a separate counterexample identity: QSL's request has no slot for one.
 - No domain check precedes the frame path, and the frame envelope carries
-  `declared_domains: Some(Vec::new())` (`frame_replay.rs:169`): the proof bound is not in the
+  `declared_domains: Some(Vec::new())` (`frame.rs:165`): the proof bound is not in the
   envelope even though QSL's `DeclaredDomain` is buildable through the facade. QSL's review
   says an empty declared-domain list will be refused once its QSL-345 part 2 lands; CG's frame
   path must then supply the bounds.
@@ -161,7 +161,7 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   path builds an envelope. The function path is therefore either outside FR-024 or short of it.
   This AD records the gap; it does not decide it. FR-024 is `Planned` in the replay matrix.
 - `first_out_of_domain` is crate-private; `decode_falsification` is public
-  (`kani_witness_join.rs:138`) and decodes to `qsl_replay::WitnessValue`.
+  (`src/replay/witness.rs:116`) and decodes to `qsl_replay::WitnessValue`.
 - QSL's `call_site` accepts a `ClauseSite` selection and QSL has a state-clause replay entry;
   CG has no clause-replay entry in `src`. Not a gap against this AD; recorded so nobody assumes
   it.
