@@ -2121,12 +2121,18 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
 fn tc_024_ac39_the_panic_scan_names_every_banned_token_and_no_lookalike() {
     for banned in [
         "x.unwrap()",
+        "x.unwrap ()",
+        "x\n    .unwrap()",
+        "x.map(Option::unwrap)",
+        "Result::expect(x, \"m\")",
+        "use std::option::Option::unwrap;",
         "x.expect(\"m\")",
         "x.unwrap_unchecked()",
         "panic!(\"m\")",
         "panic![]",
         "panic!{}",
         "panic !(\"m\")",
+        "std::panic!(\"m\")",
         "unreachable!()",
         "todo!()",
         "unimplemented!()",
@@ -2134,7 +2140,11 @@ fn tc_024_ac39_the_panic_scan_names_every_banned_token_and_no_lookalike() {
         "assert_eq!(a, b)",
         "assert_ne!(a, b)",
         "debug_assert!(a)",
+        "debug_assert_eq!(a, b)",
+        "debug_assert_ne!(a, b)",
         "std::process::abort()",
+        "use std::process::abort;\nfn f() { abort() }",
+        "use std::process::{abort};",
     ] {
         assert!(
             !panic_tokens_in(banned).is_empty(),
@@ -2147,6 +2157,8 @@ fn tc_024_ac39_the_panic_scan_names_every_banned_token_and_no_lookalike() {
         "x.expect_err(e)",
         "let assertion = 1;",
         "fn panic_free() {}",
+        "a != b && todo != 1",
+        "handle.abort()",
     ] {
         assert_eq!(
             panic_tokens_in(allowed),
@@ -2154,9 +2166,54 @@ fn tc_024_ac39_the_panic_scan_names_every_banned_token_and_no_lookalike() {
             "the scan named `{allowed}`"
         );
     }
-    let source =
-        "fn a() { x.unwrap() }\n// panic!(\"m\")\n#[cfg(test)]\nmod tests { fn t() { todo!() } }";
-    assert_eq!(non_test_code(source), "fn a() { x.unwrap() }");
+}
+
+/// Trace: FR-014-AC-39, FR-018-AC-19, TC-024, TC-029. `non_test_code` removes the items a
+/// `#[cfg(test)]` attribute governs by structure, wherever they sit, and keeps everything else:
+/// an earlier mention of the attribute in a comment or a literal cuts nothing, code after a test
+/// module is kept, braces in literals do not end the module early, and comments are dropped
+/// without mistaking `//` inside a string for one.
+#[test]
+fn tc_024_ac39_non_test_code_strips_test_items_by_structure() {
+    let source = "\
+// the module below is #[cfg(test)]
+fn before() { a.unwrap() }
+/* #[cfg(test)] fn commented() { todo!() } */
+fn literal() -> &'static str { \"#[cfg(test)] http://x\" }
+#[cfg(test)]
+mod tests {
+    fn t() { let s = \"}\"; let c = '{'; todo!() }
+}
+fn after() { b.expect(1) }
+#[cfg(test)]
+use helper::only_in_tests;
+fn last() { c.unwrap_or(1) }
+";
+    let code = non_test_code(source);
+    for kept in [
+        "fn before()",
+        "a.unwrap()",
+        "fn literal()",
+        "http://x",
+        "fn after()",
+        "b.expect(1)",
+        "fn last()",
+    ] {
+        assert!(code.contains(kept), "`{kept}` was dropped from:\n{code}");
+    }
+    for dropped in [
+        "mod tests",
+        "todo!",
+        "only_in_tests",
+        "commented",
+        "the module below",
+    ] {
+        assert!(!code.contains(dropped), "`{dropped}` survived in:\n{code}");
+    }
+    assert_eq!(
+        panic_tokens_in(&code),
+        vec!["expect".to_owned(), "unwrap".to_owned()]
+    );
 }
 
 /// Trace: FR-014-AC-39, TC-024. The scalar generator's non-test code holds no panic site, and
@@ -2204,14 +2261,12 @@ pub(crate) fn invokes_panicking_macro(text: &str) -> bool {
 /// variant. The RT enums are `#[non_exhaustive]` and foreign to this crate, so a test cannot build
 /// an unknown variant to drive `OracleGenerationError::UnknownRuntimeVariant`, and every mapper
 /// takes the RT enum directly (there is no CG-local seam to inject one through). The evidence is
-/// therefore the source itself: the non-test code (everything before the file's `#[cfg(test)]`
-/// module) of the exact-scalar, composite-equality and function generators contains no
-/// `unreachable!`, `panic!`, `todo!` or `unimplemented!` invocation (any delimiter, any path
-/// prefix) and no excused arm. The equality generator's two former `unreachable!` arms, for
-/// `ValueType::Quantity` and `ValueType::Reference`, now return a typed render error
-/// (FR-018-AC-18).
-///
-/// Lines that are `//` comments are skipped.
+/// therefore the source itself: each of the exact-scalar, composite-equality and function
+/// generators, whole file, minus comments and any `#[cfg(test)]` item wherever it sits
+/// (`non_test_code`), contains no `unreachable!`, `panic!`, `todo!` or `unimplemented!`
+/// invocation (any delimiter, any path prefix) and no excused arm. The equality generator's two
+/// former `unreachable!` arms, for `ValueType::Quantity` and `ValueType::Reference`, now return a
+/// typed render error (FR-018-AC-18).
 #[test]
 fn oracle_generators_have_no_panicking_arms() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -2222,14 +2277,10 @@ fn oracle_generators_have_no_panicking_arms() {
         "src/oracle/function/mod.rs",
     ] {
         let source = fs::read_to_string(root.join(file)).expect("read generator source");
-        let non_test = source
-            .split_once("#[cfg(test)]")
-            .map_or(source.as_str(), |(before, _)| before);
-        for (index, line) in non_test.lines().enumerate() {
-            if line.trim_start().starts_with("//") || !invokes_panicking_macro(line) {
-                continue;
+        for line in non_test_code(&source).lines() {
+            if invokes_panicking_macro(line) {
+                offending.push(format!("{file}: {}", line.trim()));
             }
-            offending.push(format!("{file}:{}: {}", index + 1, line.trim()));
         }
     }
     assert!(

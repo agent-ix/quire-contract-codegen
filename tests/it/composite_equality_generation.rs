@@ -1282,6 +1282,16 @@ const REBUILD_HELPERS: [&str; 6] = [
     "rebuild_cardinality",
 ];
 
+/// The `ReconstructionError` variant each helper fails with, and nothing else.
+const HELPER_VARIANTS: [(&str, &str); 6] = [
+    ("rebuild_integer", "Integer"),
+    ("rebuild_interval", "Interval"),
+    ("rebuild_rational", "Rational"),
+    ("rebuild_decimal", "Decimal"),
+    ("rebuild_text", "Text"),
+    ("rebuild_cardinality", "Cardinality"),
+];
+
 /// The emitted functions that return `Result<_, ReconstructionError>`: the helpers, and the
 /// per-item functions that build a declaration or a type from them.
 fn returns_reconstruction(name: &str) -> bool {
@@ -1370,6 +1380,47 @@ fn structural_violations(lib: &str) -> Vec<String> {
             let enclosing = fns.iter().rfind(|function| function.start <= at);
             if !enclosing.is_some_and(|function| function.name.starts_with("rebuild_")) {
                 violations.push(format!("`{constructor}` outside a reconstruction helper"));
+            }
+        }
+    }
+    for function in &fns {
+        let Some((_, variant)) = HELPER_VARIANTS
+            .iter()
+            .find(|(helper, _)| *helper == function.name)
+        else {
+            continue;
+        };
+        let body: String = function
+            .body
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect();
+        if body
+            .matches(&format!(".map_err(|_|ReconstructionError::{variant})"))
+            .count()
+            != 1
+            || body.matches("ReconstructionError::").count() != 1
+        {
+            violations.push(format!(
+                "`{}` does not fail with exactly ReconstructionError::{variant}",
+                function.name
+            ));
+        }
+        for combinator in [
+            "or_else",
+            "unwrap_or",
+            ".or(",
+            ".ok(",
+            "map_or",
+            "match",
+            "Ok(",
+            "Err(",
+        ] {
+            if body.contains(combinator) {
+                violations.push(format!(
+                    "`{}` handles its failure with `{combinator}`",
+                    function.name
+                ));
             }
         }
     }
@@ -1521,6 +1572,36 @@ fn tc_029_ac17_the_structural_checker_names_each_departure() {
         .iter()
         .any(|violation| violation.contains(".parse(")));
 
+    let helper = |name: &str, body: &str| {
+        format!("fn {name}(a: u64) -> Result<rt::X, ReconstructionError> {{\n    {body}\n}}\n")
+    };
+    let wrong_variant = helper(
+        "rebuild_text",
+        "rt::TextType::new(a).map_err(|_| ReconstructionError::Cardinality)",
+    );
+    assert!(structural_violations(&wrong_variant)
+        .iter()
+        .any(|violation| violation.contains("exactly ReconstructionError::Text")));
+    let silent_widen = helper(
+        "rebuild_cardinality",
+        "rt::CardinalityBound::new(a, 1).or_else(|_| rt::CardinalityBound::new(0, u64::MAX)).map_err(|_| ReconstructionError::Cardinality)",
+    );
+    assert!(structural_violations(&silent_widen)
+        .iter()
+        .any(|violation| violation.contains("`or_else`")));
+    let swallowed = helper(
+        "rebuild_rational",
+        "Ok(rt::RationalDomain::new(a).ok().unwrap_or_default()) // map_err(|_| ReconstructionError::Rational)",
+    );
+    assert!(structural_violations(&swallowed)
+        .iter()
+        .any(|violation| violation.contains("`.ok(`")));
+    let good = helper(
+        "rebuild_text",
+        "rt::TextType::new(a).map_err(|_| ReconstructionError::Text)",
+    );
+    assert_eq!(structural_violations(&good), Vec::<String>::new());
+
     assert_eq!(
         index_expressions("let a = v[0]; let b = f()[1]; let c = x[1][2];").len(),
         4
@@ -1534,12 +1615,13 @@ fn tc_029_ac17_the_structural_checker_names_each_departure() {
 fn tc_029_ac19_the_equality_generator_source_holds_no_panic_token() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/oracle/equality/mod.rs");
     let source = fs::read_to_string(path).expect("read the generator source");
-    assert!(
-        source.contains("#[cfg(test)]"),
-        "the scan splits the source at its `#[cfg(test)]` module"
-    );
+    let code = non_test_code(&source);
+    // The scan must have removed the test module and nothing before it: the last generator
+    // function sits just above the module, and the module's own tests are gone.
+    assert!(code.contains("fn artifact(") && code.contains("fn render_value_type("));
+    assert!(!code.contains("mod tests") && !code.contains("fn tc_029_"));
     assert_eq!(
-        panic_tokens_in(&non_test_code(&source)),
+        panic_tokens_in(&code),
         Vec::<String>::new(),
         "src/oracle/equality/mod.rs"
     );

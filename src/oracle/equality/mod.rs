@@ -624,30 +624,7 @@ pub fn generate_composite_equality_oracles(
             result,
         });
     }
-    // Render every item before any is named, so an item the render refuses never takes a number
-    // from a sibling. An unrenderable item becomes a per-item refusal (`settle_render`).
-    let mut rendered = Vec::with_capacity(pending.len());
-    for (claim, key, item, generated) in pending {
-        let result = render_item(&generated);
-        if let Some(rendered_item) = settle_render(&mut claims[claim], result)? {
-            rendered.push((claim, key, item, rendered_item));
-        }
-    }
-    // Each oracle is named by its operator; oracles sharing one are numbered in key order, so a
-    // refused or differently requested sibling never renames one.
-    let names = unique_names(
-        rendered
-            .iter()
-            .map(|(_, key, item, _)| (item.operator.identity().replace('.', "_"), key.clone()))
-            .collect(),
-    );
-    for ((claim, _, item, rendered_item), symbol) in rendered.into_iter().zip(names) {
-        source.item(&symbol, item, &rendered_item);
-        if let ClaimDisposition::Generated(claim) = &mut claims[claim].result {
-            claim.environment_symbol = format!("environment_{symbol}");
-            claim.oracle_symbol = format!("oracle_{symbol}");
-        }
-    }
+    render_and_emit(&mut claims, &mut source, pending, render_item)?;
 
     let claim_map = ClaimMap {
         package_id: lowering.package.source_package_id().clone(),
@@ -1575,6 +1552,42 @@ fn render_item(generated: &CheckedItem<'_>) -> Result<RenderedItem, RenderError>
     })
 }
 
+/// Render every pending item, then name and emit the ones that rendered. `pending` holds, per
+/// item, the position of its claim, its descriptor key, the request and what `render` reads.
+///
+/// Every item is rendered before any is named, so an item the render refuses never takes a number
+/// from a sibling: oracles sharing an operator stem are numbered in key order among the items that
+/// rendered. An unrenderable item becomes a per-item refusal on its own claim
+/// ([`settle_render`]); a whole-call failure aborts.
+fn render_and_emit<T>(
+    claims: &mut [CompositeEqualityClaim],
+    source: &mut SourceBuilder,
+    pending: Vec<(usize, DescriptorKey, &CompositeEqualityItem, T)>,
+    render: impl Fn(&T) -> Result<RenderedItem, RenderError>,
+) -> Result<(), OracleGenerationError> {
+    let mut rendered = Vec::with_capacity(pending.len());
+    for (claim, key, item, checked) in pending {
+        let result = render(&checked);
+        if let Some(rendered_item) = settle_render(&mut claims[claim], result)? {
+            rendered.push((claim, key, item, rendered_item));
+        }
+    }
+    let names = unique_names(
+        rendered
+            .iter()
+            .map(|(_, key, item, _)| (item.operator.identity().replace('.', "_"), key.clone()))
+            .collect(),
+    );
+    for ((claim, _, item, rendered_item), symbol) in rendered.into_iter().zip(names) {
+        source.item(&symbol, item, &rendered_item);
+        if let ClaimDisposition::Generated(claim) = &mut claims[claim].result {
+            claim.environment_symbol = format!("environment_{symbol}");
+            claim.oracle_symbol = format!("oracle_{symbol}");
+        }
+    }
+    Ok(())
+}
+
 /// Settle one rendered item against its claim, at the item boundary. A render that failed with
 /// [`RenderError::UnsupportedValueType`] turns the item's claim into the per-item refusal
 /// [`CompositeEqualityRefusal::Unsupported`], whose `node_tag` is the family and whose
@@ -2096,7 +2109,6 @@ mod tests {
     fn tc_029_ac18_the_item_boundary_refuses_the_item_and_fails_the_call_on_a_generation_error() {
         for family in ["quantity", "reference"] {
             let mut item = generated_claim('1');
-            let sibling = generated_claim('2');
             let settled =
                 settle_render(&mut item, Err(RenderError::UnsupportedValueType { family }));
             assert!(
@@ -2112,7 +2124,6 @@ mod tests {
                     }
                 }
             );
-            assert_eq!(sibling, generated_claim('2'), "the sibling is unchanged");
         }
 
         let mut item = generated_claim('1');
@@ -2139,5 +2150,123 @@ mod tests {
             generated_claim('1'),
             "a rendered item stays generated"
         );
+    }
+
+    fn request(node: char) -> CompositeEqualityItem {
+        CompositeEqualityItem {
+            node_id: node_id(node),
+            operator: EqualityOperatorKind::Equal,
+            left: EqualityOperandDescriptor::typed(node_id('d')),
+            right: EqualityOperandDescriptor::typed(node_id('d')),
+        }
+    }
+
+    /// Run [`render_and_emit`] over two items, `1` then `2`, sharing one operator stem; an item
+    /// whose flag is true fails to render with `error`.
+    fn emit_two(
+        fails: [bool; 2],
+        error: RenderError,
+    ) -> (
+        Result<(), OracleGenerationError>,
+        Vec<CompositeEqualityClaim>,
+        String,
+    ) {
+        let requests = [request('1'), request('2')];
+        let mut claims = vec![generated_claim('1'), generated_claim('2')];
+        let pending = requests
+            .iter()
+            .zip(fails)
+            .enumerate()
+            .map(|(position, (item, fails))| (position, DescriptorKey::of(item), item, fails))
+            .collect();
+        let mut source = SourceBuilder::default();
+        let result = render_and_emit(&mut claims, &mut source, pending, |fails| {
+            if *fails {
+                Err(error)
+            } else {
+                Ok(rendered_item())
+            }
+        });
+        (result, claims, source.finish())
+    }
+
+    fn symbols(claim: &CompositeEqualityClaim) -> Option<(&str, &str)> {
+        match &claim.result {
+            ClaimDisposition::Generated(generated) => Some((
+                generated.environment_symbol.as_str(),
+                generated.oracle_symbol.as_str(),
+            )),
+            ClaimDisposition::Refused { .. } => None,
+        }
+    }
+
+    fn unsupported(
+        node: char,
+        family: &'static str,
+    ) -> ClaimDisposition<GeneratedCompositeEqualityClaim, CompositeEqualityRefusal> {
+        ClaimDisposition::Refused {
+            refusal: CompositeEqualityRefusal::Unsupported {
+                unsupported_node_id: node_id(node),
+                node_tag: family,
+            },
+        }
+    }
+
+    /// An item that fails to render is refused on its own claim, emits no code, and leaves its
+    /// sibling's claim and symbols unchanged, whichever of the two fails; the sibling keeps the
+    /// bare stem the refused item would otherwise have shared. A whole-call render error aborts.
+    ///
+    /// Trace: FR-018-AC-18, TC-029.
+    #[test]
+    fn tc_029_ac18_a_render_failure_refuses_only_its_item_and_never_renames_a_sibling() {
+        let quantity = RenderError::UnsupportedValueType { family: "quantity" };
+
+        // Both render: the stem is shared, so the two are numbered in key order.
+        let (result, claims, lib) = emit_two([false, false], quantity);
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            symbols(&claims[0]),
+            Some(("environment_equality_equal_1", "oracle_equality_equal_1"))
+        );
+        assert_eq!(
+            symbols(&claims[1]),
+            Some(("environment_equality_equal_2", "oracle_equality_equal_2"))
+        );
+        assert_eq!(lib.matches("pub fn environment_").count(), 2);
+
+        // The second fails: the first is untouched in claim, and holds the bare stem.
+        let (result, claims, lib) = emit_two([false, true], quantity);
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            symbols(&claims[0]),
+            Some(("environment_equality_equal", "oracle_equality_equal"))
+        );
+        assert_eq!(claims[1].result, unsupported('2', "quantity"));
+        assert_eq!(claims[1].node_id, node_id('2'));
+        assert_eq!(lib.matches("pub fn environment_").count(), 1);
+
+        // The first fails: the second is the one that survives, under the bare stem.
+        let (result, claims, lib) = emit_two([true, false], quantity);
+        assert_eq!(result, Ok(()));
+        assert_eq!(claims[0].result, unsupported('1', "quantity"));
+        assert_eq!(
+            symbols(&claims[1]),
+            Some(("environment_equality_equal", "oracle_equality_equal"))
+        );
+        assert_eq!(lib.matches("pub fn environment_").count(), 1);
+
+        // Neither renders: both are refused, with no code.
+        let (result, claims, lib) = emit_two([true, true], quantity);
+        assert_eq!(result, Ok(()));
+        assert_eq!(claims[0].result, unsupported('1', "quantity"));
+        assert_eq!(claims[1].result, unsupported('2', "quantity"));
+        assert_eq!(lib.matches("pub fn environment_").count(), 0);
+
+        // A whole-call error aborts the call, however the other item fares.
+        let error = OracleGenerationError::UnknownRuntimeVariant {
+            enum_name: "TextProfile",
+        };
+        let (result, _, _) = emit_two([false, true], RenderError::Generation(error));
+        assert_eq!(result, Err(error));
     }
 }
