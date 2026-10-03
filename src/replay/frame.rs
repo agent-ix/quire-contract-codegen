@@ -16,7 +16,7 @@ use qsl_replay::{
     ReplayRequestWire, ReplaySource, Witness, WitnessEnvelope, WitnessPacket, WitnessRefusal,
 };
 
-use crate::spine_replay::{DependencyLockError, ReplayInputs};
+use crate::replay::function::{DependencyLockError, ReplayInputs};
 
 /// One document the replay reads from the request's byte provision, with the digest the request
 /// addresses it by.

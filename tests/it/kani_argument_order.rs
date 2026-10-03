@@ -1,6 +1,6 @@
 //! IR-213: couples `symbolic_arguments`'s `kani::any()` emission order
 //! (`src/kani/generate/clause.rs`) to the order persisted in `identity.arguments`. That coupling
-//! is what `decode_falsification` (`src/kani_witness_join.rs`) depends on: it binds
+//! is what `decode_falsification` (`src/replay/witness.rs`) depends on: it binds
 //! `identity.arguments` *positionally* onto Kani's concrete playback bytes, which is only sound
 //! if position *i* of the persisted arguments is position *i* of the emitted `kani::any()` calls.
 //!

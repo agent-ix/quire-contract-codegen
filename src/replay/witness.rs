@@ -17,7 +17,7 @@
 //! same.
 //!
 //! The values come out as [`qsl_replay::WitnessValue`], the type QSL's replay envelope carries,
-//! so [`crate::spine_replay`] hands them to QSL without a conversion. The transcript grammar
+//! so [`crate::replay::function`] hands them to QSL without a conversion. The transcript grammar
 //! read here is Kani's; QSL's `Witness::decode` reads QSL's own transcript grammar and cannot
 //! read this one, so the playback bytes are decoded here.
 //!
@@ -30,7 +30,7 @@
 //! line names a harness by its qualified path.
 //!
 //! It does not validate a decoded value against its IR domain ([`first_out_of_domain`] does) or
-//! replay it ([`crate::spine_replay`] does).
+//! replay it ([`crate::replay::function`] does).
 
 use qsl_replay::WitnessValue;
 

@@ -11,18 +11,12 @@ mod core;
 mod kani;
 // The oracle subsystem.
 mod oracle;
-// Implements: FR-005, NFR-001
+// The publication subsystem.
 mod publication;
-// Implements: FR-019
-mod capability;
-// Implements: FR-022
-mod routed_generation;
-// IR-211: joins a real Kani witness to the generator's own persisted obligation schema.
-mod kani_witness_join;
-// Implements: FR-016
-mod spine_replay;
-// Implements: FR-015-AC-33
-mod frame_replay;
+// The routed subsystem.
+mod routed;
+// The replay subsystem.
+mod replay;
 // The evidence subsystem.
 mod evidence;
 // The strategy subsystem.
@@ -98,12 +92,6 @@ pub use oracle::bound_v1::{
 
 pub use crate::core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError};
 pub use crate::core::profile::RUNTIME_DEPENDENCY_SOURCE;
-pub use capability::{
-    negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
-    Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
-    ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
-    CAPABILITY_VOCABULARY,
-};
 pub use kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver};
 pub use kani::census::{
     ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
@@ -127,7 +115,13 @@ pub use kani::run::execute::{
 pub use kani::run::harness::KaniExecutableHarness;
 pub use kani::run::launch::{run_launcher_with_timeout, LaunchOutcome};
 pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
-pub use routed_generation::{
+pub use routed::capability::{
+    negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
+    Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
+    ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
+    CAPABILITY_VOCABULARY,
+};
+pub use routed::generate::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
 };
@@ -143,7 +137,6 @@ pub use crate::core::diagnostic::{
     GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
 };
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
-pub use frame_replay::{FrameReplay, FrameReplayError, FrameReplayInputs, ProvidedDocument};
 pub use kani::generate::frame::{
     generate_state_frame_obligations, StateFrameObligations, StateFrameRefusal, StateFrameRequest,
     UnsupportedFrameEffect,
@@ -161,13 +154,14 @@ pub use kani::identity::{
     StateFrameScope,
 };
 pub use kani::output::playback::DecodeFailure;
-pub use kani_witness_join::decode_falsification;
-pub use publication::{write_bundle_atomic, PublishedBundleIdentity};
-pub use spine_replay::{
+pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
+pub use replay::frame::{FrameReplay, FrameReplayError, FrameReplayInputs, ProvidedDocument};
+pub use replay::function::{
     replay_counterexample, replay_falsification, DependencyLock, DependencyLockError,
     EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError,
     ReplayParameter, ReplayVerdict, SpineReplayError,
 };
+pub use replay::witness::decode_falsification;
 pub use strategy::campaign::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,
