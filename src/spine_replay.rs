@@ -2,7 +2,8 @@
 //! QSL's own verdict comes back.
 //!
 //! This module builds the backend-witness transcript in the grammar `qsl-replay` admits from the
-//! typed values [`crate::kani_witness_join::decode_falsification`] returns, binds each value to its parameter by
+//! typed values [`decode_falsification`]
+//! returns, binds each value to its parameter by
 //! the parameter's node id, and calls [`qsl_replay::replay`]. The executor recompiles the
 //! request's digest-addressed source and evaluates the selected function itself, so the verdict
 //! is QSL's, not a value this crate supplies.

@@ -28,7 +28,7 @@
 //! package, each of which precedes it, or a duplicate item, which overwrites it afterwards --
 //! is refused here as
 //! [`UnsupportedObligation::CallerDeclaredOperation`] with the domains the IR does carry. That is
-//! the only case of [`crate::oracle::scalar::OperationProvenance::CallerDeclared`] this generator refuses under
+//! the only case of [`OperationProvenance::CallerDeclared`] this generator refuses under
 //! that name: `CallerDeclaredOperation` is constructed once, inside the `Generated` arm of
 //! `classify_claim`, so a claim codegen refused outright is classified through the `Refused` arm
 //! instead and never reaches it. V1 has no
@@ -41,7 +41,7 @@
 //! absent from the graph entirely is refused the same way as [`InvalidObligationItem::UnknownNode`]
 //! (see `refuse_unknown_node_kind`).
 //!
-//! A render whose generated source would exceed [`crate::core::artifact::MAX_GENERATED_SOURCE_BYTES`] is refused
+//! A render whose generated source would exceed [`MAX_GENERATED_SOURCE_BYTES`] is refused
 //! as [`UnsupportedObligation::ResourceLimitExceeded`], and one that fits that ceiling but fails
 //! `syn::parse_file` is refused as [`UnsupportedObligation::InvalidGeneratedSyntax`]; the two
 //! grounds are checked in that order and are never conflated with the internal-invariant
