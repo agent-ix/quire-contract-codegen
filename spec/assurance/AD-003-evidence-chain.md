@@ -305,10 +305,11 @@ crate CG's lock selects.
   `TerminalRecord::new` and `BackendProviderSource` publicly. QSL's review says
   `TerminalRecord.item` (a string today) becomes a typed request index; the driver follows when
   it lands.
-- Resolved decision, preimage: AD-001's Decisions section defines the `ObligationIdentity`
-  preimage as "every `KaniObligationIdentity` member except `source_span`", and FR-024 repeats
-  it. That conflicts with ADR-013 O-09's member list that E-1 uses (node id, occurrence key,
-  kind, arguments as parameter node id and domain). Decision: O-09 wins. AD-001 and FR-024 state the O-09 preimage (IR-553).
+- Resolved decision, preimage: AD-001's Decisions section and FR-024 once gave the
+  `ObligationIdentity` preimage as "every `KaniObligationIdentity` member except `source_span`",
+  which conflicted with ADR-013 O-09's member list that E-1 uses (node id, occurrence key,
+  kind, arguments as parameter node id and domain). Decision: O-09 wins. AD-001 and FR-024 now
+  state the O-09 preimage (IR-553).
 - Sequencing (QSL's review, not assumed): QSL-351 (an inconclusive value with a typed cause,
   and a non-zero count in `Proved`) and QSL-352 change `qsl-replay` types CG builds, so they
   land in step with CG, and QSL-351 lands before the IR-465 terminal map is written so that map

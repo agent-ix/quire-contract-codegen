@@ -162,8 +162,9 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   its copies of their spellings from the function path's request. The `quire.capability-kind/v1`
   constant at `capability.rs:22` belongs to the capability envelope (FR-019), not to the request.
 - FR-024 requires the envelope for every replay and a domain check before it; only the frame
-  path builds an envelope. The function path is therefore either outside FR-024 or short of it.
-  This AD records the gap; it does not decide it. FR-024 is `Planned` in the replay matrix.
+  path builds an envelope. The function path is therefore short of FR-024: merged ADR-013 O-25 puts the selected
+  function's `QualifiedName` and the obligation identity in the packet, so FR-024 covers function
+  counterexamples and the path is not exempt. FR-024 is `Planned` in the replay matrix.
 - `first_out_of_domain` is crate-private; `decode_falsification` is public
   (`src/replay/witness.rs:116`) and decodes to `qsl_replay::WitnessValue`.
 - QSL's `call_site` accepts a `ClauseSite` selection and QSL has a state-clause replay entry;
@@ -192,5 +193,5 @@ To QSL (QSL reviews these rows):
 | Id | Stated need |
 | --- | --- |
 | R-Q5 | Done in QSL: the three version and vocabulary members are gone from the request, and CG dropped its copies. |
-| R-Q7 | Renamed in QSL: the request's slot is `obligation_identity`. It is to hold the obligation-identity digest; no separate envelope for the function path (QSL's review, to be confirmed by QSL). CG fills the slot on the function path with the O-09 function-contract obligation identity (FR-016-AC-21); the transcript digest it passes at this base is replaced, not kept. |
+| R-Q7 | Renamed in QSL: the request's slot is `obligation_identity`. It is to hold the obligation-identity digest. The earlier remark "no separate envelope for the function path" is superseded by merged ADR-013 O-25 (the packet carries the selected function). CG fills the slot on the function path with the O-09 function-contract obligation identity (FR-016-AC-21); the transcript digest it passes at this base is replaced, not kept. |
 | R-Q8 | CG's frame envelope sends an empty declared-domain list, which QSL-345 part 2 will refuse; CG must supply the bounds. CG keeps its own pre-check regardless. |
