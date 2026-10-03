@@ -66,7 +66,7 @@ obligation identity type, and neither does IR. CG's only QSL dependency is the `
 | Request version and vocabulary members | none | QSL deleted `contract_version`, `capability_vocabulary` and `package_contract_version` from `ReplayRequestWire` and `WitnessPacket` (R-Q5, done in QSL), so the request carries no contract spelling and CG writes none. |
 | `package_id` (`quire.package.semantic/v2`) | QSL | QSL recompiles the provided source and requires the recompiled `package_id` to equal the request's (`execute.rs`, "Rule 5"; `execute/frame.rs` for the frame path). This is the one canonical content-identity digest the whole replay seam rests on: it binds a replay to the content that was proved. |
 | Source bytes | CG computes the digest with QSL's `ByteDigest` | QSL checks each provided byte against its digest (`stale_dependency/byte-digest-mismatch`). |
-| Request `obligation_identity` slot (QSL renamed it from `originating_counterexample_identity`, R-Q7) | CG fills it. The frame path passes `FrameReplayInputs::obligation_identity`. The function path still passes the `ByteDigest` of the transcript, a placeholder and not the obligation identity, because nothing in CG computes that identity yet (AD-003 E-1). | QSL does not check it against any content: `replay` passes it into witness decoding as a label (`execute.rs`, `arguments`). The function path's placeholder goes when E-1 lands. |
+| Request `obligation_identity` slot (QSL renamed it from `originating_counterexample_identity`, R-Q7) | CG fills it. The frame path passes `FrameReplayInputs::obligation_identity`. The function path holds the ADR-013 O-09 function-contract obligation digest, which CG computes over the checked function node id and `declaration` occurrence key that `call_site`'s `FunctionSite` carries (QSL-352, FR-121-AC-15), the requested `ObligationKind` and the arguments (AD-003 E-1, FR-016-AC-21 to AC-23). The `ByteDigest` of the transcript that `ReplayPackage::request` passes at this base is a placeholder this AD records as wrong and replaced by that identity; it is not the accepted design. 🚧 planned until the code lands. | QSL does not check it against any content: `replay` passes it into witness decoding as a label (`execute.rs`, `arguments`). The function path's transcript digest goes with the code that lands FR-016-AC-21. |
 | Backend identity | request `backend` member | carried; QSL records it, does not interpret it |
 
 The obligation identity is the other content identity on the replay path; it is discussed in
@@ -140,9 +140,13 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   partitions (`verdict_of`, :520). This path builds no `WitnessEnvelope`: it sends
   `ReplaySource::Witness` in the request. The request has an obligation-identity slot (QSL
   renamed it from `originating_counterexample_identity` to `obligation_identity`, R-Q7, and it
-  is typed `ObligationIdentity`), and CG fills it on this path with the `ByteDigest` of the
-  transcript (`ReplayPackage::request`, `function.rs:438`): the slot exists and holds a placeholder, not the
-  obligation identity, until AD-003 E-1 gives CG one to pass.
+  is typed `ObligationIdentity`). At this base `ReplayPackage::request` (`function.rs:438`) fills
+  it with the `ByteDigest` of the transcript. That is a placeholder, recorded here as wrong and
+  replaced by the ADR-013 O-09 function-contract obligation identity (QSL-352, merged in
+  quire-spec-language #618; IR-553 carries the CG work), not as the design. The function node id
+  and `declaration` occurrence key reach CG through `FunctionSite`'s `function` and
+  `declaration` members, and CG never derives a node id. Until QSL's queued code PR adds those
+  members, the code cannot land; FR-016-AC-21 to AC-23 are planned.
 - Frame path: `src/replay/frame.rs` calls `call_site` with an `OperationSite` (:112), builds the
   envelope with `WitnessEnvelope::reconstruct` (:182) and calls `replay_frame` (:183).
   `obligation_identity` is a caller-supplied `[u8; 32]` field (:47) that the request and the
@@ -158,8 +162,15 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   its copies of their spellings from the function path's request. The `quire.capability-kind/v1`
   constant at `capability.rs:22` belongs to the capability envelope (FR-019), not to the request.
 - FR-024 requires the envelope for every replay and a domain check before it; only the frame
-  path builds an envelope. The function path is therefore either outside FR-024 or short of it.
-  This AD records the gap; it does not decide it. FR-024 is `Planned` in the replay matrix.
+  path builds an envelope. The function path is therefore short of FR-024: merged ADR-013 O-25 puts the selected
+  function's `QualifiedName` and the obligation identity in the packet, so FR-024 covers function
+  counterexamples and the path is not exempt. FR-024 is `Planned` in the replay matrix.
+- Resolved (IR-553): the function path puts the O-09 function-contract obligation identity
+  (AD-003 E-1, FR-016-AC-21) in the request's `obligation_identity` slot instead of the
+  transcript digest, and FR-024's envelope covers function counterexamples (merged ADR-013 O-25),
+  so the missing function-path envelope is a gap and FR-024 is not scoped down. QSL's earlier "no
+  separate envelope" remark is superseded by that text. Until the code lands, the function path's
+  request carries no obligation join, so a counterexample cannot be tied to its harness.
 - `first_out_of_domain` is crate-private; `decode_falsification` is public
   (`src/replay/witness.rs:116`) and decodes to `qsl_replay::WitnessValue`.
 - QSL's `call_site` accepts a `ClauseSite` selection and QSL has a state-clause replay entry;
@@ -172,7 +183,6 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
 
 | Question | Owner | Recommendation | Cost of the alternative |
 | --- | --- | --- | --- |
-| What does the function path put in the request's `obligation_identity` slot, and does it also build a `WitnessEnvelope`, as FR-024 says? | CG | Put the obligation identity (AD-003, E-1) in the slot instead of the transcript digest. QSL's review says no separate envelope is wanted for the function path; if so, amend FR-024 to scope the envelope to frame and state-clause counterexamples. Decide in the CG spec PR. | Today the function path's request carries no obligation join, so a counterexample cannot be tied to the harness that produced it. |
 | `call_site` selection for state clauses (`ClauseSite`) has no CG consumer | CG | Leave until a state-clause harness needs it. | none now |
 | The domain check before replay exists on the function path only | CG with QSL | CG keeps its own pre-check: a playback outside the harness's proof bound is a CG harness defect, and a QSL-side check of admitted values against `DeclaredDomain`, if QSL adds one, would report it as an invalid input and hide the defect. Do not drop the CG check on QSL's account. | Without CG's check a QSL refusal would hide a CG defect. |
 
@@ -188,5 +198,5 @@ To QSL (QSL reviews these rows):
 | Id | Stated need |
 | --- | --- |
 | R-Q5 | Done in QSL: the three version and vocabulary members are gone from the request, and CG dropped its copies. |
-| R-Q7 | Renamed in QSL: the request's slot is `obligation_identity`. It is to hold the obligation-identity digest; no separate envelope for the function path (QSL's review, to be confirmed by QSL). CG fills the slot with its obligation identity once AD-003 E-1 gives it one; until then the function path passes a transcript digest. |
+| R-Q7 | Renamed in QSL: the request's slot is `obligation_identity`. It is to hold the obligation-identity digest. The earlier remark "no separate envelope for the function path" is superseded by merged ADR-013 O-25 (the packet carries the selected function). CG fills the slot on the function path with the O-09 function-contract obligation identity (FR-016-AC-21); the transcript digest it passes at this base is replaced, not kept. |
 | R-Q8 | CG's frame envelope sends an empty declared-domain list, which QSL-345 part 2 will refuse; CG must supply the bounds. CG keeps its own pre-check regardless. |

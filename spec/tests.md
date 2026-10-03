@@ -17,5 +17,5 @@ Each subsystem owns one matrix beside its requirements, per
 | Oracle | FR-014, FR-018, FR-021 | [oracle](./oracle/matrix/tests.md) | 🚧 several criteria are partial or planned in the matrix rows |
 | Kani | FR-015, FR-017, FR-025, FR-028, FR-029, FR-030 | [kani](./kani/matrix/tests.md) | 🚧 several criteria are planned in the matrix rows |
 | Routed | FR-019, FR-022, FR-026 | [routed](./routed/matrix/tests.md) | 🚧 FR-019 and FR-022 are covered except FR-022-AC-1, FR-022-AC-6 and FR-022-AC-16; FR-026 is planned |
-| Replay | FR-016, FR-024 | [replay](./replay/matrix/tests.md) | 🚧 FR-016-AC-6, AC-7 and AC-12 and FR-024 are planned |
+| Replay | FR-016, FR-024 | [replay](./replay/matrix/tests.md) | 🚧 FR-016-AC-6, AC-7, AC-12 and AC-21 to AC-23 and FR-024 are planned |
 | Evidence | FR-004 | [evidence](./evidence/matrix/tests.md) | 🚧 FR-004 (TC-006) is planned |

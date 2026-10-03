@@ -65,8 +65,9 @@ the partition of replay outcomes. This requirement owns what reaches QSL.
 
 ## Behavior
 
-- The generator shall build the envelope's `qsl_replay::ObligationIdentity` from every
-  `KaniObligationIdentity` member except `source_span`.
+- The generator shall build the envelope's `qsl_replay::ObligationIdentity` as the ADR-013 O-09
+  digest of the obligation's subject node id, occurrence key, obligation kind and arguments, with
+  no `source_span` (AD-003 E-1).
 - The generator shall build QSL's backend-witness transcript from FR-016's decoded values, never
   from backend-native text, in exactly one function of the backend's adapter.
 - The generator shall admit that transcript only through `qsl_replay::Witness::parse`.
@@ -100,7 +101,7 @@ the partition of replay outcomes. This requirement owns what reaches QSL.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-024-AC-1 | The envelope's obligation identity is QSL's `ObligationIdentity` built from every `KaniObligationIdentity` member except `source_span`. Changing `source_span` leaves it unchanged, and changing the obligation kind or any argument binding changes it. | Test (TC-035) |
+| FR-024-AC-1 | The envelope's obligation identity is QSL's `ObligationIdentity` built as the ADR-013 O-09 digest: the subject node id (clause, application or function, FR-016-AC-21), its occurrence key, the obligation kind and the arguments, each a parameter node id with its declared domain, and no `source_span`. Changing `source_span` leaves it unchanged, and changing the obligation kind or any argument binding changes it. | Test (TC-035) |
 | FR-024-AC-2 | Every backend-witness transcript the generator passes to `Witness::parse` is produced by the one adapter rendering function from decoded values, and that function takes no backend-native text as input. | Test (TC-035) |
 | FR-024-AC-3 | A counterexample with any value outside its declared domain is reported out-of-domain and neither `replay` nor `replay_frame` is called. The endpoints of each declared domain are admitted, and the values immediately outside it are not. | Test (TC-035) |
 | FR-024-AC-4 | For each `WitnessPacket` member in turn, a packet missing that member is refused by `WitnessEnvelope::reconstruct` with QSL's `MissingMember` naming it, and no replay runs. A packet whose trace position is present with the value none is admitted. | Test (TC-035) |

@@ -88,10 +88,11 @@ success.
   other digest, pin, SHA or version record is added to this chain.
 - The other digests on the chain already exist and bind content, not tools or versions:
   `package_id` (QSL recomputes it on replay), the byte digests QSL checks on provided source and
-  the `CaseIdentity` name of a corpus case. The `ByteDigest` of the transcript that CG puts in the
-  request's identity slot today is not a content identity of the proof; R-Q7 retires it in favour
-  of the obligation identity, and QSL does not check it against anything (`execute.rs`, it is
-  passed to witness decoding as a label).
+  the `CaseIdentity` name of a corpus case. The `ByteDigest` of the transcript that the function path
+  puts in the request's identity slot at this base is not a content identity of the proof. It is
+  recorded as wrong and replaced by the O-09 function-contract obligation identity (R-Q7,
+  IR-553); QSL does not check the slot against anything (`execute.rs`, it is passed to witness
+  decoding as a label).
 - There is no pin, SHA or digest over a file, version or tool, and CG proposes none. In
   particular the Kani version is not pinned; classification reads Kani's output through the one
   transcript parser. QSL's `BackendProviderSource` has a public `tool_pin` string and ADR-013
@@ -127,7 +128,12 @@ authored).
   as RFC 8785 JSON in CG's one canonical-encoding place by `quire_canonical`, never by
   `serde_json`;
   the value changes when any included member changes and does not when the span changes. The
-  V1 contract path, the scalar path and the frame path (`StateFrameIdentity`) all use it.
+  V1 contract path, the scalar path and the frame path (`StateFrameIdentity`) all use it. The
+  function path (`call_site` over a `QualifiedName`, ADR-013 O-09 as amended by QSL-352) uses it
+  too, with the checked function node id and its `declaration` occurrence key in place of the
+  clause's, both read from `FunctionSite` and never derived by CG, and the existing `ObligationKind` of the
+  harness replayed (O-09 adds no subject tag and no new kind: one identity per kind the function
+  requests; FR-016-AC-21 to AC-23, planned).
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001).
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from
@@ -259,7 +265,8 @@ crate CG's lock selects.
   ADR-013 O-09 defines the preimage: the clause (or application) node id, its occurrence key,
   the obligation kind and the arguments (parameter node id and declared domain), source span
   excluded. CG's frame envelope takes a caller `[u8; 32]` (`frame_replay.rs:47`); the function
-  path puts the transcript's byte digest in the request's obligation-identity slot (AD-002).
+  path puts the transcript's byte digest in the request's obligation-identity slot at this base
+  (AD-002); that digest is replaced by the function-contract identity, not retained.
   The work is larger than one missing field. Three identity structs exist and none carries what
   O-09 needs. `KaniObligationIdentity` holds a `ClauseRef`, not the clause node id, and no
   occurrence key; its `ObligationBinding` (`identifier`, `role`, `primitive_type`,
@@ -298,11 +305,11 @@ crate CG's lock selects.
   `TerminalRecord::new` and `BackendProviderSource` publicly. QSL's review says
   `TerminalRecord.item` (a string today) becomes a typed request index; the driver follows when
   it lands.
-- Resolved decision, preimage: AD-001's Decisions section defines the `ObligationIdentity`
-  preimage as "every `KaniObligationIdentity` member except `source_span`", and FR-024 repeats
-  it. That conflicts with ADR-013 O-09's member list that E-1 uses (node id, occurrence key,
-  kind, arguments as parameter node id and domain). Decision: O-09 wins. AD-001 and FR-024 are
-  to be corrected in the follow-up spec PR; neither is edited here.
+- Resolved decision, preimage: AD-001's Decisions section and FR-024 once gave the
+  `ObligationIdentity` preimage as "every `KaniObligationIdentity` member except `source_span`",
+  which conflicted with ADR-013 O-09's member list that E-1 uses (node id, occurrence key,
+  kind, arguments as parameter node id and domain). Decision: O-09 wins. AD-001 and FR-024 now
+  state the O-09 preimage (IR-553).
 - Sequencing (QSL's review, not assumed): QSL-351 (an inconclusive value with a typed cause,
   and a non-zero count in `Proved`) and QSL-352 change `qsl-replay` types CG builds, so they
   land in step with CG, and QSL-351 lands before the IR-465 terminal map is written so that map

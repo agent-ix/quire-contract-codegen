@@ -27,6 +27,17 @@ size limit, an out-of-domain witness, a witness whose native value or charges
 disagree with the harness, a witness whose native replay is unavailable, and
 a witness whose replay agrees in a category other than `violation`.
 
+For FR-016-AC-21 to AC-23, build the replay request for a function with two parameters declared
+in an order that differs from their ascending identifier order. Recompute the O-09 digest from
+the `FunctionSite`'s `function` and `declaration`, the requested kind and the arguments ascending
+by identifier, through `quire-canonical`, and compare it with the request's `obligation_identity`
+slot (AC-21). Then build the request for a second function with the same parameters, recompile
+the first with comments and blank lines inserted, change its harness source span, replay it under
+a different `ObligationKind`, and change one argument domain, comparing slots each time. Replay a
+function whose body has two conjuncts under one kind and count its identities (AC-22). Rebuild the
+identity with every other node of the compiled package perturbed and the `FunctionSite` members
+held fixed, then with `function` and then `declaration` perturbed (AC-23).
+
 ## Expected Results
 
 The schema follows the persisted argument order, which is the emission
@@ -40,8 +51,17 @@ mismatch and unavailable results respectively. The disagreeing witnesses are
 never reported unavailable, and the unavailable replay is never reported as a
 mismatch. The witness that agrees in a category other than `violation` is a
 mismatch and never a failure.
+The slot equals the recomputed digest (AC-21). The two functions' identities differ, comments and
+blank lines and the span change leave one unchanged, the kind change and the domain change each
+alter it, and the two-conjunct function has one identity (AC-22). The identity is unchanged by the
+other-node perturbation and changed by each `FunctionSite` perturbation (AC-23).
 
 ## Status
+
+FR-016-AC-21 to AC-23 are planned (the O-09 amendment is quire-spec-language commit f6c3974,
+QSL-352; informational): the function path still passes the transcript digest, and
+QSL's `FunctionSite` `function` and `declaration` members are not yet in the `qsl-replay` CG
+builds against.
 
 Partial. FR-016-AC-9 through AC-11 are implemented and tested in the default suite
 (`tests/it/skeleton_spine.rs`): a falsifying input replays through
