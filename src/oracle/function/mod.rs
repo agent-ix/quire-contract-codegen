@@ -554,19 +554,6 @@ enum ClassifiedBody<'r> {
     Call(&'r str),
 }
 
-impl<'r> ClassifiedBody<'r> {
-    /// Resolve `body`, or `None` for a scalar body whose operator is not binary.
-    fn of(body: &'r ExactFunctionBody) -> Option<Self> {
-        match body {
-            ExactFunctionBody::Scalar { operator } => {
-                BinaryIntegerOperator::of(*operator).map(Self::Scalar)
-            }
-            ExactFunctionBody::CompositeEquality { operator } => Some(Self::Equality(*operator)),
-            ExactFunctionBody::Call { callee } => Some(Self::Call(callee)),
-        }
-    }
-}
-
 fn lowering_profile() -> CompleteLoweringProfileV2 {
     CompleteLoweringProfileV2 {
         supported_tags: BTreeSet::from([
@@ -706,18 +693,20 @@ fn application_arguments(body: &serde_json::Value) -> Option<&Vec<serde_json::Va
 }
 
 /// Classify one declared function's own body shape against its lowered
-/// node, independent of any other function (Stage 1, non-`Call` bodies).
-fn classify_body_shape(
+/// node, independent of any other function (Stage 1, non-`Call` bodies), and
+/// return the body with its operator resolved: the one place a scalar operator
+/// is checked, so the rendered body cannot disagree with the refusal.
+fn classify_body_shape<'r>(
     node: &quire_contract_model::CompleteContractNodeV2,
-    declaration: &ExactFunctionDeclaration,
-) -> Result<(), ExactFunctionRefusal> {
+    declaration: &'r ExactFunctionDeclaration,
+) -> Result<ClassifiedBody<'r>, ExactFunctionRefusal> {
     match &declaration.body {
         ExactFunctionBody::Scalar { operator } => {
-            if BinaryIntegerOperator::of(*operator).is_none() {
-                return Err(ExactFunctionRefusal::UnsupportedOperator {
+            let operator = BinaryIntegerOperator::of(*operator).ok_or(
+                ExactFunctionRefusal::UnsupportedOperator {
                     detail: "only binary IntegerOperator::{Add,Subtract,Multiply} are supported",
-                });
-            }
+                },
+            )?;
             if &*node.node.semantic_form != "binary" {
                 return Err(ExactFunctionRefusal::FormMismatch {
                     found: node.node.semantic_form.to_string(),
@@ -727,9 +716,9 @@ fn classify_body_shape(
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
             let _ = arguments;
-            Ok(())
+            Ok(ClassifiedBody::Scalar(operator))
         }
-        ExactFunctionBody::CompositeEquality { .. } => {
+        ExactFunctionBody::CompositeEquality { operator } => {
             if &*node.node.semantic_form != "binary" {
                 return Err(ExactFunctionRefusal::FormMismatch {
                     found: node.node.semantic_form.to_string(),
@@ -739,15 +728,15 @@ fn classify_body_shape(
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
             let _ = arguments;
-            Ok(())
+            Ok(ClassifiedBody::Equality(*operator))
         }
-        ExactFunctionBody::Call { .. } => {
+        ExactFunctionBody::Call { callee } => {
             if &*node.node.semantic_form != "call" {
                 return Err(ExactFunctionRefusal::FormMismatch {
                     found: node.node.semantic_form.to_string(),
                 });
             }
-            Ok(())
+            Ok(ClassifiedBody::Call(callee))
         }
     }
 }
@@ -862,9 +851,10 @@ pub fn generate_exact_function_oracles(
     // Stage 1: per-function classification, with a bounded fixed-point pass
     // for `Call` bodies (a nested call's own validity depends on its
     // callee's classification, per AC-12).
-    let mut own_shape: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
+    let mut own_shape: BTreeMap<&CheckedNodeId, Result<ClassifiedBody<'_>, ExactFunctionRefusal>> =
+        BTreeMap::new();
     for (declaration, record) in ordered_functions.iter().zip(&lowering.records) {
-        let result = (|| -> Result<(), ExactFunctionRefusal> {
+        let result = (|| -> Result<ClassifiedBody<'_>, ExactFunctionRefusal> {
             if name_counts[declaration.name.as_str()] > 1 {
                 return Err(ExactFunctionRefusal::AmbiguousFunctionName {
                     name: declaration.name.clone(),
@@ -881,14 +871,14 @@ pub fn generate_exact_function_oracles(
                 });
             }
             let node = lowered_binary_body(record)?;
-            classify_body_shape(node, declaration)?;
+            let body = classify_body_shape(node, declaration)?;
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
                 parameter_kinds.push(resolve_operand_type(&graph, &parameter.type_node_id)?);
             }
             let result_kind = resolve_operand_type(&graph, &declaration.result_type)?;
             validate_signature(declaration, &parameter_kinds, result_kind)?;
-            Ok(())
+            Ok(body)
         })();
         own_shape.insert(&declaration.node_id, result);
     }
@@ -903,7 +893,7 @@ pub fn generate_exact_function_oracles(
             let own = own_shape.get(&declaration.node_id).unwrap();
             let outcome = match (&declaration.body, own) {
                 (_, Err(refusal)) => Some(Err(refusal.clone())),
-                (ExactFunctionBody::Call { callee }, Ok(())) => {
+                (ExactFunctionBody::Call { callee }, Ok(_)) => {
                     match unique_name_node_id.get(callee.as_str()) {
                         None => Some(Err(ExactFunctionRefusal::UnknownCallee {
                             callee: callee.clone(),
@@ -917,7 +907,7 @@ pub fn generate_exact_function_oracles(
                         },
                     }
                 }
-                (_, Ok(())) => Some(Ok(())),
+                (_, Ok(_)) => Some(Ok(())),
             };
             if let Some(outcome) = outcome {
                 resolved.insert(&declaration.node_id, outcome);
@@ -945,14 +935,13 @@ pub fn generate_exact_function_oracles(
     // order, and admit it once.
     let mut classified: Vec<ClassifiedFunction<'_>> = Vec::with_capacity(ordered_functions.len());
     for declaration in &ordered_functions {
+        // A refused function (its own Stage 1 refusal, or a callee's) is left out.
+        let Some(Ok(body)) = own_shape.remove(&declaration.node_id) else {
+            continue;
+        };
         if !matches!(resolved.get(&declaration.node_id), Some(Ok(()))) {
             continue;
         }
-        // Stage 1 already refused every non-binary scalar operator; a body that
-        // still does not resolve is left out of the package like any refused one.
-        let Some(body) = ClassifiedBody::of(&declaration.body) else {
-            continue;
-        };
         let parameter_kinds: Vec<OperandKind> = declaration
             .parameters
             .iter()

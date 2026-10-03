@@ -2108,7 +2108,27 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
     ));
 }
 
-/// Trace: FR-021-AC-19, FR-021-AC-21, TC-031 (function generator); IR-352 (partial, the scalar
+/// The panicking macros no generator or generated oracle may invoke.
+const PANICKING_MACROS: [&str; 4] = ["unreachable", "panic", "todo", "unimplemented"];
+
+/// True when `text` invokes one of [`PANICKING_MACROS`]: the name, optional whitespace, then `!`,
+/// whatever delimiter follows and whatever path precedes it. Shared with the function-oracle
+/// emitted-source scan in `exact_function_generation`.
+pub(crate) fn invokes_panicking_macro(text: &str) -> bool {
+    PANICKING_MACROS.iter().any(|name| {
+        text.match_indices(name).any(|(at, _)| {
+            let before_is_ident = text[..at]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_');
+            let rest = text[at + name.len()..].trim_start();
+            !before_is_ident && rest.starts_with('!')
+        })
+    })
+}
+
+/// Trace: FR-021-AC-21, TC-031 (the source half: the function generator holds zero invocations;
+/// the emitted source is AC-19's, in `exact_function_generation`); IR-352 (partial, the scalar
 /// and equality generators). Evidence that no generator panics on an unknown Contract Runtime
 /// variant. The RT enums are `#[non_exhaustive]` and foreign to this crate, so a test cannot build
 /// an unknown variant to drive `OracleGenerationError::UnknownRuntimeVariant`, and every mapper
@@ -2125,7 +2145,6 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
 /// Lines that are `//` comments are skipped.
 #[test]
 fn oracle_generators_have_no_unexcused_panicking_arms() {
-    const MACROS: [&str; 4] = ["unreachable", "panic", "todo", "unimplemented"];
     /// (file, arm text that identifies the excused line, exact number of such lines)
     const EXCUSED: [(&str, &str, usize); 2] = [
         (
@@ -2139,21 +2158,6 @@ fn oracle_generators_have_no_unexcused_panicking_arms() {
             1,
         ),
     ];
-
-    /// True when `line` invokes one of the macros: the name, optional whitespace, then `!`,
-    /// whatever delimiter follows and whatever path precedes it.
-    fn invokes_panicking_macro(line: &str) -> bool {
-        MACROS.iter().any(|name| {
-            line.match_indices(name).any(|(at, _)| {
-                let before_is_ident = line[..at]
-                    .chars()
-                    .next_back()
-                    .is_some_and(|c| c.is_alphanumeric() || c == '_');
-                let rest = line[at + name.len()..].trim_start();
-                !before_is_ident && rest.starts_with('!')
-            })
-        })
-    }
 
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut offending = Vec::new();

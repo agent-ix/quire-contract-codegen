@@ -6,6 +6,7 @@
 //! static location map. Execution-level criteria (AC-2, AC-4, AC-5, AC-7,
 //! AC-9, AC-17) are covered by `tests/it/exact_function_agreement.rs`.
 
+use crate::exact_scalar_generation::invokes_panicking_macro;
 use crate::scratch_crate::runtime_dependency;
 use quire_contract_codegen::{
     generate_exact_function_oracles, CallPointKind, ClaimDisposition, ExactFunctionItem,
@@ -570,19 +571,6 @@ fn tc_031_ac21_unsupported_operator_refuses_unary_negate_scalar_body() {
     );
 }
 
-/// True when `source` contains an invocation of the macro `name`: the name,
-/// optional whitespace, then `!`, whatever delimiter follows and whatever path
-/// precedes it.
-fn invokes_macro(source: &str, name: &str) -> bool {
-    source.match_indices(name).any(|(at, _)| {
-        let before_is_ident = source[..at]
-            .chars()
-            .next_back()
-            .is_some_and(|c| c.is_alphanumeric() || c == '_');
-        !before_is_ident && source[at + name.len()..].trim_start().starts_with('!')
-    })
-}
-
 /// Trace: FR-021-AC-19, TC-031. The emitted `src/lib.rs` of the main corpus
 /// (scalar `add_fn`, equality `eq_fn`, nested-call `call_fn`) and of the chain
 /// corpus contains no `.unwrap(`, no `.expect(` and no panicking macro in any
@@ -598,9 +586,10 @@ fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
                 "{corpus} corpus emits {forbidden}"
             );
         }
-        for name in ["unreachable", "panic", "todo", "unimplemented"] {
-            assert!(!invokes_macro(&lib, name), "{corpus} corpus emits {name}!");
-        }
+        assert!(
+            !invokes_panicking_macro(&lib),
+            "{corpus} corpus emits a panicking macro"
+        );
     }
     let lib = contents(&main_oracles(), "src/lib.rs");
     assert!(lib.contains("rt::TypeEnvironment::default()"));
