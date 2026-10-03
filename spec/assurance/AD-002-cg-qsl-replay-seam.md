@@ -165,6 +165,12 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   path builds an envelope. The function path is therefore short of FR-024: merged ADR-013 O-25 puts the selected
   function's `QualifiedName` and the obligation identity in the packet, so FR-024 covers function
   counterexamples and the path is not exempt. FR-024 is `Planned` in the replay matrix.
+- Resolved (IR-553): the function path puts the O-09 function-contract obligation identity
+  (AD-003 E-1, FR-016-AC-21) in the request's `obligation_identity` slot instead of the
+  transcript digest, and FR-024's envelope covers function counterexamples (merged ADR-013 O-25),
+  so the missing function-path envelope is a gap and FR-024 is not scoped down. QSL's earlier "no
+  separate envelope" remark is superseded by that text. Until the code lands, the function path's
+  request carries no obligation join, so a counterexample cannot be tied to its harness.
 - `first_out_of_domain` is crate-private; `decode_falsification` is public
   (`src/replay/witness.rs:116`) and decodes to `qsl_replay::WitnessValue`.
 - QSL's `call_site` accepts a `ClauseSite` selection and QSL has a state-clause replay entry;
@@ -177,7 +183,6 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
 
 | Question | Owner | Recommendation | Cost of the alternative |
 | --- | --- | --- | --- |
-| What does the function path put in the request's `obligation_identity` slot, and does it also build a `WitnessEnvelope`, as FR-024 says? | CG | Decided for the slot: the function path puts the O-09 function-contract obligation identity (AD-003 E-1, FR-016-AC-21) in the slot instead of the transcript digest. Decided for the envelope: the merged ADR-013 O-25 packet carries the selected function's `QualifiedName` and the obligation identity, so FR-024's envelope covers function counterexamples and FR-024 is not scoped down. The function path building none today is a gap against FR-024 (its Current state), not an exemption; QSL's earlier "no separate envelope" review remark is superseded by that text. | Until the code lands, the function path's request carries no obligation join, so a counterexample cannot be tied to the harness that produced it. |
 | `call_site` selection for state clauses (`ClauseSite`) has no CG consumer | CG | Leave until a state-clause harness needs it. | none now |
 | The domain check before replay exists on the function path only | CG with QSL | CG keeps its own pre-check: a playback outside the harness's proof bound is a CG harness defect, and a QSL-side check of admitted values against `DeclaredDomain`, if QSL adds one, would report it as an invalid input and hide the defect. Do not drop the CG check on QSL's account. | Without CG's check a QSL refusal would hide a CG defect. |
 

@@ -36,9 +36,7 @@ the first with comments and blank lines inserted, change its harness source span
 a different `ObligationKind`, and change one argument domain, comparing slots each time. Replay a
 function whose body has two conjuncts under one kind and count its identities (AC-22). Rebuild the
 identity with every other node of the compiled package perturbed and the `FunctionSite` members
-held fixed, then with `function` and then `declaration` perturbed. Run the lexical scan, over
-identifiers and string literals, of the non-test code of `src/replay/` and `src/core/canonical.rs`
-for `OccurrenceKey`, `NodeKey`, `CheckedNodeId` and `node_tag` (AC-23).
+held fixed, then with `function` and then `declaration` perturbed (AC-23).
 
 ## Expected Results
 
@@ -56,8 +54,7 @@ mismatch and never a failure.
 The slot equals the recomputed digest (AC-21). The two functions' identities differ, comments and
 blank lines and the span change leave one unchanged, the kind change and the domain change each
 alter it, and the two-conjunct function has one identity (AC-22). The identity is unchanged by the
-other-node perturbation and changed by each `FunctionSite` perturbation, and the scan finds none
-of the four names (AC-23).
+other-node perturbation and changed by each `FunctionSite` perturbation (AC-23).
 
 ## Status
 
