@@ -244,13 +244,17 @@ src/
   routed/                     FR-019, FR-022, FR-026
     capability.rs             was capability
     generate.rs               was routed_generation
-    adapter.rs                the adapter trait and its one Kani implementation
+    adapter.rs                RESERVED, not created by any step of Migration order: the adapter trait
+                              and its one Kani implementation (the adapter contract of ADR-002; no
+                              code of that shape exists today)
   publication/                FR-005
     publish.rs                write_bundle_atomic, published identity
 ```
 
 `kani/terminal.rs` is created by step 5 (the terminal map); the layout reserves its place and step
-2f does not create it, nor `generate/spec.rs` or `generate/render.rs` (step 4b). Directory names equal the registry's subsystem names, which makes ADR-0056
+2f does not create it, nor `generate/spec.rs` or `generate/render.rs` (step 4b). `routed/adapter.rs`
+is reserved the same way but no step creates it: nothing in this crate is the adapter trait today,
+so step 2g does not create it and the layout test (L-1) does not require it. Directory names equal the registry's subsystem names, which makes ADR-0056
 rule 3 (one module maps to exactly one subsystem) true by construction.
 
 ### Module-to-subsystem map
@@ -323,7 +327,8 @@ Rules, each checkable:
 
 - A directory imports only the directories to its right. `strategy`, `evidence` and `kani` are peers
   and import none of each other. `kani` and `replay` import nothing from `routed`, and the adapter
-  trait is defined in `routed/adapter.rs` with the Kani implementation beside it. The driver
+  trait, when it exists, is defined in the reserved `routed/adapter.rs` with the Kani
+  implementation beside it. The driver
   (`quire-driver`, outside this crate) pairs a Kani outcome with a replay result, as QSL's merged
   ADR-011 T-13 says; no module of this crate does.
 - Imports use a module path (`use crate::core::artifact::Artifact`), never an item re-exported
@@ -831,7 +836,11 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    (see the `oracle` naming and V1 rows of the module map).
 7. **Spec follows the code.** One spec PR: the registry rows by directory; FR-005 and
    TC-001, TC-002, TC-007 to `spec/publication/`; SUR-001 to `core/functional/`; `interface-001`
-   and `tests.md` fixed. `git mv`, ids unchanged. When this step lands, the registry note in
+   and `tests.md` fixed. The same PR repoints the prose that still cites flat source paths deleted
+   by steps 2c to 2g (`src/spine_replay.rs`, `src/kani_witness_join.rs`, `src/frame_replay.rs`,
+   `src/capability.rs`, `src/routed_generation.rs`, `src/publication.rs` and the like) in FR-016,
+   FR-024, TC-026, TC-035, ADR-002, AD-001, AD-002 and AD-003, and the registry's module column.
+   `git mv`, ids unchanged. When this step lands, the registry note in
    `spec/spec.md` that records the FR-005 exception becomes obsolete and is deleted in the same
    PR, as is the SUR-001 note. A separate follow-up, not edited here: AD-001's Current state and
    Risks are stale against this AD (it lists the corpus and profile modules as V1, and says Kani
@@ -892,7 +901,7 @@ tables; each table states the count it covers, and the per-destination rows add 
   state-frame and corpus templates); where it goes later is for the steps that own it.
 - `lib.rs` replaces the flat `mod` lines of the moved files with `mod kani;` and points its
   `pub use` list at the new module paths (`kani::generate::outcome::...`, `kani::run::...` and so
-  on). The set of re-exported names does not change, so no test code under `tests/` changes (comment lines that cite a deleted source path may be updated).
+  on). The set of re-exported names does not change, so no test code under `tests/` changes (comment lines and assertion or failure message strings that cite a deleted source path may be updated, paths only).
 - Files outside the move whose imports of moved items are rewritten to the new module paths:
   `spine_replay.rs` (`kani_identity` and the `DecodeFailure` import), `routed_generation.rs`
   (`kani_identity`, and the test module's `kani::KaniSolver`, which becomes `kani::abi::KaniSolver`),
@@ -1210,7 +1219,7 @@ assigned to that one file. The names are the full item list.
 **What a reviewer checks for 2f.** For each row, the item's text at its new path equals its text at
 the old path, apart from `use` lines, paths and the visibility the row states
 (`git diff --color-moved` shows it); the generated output of every existing test is unchanged and
-`make test` passes with no test code under `tests/` edited, comment-only path updates aside (the root re-exports keep their names); the
+`make test` passes with no test code under `tests/` edited, path-only updates to comments and to assertion or failure message strings aside (the root re-exports keep their names); the
 six `mod.rs` files hold declarations only; none of `spec.rs`, `render.rs` or `terminal.rs` exists;
 and each interim file carries a header naming the step that deletes it.
 

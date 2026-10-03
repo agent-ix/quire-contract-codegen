@@ -118,7 +118,7 @@ fn assert_emission_order_matches_identity(harness: &KaniObligationHarness) {
         emitted_order, declared_order,
         "kani::any() emission order in the generated harness (left) must match \
          identity.arguments order (right) for the {:?} harness; decode_falsification in \
-         src/kani_witness_join.rs binds them positionally, so any divergence here is a silent \
+         src/replay/witness.rs binds them positionally, so any divergence here is a silent \
          misbind there",
         harness.identity.kind,
     );

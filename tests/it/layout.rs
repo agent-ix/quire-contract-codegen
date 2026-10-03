@@ -123,7 +123,7 @@ fn kani_rank(name: &str) -> Option<u8> {
         "abi" => Some(0),
         "census" => Some(1),
         "identity" => Some(2),
-        "generate" | "output" | "test_support" => Some(3),
+        "generate" | "output" => Some(3),
         "classify" => Some(4),
         "run" => Some(5),
         "terminal" => Some(6),
@@ -496,7 +496,8 @@ fn l_2_every_import_follows_the_dependency_direction() {
     );
 }
 
-/// The reason an import inside `kani/` points at a later or peer name, if it does.
+/// The reason an import inside `kani/` breaks the AD's order, if it does: first among the
+/// top-level names of `kani/`, then among the files of `kani/generate/`.
 fn kani_order_violation(from: &[String], to: &[String]) -> Option<String> {
     if from.first().map(String::as_str) != Some("kani")
         || to.first().map(String::as_str) != Some("kani")
@@ -504,8 +505,18 @@ fn kani_order_violation(from: &[String], to: &[String]) -> Option<String> {
         return None;
     }
     let (importer, imported) = (from.get(1)?, to.get(1)?);
-    if importer == imported || imported == "test_support" {
+    if importer == imported {
+        if importer == "generate" {
+            return generate_order_violation(from.get(2)?, to.get(2)?);
+        }
         return None;
+    }
+    if imported == "test_support" {
+        return None;
+    }
+    if let Some(allowed) = kani_exact_imports(importer) {
+        return (!allowed.contains(&imported.as_str()))
+            .then(|| format!("`kani::{importer}` may import only {allowed:?}, not `{imported}`"));
     }
     let (Some(importer_rank), Some(imported_rank)) = (kani_rank(importer), kani_rank(imported))
     else {
@@ -513,6 +524,72 @@ fn kani_order_violation(from: &[String], to: &[String]) -> Option<String> {
     };
     (imported_rank >= importer_rank)
         .then(|| format!("`kani::{importer}` imports `kani::{imported}`, which is not earlier"))
+}
+
+/// What a file of `kani/generate/` imports from its own directory: an earlier name only, a
+/// family never imports `negotiate`, and `negotiate`, `frame` and the leaf `outcome` take only
+/// the names the AD lists for them.
+fn generate_order_violation(importer: &str, imported: &str) -> Option<String> {
+    if importer == imported {
+        return None;
+    }
+    if let Some(allowed) = generate_exact_imports(importer) {
+        return (!allowed.contains(&imported)).then(|| {
+            format!("`generate::{importer}` may import only {allowed:?}, not `{imported}`")
+        });
+    }
+    let (Some(importer_rank), Some(imported_rank)) =
+        (generate_rank(importer), generate_rank(imported))
+    else {
+        return None;
+    };
+    (imported_rank >= importer_rank).then(|| {
+        format!("`generate::{importer}` imports `generate::{imported}`, which is not earlier")
+    })
+}
+
+/// Importers inside `kani/` the AD restricts to a named set of top-level names.
+fn kani_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
+    match importer {
+        "output" | "test_support" => Some(&["identity", "abi"]),
+        _ => None,
+    }
+}
+
+/// Importers inside `kani/generate/` the AD restricts to a named set of its files.
+fn generate_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
+    match importer {
+        "outcome" => Some(&[]),
+        "frame" => Some(&["outcome"]),
+        "negotiate" => Some(&[
+            "outcome",
+            "record",
+            "scalar",
+            "clause",
+            "precondition",
+            "contract",
+        ]),
+        _ => None,
+    }
+}
+
+/// The order of the files of `kani/generate/`, earliest first; a file imports only earlier names.
+/// `precondition` and `contract` share a rank, so neither imports the other.
+fn generate_rank(name: &str) -> Option<u8> {
+    match name {
+        "outcome" => Some(0),
+        "record" => Some(1),
+        "census_validation" => Some(2),
+        "scalar" => Some(3),
+        "clause" => Some(4),
+        "precondition" | "contract" => Some(5),
+        "frame" => Some(6),
+        "lower" => Some(7),
+        "corpus" => Some(8),
+        "v1_bundle" => Some(9),
+        "negotiate" => Some(10),
+        _ => None,
+    }
 }
 
 /// L-2, the third clause: the module graph has no cycle.
@@ -534,14 +611,28 @@ fn l_2_the_module_graph_is_acyclic() {
             }
         }
     }
+    // The scan must have read real imports, or an empty graph would pass for acyclic.
+    assert!(
+        graph.len() >= 30,
+        "the scan found imports in only {} modules",
+        graph.len()
+    );
+    let negotiate = module_of("kani/generate/negotiate.rs");
+    let outcome = module_of("kani/generate/outcome.rs");
+    assert!(
+        graph
+            .get(&negotiate)
+            .is_some_and(|imports| imports.contains(&outcome)),
+        "the scan must see `negotiate` import `outcome`"
+    );
     let mut state: BTreeMap<Vec<String>, bool> = BTreeMap::new();
-    for start in graph.keys() {
+    let cycle = graph.keys().find_map(|start| {
         let mut trail = Vec::new();
-        if let Some(cycle) = find_cycle(start, &graph, &mut state, &mut trail) {
-            let names: Vec<String> = cycle.iter().map(|module| module.join("::")).collect();
-            panic!("an import cycle: {}", names.join(" -> "));
-        }
-    }
+        find_cycle(start, &graph, &mut state, &mut trail)
+    });
+    let names: Option<Vec<String>> =
+        cycle.map(|cycle| cycle.iter().map(|module| module.join("::")).collect());
+    assert_eq!(names, None, "an import cycle");
 }
 
 /// Depth-first search; `state` maps a module to `false` while on the trail and `true` once done.
