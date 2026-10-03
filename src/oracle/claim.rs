@@ -62,10 +62,11 @@ pub struct ClaimMap<C> {
 /// Whole-generation failure; per-item problems are refusals, not errors.
 /// Each generator documents which of these it can return:
 /// `LocationMapSerialization` comes only from the function generator, the one
-/// that emits a location map. `UnknownRuntimeVariant` comes only from a
-/// generator that checks parameters against one of Contract Runtime's
-/// `#[non_exhaustive]` enums (`exact_scalar`'s `check_parameters`): unlike an
-/// ordinary per-item refusal, RT returning a variant this generator's own
+/// that emits a location map. `UnknownRuntimeVariant` comes from the
+/// generators that match one of Contract Runtime's `#[non_exhaustive]` enums:
+/// the exact-scalar generator (`check_parameters` and its shape, identity and
+/// rendering sites, roughly two dozen in all) and the composite-equality
+/// generator: unlike an ordinary per-item refusal, RT returning a variant this generator's own
 /// closed match was not written to expect means the generator's
 /// understanding of that type has gone stale, which puts every item's
 /// result in doubt, not just the one that surfaced it.
@@ -86,4 +87,13 @@ pub enum OracleGenerationError {
         /// The RT enum's name, e.g. `"IntegerDomain"`.
         enum_name: &'static str,
     },
+}
+
+impl OracleGenerationError {
+    /// The refusal for a variant of the Contract Runtime enum `enum_name`
+    /// that a closed generator match does not know. Every catch-all arm over
+    /// an RT `#[non_exhaustive]` enum returns this instead of panicking.
+    pub(crate) const fn unknown_variant(enum_name: &'static str) -> Self {
+        Self::UnknownRuntimeVariant { enum_name }
+    }
 }
