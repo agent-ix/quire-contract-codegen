@@ -64,3 +64,5 @@ Reviewed at agent-ix/quire-contract-codegen@08a7f0366888bad18e710b6b9287b543fff0
 | FND-003 | fixed | 08a7f03 |
 | FND-004 | fixed | 08a7f03 |
 | FND-005 | fixed | 08a7f03 |
+| FND-006 | fixed | 3c1ff10 (round 2, reviewed at 978c5459daa66f19806523b343bcdca247ac28ac) |
+| FND-007 | fixed | 3c1ff10 (round 2, reviewed at 978c5459daa66f19806523b343bcdca247ac28ac) |
