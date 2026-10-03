@@ -149,6 +149,16 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form,
     and `abort` anywhere but as a method call. The scan is shown to name each spelling by
     the TC-024 panic-scan snippet test, which shares it.
+12. Lowering byte-ceiling failure (FR-018-AC-20, IR-547). Read a package whose lowered contract
+    package for the call is longer than its checked package under a byte ceiling that admits the
+    checked package and is one byte below the canonical length of that lowered contract package,
+    and request every node: every item is refused `LoweringByteLimitExceeded` with `limit` equal to
+    that ceiling and one shared `consumed`, none `LoweringWorkExhausted`, and none generates. In
+    the equality module's `#[cfg(test)]` seam, hand its `Failed` arm hand-built records: `bytes`
+    gives `LoweringByteLimitExceeded` with the record's `limit` and `consumed` (the per-node case of Contract IR FR-038-AC-95, not
+    reachable through the public API); `work` gives `LoweringWorkExhausted`; each of `depth`,
+    `nodes`, `edges`, `occurrences` and `diagnostics` gives `LoweringLimitUnrecognised` with that
+    snake_case `limit_kind`, with no panic and never `LoweringWorkExhausted`.
 
 ## Expected Results
 

@@ -147,6 +147,9 @@ unsatisfiable requires as `cover_unsatisfied`.
     unwind bound, the subject, a parameter's domain and the source span: the harness
     identity record changes with the first two, the obligation identity with the domain
     and not with the span, unwind bound or subject (FR-015-AC-46 to FR-015-AC-48).
+15. Feed `negotiate` a scalar refusal of each of `LoweringByteLimitExceeded` and
+    `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
+    (FR-015-AC-50, IR-547).
 
 ## Blocked
 

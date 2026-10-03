@@ -129,6 +129,20 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    assertion against `Evaluation.location` or `Evaluation.losses`; confirm none exists, and that
    both fields are simply discarded by the emitted oracle function's return path, since the
    runtime never populates either one regardless of what the applied body computed.
+11. Lowering byte-ceiling failure (FR-021-AC-23, IR-547). Build a package whose two lowered
+    contract packages of the call (bodies, and requested `call` nodes) are both longer than its
+    checked package and whose body and call-node lowerings give different `consumed` under one
+    ceiling (read each alone to confirm). Read it under a byte ceiling that admits the checked
+    package and is one byte below the shorter of the two lowered packages' canonical lengths:
+    every function is absent from `checked_package()` and `location-map.json`, and every item is
+    refused `LoweringByteLimitExceeded` with `limit` equal to that ceiling and the call-node
+    lowering's `consumed` (Contract IR FR-038-AC-95), none `LoweringWorkExhausted`; this asserts the
+    call-node-first order. In the `#[cfg(test)]` module the code change adds to the function
+    module, hand `lowered_binary_body` hand-built records: `work` gives `LoweringWorkExhausted`,
+    `bytes` gives `LoweringByteLimitExceeded` with the record's `limit` and `consumed`, and each of
+    `depth`, `nodes`, `edges`, `occurrences` and `diagnostics` gives `LoweringLimitUnrecognised`
+    with that snake_case `limit_kind`, with no panic and never `LoweringWorkExhausted`. Per-function
+    isolation stays with FR-021-AC-12's `tc_031_ac12_*` tests.
 
 ## Expected Results
 
