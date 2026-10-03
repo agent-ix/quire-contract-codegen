@@ -51,7 +51,7 @@ and who reports each failure.
 | `ReplayRequestWire` (and `ReplaySource::{Witness, Input}`) | CG to QSL | QSL | CG fills it; `replay` reads it |
 | `WitnessEnvelope` / `WitnessPacket` (frame counterexamples) | CG to QSL | QSL | CG builds through `WitnessEnvelope::reconstruct` |
 | `ObligationIdentity` (32 bytes), in the envelope and in the request's obligation-identity slot | CG to QSL | QSL type; CG is to mint the value | see AD-003 |
-| `ReplayResult`, `FrameReplayResult`, `WitnessSettlement`, `ProofCategory` | QSL to CG | QSL | CG reads; CG defines its own verdict only as a partition of QSL's (`ReplayVerdict`) |
+| `ReplayResult`, `FrameReplayResult`, `WitnessSettlement`, `Category` (QSL's `ProofCategory`, folded into one `Category` and re-exported by `qsl-replay`) | QSL to CG | QSL | CG reads; CG defines its own verdict only as a partition of QSL's (`ReplayVerdict`) |
 | `DeclaredDomain(ProofBound{DomainKey, FiniteBound})` | CG to QSL (in the envelope) | QSL (re-exported by `qsl-replay`) | CG is to build it from its argument bindings' bounds |
 
 Nothing else crosses. CG holds no copy of an envelope, witness, replay source, terminal record or

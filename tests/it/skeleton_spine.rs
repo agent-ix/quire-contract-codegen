@@ -20,10 +20,10 @@ use std::{fs, path::PathBuf};
 
 use qsl_replay::WitnessValue;
 use qsl_replay::{
-    call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, DependencyInput,
-    DependencySelectionsCause, DigestDomain, DigestRecord, Identifier, ProofCategory,
-    QualifiedName, ReplayRefusal, ReplaySource, ScalarLimits, SourceIdentity, StageLimits, Verdict,
-    WireNodeId, WitnessSettlement, MAX_ENCODED_BYTES,
+    call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, DependencyInput,
+    DependencySelectionsCause, DigestDomain, DigestRecord, Identifier, QualifiedName,
+    ReplayRefusal, ReplaySource, ScalarLimits, SourceIdentity, StageLimits, Verdict, WireNodeId,
+    WitnessSettlement, MAX_ENCODED_BYTES,
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample, replay_falsification,
@@ -134,11 +134,11 @@ const VIOLATING_TWIN: &str = "balance_pre + amount_current";
 const HEALTHY_TWIN: &str = "balance_pre - amount_current";
 
 fn violation() -> Verdict {
-    Verdict::from_category(ProofCategory::Violation)
+    Verdict::from_category(Category::Violation)
 }
 
 fn success() -> Verdict {
-    Verdict::from_category(ProofCategory::Success)
+    Verdict::from_category(Category::Success)
 }
 
 /// A falsifying input that satisfies the proved precondition (`amount <= balance`) replays
@@ -155,7 +155,7 @@ fn tc_026_a_falsifying_input_replays_through_qsl_to_the_same_violation() {
         result.settlement(),
         WitnessSettlement::ReproducedWithEvaluatedWitness
     );
-    assert_eq!(result.category(), ProofCategory::Violation);
+    assert_eq!(result.category(), Category::Violation);
     assert!(result.disagreement().is_none());
     assert!(
         result.charges().work_units > 0,
@@ -473,7 +473,7 @@ fn tc_026_a_unit_importing_a_locked_dependency_replays_to_a_reproduced_verdict()
         reproduced.settlement(),
         WitnessSettlement::ReproducedWithEvaluatedWitness
     );
-    assert_eq!(reproduced.category(), ProofCategory::Violation);
+    assert_eq!(reproduced.category(), Category::Violation);
 
     let held = replay_q(&package, 7).expect("the replay settles");
     assert_eq!(held.settlement(), WitnessSettlement::Inconclusive);
@@ -722,7 +722,7 @@ fn tc_026_a_counterexample_the_twin_holds_is_evidence_failure() {
         verdict,
         ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
             settlement: WitnessSettlement::Inconclusive,
-            category: ProofCategory::Success,
+            category: Category::Success,
         })
     );
 }
@@ -809,7 +809,7 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
             .expect("QSL settles the replay"),
         ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
             settlement: WitnessSettlement::Inconclusive,
-            category: ProofCategory::Success,
+            category: Category::Success,
         })
     );
 }

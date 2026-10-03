@@ -11,11 +11,11 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DependencyEntryWire, DependencyInput,
-    DependencyInputRefusal, DigestDomain, DigestRecord, FunctionSite, Identifier,
-    MalformedTranscript, ProofCategory, QualifiedName, ReplayRefusal, ReplayRequestWire,
-    ReplayResult, ReplaySource, ScalarLimits, SourceIdentity, StageLimits, StateEnvironment,
-    SuppliedLibrary, Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
+    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, Category, DependencyEntryWire,
+    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, FunctionSite, Identifier,
+    MalformedTranscript, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult,
+    ReplaySource, ScalarLimits, SourceIdentity, StageLimits, StateEnvironment, SuppliedLibrary,
+    Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
 };
 
 use crate::{
@@ -462,7 +462,7 @@ pub enum EvidenceFailureCause {
         /// The settlement QSL reached.
         settlement: WitnessSettlement,
         /// The category QSL evaluated.
-        category: ProofCategory,
+        category: Category,
     },
 }
 
@@ -517,9 +517,9 @@ pub fn replay_counterexample(
 /// The verdict one witness-arm settlement decides: only an agreement with backend evidence in
 /// the `violation` category reproduces the backend's falsification; every other settlement is
 /// evidence failure.
-fn verdict_of(settlement: WitnessSettlement, category: ProofCategory) -> ReplayVerdict {
+fn verdict_of(settlement: WitnessSettlement, category: Category) -> ReplayVerdict {
     match (settlement, category) {
-        (WitnessSettlement::ReproducedWithEvaluatedWitness, ProofCategory::Violation) => {
+        (WitnessSettlement::ReproducedWithEvaluatedWitness, Category::Violation) => {
             ReplayVerdict::Reproduced
         }
         (
@@ -544,13 +544,13 @@ mod tests {
     fn only_a_reproduced_violation_reproduces() {
         use WitnessSettlement::{Inconclusive, ReproducedWithEvaluatedWitness as Reproduced};
         assert_eq!(
-            verdict_of(Reproduced, ProofCategory::Violation),
+            verdict_of(Reproduced, Category::Violation),
             ReplayVerdict::Reproduced
         );
         for (settlement, category) in [
-            (Reproduced, ProofCategory::Success),
-            (Inconclusive, ProofCategory::Violation),
-            (Inconclusive, ProofCategory::Success),
+            (Reproduced, Category::Success),
+            (Inconclusive, Category::Violation),
+            (Inconclusive, Category::Success),
         ] {
             assert_eq!(
                 verdict_of(settlement, category),

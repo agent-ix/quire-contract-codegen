@@ -173,8 +173,10 @@ and are counted separately from the three-way vectors.
    record's `limit` and `consumed`, with no panic and never `LoweringWorkExhausted`
    (FR-014-AC-41).
 4. Take the non-test code of `src/oracle/scalar/mod.rs`, `src/oracle/equality/mod.rs` and
-   `src/oracle/function/mod.rs` with `non_test_code` and `comments_stripped`, find no `limit_kind`
-   and no `CheckedPackageLimit`, and find each calls `classify_lowering_failure` (FR-014-AC-42).
+   `src/oracle/function/mod.rs` with `non_test_code` and `comments_stripped`, find no
+   `CheckedPackageLimit` and no `.limit_kind` access, `limit_kind` named only in the
+   unrecognised-kind refusal and its conversion, and in each exactly one `Failed` arm that binds
+   nothing and calls `classify_lowering_failure` (FR-014-AC-42).
 
 ## Panic-free source scan
 

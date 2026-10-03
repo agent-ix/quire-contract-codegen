@@ -34,7 +34,7 @@ use package::{
     reference, Bound, PackageBuilder, NODE_DOMAIN, T_BOOLEAN, T_INTEGER,
 };
 use qsl_replay::{
-    CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, ProofCategory,
+    CallSiteRefusal, Category, DisagreementCause, FrameChange, FrameIdentityMismatch,
     ReplayRefusal, ReplayResult, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
@@ -821,7 +821,7 @@ fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
         arm.settlement(),
         WitnessSettlement::ReproducedWithEvaluatedWitness
     );
-    assert_eq!(arm.category(), ProofCategory::Violation);
+    assert_eq!(arm.category(), Category::Violation);
     let Some(FrameChange::FieldWrite { object, field, .. }) =
         result.found().map(|found| &found.change)
     else {
@@ -841,8 +841,8 @@ fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
     assert_eq!(
         arm.disagreement(),
         Some(&DisagreementCause::Verdicts {
-            proved: Verdict::from_category(ProofCategory::Violation),
-            replayed: Verdict::from_category(ProofCategory::Success),
+            proved: Verdict::from_category(Category::Violation),
+            replayed: Verdict::from_category(Category::Success),
         })
     );
     assert!(result.found().is_none());
@@ -1058,7 +1058,7 @@ fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
         arm.settlement(),
         WitnessSettlement::ReproducedWithEvaluatedWitness
     );
-    assert_eq!(arm.category(), ProofCategory::Violation);
+    assert_eq!(arm.category(), Category::Violation);
     let Some(FrameChange::FieldWrite { object, field, .. }) =
         result.found().map(|found| &found.change)
     else {
@@ -1085,8 +1085,8 @@ fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
     assert_eq!(
         arm.disagreement(),
         Some(&DisagreementCause::Verdicts {
-            proved: Verdict::from_category(ProofCategory::Violation),
-            replayed: Verdict::from_category(ProofCategory::Success),
+            proved: Verdict::from_category(Category::Violation),
+            replayed: Verdict::from_category(Category::Success),
         })
     );
     assert!(result.found().is_none());
