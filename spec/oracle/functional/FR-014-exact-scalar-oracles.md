@@ -288,29 +288,27 @@ otherwise.
   unaffected. `LoweringWorkExhausted` is the refusal of the work ceiling and of
   nothing else.
 - Lowering a requested node can also return a `failed` record whose `limit_kind`
-  is `bytes`, for the byte ceiling the package was read under; Contract IR's
-  FR-038-AC-95 fixes when it does and what its `limit` and `consumed` are. When
-  it does, the generator shall refuse the item as `LoweringByteLimitExceeded`,
-  carrying the record's `limit` (the retained byte limit) and `consumed` (the
-  byte count Contract IR reports the encoding needed, or `limit + 1`) unchanged,
-  and contribute no generated function for it. Contract IR fails every requested
-  record for bytes when the package itself is over the ceiling, so every item of
-  such a call is refused, each with the same `limit` and `consumed`; where only
-  one node's own preimage is over the ceiling, only that item is refused and the
-  siblings' dispositions are unaffected.
+  is `bytes`. Contract IR's FR-038-AC-95 fixes when it does, what its `limit` and
+  `consumed` are (`consumed` saturating at `u64::MAX`) and whether one node or
+  every requested node fails. The generator shall refuse each item whose record
+  is such a failure as `LoweringByteLimitExceeded`, carrying the record's `limit`
+  and `consumed` unchanged, and contribute no generated function for it; an item
+  whose record did not fail keeps its own disposition.
 - If a `failed` record's `limit_kind` is neither `work` nor `bytes`, then the
   generator shall refuse the item as `LoweringLimitUnrecognised`, carrying the
-  kind's name with the record's `limit` and `consumed`, and shall not panic, not
+  kind as `limit_kind`, a `&'static str` that is the snake_case of the
+  `CheckedPackageLimit` variant's name (`depth`, `nodes`, `edges`, `occurrences`
+  or `diagnostics`; the enum has no wire name of its own) and serialises as that
+  string, with the record's `limit` and `consumed`, and shall not panic, not
   report the record as work exhaustion and not drop the item.
 - The generator shall read a `failed` record's `limit_kind` in exactly one place,
-  a classifier of the shared `oracle` module that FR-018 and FR-021 also call, so
+  `classify_lowering_failure` of the shared `oracle` module, which FR-018 and FR-021 also call, so
   the three generators cannot disagree about which kind is which. Each generator
   carries the classifier's three outcomes as `LoweringWorkExhausted`,
   `LoweringByteLimitExceeded` and `LoweringLimitUnrecognised` variants of its own
   refusal enum, with the same fields.
-- When `negotiate` meets an `ExactScalarRefusal` of either new kind, it shall
-  report the obligation as `OracleRefused` carrying that refusal unchanged, as it
-  does for `LoweringWorkExhausted`.
+- How `negotiate` reports an `ExactScalarRefusal` of either new kind is FR-015's
+  (FR-015-AC-50).
 - When a node is a Boolean connective (`and`, `or`, `not`, `implies`), the
   generator shall derive its descriptor and generate an oracle that calls
   `exact::evaluate_boolean` or, where the right operand may stop,
@@ -381,10 +379,9 @@ otherwise.
 | FR-014-AC-37 | A differential corpus covering every node FR-014-AC-35 names compiles against the runtime alone, and each oracle's outcome, admitted charges and consumed counters equal direct runtime execution and the QSL value authority. | Test (TC-024) |
 | FR-014-AC-38 | PLANNED (IR-489). The Boolean condition of a `state`/`state_clause` node, addressed by the clause node id, derives a descriptor and generates an `ir_confirmed` oracle over its connectives, integer comparisons and integer add, subtract, multiply and negate, returning `Outcome<bool>`. A `project(deref(self), field)` term is an operand that takes a value in the object member's `integer_range` as a state field read, and a `pre(...)` of one takes the pre-state value of that field. FR-014-AC-10 is not weakened: an operand that is neither a literal, a reference nor one of those two terms is still refused. The `state` node itself stays refused as FR-014-AC-7 states. | Test (TC-024) |
 | FR-014-AC-39 | The generated `src/lib.rs` of every crate the TC-024 corpus generates, and the non-test code of `src/oracle/scalar/mod.rs` (comments and every `#[cfg(test)]` item removed wherever the item sits, string literals the generator emits counted), contain zero panic tokens: the identifiers `unwrap`, `expect`, `unwrap_unchecked`, `unwrap_err`, `expect_err`, `unwrap_err_unchecked`, `panic_any` and `resume_unwind` however written (called, with whitespace before the paren, named on a path such as `Option::unwrap`, or imported); the macros `panic`, `unreachable`, `todo`, `unimplemented`, `assert`, `assert_eq`, `assert_ne`, `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form, with any whitespace before the `!` and any path prefix; and the identifier `abort` anywhere except as a method call (`.abort()`), so `process::abort` and a bare `abort` after an import are both counted. | Test (TC-024) |
-| FR-014-AC-40 | PLANNED (IR-547). A package whose lowering returns `failed` for the `bytes` limit (Contract IR FR-038-AC-95) is refused per item as `ExactScalarRefusal::LoweringByteLimitExceeded { limit, consumed }` with `limit` and `consumed` equal to the record's, never as `LoweringWorkExhausted`, and contributes no generated function: through a whole call at a ceiling one byte below the package's canonical length, every requested item is refused so, each with the same `limit` and `consumed`; through a call where only one requested node's preimage is over the ceiling, that item is refused so and every sibling's claim-map entry equals the entry the same call produces with that item removed, the siblings generating in both so the comparison cannot pass because every item was refused. | Test (TC-024) |
-| FR-014-AC-41 | PLANNED (IR-547). A `failed` record whose `limit_kind` is `work` is still refused as `LoweringWorkExhausted` with the record's `limit` and `consumed` (FR-014-AC-15 unchanged), and one whose `limit_kind` is any other `CheckedPackageLimit` value is refused as `ExactScalarRefusal::LoweringLimitUnrecognised` naming that kind with the record's `limit` and `consumed`, without a panic and without a `LoweringWorkExhausted` or `LoweringByteLimitExceeded`, for each of the five other values. | Test (TC-024) |
-| FR-014-AC-42 | PLANNED (IR-547). No `limit_kind` of a `failed` record is read anywhere in `src/oracle/` but the one shared classifier: a scan of the non-test code of `src/oracle/scalar/mod.rs`, `src/oracle/equality/mod.rs` and `src/oracle/function/mod.rs` finds no `limit_kind` and no `CheckedPackageLimit`, and each of the three calls that classifier, so the same `failed` record yields the same kind in all three. | Test (TC-024) |
-| FR-014-AC-43 | PLANNED (IR-547). `negotiate` reports an obligation whose scalar refusal is `LoweringByteLimitExceeded` or `LoweringLimitUnrecognised` as `Outcome::Unsupported(UnsupportedObligation::OracleRefused { refusal })` with `refusal` equal to the scalar refusal, field for field, and neither is mapped to another `UnsupportedObligation` variant nor to `LoweringWorkExhausted`. | Test (TC-024) |
+| FR-014-AC-40 | PLANNED (IR-547). A package whose lowering returns `failed` for the `bytes` limit (Contract IR FR-038-AC-95) is refused per item as `ExactScalarRefusal::LoweringByteLimitExceeded { limit, consumed }` with `limit` and `consumed` equal to the record's, never as `LoweringWorkExhausted`, and contributes no generated function. Through a whole call of `generate_exact_scalar_oracles` whose input is read under a byte ceiling that admits the checked package and is one byte below the canonical length of the lowered contract package of that call (the package `lower` returns for the call's requested nodes, not the checked package, which the fixture makes shorter), every requested item is refused so, each with `limit` equal to that ceiling and the same `consumed`, and no function is generated. A `Failed { limit_kind: Bytes }` record built by hand and given to the scalar `Failed` arm in the module's own `#[cfg(test)]` seam is refused so with the record's `limit` and `consumed` field for field, while a sibling record that lowered keeps its own disposition (the per-node case of Contract IR FR-038-AC-95, which CG's public API cannot reach because a node preimage is shorter than any document it can read). | Test (TC-024) |
+| FR-014-AC-41 | PLANNED (IR-547). A `failed` record whose `limit_kind` is `work` is still refused as `LoweringWorkExhausted` with the record's `limit` and `consumed` (FR-014-AC-15 unchanged), and one whose `limit_kind` is neither `work` nor `bytes` (each of `depth`, `nodes`, `edges`, `occurrences` and `diagnostics`) is refused as `ExactScalarRefusal::LoweringLimitUnrecognised` with `limit_kind` equal to that snake_case name and the record's `limit` and `consumed`, without a panic and without a `LoweringWorkExhausted` or `LoweringByteLimitExceeded`. Each of the two is asserted on hand-built `Failed` records given to the scalar `Failed` arm itself in the module's `#[cfg(test)]` seam, so a mapping of an unrecognised kind to `LoweringWorkExhausted` in this module fails it. | Test (TC-024) |
+| FR-014-AC-42 | PLANNED (IR-547). No `limit_kind` of a `failed` record is read in `src/oracle/scalar/mod.rs`, `src/oracle/equality/mod.rs` or `src/oracle/function/mod.rs` but through the one shared classifier, `classify_lowering_failure` of the shared `oracle` module: the non-test code of each of the three files, as FR-014-AC-39 defines it (comments and every `#[cfg(test)]` item removed wherever the item sits, taken with `non_test_code` and `comments_stripped` of `tests/common/panic_scan.rs`), holds no `limit_kind` and no `CheckedPackageLimit` and calls `classify_lowering_failure` at its `Failed` arm. | Test (TC-024) |
 
 ## Dependencies
 

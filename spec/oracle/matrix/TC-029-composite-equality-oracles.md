@@ -149,15 +149,17 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form,
     and `abort` anywhere but as a method call. The scan is shown to name each spelling by
     the TC-024 panic-scan snippet test, which shares it.
-12. Lowering byte-ceiling failure (FR-018-AC-20, IR-547). Request a healthy node and a node whose
-    preimage is over the ceiling the package was read under, at a ceiling the package fits under:
-    only the over-ceiling item is refused `LoweringByteLimitExceeded` with the lowering record's
-    `limit` and `consumed` (Contract IR FR-038-AC-95), and the healthy item's claim-map entry equals
-    the entry of the same call with the other removed. Request every node at a ceiling one byte below
-    the package's canonical length: every item is refused `LoweringByteLimitExceeded` with one shared
-    `limit` and `consumed`, none `LoweringWorkExhausted`, and none generates. A work-ceiling failure
-    is still `LoweringWorkExhausted`, and a `failed` record for each of the five other limit kinds is
-    `LoweringLimitUnrecognised` with no panic.
+12. Lowering byte-ceiling failure (FR-018-AC-20, IR-547). Read a package whose lowered contract
+    package for the call is longer than its checked package under a byte ceiling that admits the
+    checked package and is one byte below the canonical length of that lowered contract package,
+    and request every node: every item is refused `LoweringByteLimitExceeded` with `limit` equal to
+    that ceiling and one shared `consumed`, none `LoweringWorkExhausted`, and none generates. In
+    the equality module's `#[cfg(test)]` seam, hand its `Failed` arm hand-built records: `bytes`
+    gives `LoweringByteLimitExceeded` with the record's `limit` and `consumed` and leaves a
+    sibling lowered record's item alone (the per-node case of Contract IR FR-038-AC-95, not
+    reachable through the public API); `work` gives `LoweringWorkExhausted`; each of `depth`,
+    `nodes`, `edges`, `occurrences` and `diagnostics` gives `LoweringLimitUnrecognised` with that
+    snake_case `limit_kind`, with no panic and never `LoweringWorkExhausted`.
 
 ## Expected Results
 

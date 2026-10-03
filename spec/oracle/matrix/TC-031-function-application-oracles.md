@@ -129,12 +129,18 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    assertion against `Evaluation.location` or `Evaluation.losses`; confirm none exists, and that
    both fields are simply discarded by the emitted oracle function's return path, since the
    runtime never populates either one regardless of what the applied body computed.
-11. Lowering byte-ceiling failure (FR-021-AC-23, IR-547). Request a package at a ceiling one byte
-    below its canonical length: every item is refused `LoweringByteLimitExceeded` with the lowering
-    record's `limit` and `consumed` (Contract IR FR-038-AC-95), no function appears in
-    `checked_package()` or `location-map.json`, and none is `LoweringWorkExhausted`. A work-ceiling
-    failure is still `LoweringWorkExhausted`, and a `failed` record for each of the five other limit
-    kinds is `LoweringLimitUnrecognised` with no panic.
+11. Lowering byte-ceiling failure (FR-021-AC-23, IR-547). Read a package whose lowered contract
+    package is longer than its checked package under a byte ceiling that admits the checked
+    package and is one byte below the canonical length of the lowered contract package of that
+    call: every function is absent from `checked_package()` and `location-map.json`, and every item
+    is refused `LoweringByteLimitExceeded` with `limit` equal to that ceiling and the call-node
+    lowering's `consumed` (Contract IR FR-038-AC-95), none `LoweringWorkExhausted`. In the function
+    module's `#[cfg(test)]` seam, hand its `Failed` arm hand-built records: a `bytes` or `work`
+    record for one function's body refuses only that function's items while an unrelated function's
+    items generate unchanged (as FR-021-AC-12); each of `depth`, `nodes`, `edges`, `occurrences` and
+    `diagnostics` gives `LoweringLimitUnrecognised` with that snake_case `limit_kind`, with no panic
+    and never `LoweringWorkExhausted`. Feed a call-node record that failed beside a function whose
+    body record also failed, with different `consumed`, and read the call-node record's.
 
 ## Expected Results
 

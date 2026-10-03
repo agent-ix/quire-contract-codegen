@@ -157,22 +157,25 @@ and are counted separately from the three-way vectors.
 
 ## Lowering byte-ceiling failure (IR-547)
 
-1. Request a healthy node and a node whose preimage is over the ceiling the package was read under,
-   at a ceiling the package itself fits under. The over-ceiling item is refused
-   `LoweringByteLimitExceeded` with `limit` and `consumed` equal to the lowering record's (Contract
-   IR FR-038-AC-95), the healthy item generates, and its claim-map entry equals the entry of the
-   same call with the over-ceiling item removed (FR-014-AC-40).
-2. Request every node of the package at a ceiling one byte below its canonical length. Every item is
-   refused `LoweringByteLimitExceeded` with one shared `limit` and `consumed`, none is
-   `LoweringWorkExhausted`, and no function is generated (FR-014-AC-40).
+1. Build a package whose lowered contract package for the call's requested nodes is longer than its
+   checked package, read it under a byte ceiling that admits the checked package and is one byte
+   below the canonical length of that lowered contract package, and request every node. Every item
+   is refused `LoweringByteLimitExceeded` with `limit` equal to that ceiling and one shared
+   `consumed`, none is `LoweringWorkExhausted`, and no function is generated (FR-014-AC-40).
+2. In the scalar module's `#[cfg(test)]` seam, hand the module's `Failed` arm a
+   `Failed { limit_kind: Bytes }` record and read `LoweringByteLimitExceeded` with the record's
+   `limit` and `consumed`; hand it the record beside a lowered record and read that the lowered
+   record keeps its own disposition. The per-node case of Contract IR FR-038-AC-95 is not reachable
+   through the public API (FR-014-AC-40).
 3. Lower a package past the 65,536-unit work ceiling and read `LoweringWorkExhausted` with its
-   ceiling and counter (FR-014-AC-41, with FR-014-AC-15). Feed the classifier a `failed` record
-   built for each of `depth`, `nodes`, `edges`, `occurrences` and `diagnostics`; each is
-   `LoweringLimitUnrecognised` naming its kind, with no panic (FR-014-AC-41).
-4. Scan the non-test text of the three generator modules for `limit_kind` and `CheckedPackageLimit`,
-   find none, and read that each calls the shared classifier (FR-014-AC-42).
-5. Feed `negotiate` a scalar refusal of each new kind and read `OracleRefused` carrying it unchanged
-   (FR-014-AC-43).
+   ceiling and counter (FR-014-AC-41, with FR-014-AC-15). In the same seam, hand the scalar
+   `Failed` arm a hand-built record for each of `depth`, `nodes`, `edges`, `occurrences` and
+   `diagnostics`; each is `LoweringLimitUnrecognised` with `limit_kind` the snake_case name and the
+   record's `limit` and `consumed`, with no panic and never `LoweringWorkExhausted`
+   (FR-014-AC-41).
+4. Take the non-test code of `src/oracle/scalar/mod.rs`, `src/oracle/equality/mod.rs` and
+   `src/oracle/function/mod.rs` with `non_test_code` and `comments_stripped`, find no `limit_kind`
+   and no `CheckedPackageLimit`, and find each calls `classify_lowering_failure` (FR-014-AC-42).
 
 ## Panic-free source scan
 
