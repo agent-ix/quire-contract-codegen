@@ -151,7 +151,8 @@ authored).
   that text, with no domain label: interim, until QC-4 / TK-07 may add an FR-201 domain, which
   would change every identity. The golden text of the FR-016-AC-21 tests
   (`tests/it/skeleton_spine.rs`, `recomputed`) is the vector; it is written by hand, not by CG's
-  encoder.
+  encoder. If QSL later recomputes or compares the identity, QSL pins the spelling and CG
+  follows in a follow-up; until then the spelling is CG's own and interim.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001).
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from

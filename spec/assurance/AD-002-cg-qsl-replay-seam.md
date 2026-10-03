@@ -145,7 +145,12 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   quire-spec-language #618; IR-553; FR-016-AC-21 to AC-23, implemented); the `ByteDigest` of the
   transcript that stood there before is gone. The function node id and `declaration` occurrence
   key reach CG through `FunctionSite`'s `function` and `declaration` members, and CG never
-  derives a node id.
+  derives a node id. The preimage's spelling is interim and CG's own: no digest label, raw
+  SHA-256 over the RFC 8785 text made by `quire-canonical`, interim until QC-4 / TK-07; merged
+  O-09 makes CG the owner of the identity and nothing in QSL or QSpec pins a spelling, and the
+  AD-016 TK-05 seed vector is still open (AD-003 E-1 states the spelling). QSL does not read the
+  slot against any content today; if QSL later recomputes or compares the identity, QSL pins the
+  spelling and CG follows in a follow-up.
 - Frame path: `src/replay/frame.rs` calls `call_site` with an `OperationSite` (:112), builds the
   envelope with `WitnessEnvelope::reconstruct` (:182) and calls `replay_frame` (:183).
   `obligation_identity` is a caller-supplied `[u8; 32]` field (:47) that the request and the
