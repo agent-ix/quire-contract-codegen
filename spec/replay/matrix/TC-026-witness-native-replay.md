@@ -27,6 +27,11 @@ size limit, an out-of-domain witness, a witness whose native value or charges
 disagree with the harness, a witness whose native replay is unavailable, and
 a witness whose replay agrees in a category other than `violation`.
 
+For FR-016-AC-21 to AC-23, build the replay request for two functions with the same parameters
+and compare the `obligation_identity` slots, recompile one with comments and blank lines inserted,
+change its harness source span, then change its obligation kind and one argument domain in turn,
+and scan `src/` for any computation of a function node id or occurrence key.
+
 ## Expected Results
 
 The schema follows the persisted argument order, which is the emission
@@ -40,8 +45,15 @@ mismatch and unavailable results respectively. The disagreeing witnesses are
 never reported unavailable, and the unavailable replay is never reported as a
 mismatch. The witness that agrees in a category other than `violation` is a
 mismatch and never a failure.
+The two functions' identities differ, comments and blank lines and the span change leave one
+unchanged, the kind change and the domain change each alter it, and `src/` computes no node id or
+occurrence key (FR-016-AC-21 to AC-23).
 
 ## Status
+
+FR-016-AC-21 to AC-23 are planned: the function path still passes the transcript digest, and
+QSL's `FunctionSite` `function` and `declaration` members are not yet in the `qsl-replay` CG
+builds against.
 
 Partial. FR-016-AC-9 through AC-11 are implemented and tested in the default suite
 (`tests/it/skeleton_spine.rs`): a falsifying input replays through

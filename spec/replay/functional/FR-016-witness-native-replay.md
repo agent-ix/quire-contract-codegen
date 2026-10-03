@@ -111,6 +111,10 @@ failure is reported.
   category `violation` is the reproduced failure, a settlement of `inconclusive`
   is a mismatch, and an executor refusal is returned with its own cause.
 
+- The function path's request carries the O-09 function-contract obligation identity in its
+  `obligation_identity` slot (FR-016-AC-21 to AC-23, planned). The transcript digest it carries
+  at this base is a placeholder that AD-002 records as replaced.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -135,6 +139,9 @@ failure is reported.
 | FR-016-AC-18 | A lock selecting a library the unit does not import is refused by QSL as unselected. | Test (TC-026) |
 | FR-016-AC-19 | Lock libraries whose sources share a source owner are refused as no dependency input, before the call site compiles anything. | Test (TC-026) |
 | FR-016-AC-20 | A lock library whose source has the unit's own source owner is refused by the call site. | Test (TC-026) |
+| FR-016-AC-21 | 🚧 Planned. The function path's request `obligation_identity` holds the function-contract obligation digest of quire-spec-language ADR-013 O-09 (amended by QSL-352, commit f6c3974): the digest of the RFC 8785 encoding, through CG's one canonical encoder, of the `FunctionSite`'s `function` node id, its `declaration` occurrence key, the CG function-contract obligation kind and `arguments`, each a parameter node id with its declared domain. It is never the digest of the transcript. | Test (TC-026) |
+| FR-016-AC-22 | 🚧 Planned. For two functions with the same parameters, the identities differ. The identity of one function is the same across recompiles that only add comments or blank lines, and across a change of the harness's source span. It differs when the obligation kind or any argument's domain differs. The CG function-contract kind is a variant of `ObligationKind` distinct from `Precondition`, `Postcondition`, `Invariant` and `Frame`, and a function yields one identity per kind it requests, not one per conjunct of its body. | Test (TC-026) |
+| FR-016-AC-23 | 🚧 Planned. The function path takes the function node id and the `declaration` occurrence key only from the `FunctionSite` members `function` and `declaration`. No code under `src/` computes a node id, a node-id preimage or an occurrence key, and no fallback fills the slot when a `FunctionSite` lacks either member: a `FunctionSite` without them does not build against the `qsl-replay` API, so the path has no runtime refusal for their absence. | Test (TC-026) |
 
 ## Dependencies
 
