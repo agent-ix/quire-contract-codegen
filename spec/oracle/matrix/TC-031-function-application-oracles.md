@@ -25,6 +25,9 @@ It also verifies that the emitted function-oracle source has no panicking path (
 `Refused(CheckedInvariant)`, and that a `Negate` body is refused rather than reaching a panic
 (FR-021-AC-19 to AC-21).
 
+It also verifies that declarations sharing one declaring node id are refused with
+`DuplicateDeclaringNode` before Stage 1 (FR-021-AC-22, 🚧 Planned).
+
 The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
 
 ## Test Procedure
@@ -97,7 +100,14 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    `src/oracle/function/mod.rs` and assert zero (FR-021-AC-21). The unknown variant itself cannot
    be built from a test crate because the runtime enum is `#[non_exhaustive]`, so the arm's text
    and the zero counts are the evidence.
-9. Grep the generated crate's source and its claim map for any read of, branch on, or non-emptiness
+9. 🚧 Planned (FR-021-AC-22): request two declarations sharing one declaring node id, once with both
+   bodies admissible, once with one body refused in Stage 1 and its same-node sibling admissible,
+   and an item naming each. Assert every such declaration and every item naming it carries
+   `ExactFunctionRefusal::DuplicateDeclaringNode` (never `UnknownFunction`), that neither appears
+   in the emitted `checked_package()` or source, that no claim-map entry records another
+   function's name or `Origin::Body` index, and that an item over a distinct-node-id function in
+   the same request is generated unchanged.
+10. Grep the generated crate's source and its claim map for any read of, branch on, or non-emptiness
    assertion against `Evaluation.location` or `Evaluation.losses`; confirm none exists, and that
    both fields are simply discarded by the emitted oracle function's return path, since the
    runtime never populates either one regardless of what the applied body computed.

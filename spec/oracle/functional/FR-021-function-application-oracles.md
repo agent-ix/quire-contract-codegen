@@ -245,6 +245,7 @@ come from the request, not from this generator's own inference.
 | FR-021-AC-19 | The emitted `src/lib.rs` of the main corpus of `tests/it/exact_function_generation.rs` (`main_oracles()`, whose generated functions include the scalar `add_fn`, the equality `eq_fn` and the nested-call `call_fn`) and of its chain corpus (`chain_oracles()`) contains zero occurrences of `.unwrap(`, `.expect(`, `unreachable!`, `panic!`, `todo!` and `unimplemented!`, the macros in any delimiter form. | Test (TC-031) |
 | FR-021-AC-20 | In the emitted body of `add_fn` and of `eq_fn`, the `match` over the runtime operator's `Result<Outcome<_>, Refusal>` has arms for `Ok(Completed)` (rewrapped as `Value::Integer` or `Value::Boolean`), `Ok(Undefined)`, `Ok(Refused)`, `Ok(Incomplete)` and `Err(refusal)` (returned as `Outcome::Refused(refusal)`), and a final `Ok(_)` arm whose value is `Outcome::Refused(Refusal::CheckedInvariant)`. | Test (TC-031) |
 | FR-021-AC-21 | A request whose scalar body has operator `Negate` is refused with `ExactFunctionRefusal::UnsupportedOperator`, and that function does not appear in the emitted `checked_package()`; `src/oracle/function/mod.rs` contains zero invocations of `unreachable!`, `panic!`, `todo!` and `unimplemented!`, comment lines not counted. | Test (TC-031) |
+| FR-021-AC-22 | 🚧 Planned. Two or more declarations sharing one declaring node id are each refused with `ExactFunctionRefusal::DuplicateDeclaringNode { node_id }` before Stage 1 classification, so none enters the assembled package; every item naming such a function carries that same refusal (never `UnknownFunction`, never another function's oracle symbol or claim-map `Origin::Body` index), and items naming functions with distinct declaring node ids are generated unchanged (SR-880 FND-004). | Test (TC-031) |
 
 ### Mutations these criteria detect
 
@@ -274,6 +275,7 @@ written.
 | FR-021-AC-19 | Leave an `Ok(_) => unreachable!(..)` arm in a body template, or an `.expect(..)` in `checked_package()`, so a runtime release that adds an `Outcome` variant, or an unforeseen admission failure, panics a generated oracle instead of refusing. |
 | FR-021-AC-20 | Replace the catch-all with a `Completed` fallthrough or a different refusal, so an unknown variant is reported as a value or as a refusal that names no checked-program invariant. |
 | FR-021-AC-21 | Keep a defensive `Negate => unreachable!(..)` arm after the earlier refusal, so a change to the refusal turns a bad request into a generator panic. |
+| FR-021-AC-22 | Key classification by position but resolve an item's function by name or node id, so two declarations with one node id both survive and the second item takes the first function's oracle symbol and claim-map index; or refuse only the first declaration so its same-node sibling survives and the item reports `UnknownFunction`. |
 
 ## Dependencies
 
