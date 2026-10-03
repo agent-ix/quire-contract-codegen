@@ -163,6 +163,13 @@ come from the request, not from this generator's own inference.
   classifiers admits, or a nested `call` whose own callee is not among the request's declared
   functions — then the generator shall refuse the whole package with a typed reason and emit no
   function for any item bound to it.
+- If lowering a declared function's body returns a `failed` record, then the generator shall
+  classify its `limit_kind` through the one classifier FR-014 specifies and refuse the whole
+  package, as that bullet requires, with `LoweringWorkExhausted` for `work`,
+  `LoweringByteLimitExceeded { limit, consumed }` for `bytes` (the retained byte limit and the byte
+  count Contract IR FR-038-AC-95 defines, carried unchanged) and `LoweringLimitUnrecognised` for any
+  other kind, so a byte-ceiling failure is never reported as work exhaustion and no `limit_kind`
+  panics the generator (FR-021-AC-21's no-panic rule).
 - When every declared function's body lowers, the generator shall assemble a `PackageDeclarations`
   and admit it through `PackageDeclarations::check(CheckMode::Linked, limits)` with
   `limits.depth() = MAX_CALL_DEPTH`. If `check` refuses, the generator shall refuse every item bound
@@ -263,6 +270,7 @@ come from the request, not from this generator's own inference.
 | FR-021-AC-20 | In the emitted body of `add_fn` and of `eq_fn`, the `match` over the runtime operator's `Result<Outcome<_>, Refusal>` has arms for `Ok(Completed)` (rewrapped as `Value::Integer` or `Value::Boolean`), `Ok(Undefined)`, `Ok(Refused)`, `Ok(Incomplete)` and `Err(refusal)` (returned as `Outcome::Refused(refusal)`), and a final `Ok(_)` arm whose value is `Outcome::Refused(Refusal::CheckedInvariant)`. | Test (TC-031) |
 | FR-021-AC-21 | A request whose scalar body has operator `Negate` is refused with `ExactFunctionRefusal::UnsupportedOperator`, and that function does not appear in the emitted `checked_package()`; `src/oracle/function/mod.rs` contains zero invocations of `unreachable!`, `panic!`, `todo!` and `unimplemented!`, comment lines not counted. | Test (TC-031) |
 | FR-021-AC-22 | When two or more declarations share one declaring node id, none of them appears in the emitted `checked_package()` or in `location-map.json`, and every item naming one of them is refused with `ExactFunctionRefusal::DuplicateDeclaringNode { node_id }` (the shared node id; the smallest in node-id order when the item's name is held by duplicate groups on several node ids) before Stage 1 classification: never `UnknownFunction`, never `AmbiguousFunctionName` (the node-id refusal takes precedence when the declarations also share a name), never `DuplicateRequest` (two items on one `call` node naming different members, or one such item requested twice, each carry the node-id refusal), and no claim-map entry records another function's name, oracle symbol or `Origin::Body` index. A declaration with its own distinct node id that shares a name with one of them is absent from `checked_package()` and from `location-map.json`. A declared function whose nested `call` names such a function is refused as `UnknownCallee`. The refusal and these outputs are identical under every permutation of the request order. Every item naming a function with a distinct declaring node id, and not a duplicate name, has a claim-map entry equal to the one the same request produces with the duplicate declarations removed. | Test (TC-031) |
+| FR-021-AC-23 | PLANNED (IR-547). A `failed` lowering record of a declared function's body refuses every item bound to the package as `ExactFunctionRefusal::LoweringWorkExhausted` for the `work` limit, as `LoweringByteLimitExceeded { limit, consumed }` with the record's `limit` and `consumed` for the `bytes` limit (Contract IR FR-038-AC-95), and as `LoweringLimitUnrecognised` naming the kind for each of the other five `CheckedPackageLimit` values, never as another arm's refusal and without a panic; the refused items appear in no `checked_package()` and no `location-map.json`, and through a whole call at a ceiling one byte below the package's canonical length every item is refused as `LoweringByteLimitExceeded` with the same `limit` and `consumed`. | Test (TC-031) |
 
 ### Mutations these criteria detect
 
@@ -293,6 +301,7 @@ written.
 | FR-021-AC-20 | Replace the catch-all with a `Completed` fallthrough or a different refusal, so an unknown variant is reported as a value or as a refusal that names no checked-program invariant. |
 | FR-021-AC-21 | Keep a defensive `Negate => unreachable!(..)` arm after the earlier refusal, so a change to the refusal turns a bad request into a generator panic. |
 | FR-021-AC-22 | Key classification by position but resolve an item's function by name or node id, so two declarations with one node id both survive and the second item takes the first function's oracle symbol and claim-map index; refuse only the first (or only the later-sorted) declaration so its same-node sibling survives and the item reports `UnknownFunction` or depends on request order; check the name before the node id so a declaration sharing both reports `AmbiguousFunctionName`; exempt a distinct-node-id declaration that shares a name with the pair so it enters the package and answers to the pair's name; or refuse the whole request instead of only the duplicate declarations. |
+| FR-021-AC-23 | Keep the single `Failed` arm that reports every failure as `LoweringWorkExhausted`, so a byte-ceiling failure reads as work exhaustion; or leave a `_ => LoweringWorkExhausted` or `_ => unreachable!(..)` arm for an unrecognised kind; or refuse only the function whose body failed so its siblings' items still generate from a package that did not lower. |
 
 ## Dependencies
 

@@ -129,6 +129,12 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    assertion against `Evaluation.location` or `Evaluation.losses`; confirm none exists, and that
    both fields are simply discarded by the emitted oracle function's return path, since the
    runtime never populates either one regardless of what the applied body computed.
+11. Lowering byte-ceiling failure (FR-021-AC-23, IR-547). Request a package at a ceiling one byte
+    below its canonical length: every item is refused `LoweringByteLimitExceeded` with the lowering
+    record's `limit` and `consumed` (Contract IR FR-038-AC-95), no function appears in
+    `checked_package()` or `location-map.json`, and none is `LoweringWorkExhausted`. A work-ceiling
+    failure is still `LoweringWorkExhausted`, and a `failed` record for each of the five other limit
+    kinds is `LoweringLimitUnrecognised` with no panic.
 
 ## Expected Results
 
