@@ -161,8 +161,31 @@ fn tc_029_ac2_and_ac9_record_tuple_option_and_collection_oracles_agree() {
         };
     }
 
-    // No recursive vector: IR refuses an equality over a type that reaches itself (E_SELF), so
-    // it has no generated oracle (`tc_029_a_cyclic_compared_type_is_refused_by_ir_today`).
+    // Recursive (E_SELF): both leaves, and one leaf vs. one nested one level.
+    for nested_right in [false, true] {
+        agree2! {
+            limits: UNLIMITED,
+            setup: {
+                let environment = environment_self();
+                let leaf = record_self(&environment, FieldValue::Absent);
+                let nested = record_self(&environment, FieldValue::Present(record_self(&environment, FieldValue::Absent)));
+                let left = leaf.clone();
+                let right = if nested_right { nested } else { leaf };
+            },
+            direct: |m| direct_equality(
+                &environment,
+                EqualityOperator::Equal,
+                operand_typed(composite_type(R_SELF)),
+                operand_typed(composite_type(R_SELF)),
+                &left,
+                &right,
+                m,
+            ),
+            generated: |g| generated::oracle_e_self_equal( // E_SELF Equal
+                &environment, &left, &right, g,
+            ),
+        };
+    }
 
     // Nested composite (E_PAIR_OF_POINTS): equal and unequal pairs of records.
     for (la, lb, ra, rb) in [

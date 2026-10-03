@@ -57,7 +57,7 @@ fn base_unit_preimage(dimension: &str) -> serde_json::Value {
 fn base_preimage_digest(preimage: serde_json::Value) -> String {
     serde_json::from_value::<quire_contract_model::NominalIdentityPreimage>(preimage)
         .expect("a well-formed nominal identity preimage")
-        .digest()
+        .digest(quire_contract_model::CheckedPackageReadLimits::bounded().bytes)
         .expect("a nominal identity preimage digests")
 }
 
@@ -81,21 +81,24 @@ fn base_package() -> serde_json::Value {
     const GRAPH: &str = "quire.checked-semantic-graph/v2";
     let ids = base_node_ids();
     let node_ref = |digest: &str| base_node_ref(digest);
-    let artifact = |identity: &str, namespace: &str, domain: &str, digest: char| {
+    // A definition is named by `{authority, identity}` alone; a raw source by
+    // `{authority, identity, digest_domain, digest}` (IR `CheckedArtifactRef`, `CheckedSourceRef`).
+    let definition =
+        |identity: &str| serde_json::json!({"authority": "agent-ix", "identity": identity});
+    let source_ref = |identity: &str, digest: char| {
         serde_json::json!({
             "authority": "agent-ix",
             "identity": identity,
-            "revision": {"namespace": namespace, "value": "1"},
-            "digest_domain": domain,
+            "digest_domain": "quire.source.bytes/v1",
             "digest": digest.to_string().repeat(64),
         })
     };
     let edition = serde_json::json!({
         "role": "edition",
-        "definition": artifact("quire-edition", "semver", "quire.definition.bytes/v1", '1'),
+        "definition": definition("quire-edition"),
     });
-    let model = artifact("example-model", "git", "quire.definition.bytes/v1", '4');
-    let source = artifact("example", "git", "quire.source.bytes/v1", '2');
+    let model = definition("example-model");
+    let source = source_ref("example", '2');
     let aggregate = serde_json::json!({"term": "aggregate", "members": []});
     let declared = serde_json::json!([{"role": "declaration", "ordinal": 0}]);
 
@@ -161,7 +164,7 @@ fn base_package() -> serde_json::Value {
         },
         "package_id": {"domain": "quire.package.semantic/v2", "algorithm": "sha256", "digest": ""},
         "lock": {
-            "sources": [source, artifact("example-units", "git", "quire.source.bytes/v1", '6')],
+            "sources": [source, source_ref("example-units", '6')],
             "edition": edition,
             "profile_selections": [],
             "definition_selections": [model],
@@ -173,13 +176,7 @@ fn base_package() -> serde_json::Value {
         "source_map": source_map,
         "capability_report": [{"feature": "quire.value.complete/v1", "disposition": "available"}],
         "diagnostics": {
-            "catalog": {
-                "authority": "agent-ix",
-                "identity": "catalog",
-                "revision": {"namespace": "draft", "value": "1"},
-                "digest_domain": "quire.definition.bytes/v1",
-                "digest": "3".repeat(64),
-            },
+            "catalog": definition("catalog"),
             "entries": [],
         },
     })

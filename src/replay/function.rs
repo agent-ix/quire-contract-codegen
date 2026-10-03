@@ -306,7 +306,7 @@ impl ReplayInputs {
         package_id: DigestRecord,
         selected: QualifiedName,
         source: ReplaySource,
-        counterexample_identity: [u8; 32],
+        obligation_identity: [u8; 32],
         documents: &[(DigestRecord, &[u8])],
     ) -> ReplayRequestWire {
         let dependencies = self
@@ -344,19 +344,16 @@ impl ReplayInputs {
             .map(|(hex, (domain, bytes))| (domain, hex, bytes.to_vec()))
             .collect();
         ReplayRequestWire {
-            contract_version: "quire.native-runtime/v1".to_owned(),
-            capability_vocabulary: Some("quire.capability-kind/v1".to_owned()),
             profile_selections: Vec::new(),
             package_id: (
                 Some(package_id.domain().as_str().to_owned()),
                 package_id.hex(),
             ),
-            package_contract_version: "quire.checked-package/v2".to_owned(),
             source_digests: vec![self.source.wire()],
             dependencies,
             selected_function: selected,
             source,
-            originating_counterexample_identity: counterexample_identity,
+            obligation_identity,
             backend: (
                 "kani".to_owned(),
                 Some(self.backend_manifest.domain().as_str().to_owned()),
@@ -434,6 +431,10 @@ impl ReplayPackage {
     ///
     /// The package reference's `dependencies` are the lock's dependency selections, one entry
     /// each, and the byte provision holds the proved unit's source and every dependency source.
+    ///
+    /// The request's `obligation_identity` slot holds the `ByteDigest` of `counterexample`, a
+    /// placeholder and not the obligation's ADR-013 O-09 identity: no code in this crate computes
+    /// that identity yet (AD-002, AD-003 gap E-1).
     pub fn request(&self, counterexample: &str, source: ReplaySource) -> ReplayRequestWire {
         self.inputs.wire(
             self.site.package_id,

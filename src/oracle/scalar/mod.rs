@@ -3371,6 +3371,7 @@ mod tests {
                 cause: None,
                 locus: None,
                 contract_version: None,
+                document_pointer: None,
             },
         };
         assert_eq!(

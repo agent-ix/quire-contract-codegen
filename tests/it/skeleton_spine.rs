@@ -39,8 +39,7 @@ use super::kani_obligations::{
 const SUBJECT_PATH: &str = "crate::subject::withdraw";
 
 const HEALTHY_SUBJECT: &str = "pub mod subject {\n    pub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n        balance_pre - amount_current\n    }\n}\n";
-const PROFILE: &str = "profile v = \"quire.value.complete/v1\" version \"1-draft.2\" digest \
-    \"sha256:c8c7ae9fbe783286369ecc83f006190f83be4c3c8fc585766617c90f27a25b16\";\n";
+const PROFILE: &str = "profile v = \"quire.value.complete/v1\";\n";
 const AUTHORITY: &str = "agent-ix";
 const IDENTITY: &str = "test:skeleton-spine";
 const NAMESPACE: &str = "git";
@@ -491,7 +490,7 @@ fn tc_026_an_import_with_no_locked_dependency_is_refused() {
     let refusal =
         ReplayPackage::new(lock_inputs, "q").expect_err("no library satisfies the import");
     assert!(
-        matches!(&refusal, ReplayPackageError::CallSite(cause) if matches!(**cause, CallSiteRefusal::Import(_))),
+        matches!(&refusal, ReplayPackageError::CallSite(cause) if matches!(**cause, CallSiteRefusal::Import { .. })),
         "{refusal}"
     );
 }

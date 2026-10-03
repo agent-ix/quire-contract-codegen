@@ -620,41 +620,6 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     }
 }
 
-/// Trace: TC-029. UNBACKED today (FR-018-AC-2's recursive vectors): an equality over a record
-/// type that reaches itself (`R_SELF` = `{ next: Option<R_SELF> }`, no text) is refused by
-/// Contract IR at admission, as any cyclic compared type is under the QSpec reference
-/// reader, so no oracle is generated for it and no generation or agreement test runs over any
-/// recursive composite. QSL emits `leaves: []` for this shape. Pending STD-129 (a cyclic type with
-/// no text: operator-ineligible or 0 leaves). This pins the exact refusal (code, cause, pointer,
-/// locus); it backs no clause of FR-018-AC-8, which concerns generation-time declaration
-/// refusals.
-#[test]
-fn tc_029_a_cyclic_compared_type_is_refused_by_ir_today() {
-    let (result, wire) = cyclic_self_package().read();
-    let node_id = code_id(E_SELF);
-    let position = wire["semantic_graph"]["nodes"]
-        .as_array()
-        .expect("nodes")
-        .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
-        .expect("the node is in the wire");
-    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
-        panic!("IR now admits a cyclic compared type ({result:?}); add it back to the corpus");
-    };
-    assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
-    assert_eq!(
-        refusal.cause,
-        Some(CheckedPackageRefusalCause::OperatorIneligible)
-    );
-    assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
-        Some(format!(
-            "/semantic_graph/nodes/{position}/body/operation/leaves"
-        ))
-    );
-    assert_eq!(refusal.locus, Some(node_id));
-}
-
 /// Trace: FR-018-AC-7, TC-029. The direct `reference` composite form: an equality over two
 /// `REF_TYPE` operands is refused by Contract IR at admission, before this generator runs, so the
 /// generator's `QuireSpecLanguage120` blocker is not reached for it today. This pins the exact
@@ -769,6 +734,7 @@ pub(super) fn agreement_names(oracles: &CompositeEqualityOracles) -> String {
         (E_TUPLE, "equal", "e_tuple_equal"),
         (E_OPTION, "equal", "e_option_equal"),
         (E_COLLECTION, "equal", "e_collection_equal"),
+        (E_SELF, "equal", "e_self_equal"),
         (E_PAIR_OF_POINTS, "equal", "e_pair_of_points_equal"),
         (E_RECORD, "not_equal", "e_record_not_equal"),
         (E_TEXT, "equal", "e_text_equal"),

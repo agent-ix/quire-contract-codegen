@@ -840,7 +840,7 @@ fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
     assert_eq!(arm.settlement(), WitnessSettlement::Inconclusive);
     assert_eq!(
         arm.disagreement(),
-        Some(DisagreementCause::Verdicts {
+        Some(&DisagreementCause::Verdicts {
             proved: Verdict::from_category(ProofCategory::Violation),
             replayed: Verdict::from_category(ProofCategory::Success),
         })
@@ -1084,7 +1084,7 @@ fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
     assert_eq!(arm.settlement(), WitnessSettlement::Inconclusive);
     assert_eq!(
         arm.disagreement(),
-        Some(DisagreementCause::Verdicts {
+        Some(&DisagreementCause::Verdicts {
             proved: Verdict::from_category(ProofCategory::Violation),
             replayed: Verdict::from_category(ProofCategory::Success),
         })

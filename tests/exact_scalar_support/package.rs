@@ -306,16 +306,10 @@ pub fn member_kind(kind: &str) -> Value {
     json!({"kind": kind})
 }
 
-/// A well-formed artifact ref for a profile-role law, which has no closed catalog to select from:
-/// any well-formed ref the lock selects under that role admits.
-pub fn artifact_ref(identity: &str, digest: &str) -> Value {
-    json!({
-        "authority": "agent-ix",
-        "identity": identity,
-        "revision": {"namespace": "quire-draft", "value": "1-draft.1"},
-        "digest_domain": "quire.definition.bytes/v1",
-        "digest": digest,
-    })
+/// A well-formed definition ref `{authority, identity}` for a profile-role law, which has no closed
+/// catalog to select from: any well-formed ref the lock selects under that role admits.
+pub fn artifact_ref(identity: &str) -> Value {
+    json!({"authority": "agent-ix", "identity": identity})
 }
 
 /// The catalogued `role` law definition named `identity`, read from the operation catalog's home
@@ -1312,6 +1306,10 @@ pub const CLAIM: u32 = 2008;
 /// green against a one-element array. Two entries in a determinate order
 /// close that gap.
 pub const CLAIM_ALT: u32 = 2009;
+/// The `temporal` formula the `TEMPORAL` clause names as its formula argument.
+pub const TEMPORAL_FORMULA: u32 = 2010;
+/// The `parameter` the `TEMPORAL` clause ranges over.
+pub const TEMPORAL_PARAMETER: u32 = 2012;
 pub const CALLS_FUNCTION: u32 = 2011;
 pub const WRONG_BODY: u32 = 2013;
 pub const WRONG_OPERAND: u32 = 2014;
@@ -2707,6 +2705,26 @@ pub fn corpus_package() -> PackageBuilder {
         &[DEC],
     );
     let boolean = key(T_BOOLEAN);
+    let clause_profile = artifact_ref("quire.temporal.event-position.false-extension/v1");
+    builder.select_profile("temporal_profile", clause_profile.clone());
+    // The formula is registered by the chain below, ahead of the clause that names it.
+    let clause_formula = {
+        let body = application(
+            "temporal_formula",
+            op("quire.op.temporal.true"),
+            &boolean,
+            Vec::new(),
+        );
+        builder.application_code(TEMPORAL_FORMULA, "temporal", "formula", &boolean, body);
+        code_id(TEMPORAL_FORMULA).digest.to_string()
+    };
+    builder.code(
+        TEMPORAL_PARAMETER,
+        "value",
+        "parameter",
+        &key(T_INTEGER),
+        parameter_body("p", 0),
+    );
     builder
         .code(COMPOSITE, "composite_type", "record", &boolean, aggregate())
         // `FUNCTION`/`TEMPORAL`/`PROTOCOL` are non-`expression`-tagged
@@ -2733,17 +2751,34 @@ pub fn corpus_package() -> PackageBuilder {
         .code(MODEL, "model", "model_import", &boolean, aggregate())
         .code(RELATION, "relation", "relationship", &boolean, aggregate())
         .code(STATE, "state", "snapshot", &boolean, aggregate())
-        .application_code(
+        // IR admits a `temporal_clause` only as a `temporal`-operator application over a
+        // declared `parameter` with one `temporal_profile` law and a `temporal` formula argument
+        // (QSpec FR-370), so this node is that minimal clause rather than a `boolean.not`
+        // stand-in. CG still refuses it on its `temporal` tag alone.
+        .application_code_with(
             TEMPORAL,
             "temporal",
             "temporal_clause",
             &boolean,
             application(
-                "unary",
-                op("quire.op.boolean.not"),
+                "temporal",
+                op_full(
+                    "quire.op.temporal.clause",
+                    vec![law("temporal_profile", clause_profile)],
+                    None,
+                    None,
+                ),
                 &boolean,
-                vec![literal("boolean", "true")],
+                vec![
+                    reference(&key(TEMPORAL_PARAMETER)),
+                    literal("text", "c"),
+                    aggregate(),
+                    aggregate(),
+                    aggregate(),
+                    reference(&clause_formula),
+                ],
             ),
+            &[key(TEMPORAL_PARAMETER), clause_formula.clone()],
         )
         .application_code(
             PROTOCOL,
@@ -2930,10 +2965,7 @@ pub fn corpus_package() -> PackageBuilder {
     // `select_profile`'s own doc) -- any well-formed artifact ref the lock
     // selects under that role admits -- so both laws are locally chosen
     // well-formed values, distinct by construction.
-    let temporal_profile = artifact_ref(
-        "quire.temporal.event-position.false-extension/v1",
-        &"7".repeat(64),
-    );
+    let temporal_profile = artifact_ref("quire.temporal.event-position.false-extension/v1");
     builder.select_profile("temporal_profile", temporal_profile.clone());
     builder.application_code(
         CLAIM,
@@ -2952,10 +2984,7 @@ pub fn corpus_package() -> PackageBuilder {
             Vec::new(),
         ),
     );
-    let temporal_profile_alt = artifact_ref(
-        "quire.temporal.event-position.true-extension/v1",
-        &"8".repeat(64),
-    );
+    let temporal_profile_alt = artifact_ref("quire.temporal.event-position.true-extension/v1");
     builder.select_profile("temporal_profile", temporal_profile_alt.clone());
     builder.application_code(
         CLAIM_ALT,

@@ -460,7 +460,9 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             blocked(RELATION, "relation", UpstreamBlocker::QuireSpecLanguage120),
         ),
         (STATE, unsupported(STATE, "state")),
-        (TEMPORAL, unsupported(TEMPORAL, "temporal")),
+        // IR names the first unsupported node the lowering reaches, and the clause's formula
+        // dependency is reached before the clause itself.
+        (TEMPORAL, unsupported(TEMPORAL_FORMULA, "temporal")),
         (PROTOCOL, unsupported(PROTOCOL, "protocol")),
         (MISSING, ExactScalarRefusal::InvalidInput),
         (
