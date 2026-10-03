@@ -6,6 +6,7 @@
 //! static location map. Execution-level criteria (AC-2, AC-4, AC-5, AC-7,
 //! AC-9, AC-17) are covered by `tests/it/exact_function_agreement.rs`.
 
+use crate::exact_scalar_generation::invokes_panicking_macro;
 use crate::scratch_crate::runtime_dependency;
 use quire_contract_codegen::{
     generate_exact_function_oracles, CallPointKind, ClaimDisposition, ExactFunctionItem,
@@ -525,12 +526,12 @@ fn tc_031_arity_mismatch_refuses_when_item_argument_count_disagrees() {
     ));
 }
 
-/// Trace: FR-021 module doc (scalar vocabulary), TC-031.
-/// `IntegerOperator::Negate` is unary and out of this V1's scope (only
-/// binary `Add`/`Subtract`/`Multiply` are supported): a `Scalar` body
-/// declaring it is refused as `UnsupportedOperator`.
+/// Trace: FR-021-AC-21, TC-031. `IntegerOperator::Negate` is unary and out of
+/// this V1's scope (only binary `Add`/`Subtract`/`Multiply` are supported): a
+/// `Scalar` body declaring it is refused as `UnsupportedOperator` and the
+/// function is absent from the emitted `checked_package()`.
 #[test]
-fn tc_031_unsupported_operator_refuses_unary_negate_scalar_body() {
+fn tc_031_ac21_unsupported_operator_refuses_unary_negate_scalar_body() {
     let package = ext_corpus_package().admit();
     let functions = vec![quire_contract_codegen::ExactFunctionDeclaration {
         node_id: code_id(FN_ADD),
@@ -559,6 +560,123 @@ fn tc_031_unsupported_operator_refuses_unary_negate_scalar_body() {
             refusal: ExactFunctionRefusal::UnsupportedOperator { .. }
         }
     ));
+    let lib = contents(&oracles, "src/lib.rs");
+    assert!(
+        !lib.contains("negate_fn"),
+        "a refused Negate function must not appear in checked_package()"
+    );
+    assert!(
+        !lib.contains("rt::FunctionDeclaration {"),
+        "no function survives, so checked_package() declares none"
+    );
+}
+
+/// The text of `function`'s `rt::FunctionDeclaration` literal in an emitted `src/lib.rs`.
+fn declaration_text<'a>(lib: &'a str, function: &str) -> &'a str {
+    let name = format!("name: {function:?}.to_owned(),");
+    let start = lib
+        .find(&name)
+        .unwrap_or_else(|| panic!("{function} is not declared"));
+    let rest = &lib[start + name.len()..];
+    &rest[..rest.find("rt::FunctionDeclaration {").unwrap_or(rest.len())]
+}
+
+/// Trace: FR-021-AC-1, FR-021-AC-12, TC-031. Two declarations that share one
+/// declaring node id (a malformed request: AC-12's per-declaration isolation
+/// is the nearest owning criterion) neither panic the generator nor swap
+/// bodies: each function renders its own body under its own name.
+#[test]
+fn tc_031_ac12_two_declarations_on_one_node_id_each_render_their_own_body() {
+    let package = ext_corpus_package().admit();
+    let mut eq_on_add_node = function_eq("eq_same_node");
+    eq_on_add_node.node_id = code_id(FN_ADD);
+    let functions = vec![function_add("add_first"), eq_on_add_node];
+    let items = vec![
+        item(ITEM_CALL_ADD, "add_first"),
+        item(ITEM_CALL_EQ, "eq_same_node"),
+    ];
+    let oracles = generate(&package, &functions, &items);
+    let lib = contents(&oracles, "src/lib.rs");
+
+    let add = declaration_text(&lib, "add_first");
+    assert!(add.contains("rt::IntegerArithmetic::Add("));
+    assert!(!add.contains("EqualityOperator"));
+    let eq = declaration_text(&lib, "eq_same_node");
+    assert!(eq.contains("rt::EqualityOperator::Equal"));
+    assert!(!eq.contains("IntegerArithmetic"));
+}
+
+/// Trace: FR-021-AC-19, TC-031. The emitted `src/lib.rs` of the main corpus
+/// (scalar `add_fn`, equality `eq_fn`, nested-call `call_fn`) and of the chain
+/// corpus contains no `.unwrap(`, no `.expect(` and no panicking macro in any
+/// delimiter form.
+#[test]
+fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
+    for (corpus, oracles) in [("main", main_oracles()), ("chain", chain_oracles())] {
+        let lib = contents(&oracles, "src/lib.rs");
+        assert!(lib.contains("pub fn checked_package()"), "{corpus} corpus");
+        for forbidden in [".unwrap(", ".expect("] {
+            assert!(
+                !lib.contains(forbidden),
+                "{corpus} corpus emits {forbidden}"
+            );
+        }
+        assert!(
+            !invokes_panicking_macro(&lib),
+            "{corpus} corpus emits a panicking macro"
+        );
+    }
+    let lib = contents(&main_oracles(), "src/lib.rs");
+    assert!(lib.contains("rt::TypeEnvironment::default()"));
+}
+
+/// Trace: FR-021-AC-20, TC-031. In the emitted bodies of `add_fn` and `eq_fn`
+/// the `match` over the runtime operator's `Result<Outcome<_>, Refusal>` has
+/// the five arms in order and ends with a catch-all `Ok(_)` arm valued
+/// `Outcome::Refused(Refusal::CheckedInvariant)`. The unknown variant cannot
+/// be built from a test crate (`rt::Outcome` is `#[non_exhaustive]`), so the
+/// arm's text is the evidence.
+#[test]
+fn tc_031_ac20_unknown_outcome_variant_refuses_checked_invariant() {
+    let lib = contents(&main_oracles(), "src/lib.rs");
+    for (function, completed) in [
+        (
+            "add_fn",
+            "Ok(rt::Outcome::Completed(value)) => rt::Outcome::Completed(rt::Value::Integer(value)),",
+        ),
+        (
+            "eq_fn",
+            "Ok(rt::Outcome::Completed(value)) => rt::Outcome::Completed(rt::Value::Boolean(value)),",
+        ),
+    ] {
+        let name = format!("name: {function:?}.to_owned(),");
+        let start = lib
+            .find(&name)
+            .unwrap_or_else(|| panic!("{function} is not declared"));
+        let rest = &lib[start + name.len()..];
+        let body = &rest[..rest.find("rt::FunctionDeclaration {").unwrap_or(rest.len())];
+
+        let arms = [
+            completed,
+            "Ok(rt::Outcome::Undefined(undefined)) => rt::Outcome::Undefined(undefined),",
+            "Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),",
+            "Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),",
+            "Err(refusal) => rt::Outcome::Refused(refusal),",
+            "Ok(_) => rt::Outcome::Refused(rt::Refusal::CheckedInvariant),",
+        ];
+        let mut from = 0;
+        for arm in arms {
+            let at = body[from..]
+                .find(arm)
+                .unwrap_or_else(|| panic!("{function}: arm `{arm}` missing or out of order"));
+            from += at + arm.len();
+        }
+        let tail: String = body[from..].split_whitespace().collect();
+        assert!(
+            tail.starts_with('}'),
+            "{function}: the catch-all must be the final arm, found `{tail}`"
+        );
+    }
 }
 
 /// The generator's current output for the main corpus, which

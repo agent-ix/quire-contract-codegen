@@ -510,8 +510,48 @@ impl OperandKind {
 /// so the two can never disagree about a function's own type).
 struct ClassifiedFunction<'r> {
     declaration: &'r ExactFunctionDeclaration,
+    body: ClassifiedBody<'r>,
     parameter_kinds: Vec<OperandKind>,
     result_kind: OperandKind,
+}
+
+/// The binary integer operators a scalar function body can apply: the
+/// operators of [`IntegerOperator`] that have a two-operand runtime form.
+/// `Negate` is unary and has no variant here, so a body that survives
+/// classification cannot carry it.
+#[derive(Clone, Copy)]
+enum BinaryIntegerOperator {
+    Add,
+    Subtract,
+    Multiply,
+}
+
+impl BinaryIntegerOperator {
+    /// The binary form of `operator`, or `None` for the unary `Negate`.
+    fn of(operator: IntegerOperator) -> Option<Self> {
+        match operator {
+            IntegerOperator::Add => Some(Self::Add),
+            IntegerOperator::Subtract => Some(Self::Subtract),
+            IntegerOperator::Multiply => Some(Self::Multiply),
+            IntegerOperator::Negate => None,
+        }
+    }
+
+    /// The `rt::IntegerArithmetic` variant this operator renders as.
+    fn variant(self) -> &'static str {
+        match self {
+            Self::Add => "Add",
+            Self::Subtract => "Subtract",
+            Self::Multiply => "Multiply",
+        }
+    }
+}
+
+/// A survivor's body with its operator resolved, ready to render.
+enum ClassifiedBody<'r> {
+    Scalar(BinaryIntegerOperator),
+    Equality(EqualityOperatorKind),
+    Call(&'r str),
 }
 
 fn lowering_profile() -> CompleteLoweringProfileV2 {
@@ -653,21 +693,20 @@ fn application_arguments(body: &serde_json::Value) -> Option<&Vec<serde_json::Va
 }
 
 /// Classify one declared function's own body shape against its lowered
-/// node, independent of any other function (Stage 1, non-`Call` bodies).
-fn classify_body_shape(
+/// node, independent of any other function (Stage 1, non-`Call` bodies), and
+/// return the body with its operator resolved: the one place a scalar operator
+/// is checked, so the rendered body cannot disagree with the refusal.
+fn classify_body_shape<'r>(
     node: &quire_contract_model::CompleteContractNodeV2,
-    declaration: &ExactFunctionDeclaration,
-) -> Result<(), ExactFunctionRefusal> {
+    declaration: &'r ExactFunctionDeclaration,
+) -> Result<ClassifiedBody<'r>, ExactFunctionRefusal> {
     match &declaration.body {
         ExactFunctionBody::Scalar { operator } => {
-            if !matches!(
-                operator,
-                IntegerOperator::Add | IntegerOperator::Subtract | IntegerOperator::Multiply
-            ) {
-                return Err(ExactFunctionRefusal::UnsupportedOperator {
+            let operator = BinaryIntegerOperator::of(*operator).ok_or(
+                ExactFunctionRefusal::UnsupportedOperator {
                     detail: "only binary IntegerOperator::{Add,Subtract,Multiply} are supported",
-                });
-            }
+                },
+            )?;
             if &*node.node.semantic_form != "binary" {
                 return Err(ExactFunctionRefusal::FormMismatch {
                     found: node.node.semantic_form.to_string(),
@@ -677,9 +716,9 @@ fn classify_body_shape(
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
             let _ = arguments;
-            Ok(())
+            Ok(ClassifiedBody::Scalar(operator))
         }
-        ExactFunctionBody::CompositeEquality { .. } => {
+        ExactFunctionBody::CompositeEquality { operator } => {
             if &*node.node.semantic_form != "binary" {
                 return Err(ExactFunctionRefusal::FormMismatch {
                     found: node.node.semantic_form.to_string(),
@@ -689,15 +728,15 @@ fn classify_body_shape(
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
             let _ = arguments;
-            Ok(())
+            Ok(ClassifiedBody::Equality(*operator))
         }
-        ExactFunctionBody::Call { .. } => {
+        ExactFunctionBody::Call { callee } => {
             if &*node.node.semantic_form != "call" {
                 return Err(ExactFunctionRefusal::FormMismatch {
                     found: node.node.semantic_form.to_string(),
                 });
             }
-            Ok(())
+            Ok(ClassifiedBody::Call(callee))
         }
     }
 }
@@ -812,9 +851,14 @@ pub fn generate_exact_function_oracles(
     // Stage 1: per-function classification, with a bounded fixed-point pass
     // for `Call` bodies (a nested call's own validity depends on its
     // callee's classification, per AC-12).
+    // `own_shape` is keyed by node id (as `resolved` is); `bodies` holds each
+    // declaration's own classified body by position, so two declarations that
+    // share a node id can never swap bodies.
     let mut own_shape: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
+    let mut bodies: Vec<Result<ClassifiedBody<'_>, ExactFunctionRefusal>> =
+        Vec::with_capacity(ordered_functions.len());
     for (declaration, record) in ordered_functions.iter().zip(&lowering.records) {
-        let result = (|| -> Result<(), ExactFunctionRefusal> {
+        let result = (|| -> Result<ClassifiedBody<'_>, ExactFunctionRefusal> {
             if name_counts[declaration.name.as_str()] > 1 {
                 return Err(ExactFunctionRefusal::AmbiguousFunctionName {
                     name: declaration.name.clone(),
@@ -831,16 +875,20 @@ pub fn generate_exact_function_oracles(
                 });
             }
             let node = lowered_binary_body(record)?;
-            classify_body_shape(node, declaration)?;
+            let body = classify_body_shape(node, declaration)?;
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
                 parameter_kinds.push(resolve_operand_type(&graph, &parameter.type_node_id)?);
             }
             let result_kind = resolve_operand_type(&graph, &declaration.result_type)?;
             validate_signature(declaration, &parameter_kinds, result_kind)?;
-            Ok(())
+            Ok(body)
         })();
-        own_shape.insert(&declaration.node_id, result);
+        own_shape.insert(
+            &declaration.node_id,
+            result.as_ref().map(|_| ()).map_err(Clone::clone),
+        );
+        bodies.push(result);
     }
 
     let mut resolved: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
@@ -893,15 +941,15 @@ pub fn generate_exact_function_oracles(
 
     // Stage 2: assemble one package from every surviving function, in
     // order, and admit it once.
-    let mut survivors: Vec<&ExactFunctionDeclaration> = Vec::new();
-    for declaration in &ordered_functions {
-        if matches!(resolved.get(&declaration.node_id), Some(Ok(()))) {
-            survivors.push(declaration);
+    let mut classified: Vec<ClassifiedFunction<'_>> = Vec::with_capacity(ordered_functions.len());
+    for (declaration, body) in ordered_functions.iter().zip(bodies) {
+        // A refused function (its own Stage 1 refusal, or a callee's) is left out.
+        let Ok(body) = body else {
+            continue;
+        };
+        if !matches!(resolved.get(&declaration.node_id), Some(Ok(()))) {
+            continue;
         }
-    }
-
-    let mut classified: Vec<ClassifiedFunction<'_>> = Vec::with_capacity(survivors.len());
-    for declaration in &survivors {
         let parameter_kinds: Vec<OperandKind> = declaration
             .parameters
             .iter()
@@ -912,10 +960,15 @@ pub fn generate_exact_function_oracles(
             .expect("Stage 1 already validated every survivor's result type");
         classified.push(ClassifiedFunction {
             declaration,
+            body,
             parameter_kinds,
             result_kind,
         });
     }
+    let survivors: Vec<&ExactFunctionDeclaration> = classified
+        .iter()
+        .map(|function| function.declaration)
+        .collect();
 
     let declared_functions: Vec<rt::FunctionDeclaration> = classified
         .iter()
@@ -1034,12 +1087,20 @@ pub fn generate_exact_function_oracles(
                 record,
             ) {
                 Ok((stem, claim)) => {
-                    let declaration = survivors
+                    match survivors
                         .iter()
                         .find(|declaration| declaration.name == item.function)
-                        .expect("item_disposition only returns Ok for a surviving function");
-                    pending.push((claims.len(), stem, key.clone(), *declaration));
-                    ClaimDisposition::Generated(Box::new(claim))
+                    {
+                        Some(declaration) => {
+                            pending.push((claims.len(), stem, key.clone(), *declaration));
+                            ClaimDisposition::Generated(Box::new(claim))
+                        }
+                        None => ClaimDisposition::Refused {
+                            refusal: ExactFunctionRefusal::UnknownFunction {
+                                name: item.function.clone(),
+                            },
+                        },
+                    }
                 }
                 Err(refusal) => ClaimDisposition::Refused { refusal },
             }
@@ -1273,8 +1334,7 @@ impl SourceBuilder {
         let mut source = SOURCE_HEADER.to_owned();
         source.push_str(&format!(
             "\npub fn checked_package() -> Result<rt::CheckedPackage, Vec<rt::CheckRefusal>> {{\n    \
-             let types = rt::TypeEnvironment::new(Vec::new(), core::iter::empty::<rt::ObjectTypeDeclaration>())\n        \
-             .expect(\"an empty composite/enum declaration set always admits: generation-time invariant\");\n    \
+             let types = rt::TypeEnvironment::default();\n    \
              let functions = vec![{declarations}];\n    \
              rt::PackageDeclarations {{ types, functions }}.check(rt::CheckMode::Linked, rt::CheckingLimits::default())\n}}\n"
         ));
@@ -1294,7 +1354,7 @@ fn render_function_declaration(function: &ClassifiedFunction<'_>) -> String {
         .zip(&function.parameter_kinds)
         .map(|(parameter, kind)| format!("({:?}.to_owned(), {}), ", parameter.name, kind.render()))
         .collect();
-    let body = render_body(function.declaration);
+    let body = render_body(&function.body);
     format!(
         "rt::FunctionDeclaration {{\n        \
          name: {:?}.to_owned(),\n        \
@@ -1310,15 +1370,10 @@ fn render_function_declaration(function: &ClassifiedFunction<'_>) -> String {
     )
 }
 
-fn render_body(declaration: &ExactFunctionDeclaration) -> String {
-    match &declaration.body {
-        ExactFunctionBody::Scalar { operator } => {
-            let variant = match operator {
-                IntegerOperator::Add => "Add",
-                IntegerOperator::Subtract => "Subtract",
-                IntegerOperator::Multiply => "Multiply",
-                IntegerOperator::Negate => unreachable!("Negate refused at generation time"),
-            };
+fn render_body(body: &ClassifiedBody<'_>) -> String {
+    match body {
+        ClassifiedBody::Scalar(operator) => {
+            let variant = operator.variant();
             format!(
                 "|frame: &rt::Frame, args: &[rt::Value]| -> rt::Outcome<rt::Value> {{\n        \
                  let [rt::Value::Integer(left), rt::Value::Integer(right)] = args else {{\n            \
@@ -1330,11 +1385,11 @@ fn render_body(declaration: &ExactFunctionDeclaration) -> String {
                  Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),\n            \
                  Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),\n            \
                  Err(refusal) => rt::Outcome::Refused(refusal),\n            \
-                 Ok(_) => unreachable!(\"rt::Outcome gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then (Completed, Undefined, Refused, Incomplete) is matched above\"),\n        \
+                 Ok(_) => rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n        \
                  }}\n    }}"
             )
         }
-        ExactFunctionBody::CompositeEquality { operator } => {
+        ClassifiedBody::Equality(operator) => {
             let path = match operator {
                 EqualityOperatorKind::Equal => "rt::EqualityOperator::Equal",
                 EqualityOperatorKind::NotEqual => "rt::EqualityOperator::NotEqual",
@@ -1362,11 +1417,11 @@ fn render_body(declaration: &ExactFunctionDeclaration) -> String {
                  Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),\n            \
                  Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),\n            \
                  Err(refusal) => rt::Outcome::Refused(refusal),\n            \
-                 Ok(_) => unreachable!(\"rt::Outcome gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then (Completed, Undefined, Refused, Incomplete) is matched above\"),\n        \
+                 Ok(_) => rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n        \
                  }}\n    }}"
             )
         }
-        ExactFunctionBody::Call { callee } => {
+        ClassifiedBody::Call(callee) => {
             format!(
                 "|frame: &rt::Frame, args: &[rt::Value]| -> rt::Outcome<rt::Value> {{\n        \
                  frame.call({callee:?}, args)\n    }}"
