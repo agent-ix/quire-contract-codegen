@@ -154,14 +154,26 @@ operations:
     inputs: [ReplayInputs (proved unit LockedSource, DependencyLock list, backend manifest digest, accounting and stage limits), function name]
     output: ReplayPackage | ReplayPackageError (InvalidFunction{function} | Dependencies(DependencyLockError: Duplicate{identity} | Input(DependencyInputRefusal)) | CallSite(CallSiteRefusal))
     semantics: compiles the proved unit, together with the lock's dependency selections as its dependency input, through qsl_replay::call_site and keeps the package id and each parameter's node id; ReplayPackage::request builds the complete ReplayRequestWire from the same lock, filling package.dependencies with one entry per lock dependency selection in ascending identity order (identity, version, the lock's recorded package_id, the dependency's own source); every source's bytes, the unit's and each dependency's, are provided by digest; QSL refuses a request naming a dependency the unit does not import (FR-016)
+  - name: ReplayPackage::obligation_identity
+    inputs: [ReplayPackage, KaniObligationIdentity (the harness replayed)]
+    output: qsl-replay ObligationIdentity | ObligationIdentityError (UnboundArgument{argument} | UnboundParameter{parameter} | UnboundedDomain{argument} | BoundedBoolean{argument} | Digest(DigestError: the encoder refused the preimage))
+    semantics: the ADR-013 O-09 function-contract obligation identity of the selected function for that harness: SHA-256 over the RFC 8785 encoding, made by quire-canonical in core::canonical, of the FunctionSite's function node id and declaration occurrence key, the harness's ObligationKind and the arguments (parameter node id and declared domain) ascending by identifier; the arguments must be exactly the function's parameters, each bound; the spelling is CG's own and interim (AD-003 E-1; FR-016-AC-21 to AC-23)
+  - name: ReplayPackage::request
+    inputs: [ReplayPackage, KaniObligationIdentity (the harness replayed), ReplaySource]
+    output: the complete qsl-replay ReplayRequestWire | ObligationIdentityError
+    semantics: builds the request whose obligation_identity slot is ReplayPackage::obligation_identity of that harness, so a slot that is not that identity is not representable (FR-016-AC-21)
   - name: FrameReplay::new
     inputs: [FrameReplayInputs (proving-run ReplayInputs, domain package ProvidedDocuments, invocation and snapshot ProvidedDocuments, qsl-replay OperationName, invocation DocumentRef, ClaimedChange, obligation and counterexample identities)]
     output: FrameReplay (request ReplayRequestWire, envelope WitnessPacket) | FrameReplayError (Dependencies | CallSite(CallSiteRefusal) | Name | Transcript | Envelope | Refused)
     semantics: compiles the proved unit with its domain packages and dependencies through qsl_replay::call_site selected by the operation's name, and builds the frame counterexample payload from the answer (anchor, frame, frame occurrence); the envelope's clause_node is the payload's frame node and its occurrence_key the payload's frame occurrence; FrameReplay::replay reconstructs the envelope and calls qsl_replay::replay_frame, returning QSL's result (FR-015)
   - name: replay_counterexample
     inputs: [KaniObligationIdentity, Kani playback transcript, ReplayPackage]
-    output: ReplayVerdict (Reproduced | EvidenceFailure(Decode(DecodeFailure) | Domain | Verdict)) | SpineReplayError
-    semantics: decodes the transcript, checks every integer value against its argument's declared bounds before any replay, replays natively, and reports a decode, domain or verdict mismatch as the one EvidenceFailure verdict, never as a clause success or failure; Boolean and i64 values only (FR-016)
+    output: ReplayVerdict (Reproduced | EvidenceFailure(Decode(DecodeFailure) | Domain | Verdict)) | SpineReplayError (the replay_falsification variants | Identity(ObligationIdentityError))
+    semantics: decodes the transcript, checks every integer value against its argument's declared bounds before any replay, builds the O-09 obligation identity of the harness (ReplayPackage::obligation_identity), replays natively, and reports a decode, domain or verdict mismatch as the one EvidenceFailure verdict, never as a clause success or failure; Boolean and i64 values only (FR-016)
+  - name: replay_counterexample_through
+    inputs: [KaniObligationIdentity, Kani playback transcript, ReplayPackage, an executor from the built ReplayRequestWire to a qsl-replay ReplayResult or ReplayRefusal]
+    output: as replay_counterexample
+    semantics: replay_counterexample with the request handed to the caller's executor, which ends in qsl_replay::replay, so a caller can observe the request QSL receives; kept public because the harness fixtures that build a KaniObligationIdentity and its playback live in the integration tests (FR-016-AC-21)
   - name: bound_strategy::census::compute_census
     inputs: [Relation, Domain]
     output: BoundaryCensus | StrategyDiagnostic

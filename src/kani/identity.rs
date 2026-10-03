@@ -4,6 +4,7 @@
 //! them, so they live below both: a harness is run from its identity and its source text, and
 //! no reader imports a generator.
 
+use quire_canonical::FixedShape;
 use quire_contract_model::{CheckedNodeId, ClauseRef, DependencyIdentity, SourceSpan};
 use serde::Serialize;
 
@@ -14,7 +15,7 @@ use crate::{
 };
 
 /// The contract role of one obligation.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, FixedShape)]
 #[serde(rename_all = "snake_case")]
 pub enum ObligationKind {
     /// Lowered to a `kani::proof` that the precondition is total and satisfiable in bounds.

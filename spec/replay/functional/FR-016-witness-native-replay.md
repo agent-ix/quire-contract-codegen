@@ -113,7 +113,7 @@ failure is reported.
 
 - The generator shall fill the function path's request `obligation_identity` with the ADR-013
   O-09 function-contract obligation identity of the function being replayed (FR-016-AC-21 to
-  AC-23, planned).
+  AC-23).
 
 ## Acceptance Criteria
 
@@ -139,9 +139,9 @@ failure is reported.
 | FR-016-AC-18 | A lock selecting a library the unit does not import is refused by QSL as unselected. | Test (TC-026) |
 | FR-016-AC-19 | Lock libraries whose sources share a source owner are refused as no dependency input, before the call site compiles anything. | Test (TC-026) |
 | FR-016-AC-20 | A lock library whose source has the unit's own source owner is refused by the call site. | Test (TC-026) |
-| FR-016-AC-21 | 🚧 Planned. The function path's request `obligation_identity` holds the function-contract obligation digest of quire-spec-language ADR-013 O-09: the digest of the RFC 8785 encoding, made by `quire-canonical` (ADR-013 §2's one encoder, AD-003 E-1), of the `FunctionSite`'s `function` node id, its `declaration` occurrence key, the `ObligationKind` of the harness being replayed and `arguments`, each a parameter node id with its declared domain, ordered ascending by identifier as O-09 fixes and not in the declared order of `FunctionSite.parameters`. It is never the digest of the transcript. | Test (TC-026) |
-| FR-016-AC-22 | 🚧 Planned. For two functions with the same parameters, the identities differ. The identity of one function is the same across recompiles that only add comments or blank lines, and across a change of the harness's source span. It differs between two different `ObligationKind`s over the same function, and when any argument's domain differs. A function yields one identity per existing `ObligationKind` it requests, not one per conjunct of its body: a function whose body has two conjuncts, replayed under one kind, has one identity. | Test (TC-026) |
-| FR-016-AC-23 | 🚧 Planned. The function-contract identity function derives nothing from the package: with the `FunctionSite`'s `function` and `declaration`, the kind and the arguments held fixed, perturbing every other node of the compiled package (an unrelated declaration, the order of `FunctionSite.parameters`) leaves the identity unchanged, and a perturbed `function` or `declaration` changes it. | Test (TC-026) |
+| FR-016-AC-21 | The function path's request `obligation_identity` holds the function-contract obligation digest of quire-spec-language ADR-013 O-09: the digest of the RFC 8785 encoding, made by `quire-canonical` (ADR-013 §2's one encoder, AD-003 E-1), of the `FunctionSite`'s `function` node id, its `declaration` occurrence key, the `ObligationKind` of the harness being replayed and `arguments`, each a parameter node id with its declared domain, ordered ascending by identifier as O-09 fixes and not in the declared order of `FunctionSite.parameters`. It is never the digest of the transcript. The `arguments` are all of the function's parameters: a harness that leaves a parameter without an argument, or declares an unbounded integer or a bounded Boolean, has no identity and is refused. | Test (TC-026) |
+| FR-016-AC-22 | For two functions with the same parameters, the identities differ. The identity of one function is the same across recompiles that only add comments or blank lines, and across a change of the harness's source span. It differs between two different `ObligationKind`s over the same function, and when any argument's domain differs. A function yields one identity per existing `ObligationKind` it requests, not one per conjunct of its body: a function whose body has two conjuncts, replayed under one kind, has one identity. | Test (TC-026) |
+| FR-016-AC-23 | The function-contract identity function derives nothing from the package: with the `FunctionSite`'s `function` and `declaration`, the kind and the arguments held fixed, perturbing every other node of the compiled package (an unrelated declaration, the order of `FunctionSite.parameters`) leaves the identity unchanged, and a perturbed `function` or `declaration` changes it. | Test (TC-026) |
 ## Dependencies
 
 - **Upstream**: [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md); QSL's

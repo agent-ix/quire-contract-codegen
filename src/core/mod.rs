@@ -7,6 +7,9 @@
 // The generated file and the validated bundle every generator builds.
 // Implements: FR-005
 pub(crate) mod artifact;
+// The one caller of quire-canonical's RFC 8785 encoder and digest.
+// Implements: FR-016-AC-21
+pub(crate) mod canonical;
 // The generation diagnostic vocabulary, below every generator.
 pub(crate) mod diagnostic;
 // Identity newtypes of a generated harness.

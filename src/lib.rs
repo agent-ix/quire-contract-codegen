@@ -137,6 +137,7 @@ pub use crate::core::diagnostic::{
     GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
 };
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
+pub use core::canonical::DigestError;
 pub use kani::generate::frame::{
     generate_state_frame_obligations, StateFrameObligations, StateFrameRefusal, StateFrameRequest,
     UnsupportedFrameEffect,
@@ -157,10 +158,11 @@ pub use kani::output::playback::DecodeFailure;
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
 pub use replay::frame::{FrameReplay, FrameReplayError, FrameReplayInputs, ProvidedDocument};
 pub use replay::function::{
-    replay_counterexample, replay_falsification, DependencyLock, DependencyLockError,
-    EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage, ReplayPackageError,
-    ReplayParameter, ReplayVerdict, SpineReplayError,
+    replay_counterexample, replay_counterexample_through, replay_falsification, DependencyLock,
+    DependencyLockError, EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage,
+    ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
 };
+pub use replay::obligation::ObligationIdentityError;
 pub use replay::witness::decode_falsification;
 pub use strategy::campaign::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,

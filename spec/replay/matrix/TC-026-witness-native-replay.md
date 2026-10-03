@@ -58,10 +58,19 @@ other-node perturbation and changed by each `FunctionSite` perturbation (AC-23).
 
 ## Status
 
-FR-016-AC-21 to AC-23 are planned (the O-09 amendment is quire-spec-language commit f6c3974,
-QSL-352; informational): the function path still passes the transcript digest, and
-QSL's `FunctionSite` `function` and `declaration` members are not yet in the `qsl-replay` CG
-builds against.
+FR-016-AC-21 to AC-23 are implemented and tested in the default suite
+(`tests/it/skeleton_spine.rs`, and unit tests in `src/replay/obligation.rs` and
+`src/replay/function.rs`): `ReplayPackage::obligation_identity` builds the O-09 function-contract
+digest in `core::canonical` over the `FunctionSite`'s `function` and `declaration`, the harness's
+kind and its arguments ascending by identifier, and `replay_counterexample` puts it in the
+request's `obligation_identity` slot. The slot equals a digest recomputed in the test from
+hand-written RFC 8785 text, with a Boolean argument and an identifier order that differs from the
+node-id order, and the request `replay_counterexample` sends is captured at the executor seam
+(`replay_counterexample_through`) and carries it; a harness that is not exactly the function's
+bound parameters is refused (AC-21). The identity separates functions, kinds and domains and
+ignores comments, blank lines and the harness's source span (AC-22), and it ignores an unrelated
+declaration and the order of `FunctionSite.parameters` while a changed `function` or
+`declaration` changes it (AC-23).
 
 Partial. FR-016-AC-9 through AC-11 are implemented and tested in the default suite
 (`tests/it/skeleton_spine.rs`): a falsifying input replays through
