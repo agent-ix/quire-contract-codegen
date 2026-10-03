@@ -21,7 +21,7 @@ use qsl_replay::{
 use crate::{
     kani::identity::KaniObligationIdentity,
     kani::output::playback::DecodeFailure,
-    kani_witness_join::{decode_falsification, first_out_of_domain},
+    replay::witness::{decode_falsification, first_out_of_domain},
 };
 
 /// One parameter of the function the replay selects: the harness argument name a decoded value

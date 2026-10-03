@@ -55,6 +55,7 @@ mod kani_generation;
 mod kani_obligations;
 mod kani_obligations_state_frame;
 mod kani_witness_join;
+mod layout;
 mod oracle_generation;
 mod routed_generation;
 pub(crate) mod scratch_crate;

@@ -20,7 +20,6 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 
 use crate::{
-    capability::{BackendKind, Candidate},
     core::artifact::Artifact,
     core::identity::{HarnessPath, HarnessSymbol},
     kani::generate::negotiate::negotiate_kani_obligations,
@@ -34,6 +33,7 @@ use crate::{
         derive_exact_scalar_items, generate_exact_scalar_oracles, ExactScalarClaim,
         ExactScalarOracles,
     },
+    routed::capability::{BackendKind, Candidate},
 };
 
 /// One item the driver routed to a backend.
