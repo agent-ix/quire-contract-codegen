@@ -26,7 +26,7 @@ It also verifies that the emitted function-oracle source has no panicking path (
 (FR-021-AC-19 to AC-21).
 
 It also verifies that declarations sharing one declaring node id are refused with
-`DuplicateDeclaringNode` before Stage 1 (FR-021-AC-22, 🚧 Planned).
+`DuplicateDeclaringNode` before Stage 1 (FR-021-AC-22).
 
 The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
 
@@ -100,7 +100,7 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    `src/oracle/function/mod.rs` and assert zero (FR-021-AC-21). The unknown variant itself cannot
    be built from a test crate because the runtime enum is `#[non_exhaustive]`, so the arm's text
    and the zero counts are the evidence.
-9. 🚧 Planned (FR-021-AC-22): request two declarations sharing one declaring node id in each of
+9. (FR-021-AC-22): request two declarations sharing one declaring node id in each of
    four fixtures: (i) both bodies admissible; (ii) one body refused in Stage 1 and its same-node
    sibling admissible; (iii) the two also sharing one name, plus a third declaration with its own distinct node id and
    the same name (refused as `AmbiguousFunctionName`, absent from `checked_package()`, while items
@@ -109,14 +109,19 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    function. Generate each fixture twice, with the pair in both request orders. Assert, in every
    case and both orders: neither declaration of the pair appears in the emitted
    `checked_package()`, source or `location-map.json`; every item naming one of them is refused
-   with `ExactFunctionRefusal::DuplicateDeclaringNode` (never `UnknownFunction`, and in fixture
+   with `ExactFunctionRefusal::DuplicateDeclaringNode` carrying the shared node id (the smallest in
+   node-id order when the item's name is held by duplicate groups on several node ids) (never `UnknownFunction`, and in fixture
    (iii) never `AmbiguousFunctionName`); no claim-map entry records another function's name,
    symbol or `Origin::Body` index; the third declaration of (iv) is refused as `UnknownCallee`;
    and each item over a distinct-node-id function has a claim-map entry equal to the entry the
-   same request produces with the duplicate declarations removed. The code PR that lands this
-   also corrects the comments in `src/oracle/function/mod.rs` (module doc "Package assembly" and
-   the `own_shape`/`bodies` comment) that claim node-id keying alone prevents collapse, which does
-   not hold for duplicate node ids.
+   same request produces with the duplicate declarations removed. The tests are
+   `tc_031_ac22_fixture_i_both_bodies_admissible`,
+   `tc_031_ac22_fixture_ii_one_body_refused_and_sibling_admissible`,
+   `tc_031_ac22_fixture_iii_shared_name_takes_the_node_id_refusal` and
+   `tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee`, each over every
+   permutation of the declaration order. The comments in `src/oracle/function/mod.rs` (module doc
+   "Package assembly" and the `own_shape`/`bodies` comment) no longer claim node-id keying alone
+   prevents collapse, which does not hold for duplicate node ids.
 10. Grep the generated crate's source and its claim map for any read of, branch on, or non-emptiness
    assertion against `Evaluation.location` or `Evaluation.losses`; confirm none exists, and that
    both fields are simply discarded by the emitted oracle function's return path, since the
@@ -139,7 +144,7 @@ on `Evaluation.location`/`.losses` becoming non-empty; the emitted corpus source
 `CheckedInvariant`, and a `Negate` body is refused with `UnsupportedOperator`; declarations sharing
 a declaring node id are absent from the package, source and location map, every item naming one
 is refused as `DuplicateDeclaringNode` independent of request order, and no claim or oracle symbol
-is crossed (FR-021-AC-22, 🚧 Planned).
+is crossed (FR-021-AC-22).
 
 Function-body semantics beyond what FR-014's and FR-018's own oracles already verify are not
 separately asserted here: a function body is a delegation to those same generators' lowering, so

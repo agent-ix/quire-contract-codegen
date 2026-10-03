@@ -74,12 +74,20 @@
 //! ([`UpstreamBlocker::QuireSpecLanguage120`]/[`UpstreamBlocker::QuireSpecLanguage121`]),
 //! or a nested `call` naming a callee absent from the request or itself
 //! refused -- refuses only the items naming that function (AC-10, AC-11,
-//! AC-12), never a sibling function's items. A duplicate-named function is
-//! never seen by Stage 1's body classification at all, and never reaches
-//! Stage 2: `own_shape`, `resolved` and `function_index` are keyed by each
-//! declaration's own node id, not by name, precisely so two declarations
-//! that happen to share a name cannot collapse into one classification or
-//! one location-map index (see "Location tagging" below). Every function
+//! AC-12), never a sibling function's items. Two kinds of duplicate are
+//! never seen by Stage 1's body classification at all, and never reach
+//! Stage 2. Declarations sharing one declaring node id are refused first
+//! ([`ExactFunctionRefusal::DuplicateDeclaringNode`], AC-22), including a
+//! pair that also shares a name; the node-id check precedes the name check.
+//! Declarations whose node ids are all distinct but whose name is shared are
+//! refused as [`ExactFunctionRefusal::AmbiguousFunctionName`]. `own_shape`,
+//! `resolved` and `function_index` are keyed by each declaration's own node
+//! id, which keeps two same-name declarations on distinct node ids apart,
+//! but keying by node id cannot separate two declarations that share a node
+//! id: they would collapse into one entry and cross claims and oracle
+//! symbols. Refusing every such declaration up front is what prevents
+//! that, so no node id reaching those maps is held by more than one
+//! survivor (see "Location tagging" below). Every function
 //! that survives this stage is then assembled into one `PackageDeclarations`
 //! and admitted once through `PackageDeclarations::check(CheckMode::Linked,
 //! CheckingLimits::default())`; a refusal at *this* stage is reported on
@@ -291,6 +299,20 @@ pub enum ExactFunctionRefusal {
     AmbiguousFunctionName {
         /// The ambiguous name.
         name: String,
+    },
+    /// The declaration, or the item naming one, shares its declaring node id
+    /// with another declaration in the request (FR-021-AC-22). Every
+    /// declaration holding that node id is refused before Stage 1
+    /// classification, so none enters the assembled package, and an item
+    /// naming any of them gets this refusal rather than
+    /// [`ExactFunctionRefusal::UnknownFunction`] or
+    /// [`ExactFunctionRefusal::AmbiguousFunctionName`]: this check takes
+    /// precedence over the name check. A nested `call` naming such a
+    /// declaration is refused as [`ExactFunctionRefusal::UnknownCallee`].
+    DuplicateDeclaringNode {
+        /// The shared declaring node id. When an item's name is held by
+        /// duplicate groups on more than one node id, the smallest.
+        node_id: CheckedNodeId,
     },
     /// The function's declared operator requirements name a capability no
     /// registered backend can discharge (AC-6). Decided at generation time,
@@ -824,23 +846,14 @@ pub fn generate_exact_function_oracles(
     let mut ordered_functions: Vec<&ExactFunctionDeclaration> = functions.iter().collect();
     ordered_functions.sort_by(|a, b| a.node_id.cmp(&b.node_id));
 
-    // How many declarations share each name. `own_shape`, `resolved` and
-    // `function_index` below are all keyed by each declaration's own node
-    // id, never by name, so two declarations that happen to share a name
-    // can never collapse into one classification or one location-map
-    // index. A name with more than one declaration is instead refused
-    // outright, before Stage 1 classification even runs (see module doc,
-    // "Package assembly"): `unique_name_node_id` therefore holds only the
-    // names Stage 1 will actually attempt to classify.
-    let mut name_counts: BTreeMap<&str, usize> = BTreeMap::new();
-    for declaration in &ordered_functions {
-        *name_counts.entry(declaration.name.as_str()).or_insert(0) += 1;
-    }
-    let unique_name_node_id: BTreeMap<&str, &CheckedNodeId> = ordered_functions
-        .iter()
-        .filter(|declaration| name_counts[declaration.name.as_str()] == 1)
-        .map(|declaration| (declaration.name.as_str(), &declaration.node_id))
-        .collect();
+    // `own_shape`, `resolved` and `function_index` below are keyed by each
+    // declaration's own node id, which keeps same-name declarations on
+    // distinct node ids apart but cannot separate declarations that share a
+    // node id. Both kinds of duplicate are therefore refused outright,
+    // before Stage 1 classification even runs (see module doc, "Package
+    // assembly"), and `FunctionNames` holds only the names Stage 1 will
+    // actually attempt to classify as resolvable.
+    let names = FunctionNames::of(&ordered_functions);
 
     let requested: Vec<CheckedNodeId> = ordered_functions
         .iter()
@@ -851,15 +864,21 @@ pub fn generate_exact_function_oracles(
     // Stage 1: per-function classification, with a bounded fixed-point pass
     // for `Call` bodies (a nested call's own validity depends on its
     // callee's classification, per AC-12).
-    // `own_shape` is keyed by node id (as `resolved` is); `bodies` holds each
-    // declaration's own classified body by position, so two declarations that
-    // share a node id can never swap bodies.
+    // `own_shape` is keyed by node id (as `resolved` is), which is sound only
+    // because every declaration sharing a node id is refused before this
+    // point; `bodies` holds each declaration's own classified body by
+    // position.
     let mut own_shape: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
     let mut bodies: Vec<Result<ClassifiedBody<'_>, ExactFunctionRefusal>> =
         Vec::with_capacity(ordered_functions.len());
     for (declaration, record) in ordered_functions.iter().zip(&lowering.records) {
         let result = (|| -> Result<ClassifiedBody<'_>, ExactFunctionRefusal> {
-            if name_counts[declaration.name.as_str()] > 1 {
+            if names.shares_node_id(&declaration.node_id) {
+                return Err(ExactFunctionRefusal::DuplicateDeclaringNode {
+                    node_id: declaration.node_id.clone(),
+                });
+            }
+            if names.is_ambiguous(&declaration.name) {
                 return Err(ExactFunctionRefusal::AmbiguousFunctionName {
                     name: declaration.name.clone(),
                 });
@@ -902,11 +921,11 @@ pub fn generate_exact_function_oracles(
             let outcome = match (&declaration.body, own) {
                 (_, Err(refusal)) => Some(Err(refusal.clone())),
                 (ExactFunctionBody::Call { callee }, Ok(())) => {
-                    match unique_name_node_id.get(callee.as_str()) {
+                    match names.unique_node_id(callee) {
                         None => Some(Err(ExactFunctionRefusal::UnknownCallee {
                             callee: callee.clone(),
                         })),
-                        Some(&callee_node_id) => match resolved.get(callee_node_id) {
+                        Some(callee_node_id) => match resolved.get(callee_node_id) {
                             Some(Ok(())) => Some(Ok(())),
                             Some(Err(_)) => Some(Err(ExactFunctionRefusal::UnknownCallee {
                                 callee: callee.clone(),
@@ -1076,8 +1095,7 @@ pub fn generate_exact_function_oracles(
             }
         } else {
             match item_disposition(
-                &name_counts,
-                &unique_name_node_id,
+                &names,
                 &resolved,
                 &survivors,
                 &function_index,
@@ -1112,13 +1130,13 @@ pub fn generate_exact_function_oracles(
     }
     // Each function is named by the function it applies; items applying one function are
     // numbered in key order, so a refused or differently requested sibling never renames one.
-    let names = unique_names(
+    let symbols = unique_names(
         pending
             .iter()
             .map(|(_, stem, key, _)| (stem.clone(), key.clone()))
             .collect(),
     );
-    for ((claim, _, _, declaration), symbol) in pending.into_iter().zip(names) {
+    for ((claim, _, _, declaration), symbol) in pending.into_iter().zip(symbols) {
         source.item(&symbol, declaration);
         if let ClaimDisposition::Generated(generated) = &mut claims[claim].result {
             generated.oracle_symbol = format!("oracle_{symbol}");
@@ -1161,15 +1179,94 @@ pub fn generate_exact_function_oracles(
     })
 }
 
-// `#[allow(clippy::too_many_arguments)]`: every parameter here is one of
-// Stage 1/2's own per-generation lookup tables, already computed once by
-// the caller and passed by reference; folding them into a context struct
-// would only move the same nine borrows into a second type to define and
-// keep in sync, not reduce them.
-#[allow(clippy::too_many_arguments)]
+/// How the request's declarations share node ids and names, computed once
+/// from every declaration (FR-021-AC-22 and `AmbiguousFunctionName`).
+struct FunctionNames<'a> {
+    /// Declarations per declaring node id.
+    node_id_counts: BTreeMap<&'a CheckedNodeId, usize>,
+    /// Declarations per name, counting every declaration whatever its node id.
+    name_counts: BTreeMap<&'a str, usize>,
+    /// For each name held by a declaration whose node id is shared, that node
+    /// id: the smallest when several duplicate groups hold the name.
+    duplicate_node_by_name: BTreeMap<&'a str, &'a CheckedNodeId>,
+    /// The declaring node id of each name held by exactly one declaration
+    /// whose node id is not shared: the only names a call can resolve.
+    unique_node_id: BTreeMap<&'a str, &'a CheckedNodeId>,
+}
+
+impl<'a> FunctionNames<'a> {
+    /// Build the tables from declarations sorted by declaring node id, so the
+    /// smallest duplicate node id wins `duplicate_node_by_name` whatever the
+    /// request order.
+    fn of(ordered: &[&'a ExactFunctionDeclaration]) -> Self {
+        let mut node_id_counts: BTreeMap<&CheckedNodeId, usize> = BTreeMap::new();
+        let mut name_counts: BTreeMap<&str, usize> = BTreeMap::new();
+        for declaration in ordered {
+            *node_id_counts.entry(&declaration.node_id).or_insert(0) += 1;
+            *name_counts.entry(declaration.name.as_str()).or_insert(0) += 1;
+        }
+        let mut duplicate_node_by_name = BTreeMap::new();
+        let mut unique_node_id = BTreeMap::new();
+        for declaration in ordered {
+            let name = declaration.name.as_str();
+            if node_id_counts
+                .get(&declaration.node_id)
+                .copied()
+                .unwrap_or(0)
+                > 1
+            {
+                duplicate_node_by_name
+                    .entry(name)
+                    .or_insert(&declaration.node_id);
+            } else if name_counts.get(name).copied().unwrap_or(0) == 1 {
+                unique_node_id.insert(name, &declaration.node_id);
+            }
+        }
+        Self {
+            node_id_counts,
+            name_counts,
+            duplicate_node_by_name,
+            unique_node_id,
+        }
+    }
+
+    /// Whether more than one declaration holds `node_id`.
+    fn shares_node_id(&self, node_id: &CheckedNodeId) -> bool {
+        self.node_id_counts.get(node_id).copied().unwrap_or(0) > 1
+    }
+
+    /// Whether more than one declaration holds `name`.
+    fn is_ambiguous(&self, name: &str) -> bool {
+        self.name_counts.get(name).copied().unwrap_or(0) > 1
+    }
+
+    /// The declaring node id of the one resolvable declaration named `name`.
+    fn unique_node_id(&self, name: &str) -> Option<&'a CheckedNodeId> {
+        self.unique_node_id.get(name).copied()
+    }
+
+    /// The declaring node id an item naming `name` applies, or the refusal
+    /// for it: the node-id check first, then absence, then name ambiguity.
+    fn resolve(&self, name: &str) -> Result<&'a CheckedNodeId, ExactFunctionRefusal> {
+        if let Some(node_id) = self.duplicate_node_by_name.get(name) {
+            return Err(ExactFunctionRefusal::DuplicateDeclaringNode {
+                node_id: (*node_id).clone(),
+            });
+        }
+        if self.is_ambiguous(name) {
+            return Err(ExactFunctionRefusal::AmbiguousFunctionName {
+                name: name.to_owned(),
+            });
+        }
+        self.unique_node_id(name)
+            .ok_or_else(|| ExactFunctionRefusal::UnknownFunction {
+                name: name.to_owned(),
+            })
+    }
+}
+
 fn item_disposition(
-    name_counts: &BTreeMap<&str, usize>,
-    unique_name_node_id: &BTreeMap<&str, &CheckedNodeId>,
+    names: &FunctionNames<'_>,
     resolved: &BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>>,
     survivors: &[&ExactFunctionDeclaration],
     function_index: &BTreeMap<&CheckedNodeId, usize>,
@@ -1188,22 +1285,11 @@ fn item_disposition(
     // classification carries that function's own typed refusal reason
     // (AC-10, AC-11, AC-12), never a generic "unknown function" -- that
     // disposition is reserved for a name absent from the request's own
-    // declarations entirely. A name declared more than once is a third,
-    // distinct case: it IS declared, just ambiguously, so it is refused as
-    // `AmbiguousFunctionName`, never as `UnknownFunction`.
-    let function_node_id = match name_counts.get(item.function.as_str()) {
-        None => {
-            return Err(ExactFunctionRefusal::UnknownFunction {
-                name: item.function.clone(),
-            })
-        }
-        Some(1) => unique_name_node_id[item.function.as_str()],
-        Some(_) => {
-            return Err(ExactFunctionRefusal::AmbiguousFunctionName {
-                name: item.function.clone(),
-            })
-        }
-    };
+    // declarations entirely. A name held by a declaration whose node id is
+    // shared is refused as `DuplicateDeclaringNode`, and a name declared more
+    // than once on distinct node ids as `AmbiguousFunctionName`: both ARE
+    // declared, just unresolvably, so never `UnknownFunction`.
+    let function_node_id = names.resolve(&item.function)?;
     if let Some(Err(refusal)) = resolved.get(function_node_id) {
         return Err(refusal.clone());
     }

@@ -571,39 +571,265 @@ fn tc_031_ac21_unsupported_operator_refuses_unary_negate_scalar_body() {
     );
 }
 
-/// The text of `function`'s `rt::FunctionDeclaration` literal in an emitted `src/lib.rs`.
-fn declaration_text<'a>(lib: &'a str, function: &str) -> &'a str {
-    let name = format!("name: {function:?}.to_owned(),");
-    let start = lib
-        .find(&name)
-        .unwrap_or_else(|| panic!("{function} is not declared"));
-    let rest = &lib[start + name.len()..];
-    &rest[..rest.find("rt::FunctionDeclaration {").unwrap_or(rest.len())]
+/// `declaration` moved onto the node `code`.
+fn on_node(
+    mut declaration: quire_contract_codegen::ExactFunctionDeclaration,
+    code: u32,
+) -> quire_contract_codegen::ExactFunctionDeclaration {
+    declaration.node_id = code_id(code);
+    declaration
 }
 
-/// Trace: FR-021-AC-1, FR-021-AC-12, TC-031. Two declarations that share one
-/// declaring node id (a malformed request: AC-12's per-declaration isolation
-/// is the nearest owning criterion) neither panic the generator nor swap
-/// bodies: each function renders its own body under its own name.
-#[test]
-fn tc_031_ac12_two_declarations_on_one_node_id_each_render_their_own_body() {
-    let package = ext_corpus_package().admit();
-    let mut eq_on_add_node = function_eq("eq_same_node");
-    eq_on_add_node.node_id = code_id(FN_ADD);
-    let functions = vec![function_add("add_first"), eq_on_add_node];
-    let items = vec![
-        item(ITEM_CALL_ADD, "add_first"),
-        item(ITEM_CALL_EQ, "eq_same_node"),
-    ];
-    let oracles = generate(&package, &functions, &items);
-    let lib = contents(&oracles, "src/lib.rs");
+/// Every ordering of `items`.
+fn permutations<T: Clone>(items: &[T]) -> Vec<Vec<T>> {
+    let Some((first, rest)) = items.split_first() else {
+        return vec![Vec::new()];
+    };
+    let mut all = Vec::new();
+    for tail in permutations(rest) {
+        for at in 0..=tail.len() {
+            let mut order = tail.clone();
+            order.insert(at, first.clone());
+            all.push(order);
+        }
+    }
+    all
+}
 
-    let add = declaration_text(&lib, "add_first");
-    assert!(add.contains("rt::IntegerArithmetic::Add("));
-    assert!(!add.contains("EqualityOperator"));
-    let eq = declaration_text(&lib, "eq_same_node");
-    assert!(eq.contains("rt::EqualityOperator::Equal"));
-    assert!(!eq.contains("IntegerArithmetic"));
+/// One FR-021-AC-22 fixture: declarations of which `pair_names` share the declaring node
+/// `FN_ADD`, and the requested `(call node, function)` items.
+struct DuplicateNodeFixture {
+    functions: Vec<quire_contract_codegen::ExactFunctionDeclaration>,
+    items: Vec<(u32, &'static str)>,
+    /// Names held by a declaration sharing `FN_ADD`.
+    pair_names: Vec<&'static str>,
+    /// Every function name that must be absent from `checked_package()` and the location map.
+    absent_names: Vec<&'static str>,
+    /// Items (call node codes) that must be refused `DuplicateDeclaringNode`.
+    duplicate_items: Vec<u32>,
+    /// Items over a function with its own node id and name; each must equal the entry the same
+    /// request produces with every declaration in `absent_names` removed.
+    distinct_items: Vec<u32>,
+}
+
+impl DuplicateNodeFixture {
+    /// Check the fixture under every permutation of the declaration order (which includes both
+    /// orders of the pair).
+    fn check(&self, package: &CheckedPackageV2) {
+        let requested: Vec<ExactFunctionItem> = self
+            .items
+            .iter()
+            .map(|(code, function)| item(*code, function))
+            .collect();
+        let baseline_functions: Vec<_> = self
+            .functions
+            .iter()
+            .filter(|declaration| !self.absent_names.contains(&declaration.name.as_str()))
+            .cloned()
+            .collect();
+        let baseline_items: Vec<ExactFunctionItem> = self
+            .items
+            .iter()
+            .filter(|(code, _)| self.distinct_items.contains(code))
+            .map(|(code, function)| item(*code, function))
+            .collect();
+        let baseline = generate(package, &baseline_functions, &baseline_items);
+
+        let mut first: Option<quire_contract_codegen::ExactFunctionOracles> = None;
+        for order in permutations(&self.functions) {
+            let oracles = generate(package, &order, &requested);
+            match &first {
+                Some(first) => assert_eq!(first, &oracles, "request order changed the output"),
+                None => first = Some(oracles.clone()),
+            }
+            self.check_one(&oracles, &baseline);
+        }
+    }
+
+    fn check_one(
+        &self,
+        oracles: &quire_contract_codegen::ExactFunctionOracles,
+        baseline: &quire_contract_codegen::ExactFunctionOracles,
+    ) {
+        let lib = contents(oracles, "src/lib.rs");
+        let location_json = contents(oracles, "location-map.json");
+        for name in &self.absent_names {
+            assert!(
+                !lib.contains(&format!("{name:?}")),
+                "{name} is in src/lib.rs"
+            );
+            assert!(
+                !location_json.contains(&format!("{name:?}")),
+                "{name} is in location-map.json"
+            );
+            assert!(oracles
+                .location_map
+                .iter()
+                .all(|entry| entry.function != *name));
+        }
+        for code in &self.duplicate_items {
+            assert!(
+                matches!(
+                    disposition_for(oracles, *code),
+                    ClaimDisposition::Refused {
+                        refusal: ExactFunctionRefusal::DuplicateDeclaringNode { node_id }
+                    } if *node_id == code_id(FN_ADD)
+                ),
+                "item {code} is not DuplicateDeclaringNode: {:?}",
+                disposition_for(oracles, *code)
+            );
+        }
+        // No claim records a pair member's identity, and no generated claim shares an oracle
+        // symbol or origin index with another.
+        let mut symbols = Vec::new();
+        let mut indices = Vec::new();
+        for claim in &oracles.claim_map.items {
+            if let ClaimDisposition::Generated(generated) = &claim.result {
+                assert!(!self.pair_names.contains(&generated.function.as_str()));
+                symbols.push(generated.oracle_symbol.clone());
+                indices.push(format!("{:?}", generated.function_origin));
+            }
+        }
+        let distinct = (symbols.len(), indices.len());
+        symbols.sort();
+        symbols.dedup();
+        indices.sort();
+        indices.dedup();
+        assert_eq!((symbols.len(), indices.len()), distinct);
+        for code in &self.distinct_items {
+            assert!(
+                matches!(
+                    disposition_for(oracles, *code),
+                    ClaimDisposition::Generated(_)
+                ),
+                "distinct item {code} was not generated"
+            );
+            assert_eq!(
+                disposition_for(oracles, *code),
+                disposition_for(baseline, *code),
+                "item {code} differs from the request without the duplicates"
+            );
+        }
+    }
+}
+
+/// Trace: FR-021-AC-22, TC-031 step 9 fixture (i). Two declarations sharing one declaring node
+/// id and both admissible are both refused, whichever order they arrive in: neither enters
+/// `checked_package()`, the source or `location-map.json`, and each item naming one is
+/// `DuplicateDeclaringNode`, never `UnknownFunction`. A distinct-node function is generated
+/// unchanged.
+#[test]
+fn tc_031_ac22_fixture_i_both_bodies_admissible() {
+    let package = ext_corpus_package().admit();
+    DuplicateNodeFixture {
+        functions: vec![
+            function_add("pair_one"),
+            function_add("pair_two"),
+            function_eq("solo"),
+        ],
+        items: vec![
+            (ITEM_CALL_ADD, "pair_one"),
+            (ITEM_CALL_EQ, "pair_two"),
+            (ITEM_CALL_UNRELATED, "solo"),
+        ],
+        pair_names: vec!["pair_one", "pair_two"],
+        absent_names: vec!["pair_one", "pair_two"],
+        duplicate_items: vec![ITEM_CALL_ADD, ITEM_CALL_EQ],
+        distinct_items: vec![ITEM_CALL_UNRELATED],
+    }
+    .check(&package);
+}
+
+/// Trace: FR-021-AC-22, TC-031 step 9 fixture (ii). One declaration of the pair would be
+/// refused in Stage 1 (an undischargeable capability) and its same-node sibling is admissible:
+/// the sibling does not survive, and neither item reports `UnknownFunction`, nor the refused
+/// one's own Stage 1 reason.
+#[test]
+fn tc_031_ac22_fixture_ii_one_body_refused_and_sibling_admissible() {
+    let package = ext_corpus_package().admit();
+    DuplicateNodeFixture {
+        functions: vec![
+            on_node(function_capability("pair_one"), FN_ADD),
+            function_add("pair_two"),
+            function_eq("solo"),
+        ],
+        items: vec![
+            (ITEM_CALL_ADD, "pair_one"),
+            (ITEM_CALL_EQ, "pair_two"),
+            (ITEM_CALL_UNRELATED, "solo"),
+        ],
+        pair_names: vec!["pair_one", "pair_two"],
+        absent_names: vec!["pair_one", "pair_two"],
+        duplicate_items: vec![ITEM_CALL_ADD, ITEM_CALL_EQ],
+        distinct_items: vec![ITEM_CALL_UNRELATED],
+    }
+    .check(&package);
+}
+
+/// Trace: FR-021-AC-22, TC-031 step 9 fixture (iii). The pair also shares one name, and a third
+/// declaration with its own node id holds the same name: the third is refused as
+/// `AmbiguousFunctionName` and is absent from `checked_package()` and the location map, while
+/// items naming the shared name are `DuplicateDeclaringNode`, never `AmbiguousFunctionName`.
+#[test]
+fn tc_031_ac22_fixture_iii_shared_name_takes_the_node_id_refusal() {
+    let package = ext_corpus_package().admit();
+    DuplicateNodeFixture {
+        functions: vec![
+            function_add("shared"),
+            function_add("shared"),
+            function_unrelated("shared"),
+            function_eq("solo"),
+        ],
+        items: vec![(ITEM_CALL_ADD, "shared"), (ITEM_CALL_UNRELATED, "solo")],
+        pair_names: vec!["shared"],
+        absent_names: vec!["shared"],
+        duplicate_items: vec![ITEM_CALL_ADD],
+        distinct_items: vec![ITEM_CALL_UNRELATED],
+    }
+    .check(&package);
+}
+
+/// Trace: FR-021-AC-22, TC-031 step 9 fixture (iv). A declaration whose nested `call` names a
+/// member of the pair is refused as `UnknownCallee`, and a distinct-node function and an item
+/// naming each function are handled: the pair's items `DuplicateDeclaringNode`, the caller's
+/// item `UnknownCallee`, the distinct function's generated.
+#[test]
+fn tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee() {
+    let package = ext_corpus_package().admit();
+    let fixture = DuplicateNodeFixture {
+        functions: vec![
+            function_add("pair_one"),
+            function_add("pair_two"),
+            function_call_nested("caller", "pair_one"),
+            function_eq("solo"),
+        ],
+        items: vec![
+            (ITEM_CALL_ADD, "pair_one"),
+            (ITEM_CALL_EQ, "pair_two"),
+            (ITEM_CALL_NESTED, "caller"),
+            (ITEM_CALL_UNRELATED, "solo"),
+        ],
+        pair_names: vec!["pair_one", "pair_two"],
+        absent_names: vec!["pair_one", "pair_two", "caller"],
+        duplicate_items: vec![ITEM_CALL_ADD, ITEM_CALL_EQ],
+        distinct_items: vec![ITEM_CALL_UNRELATED],
+    };
+    fixture.check(&package);
+
+    let requested: Vec<ExactFunctionItem> = fixture
+        .items
+        .iter()
+        .map(|(code, function)| item(*code, function))
+        .collect();
+    for order in permutations(&fixture.functions) {
+        let oracles = generate(&package, &order, &requested);
+        assert!(matches!(
+            disposition_for(&oracles, ITEM_CALL_NESTED),
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::UnknownCallee { callee }
+            } if callee == "pair_one"
+        ));
+    }
 }
 
 /// Trace: FR-021-AC-19, TC-031. The emitted `src/lib.rs` of the main corpus
