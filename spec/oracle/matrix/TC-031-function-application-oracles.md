@@ -80,7 +80,15 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    the runtime builds every `Location` through `location_at`, which always sets an empty `path` — so
    step 7's request-side re-derivation is the only check `path` can have, and this test states that
    rather than implying a runtime cross-check covers both fields.
-8. Grep the generated crate's source and its claim map for any read of, branch on, or non-emptiness
+8. Count `unreachable!`, `panic!`, `todo!` and `unimplemented!`, in any delimiter form, in the emitted
+   source of every corpus oracle (FR-021-AC-19) and assert zero; assert each emitted scalar and
+   equality body ends its `Outcome` match with a catch-all returning
+   `Outcome::Refused(Refusal::CheckedInvariant)` after the four known arms (FR-021-AC-20); request
+   a `Negate` body and assert the typed generation refusal and no function source, and count the
+   same four macros in `src/oracle/function/mod.rs` and assert zero (FR-021-AC-21). The unknown
+   variant itself cannot be built from a test crate because the runtime enum is
+   `#[non_exhaustive]`, so the arm's text and the zero count are the evidence. 🚧 Planned.
+9. Grep the generated crate's source and its claim map for any read of, branch on, or non-emptiness
    assertion against `Evaluation.location` or `Evaluation.losses`; confirm none exists, and that
    both fields are simply discarded by the emitted oracle function's return path, since the
    runtime never populates either one regardless of what the applied body computed.
