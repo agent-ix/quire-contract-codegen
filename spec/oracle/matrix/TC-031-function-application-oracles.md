@@ -94,7 +94,7 @@ The authority-agreement leg (FR-021-AC-18) and the no-panic criteria (FR-021-AC-
    then end with an `Ok(_)` arm valued `Outcome::Refused(Refusal::CheckedInvariant)`
    (FR-021-AC-20). Request a `Negate` body and assert
    `ExactFunctionRefusal::UnsupportedOperator` and that the function is absent from the emitted
-   `checked_package()`; count `unreachable!`, `panic!`, `todo!` and `unimplemented!` in
+   `checked_package()`; count invocations of `unreachable!`, `panic!`, `todo!` and `unimplemented!`, comment lines not counted, in
    `src/oracle/function/mod.rs` and assert zero (FR-021-AC-21). The unknown variant itself cannot
    be built from a test crate because the runtime enum is `#[non_exhaustive]`, so the arm's text
    and the zero counts are the evidence. 🚧 Planned.

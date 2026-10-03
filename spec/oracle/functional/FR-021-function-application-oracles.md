@@ -191,8 +191,8 @@ come from the request, not from this generator's own inference.
 - If a function body's integer operator is not one of the binary `Add`, `Subtract` or
   `Multiply` (the unary `Negate`), then the generator shall refuse the body with
   `ExactFunctionRefusal::UnsupportedOperator` and omit that function from `checked_package()`.
-- The generator's own `src/oracle/function/mod.rs` shall contain no `unreachable!`, `panic!`,
-  `todo!` or `unimplemented!` arm over an operator or over a runtime enum.
+- The generator's own `src/oracle/function/mod.rs` shall contain no invocation of `unreachable!`,
+  `panic!`, `todo!` or `unimplemented!`, anywhere in the file; comment lines are not counted.
 - If a function's declared parameter type or result type reaches a `composite_type` of form
   `reference` at any depth, then the generator shall refuse every item naming that function as
   blocked on quire-spec-language#120, for the same reason FR-018-AC-7 refuses a `reference` operand:
@@ -244,7 +244,7 @@ come from the request, not from this generator's own inference.
 | FR-021-AC-18 | On every vector of the function-application corpus, the generated oracle's outcome, refusal and charge sequence are equal to `quire_spec_language::value::expression::CheckedPackage::call` this requirement's third agreement leg alongside AC-2's generated and native legs. | Test (TC-031) |
 | FR-021-AC-19 | The emitted `src/lib.rs` of the main corpus of `tests/it/exact_function_generation.rs` (`main_oracles()`, whose generated functions include the scalar `add_fn`, the equality `eq_fn` and the nested-call `call_fn`) and of its chain corpus (`chain_oracles()`) contains zero occurrences of `.unwrap(`, `.expect(`, `unreachable!`, `panic!`, `todo!` and `unimplemented!`, the macros in any delimiter form. | Test (TC-031) |
 | FR-021-AC-20 | In the emitted body of `add_fn` and of `eq_fn`, the `match` over the runtime operator's `Result<Outcome<_>, Refusal>` has arms for `Ok(Completed)` (rewrapped as `Value::Integer` or `Value::Boolean`), `Ok(Undefined)`, `Ok(Refused)`, `Ok(Incomplete)` and `Err(refusal)` (returned as `Outcome::Refused(refusal)`), and a final `Ok(_)` arm whose value is `Outcome::Refused(Refusal::CheckedInvariant)`. | Test (TC-031) |
-| FR-021-AC-21 | A request whose scalar body has operator `Negate` is refused with `ExactFunctionRefusal::UnsupportedOperator`, and that function does not appear in the emitted `checked_package()`; `src/oracle/function/mod.rs` contains zero `unreachable!`, `panic!`, `todo!` and `unimplemented!` occurrences. | Test (TC-031) |
+| FR-021-AC-21 | A request whose scalar body has operator `Negate` is refused with `ExactFunctionRefusal::UnsupportedOperator`, and that function does not appear in the emitted `checked_package()`; `src/oracle/function/mod.rs` contains zero invocations of `unreachable!`, `panic!`, `todo!` and `unimplemented!`, comment lines not counted. | Test (TC-031) |
 
 ### Mutations these criteria detect
 
