@@ -33,8 +33,8 @@ type: TestMatrix
 | FR-025 | FR-025-AC-2 through FR-025-AC-8 | TC-036 | 🚧 Planned |
 | FR-028 | FR-028-AC-1 through FR-028-AC-9 | TC-039 | 🚧 Planned |
 | FR-028 | FR-028-AC-12 | TC-039 | ✅ Covered (IR-277); the batch wall-clock rule, asserted by the `tc_043_*` batch tests, which are tagged to both TC-039 and TC-043 |
-| FR-029 | FR-029-AC-1 through FR-029-AC-6, FR-029-AC-8 through FR-029-AC-13 | TC-040 | 🚧 Planned; AC-8 and AC-9 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-13 is held on a QSL or owner ruling, with the setup errors `InvalidFunction`, `Name` and `DependencyLockError` |
-| FR-030 | FR-030-AC-1 through FR-030-AC-12 | TC-041 | 🚧 Planned; AC-9 waits on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-12 is held on a QSL or owner ruling, and AC-1 is held with it for that class |
+| FR-029 | FR-029-AC-1 through FR-029-AC-6, FR-029-AC-8 through FR-029-AC-14 | TC-040 | 🚧 Planned; AC-8, AC-9 and AC-13 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-14 is held on QSL's answer about `DependencyLockError::Duplicate` |
+| FR-030 | FR-030-AC-1 through FR-030-AC-13 | TC-041 | 🚧 Planned; AC-9 and AC-12 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-13 is held on QSL's answer about `DependencyLockError::Duplicate`, and AC-1 excludes that case |
 
 ## Test Case Summary
 
@@ -53,5 +53,5 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-043 | Verify Kani harness batching, the output cap and launcher cleanup | Integration | P0 | FR-017-AC-14, FR-017-AC-21, FR-017-AC-22, FR-017-AC-23, FR-017-AC-24, FR-017-AC-25 | ✅ Covered |
 | TC-036 | Verify the generated harness subject ABI | Integration | P0 | FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6, FR-025-AC-7, FR-025-AC-8 | 🚧 Planned |
 | TC-039 | Verify bounded proof ceilings, their inconclusive reasons and the proof subject | Integration | P0 | FR-028-AC-1, FR-028-AC-2, FR-028-AC-3, FR-028-AC-4, FR-028-AC-5, FR-028-AC-6, FR-028-AC-7, FR-028-AC-8, FR-028-AC-9, FR-028-AC-12 | 🚧 Planned |
-| TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6, FR-029-AC-8, FR-029-AC-9, FR-029-AC-10, FR-029-AC-11, FR-029-AC-12, FR-029-AC-13 | 🚧 Planned |
-| TC-041 | Verify the total map from a Contract IR Kani outcome to QSL's terminal value | Integration | P0 | FR-030-AC-1, FR-030-AC-2, FR-030-AC-3, FR-030-AC-4, FR-030-AC-5, FR-030-AC-6, FR-030-AC-7, FR-030-AC-8, FR-030-AC-9, FR-030-AC-10, FR-030-AC-11, FR-030-AC-12 | 🚧 Planned |
+| TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6, FR-029-AC-8, FR-029-AC-9, FR-029-AC-10, FR-029-AC-11, FR-029-AC-12, FR-029-AC-13, FR-029-AC-14 | 🚧 Planned |
+| TC-041 | Verify the total map from a Contract IR Kani outcome to QSL's terminal value | Integration | P0 | FR-030-AC-1, FR-030-AC-2, FR-030-AC-3, FR-030-AC-4, FR-030-AC-5, FR-030-AC-6, FR-030-AC-7, FR-030-AC-8, FR-030-AC-9, FR-030-AC-10, FR-030-AC-11, FR-030-AC-12, FR-030-AC-13 | 🚧 Planned |

@@ -31,8 +31,9 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 10. Map `falsified` with each CG-raised failure FR-029-AC-11 lists and inspect every
     `ReplayRefused` value the run produced.
 11. Map `falsified` under every replay settlement other than reproduced.
-12. HELD: map `falsified` with a setup refusal on data (a non-fault `CallSiteRefusal`,
-    `DependencyLockError`, `ReplayPackageError::InvalidFunction`, `FrameReplayError::Name`).
+12. Map `falsified` with a non-fault `CallSiteRefusal` and with a `DependencyLockError::Input`,
+    each bare and wrapped in `ReplayPackageError` and `FrameReplayError`.
+13. HELD: map `falsified` with `DependencyLockError::Duplicate`.
 
 ## Expected Results
 
@@ -47,12 +48,17 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 7. Each is `Inconclusive(ReplayParity)` carrying its `DisagreementCause` (FR-029-AC-8).
 8. `Inconclusive(ReplayRefused)` carrying the refusal's catalog code (FR-029-AC-9).
 9. Each is `Failed` (FR-029-AC-10).
-10. Each CG-raised failure is `Failed`, and every `ReplayRefused` value carries a code of QSL's
-    `ReplayRefusal` set (FR-029-AC-11).
+10. Each CG-raised failure, including `ReplayPackageError::InvalidFunction` and
+    `FrameReplayError::Name`, is `Failed`, and every `ReplayRefused` value carries a code a QSL
+    refusal value supplied (FR-029-AC-11).
 11. No value is `Refuted` (FR-029-AC-12).
-12. HELD on a QSL or owner ruling (FR-029-AC-13).
+12. Each is `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or
+    `DependencyInputRefusal::code()` of the refusal, and none is `Declined` (FR-029-AC-13).
+13. HELD on a QSL ruling (FR-029-AC-14).
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. Steps 7 and 8 wait on the unmerged QSL
-`Inconclusive` terminal value, and step 12 is held on a QSL or owner ruling (FR-029 Status).
+Planned. No outcome maps to QSL's terminal value at this revision. Steps 7, 8, 11 and 12, and the `ReplayRefused`
+inspection of step 10, wait on the unmerged QSL `Inconclusive` terminal value; step 9 and the
+`Failed` half of step 10 do not. Step 13 is held on QSL's answer about
+`DependencyLockError::Duplicate` (FR-029 Status).
