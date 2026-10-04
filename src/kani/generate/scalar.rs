@@ -777,22 +777,33 @@ mod tests {
     }
 
     /// The operand ranges of each operation are of its own arity and combine to the exact
-    /// extremes.
+    /// extremes, for small ranges and for operands at `i64::MIN` and `i64::MAX`, where the
+    /// results exceed `i64` and are exact in `i128`. This keeps the behaviour of the fixed-arity
+    /// operands that replaced the `reachable` arm NFR-005 removed.
     ///
-    /// Trace: NFR-005-AC-1, TC-042.
+    /// Trace: TC-042.
     #[test]
-    fn tc_042_ac1_operands_of_each_operation_have_its_own_arity_and_reach_exact_extremes() {
-        let range = |position: usize| -> Result<(i64, i64), ()> {
-            Ok(if position == 0 { (-2, 3) } else { (4, 5) })
-        };
-        let reach = |operation: ScalarOperation| {
+    fn tc_042_scalar_operands_have_their_own_arity_and_reach_exact_extremes() {
+        let reach = |operation: ScalarOperation, low: i64, high: i64, other: (i64, i64)| {
             operation
-                .operands(range)
+                .operands(|position| -> Result<(i64, i64), ()> {
+                    Ok(if position == 0 { (low, high) } else { other })
+                })
                 .map(|operands| (operands.ranges().len(), operands.reachable()))
         };
-        assert_eq!(reach(ScalarOperation::Negate), Ok((1, (-3, 2))));
-        assert_eq!(reach(ScalarOperation::Add), Ok((2, (2, 8))));
-        assert_eq!(reach(ScalarOperation::Subtract), Ok((2, (-7, -1))));
-        assert_eq!(reach(ScalarOperation::Multiply), Ok((2, (-10, 15))));
+        let small = |operation| reach(operation, -2, 3, (4, 5));
+        assert_eq!(small(ScalarOperation::Negate), Ok((1, (-3, 2))));
+        assert_eq!(small(ScalarOperation::Add), Ok((2, (2, 8))));
+        assert_eq!(small(ScalarOperation::Subtract), Ok((2, (-7, -1))));
+        assert_eq!(small(ScalarOperation::Multiply), Ok((2, (-10, 15))));
+
+        // With every operand over the whole `i64` range, written by hand in powers of two:
+        // `i64::MIN` is -2^63 and `i64::MAX` is 2^63 - 1.
+        let (p63, p64, p126) = (1i128 << 63, 1i128 << 64, 1i128 << 126);
+        let wide = |operation| reach(operation, i64::MIN, i64::MAX, (i64::MIN, i64::MAX));
+        assert_eq!(wide(ScalarOperation::Negate), Ok((1, (1 - p63, p63))));
+        assert_eq!(wide(ScalarOperation::Add), Ok((2, (-p64, p64 - 2))));
+        assert_eq!(wide(ScalarOperation::Subtract), Ok((2, (1 - p64, p64 - 1))));
+        assert_eq!(wide(ScalarOperation::Multiply), Ok((2, (p63 - p126, p126))));
     }
 }

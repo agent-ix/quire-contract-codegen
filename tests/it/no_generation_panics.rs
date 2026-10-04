@@ -21,9 +21,9 @@ use crate::kani_obligations::scalar_package;
 /// The file holding the one dated exception (NFR-005 Scope, IR-344).
 const CORPUS: &str = "src/kani/generate/corpus/bounded_kani_corpus.rs";
 
-/// Every file that holds a measured site, and the three files FR-014-AC-39, FR-018-AC-19 and
-/// FR-021-AC-21 name.
-const MUST_SCAN: [&str; 10] = [
+/// The seven files that hold a measured site, plus the files FR-014-AC-39, FR-018-AC-19 and
+/// FR-021-AC-21 name, deduplicated (`src/oracle/function/mod.rs` is in both): nine distinct files.
+const MUST_SCAN: [&str; 9] = [
     "src/oracle/function/mod.rs",
     "src/kani/generate/scalar.rs",
     CORPUS,
@@ -33,7 +33,6 @@ const MUST_SCAN: [&str; 10] = [
     "src/oracle/boolean_v1.rs",
     "src/oracle/scalar/mod.rs",
     "src/oracle/equality/mod.rs",
-    "src/oracle/function/mod.rs",
 ];
 
 /// The fewest files the walk must read.
