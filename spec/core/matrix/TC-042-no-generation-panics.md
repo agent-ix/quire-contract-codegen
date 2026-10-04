@@ -18,8 +18,9 @@ test can reach returns its typed value instead of aborting (NFR-005).
 1. Walk `src/` and scan every `.rs` file except a file its parent declares under `#[cfg(test)]`
    with `non_test_code_outside_literals` of `tests/common/panic_scan.rs`; assert that
    `panic_tokens_in` finds nothing, and that the walk read the files FR-014-AC-39, FR-018-AC-19 and
-   FR-021-AC-21 name, every file that holds a measured site, at least 60 files, and that the dated
-   `expect` exception of IR-344 was used exactly once (NFR-005-AC-1). Assert on a hand-built source that the helper keeps an
+   FR-021-AC-21 name, every file that holds a measured site, at least 60 files, and that it found exactly
+   one `expect` inside the body of `fn digest` of `impl CaseIdentity`, the dated IR-344 exception,
+   and none elsewhere in that file (NFR-005-AC-1). Assert on a hand-built source that the helper keeps an
    `unwrap` in code, drops one in a string literal, a comment and a `#[cfg(test)]` item, and keeps
    `abort` as a bare identifier.
 2. Hand `lower_scalar_claim` a claim with empty `checked_bounds`, and one whose first checked bound

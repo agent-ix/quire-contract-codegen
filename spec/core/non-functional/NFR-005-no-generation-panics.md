@@ -56,9 +56,13 @@ relationships:
   `src/kani/generate/corpus/bounded_kani_corpus.rs` is left to IR-344's layout step 1a (draft
   PR #222), which replaces its serialization and makes the failure reachable from input, refused as
   `KaniOutcomeKind::InvalidInput` with `kani_corpus_identity_unencodable`. Until that code lands the
-  scan allows exactly one `expect` in that file, and the scan asserts the allowance is used, so it
-  cannot hide a second one. The change that lands IR-344's `digest` removes the allowance; it
-  expires at that merge.
+  scan allows one `expect`, the one inside the body of `fn digest` of `impl CaseIdentity` in that
+  file: it locates that function's body, asserts it holds exactly one `expect` there, and allows
+  only that one. Any other `expect` in the file, including one in `render_artifacts`, fails the
+  scan, so a later merge cannot bring back a site this requirement fixed. The change that lands
+  IR-344's `digest` removes the allowance; it expires at that merge. Whatever that change
+  serializes in `render_artifacts`, `render_artifacts` carries the
+  `kani_corpus_serialization_failed` refusal this requirement names.
 
 ## Rationale
 
@@ -68,8 +72,8 @@ panic sites outside that cover: the twelve `unwrap`, `expect` and `unreachable!`
 reported, and an `assert_eq!` and a `debug_assert!` it did not. Each is behind an invariant an
 earlier pass establishes, or is a failure of plain data, but an invariant that is wrong, or that a
 later change breaks, turns a request into an abort of the whole generator with no refusal, no
-diagnostic and no partial output. The three oracle generators already hold the full rule and carry
-the same kind of invariants without a panic.
+diagnostic and no partial output. The scalar and equality generators already hold the full rule and
+carry the same kind of invariants without a panic.
 
 This change adds one public enum variant, `RoutedGenerationError::KaniRecordCountMismatch`
 (FR-022, interface-001), and one refusal code, `kani_corpus_serialization_failed`. It adds no other
@@ -105,7 +109,7 @@ Each site is named by function, not by line. The class is how the code must expr
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| NFR-005-AC-1 | Every `.rs` file under `src/`, except a file its parent module declares under `#[cfg(test)]`, contains zero panic tokens in its non-test code with comments, every `#[cfg(test)]` item and every string and character literal removed (`non_test_code_outside_literals`, a variant of `non_test_code` that `tests/common/panic_scan.rs` gains), except the one `expect` the dated exception of Scope allows in `src/kani/generate/corpus/bounded_kani_corpus.rs` until IR-344's `digest` lands. The tokens are the identifiers `unwrap`, `expect`, `unwrap_unchecked`, `unwrap_err`, `expect_err`, `unwrap_err_unchecked`, `panic_any` and `resume_unwind` however written (called, with whitespace before the paren, named on a path such as `Option::unwrap`, or imported); the macros `panic`, `unreachable`, `todo`, `unimplemented`, `assert`, `assert_eq`, `assert_ne`, `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form, with any whitespace before the `!` and any path prefix; and the identifier `abort` anywhere except as a method call (`.abort()`). The scan walks `src/` itself, so a file added later is scanned. It asserts that it read every file that holds a measured site (`src/oracle/function/mod.rs`, `src/kani/generate/scalar.rs`, `src/kani/generate/corpus/bounded_kani_corpus.rs`, `src/routed/capability.rs`, `src/routed/generate.rs`, `src/evidence/bound_coverage.rs` and `src/oracle/boolean_v1.rs`), the three files FR-014-AC-39, FR-018-AC-19 and FR-021-AC-21 name, and at least 60 files, and that the exception was used exactly once. | Test (TC-042) |
+| NFR-005-AC-1 | Every `.rs` file under `src/`, except a file its parent module declares under `#[cfg(test)]`, contains zero panic tokens in its non-test code with comments, every `#[cfg(test)]` item and every string and character literal removed (`non_test_code_outside_literals`, a variant of `non_test_code` that `tests/common/panic_scan.rs` gains), except the one `expect` inside the body of `fn digest` of `impl CaseIdentity` in `src/kani/generate/corpus/bounded_kani_corpus.rs` that the dated exception of Scope allows until IR-344's `digest` lands; any other `expect` in that file, `render_artifacts` included, fails. The tokens are the identifiers `unwrap`, `expect`, `unwrap_unchecked`, `unwrap_err`, `expect_err`, `unwrap_err_unchecked`, `panic_any` and `resume_unwind` however written (called, with whitespace before the paren, named on a path such as `Option::unwrap`, or imported); the macros `panic`, `unreachable`, `todo`, `unimplemented`, `assert`, `assert_eq`, `assert_ne`, `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form, with any whitespace before the `!` and any path prefix; and the identifier `abort` anywhere except as a method call (`.abort()`). The scan walks `src/` itself, so a file added later is scanned. It asserts that it read every file that holds a measured site (`src/oracle/function/mod.rs`, `src/kani/generate/scalar.rs`, `src/kani/generate/corpus/bounded_kani_corpus.rs`, `src/routed/capability.rs`, `src/routed/generate.rs`, `src/evidence/bound_coverage.rs` and `src/oracle/boolean_v1.rs`), the three files FR-014-AC-39, FR-018-AC-19 and FR-021-AC-21 name, and at least 60 files, and that it found exactly one `expect` inside that `digest` body. | Test (TC-042) |
 | NFR-005-AC-2 | `lower_scalar_claim` returns `Err(ScalarLoweringRefusal::NoRenderer)` for a claim whose `checked_bounds` is empty and for a claim whose first checked bound has no `IntegerRange` among the derived domains, each built directly against the function, and `classify_claim` reports each as `UnsupportedObligation::OperationNotRendered`. | Test (TC-042) |
 | NFR-005-AC-3 | `ItemSettlement::warning` returns `None` for a `Disposition::Unsupported` carrying each of `Cause::AbsentKind`, `UnknownKind`, `AbsentExtent`, `UnknownBackend`, `InconsistentCandidates` and `AmbiguousBackend`, and still returns its warning for each `unsupported_projection` cause. | Test (TC-042) |
 | NFR-005-AC-4 | With a coverage export supplied, `observe_clause` given a map whose oracle-evaluation region has no probe returns a row with a `MapMismatch` diagnostic with the message `missing semantic probe`, no classification and an `evaluation_count` of `None`, and given one whose consequent region has no probe returns the same diagnostic with no classification. With no coverage export it returns `UnavailableObservation` for the same maps. | Test (TC-042) |
