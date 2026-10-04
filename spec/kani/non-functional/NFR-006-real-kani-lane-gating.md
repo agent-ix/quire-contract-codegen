@@ -19,7 +19,8 @@ relationships:
   `src/kani/**`, `src/oracle/**`, `src/routed/**`, `src/replay/**`, `src/core/**`,
   `src/publication/**`, `tests/it/kani_*.rs`, `tests/it/skeleton_spine.rs`,
   `tests/it/bounded_kani_corpus.rs`, `tests/it/scratch_crate.rs`,
-  `tests/exact_scalar_support/package.rs`, `tests/state_frame_support/**`, `Cargo.toml` and
+  `tests/exact_scalar_support/package.rs`, `tests/checked_package_support/base.rs`,
+  `tests/state_frame_support/**`, `Cargo.toml` and
   `Cargo.lock`.
 - The `make kani-scope` target shall read the paths a change touches against the merge base with
   `origin/main`, with rename detection off so that a renamed file reports its old and its new path.
@@ -45,8 +46,8 @@ relationships:
 - If a pull request touches a path in the Kani-touching set, then the merger shall not merge it until
   its body carries an evidence line with `result=passed`, `tree=clean` and a `head` equal to the pull
   request's head commit.
-- If `origin/main` holds a commit that touches the Kani-touching set and the pull request's head does
-  not contain it, then the merger shall not merge the pull request until the head contains it and
+- If a pull request touches a path in the Kani-touching set, `origin/main` holds a commit that touches
+  the set and the pull request's head does not contain it, then the merger shall not merge the pull request until the head contains it and
   `make kani-gate` has passed on the new head.
 - If a pull request touches a path in the Kani-touching set and the lane did not run, then the pull
   request body shall carry `kani-gate: not run: <reason>`, and the merge rule above still holds.
@@ -57,6 +58,8 @@ relationships:
 - When a version tag is about to be pushed, the person pushing it shall run `make kani-gate` on the
   tagged commit and record the evidence line in the release ticket.
 - The `make ci` target shall not depend on `kani-gate` or `kani`.
+- The Kani-touching set shall contain the target of every `include!` and `#[path]` found in a file of
+  the set.
 - The set of tests marked `#[ignore = "kani lane: ..."]` shall equal the set of `#[ignore]`d tests
   that the `make kani` filters select.
 
@@ -74,7 +77,9 @@ The Kani-touching set is the code the lane reaches: the lane's tests call genera
 `src/kani`, `src/oracle` and `src/routed`, decode and replay through `src/replay`, write bundles
 through `src/publication` (`kani_witness_join`), and reach their harness fixtures through
 `tests/it/scratch_crate.rs` (which copies `Cargo.lock` into every scratch crate) and the `#[path]`
-modules `tests/exact_scalar_support/package.rs` and `tests/state_frame_support/**`. `src/core/**` is
+modules `tests/exact_scalar_support/package.rs` and `tests/state_frame_support/**`, the first of
+which `include!`s `tests/checked_package_support/base.rs` (measured at this revision: the only
+`include!` or `#[path]` target reachable from a lane file beyond those listed). `src/core/**` is
 in the set because harness names and identity come from it. `src/strategy/**` and `src/evidence/**`
 are out because no module of `src/kani`, `src/oracle`, `src/routed`, `src/replay`, `src/core` or
 `src/publication` imports them and no lane test calls their entry points (measured by search at
@@ -149,7 +154,7 @@ who may record that, is an owner decision (Open decisions); until the owner rule
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| NFR-006-AC-1 | `make kani-scope` prints `required` and the path for each of `src/kani/generate/negotiate.rs`, `src/oracle/boolean_v1.rs`, `src/routed/generate.rs`, `src/replay/witness.rs`, `src/core/identity.rs`, `src/publication/mod.rs`, `tests/it/kani_batching.rs`, `tests/it/skeleton_spine.rs`, `tests/it/bounded_kani_corpus.rs`, `tests/it/kani_obligations_state_frame.rs`, `tests/it/scratch_crate.rs`, `tests/exact_scalar_support/package.rs`, `tests/state_frame_support/model.rs`, `Cargo.toml` and `Cargo.lock`, each fed alone. | Test (TC-045) |
+| NFR-006-AC-1 | `make kani-scope` prints `required` and the path for each of `src/kani/generate/negotiate.rs`, `src/oracle/boolean_v1.rs`, `src/routed/generate.rs`, `src/replay/witness.rs`, `src/core/identity.rs`, `src/publication/mod.rs`, `tests/it/kani_batching.rs`, `tests/it/skeleton_spine.rs`, `tests/it/bounded_kani_corpus.rs`, `tests/it/kani_obligations_state_frame.rs`, `tests/it/scratch_crate.rs`, `tests/exact_scalar_support/package.rs`, `tests/checked_package_support/base.rs`, `tests/state_frame_support/model.rs`, `Cargo.toml` and `Cargo.lock`, each fed alone. | Test (TC-045) |
 | NFR-006-AC-2 | `make kani-scope` prints `not required` for each of `spec/kani/functional/FR-017-kani-execution-evidence.md`, `reviews/REV-018-bound-coverage-observations.md`, `src/strategy/mod.rs`, `src/evidence/mod.rs`, `Makefile` and `.github/workflows/ci.yml`, each fed alone. | Test (TC-045) |
 | NFR-006-AC-3 | A rename of `src/kani/old.rs` to `src/strategy/new.rs`, and a rename of `src/strategy/old.rs` to `src/kani/new.rs`, each print `required`. | Test (TC-045) |
 | NFR-006-AC-4 | `make -n kani` and `make -n kani-gate` expand to the same `cargo test` command line, and that line holds each of the six filters `kani_obligations`, `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and `kani_batching`. | Test (TC-045) |
@@ -161,6 +166,7 @@ who may record that, is an owner decision (Open decisions); until the owner rule
 | NFR-006-AC-10 | With no `cargo-kani` launcher `make kani-gate` starts no test, prints `kani-gate: not run: launcher absent` and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-11 | The tests marked `#[ignore = "kani lane: ..."]` in `tests/it` are exactly the `#[ignore]`d tests of `tests/it` whose path holds one of the `make kani` filters. | Test (TC-045) |
 | NFR-006-AC-12 | `make -n ci` expands to no `kani` or `kani-gate` command. | Test (TC-045) |
+| NFR-006-AC-18 | Every `include!` and `#[path]` target named in a file of `tests/it` that holds a lane test, and in each file those name in turn, matches a pattern of the Kani-touching set. | Test (TC-045) |
 | NFR-006-AC-13 | The body of a merged pull request that touched the Kani-touching set carries a `kani-gate` line with `result=passed`, `tree=clean` and a `head` equal to the pull request's last commit. | Inspection |
 | NFR-006-AC-14 | The head of a merged pull request that touched the Kani-touching set contains every commit of `origin/main` that touched the set at the time of the merge. | Inspection |
 | NFR-006-AC-15 | The body of a pull request that touched the Kani-touching set and ran no lane carries `kani-gate: not run: <reason>`, does not state that the real-Kani lane verified the change, and the pull request is unmerged. | Inspection |
