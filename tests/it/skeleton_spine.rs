@@ -20,10 +20,11 @@ use std::{fs, path::PathBuf};
 
 use qsl_replay::WitnessValue;
 use qsl_replay::{
-    call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, DependencyInput,
-    DependencySelectionsCause, DigestDomain, DigestRecord, Identifier, ObligationIdentity,
-    QualifiedName, ReplayRefusal, ReplaySource, ScalarLimits, SourceIdentity, StageLimits, Verdict,
-    WireNodeId, WitnessSettlement, MAX_ENCODED_BYTES,
+    call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, Code, DependencyInput,
+    DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
+    DisagreementCause, Identifier, ObligationIdentity, QualifiedName, ReplayRefusal, ReplaySource,
+    ScalarLimits, SourceIdentity, StageLimits, Verdict, WireNodeId, WitnessSettlement,
+    MAX_ENCODED_BYTES,
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample,
@@ -93,7 +94,7 @@ fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
 }
 
 /// The proving run's lock for the native twin `source`: unlimited stand-in limits, because no
-/// proving run carries limits, and a stand-in backend manifest.
+/// proving run carries limits.
 fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     let s1 = ScalarLimits {
         text_input_bytes: u64::try_from(MAX_ENCODED_BYTES).unwrap(),
@@ -102,10 +103,6 @@ fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     ReplayInputs {
         source: locked(IDENTITY, source.as_bytes()),
         dependencies,
-        backend_manifest: DigestRecord::mint(
-            DigestDomain::ToolManifestJcsV1,
-            ByteDigest::of(b"kani").as_bytes(),
-        ),
         accounting_limits: UNLIMITED,
         stage_limits: StageLimits {
             s1,
@@ -346,8 +343,7 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     let mut shared = dependency_lock();
     shared.identity = "test/mmm".to_owned();
     shared.source = locked("lib-mmm", b"a dependency source");
-    let mut lock_inputs = inputs(&native, vec![lock.clone(), shared, earlier]);
-    lock_inputs.backend_manifest = DigestRecord::mint(DigestDomain::VerificationJcs, [9; 32]);
+    let lock_inputs = inputs(&native, vec![lock.clone(), shared, earlier]);
     let package = ReplayPackage::new(lock_inputs, FUNCTION).expect("the twin compiles");
     let wire = request_of(&package, ReplaySource::Input(Vec::new()));
 
@@ -357,10 +353,8 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
         .map(|d| d.identity.as_str())
         .collect();
     assert_eq!(identities, ["test/aaa", "test/mmm", "test/units"]);
-    assert_eq!(
-        wire.backend.1.as_deref(),
-        Some(DigestDomain::VerificationJcs.as_str())
-    );
+    // The backend member is the identity string alone: no manifest digest travels with it.
+    assert_eq!(wire.backend, "kani");
     // Destructured with no `..`: the entry is exactly the identity, package id and sources the
     // wire carries, so a member added back (a `version`) fails to compile here.
     let qsl_replay::DependencyEntryWire {
@@ -408,10 +402,11 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     assert!(without.dependencies.is_empty());
 }
 
-/// A lock that selects one library twice has no admitted request, so the package is refused
-/// rather than emitting an entry list QSL refuses.
+/// A lock whose only defect is one library identity selected twice has no admitted request: QSL's
+/// `DependencyInput::new` refuses it as `DuplicateIdentity` (code `invalid_package`), and it
+/// arrives as `DependencyLockError::Input`. This crate carries no duplicate check of its own.
 ///
-/// Trace: TC-026
+/// Trace: FR-016-AC-24, TC-026
 #[test]
 fn tc_026_a_lock_repeating_a_dependency_is_refused() {
     let refusal = ReplayPackage::new(
@@ -422,14 +417,14 @@ fn tc_026_a_lock_repeating_a_dependency_is_refused() {
         FUNCTION,
     )
     .expect_err("the repeated identity is refused");
+    let ReplayPackageError::Dependencies(DependencyLockError::Input(input)) = &refusal else {
+        panic!("expected a refusal from QSL's dependency input, got {refusal}");
+    };
     assert!(
-        matches!(
-            &refusal,
-            ReplayPackageError::Dependencies(DependencyLockError::Duplicate { identity })
-                if identity == "test/units"
-        ),
-        "{refusal}"
+        matches!(input, DependencyInputRefusal::DuplicateIdentity { .. }),
+        "{input}"
     );
+    assert_eq!(input.code(), Code::InvalidPackage);
 }
 
 const UNITS_IDENTITY: &str = "test:units";
@@ -1086,13 +1081,7 @@ fn tc_026_a_counterexample_the_twin_holds_is_evidence_failure() {
     let package = compile_native_twin(&native_source(HEALTHY_TWIN), FUNCTION);
     let verdict = replay_counterexample(&harness.identity, &playback(&harness, 1, 5), &package)
         .expect("the replay settles");
-    assert_eq!(
-        verdict,
-        ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
-            settlement: WitnessSettlement::Inconclusive,
-            category: Category::Success,
-        })
-    );
+    assert_eq!(verdict, not_reproduced());
 }
 
 /// The replay verdict is a function of the exact witness values: the twin that is false only at
@@ -1127,11 +1116,16 @@ fn tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values() {
     );
 }
 
-/// The verdict of a replay that ran and settled `inconclusive` because the twin holds the clause.
+/// The verdict of a replay that ran and settled `inconclusive` because the twin holds the clause:
+/// the proving run's verdict was a violation and the replay's a success.
 fn not_reproduced() -> ReplayVerdict {
     ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
         settlement: WitnessSettlement::Inconclusive,
         category: Category::Success,
+        disagreement: Some(DisagreementCause::Verdicts {
+            proved: violation(),
+            replayed: success(),
+        }),
     })
 }
 
@@ -1284,9 +1278,6 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
     assert_eq!(
         replay_counterexample(&harness.identity, counterexample, &healthy_twin)
             .expect("QSL settles the replay"),
-        ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
-            settlement: WitnessSettlement::Inconclusive,
-            category: Category::Success,
-        })
+        not_reproduced()
     );
 }

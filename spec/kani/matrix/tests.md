@@ -33,8 +33,10 @@ type: TestMatrix
 | FR-025 | FR-025-AC-2 through FR-025-AC-8 | TC-036 | 🚧 Planned |
 | FR-028 | FR-028-AC-1 through FR-028-AC-9 | TC-039 | 🚧 Planned |
 | FR-028 | FR-028-AC-12 | TC-039 | ✅ Covered (IR-277); the batch wall-clock rule, asserted by the `tc_043_*` batch tests, which are tagged to both TC-039 and TC-043 |
-| FR-029 | FR-029-AC-1 through FR-029-AC-6, FR-029-AC-8 through FR-029-AC-14 | TC-040 | 🚧 Planned; AC-8, AC-9, AC-13 and AC-14 wait on QSL's unmerged `Inconclusive` terminal value (IR-465) |
-| FR-030 | FR-030-AC-1 through FR-030-AC-13 | TC-041 | 🚧 Planned; AC-9, AC-12 and AC-13 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-2 asserts the cause only and is buildable now |
+| FR-029 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-4 through FR-029-AC-6, FR-029-AC-8, FR-029-AC-9, FR-029-AC-11 through FR-029-AC-14 | TC-040 | ✅ Covered (IR-465); `run_terminal_value` in `kani/terminal.rs`, with the `From` conversions in `replay/` from each error the replay path returns, asserted over QSL's own refusal values; the `Inconclusive` terminal value is merged in QSL |
+| FR-029 | FR-029-AC-3 | TC-040 | 🚧 Planned; the timed-out and exhausted-unwind-bound reasons are asserted, but `KaniInconclusiveReason` has no memory-exhausted reason until FR-028-AC-3 adds it, so the criterion is not backed as a whole |
+| FR-029 | FR-029-AC-10 | TC-040 | 🚧 Planned; the fault readings (`ReplayRefusal::Fault`, `AdmissionFailure::Fault`, `CallSiteRefusal::Fault`, bare and wrapped) are built in the map and its conversions, but no test constructs a QSL `InternalFault`: `qsl-replay` does not re-export the type and this crate may depend on `qsl-replay` alone, so a fault value is unreachable from a test here |
+| FR-030 | FR-030-AC-1 through FR-030-AC-13 | TC-041 | 🚧 Planned; the map is one `match` over every `KaniOutcomeKind`, and `Refused`, `InvalidInput` and `IncompleteInput` must map to `Declined`, whose QSL value now carries a `DeclineCode` with only a QSL catalog arm until IR-605 and QSL-351 add IR's arm; IR's `kani_*` cause is not a QSL catalog code, so no total map is buildable, and none is written |
 
 ## Test Case Summary
 
@@ -53,5 +55,5 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-043 | Verify Kani harness batching, the output cap and launcher cleanup | Integration | P0 | FR-017-AC-14, FR-017-AC-21, FR-017-AC-22, FR-017-AC-23, FR-017-AC-24, FR-017-AC-25 | ✅ Covered |
 | TC-036 | Verify the generated harness subject ABI | Integration | P0 | FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6, FR-025-AC-7, FR-025-AC-8 | 🚧 Planned |
 | TC-039 | Verify bounded proof ceilings, their inconclusive reasons and the proof subject | Integration | P0 | FR-028-AC-1, FR-028-AC-2, FR-028-AC-3, FR-028-AC-4, FR-028-AC-5, FR-028-AC-6, FR-028-AC-7, FR-028-AC-8, FR-028-AC-9, FR-028-AC-12 | 🚧 Planned |
-| TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6, FR-029-AC-8, FR-029-AC-9, FR-029-AC-10, FR-029-AC-11, FR-029-AC-12, FR-029-AC-13, FR-029-AC-14 | 🚧 Planned |
+| TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6, FR-029-AC-8, FR-029-AC-9, FR-029-AC-10, FR-029-AC-11, FR-029-AC-12, FR-029-AC-13, FR-029-AC-14 | 🚧 Planned; every criterion but FR-029-AC-3 and FR-029-AC-10 is covered in the Functional Requirement Coverage table above |
 | TC-041 | Verify the total map from a Contract IR Kani outcome to QSL's terminal value | Integration | P0 | FR-030-AC-1, FR-030-AC-2, FR-030-AC-3, FR-030-AC-4, FR-030-AC-5, FR-030-AC-6, FR-030-AC-7, FR-030-AC-8, FR-030-AC-9, FR-030-AC-10, FR-030-AC-11, FR-030-AC-12, FR-030-AC-13 | 🚧 Planned |

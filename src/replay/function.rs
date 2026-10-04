@@ -12,20 +12,26 @@ use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
     call_site, replay, ByteDigest, CallSite, CallSiteRefusal, Category, DependencyEntryWire,
-    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, FunctionSite, Identifier,
-    MalformedTranscript, ObligationIdentity, QualifiedName, ReplayRefusal, ReplayRequestWire,
-    ReplayResult, ReplaySource, ScalarLimits, SourceIdentity, StageLimits, StateEnvironment,
-    SuppliedLibrary, Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
+    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
+    FunctionSite, Identifier, MalformedTranscript, ObligationIdentity, QualifiedName,
+    ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource, ScalarLimits, SourceIdentity,
+    StageLimits, StateEnvironment, SuppliedLibrary, Witness, WitnessArmResult, WitnessSettlement,
+    WitnessValue,
 };
 
 use crate::{
     kani::identity::KaniObligationIdentity,
     kani::output::playback::DecodeFailure,
+    kani::terminal::ReplaySettlement,
     replay::{
         obligation::{contract_arguments, function_contract_identity, ObligationIdentityError},
         witness::{decode_falsification, first_out_of_domain},
     },
 };
+
+/// The request's `backend` member: the identity of the backend that found the counterexample.
+/// QSL records it and does not interpret it (AD-002); the only backend this crate runs is Kani.
+const BACKEND_IDENTITY: &str = "kani";
 
 /// One parameter of the function the replay selects: the harness argument name a decoded value
 /// carries, and the parameter's node id as 64 lowercase hex digits.
@@ -222,8 +228,6 @@ pub struct ReplayInputs {
     pub source: LockedSource,
     /// The proved package lock's dependency selections, each with its own source.
     pub dependencies: Vec<DependencyLock>,
-    /// The digest of the tool manifest of the backend that found the counterexample.
-    pub backend_manifest: DigestRecord,
     /// The limits the replay run itself is charged against.
     pub accounting_limits: ScalarLimits,
     /// The S1 to S4 stage limits of the proving run.
@@ -233,12 +237,8 @@ pub struct ReplayInputs {
 /// Why a lock's dependency selections are not a dependency input QSL admits.
 #[derive(Debug)]
 pub enum DependencyLockError {
-    /// Two dependency selections name the same library; QSL admits each identity once.
-    Duplicate {
-        /// The repeated library identity.
-        identity: String,
-    },
-    /// The selections are no dependency input: for example two libraries share a source owner.
+    /// The selections are no dependency input QSL's `DependencyInput::new` admits: a library
+    /// under an empty identity, a repeated identity or two libraries sharing a source owner.
     /// A library sharing the unit's owner is refused later, by the call site, as
     /// [`ReplayPackageError::CallSite`].
     Input(DependencyInputRefusal),
@@ -247,12 +247,6 @@ pub enum DependencyLockError {
 impl fmt::Display for DependencyLockError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Duplicate { identity } => {
-                write!(
-                    f,
-                    "the lock selects the dependency `{identity}` more than once"
-                )
-            }
             Self::Input(refusal) => {
                 write!(
                     f,
@@ -294,20 +288,12 @@ impl fmt::Display for ReplayPackageError {
 impl std::error::Error for ReplayPackageError {}
 
 impl ReplayInputs {
-    /// The lock with its dependencies in the strictly ascending identity order QSL admits, each
-    /// identity once, and the dependency input the same selections make.
+    /// The lock with its dependencies in the ascending identity order the request carries, and the
+    /// dependency input the same selections make. QSL's `DependencyInput::new` refuses an empty,
+    /// repeated or shared-owner selection; this adapter checks none of those itself.
     pub(crate) fn admit(mut self) -> Result<(Self, DependencyInput), DependencyLockError> {
         self.dependencies
             .sort_by(|left, right| left.identity.cmp(&right.identity));
-        if let Some(pair) = self
-            .dependencies
-            .windows(2)
-            .find(|pair| pair[0].identity == pair[1].identity)
-        {
-            return Err(DependencyLockError::Duplicate {
-                identity: pair[0].identity.clone(),
-            });
-        }
         let libraries = self
             .dependencies
             .iter()
@@ -377,11 +363,7 @@ impl ReplayInputs {
             selected_function: selected,
             source,
             obligation_identity,
-            backend: (
-                "kani".to_owned(),
-                Some(self.backend_manifest.domain().as_str().to_owned()),
-                self.backend_manifest.hex(),
-            ),
+            backend: BACKEND_IDENTITY.to_owned(),
             state_environment: StateEnvironment::new(Vec::new()),
             accounting_limits: self.accounting_limits,
             stage_limits: self.stage_limits,
@@ -523,6 +505,9 @@ pub enum EvidenceFailureCause {
         settlement: WitnessSettlement,
         /// The category QSL evaluated.
         category: Category,
+        /// QSL's typed disagreement cause: present exactly when the settlement is
+        /// `Inconclusive`.
+        disagreement: Option<DisagreementCause>,
     },
 }
 
@@ -534,6 +519,85 @@ pub enum ReplayVerdict {
     Reproduced,
     /// The counterexample is not valid evidence.
     EvidenceFailure(EvidenceFailureCause),
+}
+
+/// A replay setup refusal, read as the settlement of a falsified run (FR-029): a fault is a
+/// fault, and every other refusal is a refusal on data carrying the code QSL's value supplies.
+impl<'a> From<&'a CallSiteRefusal> for ReplaySettlement<'a> {
+    fn from(refusal: &'a CallSiteRefusal) -> Self {
+        match refusal {
+            CallSiteRefusal::Fault(_) => Self::Fault,
+            CallSiteRefusal::Compile { .. }
+            | CallSiteRefusal::ModelIntake { .. }
+            | CallSiteRefusal::DependencyInput(_)
+            | CallSiteRefusal::Import { .. }
+            | CallSiteRefusal::Dependency { .. }
+            | CallSiteRefusal::UnknownFunction { .. }
+            | CallSiteRefusal::UnknownOperation { .. }
+            | CallSiteRefusal::UnknownClause { .. } => Self::SetupRefused(refusal.code()),
+        }
+    }
+}
+
+impl<'a> From<&'a DependencyLockError> for ReplaySettlement<'a> {
+    fn from(error: &'a DependencyLockError) -> Self {
+        match error {
+            DependencyLockError::Input(refusal) => Self::SetupRefused(refusal.code()),
+        }
+    }
+}
+
+impl<'a> From<&'a ReplayPackageError> for ReplaySettlement<'a> {
+    fn from(error: &'a ReplayPackageError) -> Self {
+        match error {
+            ReplayPackageError::InvalidFunction { .. } => Self::CgDefect,
+            ReplayPackageError::Dependencies(cause) => cause.into(),
+            ReplayPackageError::CallSite(refusal) => refusal.as_ref().into(),
+        }
+    }
+}
+
+impl<'a> From<&'a SpineReplayError> for ReplaySettlement<'a> {
+    fn from(error: &'a SpineReplayError) -> Self {
+        match error {
+            SpineReplayError::UnboundArgument { .. }
+            | SpineReplayError::FieldDelimiter
+            | SpineReplayError::Transcript(_)
+            | SpineReplayError::WrongArm
+            | SpineReplayError::Identity(_) => Self::CgDefect,
+            SpineReplayError::Refused(refusal) => Self::Refused(refusal),
+        }
+    }
+}
+
+impl<'a> From<&'a EvidenceFailureCause> for ReplaySettlement<'a> {
+    fn from(cause: &'a EvidenceFailureCause) -> Self {
+        match cause {
+            // A playback that does not type against the persisted bindings, and a value outside
+            // the harness proof bound, are this repository's defects.
+            EvidenceFailureCause::Decode(_) | EvidenceFailureCause::Domain { .. } => Self::CgDefect,
+            EvidenceFailureCause::Verdict {
+                disagreement: Some(cause),
+                ..
+            } => Self::Disagreement(cause),
+            // QSL settles a disagreement with its cause. A settlement that carries none is a
+            // reproduction in a category other than `violation` (FR-016-AC-13): the replay
+            // agreed with the run yet evaluated no violation. It is neither a refutation nor a
+            // disagreement QSL typed, and no cause is invented for it, so it reads as a defect.
+            EvidenceFailureCause::Verdict {
+                disagreement: None, ..
+            } => Self::CgDefect,
+        }
+    }
+}
+
+impl<'a> From<&'a ReplayVerdict> for ReplaySettlement<'a> {
+    fn from(verdict: &'a ReplayVerdict) -> Self {
+        match verdict {
+            ReplayVerdict::Reproduced => Self::Reproduced,
+            ReplayVerdict::EvidenceFailure(cause) => cause.into(),
+        }
+    }
 }
 
 /// Decodes `transcript` against `identity`, checks every value against its declared domain,
@@ -591,13 +655,21 @@ pub fn replay_counterexample_through(
         |source| package.request_for(obligation, source),
         &mut execute,
     )?;
-    Ok(verdict_of(result.settlement(), result.category()))
+    Ok(verdict_of(
+        result.settlement(),
+        result.category(),
+        result.disagreement(),
+    ))
 }
 
 /// The verdict one witness-arm settlement decides: only an agreement with backend evidence in
 /// the `violation` category reproduces the backend's falsification; every other settlement is
-/// evidence failure.
-fn verdict_of(settlement: WitnessSettlement, category: Category) -> ReplayVerdict {
+/// evidence failure, carrying QSL's disagreement cause when it has one.
+fn verdict_of(
+    settlement: WitnessSettlement,
+    category: Category,
+    disagreement: Option<&DisagreementCause>,
+) -> ReplayVerdict {
     match (settlement, category) {
         (WitnessSettlement::ReproducedWithEvaluatedWitness, Category::Violation) => {
             ReplayVerdict::Reproduced
@@ -608,6 +680,7 @@ fn verdict_of(settlement: WitnessSettlement, category: Category) -> ReplayVerdic
         ) => ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
             settlement,
             category,
+            disagreement: disagreement.cloned(),
         }),
     }
 }
@@ -653,7 +726,6 @@ mod tests {
                 bytes: UNIT.as_bytes().to_vec(),
             },
             dependencies: Vec::new(),
-            backend_manifest: DigestRecord::mint(DigestDomain::ToolManifestJcsV1, [0; 32]),
             accounting_limits: limits,
             stage_limits: StageLimits {
                 s1: ScalarLimits {
@@ -743,7 +815,7 @@ mod tests {
     fn only_a_reproduced_violation_reproduces() {
         use WitnessSettlement::{Inconclusive, ReproducedWithEvaluatedWitness as Reproduced};
         assert_eq!(
-            verdict_of(Reproduced, Category::Violation),
+            verdict_of(Reproduced, Category::Violation, None),
             ReplayVerdict::Reproduced
         );
         for (settlement, category) in [
@@ -752,10 +824,11 @@ mod tests {
             (Inconclusive, Category::Success),
         ] {
             assert_eq!(
-                verdict_of(settlement, category),
+                verdict_of(settlement, category, None),
                 ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
                     settlement,
-                    category
+                    category,
+                    disagreement: None,
                 }),
                 "{settlement:?} {category:?}"
             );

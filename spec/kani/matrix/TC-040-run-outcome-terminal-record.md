@@ -59,6 +59,8 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. Steps 7, 8, 11, 12 and 13, and the `ReplayRefused`
-inspection of step 10, wait on the unmerged QSL `Inconclusive` terminal value; step 9 and the
-`Failed` half of step 10 do not.
+Partly covered. Steps 1, 2, 4 to 8 and 10 to 13 are tests of `tests/it/terminal_map.rs`. Step 3
+asserts the timed-out and exhausted-unwind-bound reasons only, because no memory-exhausted reason
+exists until FR-028-AC-3 adds it. Step 9 is not tested: it needs a QSL `InternalFault`, which
+`qsl-replay` does not re-export, so a fault value cannot be built in this repository. FR-029-AC-3
+and FR-029-AC-10 stay planned for those two reasons.

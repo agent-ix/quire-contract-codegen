@@ -30,8 +30,8 @@ const DIRECTORIES: [&str; 8] = [
     "strategy",
 ];
 
-/// Every module file of the AD's module-to-subsystem map that exists in this layout. The terminal
-/// map, the one-generator spec and renderer, and the routed adapter are created by later steps.
+/// Every module file of the AD's module-to-subsystem map that exists in this layout. The
+/// one-generator spec and renderer, and the routed adapter, are created by later steps.
 const MODULE_FILES: &[&str] = &[
     "core/artifact.rs",
     "core/diagnostic.rs",
@@ -54,6 +54,7 @@ const MODULE_FILES: &[&str] = &[
     "kani/census.rs",
     "kani/classify.rs",
     "kani/identity.rs",
+    "kani/terminal.rs",
     "kani/test_support.rs",
     "kani/generate/census_validation.rs",
     "kani/generate/clause.rs",

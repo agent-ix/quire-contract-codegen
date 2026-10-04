@@ -130,21 +130,24 @@ terminal value, so neither map applies to them.
 - **Upstream**: Contract IR's `KaniOutcome` (its FR-030, FR-031); QSL's `qsl-replay`, which defines
   `TerminalValue` and the replay result and refusal types; QSL ADR-013 O-16 and C-09, ADR-011 T-13;
   and FR-121; QSpec FR-331; [FR-029](./FR-029-run-outcome-terminal-record.md). The `Inconclusive`
-  terminal value and its `ReplayParity` and `ReplayRefused` causes are not yet in QSL.
+  terminal value and its `ReplayParity` and `ReplayRefused` causes are merged in QSL `main`;
+  `Declined`'s IR code arm is not.
 - **Downstream**: [TC-041](../matrix/TC-041-ir-outcome-terminal-map.md).
 
 ## Status
 
-Planned (Linear IR-465, IR-358). No code implements this map at this revision. The code half is
-blocked on QSL types that are not merged. Merged in QSL `main`, read at this revision:
-`TerminalValue::Declined(ProofRefusalCause)`, with a cause and no code, `Unsupported` and
-`Incomplete` exist, and `CallSiteRefusal::code()` and `DependencyInputRefusal::code()` are public.
-`TerminalValue::Inconclusive`, `InconclusiveCause::ReplayParity` and `ReplayRefused(Code)`, and a
-`Declined` that carries a code, are not in QSL `main`; they are pending in QSL (QSL-351, in
-progress, with only the `ToolPin` deletion merged). FR-030-AC-9, AC-12 and AC-13 cannot be built
-until those types merge; AC-2 and the other rows can. QSL ruled, relayed on IR-465 (a QSL ruling
-recorded by the planner), that vacuity stays `Proved { success_checks: 0 }` and that a setup
-refusal after a refutation is `ReplayRefused`, as
+Planned (Linear IR-465, IR-358). No code implements this map at this revision, and none can be
+written as one total `match`. Merged in QSL `main`, read at this revision: `TerminalValue`
+has `Inconclusive` with `ReplayParity` and `ReplayRefused(Code)`, and `Declined { cause, code:
+DeclineCode }`, whose `DeclineCode` has only its QSL catalog arm, `Qsl(Code)`. The map must send
+`Refused`, `InvalidInput` and `IncompleteInput` to `Declined`, so it must supply a `DeclineCode`,
+and IR's cause (for example `kani_identity_invalid`) is not a QSL catalog code and must never be
+spelled as one. The IR arm arrives with IR-605 and QSL-351, so every row of the table, and with it
+every criterion, waits on it: a map over only the other kinds would not be one `match` with no
+wildcard arm over `KaniOutcomeKind` (FR-030-AC-1, AC-7). The replay-settlement half of the map is
+already built for FR-029 (`ReplaySettlement` and its conversions) and this map reuses it
+unchanged. QSL ruled, relayed on IR-465 (a QSL ruling recorded by the planner), that vacuity stays
+`Proved { success_checks: 0 }` and that a setup refusal after a refutation is `ReplayRefused`, as
 [FR-029](./FR-029-run-outcome-terminal-record.md)'s Status states.
 
 When a lock has several defects, QSL's `DependencyInput::new` reports the first by its own order

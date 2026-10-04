@@ -169,23 +169,33 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   [FR-028](./FR-028-bounded-proof-ceilings.md), which classify the outcome; QSL's `qsl-replay`, which
   defines `TerminalValue` and the replay result and refusal types; QSL ADR-013 O-16 and C-09, ADR-011
   T-13 and FR-121; QSpec FR-331. The `Inconclusive` terminal value and its `ReplayParity` and
-  `ReplayRefused` causes are not yet in QSL.
+  `ReplayRefused` causes are merged in QSL `main`.
 - **Downstream**: [TC-040](../matrix/TC-040-run-outcome-terminal-record.md).
 
 ## Status
 
-Planned (Linear IR-465). No code implements this map at this revision. The code half is blocked on
-QSL types that are not merged.
+Built (Linear IR-465) in `kani/terminal.rs` as `run_terminal_value`, with the typed
+`ReplaySettlement` it reads and, in `replay/`, the `From` conversions from every error the replay
+path returns. Every criterion is backed by a tagged test except two. FR-029-AC-3 is backed for the
+timed-out and exhausted-unwind-bound reasons only: `KaniInconclusiveReason` has no memory-exhausted
+reason until FR-028-AC-3 adds one, and the map's `match` fails to compile there until that arm is
+written. FR-029-AC-10 is not backed: the map and the conversions read each fault as `Failed`, but a
+test cannot construct QSL's `InternalFault`, which `qsl-replay` does not re-export and which this
+repository may not name through another QSL crate; the criterion stays planned until QSL exports a
+constructor or the type through `qsl-replay`.
 
-Merged in QSL `main`, read at this revision: `TerminalValue` has seven variants and no
-`Inconclusive`, `Declined` carries a `ProofRefusalCause` only, `InconclusiveCause` has only
-`KaniVacuousProof`, and `Proved` carries a `u32`. `ReplayRefusal::code()`,
-`CallSiteRefusal::code()` and `DependencyInputRefusal::code()` are public, so every code the map
-carries exists. Pending in QSL (QSL-351, in progress; what has merged under it is the `ToolPin`
-deletion only): `TerminalValue::Inconclusive`, `InconclusiveCause::ReplayParity` and
-`ReplayRefused(Code)`, a `Declined` that carries a code, and a typed request index in the terminal
-record. FR-029-AC-8, AC-9, AC-13 and AC-14 cannot be built until those types merge, and the code is
-written against the merged API then.
+Two points the map decides that the text above leaves open. A pair the driver mis-builds, a
+falsified outcome with no settlement or any other outcome with one, is a typed `TerminalPairError`,
+not a value, because the Description defines the settlement for a falsified outcome only. A replay
+that settled `ReproducedWithEvaluatedWitness` in a category other than `violation` carries no
+`DisagreementCause` and is not a refutation (FR-016-AC-13), and the table has no row for it; the
+conversion reads it as a CG defect, `Failed`, rather than inventing a cause.
+
+Merged in QSL `main`, read at this revision: `TerminalValue::Inconclusive`,
+`InconclusiveCause::{ReplayParity, ReplayRefused(Code)}`, `Proved { success_checks: u32 }` read as
+vacuous at zero through `ReportedInconclusiveCause`, `Declined { cause, code: DeclineCode }`, and
+`TerminalValue::from_replay_refusal`, which the map uses for a refusal `qsl_replay::replay`
+returned. `DeclineCode` has only its QSL catalog arm; the map produces no `Declined`.
 
 Vacuous and cover-unsatisfied rows. QSL ruled, relayed on IR-465 (a QSL ruling recorded by the
 planner), that vacuity stays `Proved { success_checks: 0 }`, reported through a separate enum, with
@@ -213,9 +223,7 @@ repository builds the lock only after Kani refuted, so for it the settlement is 
 report an input defect as a fault. FR-016-AC-24 states the builder's behaviour, and FR-029-AC-14
 the mapping.
 
-What is buildable now, and what is not. Merged QSL code already has `DependencyInput::new` with
-`DuplicateIdentity`, so deleting the pre-check in the lock admission and the `Duplicate` variant,
-and letting QSL's constructor refuse (FR-016-AC-24, which changes the test
-`tc_026_a_lock_repeating_a_dependency_is_refused`), needs no pending QSL type. That is the job of
-the code change, not of this spec change. The mapping of the resulting `Input` to `ReplayRefused`
-(FR-029-AC-14) waits on the pending `Inconclusive` types above.
+The pre-check in the lock admission and the `Duplicate` variant are deleted, and QSL's
+`DependencyInput::new` refuses the repeated identity (FR-016-AC-24, asserted by
+`tc_026_a_lock_repeating_a_dependency_is_refused`); the resulting `Input` maps to `ReplayRefused`
+(FR-029-AC-14).

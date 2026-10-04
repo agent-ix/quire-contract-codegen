@@ -23,6 +23,9 @@ pub(crate) mod output;
 // Launch, capture, timeout and the execution of one harness.
 // Implements: FR-017
 pub(crate) mod run;
+// The terminal-value map of a run.
+// Implements: FR-029
+pub(crate) mod terminal;
 // Test helpers shared by the tests of more than one `kani/` file.
 #[cfg(test)]
 pub(crate) mod test_support;
