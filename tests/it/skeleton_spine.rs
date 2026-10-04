@@ -361,21 +361,27 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
         wire.backend.1.as_deref(),
         Some(DigestDomain::VerificationJcs.as_str())
     );
-    let entry = &wire.dependencies[2];
+    // Destructured with no `..`: the entry is exactly the identity, package id and sources the
+    // wire carries, so a member added back (a `version`) fails to compile here.
+    let qsl_replay::DependencyEntryWire {
+        identity,
+        package_id,
+        sources,
+    } = &wire.dependencies[2];
+    assert_eq!(identity, "test/units");
     assert_eq!(
-        entry.package_id.0.as_deref(),
+        package_id.0.as_deref(),
         Some(DigestDomain::VerificationJcs.as_str())
     );
-    assert_eq!(entry.identity, lock.identity);
     assert_eq!(
-        entry.package_id,
+        *package_id,
         (
             Some(lock.package_id.domain().as_str().to_owned()),
             lock.package_id.hex()
         )
     );
-    let [source] = entry.sources.as_slice() else {
-        panic!("the dependency's own lock sources: {:?}", entry.sources);
+    let [source] = sources.as_slice() else {
+        panic!("the dependency's own lock sources: {sources:?}");
     };
     assert_eq!(
         (source.0.as_str(), source.1.as_str()),

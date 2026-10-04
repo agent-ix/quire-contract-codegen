@@ -3447,7 +3447,7 @@ mod tests {
     /// Trace: FR-014-AC-40, FR-014-AC-41, TC-024.
     #[test]
     fn tc_024_a_failed_record_is_refused_by_its_limit_kind() {
-        use crate::oracle::failed_records::{failed_record, UNRECOGNISED_KINDS};
+        use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
 
         assert_eq!(
             lowered(&failed_record(CheckedPackageLimit::Work, 65_536, 65_537)).err(),
@@ -3463,7 +3463,7 @@ mod tests {
                 consumed: 1_001
             })
         );
-        for (kind, name) in UNRECOGNISED_KINDS {
+        for (kind, name) in unrecognised_kinds() {
             assert_eq!(
                 lowered(&failed_record(kind, 7, 9)).err(),
                 Some(ExactScalarRefusal::LoweringLimitUnrecognised {

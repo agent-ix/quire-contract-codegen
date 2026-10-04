@@ -90,14 +90,34 @@ pub(crate) fn classify_lowering_failure(
 pub(crate) mod failed_records {
     use quire_contract_model::{CheckedNodeId, CheckedPackageLimit, CompleteLoweringRecordV2};
 
+    /// The snake_case name FR-014 gives a limit kind that is neither `work` nor `bytes`, and
+    /// `None` for those two. The match names every kind with no wildcard arm, so a kind Contract
+    /// IR adds fails to compile here until it is classed.
+    fn unrecognised_name(limit: CheckedPackageLimit) -> Option<&'static str> {
+        match limit {
+            CheckedPackageLimit::Work | CheckedPackageLimit::Bytes => None,
+            CheckedPackageLimit::Nodes => Some("nodes"),
+            CheckedPackageLimit::Edges => Some("edges"),
+            CheckedPackageLimit::Occurrences => Some("occurrences"),
+            CheckedPackageLimit::Diagnostics => Some("diagnostics"),
+        }
+    }
+
     /// The limit kinds that are neither `work` nor `bytes`, each with the snake_case name
-    /// FR-014 gives it.
-    pub(crate) const UNRECOGNISED_KINDS: [(CheckedPackageLimit, &str); 4] = [
-        (CheckedPackageLimit::Nodes, "nodes"),
-        (CheckedPackageLimit::Edges, "edges"),
-        (CheckedPackageLimit::Occurrences, "occurrences"),
-        (CheckedPackageLimit::Diagnostics, "diagnostics"),
-    ];
+    /// FR-014 gives it, derived from every `CheckedPackageLimit` through [`unrecognised_name`].
+    pub(crate) fn unrecognised_kinds() -> Vec<(CheckedPackageLimit, &'static str)> {
+        [
+            CheckedPackageLimit::Work,
+            CheckedPackageLimit::Bytes,
+            CheckedPackageLimit::Nodes,
+            CheckedPackageLimit::Edges,
+            CheckedPackageLimit::Occurrences,
+            CheckedPackageLimit::Diagnostics,
+        ]
+        .into_iter()
+        .filter_map(|limit| unrecognised_name(limit).map(|name| (limit, name)))
+        .collect()
+    }
 
     /// A `failed` record of `limit_kind` with the given ceiling and counter.
     pub(crate) fn failed_record(
@@ -119,7 +139,7 @@ pub(crate) mod failed_records {
 
 #[cfg(test)]
 mod tests {
-    use super::failed_records::{failed_record, UNRECOGNISED_KINDS};
+    use super::failed_records::{failed_record, unrecognised_kinds};
     use super::*;
 
     /// The classifier gives `work` its own outcome, `bytes` its own, and every other kind the
@@ -143,7 +163,7 @@ mod tests {
                 consumed: 8
             })
         );
-        for (kind, name) in UNRECOGNISED_KINDS {
+        for (kind, name) in unrecognised_kinds() {
             assert_eq!(
                 classify_lowering_failure(&failed_record(kind, 3, u64::MAX)),
                 Some(LoweringFailure::LimitUnrecognised {
