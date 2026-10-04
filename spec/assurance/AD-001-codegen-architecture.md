@@ -189,12 +189,12 @@ success fallback, and no requirement converts one into another.
 
 The views and decisions above state the target. At this revision:
 
-- `src/kani_witness_join.rs` decodes the playback itself into `qsl_replay::WitnessValue`; it imports no Contract IR witness type.
+- `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue`; it imports no Contract IR witness type.
   The bounded-Kani corpus (`src/bounded_kani_corpus.rs`) generates and classifies cases and
   retains no counterexample packet and claims no replay: every caller of the retired replay
   passed a constant closure as its native evaluator, so the verdict was predetermined.
 - Step 2 of the replay view, the domain check before replay, is not built. No `WitnessEnvelope` is
-  built, and only the skeleton spine renders a QSL transcript (`src/spine_replay.rs`).
+  built, and only the skeleton spine renders a QSL transcript (`src/replay/function.rs`).
 - The V1 paths are still present: `src/oracle.rs`, `src/kani.rs`, `src/bounded_kani_corpus.rs`,
   `src/bounded_kani_profile.rs`, and the `BoundClause` arm of
   FR-015's `ObligationItem`. The FR-002 and FR-008 to FR-013

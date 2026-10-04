@@ -62,6 +62,7 @@ generators, the input model, the backend adapter, Kani tractability and the gene
 | No panic on a generation or analysis path | NFR-005 | TC-042 |
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
+| Boolean oracle integer arithmetic and comparison | FR-031 | TC-044 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings | TC-025, TC-027, TC-036, TC-039 |
 | Backend adapter (routed) | FR-026 adapter trait and registration | TC-037 |
 | Terminal-value maps (kani) | FR-029 and FR-030 terminal-value maps | TC-040, TC-041 |
@@ -91,7 +92,7 @@ are in `assurance/`, decision records in `decisions/`, and every SpecReview in t
 | Oracle | `spec/oracle/` | Exact complete-V1 scalar, composite-equality and function-application oracle generation and its agreement with the runtime | `exact_scalar`, `composite_equality`, `exact_function`, `generation` | AD-001, ADR-001 | Contract codegen lane |
 | Kani | `spec/kani/` | Bounded Kani obligation generation, the generated subject ABI, proof ceilings, execution evidence, and the maps from a Kani run outcome and a Contract IR Kani outcome to QSL's terminal value | `kani`, `kani_obligations`, `kani_execution`, `kani_transcript`, `bounded_kani_profile`, `bounded_kani_corpus`, `definedness_arithmetic`, `bounded_collections`, `finite_reference_graphs`, `state_frame` | AD-001, AD-003, ADR-002, ADR-003, ADR-004 | Contract codegen lane |
 | Routed | `spec/routed/` | Capability settlement at one negotiation point, routed generation per backend kind, and the backend adapter contract | `capability`, `routed_generation` | AD-001, ADR-002 | Contract codegen lane |
-| Replay | `spec/replay/` | Witness decoding and native replay of Kani counterexamples, and their submission in QSL's counterexample envelope | `kani_witness_join`, `spine_replay`, `frame_replay` | AD-001, AD-002, AD-003, ADR-001 | Contract codegen lane |
+| Replay | `spec/replay/` | Witness decoding and native replay of Kani counterexamples, and their submission in QSL's counterexample envelope | `replay::witness`, `replay::function`, `replay::frame`, `kani::output::playback` | AD-001, AD-002, AD-003, ADR-001 | Contract codegen lane |
 | Evidence | `spec/evidence/` | Vacuity and unexecuted-flow evidence | `vacuity`, `bound_coverage` | AD-001, AD-003 | Contract codegen lane |
 
 Two recorded exceptions to the layout convention, both to be settled at the layout AD (IR-344):

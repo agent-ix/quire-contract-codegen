@@ -29,7 +29,7 @@ the rules that classify them are those of [FR-029](./FR-029-run-outcome-terminal
 this requirement refers to and does not restate; they apply here to a `Counterexample` exactly as
 they apply there to `falsified`.
 
-Contract IR retired its own outcome-to-terminal map (FR-031-AC-5, Linear IR-358) because the
+Contract IR retired its own outcome-to-terminal map (Contract IR FR-031-AC-5, Linear IR-358) because the
 terminal value belongs to QSL and Contract IR must not depend on QSL. This repository owns the map.
 
 Two maps exist and their domains do not overlap. [FR-029](./FR-029-run-outcome-terminal-record.md)

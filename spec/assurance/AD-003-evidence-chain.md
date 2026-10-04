@@ -263,7 +263,7 @@ The contract QSL-342 reads (from its ticket text, untrusted, and consistent with
 2. The classified run: `outcome`, `success_checks` and `checks: Vec<KaniCheckResult>`, so QSL can
    attribute SUCCESS checks to each claimed module by `location.file` and `location.line`. The
    file path is relative to CG's generated crate and stable because generation is byte-identical.
-3. `decode_falsification` (public, `kani_witness_join.rs:138`) and the transcript classifier, so
+3. `decode_falsification` (public, in `src/replay/witness.rs`) and the transcript classifier, so
    QSL does not scrape Kani prose.
 
 Recommendation: CG exposes exactly these; callers use `.category()` rather than a
@@ -287,7 +287,7 @@ crate CG's lock selects.
   No code on those paths computes `ObligationIdentity`. QSL's type says QSL never hashes it.
   ADR-013 O-09 defines the preimage: the clause (or application) node id, its occurrence key,
   the obligation kind and the arguments (parameter node id and declared domain), source span
-  excluded. CG's frame envelope takes a caller `[u8; 32]` (`frame_replay.rs:47`); the function
+  excluded. CG's frame envelope takes a caller `[u8; 32]` (`src/replay/frame.rs`); the function
   path puts the transcript's byte digest in the request's obligation-identity slot at this base
   (AD-002); that digest is replaced by the function-contract identity, not retained.
   The work is larger than one missing field. Three identity structs exist and none carries what
@@ -297,14 +297,14 @@ crate CG's lock selects.
   node id but no occurrence key, and its `ScalarObligationArgument` (`identifier`, `minimum`,
   `maximum`) has no parameter node id. `StateFrameIdentity` (`state_frame.rs`) holds the clause
   node id and no occurrence key, and it is the identity of the frame harness whose
-  counterexample goes into an envelope today (`frame_replay.rs:47`). Each must gain the
+  counterexample goes into an envelope today (`src/replay/frame.rs`). Each must gain the
   missing members before one function can compute the O-09 value. Recommendation below.
 - Encoder gap (measured at `main`): CG has no obligation-identity digest code and no
   `quire_canonical` use. The content digest of a corpus case is `serde_json::to_vec` plus a
   newline in `deterministic_json` (`kani.rs:1045-1046`; a second copy at `oracle.rs:1111-1112`),
   then `ByteDigest::of` from the `qsl-replay` API (`bounded_kani_corpus.rs:340-342`). CG also
-  hashes bytes with `ByteDigest::of` for source files (`spine_replay.rs:149-152`) and the
-  transcript (`spine_replay.rs:440`); those hash given bytes and canonicalise nothing.
+  hashes bytes with `ByteDigest::of` for source files (`LockedSource::digest` in
+  `src/replay/function.rs`); that hashes given bytes and canonicalises nothing.
   `serde_json` is not RFC 8785: key order is struct field order, and integers above 2^53, floats
   and negative zero are not canonicalised. `sha2` is a dev-dependency only. The obligation
   identity must not copy this. Target, ruled by QSL (as relayed): CG's one canonical-encoding

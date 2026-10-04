@@ -46,11 +46,10 @@ failure is reported.
   each witness value into its declared complete-V1 scalar type within the
   decode size limit.
 - The generator shall read the concrete values of a Kani playback only
-  through the Kani adapter's transcript module, `src/kani_transcript.rs`.
-  At this revision the witness join
-  (`src/kani_witness_join.rs`) decodes the playback itself rather than
-  through the transcript module, so this bullet states the target and is not
-  yet met.
+  through the Kani adapter's output module, `src/kani/output/playback.rs`.
+  At this revision `src/replay/witness.rs` selects and reads the block through
+  that module's `select_assertion_block` and `read_block` and decodes the typed
+  values from what they return.
 - The generator shall decode a witness against the harness's own persisted
   obligation schema: the obligation's argument bindings, in the order the
   obligation persists them, typed position for position against the
