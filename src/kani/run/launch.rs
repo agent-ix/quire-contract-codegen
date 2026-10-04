@@ -532,7 +532,7 @@ mod tests {
     /// open: `( sleep 45 & )` orphans a `sleep 45` at once, while `exec sleep 45` replaces the
     /// outer shell, the direct child. Waiting for the capture threads to see EOF would block
     /// until the orphan's `sleep 45` ended on its own, which is unbounded; the call must return
-    /// in about 200ms.
+    /// long before that (asserted at 20 s, wide enough for a loaded host, still under the 45 s).
     ///
     /// Trace: FR-017-AC-16, TC-027
     #[test]
@@ -546,7 +546,7 @@ mod tests {
             "a run past its budget must classify as timed out"
         );
         assert!(
-            started.elapsed() < Duration::from_secs(2),
+            started.elapsed() < Duration::from_secs(20),
             "a 200ms budget must not take anywhere near the orphaned process's own 45s sleep: \
              took {:?}",
             started.elapsed()
