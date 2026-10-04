@@ -36,7 +36,8 @@ fn node_id(digit: &str) -> CheckedNodeId {
 
 const VERIFIED: &str = "        let x: u8 = kani::any();\n        kani::assume(x < 10);\n        kani::cover!(x == 3, \"x can be three\");\n        assert!(x < 10);";
 const FALSIFIED: &str = "        let x: u8 = kani::any();\n        kani::assume(x < 10);\n        kani::cover!(x == 3, \"x can be three\");\n        assert!(x < 5);";
-/// Two assertions that fail on independent paths: Kani prints one counterexample block for each.
+/// Two assertions that fail on independent paths, at different valuations: Kani prints one
+/// counterexample block for each (one block per distinct valuation).
 const TWO_FAILED_CHECKS: &str = "        let x: u8 = kani::any();\n        kani::assume(x < 10);\n        kani::cover!(x == 3, \"x can be three\");\n        if kani::any() {\n            assert!(x < 5, \"first\");\n        } else {\n            assert!(x != 7, \"second\");\n        }";
 /// A loop of 64-bit multiplications over symbolic values: still unfinished after a minute at unwind 400.
 const SLOW: &str = "        let n: u32 = kani::any();\n        kani::assume(n < 400);\n        let mut i: u32 = 0;\n        let mut acc: u64 = 1;\n        while i < n {\n            acc = acc.wrapping_mul(acc ^ (i as u64) | 1).wrapping_add(kani::any::<u64>() % 7);\n            i += 1;\n        }\n        assert!(acc != 12_345_678_901_234);";

@@ -150,12 +150,19 @@ the run and everything read back from it.
   as a single run does (FR-017-AC-5).
 - If a console block is headed for a path that is not a member of the group, then the generator
   shall refuse the group as an unattributable playback and classify no member. A member that
-  fails several property checks has several counterexample blocks under its own path, because
-  Kani prints one per failed check (and a cover block beside them); that is not unattributable.
+  fails several property checks at different input valuations has several counterexample blocks
+  under its own path, because Kani prints one block per distinct input valuation (the playback
+  test's name is a hash of the concrete values), listing first the check that comes first in its
+  report, and a cover block beside them at a valuation of its own; that is not unattributable.
   The member takes the first counterexample block headed for its path, as the same harness run
   alone does, so that a member's own failures never change another member's outcome (measured on
-  Kani 0.68: one harness with two independently failing assertions printed two counterexample
-  blocks, both headed for it).
+  Kani 0.68: one harness with two independently failing assertions at different valuations
+  printed two counterexample blocks, both headed for it). Checks that fail at the same valuation
+  print one block, the first-listed check's: a member whose failing assertions share a valuation
+  has one counterexample block and is falsified with it, and a failed check whose valuation a
+  satisfied cover also took prints only the cover's block, which is no counterexample, so the
+  member classifies as a failure with no counterexample. The generator therefore never places a
+  cover where a failing check can share its valuation (FR-015-AC-7).
 - If a member's entry states success, the batch process exited non-zero and no member's entry
   states failure, then the generator shall classify that member inconclusive as a success reported
   by an unsuccessfully exited process. A member's success is verified when the process exited 0, or

@@ -557,8 +557,9 @@ fn run_group(
             harness: block.harness.to_owned(),
         });
     }
-    // Kani prints one counterexample block per failed property check, so a member that fails two
-    // checks has two blocks under its own path. Each member takes the first, as a single run
+    // Kani prints one counterexample block per distinct failing valuation, so a member that fails
+    // two checks at different valuations has two blocks under its own path (at one valuation,
+    // one block). Each member takes the first, as a single run
     // does; only a block for a path that is not a member cannot be attributed.
     // Kani exits 1 for any failed harness and for its own errors alike: a success is believed
     // beside a non-zero exit only when some entry states the failure that exit stands for.
@@ -1947,8 +1948,9 @@ exit 0
     }
 
     /// The playback section of Kani 0.68's console for a batch of `two::check`, whose two
-    /// assertions fail on independent paths, and `ok::check`, verbatim from a real run: one cover
-    /// block and one counterexample block per failed check, all headed `two::check`, then
+    /// assertions fail on independent paths at different valuations, and `ok::check`, verbatim
+    /// from a real run: one cover block and one counterexample block per distinct failing
+    /// valuation, all headed `two::check`, then
     /// `ok::check`'s cover block. (The trailing space after the harness path in the `Test
     /// generated` line is Kani's.)
     const TWO_FAILED_CHECKS_CONSOLE: &str = r#"Concrete playback unit test for `two::check`:

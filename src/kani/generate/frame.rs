@@ -950,14 +950,6 @@ fn assertion_message(text: &str) -> String {
 }
 
 /// The `kani::proof` function every generated module holds.
-///
-/// Every body ends with its one non-vacuity cover, after the assertions (FR-015, IR-451). Kani
-/// prints one concrete playback per distinct input valuation and a cover that precedes an
-/// assertion is satisfied by every valuation, the failing one included, so a violation Kani found
-/// at a valuation the cover also took (the all-zero one, say) printed only the cover's playback
-/// and read as a failure with no counterexample. An assertion that fails does not return, so a
-/// cover placed after it can only be satisfied by a valuation that passed it, and the failing
-/// valuation's playback is the assertion's own.
 const HARNESS: &str = "check";
 
 struct Postcondition<'a> {
@@ -966,6 +958,15 @@ struct Postcondition<'a> {
     left_is_pre: bool,
 }
 
+/// The operation-contract harness body.
+///
+/// It ends with its one non-vacuity cover, after the assertion (FR-015-AC-7, IR-451). Kani prints
+/// one concrete playback per distinct input valuation, and a cover that precedes the assertion is
+/// satisfied by every valuation, the failing one included, so a violation found at a valuation the
+/// cover also took (the all-zero one, say) printed only the cover's playback and read as a failure
+/// with no counterexample. An assertion that fails does not return, so a cover placed after it can
+/// only be satisfied by a valuation that passed it, and the failing valuation's playback is the
+/// assertion's own.
 fn postcondition_body(
     abi: &Abi<'_>,
     scope: &StateFrameScope,
@@ -995,6 +996,8 @@ fn postcondition_body(
     )
 }
 
+/// The frame-effect harness body. Like [`postcondition_body`] it ends with its one cover, after
+/// every assertion, for the reason given there (FR-015-AC-7, IR-451).
 fn frame_body(
     abi: &Abi<'_>,
     scope: &StateFrameScope,
