@@ -159,6 +159,14 @@ pub enum RoutedGenerationError {
         /// The number of items in the Kani group.
         items: usize,
     },
+    /// FR-015 reported a `DuplicateItem` whose `first_index` is not a position in the Kani group,
+    /// so it cannot be rewritten to a request index.
+    KaniDuplicatePositionOutOfRange {
+        /// The position the record named.
+        first_index: usize,
+        /// The number of items in the Kani group.
+        items: usize,
+    },
     /// The Kani arm refused its group as a whole.
     Kani(KaniObligationError),
     /// FR-014 generation over the derived items failed as a whole.
@@ -310,11 +318,7 @@ fn generate_kani(
 
     // FR-015 reports exactly one record per item, numbered by position in `group` (the loop index
     // in `negotiate_kani_obligations`), and a `DuplicateItem`'s `first_index` is an earlier
-    // position. So `records` and `group` pair one to one, and every position is in `driver`.
-    let driver = group
-        .iter()
-        .map(|item| item.request_index)
-        .collect::<Vec<_>>();
+    // position. So `records` and `group` pair one to one; a position outside `group` is refused.
     let (records, mut harnesses, rejected) = match outcome {
         KaniObligationOutcome::Emitted {
             records,
@@ -323,19 +327,23 @@ fn generate_kani(
         } => (records, index_harnesses(scalar_harnesses)?, false),
         KaniObligationOutcome::Rejected { records } => (records, BTreeMap::new(), true),
     };
-    let outputs = pair_records(records, group)?
+    let outputs = route_records(records, group, &mut harnesses)?;
+    Ok((ArmOutput { outputs, rejected }, claim_map, artifacts))
+}
+
+/// Pairs FR-015's records with `group`, rewrites every record's positions into the driver's
+/// request index and joins each `Supported` record with its harness. A count mismatch or a
+/// `DuplicateItem` position outside `group` refuses the whole call.
+fn route_records(
+    records: Vec<ObligationRecord>,
+    group: &[&RoutedGenerationItem],
+    harnesses: &mut BTreeMap<HarnessSymbol, KaniScalarObligationHarness>,
+) -> Result<Vec<RoutedItemOutput>, RoutedGenerationError> {
+    pair_records(records, group)?
         .into_iter()
         .map(|(mut record, item)| {
             record.request_index = item.request_index;
-            if let ObligationDisposition::InvalidRequest {
-                reason: InvalidObligationItem::DuplicateItem { first_index },
-            } = &mut record.disposition
-            {
-                // FR-015 names an earlier position in the group; an
-                // out-of-range index is an invariant violation, so index
-                // directly and panic rather than leave it unmapped.
-                *first_index = driver[*first_index];
-            }
+            rewrite_duplicate_position(&mut record, group)?;
             let harness = match &record.disposition {
                 ObligationDisposition::Supported { harness_symbol } => {
                     harnesses.remove(harness_symbol)
@@ -344,14 +352,35 @@ fn generate_kani(
                 | ObligationDisposition::Unsupported { .. }
                 | ObligationDisposition::InvalidRequest { .. } => None,
             };
-            RoutedItemOutput {
+            Ok(RoutedItemOutput {
                 request_index: item.request_index,
                 backend: item.backend.clone(),
                 output: KindOutput::Kani { record, harness },
-            }
+            })
         })
-        .collect();
-    Ok((ArmOutput { outputs, rejected }, claim_map, artifacts))
+        .collect()
+}
+
+/// Rewrites a `DuplicateItem` record's `first_index`, a position in `group`, into the request
+/// index of the item at that position. Any other record is unchanged. A position outside `group`
+/// is a typed refusal, so the record is never left naming a position the driver did not send.
+fn rewrite_duplicate_position(
+    record: &mut ObligationRecord,
+    group: &[&RoutedGenerationItem],
+) -> Result<(), RoutedGenerationError> {
+    if let ObligationDisposition::InvalidRequest {
+        reason: InvalidObligationItem::DuplicateItem { first_index },
+    } = &mut record.disposition
+    {
+        let Some(earlier) = group.get(*first_index) else {
+            return Err(RoutedGenerationError::KaniDuplicatePositionOutOfRange {
+                first_index: *first_index,
+                items: group.len(),
+            });
+        };
+        *first_index = earlier.request_index;
+    }
+    Ok(())
 }
 
 /// Pairs each of FR-015's records with the item of `group` at its position. A different count is
@@ -416,7 +445,10 @@ fn derive_claim_map(
 
 #[cfg(test)]
 mod tests {
-    use super::{index_harnesses, pair_records, RoutedGenerationError, RoutedGenerationItem};
+    use super::{
+        index_harnesses, pair_records, rewrite_duplicate_position, route_records,
+        RoutedGenerationError, RoutedGenerationItem,
+    };
     use crate::{
         core::artifact::Artifact,
         core::identity::{HarnessSymbol, ModuleSymbol},
@@ -494,6 +526,88 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(0, 10), (1, 11), (2, 12)]
         );
+    }
+
+    fn duplicate_record(first_index: usize) -> ObligationRecord {
+        ObligationRecord {
+            disposition: ObligationDisposition::InvalidRequest {
+                reason: InvalidObligationItem::DuplicateItem { first_index },
+            },
+            ..record(0)
+        }
+    }
+
+    /// Trace: NFR-005-AC-6, TC-042.
+    #[test]
+    fn tc_042_ac6_a_duplicate_position_outside_the_group_is_a_typed_refusal() {
+        let items = [item(10), item(11), item(12)];
+        let group = items.iter().collect::<Vec<_>>();
+
+        for first_index in [3, 4, usize::MAX] {
+            let mut record = duplicate_record(first_index);
+            assert_eq!(
+                rewrite_duplicate_position(&mut record, &group),
+                Err(RoutedGenerationError::KaniDuplicatePositionOutOfRange {
+                    first_index,
+                    items: 3
+                })
+            );
+        }
+
+        let mut last = duplicate_record(2);
+        rewrite_duplicate_position(&mut last, &group).expect("the last valid position rewrites");
+        assert_eq!(
+            last.disposition,
+            ObligationDisposition::InvalidRequest {
+                reason: InvalidObligationItem::DuplicateItem { first_index: 12 }
+            }
+        );
+
+        let mut other = record(0);
+        rewrite_duplicate_position(&mut other, &group).expect("another record is unchanged");
+        assert_eq!(other, record(0));
+    }
+
+    /// Trace: NFR-005-AC-6, TC-042. The refusal reaches the caller of the Kani arm's
+    /// record routing: one record naming a position outside the group refuses the whole call and
+    /// yields no output, while in-range duplicates are rewritten to request indices.
+    #[test]
+    fn tc_042_ac6_an_out_of_range_duplicate_position_refuses_the_whole_routing() {
+        let items = [item(10), item(11), item(12)];
+        let group = items.iter().collect::<Vec<_>>();
+        let mut harnesses = std::collections::BTreeMap::new();
+
+        let refused = route_records(
+            vec![record(0), duplicate_record(7), duplicate_record(0)],
+            &group,
+            &mut harnesses,
+        );
+        assert_eq!(
+            refused,
+            Err(RoutedGenerationError::KaniDuplicatePositionOutOfRange {
+                first_index: 7,
+                items: 3
+            })
+        );
+
+        let routed = route_records(
+            vec![record(0), duplicate_record(0), duplicate_record(1)],
+            &group,
+            &mut harnesses,
+        )
+        .expect("in-range positions route");
+        let positions = routed
+            .iter()
+            .map(|output| match &output.output {
+                super::KindOutput::Kani { record, .. } => match &record.disposition {
+                    ObligationDisposition::InvalidRequest {
+                        reason: InvalidObligationItem::DuplicateItem { first_index },
+                    } => Some(*first_index),
+                    _ => None,
+                },
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(positions, vec![None, Some(10), Some(11)]);
     }
 
     fn harness(module: &str, symbol: &str) -> KaniScalarObligationHarness {

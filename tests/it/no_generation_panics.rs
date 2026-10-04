@@ -1,8 +1,8 @@
 //! NFR-005 / TC-042: no panic token on a generation or analysis path.
 //!
-//! The scan (AC-1) and the public-surface seam (AC-3) live here. The seams that are private to
-//! the crate (AC-2, AC-4, AC-5) are `#[cfg(test)]` tests beside the code they reach, named
-//! `tc_042_*`.
+//! The scan (AC-1), the public-surface seam (AC-3) and the body scan of the five IR-577
+//! functions (AC-8) live here. The seams that are private to the crate (AC-2, AC-4 to AC-7) are
+//! `#[cfg(test)]` tests beside the code they reach, named `tc_042_*`.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -108,11 +108,9 @@ fn declared_under_cfg_test(file: &Path) -> bool {
         })
 }
 
-/// The byte range of the body of `fn digest` of `impl CaseIdentity<'_>` in `code`, braces included.
-fn digest_body(code: &str) -> Option<std::ops::Range<usize>> {
-    let implementation = code.find("impl CaseIdentity<'_>")?;
-    let function = implementation + code[implementation..].find("fn digest")?;
-    let open = function + code[function..].find('{')?;
+/// The byte range of the first braced block of `code` at or after `from`, braces included.
+fn braced_body(code: &str, from: usize) -> Option<std::ops::Range<usize>> {
+    let open = from + code[from..].find('{')?;
     let mut depth = 0usize;
     for (offset, byte) in code[open..].bytes().enumerate() {
         match byte {
@@ -127,6 +125,103 @@ fn digest_body(code: &str) -> Option<std::ops::Range<usize>> {
         }
     }
     None
+}
+
+/// The byte range of the body of `fn digest` of `impl CaseIdentity<'_>` in `code`, braces included.
+fn digest_body(code: &str) -> Option<std::ops::Range<usize>> {
+    let implementation = code.find("impl CaseIdentity<'_>")?;
+    let function = implementation + code[implementation..].find("fn digest")?;
+    braced_body(code, function)
+}
+
+/// The byte range of the body of `fn <name>` in `code`, braces included: the first `fn <name>`
+/// whose name ends there, so `fn observe_clause_row` is not `observe_clause`.
+fn function_body(code: &str, name: &str) -> Option<std::ops::Range<usize>> {
+    let needle = format!("fn {name}");
+    let mut from = 0;
+    while let Some(found) = code[from..].find(&needle) {
+        let end = from + found + needle.len();
+        let named = code[end..]
+            .bytes()
+            .next()
+            .is_none_or(|byte| !(byte.is_ascii_alphanumeric() || byte == b'_'));
+        if named {
+            return braced_body(code, end);
+        }
+        from = end;
+    }
+    None
+}
+
+/// The five functions NFR-005-AC-8 scans: the file its body lives in, its name, and an identifier
+/// that only that function's own body holds, so a locator that returned an empty or wrong range
+/// would fail the scan instead of passing it vacuously.
+const INDEX_FREE_BODIES: [(&str, &str, &str); 5] = [
+    ("src/routed/generate.rs", "generate_kani", "route_records("),
+    ("src/routed/generate.rs", "route_records", "pair_records("),
+    (
+        "src/routed/generate.rs",
+        "rewrite_duplicate_position",
+        "KaniDuplicatePositionOutOfRange",
+    ),
+    (
+        "src/evidence/bound_coverage.rs",
+        "observe_clause",
+        "consequent_regions",
+    ),
+    (
+        "src/oracle/boolean_v1.rs",
+        "generate_boolean_oracle_inner",
+        "probe_at(",
+    ),
+];
+
+/// The keywords a body can precede a `[` or `-` with; any other identifier ends an operand.
+const NON_OPERAND_KEYWORDS: [&str; 12] = [
+    "in", "let", "mut", "ref", "return", "break", "if", "else", "match", "while", "as", "move",
+];
+
+/// What NFR-005-AC-8 forbids in the four bodies.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Unchecked {
+    /// A `[` whose previous non-whitespace token ends an operand: an index or a range slice.
+    Index,
+    /// A `-` (or `-=`) that is not `->` and follows an operand.
+    Subtraction,
+}
+
+/// Every index and subtraction token of `body`, with its byte offset. An operand-ending token is
+/// `)`, `]`, `}`, `?`, a numeric literal, or an identifier that is not one of
+/// [`NON_OPERAND_KEYWORDS`]; the body is literal-free, so a string is not a token here.
+fn unchecked_tokens(body: &str) -> Vec<(Unchecked, usize)> {
+    let bytes = body.as_bytes();
+    let mut found = Vec::new();
+    let mut after_operand = false;
+    let mut at = 0;
+    while at < bytes.len() {
+        let byte = bytes[at];
+        if byte.is_ascii_whitespace() {
+            at += 1;
+        } else if byte.is_ascii_alphanumeric() || byte == b'_' {
+            let start = at;
+            while at < bytes.len() && (bytes[at].is_ascii_alphanumeric() || bytes[at] == b'_') {
+                at += 1;
+            }
+            after_operand =
+                byte.is_ascii_digit() || !NON_OPERAND_KEYWORDS.contains(&&body[start..at]);
+        } else {
+            match byte {
+                b'[' if after_operand => found.push((Unchecked::Index, at)),
+                b'-' if after_operand && bytes.get(at + 1) != Some(&b'>') => {
+                    found.push((Unchecked::Subtraction, at));
+                }
+                _ => {}
+            }
+            after_operand = matches!(byte, b')' | b']' | b'}' | b'?');
+            at += 1;
+        }
+    }
+    found
 }
 
 /// Trace: NFR-005-AC-1, TC-042. The helper keeps a panic token in code and drops one in a string
@@ -225,6 +320,87 @@ fn tc_042_ac1_src_holds_no_panic_token_outside_the_dated_digest_exception() {
         offences.is_empty(),
         "panic tokens on a generation or analysis path: {offences:#?}"
     );
+}
+
+/// Trace: NFR-005-AC-8, TC-042. The bodies of `generate_kani`, `route_records`, `rewrite_duplicate_position`,
+/// `observe_clause` and `generate_boolean_oracle_inner`, located in the literal-free non-test code
+/// of their files, hold no index token and no subtraction token.
+#[test]
+fn tc_042_ac8_the_ir_577_bodies_hold_no_index_or_subtraction() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut offences = Vec::new();
+    for (file, name, marker) in INDEX_FREE_BODIES {
+        let source = fs::read_to_string(root.join(file)).expect("read a source file");
+        let code = non_test_code_outside_literals(&source);
+        let body = function_body(&code, name)
+            .unwrap_or_else(|| panic!("`fn {name}` was not found in {file}"));
+        assert!(
+            code[body.clone()].contains(marker),
+            "the located body of `fn {name}` ({} bytes) does not hold `{marker}`",
+            body.len()
+        );
+        for (kind, at) in unchecked_tokens(&code[body.clone()]) {
+            let from = body.start + at;
+            let context = code[from.saturating_sub(30)..]
+                .chars()
+                .take(60)
+                .collect::<String>();
+            offences.push(format!(
+                "{name}: {kind:?} near `{}`",
+                context.replace('\n', " ")
+            ));
+        }
+    }
+    assert!(
+        offences.is_empty(),
+        "index or subtraction in an IR-577 body: {offences:#?}"
+    );
+}
+
+/// Trace: NFR-005-AC-8, TC-042. The body check flags every index, range slice and subtraction
+/// spelling the requirement names, and passes the array, pattern, attribute, macro, arrow and
+/// unary-minus shapes it names.
+#[test]
+fn tc_042_ac8_the_body_check_flags_index_and_subtraction_and_passes_their_lookalikes() {
+    for (body, expected) in [
+        ("a[1]", Unchecked::Index),
+        ("a[2..]", Unchecked::Index),
+        ("f(x)[0]", Unchecked::Index),
+        ("x?[0]", Unchecked::Index),
+        ("t.0[1]", Unchecked::Index),
+        ("{ v }[0]", Unchecked::Index),
+        ("n - 1", Unchecked::Subtraction),
+        ("x? - 1", Unchecked::Subtraction),
+        ("n -= 1", Unchecked::Subtraction),
+    ] {
+        assert_eq!(
+            unchecked_tokens(body)
+                .into_iter()
+                .map(|(kind, _)| kind)
+                .collect::<Vec<_>>(),
+            vec![expected],
+            "`{body}`"
+        );
+    }
+    for body in [
+        "for l in [a, b] {}",
+        "vec![a]",
+        "let [x, ..] = y;",
+        "#[must_use]",
+        "let a: [u8; 4] = b;",
+        "fn f() -> u8 { 0 }",
+        "-n",
+        "(-n)",
+        "f(a, -1)",
+        "x = -1",
+        "match x { _ => -1 }",
+    ] {
+        assert!(
+            unchecked_tokens(body).is_empty(),
+            "`{body}` is not an index or subtraction: {:?}",
+            unchecked_tokens(body)
+        );
+    }
 }
 
 /// Trace: NFR-005-AC-2, TC-042. `classify_claim` reports a generated claim with no checked bound,

@@ -450,13 +450,22 @@ fn observe_clause(
                     .and_then(|probe| c.observe(&region.artifact_path, probe))
             })
     };
-    let evaluation = observe(&map[1]);
+    // The clause envelope, the oracle evaluation, then the consequents: the shape `check_maps`
+    // requires. A shorter map is the census mismatch it reports, with nothing observed.
+    let [_, evaluation_region, consequent_regions @ ..] = map else {
+        row.diagnostics.push(diag(
+            CoverageErrorCode::MapMismatch,
+            "typed implication census differs from map",
+        ));
+        return row;
+    };
+    let evaluation = observe(evaluation_region);
     match &evaluation {
         Ok(value) => row.evaluation_count = Some(value.count()),
         Err(error) => row.diagnostics.push(error.clone()),
     }
     let mut observations = Vec::new();
-    for (ordinal, region) in map[2..].iter().enumerate() {
+    for (ordinal, region) in consequent_regions.iter().enumerate() {
         let count = match observe(region) {
             Ok(value) => {
                 observations.push(value);
@@ -657,6 +666,46 @@ mod tests {
             assert!(!unavailable.diagnostics.is_empty());
         }
     }
+
+    /// Trace: NFR-005-AC-7, TC-042. A map with fewer than two regions is the census `MapMismatch`
+    /// with nothing observed, with or without a coverage export; two probed regions are not.
+    #[test]
+    fn tc_042_ac7_a_map_shorter_than_two_regions_is_a_census_mismatch_not_a_panic() {
+        let package = implication_package();
+        let clause = &package.clauses()[0];
+        let supplied = coverage();
+        let full = map(true, true);
+
+        for length in [0, 1] {
+            for export in [Some(&supplied), None] {
+                let row = observe_clause(clause, &full[..length], export);
+                assert_eq!(
+                    codes(&row),
+                    vec![(
+                        CoverageErrorCode::MapMismatch,
+                        "typed implication census differs from map"
+                    )],
+                    "{length} regions, export supplied: {}",
+                    export.is_some()
+                );
+                assert!(row.classification.is_none());
+                assert_eq!(row.evaluation_count, None);
+                assert!(row.consequents.is_empty());
+            }
+        }
+
+        let two = observe_clause(clause, &full[..2], Some(&supplied));
+        assert!(two.consequents.is_empty());
+        assert_eq!(two.evaluation_count, Some(1));
+        assert!(
+            two.diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.code != CoverageErrorCode::MapMismatch),
+            "{:?}",
+            codes(&two)
+        );
+    }
+
     /// Trace: TC-006, FR-004-AC-5
     #[test]
     fn output_bound_counts_exact_bytes_before_allocating_output() {
