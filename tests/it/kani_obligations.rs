@@ -810,6 +810,13 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
         "soundness must be an assertion Kani can falsify, not only a cover: {source}"
     );
     assert!(
+        source
+            .rfind("assert!(")
+            .zip(source.find("kani::cover!("))
+            .is_some_and(|(assertion, cover)| assertion < cover),
+        "the cover must follow the last assertion (FR-015-AC-7, IR-451): {source}"
+    );
+    assert!(
         !source.contains("assert!(completed,"),
         "regression to the old, false, unconditional-totality assertion: {source}"
     );
