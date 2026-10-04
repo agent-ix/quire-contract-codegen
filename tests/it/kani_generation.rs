@@ -1667,12 +1667,24 @@ fn kani_executes_the_generated_contract_proof() {
     );
 }
 
-/// The `i64` values Kani's concrete playback assigns the harness's symbolic inputs, in order.
+/// The `i64` values Kani's concrete playback assigns the harness's symbolic inputs, in order, of
+/// the failing check. A harness with a non-vacuity cover also prints the cover's own playback
+/// ("Check for `cover`"), which is a satisfying valuation and not the counterexample, so that
+/// block is skipped.
 fn playback_values(output: &std::process::Output) -> Vec<i64> {
-    String::from_utf8_lossy(&output.stdout)
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut in_cover_block = false;
+    stdout
         .lines()
         .map(str::trim)
-        .filter(|line| line.starts_with("vec![") && !line.contains("concrete_vals"))
+        .filter(|line| {
+            if line.starts_with("Concrete playback unit test") {
+                in_cover_block = false;
+            } else if line.starts_with("/// Check for `cover`") {
+                in_cover_block = true;
+            }
+            !in_cover_block && line.starts_with("vec![") && !line.contains("concrete_vals")
+        })
         .map(|line| {
             let bytes = line
                 .trim_start_matches("vec![")
@@ -1745,7 +1757,12 @@ fn kani_exemplar_verifies_and_its_addition_mutant_is_falsified_at_999() {
         "the non-equivalent mutant must be falsified:\n{}",
         String::from_utf8_lossy(&falsified.stdout)
     );
-    assert_eq!(playback_values(&falsified), [999]);
+    assert_eq!(
+        playback_values(&falsified),
+        [999],
+        "{}",
+        String::from_utf8_lossy(&falsified.stdout)
+    );
 
     // Dropping the `+ 1` leaves `amount <= 1000`, which the clause's antecedent already implies.
     let equivalent = mutated(&bundle, "\n+\n(\n1_i64\n)", "");
