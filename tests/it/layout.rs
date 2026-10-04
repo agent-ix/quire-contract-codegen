@@ -136,7 +136,7 @@ fn source_root() -> PathBuf {
 }
 
 /// Every `.rs` file under `src/`: its path relative to `src/` with `/` separators, and its text.
-fn source_files() -> BTreeMap<String, String> {
+pub(crate) fn source_files() -> BTreeMap<String, String> {
     fn walk(root: &Path, directory: &Path, files: &mut BTreeMap<String, String>) {
         for entry in fs::read_dir(directory).expect("a readable source directory") {
             let path = entry.expect("a readable directory entry").path();
@@ -206,6 +206,61 @@ fn blank_extent(text: &[char], index: usize) -> Option<usize> {
         '\'' => char_literal_end(text, index),
         _ => None,
     }
+}
+
+/// The string literals of `source`, as written between their delimiters' extent, outside every
+/// `#[cfg(test)]` item. It reads with the same lexer as [`code_only`], so a literal inside a
+/// comment or a character literal is not one, and a `#[cfg(test)]` spelled in a literal or a
+/// comment gates nothing. The gated item ends at its first `;` or at the `}` closing its first
+/// `{`, which holds for the `mod tests` blocks and test functions of `src/`.
+pub(crate) fn non_test_string_literals(source: &str) -> Vec<String> {
+    const GATE: &str = "#[cfg(test)]";
+    let text: Vec<char> = source.chars().collect();
+    let gate: Vec<char> = GATE.chars().collect();
+    let mut literals = Vec::new();
+    let mut index = 0;
+    while index < text.len() {
+        if text.get(index..index + gate.len()) == Some(&gate[..]) {
+            index = gated_item_end(&text, index + gate.len());
+            continue;
+        }
+        match blank_extent(&text, index) {
+            Some(end) => {
+                if text[index] == '"' || text[index] == 'r' {
+                    literals.push(text[index..end.min(text.len())].iter().collect());
+                }
+                index = end;
+            }
+            None => index += 1,
+        }
+    }
+    literals
+}
+
+/// The index after the item that starts at `index`: past the first `;` outside every bracket
+/// (an array type or length such as `[u8; 2]` holds one), or past the `}` that closes the first
+/// `{` outside brackets, skipping comments and literals.
+fn gated_item_end(text: &[char], mut index: usize) -> usize {
+    let mut depth = 0_usize;
+    while index < text.len() {
+        if let Some(end) = blank_extent(text, index) {
+            index = end;
+            continue;
+        }
+        match text[index] {
+            ';' if depth == 0 => return index + 1,
+            '{' | '[' | '(' => depth += 1,
+            '}' | ']' | ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 && text[index] == '}' {
+                    return index + 1;
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    index
 }
 
 fn line_end(text: &[char], mut index: usize) -> usize {
