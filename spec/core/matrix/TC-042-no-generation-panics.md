@@ -38,7 +38,7 @@ arithmetic sites of IR-577 hold no unchecked index, slice or subtraction.
 5. Hand the record-pairing step of `generate_kani` one record fewer and one record more than the
    group has items, and an equal count; assert `KaniRecordCountMismatch` with both counts for the
    first two and a paired item per record for the third (NFR-005-AC-5).
-6. PLANNED (IR-577). Hand the position-rewriting step of `generate_kani` a `DuplicateItem` record
+6. PLANNED (IR-577). Hand `rewrite_duplicate_position` of `src/routed/generate.rs` a `DuplicateItem` record
    whose `first_index` equals the group's length, one beyond it, and one at the last valid position;
    assert `KaniDuplicatePositionOutOfRange` with the position and the length for the first two and
    the earlier item's request index for the third (NFR-005-AC-6).
@@ -46,11 +46,12 @@ arithmetic sites of IR-577 hold no unchecked index, slice or subtraction.
    without a coverage export; assert the `MapMismatch` diagnostic `typed implication census differs
    from map`, no classification, `evaluation_count` of `None` and no consequents. Hand it two
    probed regions with an export and assert no consequents and no `MapMismatch` (NFR-005-AC-7).
-8. PLANNED (IR-577). Locate the bodies of `generate_kani`, `observe_clause` and
-   `generate_boolean_oracle_inner` in the literal-free non-test code of their files, as the scan
-   locates `fn digest`; assert each is found and that none holds an index expression, a range slice
-   or an integer subtraction (NFR-005-AC-8). Assert on a hand-built body that the check flags `a[1]`,
-   `a[2..]` and `n - 1`, and passes an array type, a slice pattern and an attribute.
+8. PLANNED (IR-577). Locate the bodies of `generate_kani`, `rewrite_duplicate_position`,
+   `observe_clause` and `generate_boolean_oracle_inner` in the literal-free non-test code of their
+   files, as the scan locates `fn digest`; assert each is found and that none holds an index token or
+   a subtraction token as NFR-005-AC-8 defines them (NFR-005-AC-8). Assert on a hand-built body that
+   the check flags `a[1]`, `a[2..]`, `f(x)[0]`, `n - 1` and `n -= 1`, and passes `for l in [a, b]`,
+   `vec![a]`, `let [x, ..] = y`, `#[must_use]`, an array type, `fn f() -> u8` and `-n`.
 
 ## Expected Results
 
@@ -58,7 +59,8 @@ The scan finds zero panic tokens; each seam test returns its typed refusal or va
 The four `src/oracle/function/mod.rs` sites, the `ScalarOperation::reachable` arm, the proof-graph
 serialization and the `boolean_v1` assertion have no fixture and are held by step 1 alone.
 `CaseIdentity::digest` is left to IR-344. Once IR-577's code lands, the two IR-577 seam tests return
-their typed refusal or row with no panic, and the three bodies hold no index, slice or subtraction
-expression; the `generate_boolean_oracle_inner` lookup has no fixture and is held by step 8 alone.
-The other index, slice and arithmetic sites NFR-005 Scope measured are guarded inside their own
-function and have no step.
+their typed refusal or row with no panic, and the four bodies hold no index or subtraction token; the `generate_boolean_oracle_inner`
+lookup and `regions[0]` write have no fixture and are held by step 8 alone. The other index, slice
+and arithmetic sites NFR-005 Scope measured have no step: some are guarded inside their own
+function, and the rest rest on a caller, a validator or a type, which NFR-005 names as a known limit
+and does not cover.
