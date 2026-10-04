@@ -11,58 +11,74 @@ relationships:
 ## Description
 
 Verify that `make kani-scope` decides from changed paths whether the real-Kani lane is required,
-that `make kani-gate` runs the lane serially under the host lock and reports an evidence line that
-cannot read as a pass when nothing ran, and that the lane selects every real-Kani test (NFR-006).
-The pull-request criteria are inspection, below.
+that `make kani-gate` runs the same recipe as `make kani` serially under the host lock and reports an
+evidence line that cannot read as a pass when nothing ran or the tree moved, and that the lane selects
+every real-Kani test (NFR-006). The pull-request criteria are inspection, step 11.
 
 ## Test Procedure
 
-The targets call `scripts/kani_scope.sh` and `scripts/kani_gate.sh` (planned), so a test can hand
-them stand-in executables on `PATH` for `cargo`, `cargo-kani` and `git` without installing Kani. The
-test is `tests/it/kani_gate.rs` (planned) and runs in the default `cargo test`.
+The targets call `scripts/kani_scope.sh` and `scripts/kani_gate.sh` (planned), and the Makefile
+defines the `kani` recipe once, in a variable the gate calls. A test can hand them stand-in
+executables on `PATH` for `cargo`, `cargo-kani` and `git`, and a temporary lock file through
+`KANI_LOCK`, without installing Kani and without touching `/tmp/agent-e-heavy-build.lock`. The test is
+`tests/it/kani_gate.rs` (planned) and runs in the default `cargo test`. It starts no nested `cargo
+test` and holds no host-wide lock.
 
-1. Scope, required (NFR-006-AC-1): feed `src/kani/generate/negotiate.rs`, `src/oracle/boolean_v1.rs`,
-   `src/routed/generate.rs`, `src/replay/witness.rs`, `src/core/identity.rs`,
-   `tests/it/kani_batching.rs` and `Cargo.lock` as changed paths, each alone, and assert `required`
-   and the path on the output.
-2. Scope, not required (NFR-006-AC-2): feed `spec/kani/functional/FR-017-kani-execution-evidence.md`,
-   `reviews/REV-018-bound-coverage-observations.md`, `src/strategy/mod.rs`, `Makefile` and
-   `.github/workflows/ci.yml`, each alone, and assert `not required`.
-3. Lock and serial (NFR-006-AC-3): with a stand-in `cargo` that records its argument vector and the
-   moment it started, hold `/tmp/agent-e-heavy-build.lock` from another process for a fixed interval,
-   start the gate, and assert the stand-in did not start until the lock was released, was started
-   once, and was passed `--test-threads=1`.
-4. Counts (NFR-006-AC-4): with the stand-in listing 27 tests, reporting 27 passed: `result=passed`,
-   exit 0. Reporting 26 passed: `result=failed`, non-zero. Listing 0 and reporting 0 passed:
-   `result=failed expected=0`, non-zero. Listing 27 and reporting one failure: `result=failed`,
-   non-zero.
-5. Line (NFR-006-AC-5): on the passing run in step 4, assert the line matches the field order
-   `result`, `ran`, `expected`, `elapsed`, `kani`, `tree`, `head`, with `ran` equal to `expected`,
-   `tree=clean` and `head` equal to the stand-in `git`'s head.
-6. Dirty tree (NFR-006-AC-6): with the stand-in `git` reporting a dirty tree and the tests passing,
-   assert `tree=dirty`, no `result=passed` anywhere on the output, and a non-zero exit.
-7. Launcher absent (NFR-006-AC-7): with no `cargo-kani` on `PATH`, assert the stand-in `cargo` is
-   never started, the line is `kani-gate: not run: launcher absent` and the exit is non-zero.
-8. Selection (NFR-006-AC-8): collect the names of the tests carrying `#[ignore = "kani lane` by a
-   `syn` walk of `tests/it`, run `cargo test --test it -- --ignored --list` with the `make kani`
-   filters, and assert the two sets are equal; a test tagged `kani lane` that no filter selects, or a
-   selected test without the tag, fails the step.
-9. `make ci` (NFR-006-AC-9): run `make -n ci` and assert no line contains `kani`.
-10. Inspection (NFR-006-AC-10 to NFR-006-AC-12): for each merged pull request that touched the
+1. Scope, required (NFR-006-AC-1): feed each of the fifteen paths of NFR-006-AC-1 alone as the
+   changed paths and assert `required` and the path on the output.
+2. Scope, not required (NFR-006-AC-2): feed each of the six paths of NFR-006-AC-2 alone and assert
+   `not required`.
+3. Rename (NFR-006-AC-3): have the stand-in `git`, asked for names with rename detection off, report
+   `src/kani/old.rs` and `src/strategy/new.rs`, then `src/strategy/old.rs` and `src/kani/new.rs`;
+   assert `required` for each. Assert the script's `git` argument vector turns rename detection off.
+4. One recipe (NFR-006-AC-4): run `make -n kani` and `make -n kani-gate`; assert the same `cargo test`
+   command line in both and that it holds each of the six filters, `--ignored` and
+   `--test-threads=1`.
+5. Lock and serial (NFR-006-AC-5): set `KANI_LOCK` to a temporary file. The stand-in `cargo` writes a
+   marker file when it starts and records whether `flock -n` on `KANI_LOCK` fails (the gate holds it).
+   Assert one start, `--test-threads=1` and a failed `flock -n`. Then hold the temporary lock from
+   the test, start the gate, wait until a process whose command line names `flock` and the temporary
+   lock path appears in the process table, assert the marker file is absent, release the lock and
+   wait for the marker file. No wall-clock interval orders the steps.
+6. Counts (NFR-006-AC-6): the stand-in listing 27 tests and reporting 27 passed gives `result=passed`
+   and exit 0; reporting 26 passed gives `result=failed` and non-zero; listing 0 and reporting 0 gives
+   `result=failed expected=0` and non-zero; listing 27 and reporting one failure gives
+   `result=failed` and non-zero.
+7. Line (NFR-006-AC-7): on the passing run, assert the field order `result`, `ran`, `expected`,
+   `elapsed`, `kani`, `tree`, `head`, `ran` equal to `expected`, `kani` equal to the version the
+   stand-in `cargo-kani --version` prints, `tree=clean` and `head` equal to the stand-in `git`'s head.
+   With a stand-in `cargo-kani` that prints no version assert `result=failed` and non-zero.
+8. Re-read (NFR-006-AC-8): with a stateful stand-in `git` whose head is `A` before the build and `B`
+   after, and one whose tree is clean before and dirty after, assert `result=failed` and non-zero
+   for each.
+9. Dirty tree (NFR-006-AC-9): with the stand-in `git` reporting a dirty tree before the build and the
+   tests passing, assert `tree=dirty`, no `result=passed` on the output, and a non-zero exit.
+10. Launcher absent (NFR-006-AC-10): with no `cargo-kani` on `PATH`, assert the stand-in `cargo` never
+    started, the line is `kani-gate: not run: launcher absent` and the exit is non-zero.
+11. Selection (NFR-006-AC-11), with no nested cargo: a `syn` walk of `tests/it` collects the module
+    path and function name of every `#[ignore]`d test and notes which carry `#[ignore = "kani lane`.
+    Read the six filters from `make -n kani`. Apply libtest's rule (a filter selects a test whose full
+    path contains it) and assert that the tagged tests and the `#[ignore]`d tests the filters select are
+    the same set; a tagged test no filter selects, or a selected test without the tag, fails the step.
+12. `make ci` (NFR-006-AC-12): run `make -n ci` and assert no line contains `kani`.
+13. Inspection (NFR-006-AC-13 to NFR-006-AC-17): for each merged pull request that touched the
     Kani-touching set, read its body for the evidence line and compare `head` with the pull request's
-    last commit; for each such pull request that ran no lane, read its body for
-    `kani-gate: not run: <reason>` and for the absence of a claim that the lane verified the
-    change; for each pushed version tag, read the release ticket for its line.
+    last commit, and list the commits of `origin/main` that touched the set at the merge and check
+    the head contains each; for each such pull request that ran no lane, read its body for
+    `kani-gate: not run: <reason>`, for the absence of a claim that the lane verified the change, and
+    that it is unmerged; for each pull request whose scope was `not required`, read its body for
+    `kani-gate: not required`; for each pushed version tag, read the release ticket for its line.
 
 ## Expected Results
 
-The scope target is a pure function of the changed paths. The gate prints `passed` only for a run in
-which every listed test ran and passed on a clean tree, serially, under the lock, and prints a
-`not run` or `failed` line otherwise, with a non-zero exit. The lane selects exactly the tests that
-carry its tag. `make ci` does not run the lane.
+The scope target is a pure function of the changed paths, renames included. The gate prints `passed`
+only for a run in which every listed test ran and passed on a clean tree that did not move, serially,
+under the lock, with the `make kani` command line, and prints a `not run` or `failed` line otherwise,
+with a non-zero exit. The lane selects exactly the tests that carry its tag. `make ci` does not run
+the lane.
 
 ## Implementation
 
-Planned: `scripts/kani_scope.sh`, `scripts/kani_gate.sh`, the `kani-scope` and `kani-gate` targets in
-`Makefile`, and `tests/it/kani_gate.rs`. Steps 1 to 9 are tests; step 10 is inspection. No CI
-workflow is part of this test case.
+Planned: `scripts/kani_scope.sh`, `scripts/kani_gate.sh`, the `kani-scope` and `kani-gate` targets and
+the shared `kani` recipe variable in `Makefile`, and `tests/it/kani_gate.rs`. Steps 1 to 12 are tests;
+step 13 is inspection. No CI workflow is part of this test case.
