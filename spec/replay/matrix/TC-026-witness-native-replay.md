@@ -85,10 +85,14 @@ neighbouring points settle `inconclusive` (default suite,
 `tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values`). In the Kani lane the point is
 read from Kani's own printed block, by a reader that shares no code with `decode_falsification`
 (the `// value` comment lines and, separately, the little-endian byte vectors, which must agree
-with each other and with the decoder), and a neighbour control must not reproduce. Replacing the
-real transcript with a constant, a decoder that adds one to each value, one that swaps the two
-values, and one that returns a fixed in-domain pair each turned the Kani lane red when run on a
-throwaway copy (IR-29).
+with each other and with the decoder), and a neighbour control must not reproduce. On a throwaway
+copy each of these turned the Kani lane red (IR-29): replacing the transcript handed to the replay
+with a constant after the printed witness is read, a decoder that adds one to each value, one that
+swaps the two values, and one that returns a fixed in-domain pair. The witness check pins the
+replay to the transcript it is given. A constant substituted at the source, right after the run is
+classified `Falsified` and before anything reads it, stays green, because the independent reader,
+the decoder and the replay then all see the same self-consistent block. The link from the Kani run
+to that transcript rests on the `Verified` then `Falsified` outcome assertions.
 
 What stays unbacked: the native twin is hand-mirrored QSL source, not derived from the contract or
 the Rust subject, and the input package is hand-built, so the contract-to-Contract-IR step does not
