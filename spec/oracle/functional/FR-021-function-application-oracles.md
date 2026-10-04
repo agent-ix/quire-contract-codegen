@@ -255,8 +255,8 @@ come from the request, not from this generator's own inference.
   itself failed to classify.
 - The generator shall order claim-map entries by the same descriptor-key discipline FR-018
   established: the `call` expression node's id, then the applied function's declaring node id, then
-  each argument operand's source node id, every node id compared in node-id order. When items tie
-  on all of those keys and name different functions absent from the request, the generator shall
+  each argument operand's source node id, every node id compared in node-id order. When items
+  share all of those keys and name different functions absent from the request, the generator shall
   order them by the function name, compared byte-wise over its UTF-8 bytes and case-sensitively
   (FR-021-AC-24). Two items on one `call` node naming the two members of a duplicate-node pair
   (FR-021-AC-22) are likewise two entries, ordered by name the same way, but both carry the same
