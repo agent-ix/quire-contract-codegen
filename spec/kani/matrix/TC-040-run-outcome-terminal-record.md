@@ -58,6 +58,7 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. Steps 7, 8 and 12 wait on the unmerged QSL
-`Inconclusive` terminal value, and step 13 is held on QSL's answer about
+Planned. No outcome maps to QSL's terminal value at this revision. Steps 7, 8, 11 and 12, and the `ReplayRefused`
+inspection of step 10, wait on the unmerged QSL `Inconclusive` terminal value; step 9 and the
+`Failed` half of step 10 do not. Step 13 is held on QSL's answer about
 `DependencyLockError::Duplicate` (FR-029 Status).

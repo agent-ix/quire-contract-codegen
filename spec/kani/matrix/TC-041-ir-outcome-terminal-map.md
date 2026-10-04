@@ -55,7 +55,7 @@ cause, and that the map is one match with no wildcard arm.
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. Steps 8 and 11 wait on the unmerged
-QSL `Inconclusive` terminal value; steps 9 and 10, which include `InvalidFunction` and `Name` as
-`Failed`, do not. Step 12 is held on QSL's answer about
+Planned. No outcome maps to QSL's terminal value at this revision. Steps 8, 10 and 11 wait on the unmerged
+QSL `Inconclusive` terminal value, because they include settlements whose value is
+`Inconclusive`; step 9, which includes `InvalidFunction` and `Name` as `Failed`, does not. Step 12 is held on QSL's answer about
 `DependencyLockError::Duplicate` (FR-029 Status).
