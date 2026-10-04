@@ -89,7 +89,7 @@ operations:
   - name: generate_bounded_kani_corpus_case
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
     output: BoundedCorpusCase | KaniOutcome
-    semantics: one bounded Kani corpus case and its proof dependency graph; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts
+    semantics: one bounded Kani corpus case and its proof dependency graph; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts; a serialization failure of the case's identity or proof graph refuses as kani_corpus_serialization_failed (NFR-005)
   - name: generate_exact_scalar_oracles
     inputs: [admitted CheckedPackageV2, ExactScalarItem list]
     output: ExactScalarOracles | OracleGenerationError

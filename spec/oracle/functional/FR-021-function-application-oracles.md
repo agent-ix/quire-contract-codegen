@@ -209,7 +209,9 @@ come from the request, not from this generator's own inference.
   `Multiply` (the unary `Negate`), then the generator shall refuse the body with
   `ExactFunctionRefusal::UnsupportedOperator` and omit that function from `checked_package()`.
 - The generator's own `src/oracle/function/mod.rs` shall contain no invocation of `unreachable!`,
-  `panic!`, `todo!` or `unimplemented!`, anywhere in the file; comment lines are not counted.
+  `panic!`, `todo!` or `unimplemented!`, anywhere in the file; comment lines are not counted. Its
+  non-test code shall also contain no `unwrap`, `expect` or other panic token FR-014-AC-39 lists:
+  NFR-005 holds that scan for this file and names how its four remaining sites are expressed.
 - If a function's declared parameter type or result type reaches a `composite_type` of form
   `reference` at any depth, then the generator shall refuse every item naming that function as
   blocked on quire-spec-language#120, for the same reason FR-018-AC-7 refuses a `reference` operand:

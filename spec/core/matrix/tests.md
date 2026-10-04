@@ -25,6 +25,7 @@ type: TestMatrix
 | NFR-002 | Test | TC-001 (NFR-002-AC-1, NFR-002-AC-2) | 🚧 Planned |
 | NFR-002 | Test | TC-003 (NFR-002-AC-3) | 🚧 Planned |
 | NFR-002 | Inspection | NFR-002-AC-4 | 🚧 Planned |
+| NFR-005 | Test | TC-042 (NFR-005-AC-1 through NFR-005-AC-5) | 🚧 Planned; the criteria are written ahead of the code change that removes the measured panic sites (IR-543) |
 
 ## Stakeholder Requirement Coverage
 
@@ -48,3 +49,4 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-002 | Compile and publish atomically | Integration | P0 | FR-005-AC-1, FR-005-AC-5, NFR-001-AC-2, NFR-001-AC-3 | 🚧 Planned |
 | TC-003 | Reject unsupported inputs explicitly | Integration | P0 | NFR-002-AC-3 | 🚧 Planned |
 | TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-005-AC-4 | 🚧 Planned |
+| TC-042 | Verify no panic on a generation or analysis path | Integration | P0 | NFR-005-AC-1, NFR-005-AC-2, NFR-005-AC-3, NFR-005-AC-4, NFR-005-AC-5 | 🚧 Planned |
