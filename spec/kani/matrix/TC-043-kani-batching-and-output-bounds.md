@@ -65,7 +65,7 @@ FR-028-AC-12, verified by TC-039.
    one is verified; the timeout entry is inconclusive timed-out naming T while the others keep their
    results; the entry with no checks and no timeout is inconclusive with no counterexample; each
    member's evidence carries its kind, harness path, launcher path, unwind bound, solver, outcome and
-   checks plus the batch vector, the member list, the batch statement and the exit code
+   checks plus the group's vector, the member list, the batch statement and the exit code
    (FR-017-AC-22); a sub-second T is carried rounded up. A missing, duplicated or unrequested
    harness refuses the group (FR-017-AC-23).
 8. Each falsified member's playback is the block headed for its own path, never an earlier member's;

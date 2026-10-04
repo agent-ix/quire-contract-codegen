@@ -103,9 +103,9 @@ pub enum KaniExecutionRefusal {
         /// What went wrong.
         detail: String,
     },
-    /// A batch process was still running when its outer bound, the request timeout times the
+    /// A group's process was still running when its outer bound, the request timeout times the
     /// member count, elapsed. It was killed. Kani writes its report only at the end, so a killed
-    /// batch leaves none and no member is classified (FR-017, FR-028-AC-12).
+    /// group leaves none and no member is classified (FR-017, FR-028-AC-12).
     BatchTimedOut {
         /// How many harnesses the process ran.
         members: usize,
@@ -162,11 +162,11 @@ impl fmt::Display for KaniExecutionRefusal {
             ),
             Self::BatchTimedOut { members, timeout } => write!(
                 formatter,
-                "a batch of {members} harnesses did not finish within {timeout:?} each"
+                "a group of {members} harnesses did not finish within {timeout:?} each"
             ),
             Self::PlaybackForNonMember { harness } => write!(
                 formatter,
-                "the console holds a playback headed for {harness}, which is not in the batch"
+                "the console holds a playback headed for {harness}, which is not in the group"
             ),
         }
     }
@@ -335,7 +335,7 @@ fn run_single(
     ))
 }
 
-/// What one launcher process of a batch yielded: the harnesses it ran and their evidence or the
+/// What one launcher process (one group) of a batch yielded: the harnesses it ran and their evidence or the
 /// refusal of the whole process.
 #[derive(Debug)]
 pub struct KaniGroupRun {
@@ -363,8 +363,8 @@ pub struct KaniGroupRun {
 /// `module::harness` path of each entry, each member is classified from its own entry and its own
 /// console playback, and a report that lacks, repeats or adds a harness, a playback that cannot be
 /// attributed, an output stream over 8 MiB per member and an outer bound that elapsed each refuse
-/// that process and classify none of its members. The generator does not split or retry a refused
-/// batch.
+/// that process (group) and classify none of its members. The generator does not split or retry a
+/// refused group.
 pub fn execute_kani_obligations(
     requests: &[KaniExecutionRequest<'_>],
 ) -> Result<Vec<KaniGroupRun>, KaniExecutionRefusal> {
