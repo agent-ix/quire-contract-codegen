@@ -20,8 +20,7 @@ relationships:
 
 The generator shall map every Contract IR `KaniOutcome`, paired with the settlement of its replay, to
 exactly one `qsl_replay::TerminalValue`. The map is total over the pair (outcome, replay
-settlement), not over the outcome alone, for every pair outside FR-029's held variant
-`DependencyLockError::Duplicate`, and it preserves the outcome's refusal cause: the outcome
+settlement), not over the outcome alone, and it preserves the outcome's refusal cause: the outcome
 kinds that QSL's terminal value collapses into one variant stay distinguishable through that
 variant's typed cause. This is QSL ADR-013 C-09 as merged, whose two inputs are the IR `KaniOutcome`
 and, for a `Counterexample`, the result of its replay. The replay settlement, its six readings and
@@ -72,8 +71,7 @@ terminal value, so neither map applies to them.
   | `Counterexample`, with a replay disagreement | `Inconclusive(InconclusiveCause::ReplayParity)` |
   | `Counterexample`, with a non-fault replay refusal | `Inconclusive(InconclusiveCause::ReplayRefused)` carrying the refusal's QSL catalog code |
   | `Counterexample`, with a setup refusal on data (a non-fault `CallSiteRefusal` or `DependencyLockError::Input`) | `Inconclusive(InconclusiveCause::ReplayRefused)` carrying the refusal's QSL catalog code |
-  | `Counterexample`, with `DependencyLockError::Duplicate` | HELD: no value is stated until QSL rules ([FR-029](./FR-029-run-outcome-terminal-record.md) Status) |
-  | `Counterexample`, with a fault or a CG defect (the errors FR-029-AC-11 lists, excluding the held `DependencyLockError::Duplicate`) | `Failed` |
+  | `Counterexample`, with a fault or a CG defect (the errors FR-029-AC-11 lists) | `Failed` |
   | `Refused` | `Declined(ProofRefusalCause::Refused)` |
   | `InvalidInput` | `Declined(ProofRefusalCause::InvalidInput)` |
   | `IncompleteInput` | `Declined(ProofRefusalCause::IncompleteInput)` |
@@ -91,13 +89,15 @@ terminal value, so neither map applies to them.
 - The generator shall not map a setup refusal that arises after Kani refuted to `Declined`: a
   non-fault `CallSiteRefusal` and `DependencyLockError::Input` are `Inconclusive(ReplayRefused)`
   with their QSL code, as [FR-029](./FR-029-run-outcome-terminal-record.md) states, because QSL
-  reserves `Declined` for a refusal before any backend run. `ReplayPackageError::InvalidFunction`
-  and `FrameReplayError::Name` carry no QSL code and map to `Failed`; `DependencyLockError::Duplicate`
-  is HELD (FR-029 Status).
+  reserves `Declined` for a refusal before any backend run. A repeated dependency identity is
+  refused by QSL's `DependencyInput::new` and arrives as `DependencyLockError::Input` with
+  `invalid_package`, so it is `ReplayRefused` too (FR-029-AC-14).
+  `ReplayPackageError::InvalidFunction` and `FrameReplayError::Name` carry no QSL code and map to
+  `Failed`.
 - The generator shall map a `Counterexample` to `Refuted` only with a reproduced replay.
-- The generator shall classify a fault and the CG-raised failures FR-029-AC-11 lists, but not
-  `DependencyLockError::Duplicate`, as [FR-029](./FR-029-run-outcome-terminal-record.md) states: by
-  walking the whole error, and with `ReplayRefused` carrying only QSL's closed catalog of codes.
+- The generator shall classify a fault and the CG-raised failures FR-029-AC-11 lists as
+  [FR-029](./FR-029-run-outcome-terminal-record.md) states: by walking the whole error, and with
+  `ReplayRefused` carrying only QSL's closed catalog of codes.
 - The generator shall expose no `proof_category` function
   ([AD-003](../../assurance/AD-003-evidence-chain.md) E-9).
 - The generator shall map no outcome to `Tested`.
@@ -111,7 +111,7 @@ terminal value, so neither map applies to them.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-030-AC-1 | Every pair (`KaniOutcomeKind`, replay settlement) that the map's input can express, other than a `Counterexample` with `DependencyLockError::Duplicate` (held with FR-030-AC-13), maps to exactly one `TerminalValue`. | Test (TC-041) |
+| FR-030-AC-1 | Every pair (`KaniOutcomeKind`, replay settlement) that the map's input can express maps to exactly one `TerminalValue`. | Test (TC-041) |
 | FR-030-AC-2 | `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined` with `ProofRefusalCause::Refused`, `InvalidInput` and `IncompleteInput` respectively, so no refusal cause is lost. | Test (TC-041) |
 | FR-030-AC-3 | `TimedOut`, `ResourceExhausted` and `Cancelled` map to `Incomplete` with `IncompleteCause::TimedOut`, `ResourceExhausted` and `Cancelled` respectively. | Test (TC-041) |
 | FR-030-AC-4 | `Proved` with a transcript count of three SUCCESS checks maps to `Proved { success_checks: 3 }`, `Proved` with a count of zero maps to `Proved { success_checks: 0 }`, and `Counterexample` with a reproduced replay maps to `Refuted`. | Test (TC-041) |
@@ -123,7 +123,7 @@ terminal value, so neither map applies to them.
 | FR-030-AC-10 | `Counterexample` with a fault, walked through every wrapper FR-029-AC-10 lists, and with each CG-raised failure FR-029-AC-11 lists, maps to `Failed`. | Test (TC-041) |
 | FR-030-AC-11 | Across every replay settlement other than reproduced, `Counterexample` maps to a value other than `Refuted`. | Test (TC-041) |
 | FR-030-AC-12 | `Counterexample` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped, maps to `Inconclusive(ReplayRefused)` carrying that refusal's QSL catalog code, never to `Declined`. | Test (TC-041) |
-| FR-030-AC-13 | HELD on a QSL ruling (FR-029 Status). `Counterexample` with `DependencyLockError::Duplicate` maps to the value that ruling states. | Test (TC-041) |
+| FR-030-AC-13 | `Counterexample` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-041) |
 
 ## Dependencies
 
@@ -137,15 +137,29 @@ terminal value, so neither map applies to them.
 
 Planned (Linear IR-465, IR-358). No code implements this map at this revision. The code half is
 blocked on QSL types that are not merged. Merged in QSL `main`, read at this revision:
-`TerminalValue::Declined(ProofRefusalCause)`, `Unsupported` and `Incomplete` exist, and
-`CallSiteRefusal::code()` and `DependencyInputRefusal::code()` are public.
-`TerminalValue::Inconclusive`, `InconclusiveCause::ReplayParity` and `ReplayRefused(Code)` are not
-in QSL `main`; they are pending in QSL (QSL-351, in progress, with only the `ToolPin` deletion
-merged). FR-030-AC-9 and AC-12 cannot be built until those types merge. QSL ruled, relayed on
-IR-465 (a QSL ruling recorded by the planner), that vacuity stays `Proved { success_checks: 0 }`
-and that a setup refusal after a refutation is `ReplayRefused`, as [FR-029](./FR-029-run-outcome-terminal-record.md)'s Status states.
-FR-030-AC-13 is HELD on QSL's answer about `DependencyLockError::Duplicate`.
+`TerminalValue::Declined(ProofRefusalCause)`, with a cause and no code, `Unsupported` and
+`Incomplete` exist, and `CallSiteRefusal::code()` and `DependencyInputRefusal::code()` are public.
+`TerminalValue::Inconclusive`, `InconclusiveCause::ReplayParity` and `ReplayRefused(Code)`, and a
+`Declined` that carries a code, are not in QSL `main`; they are pending in QSL (QSL-351, in
+progress, with only the `ToolPin` deletion merged). FR-030-AC-9, AC-12 and AC-13 cannot be built
+until those types merge; AC-2 and the other rows can. QSL ruled, relayed on IR-465 (a QSL ruling
+recorded by the planner), that vacuity stays `Proved { success_checks: 0 }` and that a setup
+refusal after a refutation is `ReplayRefused`, as
+[FR-029](./FR-029-run-outcome-terminal-record.md)'s Status states.
 
-Open question for QSL, not decided here: QSL's pending `Declined` carries a code beside its cause.
-Which code the `Refused`, `InvalidInput` and `IncompleteInput` rows carry is not stated in merged
-text, so FR-030-AC-2 asserts the cause only until QSL states it.
+When a lock has several defects, QSL's `DependencyInput::new` reports the first by its own order
+(libraries in supply order; for each, an empty identity, then a repeated identity, then a shared
+source owner), which differs from the order CG's removed pre-check imposed. FR-030-AC-13 is
+therefore limited to a lock whose only defect is the repeated identity.
+
+The `Declined` code. QSL ruled, relayed (a QSL ruling recorded by the planner on IR-605), that
+`Declined { cause, code }` carries the code in the registry that issued it: `code` is a
+`DeclineCode`, either a QSL catalog `Code` or IR's own registry code type. The map's input,
+Contract IR's `KaniOutcome` at the revision CG locks, is a kind plus IR's own cause string (for
+example `kani_identity_invalid` or `kani_population_incomplete`), which is not a QSL catalog
+`Code`. QSL takes IR's type, since it already depends on `quire-contract-model`: IR exports a typed
+code for its STD-001 registry from `quire-contract-model`, and `KaniOutcome.code` becomes that type
+instead of `String` (IR-605, IR lane, spec first). QSL-351 lands `DeclineCode` and its IR arm after
+IR's type merges. IR's incomplete population is not the replay's missing byte-provision input; the
+codes are distinct. FR-030-AC-2 asserts the cause only and stays cause-only until both land; this
+spec adds no code assertion to it.
