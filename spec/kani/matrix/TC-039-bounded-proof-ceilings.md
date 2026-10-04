@@ -26,6 +26,8 @@ recorded as FR-028 states.
 7. Generate a family with a supplied shadow.
 8. Narrow one argument inside its declared domain.
 9. Narrow one argument outside its declared domain.
+10. Run a batch of N harnesses sharing one wall-clock budget T with a stand-in that outlasts N times
+    T, one that finishes after T but within N times T, and a budget whose product overflows.
 
 ## Expected Results
 
@@ -42,6 +44,8 @@ recorded as FR-028 states.
 8. The identity and the evidence record the declared domain, the narrowed bound and that the
    harness covers only the narrowed bound (FR-028-AC-8).
 9. The obligation is refused with a typed reason and no harness (FR-028-AC-9).
+10. The first batch is killed and every member is `inconclusive` timed-out naming T and N; the
+    second is classified normally; the third never elapses and does not panic (FR-028-AC-12).
 
 ## Status
 

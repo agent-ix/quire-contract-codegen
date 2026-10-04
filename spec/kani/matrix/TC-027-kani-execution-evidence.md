@@ -46,6 +46,20 @@ a run removes its own file; a file over the read bound is refused. A success rep
 failed, errored, undetermined or unknown check (any class) is refused for every obligation kind
 (FR-017-AC-18), and a class spelled `cover` or `unwind` is always that class (FR-017-AC-20).
 
+Output cap, capture failure and group cleanup (IR-277, FR-017-AC-14, FR-017-AC-24, FR-017-AC-25):
+drive a launcher stand-in that prints more than 8 MiB on stdout, then on stderr, and one that prints
+exactly 8 MiB; drive a capture whose reader thread panics; run a launcher that exits on its own
+leaving a real grandchild in its group.
+
+Batching (IR-277, FR-017-AC-21 to FR-017-AC-23): build N = 1, 10 and 50 harnesses with equal options
+and ceilings and read the launch's argument vector and the number of launcher processes a stand-in
+counts (1 for N = 1, and 1 for N = 10 and 50); mix two option vectors and two ceilings and count one
+process per group; feed a batch report in which one member is falsified and another verified, one in
+which every member succeeds but the process exited unsuccessfully, and ones that lack a requested
+harness, hold one twice or hold an unrequested one; leave one member's source out of the crate.
+The PR for the code records the process count and wall time before and after for N = 1, 10 and 50 in
+the `make kani` lane.
+
 Refusals: request a run against an installation whose launcher is absent.
 
 Routed scalar harness (FR-017-AC-11): build a routed exact-scalar harness with `generate_routed`
@@ -82,12 +96,23 @@ unwinding check in a listing is verified. The run with zero successful checks is
 with the vacuous-proof reason (FR-017-AC-13), unless it is a precondition harness, which its
 cover summary decides.
 
-The launcher, exercised with real short-lived processes: a run printing more than 8 MiB completes
-with its real exit status and a bounded text (the verdict is in the exported report, not the stream); a `Duration::MAX`
+The launcher, exercised with real short-lived processes: a run printing more than 8 MiB on either
+stream is stopped, its group killed, and refused with `kani_output_over_limit` naming the stream and
+the limit, with no outcome, while a run printing exactly 8 MiB completes with its real exit status
+and the whole stream (FR-017-AC-14, replacing the earlier test that a longer stream keeps only its
+tail, which asserted the silent truncation); a `Duration::MAX`
 timeout does not panic; a capture thread told to stop returns what is already in its pipe, stops
 while a write end is still open and idle, and stops within its drain limit while a straggler keeps
-writing; and a run that times out has a real grandchild killed with it (FR-017-AC-14 through
-FR-017-AC-17).
+writing; a run that times out has a real grandchild killed with it, and so does a run whose launcher
+exits on its own (FR-017-AC-15 through FR-017-AC-17 and FR-017-AC-24); and a capture thread that
+panics refuses the run with `kani_output_unread` and no outcome (FR-017-AC-25).
+
+Batches (FR-017-AC-21 to FR-017-AC-23): one process for N compatible harnesses and one per group
+otherwise, the argument vector holding one `--harness <symbol> --exact` pair per member in request
+order; each member decided by its own report entry, a falsified member leaving a verified neighbour
+verified, and an all-success report from an unsuccessfully exited process inconclusive for every
+member; a report that lacks, duplicates or adds a harness refuses the whole batch and classifies
+none; a member missing from the crate refuses the batch with no process started.
 
 Each capture's exported report parses to the expected typed report and classifies to verified, falsified with
 the assertion playback passed through verbatim, exhausted bound, cover-unsatisfied 0 of 1,
@@ -118,7 +143,11 @@ FR-017-AC-13, and the launcher tests (`a_stream_longer_than_the_capture_limit_ke
 `a_capture_thread_*`, `a_launcher_printing_more_than_the_limit_completes_with_bounded_text`,
 `a_timeout_of_duration_max_never_elapses_and_does_not_panic`,
 `a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`) for FR-017-AC-14
-through FR-017-AC-17;
+through FR-017-AC-17, where the two tests that assert the silent tail
+(`a_stream_longer_than_the_capture_limit_keeps_only_its_tail` and
+`a_launcher_printing_more_than_the_limit_completes_with_bounded_text`) are replaced by the refusal
+tests of FR-017-AC-14 under the IR-277 change, and the batch, group-cleanup and capture-failure tests
+for FR-017-AC-21 through FR-017-AC-25 are written with it;
 the `src/kani_transcript.rs` tests `tc_027_a_report_that_changed_shape_is_refused_not_classified`,
 `tc_027_a_report_without_exactly_one_harness_is_refused`,
 `tc_027_real_kani_the_per_check_view_carries_id_class_location_and_status`,

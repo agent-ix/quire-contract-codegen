@@ -1254,7 +1254,10 @@ and each interim file carries a header naming the step that deletes it.
 - Step 1a is blocked in CG itself: until QSL moves `quire-canonical` from its tag to
   `branch = "main"` (waiting on the owner), CG's lock would hold two entries and `make deny` fails.
 - Batching with per-harness ceilings (FR-028) needs a rule for the batch's wall clock. This AD
-  puts batching in `run/` and leaves the rule to FR-017 and IR-277.
+  puts batching in `run/`. FR-028-AC-12 states the rule (the shared per-harness budget times the
+  member count, batches formed only from harnesses with equal options and ceilings, FR-017-AC-21)
+  as a default the owner may change; FR-017-AC-22 and FR-017-AC-23 own the per-harness split and the
+  refusals.
 - Typed node access depends on what IR exposes. If IR's decoder lands later than `core/ir`, the
   member names are spelled in CG once, which is still fewer than today's 70 call sites plus string
   tags, but not zero duplication with IR.

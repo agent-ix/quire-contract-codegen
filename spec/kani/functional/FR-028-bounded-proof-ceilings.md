@@ -52,6 +52,18 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
 - If a run exceeds its memory ceiling, then the generator shall stop it and classify it
   `inconclusive` with the memory-exhausted reason, naming the ceiling.
 - The generator shall never classify a run that exceeded a ceiling as verified or falsified.
+- Where FR-017 runs several harnesses in one launcher process, the generator shall hold that
+  process to its members' shared wall-clock budget multiplied by the member count, a product too
+  large to represent never elapsing, and to the members' shared memory ceiling. If the batch
+  exceeds that budget, then the generator shall kill it and classify every member inconclusive with
+  the timed-out reason, naming the budget, the member count and that the batch ended the run.
+  (Planned, IR-277.) Basis: this requirement states a ceiling for one harness's process tree and
+  does not say what a shared process owes its members. Kani checks a batch's harnesses one after
+  another and writes one report at the end, so a member's time adds to its neighbours' and a timeout
+  loses every member's result. The product of the shared per-harness budget is the smallest bound
+  that never ends a batch of healthy members sooner than their separate runs would have been
+  allowed, and equal ceilings (FR-017's grouping) make the product exact. The owner may choose
+  differently, for example a batch size limit or a retry of members singly after a batch timeout.
 - The generator shall record in each execution evidence the bounds of every symbolic argument and
   the two ceilings the run was held to.
 - The generator shall name the family in every harness identity, refusal and execution evidence, so
@@ -81,6 +93,7 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
 | FR-028-AC-7 | A family with a supplied shadow yields a harness with proof subject `bounded_shadow` and its refinement obligation in the same result, and never the shadow harness alone. | Test (TC-039) |
 | FR-028-AC-8 | An argument narrowed inside its declared domain records the declared domain, the narrowed bound and that the harness covers only the narrowed bound, in the harness identity and in the evidence. | Test (TC-039) |
 | FR-028-AC-9 | A narrowing outside the argument's declared domain is refused with a typed reason and no harness. | Test (TC-039) |
+| FR-028-AC-12 | A batch of N harnesses that share a wall-clock budget T that does not conclude within N times T is killed and every member is `inconclusive` with the timed-out reason naming the budget and N, never verified or falsified; a batch that concludes within N times T, though past T, is classified normally; an N times T too large to represent never elapses and does not panic. | Test (TC-039) |
 
 ## Dependencies
 

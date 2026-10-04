@@ -38,8 +38,9 @@ the run and everything read back from it.
   hands it, through one borrowed view, rather than owning two execution
   paths.
 - A Kani installation: the `cargo-kani` launcher to invoke.
-- The caller's wall-clock timeout, `KaniExecutionRequest::timeout`. The run has no memory ceiling;
-  what the generator keeps of the launcher's stdout and stderr is bounded to the last 8 MiB of each.
+- Or a batch of such harnesses (IR-277, planned: FR-017-AC-21 to FR-017-AC-23), run in one launcher process.
+- The caller's wall-clock timeout, `KaniExecutionRequest::timeout`, per harness. The run has no memory ceiling;
+  the launcher's stdout and stderr are each bounded to 8 MiB, and a stream over that is refused, never truncated.
 - The crate directory whose library source contains that harness's generated
   source byte for byte, and the Cargo target directory the run builds into.
 
@@ -86,9 +87,39 @@ the run and everything read back from it.
 - The generator shall run the launcher as the leader of its own process group and, when the run
   does not conclude within the timeout, kill that group, so that the solver and every other
   process the launcher started in it are killed with it.
-- The generator shall keep at most the last 8 MiB of the launcher's stdout and of its stderr,
-  read the pipes to their end or until the launcher has ended, and return within the timeout plus
-  a small fixed constant even when a process that left the group still holds a pipe open.
+- The generator shall read the launcher's stdout and stderr to their end or until the launcher has
+  ended, and return within the timeout plus a small fixed constant even when a process that left
+  the group still holds a pipe open.
+- If either stream carries more than 8 MiB, then the generator shall stop the run, kill the
+  launcher's process group and refuse with the stable code `kani_output_over_limit`, naming the
+  stream and the limit. It shall retain no text and classify no outcome, because a silently
+  truncated stream is evidence the generator cannot vouch for; a stream of exactly 8 MiB is
+  retained whole. (Planned, IR-277. Today the generator keeps the last 8 MiB of each stream and
+  says nothing.)
+- If a thread reading the launcher's stdout or stderr fails or panics, then the generator shall
+  refuse with the stable code `kani_output_unread` and classify no outcome, because an unread
+  stream is not an empty one. (Planned, IR-277. Today the join falls back to empty text.)
+- The generator shall leave no process the launcher started in its process group running when a
+  run concludes, whether it timed out or the launcher exited on its own. (Planned, IR-277. Today
+  only a timeout kills the group.)
+- Where harnesses are run as a batch, the generator shall start one launcher process for every
+  group of harnesses whose option vectors are equal once the harness selection is removed and whose
+  FR-028 ceilings are equal, and shall pass that process one `--harness <symbol> --exact` pair per
+  member, in request order, before the shared options. It shall hold the process to the batch
+  wall-clock rule of FR-028-AC-12. A batch of one is the single run above, with the argument
+  vector it states. (Planned, IR-277.)
+- The generator shall take each member's outcome, checks, SUCCESS-check count and falsifying
+  playback from that member's own entry in the batch's report, matched by harness symbol, so a
+  falsified member never changes another member's outcome. The batch's exit code is the process's
+  and is not attributable to one member: a member whose entry states success is verified only when
+  the process exited successfully or another member's entry states a failed check that accounts
+  for the exit; otherwise it is inconclusive as a success reported by an unsuccessfully exited
+  process. Each member's evidence carries the batch's complete argument vector and exit code.
+  (Planned, IR-277.)
+- If the report of a batch lacks a requested harness, holds one twice or holds one that was not
+  requested, or if a member's source is not in the crate, then the generator shall refuse the
+  whole batch with a typed cause, classify no member, and for a member missing from the crate
+  start no process. A caller may then run the members singly. (Planned, IR-277.)
 - If the run does not conclude within the caller's timeout, then the generator shall kill it and
   classify it as inconclusive with the timed-out reason.
 - If the backend reported a failed unwinding assertion, then the
@@ -153,13 +184,18 @@ the run and everything read back from it.
 | FR-017-AC-11 | A routed FR-022/FR-014 exact-scalar harness (`KaniScalarObligationHarness`) runs through `execute_kani_obligation` and `kani_launch_command` the same way an FR-015 contract harness does: a crate whose library source lacks its generated source byte for byte is `HarnessNotInCrate`, its covers classify a run identically (all satisfied is verified, an unsatisfied one is cover-unsatisfied, none printed is inconclusive), and its evidence carries `None` for obligation kind, since an exact-scalar claim carries no contract role. | Test (TC-027) |
 | FR-017-AC-12 | Real Kani captures of a verified run, a falsified run with a playback, an exhausted unwind bound, a run whose only check is unreachable, a partly satisfied cover and a run with no cover each parse into the expected typed report of harness status, successful checks, cover counts and failed checks, and classify to the expected outcome; the falsifying playback block passes through verbatim. | Test (TC-027) |
 | FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified, except that a precondition harness, which asserts nothing beyond its cover, is decided by its cover summary. | Test (TC-027) |
-| FR-017-AC-14 | A launcher that prints more than 8 MiB completes with its real exit status and only the tail of each stream retained. The verdict is read from the exported report, not from the stream, so truncating a stream never loses it. | Test (TC-027) |
+| FR-017-AC-14 | A launcher whose stdout or stderr carries more than 8 MiB is stopped, its process group is killed, and the run is refused with `kani_output_over_limit` naming the stream and the limit, with no outcome and no retained text; a launcher whose stream is exactly 8 MiB completes with its real exit status and the whole stream retained. No stream is ever truncated and then classified. (Planned, IR-277; replaces the silent tail.) | Test (TC-027) |
 | FR-017-AC-15 | A timeout too large to add to the current instant never elapses and does not panic. | Test (TC-027) |
 | FR-017-AC-16 | The launcher's capture threads are stopped and joined on every outcome: they return what the launcher wrote before it ended, stop while a write end is still held open, and stop within their drain limit while a straggler keeps writing, so a process holding a pipe open does not delay the return. | Test (TC-027) |
 | FR-017-AC-17 | A run that times out has the whole group the launcher leads killed, a real grandchild included. | Test (TC-027) |
 | FR-017-AC-18 | A report that is malformed, of an unknown check or harness status, of another schema version, that holds other than one harness result, or whose harness states success while it lists a failed, errored, undetermined or unknown check (of any class, including an unwinding assertion) is refused with its own typed cause and never classified, for every obligation kind; a run that exited successfully and exported no report is refused, and one that exited unsuccessfully and exported none is `NoVerdict`. | Test (TC-027) |
 | FR-017-AC-19 | The launch exports its report after the harness options; its report file name is unique to the launch, so a report another run left or is writing in the same target directory is never read, removed or overwritten by this run, and the run removes its own file; a report over the read bound is refused and not truncated. | Test (TC-027) |
 | FR-017-AC-20 | The evidence and the classified run list every check of a real run with its id, class, source file and line and status, a line stated as unknown is absent, and a non-numeric line or a check with no location is a refused report; the view serializes as `id`, `class`, `location { file, line }` and `status` and is not deserializable. | Test (TC-027) |
+| FR-017-AC-21 | N harnesses with equal option vectors (the harness selection removed) and equal ceilings start exactly one launcher process whose argument vector holds one `--harness <symbol> --exact` pair per member in request order before the shared options; N harnesses in G such groups start G processes; so N > 1 compatible harnesses start fewer than N processes, and one harness starts one process with the argument vector of a single run. | Test (TC-027) |
+| FR-017-AC-22 | Over a real or captured batch report, each member's outcome, checks, SUCCESS count and playback come from its own entry by harness symbol: a falsified member beside a verified member leaves the verified member verified; an all-success report from a process that exited unsuccessfully with no failed entry is inconclusive for every member; each member's evidence carries the batch argument vector and the exit code. | Test (TC-027) |
+| FR-017-AC-23 | A batch report that lacks a requested harness, holds one twice or holds an unrequested one refuses the whole batch with a typed cause and classifies no member; a member whose source is not in the crate refuses the batch with `HarnessNotInCrate` and launches nothing. | Test (TC-027) |
+| FR-017-AC-24 | A launcher that exits on its own after leaving a real grandchild in its process group has that grandchild killed by the time the run returns, the same as on a timeout. | Test (TC-027) |
+| FR-017-AC-25 | A capture thread that panics or fails to read refuses the run with `kani_output_unread`; the run is never classified from empty text. | Test (TC-027) |
 
 ## Dependencies
 
