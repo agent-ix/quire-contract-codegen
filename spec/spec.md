@@ -49,7 +49,8 @@ results. A human release owner alone decides source release suitability.
 
 StR-001 is the one stakeholder requirement. Every functional requirement satisfies it. NFR-001 and
 NFR-002 constrain it, NFR-004 constrains FR-008 to FR-013, and NFR-005 constrains the panic-free
-generation of FR-014, FR-015, FR-019, FR-021 and FR-022.
+generation of FR-014, FR-015, FR-019, FR-021 and FR-022. NFR-006 constrains FR-015, FR-017 and
+FR-031 by gating a change that can alter what real Kani proves on the real-Kani lane.
 `interface-001` defines the serialized input, the library and CLI operations, the artifact bundle,
 the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
 Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 record the owner's decisions on the
@@ -64,6 +65,7 @@ generators, the input model, the backend adapter, Kani tractability and the gene
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
 | Boolean oracle integer arithmetic and comparison | FR-031 | TC-044 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings | TC-025, TC-027, TC-036, TC-039 |
+| Real-Kani lane gating | NFR-006 | TC-045 |
 | Backend adapter (routed) | FR-026 adapter trait and registration | TC-037 |
 | Terminal-value maps (kani) | FR-029 and FR-030 terminal-value maps | TC-040, TC-041 |
 | Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope | TC-026, TC-035 |
