@@ -25,16 +25,21 @@ FR-028-AC-12, verified by TC-039.
 4. Build N = 1, 10 and 50 harnesses with equal option vectors and request timeout T, and read the
    launch's argument vector and the number of launcher processes a stand-in counts; mix two option
    vectors and two timeouts and count the processes.
-5. Feed batch reports (captured from real Kani 0.68 in the `make kani` lane, and synthetic): one
+5. Build a batch whose T is `Duration::MAX` and read its argument vector; in the `make kani` lane
+   run a batch at 4294967295 seconds and confirm it runs.
+6. Run batch stand-ins that exit successfully with no report, and unsuccessfully with no report (an
+   argument error, a failed build).
+7. Feed batch reports (captured from real Kani 0.68 in the `make kani` lane, and synthetic): one
    member falsified beside a verified one; two members sharing the bare symbol `check` under
    different `module::harness` paths; every member Success with a non-zero exit; one Failure entry
    with a non-zero exit; a Failure entry with no checks and exit status `timeout`; one with no checks
    and no timeout; a report that lacks, duplicates or adds a requested harness.
-6. Feed a console in which an earlier member prints a failing playback block and a later falsified
-   member prints its own, and one in which a falsified member has no block headed for its path.
-7. Leave one member's source out of the crate.
-8. In the `make kani` lane record the process count and wall time before and after batching for
-   N = 1, 10 and 50.
+8. Feed a console in which an earlier member prints a failing playback block and a later falsified
+   member prints its own; one in which a falsified member has no block headed for its path; one with
+   a block headed for a path that is not a member; and one with two blocks for one path.
+9. Leave one member's source out of the crate.
+10. In the `make kani` lane record the process count and wall time before and after batching for
+    N = 1, 10 and 50.
 
 ## Expected Results
 
@@ -47,17 +52,25 @@ FR-028-AC-12, verified by TC-039.
    request order, `--harness-timeout` T and then the shared options; fewer than N processes for
    N > 1 compatible harnesses; the outer bound is N times T and a batch killed at it is refused as
    timed out with no member classified (FR-017-AC-21).
-6. Members are matched by `module::harness`; a falsified member beside a verified one leaves the
+5. The `Duration::MAX` batch carries no `--harness-timeout` and its outer bound does not elapse; the
+   batch at 4294967295 seconds runs (FR-017-AC-21, FR-028-AC-12).
+6. The successful exit with no report is refused with the missing-report refusal and no member is
+   classified; the unsuccessful exit with no report leaves every member inconclusive `NoVerdict`
+   (FR-017-AC-21).
+7. Members are matched by `module::harness`; a falsified member beside a verified one leaves the
    verified one verified; Success in a non-zero exit with no Failure entry is inconclusive and with
    one is verified; the timeout entry is inconclusive timed-out naming T while the others keep their
    results; the entry with no checks and no timeout is inconclusive with no counterexample; each
-   member's evidence carries the batch vector, the member list, the batch statement and the exit
-   code (FR-017-AC-22). A missing, duplicated or unrequested harness refuses the whole batch
+   member's evidence carries its kind, harness path, launcher path, unwind bound, solver, outcome and
+   checks plus the batch vector, the member list, the batch statement and the exit code
+   (FR-017-AC-22). A missing, duplicated or unrequested harness refuses the whole batch
    (FR-017-AC-23).
-7. Each falsified member's playback is the block headed for its own path, never an earlier member's;
-   a falsified member with no such block refuses the batch; a member missing from the crate refuses
-   the batch with `HarnessNotInCrate` and launches nothing (FR-017-AC-23).
-8. Fewer processes after than before for N > 1, and the numbers are in the code PR.
+8. Each falsified member's playback is the block headed for its own path, never an earlier member's;
+   the falsified member with no block is inconclusive with no counterexample and its neighbours keep
+   their results; the block for a non-member path and the pair of blocks for one path each refuse
+   the whole batch (FR-017-AC-23).
+9. The batch is refused with `HarnessNotInCrate` and launches nothing (FR-017-AC-23).
+10. Fewer processes after than before for N > 1, and the numbers are in the code PR.
 
 ## Status
 
