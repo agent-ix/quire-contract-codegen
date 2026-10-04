@@ -269,8 +269,9 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
   satisfies, then the generator shall classify the run `CoverUnsatisfied`, never `Verified`
   (FR-015-AC-56).
 - When the installed backend runs a bounded-corpus harness whose oracle is true, the
-  generator shall classify the run `Verified`; if the oracle is false, then it shall classify
-  the run `Falsified` (FR-015-AC-57).
+  generator shall classify the run `Verified` (FR-015-AC-57).
+- If the installed backend runs a bounded-corpus harness whose oracle is false, then the
+  generator shall classify the run `Falsified` (FR-015-AC-57).
 - The crate shall carry a gate that fails when a harness it emits has other than exactly one
   cover as the last statement of its body, and when a source file emits a harness the gate
   does not drive (FR-015-AC-58).
