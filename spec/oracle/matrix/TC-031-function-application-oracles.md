@@ -148,13 +148,18 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
 12. Unknown function names on one call node (FR-021-AC-24, IR-545). Over one declared `add_fn`,
     request on one `call` node with equal arguments: (i) `zz_unknown` once; (ii) `zz_unknown` and
     `aa_unknown`, in both request orders; (iii) `zz_unknown` twice; (iv) `add_fn` and `zz_unknown`;
-    (v) `Zz_unknown` and `aa_unknown`, in both request orders.
+    (v) `Zz_unknown` and `aa_unknown`, in both request orders; (vi) over declarations
+    `m_multi` and `z_pair` sharing node id N2 and `m_multi` and `q_extra` sharing the smaller node
+    id N1, items `m_multi` and `z_pair` on one `call` node in both request orders, and the same
+    with `z_multi` and `a_pair` in place of `m_multi` and `z_pair`.
     Assert (i) one `UnknownFunction { name: "zz_unknown" }` entry; (ii) two entries, `aa_unknown`
     then `zz_unknown`, each `UnknownFunction` naming its own name, no `DuplicateRequest`, identical
     under both orders; (iii) one `DuplicateRequest` entry; (iv) two entries, the `UnknownFunction`
     one first, each equal to the entry that item gets when requested alone; (v) two entries,
-    `Zz_unknown` then `aa_unknown` (byte order, case-sensitive), identical under both orders. The
-    test is 🚧 Planned until the code change lands.
+    `Zz_unknown` then `aa_unknown` (byte order, case-sensitive), identical under both orders; (vi) two entries, `DuplicateDeclaringNode { N1 }` then
+    `DuplicateDeclaringNode { N2 }` for `m_multi` and `z_pair`, and `{ N2 }` then `{ N1 }` for
+    `z_multi` and `a_pair`, identical under both request orders. The test is 🚧 Planned until the
+    code change lands.
 
 ## Expected Results
 
