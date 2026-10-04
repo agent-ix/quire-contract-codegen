@@ -260,6 +260,17 @@ pub fn comments_stripped(source: &str) -> String {
 /// a line, in code; a mention of it in a comment or a literal removes nothing. String literals
 /// are kept: what a generator emits counts.
 pub fn non_test_code(source: &str) -> String {
+    non_test_code_keeping(source, true)
+}
+
+/// [`non_test_code`] with every string and character literal removed as well: what NFR-005-AC-1
+/// scans. A generator's emitted `assert!` and an expression kind named `"unwrap"` are text in a
+/// literal, not a panic token of the generator.
+pub fn non_test_code_outside_literals(source: &str) -> String {
+    non_test_code_keeping(source, false)
+}
+
+fn non_test_code_keeping(source: &str, keep_literals: bool) -> String {
     let kinds = classify(source);
     let bytes = source.as_bytes();
     let mut removed = vec![false; bytes.len()];
@@ -280,7 +291,9 @@ pub fn non_test_code(source: &str) -> String {
     let kept: Vec<u8> = bytes
         .iter()
         .zip(kinds.iter().zip(&removed))
-        .filter(|(_, (kind, removed))| **kind != Kind::Comment && !**removed)
+        .filter(|(_, (kind, removed))| {
+            **kind != Kind::Comment && !(**kind == Kind::Literal && !keep_literals) && !**removed
+        })
         .map(|(byte, _)| *byte)
         .collect();
     String::from_utf8_lossy(&kept).into_owned()

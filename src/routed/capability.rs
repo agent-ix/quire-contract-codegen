@@ -367,36 +367,44 @@ pub struct ItemSettlement {
 impl ItemSettlement {
     /// The warning an `unsupported` settlement carries, if any.
     ///
+    /// `None` means this settlement has no warning to name: it is not
+    /// `unsupported`, or its cause is not an `unsupported_projection` one. CG
+    /// never builds an `unsupported` settlement with an `invalid_capability`
+    /// cause, so FR-019's rule that an `unsupported` settlement carries a
+    /// warning holds for every settlement CG builds; a caller that assembles
+    /// one by hand gets `None`.
+    ///
     /// FR-290 requires the warning to name the item's kind, and the named
     /// backend when the request names one. It is derived from the cause rather
     /// than stored beside it, so the two cannot disagree.
     #[must_use]
     pub fn warning(&self) -> Option<String> {
         match &self.disposition {
-            Disposition::Unsupported { cause } => Some(match cause {
-                Cause::UnsupportedRequestedCapability { kind, backend } => match backend {
+            Disposition::Unsupported { cause } => match cause {
+                Cause::UnsupportedRequestedCapability { kind, backend } => Some(match backend {
                     Some(backend) => format!(
                         "no registered backend advertises {} for named backend {backend}",
                         kind.label()
                     ),
                     None => format!("no registered backend advertises {}", kind.label()),
-                },
-                Cause::UnboundedExtent { kind, backend } => format!(
+                }),
+                Cause::UnboundedExtent { kind, backend } => Some(format!(
                     "{backend} advertises {} bounded only and no finite bound is available",
                     kind.label()
-                ),
+                )),
                 // Exhaustive on purpose. A catch-all here would give the next
                 // cause a warning that names neither the kind nor the backend
                 // FR-290 requires it to name, with nothing failing to say so.
+                // An `invalid_capability` cause settles invalid-request, so this
+                // generator never builds it under `Unsupported`; the fields are
+                // public, so a caller can, and this settlement has no warning.
                 Cause::AbsentKind
                 | Cause::UnknownKind { .. }
                 | Cause::AbsentExtent
                 | Cause::UnknownBackend { .. }
                 | Cause::InconsistentCandidates { .. }
-                | Cause::AmbiguousBackend { .. } => unreachable!(
-                    "an invalid_capability cause settles invalid-request, never unsupported"
-                ),
-            }),
+                | Cause::AmbiguousBackend { .. } => None,
+            },
             Disposition::Supported { .. }
             | Disposition::RequiresBound { .. }
             | Disposition::InvalidRequest { .. } => None,

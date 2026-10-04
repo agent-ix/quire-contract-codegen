@@ -919,13 +919,6 @@ fn expression_diagnostic(
     message: impl Into<String>,
     source_span: &SourceSpan,
 ) -> Vec<GenerationDiagnostic> {
-    debug_assert!(matches!(
-        code,
-        GenerationErrorCode::NonBooleanRoot
-            | GenerationErrorCode::UnsupportedExpression
-            | GenerationErrorCode::UnsupportedDependency
-            | GenerationErrorCode::UnsupportedObligations
-    ));
     diagnostic(request, code, path, message, Some(source_span.clone()))
 }
 

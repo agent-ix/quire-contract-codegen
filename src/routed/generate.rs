@@ -151,6 +151,14 @@ pub enum RoutedGenerationError {
         /// The `module::harness` path of the second harness with the shared symbol.
         harness: HarnessPath,
     },
+    /// FR-015 reported a number of records other than the Kani group's item count, so a record
+    /// cannot be paired with its item.
+    KaniRecordCountMismatch {
+        /// The number of records reported.
+        records: usize,
+        /// The number of items in the Kani group.
+        items: usize,
+    },
     /// The Kani arm refused its group as a whole.
     Kani(KaniObligationError),
     /// FR-014 generation over the derived items failed as a whole.
@@ -315,16 +323,8 @@ fn generate_kani(
         } => (records, index_harnesses(scalar_harnesses)?, false),
         KaniObligationOutcome::Rejected { records } => (records, BTreeMap::new(), true),
     };
-    // A real assertion, not `debug_assert_eq!`: in a release build the `zip` below would otherwise
-    // silently truncate to the shorter of the two and drop items or records.
-    assert_eq!(
-        records.len(),
-        group.len(),
-        "FR-015 reports one record per item"
-    );
-    let outputs = records
+    let outputs = pair_records(records, group)?
         .into_iter()
-        .zip(group)
         .map(|(mut record, item)| {
             record.request_index = item.request_index;
             if let ObligationDisposition::InvalidRequest {
@@ -352,6 +352,22 @@ fn generate_kani(
         })
         .collect();
     Ok((ArmOutput { outputs, rejected }, claim_map, artifacts))
+}
+
+/// Pairs each of FR-015's records with the item of `group` at its position. A different count is
+/// a typed refusal and nothing is generated, so the pairing never truncates to the shorter side
+/// and drops items or records.
+fn pair_records<'g>(
+    records: Vec<ObligationRecord>,
+    group: &'g [&'g RoutedGenerationItem],
+) -> Result<Vec<(ObligationRecord, &'g RoutedGenerationItem)>, RoutedGenerationError> {
+    if records.len() != group.len() {
+        return Err(RoutedGenerationError::KaniRecordCountMismatch {
+            records: records.len(),
+            items: group.len(),
+        });
+    }
+    Ok(records.into_iter().zip(group.iter().copied()).collect())
 }
 
 /// The FR-014 claim map of `group`'s distinct nodes: each derivable node generated from its
@@ -400,13 +416,85 @@ fn derive_claim_map(
 
 #[cfg(test)]
 mod tests {
-    use super::{index_harnesses, RoutedGenerationError};
+    use super::{index_harnesses, pair_records, RoutedGenerationError, RoutedGenerationItem};
     use crate::{
         core::artifact::Artifact,
         core::identity::{HarnessSymbol, ModuleSymbol},
         kani::abi::KaniSolver,
+        kani::generate::outcome::{
+            InvalidObligationItem, ObligationDisposition, ObligationRecord, ObligationSubject,
+        },
         kani::identity::{KaniScalarObligationHarness, ScalarObligationIdentity},
+        routed::capability::{BackendKind, Candidate},
     };
+
+    fn node_id() -> quire_contract_model::CheckedNodeId {
+        serde_json::from_value(serde_json::json!({
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "1".repeat(64),
+        }))
+        .expect("a checked node id")
+    }
+
+    fn record(request_index: usize) -> ObligationRecord {
+        ObligationRecord {
+            request_index,
+            kind: None,
+            subject: ObligationSubject::CheckedNode {
+                node_id: node_id(),
+                source_map: Vec::new(),
+            },
+            disposition: ObligationDisposition::InvalidRequest {
+                reason: InvalidObligationItem::UnknownNode,
+            },
+        }
+    }
+
+    fn item(request_index: usize) -> RoutedGenerationItem {
+        RoutedGenerationItem {
+            request_index,
+            node_id: node_id(),
+            backend: Candidate {
+                identity: "kani".to_owned(),
+            },
+            kind: BackendKind::Kani,
+        }
+    }
+
+    /// Trace: NFR-005-AC-5, TC-042.
+    #[test]
+    fn tc_042_ac5_a_record_count_other_than_the_item_count_is_a_typed_refusal() {
+        let items = [item(10), item(11), item(12)];
+        let group = items.iter().collect::<Vec<_>>();
+
+        let fewer = pair_records(vec![record(0), record(1)], &group)
+            .expect_err("one record fewer than the items is refused");
+        assert_eq!(
+            fewer,
+            RoutedGenerationError::KaniRecordCountMismatch {
+                records: 2,
+                items: 3
+            }
+        );
+        let more = pair_records((0..4).map(record).collect(), &group)
+            .expect_err("one record more than the items is refused");
+        assert_eq!(
+            more,
+            RoutedGenerationError::KaniRecordCountMismatch {
+                records: 4,
+                items: 3
+            }
+        );
+
+        let paired = pair_records((0..3).map(record).collect(), &group).expect("equal counts pair");
+        assert_eq!(
+            paired
+                .iter()
+                .map(|(record, item)| (record.request_index, item.request_index))
+                .collect::<Vec<_>>(),
+            vec![(0, 10), (1, 11), (2, 12)]
+        );
+    }
 
     fn harness(module: &str, symbol: &str) -> KaniScalarObligationHarness {
         let node_id = serde_json::from_value(serde_json::json!({

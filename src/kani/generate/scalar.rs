@@ -91,33 +91,75 @@ impl ScalarOperation {
         }
     }
 
-    /// The least and greatest exact results over inclusive `i64` operand ranges, one per operand.
-    /// Each is exact in `i128`. The extremes of `+`, `-` and unary `-` lie at the range endpoints,
-    /// and so do those of `*`, which is bilinear.
-    fn reachable(self, operands: &[(i64, i64)]) -> (i128, i128) {
+    /// The operation's operands, one inclusive `i64` range per operand name, in call order, each
+    /// read by `range_at` from its position. The operand count is the operation's own, so the
+    /// result carries exactly the operands [`ScalarOperands::reachable`] needs.
+    fn operands<E>(
+        self,
+        mut range_at: impl FnMut(usize) -> Result<(i64, i64), E>,
+    ) -> Result<ScalarOperands, E> {
+        Ok(match self {
+            Self::Negate => ScalarOperands::Negate(range_at(0)?),
+            Self::Add => ScalarOperands::Binary(BinaryOperation::Add, range_at(0)?, range_at(1)?),
+            Self::Subtract => {
+                ScalarOperands::Binary(BinaryOperation::Subtract, range_at(0)?, range_at(1)?)
+            }
+            Self::Multiply => {
+                ScalarOperands::Binary(BinaryOperation::Multiply, range_at(0)?, range_at(1)?)
+            }
+        })
+    }
+}
+
+/// The two-operand operations of [`ScalarOperation`].
+#[derive(Clone, Copy)]
+enum BinaryOperation {
+    Add,
+    Subtract,
+    Multiply,
+}
+
+/// The operand ranges of one [`ScalarOperation`], of the operation's own arity: one range for
+/// `Negate`, two for the others, so no combination of operation and operand count is left over.
+#[derive(Clone, Copy)]
+enum ScalarOperands {
+    Negate((i64, i64)),
+    Binary(BinaryOperation, (i64, i64), (i64, i64)),
+}
+
+impl ScalarOperands {
+    /// The ranges in call order, one per operand name of the operation.
+    fn ranges(self) -> Vec<(i64, i64)> {
+        match self {
+            Self::Negate(operand) => vec![operand],
+            Self::Binary(_, left, right) => vec![left, right],
+        }
+    }
+
+    /// The least and greatest exact results over the inclusive `i64` operand ranges. Each is exact
+    /// in `i128`. The extremes of `+`, `-` and unary `-` lie at the range endpoints, and so do
+    /// those of `*`, which is bilinear.
+    fn reachable(self) -> (i128, i128) {
         let wide = |(low, high): (i64, i64)| (i128::from(low), i128::from(high));
-        match (self, operands) {
-            (Self::Negate, [operand]) => {
-                let (low, high) = wide(*operand);
+        match self {
+            Self::Negate(operand) => {
+                let (low, high) = wide(operand);
                 (-high, -low)
             }
-            (Self::Add, [left, right]) => {
-                let ((a, b), (c, d)) = (wide(*left), wide(*right));
-                (a + c, b + d)
+            Self::Binary(operation, left, right) => {
+                let ((a, b), (c, d)) = (wide(left), wide(right));
+                match operation {
+                    BinaryOperation::Add => (a + c, b + d),
+                    BinaryOperation::Subtract => (a - d, b - c),
+                    BinaryOperation::Multiply => {
+                        let corners = [a * c, a * d, b * c, b * d];
+                        (
+                            corners.into_iter().min().unwrap_or_default(),
+                            corners.into_iter().max().unwrap_or_default(),
+                        )
+                    }
+                }
             }
-            (Self::Subtract, [left, right]) => {
-                let ((a, b), (c, d)) = (wide(*left), wide(*right));
-                (a - d, b - c)
-            }
-            (Self::Multiply, [left, right]) => {
-                let ((a, b), (c, d)) = (wide(*left), wide(*right));
-                let corners = [a * c, a * d, b * c, b * d];
-                (
-                    corners.into_iter().min().unwrap_or_default(),
-                    corners.into_iter().max().unwrap_or_default(),
-                )
-            }
-            _ => unreachable!("one range per operand name"),
         }
     }
 }
@@ -130,20 +172,14 @@ pub(super) fn scalar_stem(operation: &str) -> String {
     )
 }
 
-/// Why [`lower_scalar_claim`] could not lower an IR-confirmed claim -- two distinct causes that
-/// `classify_claim` reports as two distinct [`UnsupportedObligation`] reasons, rather than
-/// folding them into one the way a single `Option` return would. A third and fourth candidate
-/// cause -- `check_parameters` recording no `checked_bounds` entry, or recording one whose own
-/// derived domain is not an `integer_range` -- are not represented here: [`ScalarOperation::of`] only
-/// renders the `IntegerArithmetic` family, and for that family `check_parameters`'s own
-/// `Bounds::equal` returns `Ok` only after successfully reading exactly one `integer_range` bound
-/// (`oracle::scalar::check_parameters`, `oracle::scalar::Bounds::equal`) -- the same node, read by the
-/// same `literal_integer`, that this function's own [`derive_domain`] call reads. Given that
-/// guarantee, both failure shapes are structurally unreachable through this function today, so
-/// they are asserted with `unreachable!` below rather than modelled as a caller-visible refusal a
-/// test could never construct a fixture for.
+/// Why [`lower_scalar_claim`] could not lower an IR-confirmed claim -- distinct causes that
+/// `classify_claim` reports as distinct [`UnsupportedObligation`] reasons, rather than folding
+/// them into one the way a single `Option` return would. A claim with no `checked_bounds` entry,
+/// or whose first checked bound has no `integer_range` among the derived domains, is a claim map
+/// this generator did not produce (for the `IntegerArithmetic` family `check_parameters` records
+/// exactly one such bound), and is the [`ScalarLoweringRefusal::NoRenderer`] refusal.
 pub(super) enum ScalarLoweringRefusal {
-    /// [`ScalarOperation::of`] has no renderer for this operation identity.
+    /// No renderer for its family yet, or a claim map this generator did not produce.
     NoRenderer,
     /// Every operand range combines to results outside the result range, so no input the harness
     /// assumes completes and its non-vacuity cover could never be met.
@@ -179,11 +215,10 @@ pub(super) fn lower_scalar_claim(
 ) -> Result<LoweredScalarClaim, ScalarLoweringRefusal> {
     let operation =
         ScalarOperation::of(&claim.operation.identity).ok_or(ScalarLoweringRefusal::NoRenderer)?;
+    // `check_parameters` records exactly one checked bound for every `IntegerArithmetic` claim,
+    // so a claim without one is a claim map this generator did not produce, which has no renderer.
     let Some(bound_id) = generated.checked_bounds.first() else {
-        unreachable!(
-            "check_parameters's Bounds::equal records exactly one checked bound for every \
-             IntegerArithmetic claim, the only family ScalarOperation::of renders a harness for"
-        );
+        return Err(ScalarLoweringRefusal::NoRenderer);
     };
     let range_of = |id: &CheckedNodeId| {
         derived.iter().find_map(|domain| match domain {
@@ -195,12 +230,11 @@ pub(super) fn lower_scalar_claim(
             _ => None,
         })
     };
+    // `check_parameters` parsed the same node with the `literal_integer` that `derive_domain`
+    // uses, so a first checked bound with no `IntegerRange` is likewise a claim map this
+    // generator did not produce.
     let Some((lower, upper)) = range_of(bound_id) else {
-        unreachable!(
-            "the same node backs bound_id here and in check_parameters, which already parsed its \
-             two members with the same literal_integer this function's derive_domain uses, so it \
-             cannot fail to be read as an IntegerRange here"
-        );
+        return Err(ScalarLoweringRefusal::NoRenderer);
     };
     let to_i64 = |(lower, upper): (&String, &String)| match (lower.parse(), upper.parse()) {
         (Ok(lower), Ok(upper)) => Ok((lower, upper)),
@@ -210,23 +244,21 @@ pub(super) fn lower_scalar_claim(
         }),
     };
     let (lower, upper) = to_i64((lower, upper))?;
-    let operands = (0..operation.operand_names().len())
-        .map(|position| match operand_ranges.get(position) {
-            None | Some(OperandRange::Result) => Ok((lower, upper)),
-            Some(OperandRange::Literal(value)) => to_i64((value, value)),
-            // An own bound `check_parameters` recorded is in `checked_bounds` and a derived
-            // integer range; one that is not is a claim map this generator did not produce,
-            // which has no renderer.
-            Some(OperandRange::Bound(id)) => generated
-                .checked_bounds
-                .contains(id)
-                .then(|| range_of(id))
-                .flatten()
-                .ok_or(ScalarLoweringRefusal::NoRenderer)
-                .and_then(to_i64),
-        })
-        .collect::<Result<Vec<(i64, i64)>, _>>()?;
-    let (reachable_lower, reachable_upper) = operation.reachable(&operands);
+    let operands = operation.operands(|position| match operand_ranges.get(position) {
+        None | Some(OperandRange::Result) => Ok((lower, upper)),
+        Some(OperandRange::Literal(value)) => to_i64((value, value)),
+        // An own bound `check_parameters` recorded is in `checked_bounds` and a derived
+        // integer range; one that is not is a claim map this generator did not produce,
+        // which has no renderer.
+        Some(OperandRange::Bound(id)) => generated
+            .checked_bounds
+            .contains(id)
+            .then(|| range_of(id))
+            .flatten()
+            .ok_or(ScalarLoweringRefusal::NoRenderer)
+            .and_then(to_i64),
+    })?;
+    let (reachable_lower, reachable_upper) = operands.reachable();
     if reachable_upper < i128::from(lower) || reachable_lower > i128::from(upper) {
         return Err(ScalarLoweringRefusal::ResultUnreachable {
             lower,
@@ -245,7 +277,7 @@ pub(super) fn lower_scalar_claim(
         oracle_source: generated.oracle_source.clone(),
         oracle_symbol: generated.symbol.clone(),
         operation,
-        operands,
+        operands: operands.ranges(),
         lower,
         upper,
         module_symbol,
@@ -612,15 +644,8 @@ mod tests {
     // is the closest in subject but does not describe this case -- the domain below is bounded
     // and finite, just outside `i64` -- so citing it would misdescribe what this test proves.
     //
-    // `ScalarLoweringRefusal::NoCheckedBound` and `::NoIntegerDomain` were removed rather than
-    // given a test here: `check_parameters`'s `Bounds::equal` (`oracle/scalar/mod.rs`) returns `Ok`
-    // only after reading exactly one `integer_range` bound via the same `literal_integer` this
-    // module's `derive_domain` uses on the identical node, so for `IntegerArithmetic` -- the only
-    // family `ScalarOperation::of` renders -- neither an empty `checked_bounds` nor a checked bound with
-    // no `IntegerRange` domain is reachable; both are now `unreachable!` invariants in
-    // `lower_scalar_claim` instead of typed refusals no fixture could ever construct. This test
-    // is the one cause of the original four that a fixture -- built directly against
-    // `lower_scalar_claim`, not through package admission -- does reach.
+    // An empty `checked_bounds`, and a first checked bound with no `IntegerRange` domain, are the
+    // `NoRenderer` refusal (NFR-005-AC-2, the `tc_042_ac2_*` tests below).
     #[test]
     fn tc_026_a_domain_outside_i64_is_a_typed_refusal_not_a_panic() {
         let node_id = |digest: &str| -> CheckedNodeId {
@@ -681,5 +706,93 @@ mod tests {
             }
             Ok(_) => panic!("an arbitrary-precision Integer domain outside i64 must not lower"),
         }
+    }
+
+    fn checked_node_id(digit: &str) -> CheckedNodeId {
+        serde_json::from_value(json!({
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": digit.repeat(64),
+        }))
+        .expect("node id")
+    }
+
+    /// An `integer.add` claim whose generated record names `checked_bounds`.
+    fn add_claim(checked_bounds: Vec<CheckedNodeId>) -> ExactScalarClaim {
+        ExactScalarClaim {
+            node_id: checked_node_id("2"),
+            operation: OperationClaim {
+                identity: "quire.op.integer.add".to_owned(),
+                provenance: OperationProvenance::IrConfirmed,
+            },
+            result: ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
+                symbol: "oracle_test".to_owned(),
+                ir_id: serde_json::from_value(json!({
+                    "domain": "quire.checked-semantic-node/v1",
+                    "algorithm": "sha256",
+                    "digest": "3".repeat(64),
+                }))
+                .expect("ir id"),
+                semantic_form: "expression".to_owned(),
+                semantic_type: checked_node_id("4"),
+                source_map: Vec::new(),
+                claims: Vec::new(),
+                bounds: checked_bounds.clone(),
+                checked_bounds,
+                dependencies: Vec::new(),
+                oracle_source: String::new(),
+            })),
+        }
+    }
+
+    /// A claim with no checked bound, and one whose first checked bound has no `IntegerRange`
+    /// among the derived domains, are the `NoRenderer` refusal: a claim map this generator did not
+    /// produce, with no panic.
+    ///
+    /// Trace: NFR-005-AC-2, TC-042.
+    #[test]
+    fn tc_042_ac2_a_claim_without_a_derivable_first_bound_has_no_renderer() {
+        let bound = checked_node_id("7");
+        let not_symbolic = [DerivedDomain::NotSymbolic {
+            bound: bound.clone(),
+            form: "text_bounds".to_owned(),
+        }];
+        for (checked_bounds, derived) in [
+            (Vec::new(), Vec::new()),
+            (vec![bound.clone()], Vec::new()),
+            (vec![bound.clone()], not_symbolic.to_vec()),
+        ] {
+            let claim = add_claim(checked_bounds);
+            let ClaimDisposition::Generated(generated) = &claim.result else {
+                panic!("built as Generated above");
+            };
+            assert!(
+                matches!(
+                    lower_scalar_claim(&claim, generated, &derived, &[]),
+                    Err(ScalarLoweringRefusal::NoRenderer)
+                ),
+                "checked bounds {:?}",
+                generated.checked_bounds
+            );
+        }
+    }
+
+    /// The operand ranges of each operation are of its own arity and combine to the exact
+    /// extremes.
+    ///
+    /// Trace: NFR-005-AC-1, TC-042.
+    #[test]
+    fn tc_042_ac1_operands_of_each_operation_have_its_own_arity_and_reach_exact_extremes() {
+        let range = |position: usize| -> Result<(i64, i64), ()> {
+            Ok(if position == 0 { (-2, 3) } else { (4, 5) })
+        };
+        let reach = |operation: ScalarOperation| {
+            operation
+                .operands(range)
+                .map(|operands| (operands.ranges().len(), operands.reachable()))
+        };
+        assert_eq!(reach(ScalarOperation::Negate), Ok((1, (-3, 2))));
+        assert_eq!(reach(ScalarOperation::Add), Ok((2, (2, 8))));
+        assert_eq!(reach(ScalarOperation::Subtract), Ok((2, (-7, -1))));
+        assert_eq!(reach(ScalarOperation::Multiply), Ok((2, (-10, 15))));
     }
 }
