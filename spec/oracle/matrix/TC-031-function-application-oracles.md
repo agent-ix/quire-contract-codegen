@@ -26,7 +26,9 @@ It also verifies that the emitted function-oracle source has no panicking path (
 (FR-021-AC-19 to AC-21).
 
 It also verifies that declarations sharing one declaring node id are refused with
-`DuplicateDeclaringNode` before Stage 1 (FR-021-AC-22).
+`DuplicateDeclaringNode` before Stage 1 (FR-021-AC-22), that a failed lowering record is refused
+as its own byte-ceiling or work refusal (FR-021-AC-23), and that two different unknown function
+names on one call node are two `UnknownFunction` entries in byte order (FR-021-AC-24, 🚧 Planned).
 
 The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
 
@@ -145,12 +147,14 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     isolation stays with FR-021-AC-12's `tc_031_ac12_*` tests.
 12. Unknown function names on one call node (FR-021-AC-24, IR-545). Over one declared `add_fn`,
     request on one `call` node with equal arguments: (i) `zz_unknown` once; (ii) `zz_unknown` and
-    `aa_unknown`, in both request orders; (iii) `zz_unknown` twice; (iv) `add_fn` and `zz_unknown`.
+    `aa_unknown`, in both request orders; (iii) `zz_unknown` twice; (iv) `add_fn` and `zz_unknown`;
+    (v) `Zz_unknown` and `aa_unknown`, in both request orders.
     Assert (i) one `UnknownFunction { name: "zz_unknown" }` entry; (ii) two entries, `aa_unknown`
     then `zz_unknown`, each `UnknownFunction` naming its own name, no `DuplicateRequest`, identical
     under both orders; (iii) one `DuplicateRequest` entry; (iv) two entries, the `UnknownFunction`
-    one first, each equal to the entry that item gets when requested alone. The test is
-    🚧 Planned until the code change lands.
+    one first, each equal to the entry that item gets when requested alone; (v) two entries,
+    `Zz_unknown` then `aa_unknown` (byte order, case-sensitive), identical under both orders. The
+    test is 🚧 Planned until the code change lands.
 
 ## Expected Results
 
