@@ -797,6 +797,13 @@ mod tests {
         assert_eq!(small(ScalarOperation::Subtract), Ok((2, (-7, -1))));
         assert_eq!(small(ScalarOperation::Multiply), Ok((2, (-10, 15))));
 
+        // The least product is the `b * c` corner here: 1*-5 = -5, 1*-4 = -4, 2*-5 = -10,
+        // 2*-4 = -8.
+        assert_eq!(
+            reach(ScalarOperation::Multiply, 1, 2, (-5, -4)),
+            Ok((2, (-10, -4)))
+        );
+
         // With every operand over the whole `i64` range, written by hand in powers of two:
         // `i64::MIN` is -2^63 and `i64::MAX` is 2^63 - 1.
         let (p63, p64, p126) = (1i128 << 63, 1i128 << 64, 1i128 << 126);
