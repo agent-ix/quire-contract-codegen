@@ -41,7 +41,7 @@ type: TestMatrix
 | FR-021 | FR-021-AC-18 | TC-031 | 🚧 Planned; the `quire-spec-language` authority leg is written and unasserted |
 | FR-021 | FR-021-AC-19 through FR-021-AC-22 | TC-031 | ✅ Covered |
 | FR-021 | FR-021-AC-23 | TC-031 | ✅ Covered; the function generator's refusals of a byte-ceiling and of an unrecognised lowering failure (IR-547) |
-| FR-021 | FR-021-AC-24 | TC-031 | 🚧 Planned; one `UnknownFunction` entry per unknown name on one call node (IR-545) |
+| FR-021 | FR-021-AC-24 | TC-031 | 🚧 Planned; one `UnknownFunction` entry per unknown name, and one entry per duplicate-node pair member, on one call node, in byte order of the name (IR-545) |
 
 FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 are `🚧 Planned`: each names at least one
 clause TC-029 carries no test for. AC-4 requires a schedule assertion for a top-level quantity pair;

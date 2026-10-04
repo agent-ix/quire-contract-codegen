@@ -28,7 +28,9 @@ It also verifies that the emitted function-oracle source has no panicking path (
 It also verifies that declarations sharing one declaring node id are refused with
 `DuplicateDeclaringNode` before Stage 1 (FR-021-AC-22), that a failed lowering record is refused
 as its own byte-ceiling or work refusal (FR-021-AC-23), and that two different unknown function
-names on one call node are two `UnknownFunction` entries in byte order (FR-021-AC-24, 🚧 Planned).
+names on one call node are two `UnknownFunction` entries, and two members of a duplicate-node pair
+are two `DuplicateDeclaringNode` entries, each in byte order of the function name (FR-021-AC-24,
+🚧 Planned).
 
 The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
 
@@ -145,8 +147,9 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     `depth`, `nodes`, `edges`, `occurrences` and `diagnostics` gives `LoweringLimitUnrecognised`
     with that snake_case `limit_kind`, with no panic and never `LoweringWorkExhausted`. Per-function
     isolation stays with FR-021-AC-12's `tc_031_ac12_*` tests.
-12. Unknown function names on one call node (FR-021-AC-24, IR-545). Over one declared `add_fn`,
-    request on one `call` node with equal arguments: (i) `zz_unknown` once; (ii) `zz_unknown` and
+12. Unknown function names, and duplicate-node pair members, on one call node (FR-021-AC-24,
+    IR-545). For cases (i) to (v), over one declared `add_fn`, request on one `call` node with
+    equal arguments: (i) `zz_unknown` once; (ii) `zz_unknown` and
     `aa_unknown`, in both request orders; (iii) `zz_unknown` twice; (iv) `add_fn` and `zz_unknown`;
     (v) `Zz_unknown` and `aa_unknown`, in both request orders; (vi) over declarations
     `m_multi` and `z_pair` sharing node id N2 and `m_multi` and `q_extra` sharing the smaller node
@@ -158,8 +161,8 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     one first, each equal to the entry that item gets when requested alone; (v) two entries,
     `Zz_unknown` then `aa_unknown` (byte order, case-sensitive), identical under both orders; (vi) two entries, `DuplicateDeclaringNode { N1 }` then
     `DuplicateDeclaringNode { N2 }` for `m_multi` and `z_pair`, and `{ N2 }` then `{ N1 }` for
-    `z_multi` and `a_pair`, identical under both request orders. The test is 🚧 Planned until the
-    code change lands.
+    `z_multi` and `a_pair`, identical under both request orders. The test is 🚧 Planned until
+    the code change lands.
 
 ## Expected Results
 
@@ -179,8 +182,9 @@ on `Evaluation.location`/`.losses` becoming non-empty; the emitted corpus source
 a declaring node id are absent from the package, source and location map, every item naming one
 is refused as `DuplicateDeclaringNode` independent of request order, and no claim or oracle symbol
 is crossed (FR-021-AC-22); and two different unknown function names on one call node are two
-`UnknownFunction` entries, while only the same name requested twice is a `DuplicateRequest`
-(FR-021-AC-24, 🚧 Planned).
+`UnknownFunction` entries, while only the same name requested twice is a `DuplicateRequest`, and
+two members of a duplicate-node pair are two `DuplicateDeclaringNode` entries ordered by function
+name (FR-021-AC-24, 🚧 Planned).
 
 Function-body semantics beyond what FR-014's and FR-018's own oracles already verify are not
 separately asserted here: a function body is a delegation to those same generators' lowering, so
