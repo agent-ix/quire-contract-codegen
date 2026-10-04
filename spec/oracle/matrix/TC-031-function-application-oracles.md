@@ -173,7 +173,7 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     `tc_031_ac24_case_ii_two_unknown_names_are_two_entries_in_name_order`,
     `tc_031_ac24_case_iii_the_same_unknown_name_twice_is_one_duplicate_request`,
     `tc_031_ac24_case_iv_known_and_unknown_order_unknown_first_and_match_solo`,
-    `tc_031_ac24_case_v_names_order_by_bytes_case_sensitively` and
+    `tc_031_ac24_case_v_names_order_by_bytes_case_sensitively`,
     `tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name` and
     `tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names`.
 
