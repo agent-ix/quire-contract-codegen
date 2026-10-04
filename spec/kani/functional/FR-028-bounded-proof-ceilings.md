@@ -56,7 +56,8 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
   member to the group's wall-clock budget T through the backend's own per-harness timeout, except
   that when T rounded up to whole seconds exceeds 4294967295, the most the backend accepts (it exits
   2 with no report above that), the generator shall omit the per-member timeout for that batch.
-  The outer bound below then does not elapse either, as in FR-017-AC-15. (Planned, IR-277.)
+  The outer bound below still applies, and does not elapse only when the product does not fit, as
+  in FR-017-AC-15. (Planned, IR-277.)
 - If the backend timed out a member of a batch, then the generator shall classify that member
   inconclusive with the timed-out reason naming T and leave the other members' results as they
   are. (Planned, IR-277.)
@@ -95,7 +96,7 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
 | FR-028-AC-7 | A family with a supplied shadow yields a harness with proof subject `bounded_shadow` and its refinement obligation in the same result, and never the shadow harness alone. | Test (TC-039) |
 | FR-028-AC-8 | An argument narrowed inside its declared domain records the declared domain, the narrowed bound and that the harness covers only the narrowed bound, in the harness identity and in the evidence. | Test (TC-039) |
 | FR-028-AC-9 | A narrowing outside the argument's declared domain is refused with a typed reason and no harness. | Test (TC-039) |
-| FR-028-AC-12 | In a batch of N harnesses sharing a wall-clock budget T, a member the backend cuts off (entry status Failure, no checks, exit status `timeout`) is `inconclusive` timed-out naming T and never falsified, while members that finished keep their verified or falsified results; a batch still running at N times T is killed, refused as timed out, and no member is classified; an N times T too large to represent never elapses and does not panic; a T above 4294967295 whole seconds launches the batch without `--harness-timeout` and the batch still runs. | Test (TC-039) |
+| FR-028-AC-12 | In a batch of N harnesses sharing a wall-clock budget T, a member the backend cuts off (entry status Failure, no checks, exit status `timeout`) is `inconclusive` timed-out naming T and never falsified, while members that finished keep their verified or falsified results; a batch still running at N times T is killed, refused as timed out, and no member is classified; an N times T too large to represent never elapses and does not panic; a T above 4294967295 whole seconds launches the batch without `--harness-timeout` and the batch still runs, its outer bound still elapsing at N times T when the product fits. | Test (TC-039) |
 
 ## Rationale
 

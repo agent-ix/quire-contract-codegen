@@ -29,7 +29,8 @@ recorded as FR-028 states.
 10. Run a batch of N harnesses sharing one wall-clock budget T with a report in which one member's
     entry reads Failure, no checks, exit status `timeout` beside finished members; a stand-in that
     is still running at N times T; a budget whose product overflows; and a T above 4294967295
-    seconds (a `Duration::MAX` request), reading the launch's arguments.
+    seconds whose product with N fits, and a `Duration::MAX` request, reading each launch's
+    arguments and outer bound.
 
 ## Expected Results
 
@@ -48,8 +49,9 @@ recorded as FR-028 states.
 9. The obligation is refused with a typed reason and no harness (FR-028-AC-9).
 10. The timed-out member is `inconclusive` timed-out naming T and the finished members keep their
     results; the second batch is killed, refused as timed out and no member is classified; the
-    third never elapses and does not panic; the oversized T launches without `--harness-timeout`
-    and the batch runs (FR-028-AC-12).
+    third never elapses and does not panic; each oversized T launches without `--harness-timeout`
+    and the batch runs, its outer bound elapsing at N times T where the product fits and never where
+    it does not (FR-028-AC-12).
 
 ## Status
 
