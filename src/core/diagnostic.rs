@@ -65,6 +65,12 @@ pub enum GenerationErrorCode {
     UnsupportedDependency,
     /// The typed expression carries definedness obligations this slice cannot preserve.
     UnsupportedObligations,
+    /// An integer divide or remainder node. Held until the IR-601 ruling decides which division
+    /// semantics and which runtime operation a V1 oracle takes (FR-031).
+    UnsupportedIntegerDivision,
+    /// An integer add, subtract or multiply node over a `saturate` integer type. The runtime has
+    /// no saturating integer operation, and the generator does not restate saturation (FR-031).
+    UnsupportedSaturatingArithmetic,
     /// Two input identities would claim the same generated name.
     NameCollision,
     /// The bounded output resource would be exceeded.
@@ -84,6 +90,8 @@ impl GenerationErrorCode {
             Self::UnsupportedExpression
             | Self::UnsupportedDependency
             | Self::UnsupportedObligations
+            | Self::UnsupportedIntegerDivision
+            | Self::UnsupportedSaturatingArithmetic
             | Self::ResourceLimitExceeded => GenerationTerminalState::Unsupported,
             Self::InvalidGeneratedSyntax | Self::SerializationFailed => {
                 GenerationTerminalState::Inconclusive

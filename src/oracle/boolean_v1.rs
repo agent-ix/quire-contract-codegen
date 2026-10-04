@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 
 use quire_contract_model::{
     BooleanOperator, ClauseId, ComparisonOperator, DefinednessObligationKind, DependencyIdentity,
-    DependencyKind, Expression, ExpressionKind, IntegerType, NumericOperator, RequirementRef,
-    SourceSpan, StateObservation, TypedExpression, ValueType,
+    DependencyKind, Expression, ExpressionKind, IntegerType, NumericOperator, OverflowPolicy,
+    RequirementRef, SourceSpan, StateObservation, TypedExpression, ValueType,
 };
 use serde::Serialize;
 
@@ -46,9 +46,37 @@ pub struct GeneratedArtifactBundle {
     pub rust: Artifact,
 }
 
+/// The consumer a Boolean oracle is rendered for. FR-031 gives integer arithmetic a different
+/// shape for each, because they need different things from the same rule.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum OracleShape {
+    /// A native oracle, evaluated by a Rust program. Integer add, subtract and multiply are
+    /// Contract Runtime `exact` calls, and an oracle holding any returns `Outcome<bool>` and
+    /// takes a trailing `&mut Meter`. An arithmetic-free oracle returns `bool`.
+    Native,
+    /// The oracle `generate_kani_bundle` embeds in a `proof_for_contract` harness. It is
+    /// evaluated only by `cargo kani`, so add, subtract and multiply stay the infix `i64`
+    /// operators whose overflow is Kani's own falsifiable check, and it returns `bool`.
+    KaniBundle,
+    /// A consumer that needs a plain `bool` and cannot carry an outcome. It refuses a clause
+    /// holding integer arithmetic rather than read an `Outcome<bool>` as a `bool`.
+    PlainBool,
+}
+
 struct RenderedExpression {
     source: String,
     implication_regions: Vec<(u32, u32)>,
+    /// Whether the clause holds an integer arithmetic node.
+    has_arithmetic: bool,
+    /// The generated helper functions the rendered body calls.
+    helpers: Helpers,
+}
+
+/// The helper functions a native arithmetic oracle's body calls, emitted once per file.
+#[derive(Clone, Copy, Default)]
+struct Helpers {
+    bound: bool,
+    equality: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -72,10 +100,20 @@ struct ReferenceInfo {
     source: SourceSpan,
 }
 
-#[derive(Default)]
 struct ExpressionAnalysis {
+    shape: OracleShape,
     references: BTreeMap<String, ReferenceInfo>,
     reference_order: Vec<String>,
+}
+
+impl ExpressionAnalysis {
+    fn new(shape: OracleShape) -> Self {
+        Self {
+            shape,
+            references: BTreeMap::new(),
+            reference_order: Vec::new(),
+        }
+    }
 }
 
 pub(crate) struct DependencyParameter {
@@ -137,28 +175,40 @@ impl SourceBuilder {
 pub fn generate_boolean_oracle(
     request: &OracleRequest<'_>,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
+    generate_boolean_oracle_shaped(request, OracleShape::Native)
+}
+
+/// [`generate_boolean_oracle`] rendered for `shape`, naming the function from the request.
+pub(crate) fn generate_boolean_oracle_shaped(
+    request: &OracleRequest<'_>,
+    shape: OracleShape,
+) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     let symbol = oracle_symbol(
         request.requirement.requirement().as_str(),
         request.requirement.revision().get(),
         request.clause.as_str(),
     );
-    generate_named_boolean_oracle(request, &symbol)
+    generate_named_boolean_oracle(request, &symbol, shape)
 }
 
 /// [`generate_boolean_oracle`] with the oracle function named `symbol`, for generators that name
-/// several oracles together through [`unique_names`](crate::core::naming::unique_names).
+/// several oracles together through [`unique_names`](crate::core::naming::unique_names), rendered
+/// for `shape`.
 pub(crate) fn generate_named_boolean_oracle(
     request: &OracleRequest<'_>,
     symbol: &str,
+    shape: OracleShape,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     if request.expression.nodes().len() < 128 {
-        return generate_boolean_oracle_inner(request, symbol);
+        return generate_boolean_oracle_inner(request, symbol, shape);
     }
     std::thread::scope(|scope| {
         let handle = std::thread::Builder::new()
             .name("contract-oracle-generation".to_owned())
             .stack_size(16 * 1024 * 1024)
-            .spawn_scoped(scope, || generate_boolean_oracle_inner(request, symbol))
+            .spawn_scoped(scope, || {
+                generate_boolean_oracle_inner(request, symbol, shape)
+            })
             .map_err(|error| {
                 single_diagnostic(
                     request,
@@ -181,6 +231,7 @@ pub(crate) fn generate_named_boolean_oracle(
 fn generate_boolean_oracle_inner(
     request: &OracleRequest<'_>,
     symbol_text: &str,
+    shape: OracleShape,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     if request.expression.value_type() != &ValueType::Boolean {
         return Err(expression_diagnostic(
@@ -206,7 +257,7 @@ fn generate_boolean_oracle_inner(
         ));
     }
 
-    let parameters = typed_dependency_parameters(request)?;
+    let parameters = typed_dependency_parameters(request, shape)?;
     let parameter_lookup = parameters
         .iter()
         .map(|parameter| {
@@ -216,7 +267,15 @@ fn generate_boolean_oracle_inner(
             )
         })
         .collect::<BTreeMap<_, _>>();
-    let rendered = render_expression(request, request.expression.expression(), &parameter_lookup)?;
+    let rendered = render_expression(
+        request,
+        request.expression.expression(),
+        &parameter_lookup,
+        shape,
+    )?;
+    // A native oracle holding arithmetic returns an outcome and takes the caller's meter; every
+    // other oracle returns a plain bool.
+    let returns_outcome = shape == OracleShape::Native && rendered.has_arithmetic;
 
     let requirement = request.requirement.requirement().as_str();
     let revision = request.requirement.revision().get();
@@ -238,11 +297,32 @@ fn generate_boolean_oracle_inner(
         .collect::<Vec<_>>()
         .join(", ");
 
-    let mut source = SourceBuilder::new();
-    for line in [
+    let signature = if returns_outcome {
+        let meter = "meter: &mut rt::Meter";
+        let parameter_text = if parameter_text.is_empty() {
+            meter.to_owned()
+        } else {
+            format!("{parameter_text}, {meter}")
+        };
+        format!("pub fn {symbol_text}({parameter_text}) -> rt::Outcome<bool> {{")
+    } else {
+        format!("pub fn {symbol_text}({parameter_text}) -> bool {{")
+    };
+    let mut header = vec![
         "// SPDX-License-Identifier: MIT OR Apache-2.0".to_owned(),
         format!("// Requirement: {requirement}@{revision}; Clause: {clause}"),
-        String::new(),
+    ];
+    if shape == OracleShape::KaniBundle && rendered.has_arithmetic {
+        header.push(KANI_ARITHMETIC_NOTE.to_owned());
+    }
+    header.push(String::new());
+    if returns_outcome {
+        header.push("use quire_contract_runtime::exact as rt;".to_owned());
+        header.extend(native_helper_lines(rendered.helpers));
+    }
+
+    let mut source = SourceBuilder::new();
+    for line in header.into_iter().chain([
         format!("/// Generated contract identity for `{requirement}@{revision}`."),
         format!("pub const {identity_symbol}: quire_contract_runtime::ContractIdentity<'static> ="),
         "quire_contract_runtime::ContractIdentity::new(".to_owned(),
@@ -254,8 +334,8 @@ fn generate_boolean_oracle_inner(
         format!("quire_contract_runtime::ClauseId::new({clause_literal});"),
         format!("/// Evaluates generated oracle `{requirement}@{revision}/{clause}`."),
         "#[must_use]".to_owned(),
-        format!("pub fn {symbol_text}({parameter_text}) -> bool {{"),
-    ] {
+        signature,
+    ]) {
         source.line(&line).map_err(|_| resource_error(request))?;
     }
     let expression_start = source.next_line;
@@ -335,7 +415,7 @@ fn generate_boolean_oracle_inner(
 pub(crate) fn dependency_parameters(
     request: &OracleRequest<'_>,
 ) -> Result<Vec<(DependencyIdentity, String)>, Vec<GenerationDiagnostic>> {
-    let parameters = typed_dependency_parameters(request)?;
+    let parameters = typed_dependency_parameters(request, OracleShape::PlainBool)?;
     if let Some(parameter) = parameters
         .iter()
         .find(|parameter| parameter.value_type != RustValueType::Boolean)
@@ -356,8 +436,9 @@ pub(crate) fn dependency_parameters(
 
 pub(crate) fn typed_dependency_parameters(
     request: &OracleRequest<'_>,
+    shape: OracleShape,
 ) -> Result<Vec<DependencyParameter>, Vec<GenerationDiagnostic>> {
-    let analysis = analyze_supported_expression(request)?;
+    let analysis = analyze_supported_expression(request, shape)?;
     for key in &analysis.reference_order {
         let represented = request.expression.dependencies().iter().any(|dependency| {
             matches!(
@@ -445,8 +526,9 @@ fn first_reference_span<'a>(
 
 fn analyze_supported_expression(
     request: &OracleRequest<'_>,
+    shape: OracleShape,
 ) -> Result<ExpressionAnalysis, Vec<GenerationDiagnostic>> {
-    let mut analysis = ExpressionAnalysis::default();
+    let mut analysis = ExpressionAnalysis::new(shape);
     let mut next_index = 0_u32;
     analyze_node(
         request,
@@ -571,7 +653,22 @@ fn analyze_node(
             }
             RustValueType::Boolean
         }
-        ExpressionKind::Numeric { left, right, .. } => {
+        ExpressionKind::Numeric {
+            operator,
+            left,
+            right,
+        } => {
+            // The node is refused before its operands are read, so the refusal locus is the
+            // first unsupported node in authored preorder.
+            if let Some(refusal) = arithmetic_refusal(
+                request,
+                expression,
+                *operator,
+                typed_node.value_type(),
+                analysis.shape,
+            ) {
+                return Err(refusal);
+            }
             let left_type = analyze_node(request, left, next_index, analysis)?;
             let right_type = analyze_node(request, right, next_index, analysis)?;
             if !matches!(left_type, RustValueType::Integer(_)) || left_type != right_type {
@@ -650,151 +747,617 @@ fn unsupported_node(
     )
 }
 
+/// Why an arithmetic node cannot be rendered for `shape`, or `None` when it can (FR-031).
+///
+/// Divide and remainder are refused under both overflow policies and for every consumer until
+/// the IR-601 ruling. Add, subtract and multiply over a `saturate` integer type are refused for
+/// every consumer, because the runtime has no saturating operation and clamping inline would be a
+/// second implementation of the rule. A consumer that needs a plain `bool` refuses the rest.
+fn arithmetic_refusal(
+    request: &OracleRequest<'_>,
+    expression: &Expression,
+    operator: NumericOperator,
+    value_type: &ValueType,
+    shape: OracleShape,
+) -> Option<Vec<GenerationDiagnostic>> {
+    let (operation, is_division) = match operator {
+        NumericOperator::Add => ("add", false),
+        NumericOperator::Subtract => ("subtract", false),
+        NumericOperator::Multiply => ("multiply", false),
+        NumericOperator::Divide => ("divide", true),
+        NumericOperator::Remainder => ("remainder", true),
+    };
+    let ValueType::Integer { value } = value_type else {
+        // A node that is not integer-typed is refused by the grammar checks.
+        return None;
+    };
+    if is_division {
+        return Some(expression_diagnostic(
+            request,
+            GenerationErrorCode::UnsupportedIntegerDivision,
+            "expression.node",
+            format!(
+                "integer {operation} is refused until IR-601 rules which division semantics a V1 \
+                 oracle takes and which runtime operation provides them; no raw `/` or `%` is emitted"
+            ),
+            expression.source(),
+        ));
+    }
+    match value.overflow() {
+        OverflowPolicy::Saturate => Some(expression_diagnostic(
+            request,
+            GenerationErrorCode::UnsupportedSaturatingArithmetic,
+            "expression.node",
+            format!(
+                "integer {operation} over a `saturate` integer type needs a saturating integer \
+                 operation in Contract Runtime, which the runtime does not define; the generator \
+                 does not restate saturation inline"
+            ),
+            expression.source(),
+        )),
+        OverflowPolicy::Reject if shape == OracleShape::PlainBool => Some(unsupported_node(
+            request,
+            expression,
+            format!(
+                "integer {operation} needs an outcome-carrying oracle, and this consumer needs a \
+                 plain bool"
+            ),
+        )),
+        OverflowPolicy::Reject => None,
+    }
+}
+
+/// Comment a Kani bundle oracle's file carries when it holds arithmetic (FR-031-AC-19). It holds
+/// no `+`, because the exemplar's mutation control counts the additions of the oracle text.
+const KANI_ARITHMETIC_NOTE: &str = "// Integer arithmetic in this oracle is checked by Kani, which fails the proof on overflow; this file is not a native evaluator.";
+
+/// The `use`-free helper functions of a native arithmetic oracle, as source lines. `carry` is
+/// always present; the others are emitted only when the body calls them.
+fn native_helper_lines(helpers: Helpers) -> Vec<String> {
+    let mut source = String::from(NATIVE_CARRY_HELPER);
+    if helpers.bound {
+        source.push_str(NATIVE_BOUND_HELPER);
+    }
+    if helpers.equality {
+        source.push_str(NATIVE_EQUALITY_HELPER);
+    }
+    source.lines().map(str::to_owned).collect()
+}
+
+const NATIVE_CARRY_HELPER: &str = "
+/// Splits an outcome into its completed value or the first stop, carried at another type.
+fn carry<T, U>(outcome: rt::Outcome<T>) -> Result<T, rt::Outcome<U>> {
+    match outcome {
+        rt::Outcome::Completed(value) => Ok(value),
+        rt::Outcome::Undefined(reason) => Err(rt::Outcome::Undefined(reason)),
+        rt::Outcome::Refused(reason) => Err(rt::Outcome::Refused(reason)),
+        rt::Outcome::Incomplete(record) => Err(rt::Outcome::Incomplete(record)),
+        _ => Err(rt::Outcome::Refused(rt::Refusal::CheckedInvariant)),
+    }
+}
+";
+
+const NATIVE_BOUND_HELPER: &str = "
+/// The inclusive result interval of a `reject` integer type.
+fn bound<U>(minimum: i64, maximum: i64) -> Result<rt::IntegerInterval, rt::Outcome<U>> {
+    rt::IntegerInterval::new(rt::Integer::from(minimum), rt::Integer::from(maximum))
+        .map_err(|_| rt::Outcome::Refused(rt::Refusal::CheckedInvariant))
+}
+";
+
+const NATIVE_EQUALITY_HELPER: &str = "
+/// Type-checks then evaluates integer equality through the runtime's equality evaluation.
+fn equality(
+    operator: rt::EqualityOperator,
+    left: rt::Integer,
+    right: rt::Integer,
+    meter: &mut rt::Meter,
+) -> rt::Outcome<bool> {
+    let environment = match rt::TypeEnvironment::new(
+        core::iter::empty::<rt::CompositeDeclaration>(),
+        core::iter::empty::<rt::ObjectTypeDeclaration>(),
+    ) {
+        Ok(environment) => environment,
+        Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),
+    };
+    let checked = match environment.check_equality(
+        operator,
+        rt::EqualityOperand::typed(rt::ValueType::Integer),
+        rt::EqualityOperand::typed(rt::ValueType::Integer),
+    ) {
+        Ok(checked) => checked,
+        Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),
+    };
+    checked.evaluate(&rt::Value::Integer(left), &rt::Value::Integer(right), meter)
+}
+";
+
+/// Whether each node, in authored preorder, holds an integer arithmetic node in its subtree
+/// (itself included). Only grammar nodes the analysis admitted are descended into.
+fn mark_arithmetic(expression: &Expression, marks: &mut Vec<bool>) -> bool {
+    let slot = marks.len();
+    marks.push(false);
+    let own = matches!(expression.kind(), ExpressionKind::Numeric { .. });
+    let below = match expression.kind() {
+        ExpressionKind::Boolean { left, right, .. }
+        | ExpressionKind::Compare { left, right, .. }
+        | ExpressionKind::Numeric { left, right, .. } => {
+            let left = mark_arithmetic(left, marks);
+            let right = mark_arithmetic(right, marks);
+            left || right
+        }
+        ExpressionKind::BooleanNot { operand } | ExpressionKind::NumericNegate { operand } => {
+            mark_arithmetic(operand, marks)
+        }
+        _ => false,
+    };
+    if let Some(mark) = marks.get_mut(slot) {
+        *mark = own || below;
+    }
+    own || below
+}
+
 fn render_expression(
     request: &OracleRequest<'_>,
     expression: &Expression,
     parameters: &BTreeMap<String, String>,
+    shape: OracleShape,
 ) -> Result<RenderedExpression, Vec<GenerationDiagnostic>> {
-    let mut builder = SourceBuilder::new();
-    render_node(request, expression, parameters, &mut builder)?;
+    let mut arithmetic = Vec::new();
+    let has_arithmetic = mark_arithmetic(expression, &mut arithmetic);
+    let mut renderer = Renderer {
+        request,
+        parameters,
+        arithmetic,
+        next_index: 0,
+        output: SourceBuilder::new(),
+        helpers: Helpers::default(),
+    };
+    if shape == OracleShape::Native && has_arithmetic {
+        renderer.outcome_bool(expression)?;
+    } else {
+        renderer.plain_node(expression)?;
+    }
     Ok(RenderedExpression {
-        source: builder.source,
-        implication_regions: builder.implication_regions,
+        source: renderer.output.source,
+        implication_regions: renderer.output.implication_regions,
+        has_arithmetic,
+        helpers: renderer.helpers,
     })
 }
 
-fn render_node(
+/// Renders one clause's expression tree. Every `*_node` and `outcome_*` method consumes one node
+/// of authored preorder per call, so `next_index` names the typed node under render.
+struct Renderer<'a> {
+    request: &'a OracleRequest<'a>,
+    parameters: &'a BTreeMap<String, String>,
+    arithmetic: Vec<bool>,
+    next_index: usize,
+    output: SourceBuilder,
+    helpers: Helpers,
+}
+
+type Rendered = Result<(), Vec<GenerationDiagnostic>>;
+
+impl<'a> Renderer<'a> {
+    fn emit(&mut self, text: &str) -> Rendered {
+        self.output
+            .line(text)
+            .map_err(|_| resource_error(self.request))
+    }
+
+    /// Whether the node about to be rendered holds an arithmetic node.
+    fn holds_arithmetic(&self) -> bool {
+        self.arithmetic
+            .get(self.next_index)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// Takes the typed node under render, advancing to the next in preorder.
+    fn take_index(&mut self) -> usize {
+        let index = self.next_index;
+        self.next_index = self.next_index.saturating_add(1);
+        index
+    }
+
+    /// The expression as the plain Rust `bool` or `i64` it has always been: native operators, and
+    /// for the Kani bundle oracle the infix `+`, `-` and `*` on `i64`.
+    fn plain_node(&mut self, expression: &Expression) -> Rendered {
+        let index = self.take_index();
+        match expression.kind() {
+            ExpressionKind::BooleanLiteral { value } => {
+                self.emit(if *value { "true" } else { "false" })
+            }
+            ExpressionKind::IntegerLiteral { value, .. } => {
+                self.emit(&integer_literal_source(*value))
+            }
+            ExpressionKind::ValueReference { name, observation } => {
+                let key = reference_key(name.as_str(), Some(*observation));
+                let Some(identifier) = self.parameters.get(&key) else {
+                    return Err(expression_diagnostic(
+                        self.request,
+                        GenerationErrorCode::UnsupportedDependency,
+                        "expression.value_reference",
+                        "typed dependency census does not contain the referenced value",
+                        expression.source(),
+                    ));
+                };
+                let identifier = identifier.clone();
+                self.emit(&identifier)
+            }
+            ExpressionKind::BooleanNot { operand } => {
+                self.emit("!(")?;
+                self.plain_node(operand)?;
+                self.emit(")")
+            }
+            ExpressionKind::Boolean {
+                operator,
+                left,
+                right,
+            } => {
+                let (function, left_closure) = connective_function(*operator);
+                self.emit(&format!("quire_contract_runtime::operators::{function}("))?;
+                if left_closure {
+                    self.emit("|| {")?;
+                }
+                self.plain_node(left)?;
+                self.emit(if left_closure { "}," } else { "," })?;
+                self.emit("|| {")?;
+                let region_index = self.open_implication_region(*operator);
+                let start_line = self.output.next_line;
+                self.plain_node(right)?;
+                self.close_implication_region(region_index, start_line);
+                self.emit("},")?;
+                self.emit(")")
+            }
+            ExpressionKind::Compare {
+                operator,
+                left,
+                right,
+            } => {
+                self.emit("(")?;
+                self.plain_node(left)?;
+                self.emit(")")?;
+                self.emit(comparison_source(*operator))?;
+                self.emit("(")?;
+                self.plain_node(right)?;
+                self.emit(")")
+            }
+            ExpressionKind::Numeric {
+                operator,
+                left,
+                right,
+            } => {
+                let infix = self.infix_operator(index, expression, *operator)?;
+                self.emit("(")?;
+                self.plain_node(left)?;
+                self.emit(")")?;
+                self.emit(infix)?;
+                self.emit("(")?;
+                self.plain_node(right)?;
+                self.emit(")")
+            }
+            other => Err(unsupported_kind(self.request, expression, other)),
+        }
+    }
+
+    /// The infix operator of an add, subtract or multiply over a `reject` integer type, for the
+    /// Kani bundle oracle. Divide, remainder and `saturate` arithmetic are refused, so no raw `/`
+    /// or `%` and no clamped result is ever rendered.
+    fn infix_operator(
+        &self,
+        index: usize,
+        expression: &Expression,
+        operator: NumericOperator,
+    ) -> Result<&'static str, Vec<GenerationDiagnostic>> {
+        let value_type = self.typed_value_type(index, expression)?;
+        if let Some(refusal) = arithmetic_refusal(
+            self.request,
+            expression,
+            operator,
+            value_type,
+            OracleShape::KaniBundle,
+        ) {
+            return Err(refusal);
+        }
+        match operator {
+            NumericOperator::Add => Ok("+"),
+            NumericOperator::Subtract => Ok("-"),
+            NumericOperator::Multiply => Ok("*"),
+            NumericOperator::Divide | NumericOperator::Remainder => Err(unsupported_node(
+                self.request,
+                expression,
+                "integer divide and remainder are refused",
+            )),
+        }
+    }
+
+    /// The checked type of the typed node at `index`.
+    fn typed_value_type(
+        &self,
+        index: usize,
+        expression: &Expression,
+    ) -> Result<&'a ValueType, Vec<GenerationDiagnostic>> {
+        let typed: &'a TypedExpression = self.request.expression;
+        typed
+            .nodes()
+            .get(index)
+            .map(|node| node.value_type())
+            .ok_or_else(|| {
+                expression_diagnostic(
+                    self.request,
+                    GenerationErrorCode::UnsupportedExpression,
+                    "expression.nodes",
+                    "typed node census ended before the authored expression tree",
+                    expression.source(),
+                )
+            })
+    }
+
+    fn open_implication_region(&mut self, operator: BooleanOperator) -> Option<usize> {
+        (operator == BooleanOperator::Implication).then(|| {
+            let index = self.output.implication_regions.len();
+            self.output.implication_regions.push((0, 0));
+            index
+        })
+    }
+
+    fn close_implication_region(&mut self, region_index: Option<usize>, start_line: u32) {
+        let end_line = self.output.next_line.saturating_sub(1);
+        if let Some(region) =
+            region_index.and_then(|index| self.output.implication_regions.get_mut(index))
+        {
+            *region = (start_line, end_line);
+        }
+    }
+
+    /// A Boolean node as an `rt::Outcome<bool>` expression, for the native oracle. A node with no
+    /// arithmetic below it is the plain `bool` it has always been, completed.
+    fn outcome_bool(&mut self, expression: &Expression) -> Rendered {
+        if !self.holds_arithmetic() {
+            self.emit("rt::Outcome::Completed(")?;
+            self.plain_node(expression)?;
+            return self.emit(")");
+        }
+        self.take_index();
+        match expression.kind() {
+            ExpressionKind::BooleanNot { operand } => {
+                self.emit("match carry(")?;
+                self.outcome_bool(operand)?;
+                self.emit(") {")?;
+                self.emit("Ok(value) => rt::Outcome::Completed(!value),")?;
+                self.emit("Err(stop) => stop,")?;
+                self.emit("}")
+            }
+            ExpressionKind::Boolean {
+                operator,
+                left,
+                right,
+            } => self.outcome_connective(*operator, left, right),
+            ExpressionKind::Compare {
+                operator,
+                left,
+                right,
+            } => {
+                self.emit("match carry(")?;
+                self.outcome_integer(left)?;
+                self.emit(") {")?;
+                self.emit("Err(stop) => stop,")?;
+                self.emit("Ok(left_value) => match carry(")?;
+                self.outcome_integer(right)?;
+                self.emit(") {")?;
+                self.emit("Err(stop) => stop,")?;
+                let call = self.comparison_call(*operator);
+                self.emit(&format!("Ok(right_value) => {call},"))?;
+                self.emit("},")?;
+                self.emit("}")
+            }
+            other => Err(unsupported_kind(self.request, expression, other)),
+        }
+    }
+
+    /// A connective with arithmetic below it. A short-circuit connective calls the runtime's
+    /// operator, so its right operand is a closure the left operand's decision never reaches. A
+    /// total connective evaluates both operands left to right and takes the first stop.
+    fn outcome_connective(
+        &mut self,
+        operator: BooleanOperator,
+        left: &Expression,
+        right: &Expression,
+    ) -> Rendered {
+        let (function, total) = connective_function(operator);
+        if total {
+            self.emit("match (carry(")?;
+            self.outcome_bool(left)?;
+            self.emit("), carry(")?;
+            self.outcome_bool(right)?;
+            self.emit(")) {")?;
+            self.emit(&format!(
+                "(Ok(left_value), Ok(right_value)) => rt::Outcome::Completed(quire_contract_runtime::operators::{function}(|| left_value, || right_value)),"
+            ))?;
+            self.emit("(Err(stop), _) | (_, Err(stop)) => stop,")?;
+            return self.emit("}");
+        }
+        let left_stops = self.holds_arithmetic();
+        if left_stops {
+            self.emit("match carry(")?;
+            self.outcome_bool(left)?;
+            self.emit(") {")?;
+            self.emit(&format!(
+                "Ok(left_value) => quire_contract_runtime::operators::{function}(left_value, || {{"
+            ))?;
+        } else {
+            self.emit(&format!("quire_contract_runtime::operators::{function}("))?;
+            self.plain_node(left)?;
+            self.emit(",")?;
+            self.emit("|| {")?;
+        }
+        let region_index = self.open_implication_region(operator);
+        let start_line = self.output.next_line;
+        self.outcome_bool(right)?;
+        self.close_implication_region(region_index, start_line);
+        if left_stops {
+            self.emit("}),")?;
+            self.emit("Err(stop) => stop,")?;
+            self.emit("}")
+        } else {
+            self.emit("},")?;
+            self.emit(")")
+        }
+    }
+
+    /// The runtime call that orders or equates the two completed integers `left_value` and
+    /// `right_value`.
+    fn comparison_call(&mut self, operator: ComparisonOperator) -> String {
+        let ordering = match operator {
+            ComparisonOperator::Equal | ComparisonOperator::NotEqual => {
+                self.helpers.equality = true;
+                let equality = if operator == ComparisonOperator::Equal {
+                    "Equal"
+                } else {
+                    "NotEqual"
+                };
+                return format!(
+                    "equality(rt::EqualityOperator::{equality}, left_value, right_value, meter)"
+                );
+            }
+            ComparisonOperator::Less => "Less",
+            ComparisonOperator::LessEqual => "LessOrEqual",
+            ComparisonOperator::Greater => "Greater",
+            ComparisonOperator::GreaterEqual => "GreaterOrEqual",
+        };
+        format!(
+            "rt::order_numbers(rt::OrderingOperator::{ordering}, rt::OrderedOperands::Integers(&left_value, &right_value), meter)"
+        )
+    }
+
+    /// An integer node as an `rt::Outcome<rt::Integer>` expression, for the native oracle. An
+    /// operand with no arithmetic below it is converted from its `i64` parameter or literal; an
+    /// arithmetic operand is the runtime's exact operation over the completed integers of its two
+    /// operands, bounded by the node's interval.
+    fn outcome_integer(&mut self, expression: &Expression) -> Rendered {
+        if !self.holds_arithmetic() {
+            self.emit("rt::Outcome::Completed(rt::Integer::from(")?;
+            self.plain_node(expression)?;
+            return self.emit("))");
+        }
+        let index = self.take_index();
+        let ExpressionKind::Numeric {
+            operator,
+            left,
+            right,
+        } = expression.kind()
+        else {
+            return Err(unsupported_kind(
+                self.request,
+                expression,
+                expression.kind(),
+            ));
+        };
+        let value_type = self.typed_value_type(index, expression)?;
+        if let Some(refusal) = arithmetic_refusal(
+            self.request,
+            expression,
+            *operator,
+            value_type,
+            OracleShape::Native,
+        ) {
+            return Err(refusal);
+        }
+        let ValueType::Integer { value: interval } = value_type else {
+            return Err(unsupported_node(
+                self.request,
+                expression,
+                "arithmetic requires a bounded integer type",
+            ));
+        };
+        let bound = format!(
+            "bound({}, {})",
+            integer_literal_source(interval.minimum()),
+            integer_literal_source(interval.maximum())
+        );
+        let variant = match operator {
+            NumericOperator::Add => "Add",
+            NumericOperator::Subtract => "Subtract",
+            NumericOperator::Multiply => "Multiply",
+            NumericOperator::Divide | NumericOperator::Remainder => {
+                return Err(unsupported_node(
+                    self.request,
+                    expression,
+                    "integer divide and remainder are refused",
+                ));
+            }
+        };
+        self.helpers.bound = true;
+        self.emit("match carry(")?;
+        self.outcome_integer(left)?;
+        self.emit(") {")?;
+        self.emit("Err(stop) => stop,")?;
+        self.emit("Ok(left_value) => match carry(")?;
+        self.outcome_integer(right)?;
+        self.emit(") {")?;
+        self.emit("Err(stop) => stop,")?;
+        self.emit(&format!("Ok(right_value) => match {bound} {{"))?;
+        self.emit("Err(stop) => stop,")?;
+        self.emit("Ok(interval) => rt::evaluate_integer_arithmetic(")?;
+        self.emit(&format!(
+            "rt::IntegerArithmetic::{variant}(&left_value, &right_value),"
+        ))?;
+        self.emit("Some(&interval),")?;
+        self.emit("meter,")?;
+        self.emit("),")?;
+        self.emit("},")?;
+        self.emit("},")?;
+        self.emit("}")
+    }
+}
+
+fn integer_literal_source(value: i64) -> String {
+    if value == i64::MIN {
+        "i64::MIN".to_owned()
+    } else {
+        format!("{value}_i64")
+    }
+}
+
+fn comparison_source(operator: ComparisonOperator) -> &'static str {
+    match operator {
+        ComparisonOperator::Equal => "==",
+        ComparisonOperator::NotEqual => "!=",
+        ComparisonOperator::Less => "<",
+        ComparisonOperator::LessEqual => "<=",
+        ComparisonOperator::Greater => ">",
+        ComparisonOperator::GreaterEqual => ">=",
+    }
+}
+
+/// The runtime operator that decides a connective, and whether its left operand is a closure.
+fn connective_function(operator: BooleanOperator) -> (&'static str, bool) {
+    match operator {
+        BooleanOperator::ShortCircuitAnd => ("and_short_circuit", false),
+        BooleanOperator::ShortCircuitOr => ("or_short_circuit", false),
+        BooleanOperator::TotalAnd => ("and_total", true),
+        BooleanOperator::TotalOr => ("or_total", true),
+        BooleanOperator::Implication => ("implies_short_circuit", false),
+    }
+}
+
+fn unsupported_kind(
     request: &OracleRequest<'_>,
     expression: &Expression,
-    parameters: &BTreeMap<String, String>,
-    output: &mut SourceBuilder,
-) -> Result<(), Vec<GenerationDiagnostic>> {
-    let result = match expression.kind() {
-        ExpressionKind::BooleanLiteral { value } => {
-            output.line(if *value { "true" } else { "false" })
-        }
-        ExpressionKind::IntegerLiteral { value, .. } => {
-            let literal = if *value == i64::MIN {
-                "i64::MIN".to_owned()
-            } else {
-                format!("{value}_i64")
-            };
-            output.line(&literal)
-        }
-        ExpressionKind::ValueReference { name, observation } => {
-            let key = reference_key(name.as_str(), Some(*observation));
-            let Some(identifier) = parameters.get(&key) else {
-                return Err(expression_diagnostic(
-                    request,
-                    GenerationErrorCode::UnsupportedDependency,
-                    "expression.value_reference",
-                    "typed dependency census does not contain the referenced value",
-                    expression.source(),
-                ));
-            };
-            output.line(identifier)
-        }
-        ExpressionKind::BooleanNot { operand } => {
-            output.line("!(").map_err(|_| resource_error(request))?;
-            render_node(request, operand, parameters, output)?;
-            output.line(")")
-        }
-        ExpressionKind::Boolean {
-            operator,
-            left,
-            right,
-        } => {
-            let (function, left_closure) = match operator {
-                BooleanOperator::ShortCircuitAnd => ("and_short_circuit", false),
-                BooleanOperator::ShortCircuitOr => ("or_short_circuit", false),
-                BooleanOperator::TotalAnd => ("and_total", true),
-                BooleanOperator::TotalOr => ("or_total", true),
-                BooleanOperator::Implication => ("implies_short_circuit", false),
-            };
-            output
-                .line(&format!("quire_contract_runtime::operators::{function}("))
-                .map_err(|_| resource_error(request))?;
-            if left_closure {
-                output.line("|| {").map_err(|_| resource_error(request))?;
-            }
-            render_node(request, left, parameters, output)?;
-            if left_closure {
-                output.line("},").map_err(|_| resource_error(request))?;
-            } else {
-                output.line(",").map_err(|_| resource_error(request))?;
-            }
-            output.line("|| {").map_err(|_| resource_error(request))?;
-            let region_index = if *operator == BooleanOperator::Implication {
-                let index = output.implication_regions.len();
-                output.implication_regions.push((0, 0));
-                Some(index)
-            } else {
-                None
-            };
-            let start_line = output.next_line;
-            render_node(request, right, parameters, output)?;
-            let end_line = output.next_line.saturating_sub(1);
-            if let Some(index) = region_index {
-                output.implication_regions[index] = (start_line, end_line);
-            }
-            output.line("},").map_err(|_| resource_error(request))?;
-            output.line(")")
-        }
-        ExpressionKind::Compare {
-            operator,
-            left,
-            right,
-        } => {
-            let operator = match operator {
-                ComparisonOperator::Equal => "==",
-                ComparisonOperator::NotEqual => "!=",
-                ComparisonOperator::Less => "<",
-                ComparisonOperator::LessEqual => "<=",
-                ComparisonOperator::Greater => ">",
-                ComparisonOperator::GreaterEqual => ">=",
-            };
-            output.line("(").map_err(|_| resource_error(request))?;
-            render_node(request, left, parameters, output)?;
-            output.line(")").map_err(|_| resource_error(request))?;
-            output.line(operator).map_err(|_| resource_error(request))?;
-            output.line("(").map_err(|_| resource_error(request))?;
-            render_node(request, right, parameters, output)?;
-            output.line(")")
-        }
-        ExpressionKind::Numeric {
-            operator,
-            left,
-            right,
-        } => {
-            let operator = match operator {
-                NumericOperator::Add => "+",
-                NumericOperator::Subtract => "-",
-                NumericOperator::Multiply => "*",
-                NumericOperator::Divide => "/",
-                NumericOperator::Remainder => "%",
-            };
-            output.line("(").map_err(|_| resource_error(request))?;
-            render_node(request, left, parameters, output)?;
-            output.line(")").map_err(|_| resource_error(request))?;
-            output.line(operator).map_err(|_| resource_error(request))?;
-            output.line("(").map_err(|_| resource_error(request))?;
-            render_node(request, right, parameters, output)?;
-            output.line(")")
-        }
-        other => {
-            return Err(expression_diagnostic(
-                request,
-                GenerationErrorCode::UnsupportedExpression,
-                "expression.node",
-                format!(
-                    "unsupported expression in oracle slice: {}",
-                    node_name(other)
-                ),
-                expression.source(),
-            ));
-        }
-    };
-    result.map_err(|_| resource_error(request))
+    kind: &ExpressionKind,
+) -> Vec<GenerationDiagnostic> {
+    expression_diagnostic(
+        request,
+        GenerationErrorCode::UnsupportedExpression,
+        "expression.node",
+        format!(
+            "unsupported expression in oracle slice: {}",
+            node_name(kind)
+        ),
+        expression.source(),
+    )
 }
 
 fn node_name(kind: &ExpressionKind) -> &'static str {

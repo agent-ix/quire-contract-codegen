@@ -23,10 +23,15 @@ exemplar, makes overflow a falsifiable Kani property, and agrees with the native
 domain. Finally it verifies that the defect cases fail on the tree before the change and pass
 after it.
 
-This case is 🚧 Planned. No test exists for it yet. Step 5, the O-3 and O-5 rows of step 4 and the
-divide and remainder half of step 7 hold the divide and remainder rows that wait on the IR-601
-ruling (FR-031-AC-2, AC-6, AC-16 and AC-17); every other step belongs to IR-596's closing code
-change.
+This case is ⚠️ Partially covered. IR-596's closing code change implements every step except the
+held rows, in `tests/it/oracle_arithmetic.rs`, with the real-Kani steps (the exemplar controls of
+step 10 and the overflow property of step 12) in `tests/it/kani_generation.rs`, run through `make
+kani`. The QSL exemplar run of step 10 (`tests/qsl_kani_exemplar.rs` in the integration
+repository) is pending: it needs a checkout of the integration repository, and the CG run of the
+same bundle shape is the closest equivalent, not a substitute. Step 5, the O-3 and O-5 rows of
+step 4 and the divide and remainder half of step 7 hold the divide and remainder rows that wait on
+the IR-601 ruling (FR-031-AC-2, AC-6, AC-16 and AC-17), which a follow-up change implements; the
+divide and remainder constructions are covered here only as refusals (step 11).
 
 ## Test Procedure
 

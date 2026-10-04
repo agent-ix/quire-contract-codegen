@@ -1512,3 +1512,169 @@ fn kani_executes_the_generated_contract_proof() {
         String::from_utf8_lossy(&conditional_verification.stderr)
     );
 }
+
+/// The `i64` values Kani's concrete playback assigns the harness's symbolic inputs, in order.
+fn playback_values(output: &std::process::Output) -> Vec<i64> {
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("vec![") && !line.contains("concrete_vals"))
+        .map(|line| {
+            let bytes = line
+                .trim_start_matches("vec![")
+                .trim_end_matches("],")
+                .split(',')
+                .map(|byte| byte.trim().parse::<u8>().expect("a playback byte"))
+                .collect::<Vec<_>>();
+            i64::from_le_bytes(bytes.try_into().expect("eight bytes per i64"))
+        })
+        .collect()
+}
+
+/// `bundle` with its generated source replaced by `contents`, keeping the graph and its options.
+fn mutated(
+    bundle: &quire_contract_codegen::KaniArtifactBundle,
+    from: &str,
+    to: &str,
+) -> quire_contract_codegen::KaniArtifactBundle {
+    assert_eq!(
+        bundle.rust.contents.matches(from).count(),
+        1,
+        "the mutation applies to exactly one site of:\n{}",
+        bundle.rust.contents
+    );
+    let mut mutant = bundle.clone();
+    mutant.rust.contents = bundle.rust.contents.replacen(from, to, 1);
+    mutant
+}
+
+/// The exemplar's controls, run with real Kani through `generate_kani_bundle`: QSL's IT-011 and
+/// IT-010-SC-05 clause (`amount < 1000` implies `amount + 1 <= 1000` over `0..=1000`) verifies;
+/// the mutant that appends ` + 1_i64` to the addition (`left + right + 1`) is falsified with the
+/// counterexample `amount_current = 999`; the equivalent mutant that drops the `+ 1` verifies. The
+/// bundle holds exactly one syntactic addition, the shape the mutation targets. This is the
+/// in-repo equivalent of the QSL exemplar run, which needs a checkout of the integration repository
+/// and is recorded separately (FR-031-AC-11).
+///
+/// Trace: TC-044, FR-031-AC-11
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn kani_exemplar_verifies_and_its_addition_mutant_is_falsified_at_999() {
+    const SUBJECT: &str =
+        "/// Customer transition under proof.\npub fn subject(_amount_current: i64) {}";
+    let bundle = crate::oracle_arithmetic::exemplar()
+        .bundle()
+        .expect("the exemplar bundle generates");
+    let oracle = crate::oracle_arithmetic::post_oracle(&bundle.rust.contents);
+    let mut scanned = crate::oracle_arithmetic::Scan::default();
+    syn::visit::Visit::visit_item_fn(&mut scanned, &oracle);
+    assert_eq!(scanned.count("+"), 1, "exactly one addition to extend");
+
+    let healthy = execute_kani(&bundle, SUBJECT);
+    assert!(
+        healthy.status.success(),
+        "the healthy exemplar must verify:\n{}\n{}",
+        String::from_utf8_lossy(&healthy.stdout),
+        String::from_utf8_lossy(&healthy.stderr)
+    );
+    assert!(String::from_utf8_lossy(&healthy.stdout).contains("VERIFICATION:- SUCCESSFUL"));
+
+    // `left + right + 1`: the oracle's addition gains ` + 1_i64`.
+    let non_equivalent = mutated(
+        &bundle,
+        "(\n1_i64\n)\n)\n<=\n",
+        "(\n1_i64\n)\n+\n1_i64\n)\n<=\n",
+    );
+    let falsified = execute_kani(&non_equivalent, SUBJECT);
+    assert!(
+        !falsified.status.success(),
+        "the non-equivalent mutant must be falsified:\n{}",
+        String::from_utf8_lossy(&falsified.stdout)
+    );
+    assert_eq!(playback_values(&falsified), [999]);
+
+    // Dropping the `+ 1` leaves `amount <= 1000`, which the clause's antecedent already implies.
+    let equivalent = mutated(&bundle, "\n+\n(\n1_i64\n)", "");
+    let verified = execute_kani(&equivalent, SUBJECT);
+    assert!(
+        verified.status.success(),
+        "the equivalent mutant must verify:\n{}\n{}",
+        String::from_utf8_lossy(&verified.stdout),
+        String::from_utf8_lossy(&verified.stderr)
+    );
+}
+
+/// Overflow in the bundle oracle is a falsifiable Kani property, never a wrapped value: the
+/// oracle of `x < 5 && x * 2 <= 10` over `0..=10` under `reject`, called with `x` unconstrained,
+/// fails Kani's "attempt to multiply with overflow" check, and the counterexample's playback value
+/// satisfies `x < 5` and overflows `x * 2` (no particular value is named); a harness that assumes
+/// the declared domain on `x` verifies the same oracle.
+///
+/// Trace: TC-044, FR-031-AC-20
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn kani_bundle_oracle_overflow_is_a_failing_check_not_a_wrapped_value() {
+    let bundle = crate::oracle_arithmetic::o4_multiply(ComparisonOperator::LessEqual, 10)
+        .bundle()
+        .expect("the bundle generates");
+    let oracle = source_symbol(
+        bundle
+            .rust
+            .contents
+            .lines()
+            .find(|line| line.starts_with("pub fn ") && line.contains("_post("))
+            .expect("the postcondition oracle"),
+    );
+    let oracle = oracle.to_owned();
+    let subject = format!(
+        "/// Customer transition under proof.\npub fn subject(_x_current: i64) {{}}\n\n#[cfg(kani)]\nmod overflow_probe {{\n    use super::*;\n\n    #[kani::proof]\n    fn unconstrained() {{\n        let x: i64 = kani::any();\n        let _ = {oracle}(x);\n    }}\n\n    #[kani::proof]\n    fn domain_assumed() {{\n        let x: i64 = kani::any();\n        kani::assume(x >= 0_i64 && x <= 10_i64);\n        let _ = {oracle}(x);\n    }}\n}}\n"
+    );
+    let run = |harness: &str| {
+        let directory = write_generated_crate(&bundle, &subject);
+        Command::new("cargo")
+            .args([
+                "kani",
+                "-Z",
+                "function-contracts",
+                "-Z",
+                "concrete-playback",
+                "--harness",
+                harness,
+                "--exact",
+                "--unwind",
+                "2",
+                "--solver",
+                "cadical",
+                "--output-format",
+                "regular",
+                "--concrete-playback",
+                "print",
+            ])
+            .env("CARGO_TARGET_DIR", directory.0.join("target"))
+            .current_dir(&directory.0)
+            .output()
+            .expect("cargo kani should launch")
+    };
+
+    let unconstrained = run("overflow_probe::unconstrained");
+    let stdout = String::from_utf8_lossy(&unconstrained.stdout);
+    assert!(!unconstrained.status.success(), "{stdout}");
+    assert!(
+        stdout.contains("attempt to multiply with overflow"),
+        "the failing check names the multiplication:\n{stdout}"
+    );
+    let values = playback_values(&unconstrained);
+    let [x] = values[..] else {
+        panic!("one symbolic input in the playback, found {values:?}\n{stdout}");
+    };
+    assert!(x < 5, "the playback value passes the guard: {x}");
+    assert!(x.checked_mul(2).is_none(), "and overflows `x * 2`: {x}");
+
+    let assumed = run("overflow_probe::domain_assumed");
+    assert!(
+        assumed.status.success(),
+        "the declared domain discharges the overflow check:\n{}\n{}",
+        String::from_utf8_lossy(&assumed.stdout),
+        String::from_utf8_lossy(&assumed.stderr)
+    );
+}

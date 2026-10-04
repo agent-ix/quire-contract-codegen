@@ -15,7 +15,7 @@ use crate::{
     },
     oracle::boolean_v1::{
         dependency_parameters, generate_named_boolean_oracle, GeneratedArtifactBundle,
-        OracleRequest,
+        OracleRequest, OracleShape,
     },
 };
 
@@ -175,11 +175,14 @@ pub fn generate_tristate_harness(
         clause: request.postcondition_clause,
         expression: request.postcondition,
     };
+    // The harness calls each oracle as a plain `bool`, so a clause holding integer arithmetic is
+    // refused rather than read as one (FR-031).
+    let shape = OracleShape::PlainBool;
     let precondition =
-        generate_named_boolean_oracle(&precondition_request, &precondition_symbol)
+        generate_named_boolean_oracle(&precondition_request, &precondition_symbol, shape)
             .map_err(|diagnostics| map_clause_diagnostics("precondition", diagnostics))?;
     let postcondition =
-        generate_named_boolean_oracle(&postcondition_request, &postcondition_symbol)
+        generate_named_boolean_oracle(&postcondition_request, &postcondition_symbol, shape)
             .map_err(|diagnostics| map_clause_diagnostics("postcondition", diagnostics))?;
     let precondition_parameters = dependency_parameters(&precondition_request)
         .map_err(|diagnostics| map_clause_diagnostics("precondition", diagnostics))?;
