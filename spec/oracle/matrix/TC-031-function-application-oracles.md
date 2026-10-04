@@ -143,6 +143,14 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     `depth`, `nodes`, `edges`, `occurrences` and `diagnostics` gives `LoweringLimitUnrecognised`
     with that snake_case `limit_kind`, with no panic and never `LoweringWorkExhausted`. Per-function
     isolation stays with FR-021-AC-12's `tc_031_ac12_*` tests.
+12. Unknown function names on one call node (FR-021-AC-24, IR-545). Over one declared `add_fn`,
+    request on one `call` node with equal arguments: (i) `zz_unknown` once; (ii) `zz_unknown` and
+    `aa_unknown`, in both request orders; (iii) `zz_unknown` twice; (iv) `add_fn` and `zz_unknown`.
+    Assert (i) one `UnknownFunction { name: "zz_unknown" }` entry; (ii) two entries, `aa_unknown`
+    then `zz_unknown`, each `UnknownFunction` naming its own name, no `DuplicateRequest`, identical
+    under both orders; (iii) one `DuplicateRequest` entry; (iv) two entries, the `UnknownFunction`
+    one first, each equal to the entry that item gets when requested alone. The test is
+    🚧 Planned until the code change lands.
 
 ## Expected Results
 
@@ -161,7 +169,9 @@ on `Evaluation.location`/`.losses` becoming non-empty; the emitted corpus source
 `CheckedInvariant`, and a `Negate` body is refused with `UnsupportedOperator`; declarations sharing
 a declaring node id are absent from the package, source and location map, every item naming one
 is refused as `DuplicateDeclaringNode` independent of request order, and no claim or oracle symbol
-is crossed (FR-021-AC-22).
+is crossed (FR-021-AC-22); and two different unknown function names on one call node are two
+`UnknownFunction` entries, while only the same name requested twice is a `DuplicateRequest`
+(FR-021-AC-24, 🚧 Planned).
 
 Function-body semantics beyond what FR-014's and FR-018's own oracles already verify are not
 separately asserted here: a function body is a delegation to those same generators' lowering, so
