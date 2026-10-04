@@ -1500,20 +1500,25 @@ exit 0
         assert_eq!(first.calls().len(), 2);
     }
 
-    /// A batch of N is bounded by N times T, not by T: four members at T = 1 s run for two
-    /// seconds, longer than T and well inside N times T, and complete with every member verified.
+    /// A batch of N is bounded by N times T, not by T: four members at T = 3 s run for eight
+    /// seconds, longer than T and than N times T halved (6 s), and inside N times T (12 s), and
+    /// complete with every member verified.
+    ///
+    /// The stand-in's sleep never ends early, so it outlasts T and N times T halved however the
+    /// scheduler treats the test; only the 4 s between it and the 12 s bound can be eaten by a
+    /// loaded host (an earlier 1 s / 2 s / 4 s version left 2 s and flaked on a loaded runner).
     ///
     /// Trace: FR-017-AC-21, FR-028-AC-12, TC-039, TC-043
     #[test]
     fn tc_043_a_batch_may_run_longer_than_t_when_it_is_inside_n_times_t() {
         let stand_in = StandIn::running(
             "inside-n-times-t",
-            &format!("sleep 2\n{VERIFY_EVERY_HARNESS}"),
+            &format!("sleep 8\n{VERIFY_EVERY_HARNESS}"),
         );
         let harnesses: Vec<_> = (0..4)
             .map(|index| member(&format!("m{index}"), "check", 4))
             .collect();
-        let evidence = only_group(stand_in.batch(&harnesses, Duration::from_secs(1))).unwrap();
+        let evidence = only_group(stand_in.batch(&harnesses, Duration::from_secs(3))).unwrap();
         assert_eq!(
             outcomes(&evidence),
             vec![KaniRunOutcome::Verified; 4],
