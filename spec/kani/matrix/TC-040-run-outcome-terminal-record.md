@@ -31,7 +31,8 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 10. Map `falsified` with each CG-raised failure FR-029-AC-11 lists and inspect every
     `ReplayRefused` value the run produced.
 11. Map `falsified` under every replay settlement other than reproduced.
-12. HELD: map `falsified` with a setup refusal on data.
+12. HELD: map `falsified` with a setup refusal on data (a non-fault `CallSiteRefusal`,
+    `DependencyLockError`, `ReplayPackageError::InvalidFunction`, `FrameReplayError::Name`).
 
 ## Expected Results
 

@@ -20,7 +20,8 @@ relationships:
 
 The generator shall map every Contract IR `KaniOutcome`, paired with the settlement of its replay, to
 exactly one `qsl_replay::TerminalValue`. The map is total over the pair (outcome, replay
-settlement), not over the outcome alone, and it preserves the outcome's refusal cause: the outcome
+settlement), not over the outcome alone, for every pair outside the held class of FR-029's setup
+refusal on data, and it preserves the outcome's refusal cause: the outcome
 kinds that QSL's terminal value collapses into one variant stay distinguishable through that
 variant's typed cause. This is QSL ADR-013 C-09 as merged, whose two inputs are the IR `KaniOutcome`
 and, for a `Counterexample`, the result of its replay. The replay settlement, its six readings and
@@ -71,7 +72,7 @@ terminal value, so neither map applies to them.
   | `Counterexample`, with a replay disagreement | `Inconclusive(InconclusiveCause::ReplayParity)` |
   | `Counterexample`, with a non-fault replay refusal | `Inconclusive(InconclusiveCause::ReplayRefused)` carrying the refusal's QSL catalog code |
   | `Counterexample`, with a setup refusal on data | HELD: no value is stated until QSL or the owner rules ([FR-029](./FR-029-run-outcome-terminal-record.md) Status) |
-  | `Counterexample`, with a fault or a CG defect, including the CG setup errors that carry no QSL code | `Failed` |
+  | `Counterexample`, with a fault or a CG defect that is not a setup refusal | `Failed` |
   | `Refused` | `Declined(ProofRefusalCause::Refused)` |
   | `InvalidInput` | `Declined(ProofRefusalCause::InvalidInput)` |
   | `IncompleteInput` | `Declined(ProofRefusalCause::IncompleteInput)` |
@@ -87,13 +88,13 @@ terminal value, so neither map applies to them.
 - The generator shall produce `Declined` only from `Refused`, `InvalidInput` and `IncompleteInput`,
   which refuse the obligation's own input before Kani runs, so nothing was proved.
 - The generator shall not map a refused dependency lock (`DependencyLockError`) to `Declined` on the
-  strength of the kind: it arises in replay setup after Kani refuted. `DependencyLockError::Input`
-  is a setup refusal on data (HELD, FR-029 Status) and `DependencyLockError::Duplicate` is a CG
-  defect, which maps to `Failed`.
+  strength of the kind: it arises in replay setup after Kani refuted. `DependencyLockError`
+  (`Input` and `Duplicate`), `ReplayPackageError::InvalidFunction` and `FrameReplayError::Name` are
+  setup refusals on data, which are HELD with the rest of that class (FR-029 Status).
 - The generator shall map a `Counterexample` to `Refuted` only with a reproduced replay.
-- The generator shall classify a fault and a CG-origin failure as
-  [FR-029](./FR-029-run-outcome-terminal-record.md) states: by walking the whole error, and with
-  `ReplayRefused` carrying only QSL's `ReplayRefusal` codes.
+- The generator shall classify a fault and a CG-raised failure that is not a refusal of the replay
+  setup as [FR-029](./FR-029-run-outcome-terminal-record.md) states: by walking the whole error,
+  and with `ReplayRefused` carrying only QSL's closed catalog of codes.
 - The generator shall expose no `proof_category` function
   ([AD-003](../../assurance/AD-003-evidence-chain.md) E-9).
 - The generator shall map no outcome to `Tested`.
@@ -107,7 +108,7 @@ terminal value, so neither map applies to them.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-030-AC-1 | Every pair (`KaniOutcomeKind`, replay settlement) that the map's input can express maps to exactly one `TerminalValue`. | Test (TC-041) |
+| FR-030-AC-1 | Every pair (`KaniOutcomeKind`, replay settlement) that the map's input can express, other than a `Counterexample` with a setup refusal on data (held with FR-030-AC-12), maps to exactly one `TerminalValue`. | Test (TC-041) |
 | FR-030-AC-2 | `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined` with `ProofRefusalCause::Refused`, `InvalidInput` and `IncompleteInput` respectively, so no refusal cause is lost. | Test (TC-041) |
 | FR-030-AC-3 | `TimedOut`, `ResourceExhausted` and `Cancelled` map to `Incomplete` with `IncompleteCause::TimedOut`, `ResourceExhausted` and `Cancelled` respectively. | Test (TC-041) |
 | FR-030-AC-4 | `Proved` with a transcript count of three SUCCESS checks maps to `Proved { success_checks: 3 }`, `Proved` with a count of zero maps to `Proved { success_checks: 0 }`, and `Counterexample` with a reproduced replay maps to `Refuted`. | Test (TC-041) |

@@ -28,7 +28,9 @@ one match with no catch-all arm ([ADR-002](../../decisions/ADR-002-backend-adapt
 Q3). The map is total over the pair (outcome, replay settlement), not over the outcome alone: a
 falsified run's value is a function of both, because a counterexample is a refutation only once its
 replay reproduces it. Every pair maps to exactly one terminal value, so every run item has exactly
-one terminal record, as QSpec FR-331 requires.
+one terminal record, as QSpec FR-331 requires. The one exception is the held class of the setup
+refusal on data below, whose value is open until QSL or the owner rules; the totality and
+exactly-one claims hold for every pair outside that class.
 
 The replay settlement is the result of replaying the falsified run's counterexample through
 `qsl_replay::replay` (QSL ADR-013 C-09, ADR-011 T-13), read as one of:
@@ -39,15 +41,13 @@ The replay settlement is the result of replaying the falsified run's counterexam
 - refused: `qsl_replay::replay` returned a `ReplayRefusal` that is not a fault, carrying that
   refusal's QSL catalog code (`ReplayRefusal::code()`);
 - fault: an `InternalFault` anywhere in the error the replay path returned;
-- CG defect: a failure this repository raised, which has no QSL catalog code: the errors
-  FR-029-AC-11 lists, and this repository's own setup errors that carry no QSL code
-  (`ReplayPackageError::InvalidFunction`, `FrameReplayError::Name` and
-  `DependencyLockError::Duplicate`);
-- setup refusal on data (HELD, see Status): a QSL refusal of the replay setup that this repository
+- CG defect: a failure this repository raised during or after the run, which is not a refusal of
+  the replay setup: the errors FR-029-AC-11 lists;
+- setup refusal on data (HELD, see Status): a refusal of the replay setup that this repository
   reaches after the run was falsified and that is not a `ReplayRefusal` returned by
-  `qsl_replay::replay`: a `CallSiteRefusal` other than `Fault`, and `DependencyLockError::Input`
-  carrying a `DependencyInputRefusal`, each bare or wrapped in `ReplayPackageError` or
-  `FrameReplayError`.
+  `qsl_replay::replay`: a `CallSiteRefusal` other than `Fault`; `DependencyLockError`, both
+  `Input` carrying a `DependencyInputRefusal` and `Duplicate`; `ReplayPackageError::InvalidFunction`;
+  and `FrameReplayError::Name`, each bare or wrapped in `ReplayPackageError` or `FrameReplayError`.
 
 The driver runs the Kani obligation and the replay, pairs the two and writes each item's terminal
 record (QSL ADR-011 T-13); this repository provides the map and its typed inputs. A replay settlement
@@ -116,14 +116,18 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   by its top variant. A fault is `ReplayRefusal::Fault`, `ReplayRefusal::Admission` carrying
   `AdmissionFailure::Fault`, and `CallSiteRefusal::Fault`, which reaches the map directly and wrapped
   in `ReplayPackageError::CallSite` and in `FrameReplayError::CallSite`. Each maps to `Failed`.
-- The Kani adapter shall put only a code from QSL's closed catalog (`ReplayRefusal::code()`) inside
+- The Kani adapter shall put only a code from QSL's closed catalog inside
   `Inconclusive(InconclusiveCause::ReplayRefused)`, and shall define no code of its own for it.
-- The Kani adapter shall map to `Failed` every failure this repository raises that has no QSL
-  catalog code: `SpineReplayError::{UnboundArgument, FieldDelimiter, Transcript, WrongArm,
-  Identity}`, `FrameReplayError::{Transcript, Envelope, Name}`, `ReplayPackageError::InvalidFunction`,
-  `DependencyLockError::Duplicate`, a Kani playback outside the harness proof bound, and a decode
-  failure (`DecodeFailure`), which is a playback that does not type against the bindings this
-  repository persisted. A `ReplayRefusal` wrapped in `SpineReplayError::Refused` or
+- The Kani adapter shall map to `Failed` every failure this repository raises that is not a
+  refusal of the replay setup: `SpineReplayError::{UnboundArgument, FieldDelimiter, Transcript,
+  WrongArm, Identity}`, `FrameReplayError::{Transcript, Envelope}`, a Kani playback outside the
+  harness proof bound, and a decode failure (`DecodeFailure`), which is a playback that does not
+  type against the bindings this repository persisted.
+- The Kani adapter shall not map a setup refusal on data (the held class above, which includes
+  `ReplayPackageError::InvalidFunction`, `FrameReplayError::Name` and
+  `DependencyLockError::Duplicate`) to any value until the ruling in Status states one. AD-003 and
+  AD-004 classify these as setup refusals, and `Duplicate` is a condition QSL itself codes
+  `invalid_package`. A `ReplayRefusal` wrapped in `SpineReplayError::Refused` or
   `FrameReplayError::Refused` is the refused or fault reading by its walked content, not a CG
   defect. [AD-001](../../assurance/AD-001-codegen-architecture.md)'s failure view keeps each a
   distinct typed state before the map.
@@ -147,9 +151,9 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 | FR-029-AC-8 | `falsified` with a replay disagreement of each `DisagreementCause` (`Verdicts`, `Witness` and `NoValue`) maps to `Inconclusive(ReplayParity)` carrying that `DisagreementCause`. | Test (TC-040) |
 | FR-029-AC-9 | `falsified` with a non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()` of that refusal. | Test (TC-040) |
 | FR-029-AC-10 | `falsified` with a fault maps to `Failed` for each of `ReplayRefusal::Fault`, `ReplayRefusal::Admission(AdmissionFailure::Fault)`, `CallSiteRefusal::Fault`, `CallSiteRefusal::Fault` wrapped in `ReplayPackageError::CallSite`, and `CallSiteRefusal::Fault` wrapped in `FrameReplayError::CallSite`. | Test (TC-040) |
-| FR-029-AC-11 | `falsified` with each CG-raised failure that has no QSL code maps to `Failed`: `SpineReplayError::UnboundArgument`, `FieldDelimiter`, `Transcript`, `WrongArm` and `Identity`; `FrameReplayError::Transcript`, `Envelope` and `Name`; `ReplayPackageError::InvalidFunction`; `DependencyLockError::Duplicate`; a playback outside the harness proof bound; and a decode failure. No `Inconclusive(ReplayRefused)` value carries a code outside QSL's `ReplayRefusal` codes. | Test (TC-040) |
+| FR-029-AC-11 | `falsified` with each CG-raised failure that is not a refusal of the replay setup maps to `Failed`: `SpineReplayError::UnboundArgument`, `FieldDelimiter`, `Transcript`, `WrongArm` and `Identity`; `FrameReplayError::Transcript` and `Envelope`; a playback outside the harness proof bound; and a decode failure. No `Inconclusive(ReplayRefused)` value carries a code outside QSL's `ReplayRefusal` codes. | Test (TC-040) |
 | FR-029-AC-12 | Across every replay settlement other than reproduced, `falsified` maps to a value other than `Refuted`. | Test (TC-040) |
-| FR-029-AC-13 | HELD on a QSL or owner ruling (Status). `falsified` with a setup refusal on data maps to the value that ruling states. | Test (TC-040) |
+| FR-029-AC-13 | HELD on a QSL or owner ruling (Status). `falsified` with a setup refusal on data, which includes `ReplayPackageError::InvalidFunction`, `FrameReplayError::Name` and `DependencyLockError::Duplicate`, maps to the value that ruling states. | Test (TC-040) |
 
 ## Dependencies
 
@@ -186,5 +190,9 @@ other than `Fault` refuses the obligation's own input before any backend run and
 settles it `declined` with its code, and that only a `ReplayRefusal` after a backend refutation
 settles `inconclusive`, `ReplayRefused`. This repository calls `call_site` after Kani refuted, so
 FR-121's stated premise does not hold here, and `Declined` carries no code. Which value the class
-takes is a QSL or owner ruling and is open; the table row and both criteria stay held, and until
-the ruling the code cannot make the map total over this class.
+takes is a QSL or owner ruling and is open. The class also holds the three CG setup errors
+`ReplayPackageError::InvalidFunction`, `FrameReplayError::Name` and `DependencyLockError::Duplicate`
+(AD-003 and AD-004 classify them as setup refusals; QSL itself codes the `Duplicate` condition
+`invalid_package`), and `DependencyLockError::Input`; the same ruling decides all of them. The table
+row and both criteria stay held, and until the ruling the code cannot make the map total over this
+class.

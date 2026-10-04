@@ -812,10 +812,12 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      step. A decode failure (`DecodeFailure`, `EvidenceFailureCause::Decode`) is not in that list:
      it is a CG defect, a playback that does not type against the bindings CG persisted, and maps
      to `Failed` (AD-003, link 7). Faults stay `Failed`. Until QSL-352's codes exist, these
-     refusals map to `Failed` as the interim. Measured later (IR-465 spec, QSL `main` 7c2cb303):
+     refusals map to `Failed` as the interim (superseded below). Measured later (IR-465 spec, QSL `main` 7c2cb303):
      `CallSiteRefusal::code()` and `DependencyInputRefusal::code()` are already in QSL `main`, so
-     no code is missing; the class's value is a HELD question against merged QSL FR-121 (AD-003
-     R-Q1), and `Inconclusive(ReplayRefused)` is not yet in QSL's types.
+     no code is missing; the class's value (the `CallSiteRefusal` cases, `InvalidFunction`,
+     `Name` and `DependencyLockError` above) is a HELD question against merged QSL FR-121 (AD-003
+     R-Q1), decided by one ruling for the whole class, and `Inconclusive(ReplayRefused)` is not yet
+     in QSL's types. The `Failed` interim above is superseded by that hold.
    - Layering. The C-09 map is a public entry in `kani/terminal.rs` that the driver calls; the
      driver runs the obligation and the replay and pairs the two, as QSL's merged T-13 says. Its
      first input is IR's `KaniOutcome` (ADR-013 C-09's `KaniOutcomeKind`); the FR-029 map from
@@ -823,9 +825,9 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      `kani/terminal.rs` defines from `qsl-replay` types (a QSL result, a QSL `ReplayRefusal`, a
      QSL fault) plus two CG-raised variants, so `kani` imports nothing from `replay`: a CG-origin
      defect, and a setup refusal on data (the after-Kani case above) that carries a QSL code from
-     QSL-352. The setup-refusal variant needs QSL-352's codes to be constructible by CG, so it
-     is an open item on QSL-352: until those codes exist the variant cannot be built, and `replay/`
-     converts those refusals to the CG-defect variant (the `Failed` interim).
+     QSL-352. Whether that setup-refusal variant exists, and what value it maps to, is the HELD
+     question above (one ruling for the class, including the CG setup errors with no QSL code);
+     the codes themselves already exist in QSL `main`.
      `replay/` imports `kani` (downward) and owns the conversion: it turns its own errors
      (`SpineReplayError`, the envelope failure, the out-of-bound playback) and QSL's result into
      that type, so a CG-origin failure reaches the map as the CG-defect variant and becomes

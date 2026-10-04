@@ -30,11 +30,13 @@ cause, and that the map is one match with no wildcard arm.
 9. Map `Counterexample` with a fault in each position FR-029-AC-10 lists, and with each CG-raised
    failure FR-029-AC-11 lists.
 10. Map `Counterexample` under every replay settlement other than reproduced.
-11. HELD: map `Counterexample` with a setup refusal on data.
+11. HELD: map `Counterexample` with a setup refusal on data (a non-fault `CallSiteRefusal`,
+    `DependencyLockError`, `ReplayPackageError::InvalidFunction`, `FrameReplayError::Name`).
 
 ## Expected Results
 
-1. Exactly one value per expressible pair, and none is `Tested` (FR-030-AC-1, FR-030-AC-6).
+1. Exactly one value per expressible pair outside the held setup-refusal class (step 11), and none
+   is `Tested` (FR-030-AC-1, FR-030-AC-6).
 2. `Declined` with three distinct causes (FR-030-AC-2).
 3. `Incomplete` with three distinct causes (FR-030-AC-3).
 4. `Proved { success_checks: 3 }`, `Proved { success_checks: 0 }` and `Refuted` (FR-030-AC-4).
