@@ -151,6 +151,24 @@ unsatisfiable requires as `cover_unsatisfied`.
     `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
     (FR-015-AC-50, IR-547).
 
+## A cover in every harness kind (planned, IR-464)
+
+16. Generate a harness of each kind: precondition, V1 contract, scalar, state-clause,
+    frame-effect and V1 bundle (the corpus kind is TC-023's). Parse each emitted source
+    and read the last statement of every function attributed `#[kani::proof]` or
+    `#[kani::proof_for_contract]`: it is the only `kani::cover!` of the body, and no
+    assertion follows it (FR-015-AC-53, FR-015-AC-54).
+17. Run the installed backend over a V1 bundle harness whose requires clause some
+    bounded argument satisfies and whose `ensures` holds for every such argument, which classifies
+    `Verified`, and over the same bundle with a requires clause no bounded argument
+    satisfies, which classifies `CoverUnsatisfied` and is neither `Verified` nor
+    `Falsified` (FR-015-AC-56).
+18. The guard: drive every emitting entry point (precondition, V1 contract, scalar,
+    state-clause and frame-effect families, `generate_kani_bundle` and the corpus generator for each family) through the
+    inspection of item 16, and scan the non-test string literals of `src/` for the two
+    proof attributes. The scan lists exactly the files the inspection drives, and a file
+    outside the list fails it (FR-015-AC-58).
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation

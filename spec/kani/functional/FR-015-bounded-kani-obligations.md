@@ -34,6 +34,26 @@ the census requirement on the request input; once implemented, the V2 census inp
 claim carries the clause requirement of FR-015-AC-8 on the V2 input. FR-015-AC-1 to
 FR-015-AC-37 stay as they were; the new criteria add to them.
 
+Planned (IR-464): FR-015-AC-7 requires a cover in every generated harness, but the V1
+bundle generator (`generate_kani_bundle`) and the bounded Kani corpus generator emit a
+harness with none, so a run of either cannot classify `Verified` (FR-017-AC-4). The
+Kani matrix row of FR-015-AC-7 therefore claims the five kinds that carry a cover today;
+FR-015-AC-53 to FR-015-AC-58 bring the V1 bundle and the corpus under it (planned), state
+what each of the seven kinds' covers witnesses, and guard against an emitted harness
+without one.
+
+Rationale (IR-464): a corpus case draws no symbolic input and assumes nothing, so it has
+no precondition for a cover to witness and no assumption that could make its cover
+unsatisfiable. Its cover shows only that the harness runs to its end past its assertion,
+which is what FR-017 needs to read the run as `Verified` rather than as a run with no
+cover summary; no vacuous corpus run exists to classify. The generator has no single
+emission seam today: seven templates in six files each format harness source, and
+`HarnessSpec` (AD-004 step 4b) does not exist in `src/`. A constructor that refuses an
+empty cover list cannot be built over those templates in this change, and AD-004
+sequences the corpus behind QSL-353, so the guard of FR-015-AC-58 is an inspection of
+emitted text. When a family renders through `HarnessSpec`, its constructor refusal
+(AD-004 L-4) joins the inspection and does not replace it.
+
 ## Inputs
 
 - The FR-014 oracle crate and claim map for the contract's expressions.
@@ -237,6 +257,24 @@ FR-015-AC-37 stay as they were; the new criteria add to them.
   `InvalidInput` result, record no case identity and emit no artifact (FR-015-AC-51).
 - The bounded Kani corpus generator shall return the revision of the profile selection as the
   context of every typed outcome and refusal it returns (FR-015-AC-52).
+- The generator shall end a V1 bundle harness (`generate_kani_bundle`) with one cover, after
+  its contract call, that witnesses the bundle's requires clause and bounds are jointly
+  satisfiable (FR-015-AC-54).
+- The generator shall end a bounded-corpus harness, of the arithmetic, graph and collection
+  families alike, with one cover after its assertion (FR-015-AC-55).
+- When the installed backend runs a V1 bundle harness whose requires clause some bounded
+  argument satisfies and whose ensures holds for every such argument, the generator shall
+  classify the run `Verified` (FR-015-AC-56).
+- If the installed backend runs a V1 bundle harness whose requires clause no bounded argument
+  satisfies, then the generator shall classify the run `CoverUnsatisfied`, never `Verified`
+  (FR-015-AC-56).
+- When the installed backend runs a bounded-corpus harness whose oracle is true, the
+  generator shall classify the run `Verified` (FR-015-AC-57).
+- If the installed backend runs a graph or collection corpus harness whose oracle is false, then the
+  generator shall classify the run `Falsified` (FR-015-AC-57).
+- The crate shall carry a gate that fails when a harness it emits has other than exactly one
+  cover as the last statement of its body, and when a source file emits a harness the gate
+  does not drive (FR-015-AC-58).
 
 ## Acceptance Criteria
 
@@ -248,7 +286,7 @@ FR-015-AC-37 stay as they were; the new criteria add to them.
 | FR-015-AC-4 | No harness assumption excludes an undefined, refused or incomplete runtime outcome. | Test (TC-025) |
 | FR-015-AC-5 | An obligation whose bounds are unsatisfiable is refused with a typed reason and no harness. | Test (TC-025) |
 | FR-015-AC-6 | An obligation over an oracle whose operation identity is `caller_declared` is refused with a typed reason and no harness. | Test (TC-025) |
-| FR-015-AC-7 | Every generated harness contains exactly one non-vacuity cover; a precondition harness covers that the precondition holds within the IR bounds, and a contract harness's cover stands after the contract call, so a run that satisfies every check without satisfying the cover is not a proof. | Test (TC-025) |
+| FR-015-AC-7 | Every generated harness contains exactly one non-vacuity cover; a precondition harness covers that the precondition holds within the IR bounds, and a contract harness's cover stands after the contract call, so a run that satisfies every check without satisfying the cover is not a proof. The cover is the last statement of the harness, after every assertion the harness carries: the state-clause and frame-effect harnesses and the scalar harness place it after their assertions, and a contract harness's checks are inside the contract call its cover follows. A cover that preceded an assertion would be satisfied by the very valuation that falsifies the assertion, and Kani prints one concrete playback per distinct valuation, so it would print the cover's and the run would classify as a failure with no counterexample (IR-451). Tested for the state-clause and frame-effect harnesses (source order) and for the scalar harness (source order); the contract harness is tested for the cover following the contract call; a precondition harness asserts nothing. | Test (TC-025) |
 | FR-015-AC-8 | A postcondition or invariant harness emits every package precondition sharing its anchor operation as a `requires` on its generated contract and records each in its identity's embedded oracles; it embeds no other obligation's oracle; and an obligation whose sibling precondition is not a supported item of the same request is refused with a typed reason naming that precondition and no harness. | Test (TC-025) |
 | FR-015-AC-9 | Every harness identity records solver `cadical` and the complete ordered option vector — function contracts, concrete playback, the exact fully qualified harness, `--exact`, the explicit unwind, the explicit solver, `--output-format regular`, and `--concrete-playback print` — and no option enabling stubbing is emitted. | Test (TC-025) |
 | FR-015-AC-10 | Regeneration from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes the harness identity. | Test (TC-025) |
@@ -287,13 +325,19 @@ FR-015-AC-37 stay as they were; the new criteria add to them.
 | FR-015-AC-43 | A V2 postcondition harness emits every `precondition` clause node sharing its anchor node as a `requires` and records each in its identity's embedded oracles, embeds no other obligation's oracle, and a postcondition whose sibling precondition is not a supported item of the same request is refused naming that precondition with no harness; a V2 invariant is anchored at an object type, binds `self` alone, and so has no operation precondition to assume. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-44 | A census declared on a V2 clause claim with an empty or duplicate dependency identity, an inconsistent kind, state and path combination, or a non-`Required` kind is refused as a typed invalid input with no harness, by the same rules as FR-015-AC-22; the census request and readiness types it uses are not `ProofDependencyGraph`. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-45 | A valid census declared on a V2 clause claim is folded into that harness's identity record, readiness is `ready` only when every dependency passed and `incomplete` while any is missing or failed, and proof execution is recorded `not_run`, by the same rules as FR-015-AC-25; in addition, the folded census is independent of the order the caller lists its dependencies. PLANNED (IR-489). | Test (TC-025) |
-| FR-015-AC-46 | Every V2 clause harness contains exactly one non-vacuity cover, placed after every assumption and after the subject call, that states the family's reachability, as FR-015-AC-7 does: a precondition harness covers that the precondition holds within the bounds; a postcondition harness covers, after the subject call returns, that the requires and the bounds are jointly satisfiable; an invariant harness covers that the drawn state satisfies its domain assumptions. The subject call is the call of the customer subject at the request's subject path in a postcondition harness, which supplies the result and post-state; a precondition harness and an invariant harness have none, and their cover follows the last assumption. A V2 clause whose assumptions and bounds are jointly unsatisfiable is refused with a typed reason and no harness, or, if it reaches a backend run, does not classify `Verified`. PLANNED (IR-489). | Test (TC-025) |
+| FR-015-AC-46 | Every V2 clause harness contains exactly one non-vacuity cover, placed after every assumption, after the subject call and after every assertion the harness carries (the last statement, as FR-015-AC-7 states), that states the family's reachability, as FR-015-AC-7 does: a precondition harness covers that the precondition holds within the bounds; a postcondition harness covers, after the subject call returns, that the requires and the bounds are jointly satisfiable; an invariant harness covers that the drawn state satisfies its domain assumptions. The subject call is the call of the customer subject at the request's subject path in a postcondition harness, which supplies the result and post-state; a precondition harness and an invariant harness have none, and their cover follows the last assumption. A V2 clause whose assumptions and bounds are jointly unsatisfiable is refused with a typed reason and no harness, or, if it reaches a backend run, does not classify `Verified`. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-47 | Regeneration of a V2 clause harness from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes the harness identity record (as FR-015-AC-10 states). PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-48 | The obligation identity of a V2 clause claim is formed by AD-003 E-1 from the clause node id, its occurrence key, the obligation kind, and the arguments each as parameter node id and declared domain for an operation parameter, as E-1 states (the domain FR-015-AC-39 defines). A state field read is named by its declaring node id and field name, never by a node of its own; that E-1 lists parameters only is an open question for the AD-003 owner and E-1 is not widened here. The source span is excluded; changing any included member changes it, and changing the span, the unwind bound or the subject does not. It is a different value from the harness identity record of FR-015-AC-47. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-49 | A V2 invariant claim yields a harness that draws its state and parameters within their declared domains (FR-015-AC-39) and asserts the invariant clause; its subject is the clause itself, with no subject call. Preservation of the invariant under an operation is not specified by this criterion. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-50 | `negotiate` reports an obligation whose scalar refusal is `ExactScalarRefusal::LoweringByteLimitExceeded` or `LoweringLimitUnrecognised` as `Outcome::Unsupported(UnsupportedObligation::OracleRefused { refusal })` with `refusal` equal to the scalar refusal, field for field, and neither is mapped to another `UnsupportedObligation` variant nor to `LoweringWorkExhausted`. | Test (TC-025) |
 | FR-015-AC-51 | A finite input validated under a profile selection other than the offered profile's is refused as a typed `InvalidInput` `kani_profile_input_mismatch` result naming the request's source id, with no artifact and no case identity recorded. | Test (TC-023) |
 | FR-015-AC-52 | The context of every outcome and refusal the corpus generator returns (proved, counterexample, `kani_corpus_dependency_invalid`, `kani_corpus_identity_collision`, a lowering refusal and `kani_profile_input_mismatch`) is the profile selection's revision. | Test (TC-023) |
+| FR-015-AC-53 | Each of the seven harness kinds the generator emits (precondition, V1 contract, scalar, state-clause, frame-effect, V1 bundle and corpus) is subject to the cover-last rule of FR-015-AC-7: exactly one `kani::cover!`, the last statement of the body. What the cover witnesses, by kind: a precondition harness, that the precondition holds within the IR bounds (it asserts nothing); a V1 contract harness (postcondition or invariant), that the requires clause and the IR bounds are jointly satisfiable, after the contract call whose `ensures` is the harness's check; a scalar harness, that the oracle's `Completed` branch is reached; a state-clause harness and a frame-effect harness, that the bounded state is reached and the subject returns; a V1 bundle harness, as FR-015-AC-54 states; a corpus harness, as FR-015-AC-55 states. PLANNED (IR-464). | Test (TC-025) |
+| FR-015-AC-54 | A V1 bundle harness (`generate_kani_bundle`, the `proof_for_contract` harness it emits for a requires clause, an ensures clause and the bundle's bounded arguments) ends with exactly one `kani::cover!` after the call of its contract, which witnesses that the requires clause and the argument and result bounds are jointly satisfiable, so a run whose requires clause no bounded argument satisfies never reaches it; the bundle's `ensures` is checked at the contract call, so the cover follows every check the harness carries. PLANNED (IR-464). | Test (TC-025) |
+| FR-015-AC-55 | A bounded-corpus harness, whichever of the arithmetic, graph and collection families the case belongs to, ends with exactly one `kani::cover!` after its `assert!` of the case's oracle, which witnesses that the harness runs to its end past that assertion. PLANNED (IR-464). | Test (TC-023) |
+| FR-015-AC-56 | With the installed backend, a V1 bundle harness whose requires clause some bounded argument satisfies and whose `ensures` holds for every such argument classifies `Verified` (FR-017-AC-4); the same bundle with a requires clause no bounded argument satisfies classifies `CoverUnsatisfied` with its satisfied and total cover counts, never `Verified` and never `Falsified`. PLANNED (IR-464). | Test (TC-025) |
+| FR-015-AC-57 | With the installed backend, a bounded-corpus harness of each of the arithmetic, graph and collection families whose oracle is true classifies `Verified`, and a graph or collection harness whose oracle is false (an arithmetic case's oracle is always true) classifies `Falsified` carrying the assertion's playback (empty-valued, since a corpus case draws no input), never `Inconclusive` for lack of a counterexample. PLANNED (IR-464). | Test (TC-023) |
+| FR-015-AC-58 | A test generates a harness through every emitting entry point (the precondition, V1 contract, scalar, state-clause and frame-effect families, `generate_kani_bundle`, and the corpus generator for each of its three families), parses each emitted source, and fails for any function attributed `#[kani::proof]` or `#[kani::proof_for_contract]` whose body does not contain exactly one `kani::cover!`, which must be the last statement, with no assertion after it and no other cover; and a scan of the non-test string literals of `src/` fails when a file other than the ones the test drives emits either proof attribute. PLANNED (IR-464). | Test (TC-025) |
 
 ## Dependencies
 

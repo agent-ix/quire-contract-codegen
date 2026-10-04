@@ -444,7 +444,7 @@ fn refusal(shape: &Shape, fields: &[&str]) -> StateFrameRefusal {
 /// operation, anchor, frame and object, whose bounds and granted and forbidden fields are read
 /// from the IR, and each carries exactly one non-vacuity cover.
 ///
-/// Trace: FR-015-AC-26, FR-015-AC-27, FR-015-AC-28, TC-025
+/// Trace: FR-015-AC-7, FR-015-AC-26, FR-015-AC-27, FR-015-AC-28, TC-025
 #[test]
 fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness() {
     let fixture = fixture(&Shape::HEALTHY);
@@ -499,6 +499,13 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
     for source in [post, frame] {
         assert_eq!(source.matches("#[kani::proof]").count(), 1);
         assert_eq!(source.matches("kani::cover!(").count(), 1);
+        // The cover ends the harness, after every assertion: an assertion that fails does not
+        // return, so the cover cannot share a failing valuation (IR-451).
+        let (assertion, cover) = (source.rfind("assert!("), source.find("kani::cover!("));
+        assert!(
+            assertion.zip(cover).is_some_and(|(a, c)| a < c),
+            "the cover must follow the last assertion:\n{source}"
+        );
     }
     assert_eq!(post.matches("assert!(").count(), 1);
     assert_eq!(frame.matches("assert!(").count(), 1);
@@ -1000,6 +1007,35 @@ fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifi
         prove(&generate_over(&fixture, "deposit_debiting").postcondition),
         "postcondition `post.balance >= pre.balance` failed",
     );
+}
+
+/// A violation whose valuation the cover must share is still a counterexample. Both state fields
+/// are bounded to the single value 0, so the one valuation the harness can draw is the failing
+/// one and the non-vacuity cover takes it too, whatever model the solver picks; a harness whose
+/// cover preceded its assertion would print only the cover's playback here and classify as a
+/// failure with no counterexample (IR-451).
+///
+/// Trace: FR-015-AC-7, TC-025
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_025_real_kani_a_violation_at_the_only_valuation_is_a_counterexample_not_the_covers_playback()
+{
+    let single = fixture(&Shape {
+        variant: 20,
+        balance_bound: Some((0, 0)),
+        audit_bound: (0, 0),
+        ..Shape::HEALTHY
+    });
+    let counterexample = falsified(
+        prove(&generate_over(&single, "deposit_debiting").postcondition),
+        "postcondition `post.balance >= pre.balance` failed",
+    );
+    assert_eq!(playback_state(&counterexample), (0, 0));
+    let counterexample = falsified(
+        prove(&generate_over(&single, "deposit_touching_audit").frame),
+        "changed `audit`, which its frame does not modify",
+    );
+    assert_eq!(playback_state(&counterexample), (0, 0));
 }
 
 /// An effect the frame allows verifies, an effect it forbids is falsified naming the forbidden
