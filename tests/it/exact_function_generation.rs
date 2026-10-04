@@ -985,7 +985,7 @@ fn tc_031_ac22_fixture_vi_same_call_node_items_over_a_pair_each_keep_the_node_re
     }
 }
 
-/// The claim-map entries of `oracles`, in order, as `(call node, disposition)`.
+/// The dispositions of `oracles`' claim-map entries, in claim-map order.
 fn entries(
     oracles: &quire_contract_codegen::ExactFunctionOracles,
 ) -> Vec<&ClaimDisposition<GeneratedExactFunctionClaim, ExactFunctionRefusal>> {
@@ -1162,6 +1162,39 @@ fn tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name() {
                 "{shared} and {pair_member}"
             );
         }
+    }
+}
+
+/// Trace: FR-021-AC-24, TC-031 step 12 case (vii). The name tie-break applies only to items equal
+/// on the earlier key fields: items whose declaring node ids differ are ordered by declaring node
+/// id first. With `a_pair` and `z_pair` on N2, `z_pair` and `q_extra` on N1, and `a_pair` alone on
+/// the larger N3, `a_pair` resolves to N3 and `z_pair` to N2, so `z_pair` (refusal N1) orders
+/// before `a_pair` (refusal N2) although `a_pair` is the smaller name, under both request orders
+/// and every declaration order.
+#[test]
+fn tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names() {
+    let package = ext_corpus_package().admit();
+    let mut codes = [FN_ADD, FN_EQ, FN_CALL_NESTED];
+    codes.sort_by_key(|code| code_id(*code));
+    let [n1, n2, n3] = codes;
+    let functions = vec![
+        on_node(function_add("a_pair"), n2),
+        on_node(function_add("z_pair"), n2),
+        on_node(function_add("z_pair"), n1),
+        on_node(function_add("q_extra"), n1),
+        on_node(function_add("a_pair"), n3),
+    ];
+    let node_refusal = |code: u32| ClaimDisposition::Refused {
+        refusal: ExactFunctionRefusal::DuplicateDeclaringNode {
+            node_id: code_id(code),
+        },
+    };
+    for order in permutations(&functions) {
+        let oracles = both_orders(&package, &order, ["a_pair", "z_pair"]);
+        assert_eq!(
+            entries(&oracles),
+            vec![&node_refusal(n1), &node_refusal(n2)]
+        );
     }
 }
 

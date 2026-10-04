@@ -29,7 +29,8 @@ It also verifies that declarations sharing one declaring node id are refused wit
 `DuplicateDeclaringNode` before Stage 1 (FR-021-AC-22), that a failed lowering record is refused
 as its own byte-ceiling or work refusal (FR-021-AC-23), and that two different unknown function
 names on one call node are two `UnknownFunction` entries, and two members of a duplicate-node pair
-are two `DuplicateDeclaringNode` entries, each in byte order of the function name (FR-021-AC-24).
+are two `DuplicateDeclaringNode` entries, in byte order of the function name when they are equal
+on the earlier key fields and in declaring-node-id order otherwise (FR-021-AC-24).
 
 The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
 
@@ -153,7 +154,9 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     (v) `Zz_unknown` and `aa_unknown`, in both request orders; (vi) over declarations
     `m_multi` and `z_pair` sharing node id N2 and `m_multi` and `q_extra` sharing the smaller node
     id N1, items `m_multi` and `z_pair` on one `call` node in both request orders, and the same
-    with `z_multi` and `a_pair` in place of `m_multi` and `z_pair`.
+    with `z_multi` and `a_pair` in place of `m_multi` and `z_pair`; (vii) over node ids
+    N1 < N2 < N3, `a_pair` and `z_pair` declared on N2, `z_pair` and `q_extra` on N1 and `a_pair`
+    alone on N3, items `a_pair` and `z_pair` on one `call` node in both request orders.
     Assert (i) one `UnknownFunction { name: "zz_unknown" }` entry; (ii) two entries, `aa_unknown`
     then `zz_unknown`, each `UnknownFunction` naming its own name, no `DuplicateRequest`, identical
     under both orders; (iii) one `DuplicateRequest` entry; (iv) two entries, the `UnknownFunction`
@@ -161,13 +164,18 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     `Zz_unknown` then `aa_unknown` (byte order, case-sensitive), identical under both orders;
     (vi) two entries, `DuplicateDeclaringNode { N1 }` then
     `DuplicateDeclaringNode { N2 }` for `m_multi` and `z_pair`, and `{ N2 }` then `{ N1 }` for
-    `z_multi` and `a_pair`, identical under both request orders. The tests are
+    `z_multi` and `a_pair`, identical under both request orders (the name orders only items equal on
+    the earlier key fields); (vii) two entries, `DuplicateDeclaringNode { N1 }` (for `z_pair`) then
+    `DuplicateDeclaringNode { N2 }` (for `a_pair`), identical under both request orders: `a_pair`
+    resolves to the larger N3 and `z_pair` to N2, so the declaring node id orders them before the
+    smaller name `a_pair` could. The tests are
     `tc_031_ac24_case_i_one_unknown_name_is_one_entry`,
     `tc_031_ac24_case_ii_two_unknown_names_are_two_entries_in_name_order`,
     `tc_031_ac24_case_iii_the_same_unknown_name_twice_is_one_duplicate_request`,
     `tc_031_ac24_case_iv_known_and_unknown_order_unknown_first_and_match_solo`,
     `tc_031_ac24_case_v_names_order_by_bytes_case_sensitively` and
-    `tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name`.
+    `tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name` and
+    `tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names`.
 
 ## Expected Results
 
@@ -189,7 +197,7 @@ is refused as `DuplicateDeclaringNode` independent of request order, and no clai
 is crossed (FR-021-AC-22); and two different unknown function names on one call node are two
 `UnknownFunction` entries, while only the same name requested twice is a `DuplicateRequest`, and
 two members of a duplicate-node pair are two `DuplicateDeclaringNode` entries ordered by function
-name (FR-021-AC-24).
+name when equal on the earlier key fields and by declaring node id otherwise (FR-021-AC-24).
 
 Function-body semantics beyond what FR-014's and FR-018's own oracles already verify are not
 separately asserted here: a function body is a delegation to those same generators' lowering, so
