@@ -1588,7 +1588,7 @@ fn artifact(path: &str, contents: String) -> Artifact {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::oracle::failed_records::{failed_record, UNRECOGNISED_KINDS};
+    use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
     use quire_contract_model::CheckedPackageLimit;
 
     /// A `failed` record is refused by its limit kind through the one shared classifier: `work`
@@ -1614,7 +1614,7 @@ mod tests {
                 consumed: 1_001
             })
         );
-        for (kind, name) in UNRECOGNISED_KINDS {
+        for (kind, name) in unrecognised_kinds() {
             assert_eq!(
                 lowered_binary_body(&failed_record(kind, 7, 9)).err(),
                 Some(ExactFunctionRefusal::LoweringLimitUnrecognised {

@@ -2071,7 +2071,7 @@ mod tests {
     /// Trace: FR-018-AC-20, TC-029.
     #[test]
     fn tc_029_a_failed_record_is_refused_by_its_limit_kind() {
-        use crate::oracle::failed_records::{failed_record, UNRECOGNISED_KINDS};
+        use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
         use quire_contract_model::CheckedPackageLimit;
 
         assert_eq!(
@@ -2088,7 +2088,7 @@ mod tests {
                 consumed: 1_001
             })
         );
-        for (kind, name) in UNRECOGNISED_KINDS {
+        for (kind, name) in unrecognised_kinds() {
             assert_eq!(
                 lowered(&failed_record(kind, 7, 9)).err(),
                 Some(CompositeEqualityRefusal::LoweringLimitUnrecognised {

@@ -610,6 +610,10 @@ fn render_artifacts(
     let _ = writeln!(harness, "#[kani::proof]");
     let _ = writeln!(harness, "fn {proof_id}() {{");
     let _ = writeln!(harness, "    assert!(corpus_oracle());");
+    let _ = writeln!(
+        harness,
+        "    kani::cover!(true, \"the harness runs to its end past the oracle assertion\");"
+    );
     let _ = writeln!(harness, "}}");
     let proof_graph_value = CorpusProofDependencyGraph {
         schema_version: CORPUS_PROOF_GRAPH_SCHEMA.to_owned(),

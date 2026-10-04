@@ -432,6 +432,15 @@ fn generate(fixture: &Fixture) -> StateFrameObligations {
         .unwrap_or_else(|refusal| panic!("the fixture must generate: {refusal}"))
 }
 
+/// The state-clause and frame-effect harness sources, for the cover-last guard (FR-015-AC-58).
+pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
+    let generated = generate(&fixture(&Shape::HEALTHY));
+    vec![
+        ("state clause", generated.postcondition.rust.contents),
+        ("frame effect", generated.frame.rust.contents),
+    ]
+}
+
 fn refusal(shape: &Shape, fields: &[&str]) -> StateFrameRefusal {
     let fixture = fixture(shape);
     generate_state_frame_obligations(&request(&fixture, fields))

@@ -17,8 +17,9 @@ use std::{
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_bounded_kani_corpus_case, BoundedCorpusRequest,
-    CorpusProofDependencyGraph, EmittedCorpusIdentities, KaniRunOutcome, ProofDependencyKind,
-    ProofDependencyRequest, ProofDependencyState, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
+    CorpusProofDependencyGraph, EmittedCorpusIdentities, KaniInconclusiveReason, KaniRunOutcome,
+    ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness,
+    CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::kani::{
     CapabilityDisposition, CapabilityEntry, CollectionQuery, DispatchIndex, FiniteInput,
@@ -206,7 +207,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     assert_eq!(counterexample.outcome.boolean_claim(), Some(false));
 }
 
-/// Trace: TC-023.
+/// Trace: FR-015-AC-57, TC-023.
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_executes_the_generated_arithmetic_harness() {
@@ -227,39 +228,13 @@ fn tc_023_kani_executes_the_generated_arithmetic_harness() {
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
-    let directory = TemporaryDirectory::new();
-    fs::write(
-        directory.0.join("src/lib.rs"),
-        format!(
-            "{}\n{}",
-            generated.artifacts.oracle.contents, generated.artifacts.kani_harness.contents
-        ),
-    )
-    .expect("generated corpus source should be writable");
-    fs::write(
-        directory.0.join("Cargo.toml"),
-        "[package]\nname = \"bounded-kani-corpus-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[workspace]\n",
-    )
-    .expect("generated corpus manifest should be writable");
-    fs::write(
-        directory.0.join("build.rs"),
-        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
-    )
-    .expect("generated check-cfg declaration should be writable");
-    let output = Command::new("cargo")
-        .args(["kani", "--harness", "corpus_case_arithmetic"])
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
-        .current_dir(&directory.0)
-        .output()
-        .expect("cargo kani should launch");
-    assert!(
-        output.status.success(),
-        "generated arithmetic Kani proof failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
+    assert_eq!(
+        classify_corpus(&generated, "corpus_case_arithmetic"),
+        KaniRunOutcome::Verified
     );
 }
 
-/// Trace: TC-023.
+/// Trace: FR-015-AC-57, TC-023.
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_executes_the_generated_graph_harness() {
@@ -279,39 +254,98 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
-    let directory = TemporaryDirectory::new();
-    fs::write(
-        directory.0.join("src/lib.rs"),
-        format!(
-            "{}\n{}",
-            generated.artifacts.oracle.contents, generated.artifacts.kani_harness.contents
-        ),
-    )
-    .expect("generated corpus source should be writable");
-    fs::write(
-        directory.0.join("Cargo.toml"),
-        "[package]\nname = \"bounded-kani-graph-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[workspace]\n",
-    )
-    .expect("generated corpus manifest should be writable");
-    fs::write(
-        directory.0.join("build.rs"),
-        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
-    )
-    .expect("generated check-cfg declaration should be writable");
-    let output = Command::new("cargo")
-        .args(["kani", "--harness", "corpus_case_graph"])
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
-        .current_dir(&directory.0)
-        .output()
-        .expect("cargo kani should launch");
-    assert!(
-        output.status.success(),
-        "generated graph Kani proof failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
+    assert_eq!(
+        classify_corpus(&generated, "corpus_case_graph"),
+        KaniRunOutcome::Verified
     );
 }
 
-/// Trace: TC-023.
+/// A true collection case classifies `Verified`, and a false graph case is `Falsified` with the
+/// assertion's playback, which draws no value, so it is empty-valued.
+///
+/// Trace: FR-015-AC-57, TC-023.
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness() {
+    let (profile, dispatch, input) = fixture();
+    let true_collection = generate_bounded_kani_corpus_case(
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Collection(CollectionQuery {
+            source_id: "source".to_owned(),
+            values: vec![2, 2, 7],
+            max_items: 3,
+            kind: QueryKind::ExistsEqual(7),
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        classify_corpus(&true_collection, "corpus_case_collection"),
+        KaniRunOutcome::Verified
+    );
+    let false_graph = generate_bounded_kani_corpus_case(
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Graph(GraphRequest {
+            source_id: "source".to_owned(),
+            start_id: "b".to_owned(),
+            target_id: "a".to_owned(),
+            field_id: "next".to_owned(),
+            max_expansions: 2,
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    assert_eq!(false_graph.outcome.boolean_claim(), Some(false));
+    assert_empty_valued_falsification(classify_corpus(&false_graph, "corpus_case_graph"));
+}
+
+/// Without its cover a corpus harness carries no cover summary, so the cover is what lets a
+/// true case classify `Verified`.
+///
+/// Trace: FR-015-AC-55, TC-023.
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_023_kani_reads_a_corpus_harness_without_its_cover_as_missing_the_cover_summary() {
+    let (profile, dispatch, input) = fixture();
+    let mut generated = generate_bounded_kani_corpus_case(
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+            source_id: "source",
+            operator: NumericOperator::Add,
+            left: 1,
+            right: 1,
+            minimum: 0,
+            maximum: 2,
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    generated.artifacts.kani_harness.contents = generated
+        .artifacts
+        .kani_harness
+        .contents
+        .lines()
+        .filter(|line| !line.contains("kani::cover!"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(
+        classify_corpus(&generated, "corpus_case_arithmetic"),
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::MissingCoverSummary
+        }
+    );
+}
+
+/// Trace: FR-015-AC-57, TC-023.
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
@@ -330,6 +364,27 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
+    assert_empty_valued_falsification(classify_corpus(&generated, "corpus_case_collection"));
+}
+
+/// Runs the corpus case's oracle and harness as one crate under the installed backend and
+/// classifies the run as production does.
+///
+/// `-Z concrete-playback` and `--concrete-playback print` are required for the classifier to see
+/// a playback block at all: without them Kani never prints one, even for a genuine
+/// falsification, and every run classifies Inconclusive rather than Falsified. `adapter_options`
+/// (src/kani/abi.rs) always includes these two for every production harness, plus `--exact`,
+/// `--unwind` and `--solver`, which this invocation does not replicate: `--harness` is an
+/// effective exact match here (the crate holds exactly one harness), so the omission is inert.
+/// `--export-json` is what the verdict is read from.
+///
+/// A nonzero exit alone does not prove a falsification: a harness-filter mismatch and CBMC's
+/// out-of-memory abort also exit nonzero with no property decided (IR-220), so the outcome is
+/// read through the classifier and the callers assert it.
+fn classify_corpus(
+    generated: &quire_contract_codegen::BoundedCorpusCase,
+    harness_filter: &str,
+) -> KaniRunOutcome {
     let directory = TemporaryDirectory::new();
     fs::write(
         directory.0.join("src/lib.rs"),
@@ -341,7 +396,7 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
     .expect("generated corpus source should be writable");
     fs::write(
         directory.0.join("Cargo.toml"),
-        "[package]\nname = \"bounded-kani-counterexample-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[workspace]\n",
+        "[package]\nname = \"bounded-kani-corpus-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[workspace]\n",
     )
     .expect("generated corpus manifest should be writable");
     fs::write(
@@ -349,13 +404,6 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .expect("generated check-cfg declaration should be writable");
-    // -Z concrete-playback / --concrete-playback print are required for classify_kani_run below to
-    // see a playback block at all: without them Kani never prints one, even for a genuine
-    // falsification, and every run classifies Inconclusive rather than Falsified. adapter_options
-    // (src/kani/abi.rs) always includes these two for every production harness, plus --exact,
-    // --unwind and --solver, which this invocation does not replicate -- --harness is already an
-    // effective exact match here (this crate writes exactly one harness), so the omission is
-    // inert today, not load-bearing. --export-json is what the verdict is read from.
     let report_path = directory.0.join("report.json");
     let output = Command::new("cargo")
         .args([
@@ -367,12 +415,7 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
             "--export-json",
         ])
         .arg(&report_path)
-        .args([
-            "--harness",
-            "corpus_case_collection",
-            "--concrete-playback",
-            "print",
-        ])
+        .args(["--harness", harness_filter, "--concrete-playback", "print"])
         .env("CARGO_TARGET_DIR", directory.0.join("target"))
         .current_dir(&directory.0)
         .output()
@@ -382,26 +425,92 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(
-        !output.status.success(),
-        "false generated corpus case must not be reported as a Kani proof"
-    );
-    // A nonzero exit alone does not prove the harness ran and was falsified: a harness-filter
-    // mismatch ("error: no harnesses matched the harness filter") also exits nonzero, and CBMC
-    // exits nonzero on its own out-of-memory abort, where zero properties were ever decided
-    // (IR-220). Route through the same classifier production uses so any run that did not
-    // actually decide a property -- OOM, unwind exhaustion, filter mismatch, no verdict at all --
-    // fails this test instead of passing it.
     let report = fs::read(&report_path).ok();
-    let classified = classify_kani_run(output.status.success(), report.as_deref(), &text, None)
-        .map(|run| run.outcome);
+    classify_kani_run(output.status.success(), report.as_deref(), &text, None)
+        .unwrap_or_else(|refusal| panic!("the run was refused as {refusal:?}:\n{text}"))
+        .outcome
+}
+
+/// A corpus case draws no input, so a falsification's playback carries no value.
+fn assert_empty_valued_falsification(outcome: KaniRunOutcome) {
+    let KaniRunOutcome::Falsified { counterexample } = outcome else {
+        panic!("expected a falsified corpus case, got {outcome:?}");
+    };
     assert!(
-        matches!(classified, Ok(KaniRunOutcome::Falsified { .. })),
-        "expected a genuine Kani falsification (KaniRunOutcome::Falsified), not merely a \
-         nonzero exit, which an inconclusive run \
-         (a harness-filter mismatch, CBMC out-of-memory, or an exhausted unwind bound) also \
-         produces; got:\n{text}"
+        counterexample.contains("let concrete_vals: Vec<Vec<u8>> = vec![];")
+            || counterexample.contains("let concrete_vals: Vec<Vec<u8>> = vec![\n    ];"),
+        "the playback of a case that draws no input must be empty-valued:\n{counterexample}"
     );
+}
+
+/// Every corpus family's harness ends with exactly one cover, after the oracle's assertion.
+///
+/// Trace: FR-015-AC-55, TC-023.
+#[test]
+fn tc_023_every_corpus_family_ends_its_harness_with_one_cover_after_its_assertion() {
+    for (family, harness) in guard_sources() {
+        let assertion = harness.find("assert!(corpus_oracle());");
+        let cover = harness.find("kani::cover!(");
+        assert!(
+            assertion
+                .zip(cover)
+                .is_some_and(|(assert, cover)| assert < cover),
+            "{family}: the cover must follow the oracle assertion:\n{harness}"
+        );
+        assert_eq!(harness.matches("kani::cover!(").count(), 1, "{family}");
+    }
+}
+
+/// The harness of one true case of each corpus family, for the cover-last guard (FR-015-AC-58).
+pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
+    let (profile, dispatch, input) = fixture();
+    let requests = [
+        (
+            "corpus arithmetic",
+            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+                source_id: "source",
+                operator: NumericOperator::Add,
+                left: 1,
+                right: 1,
+                minimum: 0,
+                maximum: 2,
+            }),
+        ),
+        (
+            "corpus graph",
+            BoundedCorpusRequest::Graph(GraphRequest {
+                source_id: "source".to_owned(),
+                start_id: "a".to_owned(),
+                target_id: "b".to_owned(),
+                field_id: "next".to_owned(),
+                max_expansions: 2,
+            }),
+        ),
+        (
+            "corpus collection",
+            BoundedCorpusRequest::Collection(CollectionQuery {
+                source_id: "source".to_owned(),
+                values: vec![2, 2, 7],
+                max_items: 3,
+                kind: QueryKind::ExistsEqual(7),
+            }),
+        ),
+    ];
+    requests
+        .into_iter()
+        .map(|(family, request)| {
+            let generated = generate_bounded_kani_corpus_case(
+                &profile,
+                &dispatch,
+                &input,
+                request,
+                &[],
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap();
+            (family, generated.artifacts.kani_harness.contents)
+        })
+        .collect()
 }
 
 /// Every supported family's emitted `proof_graph` artifact is a real `CORPUS_PROOF_GRAPH_SCHEMA`

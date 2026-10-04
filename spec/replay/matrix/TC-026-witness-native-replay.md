@@ -36,7 +36,8 @@ the first with comments and blank lines inserted, change its harness source span
 a different `ObligationKind`, and change one argument domain, comparing slots each time. Replay a
 function whose body has two conjuncts under one kind and count its identities (AC-22). Rebuild the
 identity with every other node of the compiled package perturbed and the `FunctionSite` members
-held fixed, then with `function` and then `declaration` perturbed (AC-23).
+held fixed, then with `function` and then `declaration` perturbed (AC-23). Build a replay
+package from a lock that selects one library identity twice and has no other defect (AC-24).
 
 ## Expected Results
 
@@ -55,8 +56,19 @@ The slot equals the recomputed digest (AC-21). The two functions' identities dif
 blank lines and the span change leave one unchanged, the kind change and the domain change each
 alter it, and the two-conjunct function has one identity (AC-22). The identity is unchanged by the
 other-node perturbation and changed by each `FunctionSite` perturbation (AC-23).
+A lock whose only defect is a repeated dependency identity is refused with
+`DependencyLockError::Input`, code `invalid_package`, cause `conflicting-definition`, and the
+error has no `Duplicate` variant (AC-24, planned).
 
 ## Status
+
+FR-016-AC-24 is planned (IR-465): the test that exercises it,
+`tc_026_a_lock_repeating_a_dependency_is_refused`, today expects the `Duplicate` error and changes
+with the code, which deletes the builder's own pre-check and the `Duplicate` variant so QSL's
+constructor refuses. Because QSL checks libraries in supply order (for each, an empty identity,
+then a repeated identity, then a shared source owner), a lock with several defects reports
+whichever QSL meets first; AC-24 is therefore limited to a lock whose only defect is the repeated
+identity.
 
 FR-016-AC-21 to AC-23 are implemented and tested in the default suite
 (`tests/it/skeleton_spine.rs`, and unit tests in `src/replay/obligation.rs` and

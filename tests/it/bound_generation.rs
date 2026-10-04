@@ -70,8 +70,8 @@ fn state_integer_projection() -> Value {
         "value_type":{
             "kind":"integer",
             "domain":"signed",
-            "minimum":0,
-            "maximum":1000,
+            "minimum":"0",
+            "maximum":"1000",
             "overflow":"reject"
         },
         "source":span()

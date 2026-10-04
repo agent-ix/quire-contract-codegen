@@ -527,7 +527,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             EXPRESSION_OPERAND,
             ExactScalarRefusal::OperandUnsupported {
                 position: 0,
-                term: "application".to_owned(),
+                term: "aggregate".to_owned(),
             },
         ),
         (
@@ -1348,7 +1348,7 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
     );
     assert_eq!(
         refusal_variant_name(&ExactScalarRefusal::LoweringLimitUnrecognised {
-            limit_kind: "depth",
+            limit_kind: "nodes",
             limit: 1,
             consumed: 2,
         }),

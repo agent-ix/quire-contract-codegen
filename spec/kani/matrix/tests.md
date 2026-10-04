@@ -12,7 +12,7 @@ type: TestMatrix
 |---|---|---|---|
 | FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned |
 | FR-015 | FR-015-AC-3 through FR-015-AC-6 | TC-025 | ✅ Covered |
-| FR-015 | FR-015-AC-7 | TC-025 | ✅ Covered; for the five kinds that carry a cover today (precondition, V1 contract, scalar, state-clause, frame-effect). The V1 bundle and corpus harnesses emit none, and FR-015-AC-53 to FR-015-AC-58 (planned, IR-464) bring them under it |
+| FR-015 | FR-015-AC-7 | TC-025 | ✅ Covered; every emitted harness kind (precondition, V1 contract, scalar, state-clause, frame-effect, V1 bundle, corpus) ends with its one cover, which FR-015-AC-53 to FR-015-AC-58 (IR-464) state and guard |
 | FR-015 | FR-015-AC-8 through FR-015-AC-12 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-13 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-14 | TC-025 | ✅ Covered |
@@ -22,8 +22,8 @@ type: TestMatrix
 | FR-015 | FR-015-AC-50 | TC-025 | ✅ Covered; negotiate reports a byte-ceiling and an unrecognised lowering refusal as `OracleRefused`, unchanged (IR-547) |
 | FR-015 | FR-015-AC-26 through FR-015-AC-36 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-37 | TC-025 | ✅ Covered |
-| FR-015 | FR-015-AC-53, FR-015-AC-54, FR-015-AC-56, FR-015-AC-58 | TC-025 | 🚧 Planned (IR-464); a cover as the last statement of every harness kind, the V1 bundle's real-Kani outcomes (`Verified` for a bundle whose requires some bounded argument satisfies and whose `ensures` holds for every such argument, `CoverUnsatisfied` for one whose requires no bounded argument satisfies) and the inspection guard over all emitted harness text. FR-015-AC-7 states the cover for the kinds that already carry one |
-| FR-015 | FR-015-AC-55, FR-015-AC-57 | TC-023 | 🚧 Planned (IR-464); the corpus harness's cover after its assertion, a true case of each corpus family classifying `Verified` and a false case `Falsified` |
+| FR-015 | FR-015-AC-53, FR-015-AC-54, FR-015-AC-56, FR-015-AC-58 | TC-025 | ✅ Covered (IR-464); a cover as the last statement of every harness kind (`syn` inspection of each emitting entry point, and a scan of the non-test string literals of `src/` that fails a file the inspection does not drive), and the V1 bundle's real-Kani outcomes (`Verified` for a bundle whose requires some bounded argument satisfies and whose `ensures` holds for every such argument, `CoverUnsatisfied` for one whose requires no bounded argument satisfies, `Falsified` for a broken `ensures`), run in the `kani` lane |
+| FR-015 | FR-015-AC-55, FR-015-AC-57 | TC-023 | ✅ Covered (IR-464); the corpus harness's cover after its assertion, a true case of each corpus family classifying `Verified` and a false graph and collection case `Falsified` with an empty-valued playback, run in the `kani` lane |
 | FR-015 | FR-015-AC-51, FR-015-AC-52 | TC-023 | ✅ Covered; the profile mismatch refusal (AC-51) and the revision as the context of every corpus outcome and refusal (AC-52) |
 | FR-015 | FR-015-AC-38 through FR-015-AC-49 | TC-025 | 🚧 Planned; the V2 clause claim and V2 census inputs (IR-489, AD-004 steps 4c and 4d). FR-015-AC-44 and FR-015-AC-45 back FR-015-AC-22 and FR-015-AC-25 once `ProofDependencyGraph` retires at step 4f; if they are not implemented by then, the row above holding AC-22 and AC-25 (FR-015-AC-19 through FR-015-AC-25) stays planned and unbacked, and no criterion is deleted or rewritten |
 | FR-017 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-12, FR-017-AC-13, FR-017-AC-15, FR-017-AC-16, FR-017-AC-17, FR-017-AC-18, FR-017-AC-19, FR-017-AC-20, FR-017-CON-2 | TC-027 | ✅ Covered |
@@ -33,8 +33,8 @@ type: TestMatrix
 | FR-025 | FR-025-AC-2 through FR-025-AC-8 | TC-036 | 🚧 Planned |
 | FR-028 | FR-028-AC-1 through FR-028-AC-9 | TC-039 | 🚧 Planned |
 | FR-028 | FR-028-AC-12 | TC-039 | ✅ Covered (IR-277); the batch wall-clock rule, asserted by the `tc_043_*` batch tests, which are tagged to both TC-039 and TC-043 |
-| FR-029 | FR-029-AC-1 through FR-029-AC-6, FR-029-AC-8 through FR-029-AC-14 | TC-040 | 🚧 Planned; AC-8, AC-9 and AC-13 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-14 is held on QSL's answer about `DependencyLockError::Duplicate` |
-| FR-030 | FR-030-AC-1 through FR-030-AC-13 | TC-041 | 🚧 Planned; AC-9 and AC-12 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-13 is held on QSL's answer about `DependencyLockError::Duplicate`, and AC-1 excludes that case |
+| FR-029 | FR-029-AC-1 through FR-029-AC-6, FR-029-AC-8 through FR-029-AC-14 | TC-040 | 🚧 Planned; AC-8, AC-9, AC-13 and AC-14 wait on QSL's unmerged `Inconclusive` terminal value (IR-465) |
+| FR-030 | FR-030-AC-1 through FR-030-AC-13 | TC-041 | 🚧 Planned; AC-9, AC-12 and AC-13 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-2 asserts the cause only and is buildable now |
 
 ## Test Case Summary
 
