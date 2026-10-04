@@ -568,7 +568,7 @@ mod tests {
         assert_eq!(other, record(0));
     }
 
-    /// Trace: NFR-005-AC-6, FR-022, TC-042. The refusal reaches the caller of the Kani arm's
+    /// Trace: NFR-005-AC-6, TC-042. The refusal reaches the caller of the Kani arm's
     /// record routing: one record naming a position outside the group refuses the whole call and
     /// yields no output, while in-range duplicates are rewritten to request indices.
     #[test]
