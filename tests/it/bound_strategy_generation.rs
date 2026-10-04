@@ -283,7 +283,8 @@ fn run_integer_oracles(cases: &[(&str, &str)]) {
     );
 }
 
-/// Trace: TC-017, FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-2
+/// Trace: TC-017, FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-2,
+/// TC-044, FR-031-AC-10, FR-031-AC-18
 #[test]
 fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
     let package = decode(&version_projection());
@@ -418,7 +419,11 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         .rust
         .contents
         .clone();
-    assert!(arithmetic_body.contains("amount_current\n)\n+\n(\n0_i64\n)\n)\n<\n(\n7_i64\n)"));
+    // The native oracle takes the runtime's meaning of the addition (FR-031): an outcome-
+    // returning function over the runtime's exact operation, not a raw `+`.
+    assert!(arithmetic_body.contains("rt::IntegerArithmetic::Add(&left_value, &right_value)"));
+    assert!(arithmetic_body.contains("-> rt::Outcome<bool> {"));
+    assert!(!arithmetic_body.contains("\n+\n"));
     // The strategy slice samples only integer reads compared with integer literals, so the
     // generated oracle does not widen it: the arithmetic relation stays a typed refusal.
     let error = generate_bound_strategy(&BoundStrategyRequest {
@@ -522,21 +527,28 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         oracle_error.source_span.as_ref()
     );
 
-    // The guarded division discharges its non-zero-divisor obligation, so the oracle generates;
-    // the strategy slice still refuses the connective relation with a typed diagnostic.
+    // The guarded division discharges its non-zero-divisor obligation, yet the oracle refuses the
+    // division with its own code until the IR-601 ruling (FR-031-AC-18), so the strategy slice
+    // sees the oracle's refusal and reports it as `UnsupportedClause` carrying the oracle's code
+    // and span, not the `UnsupportedRelation` it gave a clause whose oracle generated.
     let obligation = decode(&obligation_value);
-    let obligation_oracles = match generate_bound_oracles(&obligation).unwrap() {
-        quire_contract_codegen::BoundOracleGeneration::Generated(generated) => generated,
-        other => panic!("expected generated guarded-division oracle, got {other:?}"),
+    let oracle_error = match generate_bound_oracles(&obligation).unwrap_err() {
+        BoundGenerationError::Clause {
+            identity,
+            mut diagnostics,
+        } => {
+            assert_eq!(identity, amount_clause);
+            assert_eq!(diagnostics.len(), 1);
+            diagnostics.remove(0)
+        }
+        other => panic!("expected clause refusal, got {other:?}"),
     };
-    assert_eq!(obligation_oracles.clauses().len(), 1);
-    assert_eq!(obligation_oracles.clauses()[0].identity(), &amount_clause);
-    let obligation_body = obligation_oracles.clauses()[0]
-        .bundle()
-        .rust
-        .contents
-        .clone();
-    assert!(obligation_body.contains("quire_contract_runtime::operators::and_short_circuit("));
+    assert_eq!(
+        oracle_error.code,
+        quire_contract_codegen::GenerationErrorCode::UnsupportedIntegerDivision,
+        "{oracle_error:?}"
+    );
+    assert!(oracle_error.message.contains("IR-601"));
     let error = generate_bound_strategy(&BoundStrategyRequest {
         package: &obligation,
         clause: &amount_clause,
@@ -548,15 +560,23 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
     .unwrap_err();
     assert_eq!(
         error.code,
-        StrategyErrorCode::UnsupportedRelation,
+        StrategyErrorCode::UnsupportedClause,
         "{error:?}"
     );
+    assert_eq!(error.generation_code, Some(oracle_error.code));
     assert_eq!(error.terminal_state, GenerationTerminalState::Unsupported);
     assert_eq!(error.clause.as_deref(), Some(&amount_clause));
-    run_integer_oracles(&[
-        (&arithmetic_body, "0_i64..7"),
-        (&obligation_body, "1_i64..=1000"),
-    ]);
+    assert_eq!(
+        error.source_span.as_deref(),
+        oracle_error.source_span.as_ref()
+    );
+    // An arithmetic-free oracle is still a plain `bool` function over the declared domain.
+    let amount_oracles = match generate_bound_oracles(&decode(&amount_value)).unwrap() {
+        quire_contract_codegen::BoundOracleGeneration::Generated(generated) => generated,
+        other => panic!("expected generated amount oracle, got {other:?}"),
+    };
+    let amount_body = amount_oracles.clauses()[0].bundle().rust.contents.clone();
+    run_integer_oracles(&[(&amount_body, "0_i64..7")]);
 
     let comparison = amount_value["bindings"][0]["expression"]["expression"].clone();
     let mut connective_value = amount_value.clone();

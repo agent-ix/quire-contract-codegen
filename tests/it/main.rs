@@ -60,6 +60,7 @@ mod kani_obligations_state_frame;
 mod kani_witness_join;
 mod layout;
 mod no_generation_panics;
+mod oracle_arithmetic;
 mod oracle_generation;
 mod routed_generation;
 pub(crate) mod scratch_crate;

@@ -27,7 +27,7 @@ use crate::{
     kani::generate::outcome::MAX_OBLIGATION_UNWIND,
     oracle::boolean_v1::{
         generate_named_boolean_oracle, typed_dependency_parameters, DependencyParameter,
-        OracleRequest, RustValueType,
+        OracleRequest, OracleShape, RustValueType,
     },
 };
 
@@ -165,14 +165,16 @@ pub fn generate_kani_bundle(
             postcondition_clause,
         ),
     );
-    let precondition = generate_named_boolean_oracle(&precondition_request, &precondition_symbol)
-        .map_err(|values| map_clause_diagnostics("precondition", values))?;
+    let shape = OracleShape::KaniBundle;
+    let precondition =
+        generate_named_boolean_oracle(&precondition_request, &precondition_symbol, shape)
+            .map_err(|values| map_clause_diagnostics("precondition", values))?;
     let postcondition =
-        generate_named_boolean_oracle(&postcondition_request, &postcondition_symbol)
+        generate_named_boolean_oracle(&postcondition_request, &postcondition_symbol, shape)
             .map_err(|values| map_clause_diagnostics("postcondition", values))?;
-    let precondition_parameters = typed_dependency_parameters(&precondition_request)
+    let precondition_parameters = typed_dependency_parameters(&precondition_request, shape)
         .map_err(|values| map_clause_diagnostics("precondition", values))?;
-    let postcondition_parameters = typed_dependency_parameters(&postcondition_request)
+    let postcondition_parameters = typed_dependency_parameters(&postcondition_request, shape)
         .map_err(|values| map_clause_diagnostics("postcondition", values))?;
     let abi = derive_subject_abi(&precondition_parameters, &postcondition_parameters)?;
     let symbol = kani_symbol(requirement, revision, request.proof_id);

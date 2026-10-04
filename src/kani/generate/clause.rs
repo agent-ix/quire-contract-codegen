@@ -17,8 +17,8 @@ use crate::{
     kani::generate::outcome::UnsupportedObligation,
     kani::identity::{ObligationBinding, ObligationKind},
     oracle::boolean_v1::{
-        generate_boolean_oracle, typed_dependency_parameters, DependencyParameter, OracleRequest,
-        RustValueType,
+        generate_boolean_oracle_shaped, typed_dependency_parameters, DependencyParameter,
+        OracleRequest, OracleShape, RustValueType,
     },
 };
 
@@ -90,8 +90,12 @@ pub(super) fn lower_clause(
                     diagnostic.code
                 }),
         };
-    let parameters = typed_dependency_parameters(&oracle_request).map_err(first_code)?;
-    let bundle = generate_boolean_oracle(&oracle_request).map_err(first_code)?;
+    // The clause oracle is embedded where a plain `bool` is required, so a clause holding integer
+    // arithmetic is refused rather than read as one (FR-031).
+    let parameters =
+        typed_dependency_parameters(&oracle_request, OracleShape::PlainBool).map_err(first_code)?;
+    let bundle = generate_boolean_oracle_shaped(&oracle_request, OracleShape::PlainBool)
+        .map_err(first_code)?;
     let symbol =
         oracle_function_symbol(&bundle.rust.contents).ok_or(UnsupportedObligation::RenderFailed)?;
     Ok(ClauseOracle {

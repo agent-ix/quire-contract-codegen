@@ -23,10 +23,15 @@ exemplar, makes overflow a falsifiable Kani property, and agrees with the native
 domain. Finally it verifies that the defect cases fail on the tree before the change and pass
 after it.
 
-This case is 🚧 Planned. No test exists for it yet. Step 5, the O-3 and O-5 rows of step 4 and the
-divide and remainder half of step 7 hold the divide and remainder rows that wait on the IR-601
-ruling (FR-031-AC-2, AC-6, AC-16 and AC-17); every other step belongs to IR-596's closing code
-change.
+This case is ⚠️ Partially covered. IR-596's closing code change implements every step except the
+held rows, in `tests/it/oracle_arithmetic.rs`, with the real-Kani steps (the exemplar controls of
+step 10 and the overflow property of step 12) in `tests/it/kani_generation.rs`, run through `make
+kani`. The QSL exemplar run of step 10 (`tests/qsl_kani_exemplar.rs` in the integration
+repository) is pending: it needs a checkout of the integration repository, and the CG run of the
+same bundle shape is the closest equivalent, not a substitute. Step 5, the O-3 and O-5 rows of
+step 4 and the divide and remainder half of step 7 hold the divide and remainder rows that wait on
+the IR-601 ruling (FR-031-AC-2, AC-6, AC-16 and AC-17), which a follow-up change implements; the
+divide and remainder constructions are covered here only as refusals (step 11).
 
 ## Test Procedure
 
@@ -40,7 +45,9 @@ change.
    (FR-031-AC-3). Assert the arithmetic-free oracle is byte-identical to the output of the tree
    before the change (FR-031-AC-12). Regenerate the arithmetic-bearing oracle twice and from a
    permuted request and compare bytes (FR-031-AC-13). Scan the arithmetic-bearing source for
-   `unwrap`, `expect` and panic macros (FR-031-AC-14). These four assertions are separate tests.
+   `unwrap`, `expect` and panic macros (FR-031-AC-14). These four assertions are separate tests, and the
+   AC-12, AC-13 and AC-14 assertions pass on the tree before the change: they are held
+   agreements, not defect proofs.
 3. Generate one oracle per comparison over two arithmetic-free operands, assert the native operator
    the FR-031 comparison table names, compile and run them in a generated crate against
    `quire-contract-runtime` over the seven boundary values and two interior values, taken pairwise
@@ -145,7 +152,8 @@ change.
     | S-4 | Remainder | `i64::MIN..=i64::MAX`, `saturate` | `y != 0 && x % y <= 0` | `x = i64::MIN`, `y = -1` |
 
     Three existing tests change with this requirement and are rewritten: `oracle_generation`
-    `tc_023_native_proven_numeric_obligations_render_without_assumptions`, which asserts a
+    `tc_023_native_proven_numeric_obligations_render_without_assumptions` (now named
+    `tc_023_native_proven_division_is_refused_until_the_ir_601_ruling`), which asserted a
     guarded division renders a `/`, to assert the refusal; `oracle_generation`
     `tc_003_unsupported_expression_and_root_map_to_declared_terminal_states`, for its new first
     locus (see step 6); and the guarded-division case of TC-017 in

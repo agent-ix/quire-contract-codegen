@@ -8,7 +8,9 @@ use crate::{
     },
     core::diagnostic::GenerationDiagnostic,
     core::naming::{oracle_symbol, unique_names},
-    oracle::boolean_v1::{generate_named_boolean_oracle, OracleArtifactBundle, OracleRequest},
+    oracle::boolean_v1::{
+        generate_named_boolean_oracle, OracleArtifactBundle, OracleRequest, OracleShape,
+    },
 };
 
 /// Complete generation result, distinct from a native execution or coverage result.
@@ -141,12 +143,12 @@ pub fn generate_bound_oracles(
             clause: identity.clause(),
             expression: clause.expression(),
         };
-        let bundle = generate_named_boolean_oracle(&request, symbol).map_err(|diagnostics| {
-            BoundGenerationError::Clause {
+        let bundle = generate_named_boolean_oracle(&request, symbol, OracleShape::Native).map_err(
+            |diagnostics| BoundGenerationError::Clause {
                 identity: identity.clone(),
                 diagnostics,
-            }
-        })?;
+            },
+        )?;
         for artifact in [&bundle.rust, &bundle.source_map] {
             reserve_bytes(&mut total_bytes, artifact.contents.len())?;
             artifacts.push(artifact.clone());

@@ -1091,7 +1091,11 @@ fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
     );
 }
 
-/// TC-003
+/// TC-003, and TC-044 (FR-031-AC-7) for its first locus: the `saturate` addition precedes the
+/// negation in authored preorder, so the addition is the first unsupported node, and a negation
+/// that comes first is still refused as an unsupported expression.
+///
+/// Trace: TC-044, FR-031-AC-7
 #[test]
 fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
     let integer =
@@ -1104,7 +1108,7 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
             left: Box::new(integer_literal(1, &integer, 30)),
             right: Box::new(integer_literal(1, &integer, 31)),
         },
-        addition_span,
+        addition_span.clone(),
     );
     let first_unsupported_span = span(35, 36);
     let negation = Expression::new(
@@ -1140,15 +1144,71 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
         expression: &typed,
     })
     .unwrap_err()[0];
-    assert_eq!(diagnostic.code, GenerationErrorCode::UnsupportedExpression);
+    assert_eq!(
+        diagnostic.code,
+        GenerationErrorCode::UnsupportedSaturatingArithmetic
+    );
     assert_eq!(
         diagnostic.terminal_state,
         GenerationTerminalState::Unsupported
     );
     assert_eq!(
         diagnostic.source_span.as_ref(),
-        Some(&first_unsupported_span),
-        "the first unsupported node in authored preorder must win"
+        Some(&addition_span),
+        "the first unsupported node in authored preorder must win: the `saturate` addition \
+         comes before the negation"
+    );
+    assert_ne!(addition_span, first_unsupported_span);
+
+    // A negation that comes first is the first unsupported node, as an unsupported expression.
+    let negation_first = boolean_op(
+        BooleanOperator::TotalAnd,
+        comparison(
+            ComparisonOperator::Equal,
+            Expression::new(
+                ExpressionKind::NumericNegate {
+                    operand: Box::new(integer_literal(1, &integer, 45)),
+                },
+                first_unsupported_span.clone(),
+            ),
+            integer_literal(-1, &integer, 46),
+            44,
+        ),
+        comparison(
+            ComparisonOperator::Equal,
+            Expression::new(
+                ExpressionKind::Numeric {
+                    operator: NumericOperator::Add,
+                    left: Box::new(integer_literal(1, &integer, 50)),
+                    right: Box::new(integer_literal(1, &integer, 51)),
+                },
+                span(50, 52),
+            ),
+            integer_literal(2, &integer, 52),
+            49,
+        ),
+        43,
+    );
+    let typed_negation_first = environment
+        .check_expression(&negation_first, &ValueType::Boolean, &pre(), true)
+        .unwrap();
+    let negation_diagnostic = &generate_boolean_oracle(&OracleRequest {
+        requirement: environment.owner(),
+        clause: &clause,
+        expression: &typed_negation_first,
+    })
+    .unwrap_err()[0];
+    assert_eq!(
+        negation_diagnostic.code,
+        GenerationErrorCode::UnsupportedExpression
+    );
+    assert_eq!(
+        negation_diagnostic.terminal_state,
+        GenerationTerminalState::Unsupported
+    );
+    assert_eq!(
+        negation_diagnostic.source_span.as_ref(),
+        Some(&first_unsupported_span)
     );
     let encoded = serde_json::to_string(diagnostic).unwrap();
     let decoded: GenerationDiagnostic = serde_json::from_str(&encoded).unwrap();
@@ -1288,9 +1348,12 @@ fn tc_003_dependency_normalization_is_injective_and_artifact_names_are_bounded()
     }
 }
 
-/// TC-003
+/// TC-003, and TC-044 (FR-031-AC-18): a division whose divisor and range IR discharged is still
+/// refused, because the oracle takes no raw `/`.
+///
+/// Trace: TC-044, FR-031-AC-18
 #[test]
-fn tc_023_native_proven_numeric_obligations_render_without_assumptions() {
+fn tc_023_native_proven_division_is_refused_until_the_ir_601_ruling() {
     let integer = IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Reject).unwrap();
     let environment = DeclarationEnvironment::new(
         requirement(),
@@ -1350,13 +1413,22 @@ fn tc_023_native_proven_numeric_obligations_render_without_assumptions() {
         .unwrap();
     assert!(!typed.obligations().is_empty());
     let clause = ClauseId::new("guarded-division").unwrap();
-    let bundle = generate_boolean_oracle(&OracleRequest {
+    // IR discharged the divisor and the range, yet the division is refused: the oracle takes no
+    // raw `/`, and the runtime division it would call is held on the IR-601 ruling (FR-031).
+    let refusal = generate_boolean_oracle(&OracleRequest {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed,
     })
-    .expect("native-proven nonzero divisor and checked range may render");
-    assert!(bundle.rust.contents.contains('/'));
+    .expect_err("a guarded division is refused until the IR-601 ruling")
+    .remove(0);
+    assert_eq!(
+        refusal.code,
+        GenerationErrorCode::UnsupportedIntegerDivision
+    );
+    assert_eq!(refusal.terminal_state, GenerationTerminalState::Unsupported);
+    assert_eq!(refusal.source_span.as_ref(), Some(&span(53, 55)));
+    assert!(refusal.message.contains("IR-601"), "{}", refusal.message);
 }
 
 /// TC-001.

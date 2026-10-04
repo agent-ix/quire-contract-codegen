@@ -79,7 +79,7 @@ use crate::{
     kani::identity::{
         EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, ObligationKind,
     },
-    oracle::boolean_v1::{generate_named_boolean_oracle, OracleRequest},
+    oracle::boolean_v1::{generate_named_boolean_oracle, OracleRequest, OracleShape},
     oracle::claim::{ClaimDisposition, ClaimMap, UpstreamBlocker},
     oracle::scalar::{operand_ranges, ExactScalarClaim, ExactScalarRefusal, OperationProvenance},
 };
@@ -341,6 +341,8 @@ fn named_oracle_source(
             expression: clause.expression(),
         },
         symbol,
+        // Embedded where a plain `bool` is required: arithmetic is refused (FR-031).
+        OracleShape::PlainBool,
     )
     .map(|bundle| bundle.rust.contents)
     .map_err(|diagnostics| UnsupportedObligation::ClauseLowering {
