@@ -80,8 +80,8 @@
 //! ([`ExactFunctionRefusal::DuplicateDeclaringNode`], AC-22), including a
 //! pair that also shares a name; the node-id check precedes the name check.
 //! Declarations whose node ids are all distinct but whose name is shared are
-//! refused as [`ExactFunctionRefusal::AmbiguousFunctionName`]. `own_shape`,
-//! `resolved` and `function_index` are keyed by each declaration's own node
+//! refused as [`ExactFunctionRefusal::AmbiguousFunctionName`]. `resolved`
+//! and `function_index` are keyed by each declaration's own node
 //! id, which keeps two same-name declarations on distinct node ids apart,
 //! but keying by node id cannot separate two declarations that share a node
 //! id: they would collapse into one entry and cross claims and oracle
@@ -555,6 +555,15 @@ struct ClassifiedFunction<'r> {
     result_kind: OperandKind,
 }
 
+/// What Stage 1 resolved for one function that passed its own checks: the classified body and
+/// the operand kinds it resolved, carried forward so that Stage 2 reads them and never resolves
+/// them a second time.
+struct Stage1Shape<'r> {
+    body: ClassifiedBody<'r>,
+    parameter_kinds: Vec<OperandKind>,
+    result_kind: OperandKind,
+}
+
 /// The binary integer operators a scalar function body can apply: the
 /// operators of [`IntegerOperator`] that have a two-operand runtime form.
 /// `Negate` is unary and has no variant here, so a body that survives
@@ -888,7 +897,7 @@ pub fn generate_exact_function_oracles(
     let mut ordered_functions: Vec<&ExactFunctionDeclaration> = functions.iter().collect();
     ordered_functions.sort_by(|a, b| a.node_id.cmp(&b.node_id));
 
-    // `own_shape`, `resolved` and `function_index` below are keyed by each
+    // `resolved` and `function_index` below are keyed by each
     // declaration's own node id, which keeps same-name declarations on
     // distinct node ids apart but cannot separate declarations that share a
     // node id. Both kinds of duplicate are therefore refused outright,
@@ -906,15 +915,13 @@ pub fn generate_exact_function_oracles(
     // Stage 1: per-function classification, with a bounded fixed-point pass
     // for `Call` bodies (a nested call's own validity depends on its
     // callee's classification, per AC-12).
-    // `own_shape` is keyed by node id (as `resolved` is), which is sound only
-    // because every declaration sharing a node id is refused before this
-    // point; `bodies` holds each declaration's own classified body by
-    // position.
-    let mut own_shape: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
-    let mut bodies: Vec<Result<ClassifiedBody<'_>, ExactFunctionRefusal>> =
+    // `shapes` holds each declaration's own Stage 1 result by position, so
+    // the resolution loop below reads a declaration's own result and no
+    // lookup can miss.
+    let mut shapes: Vec<Result<Stage1Shape<'_>, ExactFunctionRefusal>> =
         Vec::with_capacity(ordered_functions.len());
     for (declaration, record) in ordered_functions.iter().zip(&lowering.records) {
-        let result = (|| -> Result<ClassifiedBody<'_>, ExactFunctionRefusal> {
+        let result = (|| -> Result<Stage1Shape<'_>, ExactFunctionRefusal> {
             if names.shares_node_id(&declaration.node_id) {
                 return Err(ExactFunctionRefusal::DuplicateDeclaringNode {
                     node_id: declaration.node_id.clone(),
@@ -943,40 +950,37 @@ pub fn generate_exact_function_oracles(
             }
             let result_kind = resolve_operand_type(&graph, &declaration.result_type)?;
             validate_signature(declaration, &parameter_kinds, result_kind)?;
-            Ok(body)
+            Ok(Stage1Shape {
+                body,
+                parameter_kinds,
+                result_kind,
+            })
         })();
-        own_shape.insert(
-            &declaration.node_id,
-            result.as_ref().map(|_| ()).map_err(Clone::clone),
-        );
-        bodies.push(result);
+        shapes.push(result);
     }
 
     let mut resolved: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
     for _ in 0..=ordered_functions.len() {
         let mut changed = false;
-        for declaration in &ordered_functions {
+        for (declaration, own) in ordered_functions.iter().zip(&shapes) {
             if resolved.contains_key(&declaration.node_id) {
                 continue;
             }
-            let own = own_shape.get(&declaration.node_id).unwrap();
             let outcome = match (&declaration.body, own) {
                 (_, Err(refusal)) => Some(Err(refusal.clone())),
-                (ExactFunctionBody::Call { callee }, Ok(())) => {
-                    match names.unique_node_id(callee) {
-                        None => Some(Err(ExactFunctionRefusal::UnknownCallee {
+                (ExactFunctionBody::Call { callee }, Ok(_)) => match names.unique_node_id(callee) {
+                    None => Some(Err(ExactFunctionRefusal::UnknownCallee {
+                        callee: callee.clone(),
+                    })),
+                    Some(callee_node_id) => match resolved.get(callee_node_id) {
+                        Some(Ok(())) => Some(Ok(())),
+                        Some(Err(_)) => Some(Err(ExactFunctionRefusal::UnknownCallee {
                             callee: callee.clone(),
                         })),
-                        Some(callee_node_id) => match resolved.get(callee_node_id) {
-                            Some(Ok(())) => Some(Ok(())),
-                            Some(Err(_)) => Some(Err(ExactFunctionRefusal::UnknownCallee {
-                                callee: callee.clone(),
-                            })),
-                            None => None,
-                        },
-                    }
-                }
-                (_, Ok(())) => Some(Ok(())),
+                        None => None,
+                    },
+                },
+                (_, Ok(_)) => Some(Ok(())),
             };
             if let Some(outcome) = outcome {
                 resolved.insert(&declaration.node_id, outcome);
@@ -1003,27 +1007,19 @@ pub fn generate_exact_function_oracles(
     // Stage 2: assemble one package from every surviving function, in
     // order, and admit it once.
     let mut classified: Vec<ClassifiedFunction<'_>> = Vec::with_capacity(ordered_functions.len());
-    for (declaration, body) in ordered_functions.iter().zip(bodies) {
+    for (declaration, shape) in ordered_functions.iter().zip(shapes) {
         // A refused function (its own Stage 1 refusal, or a callee's) is left out.
-        let Ok(body) = body else {
+        let Ok(shape) = shape else {
             continue;
         };
         if !matches!(resolved.get(&declaration.node_id), Some(Ok(()))) {
             continue;
         }
-        let parameter_kinds: Vec<OperandKind> = declaration
-            .parameters
-            .iter()
-            .map(|parameter| resolve_operand_type(&graph, &parameter.type_node_id))
-            .collect::<Result<_, _>>()
-            .expect("Stage 1 already validated every survivor's parameter types");
-        let result_kind = resolve_operand_type(&graph, &declaration.result_type)
-            .expect("Stage 1 already validated every survivor's result type");
         classified.push(ClassifiedFunction {
             declaration,
-            body,
-            parameter_kinds,
-            result_kind,
+            body: shape.body,
+            parameter_kinds: shape.parameter_kinds,
+            result_kind: shape.result_kind,
         });
     }
     let survivors: Vec<&ExactFunctionDeclaration> = classified
@@ -1057,9 +1053,7 @@ pub fn generate_exact_function_oracles(
         .collect();
 
     let package_check = rt::PackageDeclarations {
-        types: rt::TypeEnvironment::new(Vec::new(), core::iter::empty()).expect(
-            "an empty composite/enum declaration set always admits: generation-time invariant",
-        ),
+        types: rt::TypeEnvironment::default(),
         functions: declared_functions,
     }
     .check(rt::CheckMode::Linked, rt::CheckingLimits::default());

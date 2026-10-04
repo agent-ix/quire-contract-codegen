@@ -218,7 +218,8 @@ pub enum UnsupportedObligation {
         derived_domains: Vec<DerivedDomain>,
     },
     /// The operation identity is IR-confirmed, but this generator has no Kani harness renderer
-    /// for its family yet (today: every family but `IntegerArithmetic`).
+    /// for its family yet (today: every family but `IntegerArithmetic`), or the claim map is one
+    /// this generator did not produce.
     OperationNotRendered {
         /// The confirmed operation.
         operation_identity: String,

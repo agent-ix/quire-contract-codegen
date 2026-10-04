@@ -443,7 +443,12 @@ fn observe_clause(
                     "LLVM export was not supplied",
                 )
             })
-            .and_then(|c| c.observe(&region.artifact_path, region.probe.expect("map preflight")))
+            .and_then(|c| {
+                region
+                    .probe
+                    .ok_or_else(|| diag(CoverageErrorCode::MapMismatch, "missing semantic probe"))
+                    .and_then(|probe| c.observe(&region.artifact_path, probe))
+            })
     };
     let evaluation = observe(&map[1]);
     match &evaluation {
@@ -475,12 +480,8 @@ fn observe_clause(
             ));
         }
     }
-    if row.diagnostics.is_empty() {
-        match classify_clause(
-            evaluation.expect("observed evaluation"),
-            row.expected_consequents as u32,
-            &observations,
-        ) {
+    if let (Ok(evaluation), true) = (evaluation, row.diagnostics.is_empty()) {
+        match classify_clause(evaluation, row.expected_consequents as u32, &observations) {
             Ok(classification) => row.classification = Some(classification),
             Err(error) => row.diagnostics.push(error),
         }
@@ -516,6 +517,146 @@ fn check_output_size(body: &ObservationBody, limit: usize) -> Result<(), Coverag
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quire_contract_model::EXECUTABLE_PROJECTION_FORMAT;
+    use serde_json::{json, Value};
+
+    const PACKAGE: &str = "test/no-generation-panics";
+    const PATH: &str = "src/generated/clause.rs";
+
+    fn span() -> Value {
+        let source = json!({"document": "no-generation-panics", "revision": 1});
+        json!({"start": {"source": source, "line": 1, "column": 1, "byte_offset": 0},
+            "end": {"source": source, "line": 1, "column": 2, "byte_offset": 1}})
+    }
+
+    fn read(name: &str) -> Value {
+        json!({"node": "value_reference", "name": name, "observation": "current",
+            "source": span()})
+    }
+
+    /// One precondition clause whose expression is the single implication `a => b`.
+    fn implication_package() -> BoundPackage {
+        let owner = json!({"package": PACKAGE, "requirement": "FR-001", "revision": 1});
+        let anchor = json!({"kind": "pre", "operation": "check"});
+        let reference = |name: &str| {
+            json!({"node": "reference", "identity": {"requirement": owner, "kind": "input",
+                "path": [name], "observation": "current"}})
+        };
+        let value = |name: &str| {
+            json!({"name": name, "kind": "input", "value_type": {"kind": "boolean"},
+                "source": span()})
+        };
+        let expression = json!({"node": "boolean", "operator": "implication",
+            "left": read("a"), "right": read("b"), "source": span()});
+        let clause = json!({"id": "c0", "kind": "precondition", "anchor": anchor,
+            "source": span(),
+            "body": {"node": "composite", "children": [reference("a"), reference("b")]}});
+        let binding = json!({"clause": {"requirement": owner, "clause": "c0"},
+            "expression": {"owner": owner, "types": [], "values": [value("a"), value("b")],
+                "functions": [], "expression": expression,
+                "expected_type": {"kind": "boolean"}, "execution_point": anchor,
+                "clause_root": true}});
+        let projection = json!({"format": EXECUTABLE_PROJECTION_FORMAT,
+            "package": {"id": PACKAGE, "schema_version": {"major": 1, "minor": 1},
+                "source": {"document": "no-generation-panics", "revision": 1},
+                "requirements": [{"id": "FR-001", "revision": 1, "source": span(),
+                    "clauses": [clause]}]},
+            "bindings": [binding]});
+        BoundPackage::from_json_bytes(&serde_json::to_vec(&projection).unwrap())
+            .unwrap_or_else(|diagnostics| panic!("the fixture must bind: {diagnostics:?}"))
+    }
+
+    fn region(role: &str, probe: Option<(u32, u32)>) -> SourceRegion {
+        SourceRegion {
+            artifact_path: PATH.to_owned(),
+            role: role.to_owned(),
+            start_line: 1,
+            end_line: 3,
+            package_id: PACKAGE.to_owned(),
+            requirement_id: "FR-001".to_owned(),
+            requirement_revision: 1,
+            clause_id: "c0".to_owned(),
+            probe: probe.map(
+                |(line, start_column)| crate::core::source_map::SourceProbe {
+                    line,
+                    start_column,
+                    end_column: start_column + 1,
+                },
+            ),
+            expected_consequents: None,
+        }
+    }
+
+    /// The map of `a => b`: the clause envelope, the oracle evaluation (probe on line 1) and the
+    /// one implication consequent (probe on line 2), each probe present as named.
+    fn map(evaluation_probe: bool, consequent_probe: bool) -> Vec<SourceRegion> {
+        let mut envelope = region("clause", None);
+        envelope.expected_consequents = Some(1);
+        vec![
+            envelope,
+            region("oracle_evaluation", evaluation_probe.then_some((1, 1))),
+            region("implication_consequent", consequent_probe.then_some((2, 1))),
+        ]
+    }
+
+    /// An export that measures both probes of [`map`].
+    fn coverage() -> LlvmCoverage {
+        let export = json!({"type": "llvm.coverage.json.export",
+            "cargo_llvm_cov": {"manifest_path": "/fixture/Cargo.toml"},
+            "data": [{"files": [{"filename": PATH, "segments": [
+                [1, 1, 1, true, true, false], [1, 2, 0, false, false, false],
+                [2, 1, 1, true, true, false], [2, 2, 0, false, false, false]]}]}]});
+        parse_llvm_coverage(&serde_json::to_vec(&export).unwrap(), "/fixture")
+            .expect("the export parses")
+    }
+
+    fn codes(row: &ClauseObservation) -> Vec<(CoverageErrorCode, &str)> {
+        row.diagnostics
+            .iter()
+            .map(|diagnostic| (diagnostic.code, diagnostic.message.as_str()))
+            .collect()
+    }
+
+    /// Trace: NFR-005-AC-4, TC-042. With a coverage export supplied, a map region with no probe
+    /// is the `MapMismatch` diagnostic and no classification; with no export it is
+    /// `UnavailableObservation`.
+    #[test]
+    fn tc_042_ac4_a_region_without_a_probe_is_a_map_mismatch_not_a_panic() {
+        let package = implication_package();
+        let clause = &package.clauses()[0];
+        let supplied = coverage();
+
+        let complete = observe_clause(clause, &map(true, true), Some(&supplied));
+        assert!(complete.diagnostics.is_empty(), "{:?}", codes(&complete));
+        assert!(complete.classification.is_some());
+
+        let missing_evaluation = observe_clause(clause, &map(false, true), Some(&supplied));
+        assert!(codes(&missing_evaluation)
+            .contains(&(CoverageErrorCode::MapMismatch, "missing semantic probe")));
+        assert!(missing_evaluation.classification.is_none());
+        assert_eq!(missing_evaluation.evaluation_count, None);
+
+        let missing_consequent = observe_clause(clause, &map(true, false), Some(&supplied));
+        assert_eq!(
+            codes(&missing_consequent),
+            vec![(CoverageErrorCode::MapMismatch, "missing semantic probe")]
+        );
+        assert!(missing_consequent.classification.is_none());
+
+        for probes in [(false, true), (true, false)] {
+            let unavailable = observe_clause(clause, &map(probes.0, probes.1), None);
+            assert!(unavailable.classification.is_none());
+            assert!(
+                unavailable
+                    .diagnostics
+                    .iter()
+                    .all(|diagnostic| diagnostic.code == CoverageErrorCode::UnavailableObservation),
+                "{:?}",
+                codes(&unavailable)
+            );
+            assert!(!unavailable.diagnostics.is_empty());
+        }
+    }
     /// Trace: TC-006, FR-004-AC-5
     #[test]
     fn output_bound_counts_exact_bytes_before_allocating_output() {

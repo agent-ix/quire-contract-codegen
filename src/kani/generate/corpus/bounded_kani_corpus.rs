@@ -386,7 +386,9 @@ pub struct BoundedCorpusCase {
 /// The case is named from its canonical content digest ([`EmittedCorpusIdentities`]), so identical
 /// requests name identical artifacts and distinct requests never share a path. `emitted` records
 /// that identity only after every other fallible step has succeeded; a case whose identity it
-/// already holds returns `InvalidInput` `kani_corpus_identity_collision` and emits nothing.
+/// already holds returns `InvalidInput` `kani_corpus_identity_collision` and emits nothing. A failure
+/// to serialize the case's proof-dependency graph returns `Refused`
+/// `kani_corpus_serialization_failed`, emits nothing and records no identity.
 pub fn generate_bounded_kani_corpus_case(
     profile: &KaniProfile,
     dispatch: &DispatchIndex,
@@ -503,6 +505,19 @@ pub fn generate_bounded_kani_corpus_case(
             profile.selection().revision.clone(),
         )
     };
+    // Rendered before the identity is claimed, so a refused rendering records nothing.
+    let name = format!("{}_{identity}", family.label());
+    let Ok(artifacts) =
+        render_artifacts(family, &name, value, &oracle_body, &normalized_dependencies)
+    else {
+        // The caller's input is not at fault, so this is `Refused` and not `InvalidInput`.
+        return Err(KaniOutcome::non_success(
+            KaniOutcomeKind::Refused,
+            "kani_corpus_serialization_failed",
+            request_source_id,
+            revision,
+        ));
+    };
     if !emitted.claim(&identity) {
         return Err(KaniOutcome::non_success(
             KaniOutcomeKind::InvalidInput,
@@ -511,8 +526,6 @@ pub fn generate_bounded_kani_corpus_case(
             revision,
         ));
     }
-    let name = format!("{}_{identity}", family.label());
-    let artifacts = render_artifacts(family, &name, value, &oracle_body, &normalized_dependencies);
     Ok(BoundedCorpusCase {
         family,
         outcome,
@@ -567,8 +580,9 @@ fn render_graph_oracle(
     )
 }
 
-/// Renders one corpus case's artifacts, all named from the case's `name`. Infallible: the caller
-/// ([`generate_bounded_kani_corpus_case`]) has already run every fallible step.
+/// Renders one corpus case's artifacts, all named from the case's `name`. The only failure is the
+/// serialization of the proof-dependency graph, which [`generate_bounded_kani_corpus_case`]
+/// refuses as `kani_corpus_serialization_failed`.
 ///
 /// `dependencies` is the already-validated, already-normalized declared census (see
 /// [`normalize_dependencies`]).
@@ -578,7 +592,7 @@ fn render_artifacts(
     value: bool,
     oracle_body: &str,
     dependencies: &[ProofDependencyEdge],
-) -> BoundedCorpusArtifacts {
+) -> Result<BoundedCorpusArtifacts, String> {
     let label = family.label();
     let value_literal = if value { "true" } else { "false" };
     let mut oracle = String::new();
@@ -606,9 +620,8 @@ fn render_artifacts(
         readiness: dependency_readiness(dependencies),
         dependencies: dependencies.to_vec(),
     };
-    let proof_graph_contents = deterministic_json(&proof_graph_value)
-        .expect("a corpus proof-dependency graph is plain finite data with no fallible conversion");
-    BoundedCorpusArtifacts {
+    let proof_graph_contents = deterministic_json(&proof_graph_value)?;
+    Ok(BoundedCorpusArtifacts {
         oracle: Artifact::new(format!("corpus/{name}.oracle.rs"), oracle),
         strategy: Artifact::new(format!("corpus/{name}.strategy.rs"), strategy),
         kani_harness: Artifact::new(format!("corpus/{name}.kani.rs"), harness),
@@ -616,7 +629,7 @@ fn render_artifacts(
             format!("corpus/{name}.proof-graph.json"),
             proof_graph_contents,
         ),
-    }
+    })
 }
 
 #[cfg(test)]
