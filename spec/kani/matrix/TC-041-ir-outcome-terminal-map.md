@@ -32,13 +32,15 @@ cause, and that the map is one match with no wildcard arm.
 10. Map `Counterexample` under every replay settlement other than reproduced.
 11. Map `Counterexample` with a non-fault `CallSiteRefusal` and with a `DependencyLockError::Input`,
     each bare and wrapped.
-12. HELD: map `Counterexample` with `DependencyLockError::Duplicate`.
+12. Map `Counterexample` with a lock that selects one library identity twice, refused by QSL's
+    `DependencyInput::new`.
 
 ## Expected Results
 
-1. Exactly one value per expressible pair outside the held `Duplicate` case (step 12), and none
-   is `Tested` (FR-030-AC-1, FR-030-AC-6).
-2. `Declined` with three distinct causes (FR-030-AC-2).
+1. Exactly one value per expressible pair, and none is `Tested` (FR-030-AC-1, FR-030-AC-6).
+2. `Declined` with three distinct causes, each carrying the catalog code of its refusal: the
+   `CheckedPackageRefusal`'s own code, `invalid_runtime_input`, and `missing_import` with
+   `missing-selection` (FR-030-AC-2).
 3. `Incomplete` with three distinct causes (FR-030-AC-3).
 4. `Proved { success_checks: 3 }`, `Proved { success_checks: 0 }` and `Refuted` (FR-030-AC-4).
 5. `Proved { success_checks: 0 }` and `Failed` (FR-030-AC-5).
@@ -51,11 +53,12 @@ cause, and that the map is one match with no wildcard arm.
 10. No value is `Refuted` (FR-030-AC-11).
 11. The call-site and lock-input refusals are `Inconclusive(ReplayRefused)` carrying their QSL
     catalog code and none is `Declined` (FR-030-AC-12).
-12. HELD on a QSL ruling (FR-030-AC-13).
+12. `Inconclusive(ReplayRefused)` carrying `invalid_package` (FR-030-AC-13).
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. Steps 8, 10 and 11 wait on the unmerged
+Planned. No outcome maps to QSL's terminal value at this revision. Steps 8, 10, 11 and 12 wait on the unmerged
 QSL `Inconclusive` terminal value, because they include settlements whose value is
-`Inconclusive`; step 9, which includes `InvalidFunction` and `Name` as `Failed`, does not. Step 12 is held on QSL's answer about
-`DependencyLockError::Duplicate` (FR-029 Status).
+`Inconclusive`; step 9, which includes `InvalidFunction` and `Name` as `Failed`, does not. The code
+half of step 2 waits on QSL's pending `Declined` that carries a code; its cause half does not
+(FR-030 Status).

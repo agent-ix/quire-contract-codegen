@@ -33,7 +33,8 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 11. Map `falsified` under every replay settlement other than reproduced.
 12. Map `falsified` with a non-fault `CallSiteRefusal` and with a `DependencyLockError::Input`,
     each bare and wrapped in `ReplayPackageError` and `FrameReplayError`.
-13. HELD: map `falsified` with `DependencyLockError::Duplicate`.
+13. Map `falsified` with a lock that selects one library identity twice, refused by QSL's
+    `DependencyInput::new`.
 
 ## Expected Results
 
@@ -54,11 +55,10 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 11. No value is `Refuted` (FR-029-AC-12).
 12. Each is `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or
     `DependencyInputRefusal::code()` of the refusal, and none is `Declined` (FR-029-AC-13).
-13. HELD on a QSL ruling (FR-029-AC-14).
+13. `Inconclusive(ReplayRefused)` carrying `invalid_package` (FR-029-AC-14).
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. Steps 7, 8, 11 and 12, and the `ReplayRefused`
+Planned. No outcome maps to QSL's terminal value at this revision. Steps 7, 8, 11, 12 and 13, and the `ReplayRefused`
 inspection of step 10, wait on the unmerged QSL `Inconclusive` terminal value; step 9 and the
-`Failed` half of step 10 do not. Step 13 is held on QSL's answer about
-`DependencyLockError::Duplicate` (FR-029 Status).
+`Failed` half of step 10 do not.

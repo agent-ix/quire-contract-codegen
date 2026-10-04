@@ -33,8 +33,8 @@ type: TestMatrix
 | FR-025 | FR-025-AC-2 through FR-025-AC-8 | TC-036 | 🚧 Planned |
 | FR-028 | FR-028-AC-1 through FR-028-AC-9 | TC-039 | 🚧 Planned |
 | FR-028 | FR-028-AC-12 | TC-039 | ✅ Covered (IR-277); the batch wall-clock rule, asserted by the `tc_043_*` batch tests, which are tagged to both TC-039 and TC-043 |
-| FR-029 | FR-029-AC-1 through FR-029-AC-6, FR-029-AC-8 through FR-029-AC-14 | TC-040 | 🚧 Planned; AC-8, AC-9 and AC-13 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-14 is held on QSL's answer about `DependencyLockError::Duplicate` |
-| FR-030 | FR-030-AC-1 through FR-030-AC-13 | TC-041 | 🚧 Planned; AC-9 and AC-12 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-13 is held on QSL's answer about `DependencyLockError::Duplicate`, and AC-1 excludes that case |
+| FR-029 | FR-029-AC-1 through FR-029-AC-6, FR-029-AC-8 through FR-029-AC-14 | TC-040 | 🚧 Planned; AC-8, AC-9, AC-13 and AC-14 wait on QSL's unmerged `Inconclusive` terminal value (IR-465) |
+| FR-030 | FR-030-AC-1 through FR-030-AC-13 | TC-041 | 🚧 Planned; AC-9, AC-12 and AC-13 wait on QSL's unmerged `Inconclusive` terminal value, and AC-2's code half on QSL's pending `Declined` code (IR-465) |
 
 ## Test Case Summary
 

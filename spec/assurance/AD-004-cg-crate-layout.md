@@ -472,7 +472,7 @@ Where the runner, report parser and witness decode sit. One module reads Kani's 
 | Run classification and vacuity | `kani/classify.rs` | the typed report; TARGET: nothing else. Today also the run's console text (`classify_kani_run`'s `text` parameter), which it hands to `output/playback.rs`'s `counterexample_playback` for a falsifying check; an interim exception removed by step 5 (see Dependency direction and L-6) |
 | Witness decode | `replay/witness.rs` | TARGET: typed playback entries only. Until step 5 it reads the block through `output/playback.rs`'s scan and compares Kani's decoded-value comment itself (`boolean_comment`) |
 | FR-029 map: `KaniRunOutcome` to a terminal value | `kani/terminal.rs` | typed run outcome only |
-| C-09 map: IR's `KaniOutcome` with the replay outcome to `TerminalValue` | `kani/terminal.rs`, a public entry | typed outcome and the replay-outcome type it defines; total over the pair, outside the held `DependencyLockError::Duplicate` case (step 5) |
+| C-09 map: IR's `KaniOutcome` with the replay outcome to `TerminalValue` | `kani/terminal.rs`, a public entry | typed outcome and the replay-outcome type it defines; total over the pair (step 5) |
 | Pairing the two inputs | the driver, outside this crate | runs the replay and calls the C-09 entry with both |
 | Building the replay request; converting CG errors and QSL's result into the replay outcome | `replay/` | builds the request the driver passes to `qsl_replay::replay`, and converts results into `kani/terminal.rs`'s input type |
 
@@ -787,7 +787,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      (`qsl_replay::replay`) and the FR-331 terminal record, CG owns the C-09 map and settles
      dispositions, and parity is settled inside `replay`). It adds no behaviour claim of this AD;
      FR-029 is amended by its own ticket, and the two causes are pending in QSL. The map is total over
-     (Kani outcome, QSL replay result), outside the held `DependencyLockError::Duplicate` case below: a reproduced replay gives `Refuted`; a replay
+     (Kani outcome, QSL replay result): a reproduced replay gives `Refuted`; a replay
      disagreement, or one that completes no value, gives
      `Inconclusive(InconclusiveCause::ReplayParity)`; a non-fault `ReplayRefusal` (identity
      mismatch, decode refusal, stale dependency, limit reached) gives
@@ -816,7 +816,10 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      `Inconclusive(ReplayRefused)` with that QSL code. QSL ruled this (relayed on IR-465): `Declined`
      is only for a refusal before any backend run, and QSL amends its FR-121 to say so.
      `InvalidFunction` and `Name` carry no QSL code and map to `Failed`;
-     `DependencyLockError::Duplicate` is held (AD-003 R-Q1). A decode failure (`DecodeFailure`, `EvidenceFailureCause::Decode`) is not in that list:
+     CG has no `DependencyLockError::Duplicate`: the lock admission drops its own duplicate
+     pre-check and builds QSL's dependency input, so QSL refuses a repeated identity as
+     `invalid_package` and it arrives as `DependencyLockError::Input` (QSL ruling, relayed on IR-465,
+     a QSL ruling recorded by the planner; AD-003 R-Q1). A decode failure (`DecodeFailure`, `EvidenceFailureCause::Decode`) is not in that list:
      it is a CG defect, a playback that does not type against the bindings CG persisted, and maps
      to `Failed` (AD-003, link 7). Faults stay `Failed`. `CallSiteRefusal::code()` and
      `DependencyInputRefusal::code()` are already in QSL `main`, so no code is missing;
@@ -829,8 +832,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      QSL fault) plus two CG-raised variants, so `kani` imports nothing from `replay`: a CG-origin
      defect, and a setup refusal on data (the after-Kani case above) that carries a QSL code from
      QSL-352; those codes already exist in QSL `main`. The setup-refusal variant carries the code of a
-     `CallSiteRefusal` or a `DependencyLockError::Input`; `DependencyLockError::Duplicate` waits on
-     QSL's answer (AD-003 R-Q1).
+     `CallSiteRefusal` or a `DependencyLockError::Input`, which includes a repeated dependency identity (AD-003 R-Q1).
      `replay/` imports `kani` (downward) and owns the conversion: it turns its own errors
      (`SpineReplayError`, the envelope failure, the out-of-bound playback) and QSL's result into
      that type, so a CG-origin failure reaches the map as the CG-defect variant and becomes
