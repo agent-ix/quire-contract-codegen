@@ -62,5 +62,6 @@ serialization and the `boolean_v1` assertion have no fixture and are held by ste
 their typed refusal or row with no panic, and the four bodies hold no index or subtraction token; the `generate_boolean_oracle_inner`
 lookup and `regions[0]` write have no fixture and are held by step 8 alone. The other index, slice
 and arithmetic sites NFR-005 Scope measured have no step: some are guarded inside their own
-function, and the rest rest on a caller, a validator or a type, which NFR-005 names as a known limit
-and does not cover.
+function, and the rest rest on an invariant that code or a type outside the reading function
+establishes. NFR-005 leaves them out by a scoping choice for IR-577: they were found unreachable
+from untrusted input today, and are neither shown safe nor covered.
