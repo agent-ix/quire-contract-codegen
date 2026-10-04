@@ -59,7 +59,7 @@ generators, the input model, the backend adapter, Kani tractability and the gene
 | Area | Requirements | Test cases |
 |---|---|---|
 | Tri-state harnesses, vacuity and publication | FR-002, FR-004, FR-005 | TC-001 to TC-004, TC-006, TC-007 |
-| No panic on a generation path | NFR-005 | TC-042 |
+| No panic on a generation or analysis path | NFR-005 | TC-042 |
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings | TC-025, TC-027, TC-036, TC-039 |

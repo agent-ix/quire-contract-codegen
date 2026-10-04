@@ -18,7 +18,8 @@ test can reach returns its typed value instead of aborting (NFR-005).
 1. Walk `src/` and scan every `.rs` file except a file its parent declares under `#[cfg(test)]`
    with `non_test_code_outside_literals` of `tests/common/panic_scan.rs`; assert that
    `panic_tokens_in` finds nothing, and that the walk read the files FR-014-AC-39, FR-018-AC-19 and
-   FR-021-AC-21 name (NFR-005-AC-1). Assert on a hand-built source that the helper keeps an
+   FR-021-AC-21 name, every file that holds a measured site, at least 60 files, and that the dated
+   `expect` exception of IR-344 was used exactly once (NFR-005-AC-1). Assert on a hand-built source that the helper keeps an
    `unwrap` in code, drops one in a string literal, a comment and a `#[cfg(test)]` item, and keeps
    `abort` as a bare identifier.
 2. Hand `lower_scalar_claim` a claim with empty `checked_bounds`, and one whose first checked bound
@@ -29,8 +30,9 @@ test can reach returns its typed value instead of aborting (NFR-005).
    `invalid_capability` causes and assert `warning()` is `None`; build one per `unsupported_projection`
    cause and assert it still returns its warning (NFR-005-AC-3).
 4. Hand `observe_clause` a map whose evaluation region has no probe, and one whose consequent region
-   has none; assert the `MapMismatch` diagnostic, no classification and, for the first,
-   `evaluation_count` of `None` (NFR-005-AC-4).
+   has none, with a coverage export supplied; assert the `MapMismatch` diagnostic, no
+   classification and, for the first, `evaluation_count` of `None`; with no export assert
+   `UnavailableObservation` (NFR-005-AC-4).
 5. Hand the record-pairing step of `generate_kani` one record fewer and one record more than the
    group has items, and an equal count; assert `KaniRecordCountMismatch` with both counts for the
    first two and a paired item per record for the third (NFR-005-AC-5).
@@ -38,5 +40,7 @@ test can reach returns its typed value instead of aborting (NFR-005).
 ## Expected Results
 
 The scan finds zero panic tokens; each seam test returns its typed refusal or value with no panic.
-The four `src/oracle/function/mod.rs` sites, the two corpus serializations and the `boolean_v1`
-assertion have no fixture and are held by step 1 alone.
+The four `src/oracle/function/mod.rs` sites, the `ScalarOperation::reachable` arm, the proof-graph
+serialization and the `boolean_v1` assertion have no fixture and are held by step 1 alone.
+`CaseIdentity::digest` is left to IR-344. Index and arithmetic panics are a known limit, followed up
+by IR-577.
