@@ -45,7 +45,9 @@ divide and remainder constructions are covered here only as refusals (step 11).
    (FR-031-AC-3). Assert the arithmetic-free oracle is byte-identical to the output of the tree
    before the change (FR-031-AC-12). Regenerate the arithmetic-bearing oracle twice and from a
    permuted request and compare bytes (FR-031-AC-13). Scan the arithmetic-bearing source for
-   `unwrap`, `expect` and panic macros (FR-031-AC-14). These four assertions are separate tests.
+   `unwrap`, `expect` and panic macros (FR-031-AC-14). These four assertions are separate tests, and the
+   AC-12, AC-13 and AC-14 assertions pass on the tree before the change: they are held
+   agreements, not defect proofs.
 3. Generate one oracle per comparison over two arithmetic-free operands, assert the native operator
    the FR-031 comparison table names, compile and run them in a generated crate against
    `quire-contract-runtime` over the seven boundary values and two interior values, taken pairwise
@@ -150,7 +152,8 @@ divide and remainder constructions are covered here only as refusals (step 11).
     | S-4 | Remainder | `i64::MIN..=i64::MAX`, `saturate` | `y != 0 && x % y <= 0` | `x = i64::MIN`, `y = -1` |
 
     Three existing tests change with this requirement and are rewritten: `oracle_generation`
-    `tc_023_native_proven_numeric_obligations_render_without_assumptions`, which asserts a
+    `tc_023_native_proven_numeric_obligations_render_without_assumptions` (now named
+    `tc_023_native_proven_division_is_refused_until_the_ir_601_ruling`), which asserted a
     guarded division renders a `/`, to assert the refusal; `oracle_generation`
     `tc_003_unsupported_expression_and_root_map_to_declared_terminal_states`, for its new first
     locus (see step 6); and the guarded-division case of TC-017 in

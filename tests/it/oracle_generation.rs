@@ -1353,7 +1353,7 @@ fn tc_003_dependency_normalization_is_injective_and_artifact_names_are_bounded()
 ///
 /// Trace: TC-044, FR-031-AC-18
 #[test]
-fn tc_023_native_proven_numeric_obligations_render_without_assumptions() {
+fn tc_023_native_proven_division_is_refused_until_the_ir_601_ruling() {
     let integer = IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Reject).unwrap();
     let environment = DeclarationEnvironment::new(
         requirement(),

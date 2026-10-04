@@ -1727,6 +1727,55 @@ fn bound_package(value: &serde_json::Value) -> quire_contract_model::BoundPackag
         .unwrap()
 }
 
+/// Bound oracle generation is all-or-nothing over a package, so a strategy requested for a healthy
+/// clause is refused when a sibling clause of the same package holds a refused node, and the
+/// refusal names the sibling (FR-031 Consumers, FR-008-AC-3).
+///
+/// Trace: TC-044, FR-031-AC-10, FR-008-AC-3
+#[test]
+fn tc_044_a_refused_sibling_clause_refuses_the_strategy_of_every_clause_in_its_package() {
+    use quire_contract_codegen::{
+        generate_bound_strategy, BoundStrategyPopulation, BoundStrategyRequest, StrategyErrorCode,
+    };
+    let mut value = arithmetic_projection("saturate", "add");
+    let refused = quire_contract_model::ClauseRef::new(
+        quire_contract_model::RequirementRef::parse("test/arithmetic", "FR-100", 3).unwrap(),
+        ClauseId::new("amount-check").unwrap(),
+    );
+    // A healthy sibling: the same read compared with the same literal, with no arithmetic.
+    let mut clause = value["package"]["requirements"][0]["clauses"][0].clone();
+    clause["id"] = serde_json::json!("healthy-check");
+    value["package"]["requirements"][0]["clauses"]
+        .as_array_mut()
+        .unwrap()
+        .push(clause);
+    let mut binding = value["bindings"][0].clone();
+    binding["clause"]["clause"] = serde_json::json!("healthy-check");
+    let read = binding["expression"]["expression"]["left"]["left"].clone();
+    binding["expression"]["expression"]["left"] = read;
+    value["bindings"].as_array_mut().unwrap().push(binding);
+    let package = bound_package(&value);
+    let healthy = quire_contract_model::ClauseRef::new(
+        quire_contract_model::RequirementRef::parse("test/arithmetic", "FR-100", 3).unwrap(),
+        ClauseId::new("healthy-check").unwrap(),
+    );
+    let refusal = generate_bound_strategy(&BoundStrategyRequest {
+        package: &package,
+        clause: &healthy,
+        population: BoundStrategyPopulation::Broad,
+        minimum_accepted_cases: 1,
+        minimum_rejected_cases: 0,
+        maximum_discarded_cases: 0,
+    })
+    .expect_err("the refused sibling refuses the whole package");
+    assert_eq!(refusal.code, StrategyErrorCode::UnsupportedClause);
+    assert_eq!(
+        refusal.generation_code,
+        Some(GenerationErrorCode::UnsupportedSaturatingArithmetic)
+    );
+    assert_eq!(refusal.clause.as_deref(), Some(&refused));
+}
+
 /// FR-031-AC-10: the tri-state harness, the bound strategies and the Kani obligation clause
 /// lowering each refuse a clause holding an arithmetic node with the refusal the Consumers
 /// section names, emit no artifact, and never read an `Outcome<bool>` as `bool`.

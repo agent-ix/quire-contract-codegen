@@ -907,6 +907,7 @@ fn render_expression(
     let has_arithmetic = mark_arithmetic(expression, &mut arithmetic);
     let mut renderer = Renderer {
         request,
+        shape,
         parameters,
         arithmetic,
         next_index: 0,
@@ -928,8 +929,13 @@ fn render_expression(
 
 /// Renders one clause's expression tree. Every `*_node` and `outcome_*` method consumes one node
 /// of authored preorder per call, so `next_index` names the typed node under render.
+///
+/// The refusals of [`arithmetic_refusal`] are decided once, by the analysis that runs before any
+/// rendering. The renderer relies on them and only keeps the shape honest: an infix operator is
+/// printed for the Kani bundle shape alone.
 struct Renderer<'a> {
     request: &'a OracleRequest<'a>,
+    shape: OracleShape,
     parameters: &'a BTreeMap<String, String>,
     arithmetic: Vec<bool>,
     next_index: usize,
@@ -964,7 +970,7 @@ impl<'a> Renderer<'a> {
     /// The expression as the plain Rust `bool` or `i64` it has always been: native operators, and
     /// for the Kani bundle oracle the infix `+`, `-` and `*` on `i64`.
     fn plain_node(&mut self, expression: &Expression) -> Rendered {
-        let index = self.take_index();
+        self.take_index();
         match expression.kind() {
             ExpressionKind::BooleanLiteral { value } => {
                 self.emit(if *value { "true" } else { "false" })
@@ -1029,7 +1035,7 @@ impl<'a> Renderer<'a> {
                 left,
                 right,
             } => {
-                let infix = self.infix_operator(index, expression, *operator)?;
+                let infix = self.infix_operator(expression, *operator)?;
                 self.emit("(")?;
                 self.plain_node(left)?;
                 self.emit(")")?;
@@ -1042,24 +1048,21 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    /// The infix operator of an add, subtract or multiply over a `reject` integer type, for the
-    /// Kani bundle oracle. Divide, remainder and `saturate` arithmetic are refused, so no raw `/`
-    /// or `%` and no clamped result is ever rendered.
+    /// The infix operator of an add, subtract or multiply, for the Kani bundle oracle only: a
+    /// native oracle renders arithmetic as runtime calls and a plain-bool consumer refuses it, so
+    /// any other shape reaching a numeric node here is refused rather than printed. Divide and
+    /// remainder have no operator, so no raw `/` or `%` is ever rendered.
     fn infix_operator(
         &self,
-        index: usize,
         expression: &Expression,
         operator: NumericOperator,
     ) -> Result<&'static str, Vec<GenerationDiagnostic>> {
-        let value_type = self.typed_value_type(index, expression)?;
-        if let Some(refusal) = arithmetic_refusal(
-            self.request,
-            expression,
-            operator,
-            value_type,
-            OracleShape::KaniBundle,
-        ) {
-            return Err(refusal);
+        if self.shape != OracleShape::KaniBundle {
+            return Err(unsupported_node(
+                self.request,
+                expression,
+                "integer arithmetic is rendered as an infix operator in the Kani bundle oracle only",
+            ));
         }
         match operator {
             NumericOperator::Add => Ok("+"),
@@ -1256,15 +1259,6 @@ impl<'a> Renderer<'a> {
             ));
         };
         let value_type = self.typed_value_type(index, expression)?;
-        if let Some(refusal) = arithmetic_refusal(
-            self.request,
-            expression,
-            *operator,
-            value_type,
-            OracleShape::Native,
-        ) {
-            return Err(refusal);
-        }
         let ValueType::Integer { value: interval } = value_type else {
             return Err(unsupported_node(
                 self.request,
