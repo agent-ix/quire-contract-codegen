@@ -1686,7 +1686,7 @@ fn arithmetic_projection(overflow: &str, operator: &str) -> serde_json::Value {
             "end":{"source":source,"line":line,"column":2,"byte_offset":line}})
     };
     let integer = serde_json::json!({
-        "kind":"integer", "domain":"signed", "minimum":0, "maximum":1000, "overflow":overflow
+        "kind":"integer", "domain":"signed", "minimum":"0", "maximum":"1000", "overflow":overflow
     });
     let owner =
         serde_json::json!({"package":"test/arithmetic","requirement":"FR-100","revision":3});
@@ -1694,7 +1694,7 @@ fn arithmetic_projection(overflow: &str, operator: &str) -> serde_json::Value {
     let read = serde_json::json!({
         "node":"value_reference", "name":"amount", "observation":"current", "source":span(4)
     });
-    let literal = |value: i64, line: u64| serde_json::json!({"node":"integer_literal","value":value,"value_type":integer,"source":span(line)});
+    let literal = |value: i64, line: u64| serde_json::json!({"node":"integer_literal","value":value.to_string(),"value_type":integer,"source":span(line)});
     serde_json::json!({
         "format": quire_contract_model::EXECUTABLE_PROJECTION_FORMAT,
         "package": {
