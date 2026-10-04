@@ -26,6 +26,7 @@ type: TestMatrix
 | NFR-002 | Test | TC-003 (NFR-002-AC-3) | 🚧 Planned |
 | NFR-002 | Inspection | NFR-002-AC-4 | 🚧 Planned |
 | NFR-005 | Test | TC-042 (NFR-005-AC-1 through NFR-005-AC-5) | ✅ Covered; NFR-005-AC-1 allows the one dated IR-344 `expect` of `CaseIdentity::digest` until that code lands |
+| NFR-005 | Test | TC-042 (NFR-005-AC-6 through NFR-005-AC-8) | 🚧 Planned (IR-577) |
 
 ## Stakeholder Requirement Coverage
 
@@ -49,4 +50,4 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-002 | Compile and publish atomically | Integration | P0 | FR-005-AC-1, FR-005-AC-5, NFR-001-AC-2, NFR-001-AC-3 | 🚧 Planned |
 | TC-003 | Reject unsupported inputs explicitly | Integration | P0 | NFR-002-AC-3 | 🚧 Planned |
 | TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-005-AC-4 | 🚧 Planned |
-| TC-042 | Verify no panic on a generation or analysis path | Unit | P0 | NFR-005-AC-1, NFR-005-AC-2, NFR-005-AC-3, NFR-005-AC-4, NFR-005-AC-5 | ✅ Covered |
+| TC-042 | Verify no panic on a generation or analysis path | Unit | P0 | NFR-005-AC-1, NFR-005-AC-2, NFR-005-AC-3, NFR-005-AC-4, NFR-005-AC-5, NFR-005-AC-6, NFR-005-AC-7, NFR-005-AC-8 | 🚧 NFR-005-AC-1 to AC-5 covered; AC-6 to AC-8 planned (IR-577) |
