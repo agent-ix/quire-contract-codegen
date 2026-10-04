@@ -176,7 +176,7 @@ src/
     profile.rs                the version profile: every spelling this build emits or requires
     diagnostic.rs             GenerationErrorCode, GenerationDiagnostic, GenerationTerminalState
     naming.rs                 bounded readable components, unique names, symbol derivation
-  oracle/                     FR-014, FR-018, FR-021
+  oracle/                     FR-014, FR-018, FR-021, FR-031 (boolean_v1.rs)
     claim.rs                  ClaimMap, ClaimDisposition, OracleGenerationError (was generation)
     scalar/                   was exact_scalar, split along derivation, lowering and rendering
     equality/                 was composite_equality
