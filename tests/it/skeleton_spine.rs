@@ -1207,7 +1207,11 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         ReplayVerdict::Reproduced,
         "the replay did not evaluate the decoded witness ({amount}, {balance})"
     );
-    let neighbour = if amount < 1000 { amount + 1 } else { amount - 1 };
+    let neighbour = if amount < 1000 {
+        amount + 1
+    } else {
+        amount - 1
+    };
     let elsewhere = compile_native_twin(&point_source(neighbour, balance), FUNCTION);
     assert!(
         matches!(
