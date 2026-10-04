@@ -12,12 +12,16 @@ relationships:
 
 ## Description
 
-Verify that the Boolean oracle renders integer add, subtract and multiply as Contract Runtime exact
-operations and the six integer comparisons as the meaning the runtime gives them, that overflow is
-the runtime's typed outcome and never a panic or a wrapped value, that divide, remainder and
-arithmetic over a `saturate` integer type are refused with their own typed codes, and that every
-consumer that cannot carry an outcome refuses an arithmetic clause. It also verifies that the
-defect cases fail on the tree before the change and pass after it.
+Verify that the native Boolean oracle renders integer add, subtract and multiply as Contract Runtime
+exact operations and the six integer comparisons as the meaning the runtime gives them, that
+overflow there is the runtime's typed outcome and never a panic or a wrapped value, that divide,
+remainder and arithmetic over a `saturate` integer type are refused with their own typed codes in
+both consumers, and that every consumer other than the V1 Kani bundle that cannot carry an outcome
+refuses an arithmetic clause. It also verifies the V1 Kani bundle oracle: its fixed-width infix
+arithmetic, a second implementation of the rule, keeps the exemplar's text shape, proves the
+exemplar, makes overflow a falsifiable Kani property, and agrees with the native oracle inside the
+domain. Finally it verifies that the defect cases fail on the tree before the change and pass
+after it.
 
 This case is 🚧 Planned. No test exists for it yet. Step 5, the O-3 and O-5 rows of step 4 and the
 divide and remainder half of step 7 hold the divide and remainder rows that wait on the IR-601

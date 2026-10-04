@@ -39,7 +39,9 @@ A generated oracle that panics or wraps disagrees with the language it claims to
 Kani proof or a conformance campaign over it proves or tests a different operation. This
 requirement fixes what the Boolean oracle emits and means for integer arithmetic and comparison,
 so that the meaning of an operator is stated once, in `quire-contract-runtime`, and the emitter
-restates none of it.
+restates none of it, other than in the V1 Kani bundle. There the fixed-width infix arithmetic is a
+second implementation of the rule, kept because QSL's exemplar mutates its text, and held to the
+runtime's meaning by a differential test (see "Two consumers, two shapes of the same rule").
 
 The defect is reachable in two ways. Contract IR discharges the definedness obligation of an
 arithmetic node from declared bounds and dominating guards, so an operand inside its declared
