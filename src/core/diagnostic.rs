@@ -69,7 +69,7 @@ pub enum GenerationErrorCode {
     NameCollision,
     /// The bounded output resource would be exceeded.
     ResourceLimitExceeded,
-    /// Generated tokens did not parse as a Rust source file.
+    /// Generated source did not parse, or did not match its own source map.
     InvalidGeneratedSyntax,
     /// A deterministic source-map value could not be encoded.
     SerializationFailed,

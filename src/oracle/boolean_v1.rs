@@ -281,24 +281,40 @@ fn generate_boolean_oracle_inner(
 
     let source_path = format!("src/generated/{symbol_text}.rs");
     let source_line_count = line_count(&source.source);
-    let mut regions = vec![source_region(
-        request,
-        &source_path,
-        "clause",
-        1,
-        source_line_count,
-    )];
-    regions[0].expected_consequents = Some(implication_count(request.expression.expression()));
+    let clause_region = SourceRegion {
+        expected_consequents: Some(implication_count(request.expression.expression())),
+        ..source_region(request, &source_path, "clause", 1, source_line_count)
+    };
     // Index once: rescanning lines for every consequent would make probe extraction quadratic.
     let source_lines = source.source.lines().collect::<Vec<_>>();
+    // The renderer's own output names these lines; a line it does not have is a source map that
+    // does not match the source, refused rather than indexed.
+    let probe_at = |line: u32| match line
+        .checked_sub(1)
+        .and_then(|at| source_lines.get(at as usize))
+    {
+        Some(text) => Ok(entry_probe(text, line)),
+        None => Err(single_diagnostic(
+            request,
+            GenerationErrorCode::InvalidGeneratedSyntax,
+            "generated.source_map",
+            format!("source map names line {line}, which the generated source does not have"),
+        )),
+    };
     let mut evaluation = source_region(request, &source_path, "oracle_evaluation", offset, offset);
-    evaluation.probe = Some(entry_probe(source_lines[offset as usize - 1], offset));
-    regions.push(evaluation);
-    regions.extend(source.implication_regions.into_iter().map(|(start, end)| {
-        let mut region = source_region(request, &source_path, "implication_consequent", start, end);
-        region.probe = Some(entry_probe(source_lines[start as usize - 1], start));
-        region
-    }));
+    evaluation.probe = Some(probe_at(offset)?);
+    let consequents = source
+        .implication_regions
+        .into_iter()
+        .map(|(start, end)| {
+            let mut region =
+                source_region(request, &source_path, "implication_consequent", start, end);
+            region.probe = Some(probe_at(start)?);
+            Ok(region)
+        })
+        .collect::<Result<Vec<_>, Vec<GenerationDiagnostic>>>()?;
+    let mut regions = vec![clause_region, evaluation];
+    regions.extend(consequents);
 
     let rust = artifact(source_path, source.source);
     let source_map_contents = deterministic_json(&regions).map_err(|error| {
