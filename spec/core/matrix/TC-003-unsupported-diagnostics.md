@@ -17,7 +17,7 @@ complete artifacts or lose their refusal locus.
 
 Run every negative conformance fixture through every applicable backend and inspect diagnostics,
 exact rejected IR source spans, exit status, and staged output
-directory. Include definedness obligations, scalar roots, `saturate` arithmetic (FR-031), numeric negation, indirect
+directory. Include definedness obligations, scalar roots, `saturate` arithmetic and integer divide and remainder (FR-031), numeric negation, indirect
 dependencies, object/graph reads such as dereference and reachability, and every expression node
 outside the supported grammar. Where more than one expression node or obligation is unsupported,
 require the deterministic first locus rather than accepting any failing span.

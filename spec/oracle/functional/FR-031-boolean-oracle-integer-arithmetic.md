@@ -47,9 +47,22 @@ domain cannot overflow or divide by zero in an expression IR admitted. But the g
 is `pub` and takes any `i64`, and FR-015 and `interface-001`'s `kani_slice` assert a
 subject-produced value's domain rather than assuming it, so the oracle is evaluated at operand
 values the declared domain excludes. Add, subtract and multiply over an integer type whose
-overflow policy is `saturate` raise no obligation at all, so that arithmetic is admitted for every
-operand value, and the raw operator is wrong on in-domain values too: over `0..=10` it computes
-`10 + 1` as `11`, where the policy requires the result to stay in range.
+overflow policy is `saturate` raise no obligation at all, so that arithmetic is admitted for
+every operand value, and the raw operator is wrong on in-domain values too: over `0..=10` it
+computes `10 + 1` as `11`, where the policy requires the result to stay in range.
+
+### Status
+
+The requirement is split because the runtime and the language disagree about division, and the
+disagreement is not CG's to settle (see "Held: integer divide and remainder").
+
+- **IR-596's closing code change** implements FR-031-AC-1, AC-3, AC-4, AC-5, AC-7, AC-8, AC-9,
+  AC-10, AC-11, AC-12, AC-13, AC-14, AC-15 and AC-18. Divide and remainder are refused at
+  generation by FR-031-AC-18 until the ruling below, so that no oracle emits a raw `/` or `%`.
+- **Held for a follow-up ticket after the IR-601 ruling:** FR-031-AC-2, AC-6, AC-16 and AC-17.
+  They state the divide and remainder rendering, the zero-divisor outcomes, the minimum divided
+  by negative one outcomes and the divide and remainder differential. The ruling decides their
+  final text. Their vectors and constructions are recorded now so the follow-up inherits them.
 
 ### Scope
 
@@ -62,8 +75,8 @@ harness generator still call it. The exact V2 oracles of FR-014, FR-018 and FR-0
 `quire_contract_runtime::exact` and are unchanged.
 
 This requirement states what the oracle emits and what it means. Whether the emitters of other
-generators spell the same operators once, in a shared table, is a separate piece of work and is
-not specified here.
+generators spell the same operators once, in a shared table, is a separate piece of work (IR-597)
+and is not specified here.
 
 ### Basis
 
@@ -71,24 +84,49 @@ not specified here.
   policy of `reject` or `saturate`. IR FR-015 makes saturating add, subtract, multiply and negate
   total, raises a non-zero-divisor obligation for every divide and remainder under both policies,
   and requires a range proof for `reject` arithmetic, including the minimum divided by negative
-  one.
+  one. IR proves the range of the selected result only: a divide's quotient, a remainder's
+  remainder.
 - Contract Runtime FR-006 and FR-007 give an exact integer operation one of four outcomes:
   completed, undefined, refused or incomplete. A zero divisor is `Undefined::DivisionByZero`. A
-  result outside the supplied bound is `Refusal::IntegerOutOfDomain`. A quotient or remainder
-  outside the supplied domain is `Refusal::DivisionPairOutOfDomain`. A false Boolean is a
+  result outside the supplied bound is `Refusal::IntegerOutOfDomain`. A false Boolean is a
   completed value, never a refusal. The runtime has no saturating integer operation.
+  `exact::evaluate_integer_arithmetic` refuses exactly when the one result it computes is outside
+  the bound, so for add, subtract and multiply it agrees with IR's per-result range proof on
+  every operand IR admitted.
 - `interface-001`'s `oracle_slice` states that no checked result is unwrapped or defaulted into
   `bool`, and ADR-003 states that a generated oracle calls `quire_contract_runtime::exact` so a
   proof covers the production code.
-- The truncating, floor and Euclidean laws agree on non-negative operands and differ on negative
-  ones. The IR divide and remainder nodes name no law, and the Boolean oracle has no package to
-  select one from. It takes the truncating law, which is what its emitted `/` and `%` mean on
-  every in-domain operand today.
+
+### Held: integer divide and remainder
+
+`exact::divide` computes the quotient and the remainder together and admits the pair: when either
+member is outside the supplied domain it returns `Refusal::DivisionPairOutOfDomain` for both
+(Contract Runtime FR-007, from QSpec FR-147). IR admits a divide or remainder after proving only
+the selected member in range. The two disagree on expressions IR admits:
+
+- `10 / y <= 10` over a `reject` type of `1..=10`, at `y = 5`: the quotient 2 is in range and the
+  remainder 0 is not, so `exact::divide` refuses where the raw operator, and IR's proof, give 2.
+- `x % -1` over a `reject` type of `-10..=5`, at `x = -10`: the remainder 0 is in range and the
+  quotient 10 is not, so `exact::divide` refuses where the raw operator gives 0.
+
+Rendering divide and remainder as `exact::divide` over the node's interval would therefore refuse
+in-domain expressions the language accepts. No existing kernel offers a division that checks one
+member and returns typed outcomes: `exact::divide` admits the pair, and
+`operators::checked_div` and `operators::checked_rem` select one member but return `Option`, so a
+zero divisor and an overflow are indistinguishable. This requirement does not choose between them.
+The question is IR-601: whether a V1 division takes IR's member-only domain semantics or QSpec
+FR-147's pair semantics, and which runtime operation provides it. Until the ruling the Boolean
+oracle refuses divide and remainder (FR-031-AC-18) and states no rendering for them.
+
+The truncating, floor and Euclidean laws agree on non-negative operands and differ on negative
+ones. The IR divide and remainder nodes name no law and the Boolean oracle has no package to
+select one from. The follow-up takes the truncating law, which is what the emitted `/` and `%`
+mean on every in-domain operand today, unless the ruling says otherwise.
 
 ## Inputs
 
 - A validated typed Boolean expression, as `OracleRequest` carries it, whose nodes are within
-  `interface-001`'s supported grammar plus integer add, subtract, multiply, divide and remainder.
+  `interface-001`'s supported grammar plus integer add, subtract and multiply.
 - For each arithmetic node, the checked `IntegerType` that types its operands and its result:
   minimum, maximum, signedness and overflow policy.
 
@@ -96,7 +134,7 @@ not specified here.
 
 - A generated Rust function and source map, as before, or a typed refusal with no partial
   artifact.
-- For an expression with no arithmetic node, the same `bool`-returning function as today.
+- For an expression with no arithmetic node, the same `bool`-returning function as before.
 - For an expression with at least one arithmetic node, a function that returns
   `quire_contract_runtime::exact::Outcome<bool>` and takes a trailing `&mut Meter`, as the
   FR-014 oracles do.
@@ -108,135 +146,160 @@ not specified here.
 - The generator shall render integer add, subtract and multiply over a `reject` type as a call of
   `exact::evaluate_integer_arithmetic` with the matching `IntegerArithmetic` variant and the
   node's `[minimum, maximum]` interval as the result bound.
-- The generator shall render integer divide and remainder over a `reject` type as a call of
-  `exact::divide` with `DivisionProfile::Truncating` and the node's interval as a bounded
-  domain. Divide takes the quotient of the pair and remainder takes its remainder. The generator
-  shall not render either through `exact::modulo`, whose remainder is Euclidean.
 - The generator shall emit no Rust arithmetic operator between two operand expressions and no
   integer method such as `checked_add`, `wrapping_add`, `saturating_add` or `overflowing_add` for
-  any of the five operators. Every arithmetic operation in the emitted body is an `exact::` call,
-  and no charge amount appears in the source.
-- The operands of an arithmetic call are the exact integers of the operand expressions, converted
-  from the function's `i64` parameters and literals. An operand that is itself an arithmetic node
-  contributes its completed integer.
+  these operators. Every arithmetic operation in the emitted body shall be an `exact::` call, and
+  no charge amount shall appear in the source.
+- The generated oracle shall take the operands of an arithmetic call as the exact integers of the
+  operand expressions, converted from the function's `i64` parameters and literals, and an operand
+  that is itself an arithmetic node shall contribute its completed integer.
 
-| `NumericOperator` | Emitted evaluation | Operand-independent outcomes |
+| `NumericOperator` | Emitted evaluation | Outcome when the result is outside the interval |
 |---|---|---|
-| Add | `evaluate_integer_arithmetic(Add(l, r), Some(interval), meter)` | `Refused(IntegerOutOfDomain)` when the sum is outside the interval |
-| Subtract | `evaluate_integer_arithmetic(Subtract(l, r), Some(interval), meter)` | `Refused(IntegerOutOfDomain)` when the difference is outside the interval |
-| Multiply | `evaluate_integer_arithmetic(Multiply(l, r), Some(interval), meter)` | `Refused(IntegerOutOfDomain)` when the product is outside the interval |
-| Divide | quotient of `divide(Truncating, l, r, Bounded(interval), meter)` | `Undefined(DivisionByZero)` for a zero divisor; `Refused(DivisionPairOutOfDomain)` when the quotient or the remainder is outside the interval, which includes the minimum divided by negative one |
-| Remainder | remainder of `divide(Truncating, l, r, Bounded(interval), meter)` | the same two outcomes as Divide |
+| Add | `evaluate_integer_arithmetic(Add(l, r), Some(interval), meter)` | `Refused(IntegerOutOfDomain)` |
+| Subtract | `evaluate_integer_arithmetic(Subtract(l, r), Some(interval), meter)` | `Refused(IntegerOutOfDomain)` |
+| Multiply | `evaluate_integer_arithmetic(Multiply(l, r), Some(interval), meter)` | `Refused(IntegerOutOfDomain)` |
 
-### Overflow policy
+### Interim refusals
 
-- If an arithmetic node's integer type has overflow policy `saturate`, then the generator shall
-  refuse the expression with `UnsupportedExpression` at that node's source span, as the first
-  unsupported node in authored preorder, and emit no artifact. The runtime has no saturating
-  integer operation, and the generator shall not restate saturation inline: clamping a result to
-  the interval would be a second implementation of the rule. A `saturate` integer that is only
-  compared, never operated on, is unaffected.
+- If the expression holds a divide or remainder node, whatever its overflow policy, then the
+  generator shall refuse it with the code `UnsupportedIntegerDivision` at that node's source span,
+  as the first unsupported node in authored preorder, and emit no artifact. The diagnostic's
+  message shall name IR-601 as the open ruling, so that the refusal is not read as a final
+  answer. The generator shall not emit a raw `/` or `%` and shall not render the node through
+  `exact::divide` until that ruling.
+- If an add, subtract or multiply node's integer type has overflow policy `saturate`, then the
+  generator shall refuse the expression with the code `UnsupportedSaturatingArithmetic` at that
+  node's source span, as the first unsupported node in authored preorder, and emit no artifact.
+  The diagnostic's message shall name the missing Contract Runtime saturating integer operation.
+  The generator shall not restate saturation inline: clamping a result to the interval would be a
+  second implementation of the rule. A `saturate` integer that is only compared, never operated
+  on, is unaffected.
+- Both codes shall have terminal state `unsupported`, as `UnsupportedExpression` does, and their
+  message text shall not be used as machine identity.
 
 ### Outcomes and their propagation
 
-- A comparison that evaluates to false is `Completed(false)`, and one that evaluates to true is
-  `Completed(true)`. Neither is a refusal.
-- The outcome of the oracle is the first outcome that is not completed, in evaluation order:
-  left operand before right operand, and the operands of a comparison before the comparison. The
-  oracle shall not unwrap, default, ignore or convert such an outcome to `true` or `false`, and its
-  source shall contain no `unwrap`, `expect` or panic macro.
-- A short-circuit connective evaluates its right operand only when its left operand does not
-  decide the result, so a stop its right operand could produce does not arise when the left
-  decides. A total connective evaluates both operands from left to right and its outcome is the
-  first stop.
+- The generated oracle shall return `Completed(false)` for a comparison that evaluates to false
+  and `Completed(true)` for one that evaluates to true. Neither is a refusal.
+- The generated oracle shall return as its outcome the first outcome that is not completed, in
+  evaluation order: left operand before right operand, and the operands of a comparison before the
+  comparison. It shall not unwrap, default, ignore or convert such an outcome to `true` or
+  `false`, and its source shall contain no `unwrap`, `expect` or panic macro.
+- A short-circuit connective in the generated oracle shall evaluate its right operand only when
+  its left operand does not decide the result, so a stop its right operand could produce does not
+  arise when the left decides. A total connective shall evaluate both operands from left to right
+  and its outcome shall be the first stop.
 
 ### Comparison
 
 | `ComparisonOperator` | Both operands arithmetic-free | An operand holds arithmetic |
 |---|---|---|
-| Equal | `l == r` on the two `i64` values | the runtime's equality evaluation over the two exact integers |
-| NotEqual | `l != r` on the two `i64` values | the same evaluation with the not-equal operator |
+| Equal | `l == r` on the two `i64` values | `TypeEnvironment::check_equality` with `EqualityOperator::Equal`, then `CheckedEquality::evaluate`, over the two exact integers, as FR-018 does |
+| NotEqual | `l != r` on the two `i64` values | the same with `EqualityOperator::NotEqual` |
 | Less | `l < r` | `exact::order_numbers` with `OrderingOperator::Less` over `Integers` |
 | LessEqual | `l <= r` | `exact::order_numbers` with `OrderingOperator::LessOrEqual` |
 | Greater | `l > r` | `exact::order_numbers` with `OrderingOperator::Greater` |
 | GreaterEqual | `l >= r` | `exact::order_numbers` with `OrderingOperator::GreaterOrEqual` |
 
-- A comparison of two `i64` values has no failure mode, so an arithmetic-free comparison keeps the
-  native operator and keeps its `bool` result. It is held to the runtime's meaning by a
-  differential test (FR-031-AC-4), not by a call.
-- A comparison with an arithmetic operand shall not use a Rust comparison operator between the
-  two operands. Its outcome is the runtime's, and an `Outcome::Completed` boolean continues as
-  above.
+- The generator shall keep the native operator and the `bool` result for a comparison of two
+  arithmetic-free `i64` values, which has no failure mode. That comparison is held to the
+  runtime's meaning by a differential test (FR-031-AC-4), not by a call.
+- The generator shall not use a Rust comparison operator between the two operands of a comparison
+  that has an arithmetic operand. Its outcome is the runtime's, and an `Outcome::Completed`
+  boolean continues as above.
 
 ### Consumers
 
 - A generator that embeds the Boolean oracle where a plain `bool` is required shall refuse a
   clause that holds an arithmetic node, shall embed no raw arithmetic operator, and shall not read
-  an `Outcome<bool>` as a `bool`. The tri-state harness generator refuses with
+  an `Outcome<bool>` as a `bool`. The tri-state harness generator shall refuse with
   `UnsupportedExpression` at the first arithmetic node, in addition to the
   `UnsupportedDependency` it already returns for an integer dependency. The bound strategy
-  generators keep the `UnsupportedRelation` they return today for a clause whose oracle generates,
-  such as a guarded division, and the `UnsupportedClause` carrying the oracle's code and span for
-  a clause the oracle refuses, such as a `saturate` one. The Kani obligation clause lowering keeps
-  its definedness refusal for a clause that carries an obligation, which is every `reject`
-  arithmetic node, and takes the oracle's refusal otherwise. FR-008-AC-3's refusals of negation
-  and of an oracle-refused clause are unchanged.
-- The V1 Kani bundle shall carry the outcome. A postcondition is asserted as `Completed(true)`. A
-  precondition is assumed only where its oracle is `Completed(true)`, and an input for which it is
-  `Completed(false)` is excluded as before. A precondition or postcondition oracle that is
-  `Undefined`, `Refused` or `Incomplete` is a failed obligation, never an assumption, never
-  satisfied and never silently excluded. The bundle supplies the meter as the FR-015 scalar
-  harness does, and its ceilings are FR-028's: a run that exhausts a ceiling is inconclusive and
-  never verified.
+  generators shall keep the `UnsupportedRelation` they return for a clause whose oracle generates,
+  such as a discharged add used as a comparison operand, and the `UnsupportedClause` carrying the
+  oracle's code and span for a clause the oracle refuses, which includes every clause refused by
+  the interim refusals above. The Kani obligation clause lowering shall keep its definedness
+  refusal for a clause that carries an obligation, which is every `reject` arithmetic node, and
+  shall take the oracle's refusal otherwise.
+- The V1 Kani bundle (`generate_kani_bundle`) is a consumer that needs a plain `bool`, because it
+  places the oracle in a `requires` and an `ensures` clause. It shall refuse a clause that holds
+  an arithmetic node with `ClauseGenerationFailed`, retaining `UnsupportedExpression` and the span
+  of the first arithmetic node for an add, subtract or multiply, and retaining the oracle's own
+  code for a divide, remainder or `saturate` node, and it shall emit no harness. The bundle shall
+  not carry an `Outcome<bool>`: it is deleted at AD-004 step 4f, and exact bignum arithmetic in a
+  bounded proof is a tractability question that FR-028 and ADR-003 govern for the V2 path, where
+  FR-014-AC-38 and FR-015-AC-40 and AC-41 own the `Outcome<bool>` oracle of a clause body. The
+  covers that FR-015-AC-53 to AC-58 add to V1 bundle harnesses apply to the bundles that remain,
+  those of arithmetic-free clauses, and this refusal is decided before any harness exists, so the
+  two requirements do not overlap.
+  AD-004 step 4a names QSL's arithmetic control as passing through this bundle until step 4e;
+  whether that control holds an arithmetic node could not be measured here, and the refusal
+  waits on that fact (see Out of Scope).
 
 ### Test obligations
 
-- The overflow and zero-divisor cases of FR-031-AC-5 and FR-031-AC-6 and the `saturate` cases of
-  FR-031-AC-7 shall each exist as a test that fails on the tree before this requirement is
-  implemented, and the code change shall record that failing run for each, before it records the
-  passing run. A test that passes on the tree before the change does not establish the defect and
-  does not count toward these criteria.
-- Operands the declared domain excludes are the only way to reach an overflow or a zero divisor
-  through an expression Contract IR admits under `reject`. The test constructs each expression
-  through `DeclarationEnvironment::check_expression`, so IR admits it, and chooses declarations
-  and guards so that the proof of safety rests on a declared bound that the operand vector
-  violates. A vector that no admitted `reject` expression can reach is exercised with the
-  nearest reachable vector of the same operation, and the code change names the substitution.
+- The overflow cases of FR-031-AC-5, the `saturate` cases of FR-031-AC-7, and the divide and
+  remainder cases of FR-031-AC-18 shall each exist as a test that fails on the tree before the
+  closing code change, and that change shall record the failing run of each, before it records
+  the passing run. A test that passes on the tree before the change does not establish the defect
+  and does not count toward these criteria. The same holds for the held cases of FR-031-AC-6 and
+  AC-16 when the follow-up lands.
+- The cases are constructed through `DeclarationEnvironment::check_expression`, so IR admits
+  each. Operands the declared domain excludes are the only way to reach an overflow or a zero
+  divisor through an expression IR admits under `reject`, and the proof of safety in each
+  construction rests on a declared bound that the operand vector violates while the guards still
+  pass. No case is replaced by a nearby vector.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-031-AC-1 | PLANNED (IR-596). For each of Add, Subtract and Multiply over a `reject` integer type, the generated source calls `exact::evaluate_integer_arithmetic` with the matching `IntegerArithmetic` variant and the type's interval as the bound, and the oracle's body holds no Rust arithmetic operator between operand expressions and none of `checked_`, `wrapping_`, `saturating_` or `overflowing_` method calls. | Test (TC-044) |
-| FR-031-AC-2 | PLANNED (IR-596). For each of Divide and Remainder over a `reject` integer type, the generated source calls `exact::divide` with `DivisionProfile::Truncating` and the type's interval as a bounded domain, reads the quotient for Divide and the remainder for Remainder, and calls neither `exact::modulo` nor a Rust `/` or `%`. | Test (TC-044) |
-| FR-031-AC-3 | PLANNED (IR-596). An oracle with an arithmetic node returns `Outcome<bool>` and takes a trailing `&mut Meter`; an oracle with none returns `bool`, takes no meter and is byte-identical to its output before this requirement; both regenerate byte-identically across repeated runs; and no generated oracle source contains `unwrap`, `expect` or a panic macro. | Test (TC-044) |
-| FR-031-AC-4 | PLANNED (IR-596). Each of the six comparisons over two arithmetic-free operands is emitted as the one native operator the table names, and over the seven values `i64::MIN`, `i64::MIN + 1`, `-1`, `0`, `1`, `i64::MAX - 1` and `i64::MAX`, with two interior values added, taken pairwise in both orders, agrees with the runtime (`exact::order_numbers` for the four orderings, the runtime's equality evaluation for equal and not-equal). Each of the six comparisons with an arithmetic operand is emitted as the runtime call the table names and has no Rust comparison operator between its operands. This criterion's native half passes before the change and is a held agreement, not a defect proof. | Test (TC-044) |
-| FR-031-AC-5 | PLANNED (IR-596). Under a `reject` integer type, an arithmetic result outside the type's interval evaluates to `Refused(IntegerOutOfDomain)`, and a quotient or remainder outside it to `Refused(DivisionPairOutOfDomain)`, and the oracle neither panics nor returns a wrapped, saturated or clamped value. The cases are `i64::MAX + 1`, `i64::MIN - 1` and `i64::MIN / -1`, each with its operands outside the declared domain, a multiply whose product leaves `i64` (`i64::MIN * 2`), and `i64::MIN % -1`. On the tree before the change each fails: a debug build panics with an overflow message for every case, a release build wraps the add, subtract and multiply cases and still panics for the divide and remainder cases, and no case returns the refusal. | Test (TC-044) |
-| FR-031-AC-6 | PLANNED (IR-596). Under a `reject` integer type, a zero divisor evaluates to `Undefined(DivisionByZero)` for both Divide (`x / 0`) and Remainder (`x % 0`), for a non-zero `x` and for `x = 0`, and the oracle does not panic. On the tree before the change each case panics with a division-by-zero message. | Test (TC-044) |
-| FR-031-AC-7 | PLANNED (IR-596). An expression with an arithmetic node over a `saturate` integer type is refused with `UnsupportedExpression` at that node's span, with no artifact, for each of Add, Subtract, Multiply, Divide and Remainder, including the `saturate` form of `i64::MAX + 1`, `i64::MIN - 1`, `i64::MIN / -1`, `x / 0` and `x % 0` over an integer type of `i64::MIN..=i64::MAX` and over a type whose declaration excludes zero; the refusal span is the first arithmetic node in authored preorder when a negation also occurs later. On the tree before the change each expression generates, and the generated function panics on the named operands. | Test (TC-044) |
-| FR-031-AC-8 | PLANNED (IR-596). In a generated crate compiled and executed against `quire-contract-runtime`, an arithmetic-bearing oracle's outcome equals the outcome of the direct runtime evaluation of the same expression, on every vector of a grid that covers both the declared domain and operand values it excludes, including the outcome kind, so no vector returns `Completed` where the runtime refuses or is undefined. | Test (TC-044) |
+| FR-031-AC-2 | HELD (IR-601; follow-up ticket). Divide and Remainder over a `reject` integer type are rendered as the runtime operation the IR-601 ruling names, with the domain semantics it names, with no Rust `/` or `%`. The criterion's final text is written when the ruling lands. | Test (TC-044) |
+| FR-031-AC-3 | PLANNED (IR-596). An oracle with an arithmetic node returns `Outcome<bool>` and takes a trailing `&mut Meter`; an oracle with none returns `bool` and takes no meter. | Test (TC-044) |
+| FR-031-AC-4 | PLANNED (IR-596). Each of the six comparisons over two arithmetic-free operands is emitted as the one native operator the table names, and over the seven values `i64::MIN`, `i64::MIN + 1`, `-1`, `0`, `1`, `i64::MAX - 1` and `i64::MAX`, with two interior values added, taken pairwise in both orders, agrees with the runtime (`exact::order_numbers` for the four orderings, `check_equality` then `CheckedEquality::evaluate` for equal and not-equal). This criterion passes on the tree before the change and is a held agreement, not a defect proof. | Test (TC-044) |
+| FR-031-AC-5 | PLANNED (IR-596). Under a `reject` integer type, an add, subtract or multiply result outside the type's interval evaluates to `Refused(IntegerOutOfDomain)`, and the oracle neither panics nor returns a wrapped, saturated or clamped value. The cases are O-1 `i64::MAX + 1`, O-2 `i64::MIN - 1` as a subtract, and O-4 `i64::MIN * 2`, each built as TC-044 step 4 gives. On the tree before the change each fails: a debug build panics with an overflow message, a release build returns a wrapped value, and no case returns the refusal. | Test (TC-044) |
+| FR-031-AC-6 | HELD (IR-601; follow-up ticket). Under a `reject` integer type, a zero divisor evaluates to the runtime's undefined outcome for both Divide and Remainder, for the cases Z-1 `x / 0`, Z-2 `0 / 0`, Z-3 `x % 0` and Z-4 `0 % 0`, each built as TC-044 step 5 gives, and the oracle does not panic. On the tree before the change each case panics with a division-by-zero message. | Test (TC-044) |
+| FR-031-AC-7 | PLANNED (IR-596). An add, subtract or multiply over a `saturate` integer type is refused with `UnsupportedSaturatingArithmetic` at the node's span, with no artifact, for the rows `i64::MAX + 1` and `i64::MIN - 1` over an integer type of `i64::MIN..=i64::MAX` and a multiply over `0..=10`; the refusal span is the first such node in authored preorder when a negation also occurs later, and the diagnostic message names the missing runtime saturating operation. On the tree before the change each expression generates, and the generated function panics in a debug build on the named operands. | Test (TC-044) |
+| FR-031-AC-8 | PLANNED (IR-596). In a generated crate compiled and executed against `quire-contract-runtime`, the outcome of an add, subtract or multiply oracle equals a plain-integer model of IR FR-015's member-range semantics, computed in the test with `i128` independently of the emitter and of any `exact::` call: `Completed` with the exact result when it lies in the type's interval and `Refused(IntegerOutOfDomain)` when it does not. The grid covers operand values inside the declared domain, at its edges and outside it, and the outcome kind is compared, so no vector returns `Completed` where the model refuses. | Test (TC-044) |
 | FR-031-AC-9 | PLANNED (IR-596). The first non-completed outcome in evaluation order is the oracle's outcome: an arithmetic stop in the left operand of a short-circuit connective is returned, a stop in a right operand the left decided is never reached, a total connective returns the first stop of its two operands, and a stop is never returned as `Completed(true)` or `Completed(false)`. | Test (TC-044) |
-| FR-031-AC-10 | PLANNED (IR-596). A clause with an arithmetic node is refused by the tri-state harness generator, by the bound strategy generators and by the Kani obligation clause lowering, with the typed refusal each already returns for an unsupported clause, and none of them emits a raw arithmetic operator or reads an `Outcome<bool>` as `bool`; FR-008-AC-3 is unchanged. | Test (TC-044) |
-| FR-031-AC-11 | PLANNED (IR-596). The V1 Kani bundle over the postcondition `amount < 1000` implies `amount + 1 <= 1000` with `amount` an integer of `0..=1000` under `reject` generates; its harness asserts `Completed(true)` for the postcondition and holds no `unwrap`, `expect` or raw arithmetic operator in the oracle; with the installed backend the unmutated clause verifies; and a subject that produces a post-state outside its declared domain fails the obligation with the runtime's refusal visible in the generated assertion, not with an arithmetic-overflow property of the oracle. | Test (TC-044) |
+| FR-031-AC-10 | PLANNED (IR-596). The tri-state harness generator, the bound strategy generators and the Kani obligation clause lowering each refuse a clause holding an arithmetic node with the refusal the Consumers section names for it, emit no raw arithmetic operator, and never read an `Outcome<bool>` as `bool`. | Test (TC-044) |
+| FR-031-AC-11 | PLANNED (IR-596). `generate_kani_bundle` over the postcondition `amount < 1000` implies `amount + 1 <= 1000`, with `amount` an integer of `0..=1000` under `reject`, returns `ClauseGenerationFailed` retaining `UnsupportedExpression` at the span of the add, and emits no harness; over a divide, a remainder or a `saturate` node it retains the oracle's own code; and over an arithmetic-free clause its output is unchanged. | Test (TC-044) |
+| FR-031-AC-12 | PLANNED (IR-596). The oracle generated for an expression with no arithmetic node is byte-identical to the oracle the generator produced for it before this requirement. This criterion passes on the tree before the change and is a held agreement, not a defect proof. | Test (TC-044) |
+| FR-031-AC-13 | PLANNED (IR-596). Generating the oracle of an expression with an arithmetic node twice, and from a permuted request, yields identical bytes. | Test (TC-044) |
+| FR-031-AC-14 | PLANNED (IR-596). The generated source of an oracle with an arithmetic node contains no `unwrap`, `expect` or panic macro. | Test (TC-044) |
+| FR-031-AC-15 | PLANNED (IR-596). Each of the six comparisons that has an arithmetic operand is emitted as the runtime call the table names, with no Rust comparison operator between its two operands. | Test (TC-044) |
+| FR-031-AC-16 | HELD (IR-601; follow-up ticket). Under a `reject` integer type, a divide or remainder of the minimum by negative one evaluates to the runtime outcome the IR-601 ruling names, and does not panic, for O-3 `i64::MIN / -1` and O-5 `i64::MIN % -1`, each built as TC-044 step 4 gives. On the tree before the change each case panics with an overflow message. | Test (TC-044) |
+| FR-031-AC-17 | HELD (IR-601; follow-up ticket). In a generated crate, the outcome of a divide or remainder oracle equals a plain-integer model of the semantics the IR-601 ruling names, computed independently of the emitter, on a grid that includes the two reproductions of the Held section: `10 / y <= 10` over a `reject` type of `1..=10` at `y = 5`, and `x % -1` over `-10..=5` at `x = -10`. Under member-only semantics both complete, with 2 and 0; the reproductions are the vectors that distinguish the member-only from the pair semantics. | Test (TC-044) |
+| FR-031-AC-18 | PLANNED (IR-596). An expression holding a divide or a remainder node, over a `reject` or a `saturate` integer type, is refused with `UnsupportedIntegerDivision` at the node's span, with no artifact and no raw `/` or `%` in any output, for each of the constructions O-3, O-5, Z-1, Z-2, Z-3 and Z-4 of TC-044; the diagnostic message names IR-601 and the refusal has terminal state `unsupported`. On the tree before the change each construction generates and its generated function panics in a debug build on the vector TC-044 names. | Test (TC-044) |
 
 ## Dependencies
 
 - **Upstream**: `interface-001` (`oracle_slice`), [FR-014](./FR-014-exact-scalar-oracles.md) for the
-  meter and `Outcome` convention of an exact oracle, [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md)
+  meter and `Outcome` convention of an exact oracle, [FR-018](./FR-018-composite-equality-oracles.md)
+  for the equality evaluation, [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md)
   and [FR-028](../../kani/functional/FR-028-bounded-proof-ceilings.md) for the Kani bundle and its
   ceilings, [FR-008](../../strategy/functional/FR-008-bound-domain-strategy-admission.md) for the
-  strategy admission it leaves unchanged, Contract IR FR-013 and FR-015, and Contract Runtime
-  FR-002, FR-006 and FR-007.
+  strategy admission, Contract IR FR-013 and FR-015, and Contract Runtime FR-002, FR-006 and
+  FR-007.
 - **Downstream**: [TC-044](../matrix/TC-044-boolean-oracle-integer-arithmetic.md).
 
 ## Out of Scope
 
+- **The IR-601 ruling.** Which domain semantics a V1 division uses and which runtime operation
+  provides it are decided by QSL, QSpec, IR and the runtime. FR-031-AC-2, AC-6, AC-16 and AC-17
+  wait on it.
+- **QSL's arithmetic control.** AD-004 names it as passing through the V1 bundle until step 4e.
+  If it holds an arithmetic node, the bundle's refusal in FR-031-AC-11 cannot land before the V2
+  contract arm carries that control, and the closing code change shall check this before it
+  merges.
 - **Numeric negation.** `interface-001` and the generator refuse it, and this requirement does
   not change that.
 - **Rational, decimal, IEEE, quantity and text arithmetic.** The V1 Boolean oracle carries
   Boolean and bounded-integer values only.
 - **A saturating integer operation.** Saturation has no runtime definition. The `saturate` refusal
-  above holds until Contract Runtime defines one.
+  holds until Contract Runtime defines one.
 - **A shared operator table for the emitters.** That is IR-597's work, and nothing here decides
   its shape.
 - **The V2 inline clause oracle.** FR-014-AC-38 and FR-015-AC-40 and AC-41 own the `Outcome<bool>`
