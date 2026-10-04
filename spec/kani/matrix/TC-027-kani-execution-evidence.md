@@ -46,6 +46,9 @@ a run removes its own file; a file over the read bound is refused. A success rep
 failed, errored, undetermined or unknown check (any class) is refused for every obligation kind
 (FR-017-AC-18), and a class spelled `cover` or `unwind` is always that class (FR-017-AC-20).
 
+The output cap, capture failure, group cleanup and batching (FR-017-AC-14, FR-017-AC-21 to
+FR-017-AC-25, IR-277) are verified by TC-043, not here.
+
 Refusals: request a run against an installation whose launcher is absent.
 
 Routed scalar harness (FR-017-AC-11): build a routed exact-scalar harness with `generate_routed`
@@ -82,12 +85,11 @@ unwinding check in a listing is verified. The run with zero successful checks is
 with the vacuous-proof reason (FR-017-AC-13), unless it is a precondition harness, which its
 cover summary decides.
 
-The launcher, exercised with real short-lived processes: a run printing more than 8 MiB completes
-with its real exit status and a bounded text (the verdict is in the exported report, not the stream); a `Duration::MAX`
+The launcher, exercised with real short-lived processes: a `Duration::MAX`
 timeout does not panic; a capture thread told to stop returns what is already in its pipe, stops
 while a write end is still open and idle, and stops within its drain limit while a straggler keeps
-writing; and a run that times out has a real grandchild killed with it (FR-017-AC-14 through
-FR-017-AC-17).
+writing; and a run that times out has a real grandchild killed with it (FR-017-AC-15 through
+FR-017-AC-17). The output cap (FR-017-AC-14) moved to TC-043.
 
 Each capture's exported report parses to the expected typed report and classifies to verified, falsified with
 the assertion playback passed through verbatim, exhausted bound, cover-unsatisfied 0 of 1,
@@ -117,8 +119,12 @@ not contain the harness is refused with no run.
 FR-017-AC-13, and the launcher tests (`a_stream_longer_than_the_capture_limit_keeps_only_its_tail`,
 `a_capture_thread_*`, `a_launcher_printing_more_than_the_limit_completes_with_bounded_text`,
 `a_timeout_of_duration_max_never_elapses_and_does_not_panic`,
-`a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`) for FR-017-AC-14
-through FR-017-AC-17;
+`a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`) for FR-017-AC-15
+through FR-017-AC-17. Two of them,
+`a_stream_longer_than_the_capture_limit_keeps_only_its_tail` and
+`a_launcher_printing_more_than_the_limit_completes_with_bounded_text`, still carry the tag
+FR-017-AC-14 and assert the silent tail that AC-14 now forbids; they are not evidence for it, and
+the IR-277 code change deletes them in favour of the TC-043 refusal tests;
 the `src/kani_transcript.rs` tests `tc_027_a_report_that_changed_shape_is_refused_not_classified`,
 `tc_027_a_report_without_exactly_one_harness_is_refused`,
 `tc_027_real_kani_the_per_check_view_carries_id_class_location_and_status`,

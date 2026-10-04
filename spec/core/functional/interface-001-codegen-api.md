@@ -110,6 +110,10 @@ operations:
     inputs: [KaniExecutionRequest, whose harness is a KaniExecutableHarness: Contract, Scalar or StateFrame]
     output: KaniExecutionEvidence | KaniExecutionRefusal
     semantics: refuses a crate that does not contain the harness, runs the harness and reports the backend's own outcome; see kani_obligation_execution_slice (FR-017)
+  - name: execute_kani_obligations
+    inputs: [list of KaniExecutionRequest, one per harness]
+    output: one KaniExecutionEvidence or KaniExecutionRefusal per harness, or one refusal for the whole batch
+    semantics: planned (IR-277, FR-017-AC-21 to FR-017-AC-23, FR-028-AC-12); the batch entry. Groups the requests by option vector and request timeout, runs each group in one launcher process, and splits the report per harness by its module::harness path. Each member's evidence carries the batch argument vector, the member list, a batch statement and the exit code beside the fields of a single run. The name is provisional until the code lands
   - name: kani_launch_command
     inputs: [KaniExecutionRequest]
     output: argv and Command
@@ -346,6 +350,7 @@ The interface's features in declaration order: every operation the contract abov
 | derive_exact_scalar_items | operation |
 | negotiate_kani_obligations | operation |
 | execute_kani_obligation | operation |
+| execute_kani_obligations | operation |
 | kani_launch_command | operation |
 | run_launcher_with_timeout | operation |
 | launch_evidence | operation |

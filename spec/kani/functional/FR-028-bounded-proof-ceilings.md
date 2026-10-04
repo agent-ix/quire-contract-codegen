@@ -52,6 +52,21 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
 - If a run exceeds its memory ceiling, then the generator shall stop it and classify it
   `inconclusive` with the memory-exhausted reason, naming the ceiling.
 - The generator shall never classify a run that exceeded a ceiling as verified or falsified.
+- Where FR-017 runs several harnesses in one launcher process, the generator shall hold each
+  member to the group's wall-clock budget T through the backend's own per-harness timeout, except
+  that when T rounded up to whole seconds exceeds 4294967295, the most the backend accepts (it exits
+  2 with no report above that), the generator shall omit the per-member timeout for that batch.
+  The outer bound below still applies, and does not elapse only when the product does not fit, as
+  in FR-017-AC-15. (Planned, IR-277.)
+- If the backend timed out a member of a batch, then the generator shall classify that member
+  inconclusive with the timed-out reason naming T and leave the other members' results as they
+  are. (Planned, IR-277.)
+- Where FR-017 runs several harnesses in one launcher process, the generator shall bound the
+  process to T multiplied by the member count, a product too large to represent never elapsing.
+  (Planned, IR-277.)
+- If a batch process reaches that bound, then the generator shall kill it, refuse the batch as
+  timed out and classify no member, because the backend writes its report only at the end and a
+  killed batch leaves none. (Planned, IR-277.)
 - The generator shall record in each execution evidence the bounds of every symbolic argument and
   the two ceilings the run was held to.
 - The generator shall name the family in every harness identity, refusal and execution evidence, so
@@ -81,6 +96,20 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
 | FR-028-AC-7 | A family with a supplied shadow yields a harness with proof subject `bounded_shadow` and its refinement obligation in the same result, and never the shadow harness alone. | Test (TC-039) |
 | FR-028-AC-8 | An argument narrowed inside its declared domain records the declared domain, the narrowed bound and that the harness covers only the narrowed bound, in the harness identity and in the evidence. | Test (TC-039) |
 | FR-028-AC-9 | A narrowing outside the argument's declared domain is refused with a typed reason and no harness. | Test (TC-039) |
+| FR-028-AC-12 | In a batch of N harnesses sharing a wall-clock budget T, a member the backend cuts off (entry status Failure, no checks, exit status `timeout`) is `inconclusive` timed-out naming T and never falsified, while members that finished keep their verified or falsified results; a batch still running at N times T is killed, refused as timed out, and no member is classified; an N times T too large to represent never elapses and does not panic; a T above 4294967295 whole seconds launches the batch without `--harness-timeout` and the batch still runs, its outer bound still elapsing at N times T when the product fits. | Test (TC-039) |
+
+## Rationale
+
+The batch rule (IR-277, planned) is a default the owner may change. This requirement states a
+ceiling for one harness's process tree and does not say what a shared process owes its members.
+Measured on Kani 0.68.0 and CBMC 6.11.0 by the review of this change: a batch's harnesses run one
+after another, one report is written at the end (a killed batch leaves none), and
+`--harness-timeout` stops only the slow member, whose entry reads Failure with no checks and exit
+status `timeout`. Using it means a slow member does not discard the results of the others; the
+N times T process bound exists only for a wedged backend. The owner may instead choose a batch
+size limit or a retry of members singly after a batch is refused. Until this requirement lands
+and identities record ceilings, FR-017 groups on equal request timeout, and the memory ceiling
+stays FR-017's "no memory ceiling"; the FR-028 ceilings join the grouping key then.
 
 ## Dependencies
 
