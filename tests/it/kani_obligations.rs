@@ -396,7 +396,10 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
             let family = match harness.identity.kind {
                 ObligationKind::Precondition => "precondition",
                 ObligationKind::Postcondition => "v1 contract postcondition",
-                _ => "v1 contract invariant",
+                ObligationKind::Invariant => "v1 contract invariant",
+                // The clause renderer never emits a frame harness; one here has a label no
+                // family lists, so the guard's family-set check fails on it.
+                ObligationKind::Frame => "unexpected frame harness",
             };
             (family, harness.rust.contents)
         })

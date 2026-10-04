@@ -271,8 +271,9 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
 - If the installed backend runs a graph or collection corpus harness whose oracle is false, then the
   generator shall classify the run `Falsified` (FR-015-AC-57).
 - The crate shall carry a gate that fails when a harness it emits has other than exactly one
-  cover as the last statement of its body, and when a source file emits a harness the gate
-  does not drive (FR-015-AC-58).
+  cover as the last statement of its body, and when a source file spells a proof attribute
+  the gate does not drive, or a driven file spells more of them than the gate counts
+  (FR-015-AC-58).
 
 ## Acceptance Criteria
 
@@ -335,7 +336,7 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
 | FR-015-AC-55 | A bounded-corpus harness, whichever of the arithmetic, graph and collection families the case belongs to, ends with exactly one `kani::cover!` after its `assert!` of the case's oracle, which witnesses that the harness runs to its end past that assertion. | Test (TC-023) |
 | FR-015-AC-56 | With the installed backend, a V1 bundle harness whose requires clause some bounded argument satisfies and whose `ensures` holds for every such argument classifies `Verified` (FR-017-AC-4); the same bundle with a requires clause no bounded argument satisfies classifies `CoverUnsatisfied` with its satisfied and total cover counts, never `Verified` and never `Falsified`. | Test (TC-025) |
 | FR-015-AC-57 | With the installed backend, a bounded-corpus harness of each of the arithmetic, graph and collection families whose oracle is true classifies `Verified`, and a graph or collection harness whose oracle is false (an arithmetic case's oracle is always true) classifies `Falsified` carrying the assertion's playback (empty-valued, since a corpus case draws no input), never `Inconclusive` for lack of a counterexample. | Test (TC-023) |
-| FR-015-AC-58 | A test generates a harness through every emitting entry point (the precondition, V1 contract, scalar, state-clause and frame-effect families, `generate_kani_bundle`, and the corpus generator for each of its three families), parses each emitted source, and fails for any function attributed `#[kani::proof]` or `#[kani::proof_for_contract]` whose body does not contain exactly one `kani::cover!`, which must be the last statement, with no assertion after it and no other cover; and a scan of the non-test string literals of `src/` fails when a file other than the ones the test drives emits either proof attribute. | Test (TC-025) |
+| FR-015-AC-58 | A test generates a harness through every emitting entry point (the precondition, V1 contract, scalar, state-clause and frame-effect families, `generate_kani_bundle`, and the corpus generator for each of its three families), parses each emitted source, and fails for any function attributed `#[kani::proof]` or `#[kani::proof_for_contract]` whose body does not contain exactly one `kani::cover!`, which must be the last statement, with no assertion after it and no other cover; and a scan of the non-test string literals of `src/` fails when a file other than the ones the test drives spells a proof attribute, or a driven file spells more proof attributes than the test counts; a spelling is `#[kani::` other than `requires`, `ensures`, `stub` and `unwind`, `kani::proof` or `proof_for_contract` in one literal, with `\` line continuations joined, which includes a `format!` template and a split `concat!` whose first fragment holds `#[kani::`, and the scan does not see a spelling assembled from fragments none of which holds `#[kani::` or `kani::proof`. | Test (TC-025) |
 
 ## Dependencies
 

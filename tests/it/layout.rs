@@ -237,8 +237,9 @@ pub(crate) fn non_test_string_literals(source: &str) -> Vec<String> {
     literals
 }
 
-/// The index after the item that starts at `index`: past its first `;`, or past the `}` that
-/// closes its first `{`, skipping comments and literals.
+/// The index after the item that starts at `index`: past the first `;` outside every bracket
+/// (an array type or length such as `[u8; 2]` holds one), or past the `}` that closes the first
+/// `{` outside brackets, skipping comments and literals.
 fn gated_item_end(text: &[char], mut index: usize) -> usize {
     let mut depth = 0_usize;
     while index < text.len() {
@@ -248,10 +249,10 @@ fn gated_item_end(text: &[char], mut index: usize) -> usize {
         }
         match text[index] {
             ';' if depth == 0 => return index + 1,
-            '{' => depth += 1,
-            '}' => {
+            '{' | '[' | '(' => depth += 1,
+            '}' | ']' | ')' => {
                 depth = depth.saturating_sub(1);
-                if depth == 0 {
+                if depth == 0 && text[index] == '}' {
                     return index + 1;
                 }
             }

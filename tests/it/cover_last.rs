@@ -8,7 +8,7 @@
 //! added without being driven here. The emitters have no single seam today (AD-004 step 4b's
 //! `HarnessSpec` does not exist), so this is an inspection of emitted text.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use syn::{
     visit::{self, Visit},
@@ -183,28 +183,136 @@ fn tc_025_the_cover_inspection_rejects_a_misplaced_duplicated_or_missing_cover()
     assert_eq!(inspect("fn plain() {}").proofs, 0);
 }
 
-/// No file outside the driven set emits either proof attribute, and every file the inspection
-/// drives does.
+/// The proof-attribute templates each driven file holds, as `proof_spellings` counts them. A
+/// driven file with more spellings than this has a template no entry point above drives; raise
+/// the count only together with a driver and a family in `FAMILIES`.
+const PROOF_TEMPLATES: [(&str, usize); 6] = [
+    ("kani/generate/precondition.rs", 1),
+    ("kani/generate/contract.rs", 1),
+    ("kani/generate/scalar.rs", 1),
+    ("kani/generate/frame.rs", 2),
+    ("kani/generate/v1_bundle.rs", 1),
+    ("kani/generate/corpus/bounded_kani_corpus.rs", 1),
+];
+
+/// `literal` as the compiler reads it with respect to `\` line continuations: each backslash
+/// that ends a line is dropped with the line break and the indentation after it.
+fn joined(literal: &str) -> String {
+    let mut out = String::with_capacity(literal.len());
+    let mut chars = literal.chars().peekable();
+    while let Some(character) = chars.next() {
+        let continues = character == '\\' && matches!(chars.peek(), Some('\n' | '\r'));
+        if !continues {
+            out.push(character);
+            continue;
+        }
+        while chars.next_if(|next| next.is_whitespace()).is_some() {}
+    }
+    out
+}
+
+/// The spellings of a kani proof attribute in `text`: each `#[kani::` that does not open one of
+/// the known non-proof attributes (so `#[kani::proof]`, `#[kani::proof_for_contract(..)]`, a
+/// split `"#[kani::"` + `"proof]"` and a `#[kani::{}]` template each count once), each
+/// `kani::proof` outside such an attribute, and each `proof_for_contract` outside `kani::`. A
+/// spelling built from fragments that never put `#[kani::` or `kani::proof` in one literal is not
+/// seen, which is the scan's stated limit (FR-015-AC-58).
+fn proof_spellings(text: &str) -> usize {
+    const NON_PROOF: [&str; 4] = ["requires", "ensures", "stub", "unwind"];
+    let text = joined(text);
+    let before = |index: usize, suffix: &str| {
+        text.get(..index)
+            .is_some_and(|prefix| prefix.ends_with(suffix))
+    };
+    let attributes = text
+        .match_indices("#[kani::")
+        .filter(|(index, marker)| {
+            let rest = text.get(index + marker.len()..).unwrap_or_default();
+            !NON_PROOF.iter().any(|name| rest.starts_with(name))
+        })
+        .count();
+    let paths = text
+        .match_indices("kani::proof")
+        .filter(|(index, _)| !before(*index, "#["))
+        .count();
+    let contracts = text
+        .match_indices("proof_for_contract")
+        .filter(|(index, _)| !before(*index, "kani::"))
+        .count();
+    attributes + paths + contracts
+}
+
+/// The counter sees each way a literal can spell a proof attribute, and none of the other
+/// `kani::` text the generator emits.
 ///
 /// Trace: FR-015-AC-58, TC-025
 #[test]
-fn tc_025_no_source_file_outside_the_driven_set_emits_a_proof_attribute() {
-    let emitting: BTreeSet<String> = source_files()
+fn tc_025_the_proof_spelling_counter_sees_split_formatted_and_continued_attributes() {
+    for spelled in [
+        "#[kani::proof]",
+        "#[kani::proof_for_contract(f)]",
+        "#[kani::{}]",
+        "\"#[kani::\"",
+        "kani::proof",
+        "#[kani::\\\n        proof]",
+        "kani\\\n::proof",
+        "proof_for_contract",
+    ] {
+        assert_eq!(proof_spellings(spelled), 1, "{spelled:?}");
+    }
+    for other in [
+        "#[kani::requires(x)]",
+        "#[kani::ensures(|r: &u8| true)]",
+        "#[kani::stub(a, b)]",
+        "kani::cover!(true, \"c\")",
+        "kani::any()",
+        "kani::assume(x)",
+    ] {
+        assert_eq!(proof_spellings(other), 0, "{other:?}");
+    }
+}
+
+/// A `#[cfg(test)]` item whose signature holds a `;` inside a bracket (an array type) still ends
+/// at its body, so its literals stay out of the scan.
+///
+/// Trace: FR-015-AC-58, TC-025
+#[test]
+fn tc_025_the_literal_scan_skips_a_test_item_with_an_array_type() {
+    let source = "#[cfg(test)]\nfn t() -> [u8; 2] { let _ = \"#[kani::proof]\"; [0, 0] }\n\
+                  #[cfg(test)]\nconst X: [u8; 2] = [0, 0];\n\
+                  #[cfg(test)]\nmod tests { fn u() { let _ = \"#[kani::proof]\"; } }\n\
+                  fn live() { let _ = \"kept\"; }\n";
+    assert_eq!(non_test_string_literals(source), ["\"kept\""]);
+}
+
+/// Every proof-attribute spelling in the non-test string literals of `src/` is in a file the
+/// inspection drives, and a driven file spells exactly the templates counted above, so a new
+/// emitter file, or a new template in a driven file, fails here until it is driven.
+///
+/// Trace: FR-015-AC-58, TC-025
+#[test]
+fn tc_025_no_proof_attribute_is_spelled_outside_what_the_inspection_drives() {
+    let spelled: BTreeMap<String, usize> = source_files()
         .into_iter()
         .filter(|(file, _)| !TEST_CODE_FILES.contains(&file.as_str()))
-        .filter(|(_, text)| {
-            non_test_string_literals(text)
+        .map(|(file, text)| {
+            let count = non_test_string_literals(&text)
                 .iter()
-                .any(|literal| literal.contains("kani::proof"))
+                .map(|literal| proof_spellings(literal))
+                .sum::<usize>();
+            (file, count)
         })
-        .map(|(file, _)| file)
+        .filter(|(_, count)| *count > 0)
         .collect();
-    let expected: BTreeSet<String> = FAMILIES
+    let expected: BTreeMap<String, usize> = PROOF_TEMPLATES
         .iter()
-        .map(|(_, file)| (*file).to_owned())
+        .map(|(file, count)| ((*file).to_owned(), *count))
         .collect();
     assert_eq!(
-        emitting, expected,
-        "the files that emit a proof attribute are exactly the files the cover inspection drives"
+        spelled, expected,
+        "the proof attributes spelled in src/ are exactly the templates the inspection drives"
     );
+    let driven: BTreeSet<&str> = FAMILIES.iter().map(|(_, file)| *file).collect();
+    let counted: BTreeSet<&str> = PROOF_TEMPLATES.iter().map(|(file, _)| *file).collect();
+    assert_eq!(driven, counted, "every counted file has a driven family");
 }
