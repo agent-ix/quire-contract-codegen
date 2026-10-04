@@ -18,9 +18,15 @@ relationships:
 
 ## Description
 
-The generator shall map every Contract IR `KaniOutcome` to exactly one `qsl_replay::TerminalValue`.
-The map is total, and it preserves the outcome's refusal cause: the outcome kinds that QSL's terminal
-value collapses into one variant stay distinguishable through that variant's typed cause.
+The generator shall map every Contract IR `KaniOutcome`, paired with the settlement of its replay, to
+exactly one `qsl_replay::TerminalValue`. The map is total over the pair (outcome, replay
+settlement), not over the outcome alone, and it preserves the outcome's refusal cause: the outcome
+kinds that QSL's terminal value collapses into one variant stay distinguishable through that
+variant's typed cause. This is QSL ADR-013 C-09 as merged, whose two inputs are the IR `KaniOutcome`
+and, for a `Counterexample`, the result of its replay. The replay settlement, its six readings and
+the rules that classify them are those of [FR-029](./FR-029-run-outcome-terminal-record.md), which
+this requirement refers to and does not restate; they apply here to a `Counterexample` exactly as
+they apply there to `falsified`.
 
 Contract IR retired its own outcome-to-terminal map (FR-031-AC-5, Linear IR-358) because the
 terminal value belongs to QSL and Contract IR must not depend on QSL. This repository owns the map.
@@ -43,6 +49,8 @@ terminal value, so neither map applies to them.
 - For a `Proved` outcome, the SUCCESS-check count taken from the Kani transcript this generator
   parsed, passed to the map as an explicit input, as [FR-029](./FR-029-run-outcome-terminal-record.md)
   takes it.
+- For a `Counterexample` outcome, the replay settlement of its counterexample, as
+  [FR-029](./FR-029-run-outcome-terminal-record.md) states it. No other kind takes a settlement.
 
 ## Outputs
 
@@ -50,15 +58,20 @@ terminal value, so neither map applies to them.
 
 ## Behavior
 
-- The generator shall map outcomes in exactly one function whose `match` over `KaniOutcomeKind` has
-  no wildcard arm, so a kind added to Contract IR fails to compile here.
+- The generator shall map outcomes in exactly one function, public so the driver calls it, whose
+  `match` over the pair (`KaniOutcomeKind`, replay settlement) has no wildcard arm, so a kind added
+  to Contract IR fails to compile here.
 - The generator shall map each outcome kind as the table states:
 
   | Contract IR kind | Result |
   |---|---|
   | `Proved`, with `n` SUCCESS checks from the transcript, `n` at least one | `Proved { success_checks: n }` |
   | `Proved`, with zero SUCCESS checks from the transcript | `Proved { success_checks: 0 }` |
-  | `Counterexample` | `Refuted` |
+  | `Counterexample`, with a reproduced replay | `Refuted` |
+  | `Counterexample`, with a replay disagreement | `Inconclusive(InconclusiveCause::ReplayParity)` |
+  | `Counterexample`, with a non-fault replay refusal | `Inconclusive(InconclusiveCause::ReplayRefused)` carrying the refusal's QSL catalog code |
+  | `Counterexample`, with a setup refusal on data | `Inconclusive(InconclusiveCause::ReplayRefused)` carrying its QSL catalog code |
+  | `Counterexample`, with a fault or a CG defect | `Failed` |
   | `Refused` | `Declined(ProofRefusalCause::Refused)` |
   | `InvalidInput` | `Declined(ProofRefusalCause::InvalidInput)` |
   | `IncompleteInput` | `Declined(ProofRefusalCause::IncompleteInput)` |
@@ -71,6 +84,16 @@ terminal value, so neither map applies to them.
   | `Inconclusive` with cause `kani_vacuous_proof` | `Proved { success_checks: 0 }` |
   | `Inconclusive`, any other cause | `Failed` |
 
+- `Refused`, `InvalidInput` and `IncompleteInput` are refusals of the obligation's own input before
+  Kani runs, so nothing was proved; they are the only producers of `Declined` here. A refused
+  dependency lock (`DependencyLockError`) is not one of them: it arises in replay setup after Kani
+  refuted, so it is a setup refusal on data and takes the `Counterexample` rows.
+- The generator shall map a `Counterexample` to `Refuted` only with a reproduced replay.
+- The generator shall classify a fault and a CG-origin failure as
+  [FR-029](./FR-029-run-outcome-terminal-record.md) states: by walking the whole error, and with
+  `ReplayRefused` carrying only QSL's `ReplayRefusal` codes.
+- The generator shall expose no `proof_category` function
+  ([AD-003](../../assurance/AD-003-evidence-chain.md) E-9).
 - The generator shall map no outcome to `Tested`.
 - The generator shall use QSL's terminal-value type, defining none of its own.
 - The generator shall not read the outcome's `source_id` or `context` to choose the result. It reads
@@ -82,21 +105,32 @@ terminal value, so neither map applies to them.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-030-AC-1 | Every `KaniOutcomeKind` maps to exactly one `TerminalValue`. | Test (TC-041) |
+| FR-030-AC-1 | Every pair (`KaniOutcomeKind`, replay settlement) that the map's input can express maps to exactly one `TerminalValue`. | Test (TC-041) |
 | FR-030-AC-2 | `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined` with `ProofRefusalCause::Refused`, `InvalidInput` and `IncompleteInput` respectively, so no refusal cause is lost. | Test (TC-041) |
 | FR-030-AC-3 | `TimedOut`, `ResourceExhausted` and `Cancelled` map to `Incomplete` with `IncompleteCause::TimedOut`, `ResourceExhausted` and `Cancelled` respectively. | Test (TC-041) |
-| FR-030-AC-4 | `Proved` with a transcript count of three SUCCESS checks maps to `Proved { success_checks: 3 }`, `Proved` with a count of zero maps to `Proved { success_checks: 0 }`, and `Counterexample` maps to `Refuted`. | Test (TC-041) |
+| FR-030-AC-4 | `Proved` with a transcript count of three SUCCESS checks maps to `Proved { success_checks: 3 }`, `Proved` with a count of zero maps to `Proved { success_checks: 0 }`, and `Counterexample` with a reproduced replay maps to `Refuted`. | Test (TC-041) |
 | FR-030-AC-5 | `Inconclusive` with cause `kani_vacuous_proof` maps to `Proved { success_checks: 0 }`, and `Inconclusive` with any other cause maps to `Failed`. | Test (TC-041) |
 | FR-030-AC-6 | No outcome maps to `Tested`. | Test (TC-041) |
-| FR-030-AC-7 | The map is one `match` over `KaniOutcomeKind` with no wildcard arm. | Inspection (TC-041) |
+| FR-030-AC-7 | The map is one `match` over the pair (`KaniOutcomeKind`, replay settlement) with no wildcard arm. | Inspection (TC-041) |
 | FR-030-AC-8 | `Unavailable` with cause `kani_solver_absent` maps to `Unsupported(SolverAbsent)`; with `kani_backend_absent` or any other cause it maps to `Unsupported(BackendAbsent)`. | Test (TC-041) |
+| FR-030-AC-9 | `Counterexample` with a replay disagreement maps to `Inconclusive(ReplayParity)`, and with a non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()` of that refusal. | Test (TC-041) |
+| FR-030-AC-10 | `Counterexample` with a fault, walked through every wrapper FR-029-AC-10 lists, and with each CG-origin failure FR-029-AC-11 lists, maps to `Failed`. | Test (TC-041) |
+| FR-030-AC-11 | Across every replay settlement other than reproduced, `Counterexample` maps to a value other than `Refuted`. | Test (TC-041) |
+| FR-030-AC-12 | `Counterexample` with a setup refusal on data that carries a QSL catalog code maps to `Inconclusive(ReplayRefused)` carrying that code. | Test (TC-041) |
 
 ## Dependencies
 
 - **Upstream**: Contract IR's `KaniOutcome` (its FR-030, FR-031); QSL's `qsl-replay`, which defines
-  `TerminalValue`; QSL ADR-013 O-16; QSpec FR-331.
+  `TerminalValue` and the replay result and refusal types; QSL ADR-013 O-16 and C-09, ADR-011 T-13;
+  QSL-351 and QSL-352; QSpec FR-331; [FR-029](./FR-029-run-outcome-terminal-record.md).
 - **Downstream**: [TC-041](../matrix/TC-041-ir-outcome-terminal-map.md).
 
 ## Status
 
-Planned. No code implements this map at this revision. Tracked under Linear IR-358.
+Planned (Linear IR-465, IR-358). No code implements this map at this revision. The Cargo lock pins
+an older `qsl-replay`, so the code lands with the lock move. Against QSL `main` when this revision
+was written, `TerminalValue::Declined(ProofRefusalCause)`, `Unsupported` and `Incomplete` exist, so
+the `Declined`, `Unsupported` and `Incomplete` rows are buildable. `TerminalValue::Inconclusive`,
+`InconclusiveCause::ReplayParity` and `ReplayRefused` are not in QSL `main` and land with QSL-351,
+so FR-030-AC-9 and AC-12 cannot be built until then; AC-12 also waits on QSL-352's catalogued codes,
+as [FR-029](./FR-029-run-outcome-terminal-record.md)'s Status states.
