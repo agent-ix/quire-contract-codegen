@@ -929,6 +929,97 @@ mod tests {
         );
     }
 
+    /// A finite input validated under another profile selection than the profile passed in is
+    /// refused as `InvalidInput` `kani_profile_input_mismatch`, naming the request's source and
+    /// the profile's own revision, before any artifact is emitted and without claiming an identity.
+    ///
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_an_input_for_another_profile_selection_is_refused_before_any_artifact() {
+        let (profile, dispatch, _) = fixture();
+        let (_, _, other_input) =
+            fixture_with(|selection| selection.revision = "r2".to_owned(), |_| {});
+        let mut emitted = EmittedCorpusIdentities::new();
+        let error = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &other_input,
+            arithmetic("mismatched-profile", 1, 1),
+            &[],
+            &mut emitted,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
+        assert_eq!(error.code, "kani_profile_input_mismatch");
+        assert_eq!(error.source_id, "mismatched-profile");
+        assert_eq!(error.context, "r1");
+        let (_, _, matching_input) = fixture();
+        generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &matching_input,
+            arithmetic("mismatched-profile", 1, 1),
+            &[],
+            &mut emitted,
+        )
+        .expect("the refused case claimed no identity, so the matching input is emitted");
+    }
+
+    /// The profile's revision is the context of every outcome the corpus returns: a proved case,
+    /// a counterexample, and an invalid census refusal.
+    ///
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_outcomes_and_refusals_carry_the_profile_revision_as_context() {
+        let (profile, dispatch, input) =
+            fixture_with(|selection| selection.revision = "rev-7".to_owned(), |_| {});
+        let proved = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            arithmetic("proved-case", 1, 1),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        assert_eq!(proved.outcome.kind, KaniOutcomeKind::Proved);
+        assert_eq!(proved.outcome.context, "rev-7");
+        let falsified = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            BoundedCorpusRequest::Collection(quire_contract_ir::kani::CollectionQuery {
+                source_id: "counterexample-case".to_owned(),
+                values: vec![2, 2, 7],
+                max_items: 3,
+                kind: QueryKind::ExistsEqual(8),
+            }),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        assert_eq!(falsified.outcome.kind, KaniOutcomeKind::Counterexample);
+        assert_eq!(falsified.outcome.context, "rev-7");
+        let duplicate = ProofDependencyRequest {
+            proof_id: "upstream-lemma",
+            kind: ProofDependencyKind::Required,
+            state: ProofDependencyState::Passed,
+            original_path: None,
+            replacement_path: None,
+        };
+        let refused = generate_bounded_kani_corpus_case(
+            &profile,
+            &dispatch,
+            &input,
+            arithmetic("refused-case", 1, 1),
+            &[duplicate, duplicate],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap_err();
+        assert_eq!(refused.code, "kani_corpus_dependency_invalid");
+        assert_eq!(refused.context, "rev-7");
+    }
+
     /// This corpus's generated harnesses render no `// proof-dependency-site:` marker, no
     /// `kani::assume`, and no `#[kani::stub]`, so a declared `Assumed` dependency must be refused
     /// (ir#80 review finding F1), claiming no identity.

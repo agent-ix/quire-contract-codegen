@@ -46,4 +46,10 @@ as `kani_corpus_identity_collision` and emits nothing. A
 declared proof-dependency census that is empty or duplicate-identity,
 kind/state/path-inconsistent, or names any non-`Required` kind is refused
 with a typed `InvalidInput` `kani_corpus_dependency_invalid` result and
-leaves no artifact.
+leaves no artifact. A finite input validated under a different profile
+selection than the profile offered with it is refused with a typed
+`InvalidInput` `kani_profile_input_mismatch` result, leaves no artifact and
+claims no case identity, so the same request is still emitted once with the
+matching input. The context of every typed outcome and refusal the corpus
+returns (proved, counterexample, and each refusal) is the revision of the
+profile selection.
