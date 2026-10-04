@@ -47,7 +47,7 @@ pub enum LaunchOutcome {
     OutputOverLimit {
         /// The stream that carried too much.
         stream: CaptureStream,
-        /// The most it may carry: [`CAPTURE_LIMIT`] times `harnesses`.
+        /// The most it may carry: 8 MiB times `harnesses`.
         limit: usize,
         /// How many harnesses the process ran.
         harnesses: usize,
@@ -128,7 +128,7 @@ const STOP_DRAIN_LIMIT: Duration = Duration::from_millis(100);
 /// Stdout and stderr are drained on their own threads as soon as the process is spawned, the same
 /// way `Command::output()` drains them internally: a full pipe buffer would otherwise stall the
 /// child while this function is only polling `try_wait`, turning a bounded run into a hang of its
-/// own. Each thread keeps its whole stream, up to [`CAPTURE_LIMIT`] bytes, and polls its pipe
+/// own. Each thread keeps its whole stream, up to 8 MiB, and polls its pipe
 /// rather than blocking in `read`. A stream over the limit, a pipe that cannot be polled or read
 /// and a thread that panics each stop the run at once and kill the group; the call then returns
 /// [`LaunchOutcome::OutputOverLimit`] or [`LaunchOutcome::OutputUnread`] and no text.
@@ -140,8 +140,7 @@ const STOP_DRAIN_LIMIT: Duration = Duration::from_millis(100);
 /// pipe for at most `STOP_DRAIN_LIMIT` and returns, however fast a straggler keeps writing, so the
 /// join adds at most that limit plus one poll interval to the return time.
 ///
-/// This is the run of one harness; [`run_launcher`] takes the harness count a batch multiplies the
-/// limit by.
+/// This is the run of one harness; a batch multiplies the limit by its harness count.
 pub fn run_launcher_with_timeout(command: Command, timeout: Duration) -> io::Result<LaunchOutcome> {
     run_launcher(command, timeout, NonZeroUsize::MIN)
 }

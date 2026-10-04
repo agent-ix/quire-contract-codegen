@@ -642,7 +642,7 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
 }
 
 /// Builds the exact argument vector and [`Command`] [`execute_kani_obligation`] launches for
-/// `request`, without spawning it, so a caller driving [`run_launcher_with_timeout`] itself
+/// `request`, without spawning it, so a caller driving [`crate::run_launcher_with_timeout`] itself
 /// launches exactly what `execute_kani_obligation` does.
 ///
 /// The vector is the harness identity's option vector followed by the flags that make Kani export
