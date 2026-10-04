@@ -54,3 +54,13 @@ source id, leaves no artifact and records no case identity in the registry
 returns (proved, counterexample, dependency-invalid, identity-collision,
 a lowering refusal and the mismatch refusal) is the revision of the profile
 selection (FR-015-AC-52).
+
+Planned (IR-464): the harness every corpus case emits, of each of the arithmetic, graph
+and collection families, ends with exactly one `kani::cover!` after its assertion of the
+case's oracle, and the installed backend classifies a case of each family whose oracle is true
+`Verified`, and a graph or collection case whose oracle is false (an arithmetic case's
+oracle is always true) `Falsified` with the assertion's empty-valued
+playback, which its cover after the assertion keeps from being the one Kani prints
+(FR-015-AC-55, FR-015-AC-57). `tc_023_kani_falsifies_the_generated_false_collection_harness`
+runs the false case through `classify_kani_run`. A corpus case has no symbolic input and no
+precondition, so no vacuous corpus run exists to classify.

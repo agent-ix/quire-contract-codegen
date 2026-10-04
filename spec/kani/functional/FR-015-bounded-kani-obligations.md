@@ -34,6 +34,26 @@ the census requirement on the request input; once implemented, the V2 census inp
 claim carries the clause requirement of FR-015-AC-8 on the V2 input. FR-015-AC-1 to
 FR-015-AC-37 stay as they were; the new criteria add to them.
 
+Planned (IR-464): FR-015-AC-7 requires a cover in every generated harness, but the V1
+bundle generator (`generate_kani_bundle`) and the bounded Kani corpus generator emit a
+harness with none, so a run of either cannot classify `Verified` (FR-017-AC-4). The
+Kani matrix row of FR-015-AC-7 therefore claims the five kinds that carry a cover today;
+FR-015-AC-53 to FR-015-AC-58 bring the V1 bundle and the corpus under it (planned), state
+what each of the seven kinds' covers witnesses, and guard against an emitted harness
+without one.
+
+Rationale (IR-464): a corpus case draws no symbolic input and assumes nothing, so it has
+no precondition for a cover to witness and no assumption that could make its cover
+unsatisfiable. Its cover shows only that the harness runs to its end past its assertion,
+which is what FR-017 needs to read the run as `Verified` rather than as a run with no
+cover summary; no vacuous corpus run exists to classify. The generator has no single
+emission seam today: seven templates in six files each format harness source, and
+`HarnessSpec` (AD-004 step 4b) does not exist in `src/`. A constructor that refuses an
+empty cover list cannot be built over those templates in this change, and AD-004
+sequences the corpus behind QSL-353, so the guard of FR-015-AC-58 is an inspection of
+emitted text. When a family renders through `HarnessSpec`, its constructor refusal
+(AD-004 L-4) joins the inspection and does not replace it.
+
 ## Inputs
 
 - The FR-014 oracle crate and claim map for the contract's expressions.
@@ -237,6 +257,24 @@ FR-015-AC-37 stay as they were; the new criteria add to them.
   `InvalidInput` result, record no case identity and emit no artifact (FR-015-AC-51).
 - The bounded Kani corpus generator shall return the revision of the profile selection as the
   context of every typed outcome and refusal it returns (FR-015-AC-52).
+- The generator shall end a V1 bundle harness (`generate_kani_bundle`) with one cover, after
+  its contract call, that witnesses the bundle's requires clause and bounds are jointly
+  satisfiable (FR-015-AC-54).
+- The generator shall end a bounded-corpus harness, of the arithmetic, graph and collection
+  families alike, with one cover after its assertion (FR-015-AC-55).
+- When the installed backend runs a V1 bundle harness whose requires clause some bounded
+  argument satisfies and whose ensures holds for every such argument, the generator shall
+  classify the run `Verified` (FR-015-AC-56).
+- If the installed backend runs a V1 bundle harness whose requires clause no bounded argument
+  satisfies, then the generator shall classify the run `CoverUnsatisfied`, never `Verified`
+  (FR-015-AC-56).
+- When the installed backend runs a bounded-corpus harness whose oracle is true, the
+  generator shall classify the run `Verified` (FR-015-AC-57).
+- If the installed backend runs a graph or collection corpus harness whose oracle is false, then the
+  generator shall classify the run `Falsified` (FR-015-AC-57).
+- The crate shall carry a gate that fails when a harness it emits has other than exactly one
+  cover as the last statement of its body, and when a source file emits a harness the gate
+  does not drive (FR-015-AC-58).
 
 ## Acceptance Criteria
 
@@ -294,6 +332,12 @@ FR-015-AC-37 stay as they were; the new criteria add to them.
 | FR-015-AC-50 | `negotiate` reports an obligation whose scalar refusal is `ExactScalarRefusal::LoweringByteLimitExceeded` or `LoweringLimitUnrecognised` as `Outcome::Unsupported(UnsupportedObligation::OracleRefused { refusal })` with `refusal` equal to the scalar refusal, field for field, and neither is mapped to another `UnsupportedObligation` variant nor to `LoweringWorkExhausted`. | Test (TC-025) |
 | FR-015-AC-51 | A finite input validated under a profile selection other than the offered profile's is refused as a typed `InvalidInput` `kani_profile_input_mismatch` result naming the request's source id, with no artifact and no case identity recorded. | Test (TC-023) |
 | FR-015-AC-52 | The context of every outcome and refusal the corpus generator returns (proved, counterexample, `kani_corpus_dependency_invalid`, `kani_corpus_identity_collision`, a lowering refusal and `kani_profile_input_mismatch`) is the profile selection's revision. | Test (TC-023) |
+| FR-015-AC-53 | Each of the seven harness kinds the generator emits (precondition, V1 contract, scalar, state-clause, frame-effect, V1 bundle and corpus) is subject to the cover-last rule of FR-015-AC-7: exactly one `kani::cover!`, the last statement of the body. What the cover witnesses, by kind: a precondition harness, that the precondition holds within the IR bounds (it asserts nothing); a V1 contract harness (postcondition or invariant), that the requires clause and the IR bounds are jointly satisfiable, after the contract call whose `ensures` is the harness's check; a scalar harness, that the oracle's `Completed` branch is reached; a state-clause harness and a frame-effect harness, that the bounded state is reached and the subject returns; a V1 bundle harness, as FR-015-AC-54 states; a corpus harness, as FR-015-AC-55 states. PLANNED (IR-464). | Test (TC-025) |
+| FR-015-AC-54 | A V1 bundle harness (`generate_kani_bundle`, the `proof_for_contract` harness it emits for a requires clause, an ensures clause and the bundle's bounded arguments) ends with exactly one `kani::cover!` after the call of its contract, which witnesses that the requires clause and the argument and result bounds are jointly satisfiable, so a run whose requires clause no bounded argument satisfies never reaches it; the bundle's `ensures` is checked at the contract call, so the cover follows every check the harness carries. PLANNED (IR-464). | Test (TC-025) |
+| FR-015-AC-55 | A bounded-corpus harness, whichever of the arithmetic, graph and collection families the case belongs to, ends with exactly one `kani::cover!` after its `assert!` of the case's oracle, which witnesses that the harness runs to its end past that assertion. PLANNED (IR-464). | Test (TC-023) |
+| FR-015-AC-56 | With the installed backend, a V1 bundle harness whose requires clause some bounded argument satisfies and whose `ensures` holds for every such argument classifies `Verified` (FR-017-AC-4); the same bundle with a requires clause no bounded argument satisfies classifies `CoverUnsatisfied` with its satisfied and total cover counts, never `Verified` and never `Falsified`. PLANNED (IR-464). | Test (TC-025) |
+| FR-015-AC-57 | With the installed backend, a bounded-corpus harness of each of the arithmetic, graph and collection families whose oracle is true classifies `Verified`, and a graph or collection harness whose oracle is false (an arithmetic case's oracle is always true) classifies `Falsified` carrying the assertion's playback (empty-valued, since a corpus case draws no input), never `Inconclusive` for lack of a counterexample. PLANNED (IR-464). | Test (TC-023) |
+| FR-015-AC-58 | A test generates a harness through every emitting entry point (the precondition, V1 contract, scalar, state-clause and frame-effect families, `generate_kani_bundle`, and the corpus generator for each of its three families), parses each emitted source, and fails for any function attributed `#[kani::proof]` or `#[kani::proof_for_contract]` whose body does not contain exactly one `kani::cover!`, which must be the last statement, with no assertion after it and no other cover; and a scan of the non-test string literals of `src/` fails when a file other than the ones the test drives emits either proof attribute. PLANNED (IR-464). | Test (TC-025) |
 
 ## Dependencies
 
