@@ -31,8 +31,7 @@ cause, and that the map is one match with no wildcard arm.
    failure FR-029-AC-11 lists.
 10. Map `Counterexample` under every replay settlement other than reproduced.
 11. Map `Counterexample` with a non-fault `CallSiteRefusal` and with a `DependencyLockError::Input`,
-    each bare and wrapped, and with `ReplayPackageError::InvalidFunction` and
-    `FrameReplayError::Name`.
+    each bare and wrapped.
 12. HELD: map `Counterexample` with `DependencyLockError::Duplicate`.
 
 ## Expected Results
@@ -51,12 +50,12 @@ cause, and that the map is one match with no wildcard arm.
 9. Each is `Failed` (FR-030-AC-10).
 10. No value is `Refuted` (FR-030-AC-11).
 11. The call-site and lock-input refusals are `Inconclusive(ReplayRefused)` carrying their QSL
-    catalog code and none is `Declined`; `InvalidFunction` and `Name` are `Failed`
-    (FR-030-AC-12).
+    catalog code and none is `Declined` (FR-030-AC-12).
 12. HELD on a QSL ruling (FR-030-AC-13).
 
 ## Status
 
 Planned. No outcome maps to QSL's terminal value at this revision. Steps 8 and 11 wait on the unmerged
-QSL `Inconclusive` terminal value, and step 12 is held on QSL's answer about
+QSL `Inconclusive` terminal value; steps 9 and 10, which include `InvalidFunction` and `Name` as
+`Failed`, do not. Step 12 is held on QSL's answer about
 `DependencyLockError::Duplicate` (FR-029 Status).

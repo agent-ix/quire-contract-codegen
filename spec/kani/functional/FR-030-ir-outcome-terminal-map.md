@@ -73,7 +73,7 @@ terminal value, so neither map applies to them.
   | `Counterexample`, with a non-fault replay refusal | `Inconclusive(InconclusiveCause::ReplayRefused)` carrying the refusal's QSL catalog code |
   | `Counterexample`, with a setup refusal on data (a non-fault `CallSiteRefusal` or `DependencyLockError::Input`) | `Inconclusive(InconclusiveCause::ReplayRefused)` carrying the refusal's QSL catalog code |
   | `Counterexample`, with `DependencyLockError::Duplicate` | HELD: no value is stated until QSL rules ([FR-029](./FR-029-run-outcome-terminal-record.md) Status) |
-  | `Counterexample`, with a fault or a CG defect that carries no QSL code | `Failed` |
+  | `Counterexample`, with a fault or a CG defect (the errors FR-029-AC-11 lists, excluding the held `DependencyLockError::Duplicate`) | `Failed` |
   | `Refused` | `Declined(ProofRefusalCause::Refused)` |
   | `InvalidInput` | `Declined(ProofRefusalCause::InvalidInput)` |
   | `IncompleteInput` | `Declined(ProofRefusalCause::IncompleteInput)` |
@@ -95,9 +95,9 @@ terminal value, so neither map applies to them.
   and `FrameReplayError::Name` carry no QSL code and map to `Failed`; `DependencyLockError::Duplicate`
   is HELD (FR-029 Status).
 - The generator shall map a `Counterexample` to `Refuted` only with a reproduced replay.
-- The generator shall classify a fault and a CG-raised failure that carries no QSL code
-  as [FR-029](./FR-029-run-outcome-terminal-record.md) states: by walking the whole error,
-  and with `ReplayRefused` carrying only QSL's closed catalog of codes.
+- The generator shall classify a fault and the CG-raised failures FR-029-AC-11 lists, but not
+  `DependencyLockError::Duplicate`, as [FR-029](./FR-029-run-outcome-terminal-record.md) states: by
+  walking the whole error, and with `ReplayRefused` carrying only QSL's closed catalog of codes.
 - The generator shall expose no `proof_category` function
   ([AD-003](../../assurance/AD-003-evidence-chain.md) E-9).
 - The generator shall map no outcome to `Tested`.
@@ -122,7 +122,7 @@ terminal value, so neither map applies to them.
 | FR-030-AC-9 | `Counterexample` with a replay disagreement maps to `Inconclusive(ReplayParity)`, and with a non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()` of that refusal. | Test (TC-041) |
 | FR-030-AC-10 | `Counterexample` with a fault, walked through every wrapper FR-029-AC-10 lists, and with each CG-raised failure FR-029-AC-11 lists, maps to `Failed`. | Test (TC-041) |
 | FR-030-AC-11 | Across every replay settlement other than reproduced, `Counterexample` maps to a value other than `Refuted`. | Test (TC-041) |
-| FR-030-AC-12 | `Counterexample` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped, maps to `Inconclusive(ReplayRefused)` carrying that refusal's QSL catalog code, never to `Declined`; with `ReplayPackageError::InvalidFunction` or `FrameReplayError::Name` it maps to `Failed`. | Test (TC-041) |
+| FR-030-AC-12 | `Counterexample` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped, maps to `Inconclusive(ReplayRefused)` carrying that refusal's QSL catalog code, never to `Declined`. | Test (TC-041) |
 | FR-030-AC-13 | HELD on a QSL ruling (FR-029 Status). `Counterexample` with `DependencyLockError::Duplicate` maps to the value that ruling states. | Test (TC-041) |
 
 ## Dependencies
@@ -141,9 +141,9 @@ blocked on QSL types that are not merged. Merged in QSL `main`, read at this rev
 `CallSiteRefusal::code()` and `DependencyInputRefusal::code()` are public.
 `TerminalValue::Inconclusive`, `InconclusiveCause::ReplayParity` and `ReplayRefused(Code)` are not
 in QSL `main`; they are pending in QSL (QSL-351, in progress, with only the `ToolPin` deletion
-merged). FR-030-AC-9 and AC-12 cannot be built until those types merge. QSL has ruled that vacuity
-stays `Proved { success_checks: 0 }` and that a setup refusal after a refutation is
-`ReplayRefused`, as [FR-029](./FR-029-run-outcome-terminal-record.md)'s Status states.
+merged). FR-030-AC-9 and AC-12 cannot be built until those types merge. QSL ruled, relayed on
+IR-465 (a QSL ruling recorded by the planner), that vacuity stays `Proved { success_checks: 0 }`
+and that a setup refusal after a refutation is `ReplayRefused`, as [FR-029](./FR-029-run-outcome-terminal-record.md)'s Status states.
 FR-030-AC-13 is HELD on QSL's answer about `DependencyLockError::Duplicate`.
 
 Open question for QSL, not decided here: QSL's pending `Declined` carries a code beside its cause.
