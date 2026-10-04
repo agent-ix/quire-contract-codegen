@@ -112,8 +112,8 @@ operations:
     semantics: refuses a crate that does not contain the harness, runs the harness and reports the backend's own outcome; see kani_obligation_execution_slice (FR-017)
   - name: execute_kani_obligations
     inputs: [list of KaniExecutionRequest, one per harness]
-    output: one KaniExecutionEvidence or KaniExecutionRefusal per harness, or one refusal for the whole batch
-    semantics: planned (IR-277, FR-017-AC-21 to FR-017-AC-23, FR-028-AC-12); the batch entry. Groups the requests by option vector and request timeout, runs each group in one launcher process, and splits the report per harness by its module::harness path. Each member's evidence carries the batch argument vector, the member list, a batch statement and the exit code beside the fields of a single run. The name is provisional until the code lands
+    output: one KaniGroupRun per launcher process (the request positions of its members and either one KaniExecutionEvidence per member or the KaniExecutionRefusal of the whole process), or one KaniExecutionRefusal for the whole call
+    semantics: the batch entry (IR-277, FR-017-AC-21 to FR-017-AC-25, FR-028-AC-12). Refuses the whole call with HarnessNotInCrate before any process starts when a harness is not in its crate; otherwise groups the requests by option vector (harness selection removed), request timeout, launcher, crate directory and target directory, runs each group in one launcher process, and splits the report per harness by its module::harness path. A group of one is the single run. Each member's evidence carries the batch argument vector, the member list with the timeout T in whole seconds (the `batch` statement) and the exit code beside the fields of a single run
   - name: kani_launch_command
     inputs: [KaniExecutionRequest]
     output: argv and Command
@@ -121,11 +121,11 @@ operations:
   - name: run_launcher_with_timeout
     inputs: [Command, timeout]
     output: LaunchOutcome | io error
-    semantics: the bounded launch execute_kani_obligation performs, draining stdout and stderr on their own threads and killing the process at the timeout (FR-017)
+    semantics: the bounded launch execute_kani_obligation performs, draining stdout and stderr on their own threads and killing the process group at the timeout, when a stream is over 8 MiB or unread, and when the launcher exits on its own (FR-017)
   - name: launch_evidence
     inputs: [LaunchOutcome, exported report bytes, optional obligation kind]
-    output: ClassifiedRun and exit code | KaniReportRefusal
-    semantics: the mapping execute_kani_obligation applies from a concluded launch to evidence; a timed-out launch has no exit code and its report is not read (FR-017)
+    output: ClassifiedRun and exit code | KaniExecutionRefusal
+    semantics: the mapping execute_kani_obligation applies from a concluded launch to evidence; a timed-out launch has no exit code and its report is not read; a launch stopped over a stream's limit or over a stream that was not read is the refusal kani_output_over_limit or kani_output_unread, never an outcome (FR-017)
   - name: classify_kani_run
     inputs: [process exit success, exported Kani report bytes, console text, optional obligation kind]
     output: ClassifiedRun (KaniRunOutcome, SUCCESS-check count and the per-check KaniCheckResult view) | KaniReportRefusal

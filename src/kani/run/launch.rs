@@ -2,8 +2,9 @@
 //! process-group kill (FR-017).
 
 use std::{
-    io,
+    fmt, io,
     io::Read,
+    num::NonZeroUsize,
     os::{fd::AsFd, unix::process::CommandExt},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{
@@ -24,6 +25,7 @@ use rustix::{
 /// How the launcher's run within its caller-declared budget
 /// ([`KaniExecutionRequest::timeout`](super::execute::KaniExecutionRequest::timeout))
 /// concluded.
+#[derive(Debug)]
 #[non_exhaustive]
 pub enum LaunchOutcome {
     /// The process exited on its own within the budget.
@@ -39,19 +41,72 @@ pub enum LaunchOutcome {
     /// killed and the launcher reaped; a descendant that left the group is not killed, and this
     /// call does not wait for it.
     TimedOut,
+    /// A stream carried more than `limit` bytes. The run was stopped and the launcher's whole
+    /// process group killed; no text is retained, because a truncated stream is evidence nobody
+    /// can vouch for (FR-017-AC-14).
+    OutputOverLimit {
+        /// The stream that carried too much.
+        stream: CaptureStream,
+        /// The most it may carry: [`CAPTURE_LIMIT`] times `harnesses`.
+        limit: usize,
+        /// How many harnesses the process ran.
+        harnesses: usize,
+    },
+    /// A stream could not be read to its end: its capture thread panicked, or a poll or read of
+    /// the pipe failed. The run was stopped and the group killed; an unread stream is not an
+    /// empty one, so no text is returned (FR-017-AC-25).
+    OutputUnread {
+        /// The stream that was not read.
+        stream: CaptureStream,
+        /// What went wrong, as text.
+        detail: String,
+    },
 }
+
+/// One of the launcher's two output streams.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CaptureStream {
+    /// Standard output.
+    Stdout,
+    /// Standard error.
+    Stderr,
+}
+
+impl fmt::Display for CaptureStream {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Stdout => "stdout",
+            Self::Stderr => "stderr",
+        })
+    }
+}
+
+/// Why a capture thread did not return its stream.
+#[derive(Debug, Eq, PartialEq)]
+enum CaptureFailure {
+    /// More than the limit was read.
+    OverLimit,
+    /// The pipe could not be polled or read, or its thread panicked.
+    Unread { detail: String },
+}
+
+/// What one capture thread returns: the whole stream, or why it could not.
+type Captured = Result<Vec<u8>, CaptureFailure>;
+
+/// The `poll(2)` a capture thread waits with. A parameter so that a failed poll, which no real pipe
+/// produces on demand, is exercised by a test.
+type PollFn = fn(&mut [PollFd<'_>], Option<&Timespec>) -> Result<usize, Errno>;
 
 /// Polling interval while waiting for the launcher to exit within its budget, and the longest a
 /// capture thread goes between looking at its stop flag. Short enough that a tight caller-declared
 /// timeout in a test is still observed promptly, long enough not to spin.
 const LAUNCHER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
-/// Most bytes kept from each of the launcher's stdout and stderr. Kani prints its concrete
-/// playback last, so when a stream is longer its tail is what is kept; the verdict is not in
-/// the stream at all, it is in the exported report.
-/// A stream is always drained to the end so the child never blocks on a full pipe; only what is
-/// retained is bounded.
-const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
+/// Most bytes each of the launcher's stdout and stderr may carry, per harness the process runs. A
+/// stream over it is refused, never truncated: the verdict is in the exported report, but the
+/// playback a falsified harness is attributed from is printed in the stream, and a cut stream
+/// cannot say which blocks it lost.
+pub(super) const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
 
 /// Longest a capture thread keeps reading after it is told to stop. Whatever the launcher wrote
 /// before it ended is already in the pipe and is read in microseconds; the limit only bounds a
@@ -73,14 +128,30 @@ const STOP_DRAIN_LIMIT: Duration = Duration::from_millis(100);
 /// Stdout and stderr are drained on their own threads as soon as the process is spawned, the same
 /// way `Command::output()` drains them internally: a full pipe buffer would otherwise stall the
 /// child while this function is only polling `try_wait`, turning a bounded run into a hang of its
-/// own. Each thread keeps at most `CAPTURE_LIMIT` bytes and polls its pipe rather than blocking
-/// in `read`, so once the launcher is gone this function tells both threads to stop and joins
-/// them: a descendant that left the process group may still hold the pipe's write end open. Each thread then reads what is
-/// already in the pipe for at most `STOP_DRAIN_LIMIT` and returns, however fast a straggler
-/// keeps writing, so the join adds at most that limit plus one poll interval to the return time.
-pub fn run_launcher_with_timeout(
+/// own. Each thread keeps its whole stream, up to [`CAPTURE_LIMIT`] bytes, and polls its pipe
+/// rather than blocking in `read`. A stream over the limit, a pipe that cannot be polled or read
+/// and a thread that panics each stop the run at once and kill the group; the call then returns
+/// [`LaunchOutcome::OutputOverLimit`] or [`LaunchOutcome::OutputUnread`] and no text.
+///
+/// Once the launcher is gone, however it went, its process group is killed (a descendant that
+/// outlived a launcher that exited on its own is killed here too, as one is on a timeout), then
+/// this function tells both threads to stop and joins them: a descendant that left the process
+/// group may still hold the pipe's write end open. Each thread then reads what is already in the
+/// pipe for at most `STOP_DRAIN_LIMIT` and returns, however fast a straggler keeps writing, so the
+/// join adds at most that limit plus one poll interval to the return time.
+///
+/// This is the run of one harness; [`run_launcher`] takes the harness count a batch multiplies the
+/// limit by.
+pub fn run_launcher_with_timeout(command: Command, timeout: Duration) -> io::Result<LaunchOutcome> {
+    run_launcher(command, timeout, NonZeroUsize::MIN)
+}
+
+/// [`run_launcher_with_timeout`] for a process that runs `harnesses` harnesses: each stream may
+/// carry [`CAPTURE_LIMIT`] bytes for every one.
+pub(super) fn run_launcher(
     mut command: Command,
     timeout: Duration,
+    harnesses: NonZeroUsize,
 ) -> io::Result<LaunchOutcome> {
     command
         .stdout(Stdio::piped())
@@ -92,21 +163,35 @@ pub fn run_launcher_with_timeout(
         let _ = child.wait();
         return Err(io::Error::other("a piped standard stream was not captured"));
     };
-    let stop = Arc::new(AtomicBool::new(false));
-    let stdout_reader = spawn_capture(stdout, &stop);
-    let stderr_reader = spawn_capture(stderr, &stop);
+    let limit = CAPTURE_LIMIT.saturating_mul(harnesses.get());
+    let flags = CaptureFlags {
+        stop: Arc::new(AtomicBool::new(false)),
+        failed: Arc::new(AtomicBool::new(false)),
+    };
+    let stdout_reader = spawn_capture(stdout, &flags, limit);
+    let stderr_reader = spawn_capture(stderr, &flags, limit);
 
     let deadline = Instant::now().checked_add(timeout);
-    let waited = wait_until(&mut child, deadline);
+    let waited = wait_until(&mut child, deadline, &flags.failed);
+    kill_process_tree(&mut child);
     if !matches!(waited, Ok(Some(_))) {
-        kill_process_tree(&mut child);
         let _ = child.wait();
     }
-    stop.store(true, Ordering::Release);
-    let stdout_bytes = stdout_reader.join().unwrap_or_default();
-    let stderr_bytes = stderr_reader.join().unwrap_or_default();
+    flags.stop.store(true, Ordering::Release);
+    let stdout_bytes = finish_capture(stdout_reader);
+    let stderr_bytes = finish_capture(stderr_reader);
+    let status = waited?;
 
-    match waited? {
+    let stdout_bytes = match stream_bytes(CaptureStream::Stdout, stdout_bytes, limit, harnesses) {
+        Ok(bytes) => bytes,
+        Err(refusal) => return Ok(refusal),
+    };
+    let stderr_bytes = match stream_bytes(CaptureStream::Stderr, stderr_bytes, limit, harnesses) {
+        Ok(bytes) => bytes,
+        Err(refusal) => return Ok(refusal),
+    };
+
+    match status {
         Some(status) => Ok(LaunchOutcome::Completed {
             exited_successfully: status.success(),
             exit_code: status.code(),
@@ -120,14 +205,47 @@ pub fn run_launcher_with_timeout(
     }
 }
 
-/// Polls `child` until it exits (`Some`) or `deadline` passes (`None`). A `deadline` of `None`
-/// never passes.
-fn wait_until(child: &mut Child, deadline: Option<Instant>) -> io::Result<Option<ExitStatus>> {
+/// The bytes of `stream`, or the outcome that refuses the run because they were not all read or
+/// were more than `limit`.
+fn stream_bytes(
+    stream: CaptureStream,
+    captured: Captured,
+    limit: usize,
+    harnesses: NonZeroUsize,
+) -> Result<Vec<u8>, LaunchOutcome> {
+    captured.map_err(|failure| match failure {
+        CaptureFailure::OverLimit => LaunchOutcome::OutputOverLimit {
+            stream,
+            limit,
+            harnesses: harnesses.get(),
+        },
+        CaptureFailure::Unread { detail } => LaunchOutcome::OutputUnread { stream, detail },
+    })
+}
+
+/// The two flags the capture threads and the run share.
+struct CaptureFlags {
+    /// Set by the run once the launcher is gone: read what is in the pipe and return.
+    stop: Arc<AtomicBool>,
+    /// Set by a capture thread that failed: the run can no longer be trusted, stop waiting.
+    failed: Arc<AtomicBool>,
+}
+
+/// Polls `child` until it exits (`Some`), `deadline` passes (`None`) or a capture thread sets
+/// `failed` (`None`; the caller reports the failure, not a timeout). A `deadline` of `None` never
+/// passes.
+fn wait_until(
+    child: &mut Child,
+    deadline: Option<Instant>,
+    failed: &AtomicBool,
+) -> io::Result<Option<ExitStatus>> {
     loop {
         if let Some(status) = child.try_wait()? {
             return Ok(Some(status));
         }
-        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        if failed.load(Ordering::Acquire)
+            || deadline.is_some_and(|deadline| Instant::now() >= deadline)
+        {
             return Ok(None);
         }
         thread::sleep(LAUNCHER_POLL_INTERVAL);
@@ -135,25 +253,67 @@ fn wait_until(child: &mut Child, deadline: Option<Instant>) -> io::Result<Option
 }
 
 /// Starts a thread that reads `pipe` to its end, or until `stop` is set and nothing more is
-/// waiting in it.
-fn spawn_capture<R>(pipe: R, stop: &Arc<AtomicBool>) -> thread::JoinHandle<Vec<u8>>
+/// waiting in it. A failure sets `failed`, so the run stops waiting for a launcher whose output
+/// nobody is reading any more.
+fn spawn_capture<R>(pipe: R, flags: &CaptureFlags, limit: usize) -> thread::JoinHandle<Captured>
 where
     R: Read + AsFd + Send + 'static,
 {
-    let stop = Arc::clone(stop);
-    thread::spawn(move || capture_tail(pipe, &stop, CAPTURE_LIMIT, STOP_DRAIN_LIMIT))
+    let stop = Arc::clone(&flags.stop);
+    let failure = FlagOnFailure {
+        flag: Arc::clone(&flags.failed),
+        failed: true,
+    };
+    thread::spawn(move || {
+        // The whole guard moves into the thread: a closure naming only `failure.failed` would
+        // capture that field and drop the guard, and set the flag, here.
+        let mut failure = failure;
+        let captured = capture(pipe, &stop, limit, STOP_DRAIN_LIMIT, poll);
+        failure.failed = captured.is_err();
+        captured
+    })
+}
+
+/// Sets `flag` when dropped while `failed`, which a capture thread is until it has returned its
+/// stream: a thread that panics unwinds through this and so stops the run's wait too, instead of
+/// leaving the run waiting on a launcher whose output nobody reads.
+struct FlagOnFailure {
+    flag: Arc<AtomicBool>,
+    failed: bool,
+}
+
+impl Drop for FlagOnFailure {
+    fn drop(&mut self) {
+        if self.failed {
+            self.flag.store(true, Ordering::Release);
+        }
+    }
+}
+
+/// The stream a capture thread returned, or why it did not: a thread that panicked is an unread
+/// stream, never an empty one.
+fn finish_capture(reader: thread::JoinHandle<Captured>) -> Captured {
+    reader.join().unwrap_or_else(|_| {
+        Err(CaptureFailure::Unread {
+            detail: "the capture thread panicked".to_owned(),
+        })
+    })
 }
 
 /// Reads `pipe` until EOF, or until `stop` is set and the pipe has been read dry or
-/// `drain_limit` has passed, returning its last `limit` bytes at most. Everything written
-/// before `stop` was set is already in the pipe when the flag is seen, so the drain after it
-/// loses none of it.
-fn capture_tail<R: Read + AsFd>(
+/// `drain_limit` has passed, returning every byte read. Everything written before `stop` was set
+/// is already in the pipe when the flag is seen, so the drain after it loses none of it.
+///
+/// More than `limit` bytes is [`CaptureFailure::OverLimit`] and exactly `limit` is returned
+/// whole; a failed poll or read is [`CaptureFailure::Unread`]. Nothing is truncated and nothing
+/// that failed is returned as what had been read so far.
+fn capture<R: Read + AsFd>(
     mut pipe: R,
     stop: &AtomicBool,
     limit: usize,
     drain_limit: Duration,
-) -> Vec<u8> {
+    poll_pipe: PollFn,
+) -> Captured {
     let mut kept = Vec::new();
     let mut chunk = [0_u8; 64 * 1024];
     let interval = Timespec::try_from(LAUNCHER_POLL_INTERVAL).unwrap_or_default();
@@ -175,34 +335,40 @@ fn capture_tail<R: Read + AsFd>(
             &interval
         };
         let mut fds = [PollFd::new(&pipe, PollFlags::IN)];
-        match poll(&mut fds, Some(wait)) {
+        match poll_pipe(&mut fds, Some(wait)) {
             Ok(0) if drain_until.is_some() => break,
             Ok(0) => continue,
             Ok(_) => {}
             Err(Errno::INTR) => continue,
-            Err(_) => break,
+            Err(errno) => {
+                return Err(CaptureFailure::Unread {
+                    detail: format!("poll failed: {errno}"),
+                })
+            }
         }
         match pipe.read(&mut chunk) {
             Ok(0) => break,
             Ok(read) => {
-                kept.extend_from_slice(&chunk[..read]);
-                if kept.len() > limit.saturating_mul(2) {
-                    kept.drain(..kept.len() - limit);
+                kept.extend(chunk.iter().take(read));
+                if kept.len() > limit {
+                    return Err(CaptureFailure::OverLimit);
                 }
             }
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-            Err(_) => break,
+            Err(error) => {
+                return Err(CaptureFailure::Unread {
+                    detail: format!("read failed: {error}"),
+                })
+            }
         }
     }
-    if kept.len() > limit {
-        kept.drain(..kept.len() - limit);
-    }
-    kept
+    Ok(kept)
 }
 
 /// Kills the launcher and every process in its process group.
 ///
-/// This exists so that a timed-out run does not leave its descendants behind: Kani's launcher
+/// This exists so that a finished run, whether it timed out, was stopped or exited on its own,
+/// does not leave its descendants behind: Kani's launcher
 /// forks `kani-driver`, which forks CBMC, and CBMC is the solver a budget most needs to stop. A
 /// `child.kill()` alone would leave it running after the launcher is gone. The launcher is started
 /// as the leader of its own process group ([`run_launcher_with_timeout`]), every descendant
@@ -397,33 +563,42 @@ mod tests {
                 assert!(text.contains("out"));
                 assert!(text.contains("err"));
             }
-            LaunchOutcome::TimedOut => panic!("a fast process must not be reported as timed out"),
+            other => panic!("a fast process must complete, not end as {other:?}"),
         }
     }
 
-    /// A stream longer than the capture limit is drained to its end but only its tail is kept,
-    /// because Kani prints the playback it ends with last; the launcher's own memory is bounded by the limit,
-    /// not by what the child prints.
+    /// A stream of more than the limit is refused whole, never truncated to a tail and returned;
+    /// a stream of exactly the limit is returned whole.
     ///
-    /// Trace: FR-017-AC-14, TC-027
+    /// Trace: FR-017-AC-14, TC-043
     #[test]
-    fn a_stream_longer_than_the_capture_limit_keeps_only_its_tail() {
-        let (reader, mut writer) = io::pipe().unwrap();
-        let producer = thread::spawn(move || {
-            for _ in 0..100 {
-                writer.write_all(&[b'x'; 1000]).unwrap();
+    fn tc_043_a_capture_over_its_limit_is_refused_and_one_at_its_limit_is_whole() {
+        let limit = 4096;
+        for (written, expected) in [(limit, true), (limit + 1, false)] {
+            let (reader, mut writer) = io::pipe().unwrap();
+            let producer = thread::spawn(move || {
+                // The write end is dropped on return, so the reader sees the end of the stream.
+                writer.write_all(&vec![b'x'; written]).unwrap();
+            });
+            let captured = capture(
+                reader,
+                &AtomicBool::new(false),
+                limit,
+                STOP_DRAIN_LIMIT,
+                poll,
+            );
+            producer.join().unwrap();
+            match (expected, captured) {
+                (true, Ok(kept)) => assert_eq!(kept.len(), limit, "exactly the limit is whole"),
+                (false, Err(CaptureFailure::OverLimit)) => {}
+                (_, other) => panic!("{written} bytes against a limit of {limit}: {other:?}"),
             }
-            writer.write_all(b"VERIFICATION:- SUCCESSFUL").unwrap();
-        });
-        let kept = capture_tail(reader, &AtomicBool::new(false), 4096, STOP_DRAIN_LIMIT);
-        producer.join().unwrap();
-        assert_eq!(kept.len(), 4096);
-        assert!(kept.ends_with(b"VERIFICATION:- SUCCESSFUL"));
+        }
     }
 
-    /// Runs `capture_tail` on its own thread and returns what it kept, or `None` if it had not
-    /// returned within `within`, so a capture that never stops fails the test instead of
-    /// hanging it.
+    /// Runs `capture` on its own thread and returns what it kept, or `None` if it had not
+    /// returned within `within` or failed, so a capture that never stops fails the test instead
+    /// of hanging it.
     fn capture_within(
         reader: io::PipeReader,
         stop: &Arc<AtomicBool>,
@@ -433,9 +608,11 @@ mod tests {
         let (sender, receiver) = std::sync::mpsc::channel();
         let stop = Arc::clone(stop);
         thread::spawn(move || {
-            let _ = sender.send(capture_tail(reader, &stop, CAPTURE_LIMIT, drain_limit));
+            // Unbounded: these tests are about when the capture stops, and a straggler writing
+            // flat out would otherwise cross the limit first.
+            let _ = sender.send(capture(reader, &stop, usize::MAX, drain_limit, poll).ok());
         });
-        receiver.recv_timeout(within).ok()
+        receiver.recv_timeout(within).ok().flatten()
     }
 
     /// Bytes already in the pipe when the stop flag is seen are returned even though a write end
@@ -525,26 +702,280 @@ mod tests {
         assert!(kept.is_some(), "the drain limit must end the capture");
     }
 
-    /// A launcher that prints far more than the capture limit and then exits still reports its
-    /// real exit status and the end of its output, with the retained text bounded.
+    /// A launcher that prints `bytes` bytes to `stream`, then `then` (a shell command).
+    fn printer(stream: CaptureStream, bytes: usize, then: &str) -> Command {
+        let redirect = match stream {
+            CaptureStream::Stdout => "",
+            CaptureStream::Stderr => " 1>&2",
+        };
+        let mut command = Command::new("sh");
+        command
+            .arg("-c")
+            .arg(format!("head -c {bytes} /dev/zero{redirect}; {then}"));
+        command
+    }
+
+    /// A launcher whose stdout, then whose stderr, carries more than the limit is stopped and
+    /// refused naming the stream, the limit and the harness count; one that prints exactly the
+    /// limit completes with its real exit status and the whole stream. Nothing is truncated and
+    /// then classified.
     ///
-    /// Trace: FR-017-AC-14, TC-027
+    /// Trace: FR-017-AC-14, TC-043
     #[test]
-    fn a_launcher_printing_more_than_the_limit_completes_with_bounded_text() {
+    fn tc_043_a_launcher_stream_over_the_limit_is_refused_and_one_at_the_limit_completes() {
+        for stream in [CaptureStream::Stdout, CaptureStream::Stderr] {
+            let outcome = run_launcher_with_timeout(
+                printer(stream, CAPTURE_LIMIT + 1, "exit 0"),
+                Duration::from_secs(60),
+            )
+            .unwrap();
+            assert!(
+                matches!(
+                    outcome,
+                    LaunchOutcome::OutputOverLimit { stream: named, limit, harnesses: 1 }
+                        if named == stream && limit == CAPTURE_LIMIT
+                ),
+                "{stream}: one byte over the limit is refused"
+            );
+            let LaunchOutcome::Completed {
+                exit_code, text, ..
+            } = run_launcher_with_timeout(
+                printer(stream, CAPTURE_LIMIT, "exit 3"),
+                Duration::from_secs(60),
+            )
+            .unwrap()
+            else {
+                panic!("{stream}: exactly the limit completes");
+            };
+            assert_eq!(exit_code, Some(3));
+            assert_eq!(text.len(), CAPTURE_LIMIT + 1, "{stream}: the whole stream");
+        }
+    }
+
+    /// A batch process may carry the limit for each member and no more: the limit is multiplied
+    /// by the harness count, and the refusal names that count.
+    ///
+    /// Trace: FR-017-AC-14, TC-043
+    #[test]
+    fn tc_043_a_batch_stream_is_bounded_by_the_limit_times_the_member_count() {
+        let members = NonZeroUsize::new(3).unwrap();
+        let outcome = run_launcher(
+            printer(CaptureStream::Stdout, 3 * CAPTURE_LIMIT + 1, "exit 0"),
+            Duration::from_secs(60),
+            members,
+        )
+        .unwrap();
+        assert!(
+            matches!(
+                outcome,
+                LaunchOutcome::OutputOverLimit { stream: CaptureStream::Stdout, limit, harnesses: 3 }
+                    if limit == 3 * CAPTURE_LIMIT
+            ),
+            "three members' limit is three times one"
+        );
+        let outcome = run_launcher(
+            printer(CaptureStream::Stderr, 3 * CAPTURE_LIMIT, "exit 0"),
+            Duration::from_secs(60),
+            members,
+        )
+        .unwrap();
+        assert!(
+            matches!(outcome, LaunchOutcome::Completed { .. }),
+            "exactly three members' limit completes"
+        );
+    }
+
+    /// An over-limit launcher that would otherwise run on is stopped and its whole process group
+    /// is killed, not only refused: the process that printed it is gone when the call returns.
+    ///
+    /// Trace: FR-017-AC-14, TC-043
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn tc_043_an_over_limit_run_kills_the_launcher_group() {
+        let directory = discover_scratch("over-limit-kill");
+        let pidfile = directory.join("pid");
+        // The launcher shell forks a grandchild (recording its pid), prints past the limit, then
+        // waits for the grandchild: only a kill of the whole group ends the grandchild.
         let mut command = Command::new("sh");
         command.arg("-c").arg(format!(
-            "head -c {} /dev/zero | tr '\\0' x; printf '\\nVERIFICATION:- SUCCESSFUL'",
-            3 * CAPTURE_LIMIT
+            "sleep 45 & echo $! > {}; head -c {} /dev/zero; wait",
+            pidfile.display(),
+            CAPTURE_LIMIT + 1
         ));
-        let LaunchOutcome::Completed {
-            exit_code, text, ..
-        } = run_launcher_with_timeout(command, Duration::from_secs(60)).unwrap()
-        else {
-            panic!("the launcher exits on its own within its budget");
+        let outcome = run_launcher_with_timeout(command, Duration::from_secs(120)).unwrap();
+        assert!(matches!(outcome, LaunchOutcome::OutputOverLimit { .. }));
+        let grandchild: i32 = fs::read_to_string(&pidfile)
+            .unwrap()
+            .trim()
+            .parse()
+            .expect("the launcher recorded its grandchild's pid before it printed");
+        assert!(
+            process_gone_within(grandchild),
+            "the over-limit launcher's grandchild {grandchild} is still running"
+        );
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    /// A reader that panics when it is read, over a pipe with bytes waiting so that its poll says
+    /// readable.
+    struct PanickingPipe(io::PipeReader);
+
+    impl Read for PanickingPipe {
+        fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+            panic!("a capture thread that panics");
+        }
+    }
+
+    impl AsFd for PanickingPipe {
+        fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+            self.0.as_fd()
+        }
+    }
+
+    /// A reader whose read fails, over a pipe with bytes waiting.
+    struct FailingPipe(io::PipeReader);
+
+    impl Read for FailingPipe {
+        fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::other("a pipe that cannot be read"))
+        }
+    }
+
+    impl AsFd for FailingPipe {
+        fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+            self.0.as_fd()
+        }
+    }
+
+    /// A poll that fails.
+    fn failing_poll(_: &mut [PollFd<'_>], _: Option<&Timespec>) -> Result<usize, Errno> {
+        Err(Errno::IO)
+    }
+
+    /// A capture thread that panics, a read that errs and a poll that errs each refuse the stream
+    /// as unread: none of them returns the empty text, or what had been read so far, as the
+    /// stream.
+    ///
+    /// Trace: FR-017-AC-25, TC-043
+    #[test]
+    fn tc_043_a_capture_that_panics_or_whose_poll_or_read_errs_is_unread_not_empty() {
+        let waiting = || {
+            let (reader, mut writer) = io::pipe().unwrap();
+            writer.write_all(b"bytes waiting").unwrap();
+            // Keep the write end open: the stream has not ended.
+            (reader, writer)
         };
-        assert_eq!(exit_code, Some(0));
-        assert!(text.len() <= CAPTURE_LIMIT + 2);
-        assert!(text.contains("VERIFICATION:- SUCCESSFUL"));
+        let flags = CaptureFlags {
+            stop: Arc::new(AtomicBool::new(false)),
+            failed: Arc::new(AtomicBool::new(false)),
+        };
+
+        let (reader, _writer) = waiting();
+        let panicked = finish_capture(spawn_capture(PanickingPipe(reader), &flags, CAPTURE_LIMIT));
+        assert!(
+            matches!(&panicked, Err(CaptureFailure::Unread { detail }) if detail.contains("panicked")),
+            "{panicked:?}"
+        );
+        assert!(
+            flags.failed.load(Ordering::Acquire),
+            "a failed capture stops the run's wait"
+        );
+
+        let (reader, _writer) = waiting();
+        let read_failed = capture(
+            FailingPipe(reader),
+            &AtomicBool::new(false),
+            CAPTURE_LIMIT,
+            STOP_DRAIN_LIMIT,
+            poll,
+        );
+        assert!(
+            matches!(&read_failed, Err(CaptureFailure::Unread { detail }) if detail.contains("read failed")),
+            "{read_failed:?}"
+        );
+
+        let (reader, _writer) = waiting();
+        let poll_failed = capture(
+            reader,
+            &AtomicBool::new(false),
+            CAPTURE_LIMIT,
+            STOP_DRAIN_LIMIT,
+            failing_poll,
+        );
+        assert!(
+            matches!(&poll_failed, Err(CaptureFailure::Unread { detail }) if detail.contains("poll failed")),
+            "{poll_failed:?}"
+        );
+    }
+
+    /// An unread stream refuses the run with the stream named; it never becomes text.
+    ///
+    /// Trace: FR-017-AC-25, TC-043
+    #[test]
+    fn tc_043_an_unread_stream_names_the_stream_in_the_launch_outcome() {
+        let unread = || CaptureFailure::Unread {
+            detail: "gone".to_owned(),
+        };
+        let one = NonZeroUsize::MIN;
+        assert!(matches!(
+            stream_bytes(CaptureStream::Stderr, Err(unread()), 5, one),
+            Err(LaunchOutcome::OutputUnread { stream: CaptureStream::Stderr, detail })
+                if detail == "gone"
+        ));
+        assert!(matches!(
+            stream_bytes(
+                CaptureStream::Stdout,
+                Err(CaptureFailure::OverLimit),
+                5,
+                one
+            ),
+            Err(LaunchOutcome::OutputOverLimit {
+                stream: CaptureStream::Stdout,
+                limit: 5,
+                harnesses: 1
+            })
+        ));
+        assert!(matches!(
+            stream_bytes(CaptureStream::Stdout, Ok(b"ok".to_vec()), 5, one),
+            Ok(bytes) if bytes == b"ok"
+        ));
+    }
+
+    /// A launcher that exits on its own, leaving a real grandchild in its process group, has
+    /// that grandchild killed by the time the run returns, as it does on a timeout. `sleep 45 &`
+    /// is forked by the launcher shell, which writes its pid and exits without waiting.
+    ///
+    /// Trace: FR-017-AC-24, TC-043
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn tc_043_a_launcher_that_exits_on_its_own_has_its_grandchild_killed() {
+        let directory = discover_scratch("exit-grandchild");
+        let pidfile = directory.join("pid");
+        let mut command = Command::new("sh");
+        command
+            .arg("-c")
+            .arg(format!("sleep 45 & echo $! > {}", pidfile.display()));
+        let outcome = run_launcher_with_timeout(command, Duration::from_secs(60)).unwrap();
+        assert!(
+            matches!(
+                outcome,
+                LaunchOutcome::Completed {
+                    exit_code: Some(0),
+                    ..
+                }
+            ),
+            "the launcher exited on its own, within its budget"
+        );
+        let grandchild: i32 = fs::read_to_string(&pidfile)
+            .unwrap()
+            .trim()
+            .parse()
+            .expect("the launcher recorded its grandchild's pid before it exited");
+        assert!(
+            process_gone_within(grandchild),
+            "the grandchild {grandchild} outlived the run that left it in the launcher's group"
+        );
+        let _ = fs::remove_dir_all(directory);
     }
 
     /// A timeout too large to add to the current instant means no deadline, not a panic.

@@ -57,16 +57,15 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
   that when T rounded up to whole seconds exceeds 4294967295, the most the backend accepts (it exits
   2 with no report above that), the generator shall omit the per-member timeout for that batch.
   The outer bound below still applies, and does not elapse only when the product does not fit, as
-  in FR-017-AC-15. (Planned, IR-277.)
+  in FR-017-AC-15.
 - If the backend timed out a member of a batch, then the generator shall classify that member
-  inconclusive with the timed-out reason naming T and leave the other members' results as they
-  are. (Planned, IR-277.)
+  inconclusive with the timed-out reason naming T (FR-017 carries T, in whole seconds rounded up,
+  in the member's batch statement) and leave the other members' results as they are.
 - Where FR-017 runs several harnesses in one launcher process, the generator shall bound the
   process to T multiplied by the member count, a product too large to represent never elapsing.
-  (Planned, IR-277.)
 - If a batch process reaches that bound, then the generator shall kill it, refuse the batch as
   timed out and classify no member, because the backend writes its report only at the end and a
-  killed batch leaves none. (Planned, IR-277.)
+  killed batch leaves none.
 - The generator shall record in each execution evidence the bounds of every symbolic argument and
   the two ceilings the run was held to.
 - The generator shall name the family in every harness identity, refusal and execution evidence, so
@@ -100,7 +99,7 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
 
 ## Rationale
 
-The batch rule (IR-277, planned) is a default the owner may change. This requirement states a
+The batch rule (IR-277) is a default the owner may change. This requirement states a
 ceiling for one harness's process tree and does not say what a shared process owes its members.
 Measured on Kani 0.68.0 and CBMC 6.11.0 by the review of this change: a batch's harnesses run one
 after another, one report is written at the end (a killed batch leaves none), and

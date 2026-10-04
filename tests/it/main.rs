@@ -13,7 +13,8 @@
 //! `flock`) are `#[ignore]`d here exactly as they were before the merge and stay reachable by
 //! name filter: see `Makefile`'s `kani` target, which runs
 //! `cargo test --test it -- --ignored --test-threads=1` with the `kani_obligations`,
-//! `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus` and `kani_generation` filters.
+//! `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and
+//! `kani_batching` filters.
 //!
 //! `common` is `mod`-included by six former top-level files. Cargo tolerated that -- each file
 //! used to be its own crate, so each had its own copy -- but `clippy::duplicate_mod` correctly
@@ -51,6 +52,7 @@ mod exact_scalar_agreement;
 mod exact_scalar_generation;
 mod harness_generation;
 mod kani_argument_order;
+mod kani_batching;
 mod kani_generation;
 mod kani_obligations;
 mod kani_obligations_state_frame;

@@ -15,27 +15,57 @@ const PLAYBACK_FENCE: &str = "```";
 const PLAYBACK_ENTRY_POINT: &str = "kani::concrete_playback_run";
 const PLAYBACK_COVER_MARKER: &str = "/// Check for `cover`";
 
+/// One fenced concrete-playback block Kani printed, with the `module::harness` path it is headed
+/// for ("Concrete playback unit test for `<harness>`:").
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PlaybackBlock<'a> {
+    /// The path in the block's heading; empty when the heading names none.
+    pub(crate) harness: &'a str,
+    /// The unit test between the fences, trimmed, verbatim.
+    pub(crate) test: &'a str,
+    /// Whether the block witnesses a failed property: it runs the playback entry point and is not
+    /// the playback of a satisfied cover, which witnesses reachability.
+    pub(crate) counterexample: bool,
+}
+
+/// Every playback block in `text`, in print order. A fence with no closing fence ends the scan.
+pub(crate) fn playback_blocks(text: &str) -> Vec<PlaybackBlock<'_>> {
+    let mut blocks = Vec::new();
+    let mut rest = text;
+    while let Some((_, after_header)) = rest.split_once(PLAYBACK_HEADER) {
+        let Some((heading, after_open)) = after_header.split_once(PLAYBACK_FENCE) else {
+            break;
+        };
+        let Some((body, after_close)) = after_open.split_once(PLAYBACK_FENCE) else {
+            break;
+        };
+        let test = body.trim();
+        blocks.push(PlaybackBlock {
+            harness: heading.split('`').nth(1).unwrap_or_default(),
+            test,
+            counterexample: test.contains(PLAYBACK_ENTRY_POINT)
+                && !test
+                    .lines()
+                    .any(|line| line.starts_with(PLAYBACK_COVER_MARKER)),
+        });
+        rest = after_close;
+    }
+    blocks
+}
+
 /// The concrete-playback unit test Kani printed for a failed property check, verbatim, or `None`
 /// when it printed none. A playback printed for a satisfied cover witnesses reachability and is
 /// never returned. A fence with no closing fence ends the scan.
-pub(crate) fn counterexample_playback(text: &str) -> Option<String> {
-    let mut rest = text;
-    while let Some(start) = rest.find(PLAYBACK_HEADER) {
-        let tail = &rest[start..];
-        let fence = tail.find(PLAYBACK_FENCE)?;
-        let body = &tail[fence + PLAYBACK_FENCE.len()..];
-        let end = body.find(PLAYBACK_FENCE)?;
-        let test = body[..end].trim();
-        if test.contains(PLAYBACK_ENTRY_POINT)
-            && !test
-                .lines()
-                .any(|line| line.starts_with(PLAYBACK_COVER_MARKER))
-        {
-            return Some(test.to_owned());
-        }
-        rest = &body[end + PLAYBACK_FENCE.len()..];
-    }
-    None
+///
+/// `harness` is the `module::harness` path of the harness whose playback is wanted: only a block
+/// headed for it is considered, so a process that ran several harnesses never hands one member
+/// the block of another. `None` takes the first such block whatever it is headed for, which is
+/// right only when the text came from one harness.
+pub(crate) fn counterexample_playback(text: &str, harness: Option<&str>) -> Option<String> {
+    playback_blocks(text)
+        .into_iter()
+        .find(|block| block.counterexample && harness.is_none_or(|path| block.harness == path))
+        .map(|block| block.test.to_owned())
 }
 
 const HARNESS_MARKER: &str = "/// Test generated for harness `";
@@ -276,14 +306,62 @@ mod tests {
         let unterminated =
             "Concrete playback unit test for `h`:\n```\nfn c() { kani::concrete_playback_run(v, h); }";
         assert_eq!(
-            counterexample_playback(&format!("{cover}{no_entry}{property}")).as_deref(),
+            counterexample_playback(&format!("{cover}{no_entry}{property}"), None).as_deref(),
             Some("/// Check for `assertion`: \"a\"\nfn u() { kani::concrete_playback_run(v, h); }")
         );
-        assert_eq!(counterexample_playback(&format!("{cover}{no_entry}")), None);
         assert_eq!(
-            counterexample_playback(&format!("{cover}{unterminated}")),
+            counterexample_playback(&format!("{cover}{no_entry}"), None),
             None
         );
-        assert_eq!(counterexample_playback(""), None);
+        assert_eq!(
+            counterexample_playback(&format!("{cover}{unterminated}"), None),
+            None
+        );
+        assert_eq!(counterexample_playback("", None), None);
+    }
+
+    /// A block is taken by the path in its own heading: another harness's earlier failing block is
+    /// never the answer, a path with no failing block gets none, and every block is listed under
+    /// the path it is headed for.
+    ///
+    /// Trace: FR-017-AC-23, TC-043
+    #[test]
+    fn tc_043_a_playback_is_taken_by_the_path_it_is_headed_for() {
+        let block = |path: &str, kind: &str, body: &str| {
+            format!(
+                "Concrete playback unit test for `{path}`:\n```\n/// Check for `{kind}`: \"c\"\nfn {body}() {{ kani::concrete_playback_run(v, h); }}\n```\n"
+            )
+        };
+        let text = format!(
+            "{}{}{}{}",
+            block("a::check", "assertion", "first"),
+            block("b::check", "cover", "cover_b"),
+            block("b::check", "assertion", "second"),
+            block("c::check", "cover", "cover_c"),
+        );
+        let taken = |path| counterexample_playback(&text, Some(path));
+        assert!(taken("a::check").is_some_and(|test| test.contains("fn first")));
+        assert!(taken("b::check").is_some_and(|test| test.contains("fn second")));
+        assert_eq!(
+            taken("c::check"),
+            None,
+            "a cover block is not a counterexample"
+        );
+        assert_eq!(taken("d::check"), None);
+        // The unfiltered scan still answers with the first failing block of the text.
+        assert!(counterexample_playback(&text, None).is_some_and(|test| test.contains("fn first")));
+        let blocks = playback_blocks(&text);
+        assert_eq!(
+            blocks
+                .iter()
+                .map(|block| (block.harness, block.counterexample))
+                .collect::<Vec<_>>(),
+            [
+                ("a::check", true),
+                ("b::check", false),
+                ("b::check", true),
+                ("c::check", false)
+            ]
+        );
     }
 }

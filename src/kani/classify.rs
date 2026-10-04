@@ -7,7 +7,10 @@ use crate::kani::{
     identity::ObligationKind,
     output::{
         playback::counterexample_playback,
-        report::{KaniCheckResult, KaniHarnessReport, KaniHarnessStatus, KaniReportRefusal},
+        report::{
+            KaniCheckResult, KaniHarnessReport, KaniHarnessStatus, KaniMemberReport,
+            KaniReportRefusal,
+        },
     },
 };
 
@@ -131,6 +134,50 @@ pub fn classify_kani_run(
         };
     };
     let report = KaniHarnessReport::parse(report)?;
+    let outcome = classify_report(
+        exited_successfully,
+        &report,
+        || counterexample_playback(text, None),
+        kind,
+    );
+    Ok(classified(outcome, report, kind))
+}
+
+/// Classifies one member of a batch from its own entry of the report Kani exported for the
+/// process (FR-017-AC-22).
+///
+/// `process_succeeded` is the success the member may claim: the process exited 0, or it exited
+/// non-zero and at least one member's entry states failure. Kani exits 1 for any failed harness
+/// and for its own errors alike, so a success beside a non-zero exit is believed only when some
+/// entry accounts for that exit. `playback` is the console block headed for this member's path,
+/// found by the caller; it is asked for only when this member's entry names a failed property.
+///
+/// An entry that states failure with no checks and was stopped by Kani's own per-harness timeout
+/// is inconclusive as timed out, never falsified.
+pub(crate) fn classify_member(
+    process_succeeded: bool,
+    member: &KaniMemberReport,
+    playback: impl FnOnce() -> Option<String>,
+    kind: Option<ObligationKind>,
+) -> ClassifiedRun {
+    let report = member.report.clone();
+    let outcome = if member.timed_out
+        && report.status == KaniHarnessStatus::Failure
+        && report.checks.is_empty()
+    {
+        inconclusive(KaniInconclusiveReason::TimedOut)
+    } else {
+        classify_report(process_succeeded, &report, playback, kind)
+    };
+    classified(outcome, report, kind)
+}
+
+/// The run `outcome` was reached for, with the check count and the checks of its `report`.
+fn classified(
+    outcome: KaniRunOutcome,
+    report: KaniHarnessReport,
+    kind: Option<ObligationKind>,
+) -> ClassifiedRun {
     let success_checks =
         report
             .property_successes()
@@ -139,18 +186,19 @@ pub fn classify_kani_run(
             } else {
                 0
             });
-    Ok(ClassifiedRun {
-        outcome: classify_report(exited_successfully, &report, text, kind),
+    ClassifiedRun {
+        outcome,
         success_checks,
         checks: report.checks,
-    })
+    }
 }
 
-/// The classification rule (codegen#55), over the typed report only.
+/// The classification rule (codegen#55), over the typed report only. `playback` finds the
+/// falsifying playback, and is asked for only when the report names a failed property.
 fn classify_report(
     exited_successfully: bool,
     report: &KaniHarnessReport,
-    text: &str,
+    playback: impl FnOnce() -> Option<String>,
     kind: Option<ObligationKind>,
 ) -> KaniRunOutcome {
     match report.status {
@@ -159,11 +207,7 @@ fn classify_report(
         KaniHarnessStatus::Failure if report.failed_unwinding() => {
             inconclusive(KaniInconclusiveReason::UnwindBoundExhausted)
         }
-        KaniHarnessStatus::Failure => match report
-            .failed_property()
-            .then(|| counterexample_playback(text))
-            .flatten()
-        {
+        KaniHarnessStatus::Failure => match report.failed_property().then(playback).flatten() {
             Some(counterexample) => KaniRunOutcome::Falsified { counterexample },
             None => inconclusive(KaniInconclusiveReason::FailedWithoutCounterexample),
         },

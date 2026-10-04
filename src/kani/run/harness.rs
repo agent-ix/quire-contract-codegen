@@ -45,6 +45,9 @@ impl<'a> From<&'a StateFrameHarness> for KaniExecutableHarness<'a> {
 /// Exactly what execution reads from a harness, whichever kind it is.
 pub(super) struct HarnessView<'a> {
     pub(super) rust: &'a Artifact,
+    /// The `module::harness` path Kani names the harness by, which a batch passes to `--harness`
+    /// and finds again as the `harness_id` of the report entry.
+    pub(super) selection: String,
     pub(super) kind: Option<ObligationKind>,
     pub(super) unwind: u32,
     pub(super) solver: KaniSolver,
@@ -58,6 +61,7 @@ impl<'a> KaniExecutableHarness<'a> {
                 let identity = &harness.identity;
                 HarnessView {
                     rust: &harness.rust,
+                    selection: identity.harness_path().to_string(),
                     kind: Some(identity.kind),
                     unwind: identity.unwind,
                     solver: identity.solver,
@@ -68,6 +72,7 @@ impl<'a> KaniExecutableHarness<'a> {
                 let identity = &harness.identity;
                 HarnessView {
                     rust: &harness.rust,
+                    selection: identity.harness_path().to_string(),
                     kind: None,
                     unwind: identity.unwind,
                     solver: identity.solver,
@@ -78,6 +83,7 @@ impl<'a> KaniExecutableHarness<'a> {
                 let identity = &harness.identity;
                 HarnessView {
                     rust: &harness.rust,
+                    selection: format!("{}::{}", identity.module_symbol, identity.harness_symbol),
                     kind: Some(match identity.property {
                         StateFrameProperty::Postcondition { .. } => ObligationKind::Postcondition,
                         StateFrameProperty::Frame { .. } => ObligationKind::Frame,

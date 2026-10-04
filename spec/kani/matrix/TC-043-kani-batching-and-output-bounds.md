@@ -70,10 +70,38 @@ FR-028-AC-12, verified by TC-039.
    their results; the block for a non-member path and the pair of blocks for one path each refuse
    the whole batch (FR-017-AC-23).
 9. The batch is refused with `HarnessNotInCrate` and launches nothing (FR-017-AC-23).
-10. Fewer processes after than before for N > 1, and the numbers are in the code PR.
+10. Fewer processes after than before for N > 1, and the numbers are in the code PR (they are also
+    written by the lane to `process-counts.json`).
+
+## Implementation
+
+Launcher stand-ins and real short-lived processes, in `src/kani/run/launch.rs`:
+`tc_043_a_capture_over_its_limit_is_refused_and_one_at_its_limit_is_whole`,
+`tc_043_a_launcher_stream_over_the_limit_is_refused_and_one_at_the_limit_completes`,
+`tc_043_a_batch_stream_is_bounded_by_the_limit_times_the_member_count` and
+`tc_043_an_over_limit_run_kills_the_launcher_group` (steps 1; FR-017-AC-14),
+`tc_043_a_capture_that_panics_or_whose_poll_or_read_errs_is_unread_not_empty` and
+`tc_043_an_unread_stream_names_the_stream_in_the_launch_outcome` (step 2; FR-017-AC-25), and
+`tc_043_a_launcher_that_exits_on_its_own_has_its_grandchild_killed` (step 3; FR-017-AC-24).
+
+A shell-script launcher that records each process it is started as and the arguments it received,
+in `src/kani/run/execute.rs` (`batch_tests`): the process counts and argument vectors for N = 1, 10
+and 50 compatible harnesses and for mixed option vectors and timeouts, the `--harness-timeout` and
+outer-bound arithmetic including `Duration::MAX` and 4294967295 seconds, a batch killed at its outer
+bound, both no-report exits, the keyed split of a report whose results are in Kani's own order
+rather than the request's (two members sharing the bare symbol `check`), the exit-status
+predicate, the `timeout` entry, the lacking, repeating and unrequested harness, the member missing
+from the crate, the playback attribution cases and the over-limit refusal of a batch by its member
+count (steps 4 to 9). `tc_043_a_playback_is_taken_by_the_path_it_is_headed_for` in
+`src/kani/output/playback.rs` covers the path-keyed scan.
+
+The `make kani` lane runs real Kani 0.68 in `tests/it/kani_batching.rs`: the launcher process count
+and wall time before and after batching for N = 1, 10 and 50 (step 10), and one real batch of a
+verified, a falsified and a timed-out member, then one at 4294967295 seconds (steps 5 and 7). The
+unit lane's batch reports are built in the shape the real batch report has (`harness_id`, an
+`error_details` entry whose `exit_status` is `timeout` for a member Kani cut off, results in the
+order Kani ran them); no real batch report is stored as a fixture.
 
 ## Status
 
-Planned (IR-277). At this revision the launcher runs one harness per process, keeps the tail of an
-over-long stream silently, falls back to empty text when a capture thread panics and kills the group
-only on a timeout.
+Implemented (IR-277).
