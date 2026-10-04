@@ -387,6 +387,37 @@ pub(crate) fn supported_contract_harnesses(
     harnesses
 }
 
+/// The precondition, V1 contract (postcondition and invariant) and scalar harness sources, for
+/// the cover-last guard (FR-015-AC-58).
+pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
+    let mut sources = supported_contract_harnesses(&bound_package(1000), "crate::withdraw")
+        .into_iter()
+        .map(|harness| {
+            let family = match harness.identity.kind {
+                ObligationKind::Precondition => "precondition",
+                ObligationKind::Postcondition => "v1 contract postcondition",
+                _ => "v1 contract invariant",
+            };
+            (family, harness.rust.contents)
+        })
+        .collect::<Vec<_>>();
+    let (scalar, claim_map) = scalar_package();
+    let node = code_id(1001);
+    let items = [ObligationItem::ScalarClaim {
+        package: &scalar,
+        claim_map: &claim_map,
+        node_id: &node,
+    }];
+    let (_, scalar_harnesses) =
+        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+    sources.extend(
+        scalar_harnesses
+            .into_iter()
+            .map(|harness| ("scalar", harness.rust.contents)),
+    );
+    sources
+}
+
 // ---- V2 fixture --------------------------------------------------------------
 
 /// An integer addition whose only bound admits no value.

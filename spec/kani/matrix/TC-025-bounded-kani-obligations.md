@@ -151,7 +151,7 @@ unsatisfiable requires as `cover_unsatisfied`.
     `LoweringLimitUnrecognised` and read `OracleRefused` carrying it unchanged, field for field
     (FR-015-AC-50, IR-547).
 
-## A cover in every harness kind (planned, IR-464)
+## A cover in every harness kind (IR-464)
 
 16. Generate a harness of each kind: precondition, V1 contract, scalar, state-clause,
     frame-effect and V1 bundle (the corpus kind is TC-023's). Parse each emitted source
