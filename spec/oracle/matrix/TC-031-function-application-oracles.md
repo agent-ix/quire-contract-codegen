@@ -144,7 +144,7 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     call-node-first order. In the `#[cfg(test)]` module the code change adds to the function
     module, hand `lowered_binary_body` hand-built records: `work` gives `LoweringWorkExhausted`,
     `bytes` gives `LoweringByteLimitExceeded` with the record's `limit` and `consumed`, and each of
-    `depth`, `nodes`, `edges`, `occurrences` and `diagnostics` gives `LoweringLimitUnrecognised`
+    `nodes`, `edges`, `occurrences` and `diagnostics` gives `LoweringLimitUnrecognised`
     with that snake_case `limit_kind`, with no panic and never `LoweringWorkExhausted`. Per-function
     isolation stays with FR-021-AC-12's `tc_031_ac12_*` tests.
 12. Unknown function names, and duplicate-node pair members, on one call node (FR-021-AC-24,

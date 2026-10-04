@@ -34,7 +34,7 @@ fn span(line: u64) -> Value {
 }
 
 fn int(minimum: i64, maximum: i64) -> Value {
-    json!({"kind":"integer","domain":"signed","minimum":minimum,"maximum":maximum,"overflow":"reject"})
+    json!({"kind":"integer","domain":"signed","minimum":minimum.to_string(),"maximum":maximum.to_string(),"overflow":"reject"})
 }
 
 fn owner() -> Value {
@@ -119,7 +119,7 @@ fn clauses() -> Vec<ClauseFixture> {
             values: vec![balance(31, 1000)],
             expression: json!({"node":"compare","operator":"greater_equal",
                 "left":read("balance", "current", 32),
-                "right":{"node":"integer_literal","value":0,"value_type":int(0, 1000),"source":span(33)},
+                "right":{"node":"integer_literal","value":"0","value_type":int(0, 1000),"source":span(33)},
                 "source":span(31)}),
         },
     ]

@@ -957,7 +957,7 @@ mod tests {
                 "end":{"source":doc,"line":line,"column":2,"byte_offset":line}})
         };
         let owner = json!({"package": package_id, "requirement": "FR-200", "revision": 1});
-        let int_type = json!({"kind":"integer","domain":"signed","minimum":0,"maximum":1000,
+        let int_type = json!({"kind":"integer","domain":"signed","minimum":"0","maximum":"1000",
             "overflow":"reject"});
         let read = |name: &str, line: u64| json!({"node":"value_reference","name":name,"observation":"current","source":span(line)});
         let identity = |kind: &str, name: &str| {

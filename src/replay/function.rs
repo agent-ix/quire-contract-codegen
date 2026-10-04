@@ -209,8 +209,6 @@ impl LockedSource {
 pub struct DependencyLock {
     /// The library identity.
     pub identity: String,
-    /// The library version.
-    pub version: String,
     /// The dependency's `package_id`, as the proving run recorded it.
     pub package_id: DigestRecord,
     /// The dependency's lock source.
@@ -315,7 +313,6 @@ impl ReplayInputs {
             .iter()
             .map(|dependency| SuppliedLibrary {
                 identity: dependency.identity.clone(),
-                version: dependency.version.clone(),
                 source: dependency.source.source_identity(),
                 path: dependency.source.identity.clone(),
                 bytes: dependency.source.bytes.clone(),
@@ -341,7 +338,6 @@ impl ReplayInputs {
             .iter()
             .map(|dependency| DependencyEntryWire {
                 identity: dependency.identity.clone(),
-                version: dependency.version.clone(),
                 package_id: (
                     Some(dependency.package_id.domain().as_str().to_owned()),
                     dependency.package_id.hex(),
