@@ -287,7 +287,7 @@ crate CG's lock selects.
   No code on those paths computes `ObligationIdentity`. QSL's type says QSL never hashes it.
   ADR-013 O-09 defines the preimage: the clause (or application) node id, its occurrence key,
   the obligation kind and the arguments (parameter node id and declared domain), source span
-  excluded. CG's frame envelope takes a caller `[u8; 32]` (`frame_replay.rs:47`); the function
+  excluded. CG's frame envelope takes a caller `[u8; 32]` (`src/replay/frame.rs`); the function
   path puts the transcript's byte digest in the request's obligation-identity slot at this base
   (AD-002); that digest is replaced by the function-contract identity, not retained.
   The work is larger than one missing field. Three identity structs exist and none carries what
@@ -297,7 +297,7 @@ crate CG's lock selects.
   node id but no occurrence key, and its `ScalarObligationArgument` (`identifier`, `minimum`,
   `maximum`) has no parameter node id. `StateFrameIdentity` (`state_frame.rs`) holds the clause
   node id and no occurrence key, and it is the identity of the frame harness whose
-  counterexample goes into an envelope today (`frame_replay.rs:47`). Each must gain the
+  counterexample goes into an envelope today (`src/replay/frame.rs`). Each must gain the
   missing members before one function can compute the O-09 value. Recommendation below.
 - Encoder gap (measured at `main`): CG has no obligation-identity digest code and no
   `quire_canonical` use. The content digest of a corpus case is `serde_json::to_vec` plus a
