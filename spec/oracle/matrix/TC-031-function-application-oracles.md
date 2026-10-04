@@ -159,7 +159,8 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     then `zz_unknown`, each `UnknownFunction` naming its own name, no `DuplicateRequest`, identical
     under both orders; (iii) one `DuplicateRequest` entry; (iv) two entries, the `UnknownFunction`
     one first, each equal to the entry that item gets when requested alone; (v) two entries,
-    `Zz_unknown` then `aa_unknown` (byte order, case-sensitive), identical under both orders; (vi) two entries, `DuplicateDeclaringNode { N1 }` then
+    `Zz_unknown` then `aa_unknown` (byte order, case-sensitive), identical under both orders;
+    (vi) two entries, `DuplicateDeclaringNode { N1 }` then
     `DuplicateDeclaringNode { N2 }` for `m_multi` and `z_pair`, and `{ N2 }` then `{ N1 }` for
     `z_multi` and `a_pair`, identical under both request orders. The test is 🚧 Planned until
     the code change lands.
