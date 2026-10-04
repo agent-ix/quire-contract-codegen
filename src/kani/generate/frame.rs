@@ -950,6 +950,14 @@ fn assertion_message(text: &str) -> String {
 }
 
 /// The `kani::proof` function every generated module holds.
+///
+/// Every body ends with its one non-vacuity cover, after the assertions (FR-015, IR-451). Kani
+/// prints one concrete playback per distinct input valuation and a cover that precedes an
+/// assertion is satisfied by every valuation, the failing one included, so a violation Kani found
+/// at a valuation the cover also took (the all-zero one, say) printed only the cover's playback
+/// and read as a failure with no counterexample. An assertion that fails does not return, so a
+/// cover placed after it can only be satisfied by a valuation that passed it, and the failing
+/// valuation's playback is the assertion's own.
 const HARNESS: &str = "check";
 
 struct Postcondition<'a> {
@@ -981,7 +989,7 @@ fn postcondition_body(
         scope.operation
     ));
     format!(
-        "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"state bounds hold and the operation returns\");\n        assert!(\n            {left}.{field} {operator} {right}.{field},\n            \"{{}}\",\n            {message}\n        );\n    }}\n}}\n",
+        "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        assert!(\n            {left}.{field} {operator} {right}.{field},\n            \"{{}}\",\n            {message}\n        );\n        kani::cover!(true, \"state bounds hold and the operation returns\");\n    }}\n}}\n",
         state = symbolic_state(abi, domains),
         subject = abi.subject_path,
     )
@@ -1005,7 +1013,7 @@ fn frame_body(
         })
         .collect::<String>();
     format!(
-        "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        kani::cover!(true, \"the operation returns\");\n{assertions}    }}\n}}\n",
+        "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n{assertions}        kani::cover!(true, \"the operation returns\");\n    }}\n}}\n",
         state = symbolic_state(abi, domains),
         subject = abi.subject_path,
     )

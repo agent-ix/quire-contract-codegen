@@ -499,6 +499,13 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
     for source in [post, frame] {
         assert_eq!(source.matches("#[kani::proof]").count(), 1);
         assert_eq!(source.matches("kani::cover!(").count(), 1);
+        // The cover ends the harness, after every assertion: an assertion that fails does not
+        // return, so the cover cannot share a failing valuation (IR-451).
+        let (assertion, cover) = (source.rfind("assert!("), source.find("kani::cover!("));
+        assert!(
+            assertion.zip(cover).is_some_and(|(a, c)| a < c),
+            "the cover must follow the last assertion:\n{source}"
+        );
     }
     assert_eq!(post.matches("assert!(").count(), 1);
     assert_eq!(frame.matches("assert!(").count(), 1);
