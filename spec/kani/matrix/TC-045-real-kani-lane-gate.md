@@ -24,7 +24,7 @@ executables on `PATH` for `cargo`, `cargo-kani` and `git`, and a temporary lock 
 `tests/it/kani_gate.rs` (planned) and runs in the default `cargo test`. It starts no nested `cargo
 test` and holds no host-wide lock.
 
-1. Scope, required (NFR-006-AC-1): feed each of the sixteen paths of NFR-006-AC-1 alone as the
+1. Scope, required (NFR-006-AC-1): feed each of the eighteen paths of NFR-006-AC-1 alone as the
    changed paths and assert `required` and the path on the output.
 2. Scope, not required (NFR-006-AC-2): feed each of the six paths of NFR-006-AC-2 alone and assert
    `not required`.
@@ -61,10 +61,12 @@ test` and holds no host-wide lock.
     Read the six filters from `make -n kani`. Apply libtest's rule (a filter selects a test whose full
     path contains it) and assert that the tagged tests and the `#[ignore]`d tests the filters select are
     the same set; a tagged test no filter selects, or a selected test without the tag, fails the step.
-    Include closure (NFR-006-AC-18): in the same walk, read every `include!` and `#[path]` target
-    from each file that holds a lane test, and from each file those name in turn, resolve it against
-    the naming file's directory, and assert the result matches a pattern of the Kani-touching set read
-    from `scripts/kani_scope.sh`; the target `tests/checked_package_support/base.rs` must be found.
+    Include closure (NFR-006-AC-18): in the same walk, read every `include!`, `include_str!`,
+    `include_bytes!` and `#[path]` target from each `tests/it` file that holds a lane test, and from
+    each file those name in turn, resolve it against the naming file's directory, and assert the
+    result matches a pattern of the Kani-touching set read from `scripts/kani_scope.sh`; the targets
+    `tests/checked_package_support/base.rs`, `tests/state_frame_support/subject.rs` and the three Kani
+    schemas must be found.
 12. `make ci` (NFR-006-AC-12): run `make -n ci` and assert no line contains `kani`.
 13. Inspection (NFR-006-AC-13 to NFR-006-AC-17): for each merged pull request that touched the
     Kani-touching set, read its body for the evidence line and compare `head` with the pull request's
