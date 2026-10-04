@@ -412,8 +412,9 @@ mod tests {
     /// already kills, and so would prove nothing about the group kill.
     ///
     /// The budget is tried up a ladder because a budget shorter than the time the OS takes to
-    /// fork the grandchild ends the run before any grandchild exists; a grandchild that died
-    /// before writing its pidfile counts as killed.
+    /// fork the grandchild ends the run before any grandchild exists; a rung whose grandchild
+    /// never wrote its pidfile is inconclusive and the next rung is tried, so the test passes
+    /// only on a recorded grandchild that is gone.
     ///
     /// Trace: FR-017-AC-17, TC-027
     #[cfg(target_os = "linux")]
@@ -437,15 +438,15 @@ mod tests {
                 "a run past its budget must classify as timed out"
             );
 
-            // A missing, empty, or unparseable pidfile means the grandchild was killed before
-            // it finished recording its own pid — informationally at least as strong as
-            // confirming its pid is gone from `/proc`, not a test failure. Treat it as "not
-            // surviving" and move on rather than panicking, which would escape the retry
-            // ladder entirely and report a fast, successful kill as a test crash.
+            // A missing, empty, or unparseable pidfile means the budget ended before the
+            // grandchild recorded its pid: that rung proves nothing about the group kill (there
+            // is no grandchild to have been killed), so it is inconclusive and the ladder moves
+            // to the next, larger budget. Only a recorded pid that is then gone counts as a kill.
             let grandchild_pid: Option<i32> = fs::read_to_string(&pidfile)
                 .ok()
                 .and_then(|contents| contents.trim().parse().ok());
             let grandchild_survived = grandchild_pid.is_some_and(|pid| !process_gone_within(pid));
+            let killed = grandchild_pid.is_some() && !grandchild_survived;
 
             if grandchild_survived {
                 let pid = grandchild_pid.expect("survived implies a parsed pid");
@@ -461,19 +462,19 @@ mod tests {
             }
             let _ = fs::remove_dir_all(directory);
 
-            if !grandchild_survived {
+            if killed {
                 return;
             }
-            // Survived this rung: indistinguishable, from here, between "genuinely not
-            // killed" and "forked after this rung's snapshot" — retry at the next, larger
-            // budget rather than assert either reading.
+            // Survived this rung, or never started one: indistinguishable, from here, between
+            // "genuinely not killed" and "forked after this rung's snapshot" — retry at the
+            // next, larger budget rather than assert either reading.
         }
 
         panic!(
             "the timed-out run's grandchild ({last_surviving_grandchild:?}) was still present \
-             in `/proc` even at the largest budget in GRANDCHILD_KILL_TIMEOUT_LADDER \
-             ({GRANDCHILD_KILL_TIMEOUT_LADDER:?}); kill_process_tree must reach every member of \
-             the launcher's process group"
+             in `/proc`, or never recorded its pid, even at the largest budget in \
+             GRANDCHILD_KILL_TIMEOUT_LADDER ({GRANDCHILD_KILL_TIMEOUT_LADDER:?}); \
+             kill_process_tree must reach every member of the launcher's process group"
         );
     }
 
@@ -528,29 +529,79 @@ mod tests {
         Duration::from_secs(5),
     ];
 
-    /// A process orphaned just before the kill keeps its inherited copy of the pipes' write end
-    /// open: `( sleep 45 & )` orphans a `sleep 45` at once, while `exec sleep 45` replaces the
-    /// outer shell, the direct child. Waiting for the capture threads to see EOF would block
-    /// until the orphan's `sleep 45` ended on its own, which is unbounded; the call must return
-    /// long before that (asserted at 20 s, wide enough for a loaded host, still under the 45 s).
+    /// A process that has left the launcher's process group keeps its inherited copy of the
+    /// pipes' write end open and is out of reach of the group kill: a `setsid sleep 45`, started
+    /// in a subshell and left behind when the outer shell `exec`s into `sleep 45` (the direct
+    /// child), is such a process. Waiting for the capture threads to see EOF would block until
+    /// that orphan's 45 s sleep ended on its own, which is unbounded; the call must return after
+    /// the drain limit, long before that (asserted at 20 s, wide enough for a loaded host and
+    /// under the 45 s). A capture that ignored the stop flag would fail this at about 45 s.
+    ///
+    /// The launcher waits for the orphan to record its pid before it `exec`s, and a rung whose
+    /// budget ended before that is inconclusive (the orphan may still have been in the group),
+    /// so the budget is tried up [`GRANDCHILD_KILL_TIMEOUT_LADDER`]. The orphan is killed by pid
+    /// before the assertions run, so no `sleep 45` outlives the test, passing or failing.
     ///
     /// Trace: FR-017-AC-16, TC-027
+    #[cfg(target_os = "linux")]
     #[test]
     fn a_process_orphaned_just_before_the_kill_does_not_block_this_calls_own_return() {
-        let mut command = Command::new("sh");
-        command.arg("-c").arg("( sleep 45 & ) ; exec sleep 45");
-        let started = Instant::now();
-        let outcome = run_launcher_with_timeout(command, Duration::from_millis(200)).unwrap();
-        assert!(
-            matches!(outcome, LaunchOutcome::TimedOut),
-            "a run past its budget must classify as timed out"
+        for &budget in GRANDCHILD_KILL_TIMEOUT_LADDER.iter() {
+            let directory = discover_scratch("launcher-timeout-escaped-orphan");
+            let pidfile = directory.join("pid");
+            let mut command = Command::new("sh");
+            command.arg("-c").arg(format!(
+                "( setsid sh -c 'echo $$ > {pid}; exec sleep 45' & ); \
+                 until [ -s {pid} ]; do sleep 0.02; done; exec sleep 45",
+                pid = pidfile.display()
+            ));
+            let started = Instant::now();
+            let outcome = run_launcher_with_timeout(command, budget).unwrap();
+            let elapsed = started.elapsed();
+            let orphan_started = kill_recorded_process(&pidfile);
+            let _ = fs::remove_dir_all(directory);
+
+            if !orphan_started {
+                // The budget ended before the orphan was out of the group: it proves nothing.
+                continue;
+            }
+            assert!(
+                matches!(outcome, LaunchOutcome::TimedOut),
+                "a run past its budget must classify as timed out"
+            );
+            assert!(
+                elapsed < Duration::from_secs(20),
+                "a {budget:?} budget must not take anywhere near the escaped process's own 45s \
+                 sleep: took {elapsed:?}"
+            );
+            return;
+        }
+        panic!(
+            "the escaped process never recorded its pid within the largest budget in \
+             GRANDCHILD_KILL_TIMEOUT_LADDER ({GRANDCHILD_KILL_TIMEOUT_LADDER:?})"
         );
-        assert!(
-            started.elapsed() < Duration::from_secs(20),
-            "a 200ms budget must not take anywhere near the orphaned process's own 45s sleep: \
-             took {:?}",
-            started.elapsed()
-        );
+    }
+
+    /// Kills the process whose pid `pidfile` records, waiting up to [`GRANDCHILD_REAP_WAIT`] for
+    /// the record to appear, and reports whether there was one.
+    #[cfg(target_os = "linux")]
+    fn kill_recorded_process(pidfile: &std::path::Path) -> bool {
+        let deadline = Instant::now() + GRANDCHILD_REAP_WAIT;
+        loop {
+            let recorded = fs::read_to_string(pidfile)
+                .ok()
+                .and_then(|contents| contents.trim().parse::<i32>().ok());
+            if let Some(pid) = recorded {
+                let _ = Command::new("kill")
+                    .args(["-KILL", &pid.to_string()])
+                    .status();
+                return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
     }
 
     /// Regression coverage for the polling/draining plumbing `run_launcher_with_timeout` added:
@@ -810,12 +861,14 @@ mod tests {
         let pidfile = directory.join("pid");
         let marker = directory.join("ran-on");
         // The launcher shell forks a grandchild (recording its pid), prints past the limit, sleeps
-        // two seconds, writes its marker and waits for the grandchild. A run that is stopped when
+        // ten seconds, writes its marker and waits for the grandchild. A run that is stopped when
         // the stream goes over never reaches the marker; one that waits for the launcher to end
-        // on its own writes it, and only a kill of the whole group ends the grandchild.
+        // on its own writes it, and only a kill of the whole group ends the grandchild. The
+        // launcher is killed within milliseconds of the stream going over, so the ten seconds are
+        // headroom for a loaded host, not time the test spends.
         let mut command = Command::new("sh");
         command.arg("-c").arg(format!(
-            "sleep 45 & echo $! > {}; head -c {} /dev/zero; sleep 2; touch {}; wait",
+            "sleep 45 & echo $! > {}; head -c {} /dev/zero; sleep 10; touch {}; wait",
             pidfile.display(),
             CAPTURE_LIMIT + 1,
             marker.display()
