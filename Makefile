@@ -9,7 +9,7 @@ TRUSTED_HOME := $(shell /usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(o
 override BASH := /usr/bin/bash
 override CARGO := $(TRUSTED_HOME)/.cargo/bin/cargo
 override MSRV := 1.98.1
-override QUIRE := $(TRUSTED_HOME)/.npm-global/bin/quire
+QUIRE ?= quire
 # --locked only when no local patch is active: a patch rewrites the resolution.
 LOCKED ?= $(if $(wildcard .cargo/config.toml),,--locked)
 
