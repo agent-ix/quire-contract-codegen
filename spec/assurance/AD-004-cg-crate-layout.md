@@ -389,7 +389,7 @@ one identity record, one cover rule and one entry, not one function:
   empty cover list, and the order is fixed by the renderer, not by the family. A frame harness's
   `kani::cover!(true, ...)` after the subject call satisfies the rule, because it is placed after
   the assumptions. Test (L-4): a harness whose assumptions are unsatisfiable does not classify
-  `Verified` under real Kani. The corpus today has no symbolic input and no cover; see step 4g.
+  `Verified` under real Kani. The corpus has no symbolic input; FR-015-AC-55 gives its harness a cover after its assertion (IR-464), and FR-015-AC-58 guards every emitter until this constructor exists; see step 4g.
 - `kani/generate/render.rs` is the only code that emits `#[kani::proof]`, `#[kani::proof_for_contract]`,
   `kani::requires`, `kani::ensures`, `kani::any`, `kani::assume` and `kani::cover!`. A layout test
   checks string literals in non-test source (not comments, so doc prose that names them passes).
@@ -423,7 +423,7 @@ What happens to the other generators:
 | `generate_kani_bundle` | Deleted at step 4f, after step 4e, the QSL-owned move of the QI exemplars and the control passing on the V2 contract arm (4c). Its public entry leaves `interface-001`. FR-003's optional stubbing was dropped by the IR-311 ruling. |
 | `kani_obligations` scalar, precondition, contract renderers | Become family lowerers; the template text moves into `render.rs`. Until 4c the precondition and contract families keep their V1 input. |
 | `state_frame` renderers | Become the frame lowerer. |
-| `bounded_kani_corpus` renderer | Keeps its own template until QSL-353 lands (an interim exception, no cover); then its hand-built package lowerer is retired and its cases render through `render.rs` (step 4g). It returns no `KaniOutcome` at generation time: a verdict comes only from a run. |
+| `bounded_kani_corpus` renderer | Keeps its own template until QSL-353 lands (an interim exception to L-3; its cover is FR-015-AC-55, IR-464); then its hand-built package lowerer is retired and its cases render through `render.rs` (step 4g). It returns no `KaniOutcome` at generation time: a verdict comes only from a run. |
 
 **Requirement (regression test the one generator must keep passing).** QSL's real-Kani arithmetic
 control, recorded as QSL-342 QI #10, passes at every step of the migration, on the path that
@@ -760,9 +760,10 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      FR-015-AC-22 and AC-25 stay verbatim; if the V2 side does not back them by this step, their
      matrix rows go to planned or unbacked, and nothing is deleted or rewritten.
    - 4g: the corpus. Until QSL-353 lands the corpus stays as it is, with its own template: it has
-     no cover and no symbolic input (a ground `assert!` over literals), so `HarnessSpec`, which
-     refuses an empty cover list, cannot render it. It is therefore an interim exception to L-3
-     and outside L-4, and IR-464 stays open for it. When QSL-353 lands, the hand-built package
+     no symbolic input (a ground `assert!` over literals), and its cover after that assertion
+     (FR-015-AC-55, IR-464) is reachability past the assertion only. It is an interim exception
+     to L-3 and, until it renders through `HarnessSpec`, outside L-4; FR-015-AC-58's inspection
+     covers its text meanwhile. When QSL-353 lands, the hand-built package
      lowerer is retired, the rows are backed from QSL-emitted packages built through the facade,
      and a corpus case with symbolic input is rendered through `render.rs` under the cover rule;
      a case with no symbolic input is not rendered as a proof. L-3 lands after 4f and 4g. The Kani family lowerings
@@ -1049,7 +1050,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | `validate_dependencies`, the V1 error type it returns and `deterministic_json` | `kani/generate/census_validation.rs` | 4g or the V2 census input for the first two; step 1a for `deterministic_json` |
 | The shared V1 clause lowering and the V1 arm (`ObligationItem::BoundClause` in `outcome.rs`, `classify_clause` in `negotiate.rs`) | `kani/generate/clause.rs`, `outcome.rs`, `negotiate.rs` | step 4c reshapes the lowering for the V2 input; 4f deletes the V1 arm |
 | The persisted-record helpers | `kani/generate/record.rs` | not scheduled; `artifact` by step 1a |
-| Each family renders its own template; the corpus keeps its own, with no cover | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4g for the corpus |
+| Each family renders its own template; the corpus keeps its own, with its cover after the assertion (FR-015-AC-55) | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4g for the corpus |
 | The IR-forwarding thin modules | `kani/generate/lower/*` | IR-347 schedules the move |
 | `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |
 
