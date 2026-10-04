@@ -84,9 +84,9 @@ relationships:
     function checks `declaration.parameters.len()`); and `function_index[&node_id]` in
     `item_disposition` (the caller builds the map). None is reachable from input today. Only
     `path()[0]` rests on a type; the others rest on generator code and are the same class as the
-    covered sites. They are not covered because IR-577 covers the sites the ticket named and the
-    sites in those functions, and the measurement found these unreachable; they are deferred, not
-    shown safe, and a change that breaks one of those invariants aborts the generator.
+    covered sites. Leaving them out is a scoping choice for IR-577, made on the measurement: they were
+    found unreachable from untrusted input today. They are neither shown safe nor covered, and a
+    change that breaks one of those invariants aborts the generator.
   FR-018-AC-17 and FR-021's Behavior section keep their own index and arithmetic rules for emitted
   source.
 - Known blind spots of the scan, none present in `src/` today: a panic macro imported under another
@@ -126,8 +126,8 @@ a sibling would copy all three. It adds one more public enum variant,
 code. The measurement found no index, slice or arithmetic panic reachable from untrusted input; the
 covered sites are held by a guarantee another function gives (or, for the `regions[0]` write, by
 nothing at all, and the row removes the index), which is the class this requirement already treats
-as a site (see the invariant rows above). Other sites of the same class are deferred, not covered,
-and named in Scope.
+as a site (see the invariant rows above). Other sites of the same class are left out by a scoping
+choice, not covered, and named in Scope.
 
 ## Behavior of each measured site
 
