@@ -12,7 +12,8 @@ type: TestMatrix
 |---|---|---|---|
 | FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned |
 | FR-015 | FR-015-AC-3 through FR-015-AC-6 | TC-025 | ✅ Covered |
-| FR-015 | FR-015-AC-7 through FR-015-AC-12 | TC-025 | ✅ Covered |
+| FR-015 | FR-015-AC-7 | TC-025 | ✅ Covered; for the five kinds that carry a cover today (precondition, V1 contract, scalar, state-clause, frame-effect). The V1 bundle and corpus harnesses emit none, and FR-015-AC-53 to FR-015-AC-58 (planned, IR-464) bring them under it |
+| FR-015 | FR-015-AC-8 through FR-015-AC-12 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-13 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-14 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-15 | TC-033 | 🚧 Planned; the test's underivable claim is `integer.eq`, which FR-014-AC-35 makes derivable |
@@ -22,7 +23,7 @@ type: TestMatrix
 | FR-015 | FR-015-AC-26 through FR-015-AC-36 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-37 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-53, FR-015-AC-54, FR-015-AC-56, FR-015-AC-58 | TC-025 | 🚧 Planned (IR-464); a cover as the last statement of every harness kind, the V1 bundle's real-Kani outcomes (`Verified` healthy, `CoverUnsatisfied` vacuous) and the inspection guard over all emitted harness text. FR-015-AC-7 and FR-015-AC-46 state the cover for the kinds that already carry one |
-| FR-015 | FR-015-AC-55, FR-015-AC-57 | TC-023 | 🚧 Planned (IR-464); the corpus harness's cover after its assertion, and a healthy run of each corpus family classifying `Verified` |
+| FR-015 | FR-015-AC-55, FR-015-AC-57 | TC-023 | 🚧 Planned (IR-464); the corpus harness's cover after its assertion, a true case of each corpus family classifying `Verified` and a false case `Falsified` |
 | FR-015 | FR-015-AC-51, FR-015-AC-52 | TC-023 | ✅ Covered; the profile mismatch refusal (AC-51) and the revision as the context of every corpus outcome and refusal (AC-52) |
 | FR-015 | FR-015-AC-38 through FR-015-AC-49 | TC-025 | 🚧 Planned; the V2 clause claim and V2 census inputs (IR-489, AD-004 steps 4c and 4d). FR-015-AC-44 and FR-015-AC-45 back FR-015-AC-22 and FR-015-AC-25 once `ProofDependencyGraph` retires at step 4f; if they are not implemented by then, the row above holding AC-22 and AC-25 (FR-015-AC-19 through FR-015-AC-25) stays planned and unbacked, and no criterion is deleted or rewritten |
 | FR-017 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-12, FR-017-AC-13, FR-017-AC-15, FR-017-AC-16, FR-017-AC-17, FR-017-AC-18, FR-017-AC-19, FR-017-AC-20, FR-017-CON-2 | TC-027 | ✅ Covered |

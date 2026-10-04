@@ -380,16 +380,17 @@ one identity record, one cover rule and one entry, not one function:
 
 - `kani/generate/spec.rs` defines `HarnessSpec`: the proof attribute (`proof` or
   `proof_for_contract`), `HarnessPath`, the argument bindings with their bounds, the assumptions,
-  the subject call, the covers and the assertions, in that order.
+  the subject call, the assertions and the covers, in that order.
 - **Cover rule (IR-464).** A non-empty cover list is not a non-vacuity check. The rule is where the
-  covers go: `render.rs` emits every cover after all assumptions and after the subject call, never
-  before, so a cover is reachable only when the assumptions are satisfiable, and the cover states
+  covers go: `render.rs` emits every cover after all assumptions, after the subject call and after
+  every assertion, as the last statement of the body, never before, so a cover is reachable only
+  when the assumptions are satisfiable and no failing assertion shares its valuation, and the cover states
   the property's own reachability (for the scalar family, that the oracle's `Completed` branch is
   reached; for the precondition family, that the precondition holds). The constructor refuses an
   empty cover list, and the order is fixed by the renderer, not by the family. A frame harness's
-  `kani::cover!(true, ...)` after the subject call satisfies the rule, because it is placed after
-  the assumptions. Test (L-4): a harness whose assumptions are unsatisfiable does not classify
-  `Verified` under real Kani. The corpus has no symbolic input; FR-015-AC-55 gives its harness a cover after its assertion (IR-464), and FR-015-AC-58 guards every emitter until this constructor exists; see step 4g.
+  `kani::cover!(true, ...)` satisfies the rule once it follows the subject call and the frame
+  assertions, as FR-015-AC-7 states. Test (L-4): a harness whose assumptions are unsatisfiable does not classify
+  `Verified` under real Kani. The corpus has no symbolic input; FR-015-AC-55 gives its harness a cover after its assertion (IR-464), and FR-015-AC-58's inspection of emitted text guards every emitter, and stays beside this constructor once a family renders through it; see step 4g.
 - `kani/generate/render.rs` is the only code that emits `#[kani::proof]`, `#[kani::proof_for_contract]`,
   `kani::requires`, `kani::ensures`, `kani::any`, `kani::assume` and `kani::cover!`. A layout test
   checks string literals in non-test source (not comments, so doc prose that names them passes).
@@ -612,7 +613,7 @@ requirement is authored.
   `kani/generate/corpus/bounded_kani_corpus.rs`); the scan lists them by file and each entry is
   removed with its step.
 - L-4. A `HarnessSpec` has at least one cover, and `render.rs` places every cover after all
-  assumptions and the subject call. Test: the constructor's refusal, and a real-Kani test that a
+  assumptions, the subject call and every assertion, as the last statement. Test: the constructor's refusal, and a real-Kani test that a
   harness with an unsatisfiable assumption does not classify `Verified`.
 - L-5. QSL's arithmetic control passes at every migration step, on the path that serves it: the
   `left + right + 1` mutant is `Falsified` with `amount_current = 999`, and the unmutated control

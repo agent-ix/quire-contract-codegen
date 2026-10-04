@@ -158,7 +158,8 @@ unsatisfiable requires as `cover_unsatisfied`.
     and read the last statement of every function attributed `#[kani::proof]` or
     `#[kani::proof_for_contract]`: it is the only `kani::cover!` of the body, and no
     assertion follows it (FR-015-AC-53, FR-015-AC-54).
-17. Run the installed backend over a healthy V1 bundle harness, which classifies
+17. Run the installed backend over a V1 bundle harness whose requires clause some
+    bounded argument satisfies and whose `ensures` holds for every such argument, which classifies
     `Verified`, and over the same bundle with a requires clause no bounded argument
     satisfies, which classifies `CoverUnsatisfied` and is neither `Verified` nor
     `Falsified` (FR-015-AC-56).
