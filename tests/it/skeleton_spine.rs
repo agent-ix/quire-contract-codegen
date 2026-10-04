@@ -1113,13 +1113,48 @@ fn tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values() {
     for (amount, balance) in [(0, 5), (2, 5), (1, 4), (1, 6), (5, 1)] {
         assert_eq!(
             replay(amount, balance),
-            ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
-                settlement: WitnessSettlement::Inconclusive,
-                category: Category::Success,
-            }),
+            not_reproduced(),
             "({amount}, {balance}) is not the witness point"
         );
     }
+    // The independent reader agrees with the synthetic transcript's own values.
+    assert_eq!(
+        printed_values(&playback(&harness, 1, 5)),
+        (vec![1, 5], vec![1, 5])
+    );
+}
+
+/// The verdict of a replay that ran and settled `inconclusive` because the twin holds the clause.
+fn not_reproduced() -> ReplayVerdict {
+    ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
+        settlement: WitnessSettlement::Inconclusive,
+        category: Category::Success,
+    })
+}
+
+/// The integers a Kani playback block prints, read twice and with no use of the decoder under
+/// test: the `// {value}` comment line above each `vec![..]` entry, and the entry's own bytes read
+/// as a little-endian `i64`. Returns `(comments, bytes)` in block order.
+fn printed_values(transcript: &str) -> (Vec<i64>, Vec<i64>) {
+    let mut comments = Vec::new();
+    let mut bytes = Vec::new();
+    for line in transcript.lines().map(str::trim) {
+        if let Some(text) = line.strip_prefix("// ") {
+            if let Ok(value) = text.parse::<i64>() {
+                comments.push(value);
+            }
+        } else if let Some(inner) = line
+            .strip_prefix("vec![")
+            .and_then(|rest| rest.strip_suffix("],"))
+        {
+            let raw: Vec<u8> = inner
+                .split(',')
+                .map(|byte| byte.trim().parse().expect("a byte"))
+                .collect();
+            bytes.push(i64::from_le_bytes(raw.try_into().expect("eight bytes")));
+        }
+    }
+    (comments, bytes)
 }
 
 /// Runs `subject` under the installed prover with `harness`, returning the classified outcome.
@@ -1197,15 +1232,36 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         ReplayVerdict::Reproduced
     );
 
-    // The verdict is decided by the values Kani found: a twin false only at the decoded point is
+    // The witness the replay must evaluate is read from Kani's own printed block by a parser that
+    // shares nothing with `decode_falsification`: the `// {value}` comment lines and, separately,
+    // the little-endian byte vectors, each in the order of Kani's `kani::any()` calls, which is
+    // the persisted argument order. Both reads must agree with each other and with the decoder.
+    let identifiers: Vec<&str> = harness
+        .identity
+        .arguments
+        .iter()
+        .map(|binding| binding.identifier.as_str())
+        .collect();
+    assert_eq!(identifiers, ["amount_current", "balance_pre"]);
+    let (printed, bytes) = printed_values(counterexample);
+    assert_eq!(printed, bytes, "Kani's comments and bytes disagree");
+    let [amount, balance] = printed[..] else {
+        panic!("Kani printed {printed:?}, expected one value per argument");
+    };
+    assert_eq!(
+        (get("amount_current"), get("balance_pre")),
+        (amount, balance),
+        "the decoder disagrees with the values Kani printed"
+    );
+
+    // The verdict is decided by the values Kani printed: a twin false only at that point is
     // reproduced by the real transcript, and a twin false only at a neighbouring point is not.
-    let (amount, balance) = (get("amount_current"), get("balance_pre"));
     let point = compile_native_twin(&point_source(amount, balance), FUNCTION);
     assert_eq!(
         replay_counterexample(&harness.identity, counterexample, &point)
             .expect("QSL settles the replay"),
         ReplayVerdict::Reproduced,
-        "the replay did not evaluate the decoded witness ({amount}, {balance})"
+        "the replay did not evaluate the witness Kani printed ({amount}, {balance})"
     );
     let neighbour = if amount < 1000 {
         amount + 1
@@ -1213,12 +1269,10 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         amount - 1
     };
     let elsewhere = compile_native_twin(&point_source(neighbour, balance), FUNCTION);
-    assert!(
-        matches!(
-            replay_counterexample(&harness.identity, counterexample, &elsewhere)
-                .expect("QSL settles the replay"),
-            ReplayVerdict::EvidenceFailure(_)
-        ),
+    assert_eq!(
+        replay_counterexample(&harness.identity, counterexample, &elsewhere)
+            .expect("QSL settles the replay"),
+        not_reproduced(),
         "a twin false only away from the witness must not reproduce"
     );
 

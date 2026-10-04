@@ -60,6 +60,6 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 ## Status
 
 Planned. No step is implemented. The skeleton spine renders a QSL transcript from decoded values
-(`src/spine_replay.rs`, TC-026), which is the shape step 2 checks, but it builds no envelope. Step 8
-holds for the decode path: `src/kani_witness_join.rs` uses no Contract IR witness type. The bounded-Kani corpus retains
+(`src/replay/function.rs`, TC-026), which is the shape step 2 checks, but it builds no envelope. Step 8
+holds for the decode path: `src/replay/witness.rs` uses no Contract IR witness type. The bounded-Kani corpus retains
 no counterexample packet, so step 5 (FR-024-AC-5) has nothing to submit.
