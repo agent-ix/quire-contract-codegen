@@ -53,4 +53,4 @@ source id, leaves no artifact and records no case identity in the registry
 (FR-015-AC-51). The context of every typed outcome and refusal the corpus
 returns (proved, counterexample, dependency-invalid, identity-collision,
 a lowering refusal and the mismatch refusal) is the revision of the profile
-selection (FR-015-AC-51).
+selection (FR-015-AC-52).

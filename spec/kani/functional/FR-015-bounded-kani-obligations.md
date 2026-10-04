@@ -233,9 +233,10 @@ FR-015-AC-37 stay as they were; the new criteria add to them.
   `OracleRefused` carrying that refusal unchanged, as it does for `LoweringWorkExhausted`
   (FR-015-AC-50).
 - When the bounded Kani corpus generator is given a finite input validated under a different
-  profile selection than the profile offered with it, it shall refuse the case, and every
-  typed outcome and refusal it returns shall carry the profile selection's revision as its
-  context (FR-015-AC-51).
+  profile selection than the profile offered with it, it shall refuse the case with a typed
+  `InvalidInput` result, record no case identity and emit no artifact (FR-015-AC-51).
+- The bounded Kani corpus generator shall return the revision of the profile selection as the
+  context of every typed outcome and refusal it returns (FR-015-AC-52).
 
 ## Acceptance Criteria
 
@@ -291,7 +292,8 @@ FR-015-AC-37 stay as they were; the new criteria add to them.
 | FR-015-AC-48 | The obligation identity of a V2 clause claim is formed by AD-003 E-1 from the clause node id, its occurrence key, the obligation kind, and the arguments each as parameter node id and declared domain for an operation parameter, as E-1 states (the domain FR-015-AC-39 defines). A state field read is named by its declaring node id and field name, never by a node of its own; that E-1 lists parameters only is an open question for the AD-003 owner and E-1 is not widened here. The source span is excluded; changing any included member changes it, and changing the span, the unwind bound or the subject does not. It is a different value from the harness identity record of FR-015-AC-47. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-49 | A V2 invariant claim yields a harness that draws its state and parameters within their declared domains (FR-015-AC-39) and asserts the invariant clause; its subject is the clause itself, with no subject call. Preservation of the invariant under an operation is not specified by this criterion. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-50 | `negotiate` reports an obligation whose scalar refusal is `ExactScalarRefusal::LoweringByteLimitExceeded` or `LoweringLimitUnrecognised` as `Outcome::Unsupported(UnsupportedObligation::OracleRefused { refusal })` with `refusal` equal to the scalar refusal, field for field, and neither is mapped to another `UnsupportedObligation` variant nor to `LoweringWorkExhausted`. | Test (TC-025) |
-| FR-015-AC-51 | A finite input validated under a profile selection other than the offered profile's is refused as a typed `InvalidInput` `kani_profile_input_mismatch` result naming the request's source id, with no artifact and no case identity recorded. The context of every outcome and refusal the corpus generator returns (proved, counterexample, `kani_corpus_dependency_invalid`, `kani_corpus_identity_collision`, a lowering refusal and the mismatch refusal) is the profile selection's revision. | Test (TC-023) |
+| FR-015-AC-51 | A finite input validated under a profile selection other than the offered profile's is refused as a typed `InvalidInput` `kani_profile_input_mismatch` result naming the request's source id, with no artifact and no case identity recorded. | Test (TC-023) |
+| FR-015-AC-52 | The context of every outcome and refusal the corpus generator returns (proved, counterexample, `kani_corpus_dependency_invalid`, `kani_corpus_identity_collision`, a lowering refusal and `kani_profile_input_mismatch`) is the profile selection's revision. | Test (TC-023) |
 
 ## Dependencies
 
