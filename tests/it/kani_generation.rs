@@ -8,8 +8,9 @@ use std::{
 use crate::scratch_crate::{runtime_dependency, write_manifest};
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode, GenerationTerminalState,
-    KaniBindingRole, KaniDiagnostic, KaniErrorCode, KaniPrimitiveType, KaniRequest, KaniSolver,
+    classify_kani_run, generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode,
+    GenerationTerminalState, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
+    KaniInconclusiveReason, KaniPrimitiveType, KaniRequest, KaniRunOutcome, KaniSolver,
     OracleRequest, ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest,
     ProofDependencyState, ProofReadiness, MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
 };
@@ -327,6 +328,159 @@ fn execute_kani(
         .current_dir(&directory.0)
         .output()
         .expect("cargo kani should launch")
+}
+
+/// The harness sources `generate_kani_bundle` emits, for the cover-last guard (FR-015-AC-58): a
+/// bundle with no dependency and one whose census assumes and stubs, which add statements before
+/// the contract call.
+pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
+    let census = [
+        ProofDependencyRequest {
+            proof_id: "proof-assumed",
+            kind: ProofDependencyKind::Assumed,
+            state: ProofDependencyState::Assumed,
+            original_path: Some("crate::dependency_predicate"),
+            replacement_path: None,
+        },
+        ProofDependencyRequest {
+            proof_id: "proof-stubbed",
+            kind: ProofDependencyKind::Stubbed,
+            state: ProofDependencyState::Stubbed,
+            original_path: Some("crate::original"),
+            replacement_path: Some("crate::replacement"),
+        },
+    ];
+    vec![
+        ("v1 bundle", fixture_bundle(&[]).rust.contents),
+        (
+            "v1 bundle with an assumed and a stubbed dependency",
+            fixture_bundle(&census).rust.contents,
+        ),
+    ]
+}
+
+/// A bundle whose requires clause (`input && false`) no bounded argument satisfies.
+fn unsatisfiable_requires_bundle() -> quire_contract_codegen::KaniArtifactBundle {
+    let environment = environment();
+    let (_, postcondition) = clauses(&environment);
+    let precondition = environment
+        .check_expression(
+            &boolean_and(
+                observed("input", StateObservation::Current, 10),
+                Expression::new(
+                    ExpressionKind::BooleanLiteral { value: false },
+                    span(12, 13),
+                ),
+                10,
+            ),
+            &ValueType::Boolean,
+            &handler(),
+            true,
+        )
+        .expect("unsatisfiable precondition fixture should type-check");
+    let precondition_clause =
+        ClauseId::new("precondition").expect("fixture clause should be valid");
+    let postcondition_clause =
+        ClauseId::new("postcondition").expect("fixture clause should be valid");
+    generate_kani_bundle(&request(
+        &environment,
+        &precondition,
+        &postcondition,
+        &precondition_clause,
+        &postcondition_clause,
+        &[],
+    ))
+    .expect("unsatisfiable-requires bundle should generate")
+}
+
+/// Runs `bundle` over `subject` under the installed backend with the options its own graph
+/// records plus the report export, and classifies the run as production does.
+fn classify_bundle(
+    bundle: &quire_contract_codegen::KaniArtifactBundle,
+    subject: &str,
+) -> KaniRunOutcome {
+    let graph: ProofDependencyGraph =
+        serde_json::from_str(&bundle.proof_graph.contents).expect("graph should deserialize");
+    let directory = write_generated_crate(bundle, subject);
+    let report_path = directory.0.join("report.json");
+    let output = Command::new("cargo")
+        .arg("kani")
+        .args(&graph.options)
+        .args(["-Z", "unstable-options", "--export-json"])
+        .arg(&report_path)
+        .env("CARGO_TARGET_DIR", directory.0.join("target"))
+        .current_dir(&directory.0)
+        .output()
+        .expect("cargo kani should launch");
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report = fs::read(&report_path).ok();
+    classify_kani_run(output.status.success(), report.as_deref(), &text, None)
+        .unwrap_or_else(|refusal| panic!("the run was refused as {refusal:?}:\n{text}"))
+        .outcome
+}
+
+const HEALTHY_BUNDLE_SUBJECT: &str = "/// Customer transition under proof.\npub fn subject(input: bool, pre_state: bool) -> bool { input || pre_state }";
+
+/// A bundle whose requires some bounded argument satisfies and whose `ensures` holds for every
+/// such argument is `Verified` (its cover after the contract call is satisfied), a bundle whose
+/// requires no bounded argument satisfies is `CoverUnsatisfied` with no satisfied cover of one,
+/// and a broken `ensures` is `Falsified` with the cover unreachable. A bundle without its cover
+/// carries no cover summary, so the cover is what makes the first of these a proof.
+///
+/// Trace: FR-015-AC-54, FR-015-AC-56, TC-025
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_025_real_kani_classifies_the_v1_bundle_verified_vacuous_and_falsified() {
+    let healthy = fixture_bundle(&[]);
+    assert_eq!(
+        classify_bundle(&healthy, HEALTHY_BUNDLE_SUBJECT),
+        KaniRunOutcome::Verified
+    );
+
+    let uncovered = quire_contract_codegen::KaniArtifactBundle {
+        rust: quire_contract_codegen::Artifact::new(
+            healthy.rust.path.clone(),
+            healthy
+                .rust
+                .contents
+                .lines()
+                .filter(|line| !line.contains("kani::cover!"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        ),
+        proof_graph: healthy.proof_graph.clone(),
+    };
+    assert_eq!(
+        classify_bundle(&uncovered, HEALTHY_BUNDLE_SUBJECT),
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::MissingCoverSummary
+        },
+        "a bundle harness with no cover must not classify as Verified"
+    );
+
+    assert_eq!(
+        classify_bundle(
+            &unsatisfiable_requires_bundle(),
+            "/// Customer transition under proof.\npub fn subject(input: bool) -> bool { input }"
+        ),
+        KaniRunOutcome::CoverUnsatisfied {
+            satisfied: 0,
+            total: 1
+        }
+    );
+
+    let broken = classify_bundle(
+        &healthy,
+        "/// Violates the ensures clause.\npub fn subject(_input: bool, _pre_state: bool) -> bool { false }",
+    );
+    assert!(
+        matches!(broken, KaniRunOutcome::Falsified { .. }),
+        "a broken ensures must be falsified, got {broken:?}"
+    );
 }
 
 /// TC-003
