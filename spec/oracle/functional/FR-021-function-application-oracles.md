@@ -256,9 +256,12 @@ come from the request, not from this generator's own inference.
 - The generator shall order claim-map entries by the same descriptor-key discipline FR-018
   established: the `call` expression node's id, then the applied function's declaring node id, then
   each argument operand's source node id, every node id compared in node-id order. When items tie
-  on all of those keys and name different functions, whether absent from the request or the
-  members of one duplicate-node pair (FR-021-AC-22), the generator shall order them by the
-  function name, compared byte-wise over its UTF-8 bytes and case-sensitively (FR-021-AC-24).
+  on all of those keys and name different functions absent from the request, the generator shall
+  order them by the function name, compared byte-wise over its UTF-8 bytes and case-sensitively
+  (FR-021-AC-24). Two items on one `call` node naming the two members of a duplicate-node pair
+  (FR-021-AC-22) are likewise two entries, ordered by name the same way, but both carry the same
+  `DuplicateDeclaringNode { node_id }` refusal and a claim-map entry names no function, so their
+  relative order is not observable and no criterion asserts it.
 - The generator shall record, in the location map, one entry per runtime call point a lowered body
   reaches (a scalar operator, an equality evaluation, or a nested `Frame::call`), each carrying the
   `Location` that call point's `Origin::Body { function, index }` and child-index path — computed
@@ -326,7 +329,7 @@ written.
 | FR-021-AC-21 | Keep a defensive `Negate => unreachable!(..)` arm after the earlier refusal, so a change to the refusal turns a bad request into a generator panic. |
 | FR-021-AC-22 | Key classification by position but resolve an item's function by name or node id, so two declarations with one node id both survive and the second item takes the first function's oracle symbol and claim-map index; refuse only the first (or only the later-sorted) declaration so its same-node sibling survives and the item reports `UnknownFunction` or depends on request order; check the name before the node id so a declaration sharing both reports `AmbiguousFunctionName`; exempt a distinct-node-id declaration that shares a name with the pair so it enters the package and answers to the pair's name; or refuse the whole request instead of only the duplicate declarations. |
 | FR-021-AC-23 | Keep the single `Failed` arm that reports every failure as `LoweringWorkExhausted`, so a byte-ceiling failure reads as work exhaustion; or leave a `_ => LoweringWorkExhausted` or `_ => unreachable!(..)` arm for an unrecognised kind; or report the function's body-lowering `consumed` for an item whose call-node lowering failed first. |
-| FR-021-AC-24 | Key an item by the call node, applied function's declaring node id and arguments only, so every unknown name on one call node shares one key and the second name is reported as `DuplicateRequest` and lost (the `zz_unknown` and `aa_unknown` example fails); or key an item by its request position, so the same unknown name requested twice yields two entries (the `zz_unknown` twice example fails); or put the name ahead of the declaring node id in the key, so `add_fn` sorts before `zz_unknown` (the `add_fn` and `zz_unknown` example fails); or compare names case-insensitively, so `aa_unknown` sorts before `Zz_unknown` (the `Zz_unknown` example fails); or break ties by hash or request position, so the order changes with the request order (the both-orders check fails). |
+| FR-021-AC-24 | Key an item by the call node, applied function's declaring node id and arguments only, so every unknown name on one call node shares one key and the second name is reported as `DuplicateRequest` and lost (the `zz_unknown` and `aa_unknown` example fails); or key an item by its request position, so the same unknown name requested twice yields two entries (the `zz_unknown` twice example fails); or put the name ahead of the declaring node id in the key, so `add_fn` sorts before `zz_unknown` (the `add_fn` and `zz_unknown` example fails); or compare names case-insensitively, so `aa_unknown` sorts before `Zz_unknown` (the `Zz_unknown` example fails); or break ties by request position, so the order changes with the request order (the both-orders check fails). |
 
 ## Dependencies
 
