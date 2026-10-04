@@ -1102,7 +1102,7 @@ pub fn generate_exact_function_oracles(
     // regardless of what order the caller passed its declarations in --
     // keeping AC-13's determinism-across-permutations guarantee even for an
     // item naming an ambiguous function. (A refused duplicate-node name keys
-    // by its own name as well, see `ItemKey::refused_name`.)
+    // by its own name as well, as does an unknown name, see `ItemKey::name`.)
     let function_node_id_by_name: BTreeMap<&str, &CheckedNodeId> = ordered_functions
         .iter()
         .map(|declaration| (declaration.name.as_str(), &declaration.node_id))
@@ -1393,17 +1393,22 @@ fn item_disposition(
 /// node's id, then the applied function's declaring node id (absent ranks
 /// before present, for an item naming an unknown function), then each
 /// argument operand's source node id, every node id compared by digest
-/// domain then digest.
+/// domain then digest, and last the function name for the items whose
+/// preceding fields cannot tell them apart (FR-021-AC-24): `String` order is
+/// byte-wise over UTF-8 and case-sensitive.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ItemKey {
     call_node_id: CheckedNodeId,
     function_node_id: Option<CheckedNodeId>,
     argument_node_ids: Vec<CheckedNodeId>,
-    /// The item's function name, set only when a declaration sharing its
-    /// declaring node id holds that name (FR-021-AC-22). Declarations sharing
-    /// a node id also share `function_node_id`, so without the name two items
-    /// naming different members of such a pair would collapse into one claim.
-    refused_name: Option<String>,
+    /// The item's function name, set only when `function_node_id` cannot
+    /// identify the function: the name is absent from the declarations, so two
+    /// unknown names on one call node would otherwise share a key and the
+    /// second would be lost as a `DuplicateRequest`; or a declaration sharing
+    /// its declaring node id holds the name (FR-021-AC-22), so two items
+    /// naming different members of such a pair would otherwise collapse into
+    /// one claim. The same name requested twice still shares one key.
+    name: Option<String>,
 }
 
 impl ItemKey {
@@ -1412,15 +1417,16 @@ impl ItemKey {
         function_node_id_by_name: &BTreeMap<&str, &CheckedNodeId>,
         names: &FunctionNames<'_>,
     ) -> Self {
+        let function_node_id = function_node_id_by_name
+            .get(item.function.as_str())
+            .map(|id| (*id).clone());
+        let needs_name =
+            function_node_id.is_none() || names.duplicate_node_refusal(&item.function).is_some();
         Self {
             call_node_id: item.call_node_id.clone(),
-            function_node_id: function_node_id_by_name
-                .get(item.function.as_str())
-                .map(|id| (*id).clone()),
+            function_node_id,
             argument_node_ids: item.argument_node_ids.clone(),
-            refused_name: names
-                .duplicate_node_refusal(&item.function)
-                .map(|_| item.function.clone()),
+            name: needs_name.then(|| item.function.clone()),
         }
     }
 }
