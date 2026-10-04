@@ -471,7 +471,7 @@ Where the runner, report parser and witness decode sit. One module reads Kani's 
 | Run classification and vacuity | `kani/classify.rs` | the typed report; TARGET: nothing else. Today also the run's console text (`classify_kani_run`'s `text` parameter), which it hands to `output/playback.rs`'s `counterexample_playback` for a falsifying check; an interim exception removed by step 5 (see Dependency direction and L-6) |
 | Witness decode | `replay/witness.rs` | TARGET: typed playback entries only. Until step 5 it reads the block through `output/playback.rs`'s scan and compares Kani's decoded-value comment itself (`boolean_comment`) |
 | FR-029 map: `KaniRunOutcome` to a terminal value | `kani/terminal.rs` | typed run outcome only |
-| C-09 map: IR's `KaniOutcome` with the replay outcome to `TerminalValue` | `kani/terminal.rs`, a public entry | typed outcome and the replay-outcome type it defines; total over the pair (step 5) |
+| C-09 map: IR's `KaniOutcome` with the replay outcome to `TerminalValue` | `kani/terminal.rs`, a public entry | typed outcome and the replay-outcome type it defines; total over the pair, outside the held setup-refusal class (step 5) |
 | Pairing the two inputs | the driver, outside this crate | runs the replay and calls the C-09 entry with both |
 | Building the replay request; converting CG errors and QSL's result into the replay outcome | `replay/` | builds the request the driver passes to `qsl_replay::replay`, and converts results into `kani/terminal.rs`'s input type |
 
@@ -776,15 +776,16 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    `run/` only. `ReplayInputs::backend_manifest` and the manifest members `spine_replay` builds
    from it are deleted here, with the tool pin QSL-351 drops. Step 5's reader and the C-09 map
    (`kani/terminal.rs`) produce `TerminalValue` (the FR-029 map from `KaniRunOutcome`, and the
-   C-09 map from IR's `KaniOutcome` with the replay outcome), so both depend on QSL-351
-   (`Inconclusive(cause)`, a `NonZero` `Proved`, the tool pin gone) and on the terminal value also
-   taking the replay settlement. Neither merges before QSL-351.
+   C-09 map from IR's `KaniOutcome` with the replay outcome), so both depend on QSL types
+   that are pending in QSL (`Inconclusive(cause)`, a `NonZero` `Proved`; the tool pin is already
+   gone, #551) and on the terminal value also taking the replay settlement. Neither merges before
+   those types are in QSL.
    - The map follows QSL's merged ADR-013 C-09 and ADR-011 T-13 (QSL #550, QSL-354; checked at QSL
      `origin/main`: T-13 says the driver `quire-driver` owns the S6b run, the E9 replay
      (`qsl_replay::replay`) and the FR-331 terminal record, CG owns the C-09 map and settles
      dispositions, and parity is settled inside `replay`). It adds no behaviour claim of this AD;
-     FR-029 is amended by its own ticket, and QSL-351 adds the two causes. The map is total over
-     (Kani outcome, QSL replay result): a reproduced replay gives `Refuted`; a replay
+     FR-029 is amended by its own ticket, and the two causes are pending in QSL. The map is total over
+     (Kani outcome, QSL replay result), outside the held setup-refusal class below: a reproduced replay gives `Refuted`; a replay
      disagreement, or one that completes no value, gives
      `Inconclusive(InconclusiveCause::ReplayParity)`; a non-fault `ReplayRefusal` (identity
      mismatch, decode refusal, stale dependency, limit reached) gives
@@ -808,8 +809,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      it is the after-Kani case and not a `Declined` candidate. A replay setup refused on data
      after a refuted Kani run (`CallSiteRefusal` `Compile` or `UnknownFunction`,
      `InvalidFunction`, `Name`, a dependency-selection refusal, `DependencyLockError`) is
-     `Inconclusive(ReplayRefused)` with a QSL code catalogued in QSL-352, which lands with this
-     step. A decode failure (`DecodeFailure`, `EvidenceFailureCause::Decode`) is not in that list:
+     `Inconclusive(ReplayRefused)` with a QSL code (relayed; HELD below, against merged QSL FR-121). A decode failure (`DecodeFailure`, `EvidenceFailureCause::Decode`) is not in that list:
      it is a CG defect, a playback that does not type against the bindings CG persisted, and maps
      to `Failed` (AD-003, link 7). Faults stay `Failed`. Until QSL-352's codes exist, these
      refusals map to `Failed` as the interim (superseded below). Measured later (IR-465 spec, QSL `main` 7c2cb303):
@@ -1281,7 +1281,7 @@ what it could against the code; the checks are stated.
 | V2 strategy criteria | FR-002, FR-004 and FR-008 to FR-013 over `CheckedPackageV2` are IR-364, IR team, ordered before step 6. | IR planner, IR-344, IR-364 |
 | One public entry before deletion | Migration step 4e: the one public generator entry exists. A QSL-owned follow-up moves QSL's quire-integration exemplars, which call `generate_kani_bundle` today, onto it. Only then does step 4f delete `generate_kani_bundle`. | QSL review of this PR |
 | Package source for tests | After QSL-353 the corpus builds packages through QSL's facade (`call_site(...).package`, or source plus `qsl_replay`), and the arithmetic control (step 4a) is quire-integration's existing test, with a CG-side copy only if the facade allows. CG copies no QSL fixture and no QSL-emitted package file. | QSL review of this PR |
-| Terminal map dependency | Step 5's reader and the C-09 map (`kani/terminal.rs`) depend on QSL-351 (`Inconclusive(cause)`, a `NonZero` `Proved`, the tool pin gone) and on the terminal value also taking the replay settlement. | QSL review of this PR |
+| Terminal map dependency | Step 5's reader and the C-09 map (`kani/terminal.rs`) depend on QSL types pending in QSL (`Inconclusive(cause)`, a `NonZero` `Proved`; the tool pin is already gone, #551) and on the terminal value also taking the replay settlement. | QSL review of this PR |
 | `ContentDigest` and the canonical encoding | CG depends on `quire-canonical` directly (`branch = "main"`, no `qsl-replay` re-export). `ContentDigest` is a CG type over its digest, with no `ByteDigest` wrapper except where a QSL API requires one. The obligation preimage is encoded by `quire-canonical` (RFC 8785), and `core::canonical` is the one place that calls it; the `serde_json` `deterministic_json` copies are deleted. QSL still pins it by tag, so step 1a waits on CG's lock resolving it to one entry. Cites AD-003, which is merged and not edited here. | QSL; relayed by the IR planner |
 
 SuiteRegistry (SUR-001): moves to `spec/core/functional/suites.md` in step 7; ADR-0056 is not
