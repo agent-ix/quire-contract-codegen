@@ -953,16 +953,10 @@ mod tests {
         assert_eq!(error.code, "kani_profile_input_mismatch");
         assert_eq!(error.source_id, "mismatched-profile");
         assert_eq!(error.context, "r1");
-        let (_, _, matching_input) = fixture();
-        generate_bounded_kani_corpus_case(
-            &profile,
-            &dispatch,
-            &matching_input,
-            arithmetic("mismatched-profile", 1, 1),
-            &[],
-            &mut emitted,
-        )
-        .expect("the refused case claimed no identity, so the matching input is emitted");
+        assert!(
+            emitted.0.is_empty(),
+            "the refused case must claim no identity in the registry"
+        );
     }
 
     /// The profile's revision is the context of every outcome the corpus returns: a proved case,
@@ -1082,6 +1076,10 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.kind, KaniOutcomeKind::ResourceExhausted);
         assert_eq!(error.boolean_claim(), None);
+        assert_eq!(
+            error.context, "r1",
+            "a lowering refusal returned through the corpus carries the profile revision"
+        );
     }
 
     /// Trace: TC-023.
@@ -1305,6 +1303,7 @@ mod tests {
             let refusal = emit(&fixture, arithmetic("same", 1, 1), &[], &mut emitted).unwrap_err();
             assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
             assert_eq!(refusal.code, "kani_corpus_identity_collision");
+            assert_eq!(refusal.context, "r1");
         }
         let again = emit(
             &fixture,
