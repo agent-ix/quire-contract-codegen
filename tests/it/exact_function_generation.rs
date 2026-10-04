@@ -985,6 +985,186 @@ fn tc_031_ac22_fixture_vi_same_call_node_items_over_a_pair_each_keep_the_node_re
     }
 }
 
+/// The claim-map entries of `oracles`, in order, as `(call node, disposition)`.
+fn entries(
+    oracles: &quire_contract_codegen::ExactFunctionOracles,
+) -> Vec<&ClaimDisposition<GeneratedExactFunctionClaim, ExactFunctionRefusal>> {
+    oracles
+        .claim_map
+        .items
+        .iter()
+        .map(|claim| &claim.result)
+        .collect()
+}
+
+fn unknown(name: &str) -> ClaimDisposition<GeneratedExactFunctionClaim, ExactFunctionRefusal> {
+    ClaimDisposition::Refused {
+        refusal: ExactFunctionRefusal::UnknownFunction {
+            name: name.to_owned(),
+        },
+    }
+}
+
+/// The entries for `names` requested on `ITEM_CALL_ADD` in each of the two request orders (the
+/// order given, then reversed), asserted identical to each other, and returned once.
+fn both_orders(
+    package: &CheckedPackageV2,
+    functions: &[quire_contract_codegen::ExactFunctionDeclaration],
+    names: [&str; 2],
+) -> quire_contract_codegen::ExactFunctionOracles {
+    let forward = generate(
+        package,
+        functions,
+        &[item(ITEM_CALL_ADD, names[0]), item(ITEM_CALL_ADD, names[1])],
+    );
+    let reverse = generate(
+        package,
+        functions,
+        &[item(ITEM_CALL_ADD, names[1]), item(ITEM_CALL_ADD, names[0])],
+    );
+    assert_eq!(forward, reverse, "request order changed the output");
+    forward
+}
+
+/// Trace: FR-021-AC-24, TC-031 step 12 case (i). One unknown name on a call node is one
+/// `UnknownFunction` entry naming it.
+#[test]
+fn tc_031_ac24_case_i_one_unknown_name_is_one_entry() {
+    let package = ext_corpus_package().admit();
+    let oracles = generate(
+        &package,
+        &[function_add("add_fn")],
+        &[item(ITEM_CALL_ADD, "zz_unknown")],
+    );
+    assert_eq!(entries(&oracles), vec![&unknown("zz_unknown")]);
+}
+
+/// Trace: FR-021-AC-24, TC-031 step 12 case (ii). Two different unknown names on one call node
+/// with equal arguments are two entries, `aa_unknown` then `zz_unknown`, never `DuplicateRequest`,
+/// identical under both request orders.
+#[test]
+fn tc_031_ac24_case_ii_two_unknown_names_are_two_entries_in_name_order() {
+    let package = ext_corpus_package().admit();
+    let oracles = both_orders(
+        &package,
+        &[function_add("add_fn")],
+        ["zz_unknown", "aa_unknown"],
+    );
+    assert_eq!(
+        entries(&oracles),
+        vec![&unknown("aa_unknown"), &unknown("zz_unknown")]
+    );
+}
+
+/// Trace: FR-021-AC-24, TC-031 step 12 case (iii). The same unknown name requested twice is one
+/// `DuplicateRequest` entry.
+#[test]
+fn tc_031_ac24_case_iii_the_same_unknown_name_twice_is_one_duplicate_request() {
+    let package = ext_corpus_package().admit();
+    let oracles = generate(
+        &package,
+        &[function_add("add_fn")],
+        &[
+            item(ITEM_CALL_ADD, "zz_unknown"),
+            item(ITEM_CALL_ADD, "zz_unknown"),
+        ],
+    );
+    assert_eq!(
+        entries(&oracles),
+        vec![&ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::DuplicateRequest
+        }]
+    );
+}
+
+/// Trace: FR-021-AC-24, TC-031 step 12 case (iv). A declared `add_fn` and `zz_unknown` on one
+/// call node are two entries, the unknown one first, each equal to the entry its item gets when
+/// requested alone.
+#[test]
+fn tc_031_ac24_case_iv_known_and_unknown_order_unknown_first_and_match_solo() {
+    let package = ext_corpus_package().admit();
+    let functions = [function_add("add_fn")];
+    let oracles = both_orders(&package, &functions, ["add_fn", "zz_unknown"]);
+    let solo_add = generate(&package, &functions, &[item(ITEM_CALL_ADD, "add_fn")]);
+    let solo_unknown = generate(&package, &functions, &[item(ITEM_CALL_ADD, "zz_unknown")]);
+    assert_eq!(solo_unknown.claim_map.items.len(), 1);
+    assert_eq!(solo_add.claim_map.items.len(), 1);
+    assert!(matches!(
+        &solo_add.claim_map.items[0].result,
+        ClaimDisposition::Generated(_)
+    ));
+    assert_eq!(
+        oracles.claim_map.items,
+        [
+            solo_unknown.claim_map.items[0].clone(),
+            solo_add.claim_map.items[0].clone()
+        ]
+    );
+    assert_eq!(oracles.claim_map.items[0].result, unknown("zz_unknown"));
+}
+
+/// Trace: FR-021-AC-24, TC-031 step 12 case (v). Names order byte-wise and case-sensitively:
+/// `Zz_unknown` (`Z` is 0x5A) before `aa_unknown` (`a` is 0x61), identical under both orders.
+#[test]
+fn tc_031_ac24_case_v_names_order_by_bytes_case_sensitively() {
+    let package = ext_corpus_package().admit();
+    let oracles = both_orders(
+        &package,
+        &[function_add("add_fn")],
+        ["aa_unknown", "Zz_unknown"],
+    );
+    assert_eq!(
+        entries(&oracles),
+        vec![&unknown("Zz_unknown"), &unknown("aa_unknown")]
+    );
+}
+
+/// Trace: FR-021-AC-24, TC-031 step 12 case (vi). Items on one call node naming the two members
+/// of a duplicate-node pair are two entries ordered by function name. With `m_multi` and `z_pair`
+/// on the larger node N2 and `m_multi` and `q_extra` on the smaller node N1, `m_multi` (whose
+/// refusal carries N1) orders before `z_pair` (N2); with `z_multi` and `a_pair`, `a_pair` (N2)
+/// orders before `z_multi` (N1). Identical under both request orders and every declaration order.
+#[test]
+fn tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name() {
+    let package = ext_corpus_package().admit();
+    let (n1, n2) = if code_id(FN_ADD) < code_id(FN_EQ) {
+        (FN_ADD, FN_EQ)
+    } else {
+        (FN_EQ, FN_ADD)
+    };
+    let node_refusal = |code: u32| ClaimDisposition::Refused {
+        refusal: ExactFunctionRefusal::DuplicateDeclaringNode {
+            node_id: code_id(code),
+        },
+    };
+    for (shared, pair_member, extra, expected) in [
+        ("m_multi", "z_pair", "q_extra", [n1, n2]),
+        ("z_multi", "a_pair", "q_extra", [n2, n1]),
+    ] {
+        let functions = vec![
+            on_node(function_add(shared), n2),
+            on_node(function_add(pair_member), n2),
+            on_node(function_add(shared), n1),
+            on_node(function_add(extra), n1),
+        ];
+        // The member named `shared` is requested alongside `pair_member`; the order of the two
+        // refusals is the order of their names, not of the request.
+        let (first, second) = if shared < pair_member {
+            (shared, pair_member)
+        } else {
+            (pair_member, shared)
+        };
+        for order in permutations(&functions) {
+            let oracles = both_orders(&package, &order, [first, second]);
+            assert_eq!(
+                entries(&oracles),
+                vec![&node_refusal(expected[0]), &node_refusal(expected[1])],
+                "{shared} and {pair_member}"
+            );
+        }
+    }
+}
+
 /// Trace: FR-021-AC-19, TC-031. The emitted `src/lib.rs` of the main corpus
 /// (scalar `add_fn`, equality `eq_fn`, nested-call `call_fn`) and of the chain
 /// corpus contains no `.unwrap(`, no `.expect(` and no panicking macro in any
