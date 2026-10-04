@@ -28,8 +28,8 @@ type: TestMatrix
 | FR-025 | FR-025-AC-1 | TC-036 | 🚧 Planned; emission order is asserted only for the V1 `BoundClause` harness kinds, and the ascending order and the scalar-claim harness are unasserted |
 | FR-025 | FR-025-AC-2 through FR-025-AC-8 | TC-036 | 🚧 Planned |
 | FR-028 | FR-028-AC-1 through FR-028-AC-9 | TC-039 | 🚧 Planned |
-| FR-029 | FR-029-AC-1 through FR-029-AC-6 | TC-040 | 🚧 Planned |
-| FR-030 | FR-030-AC-1 through FR-030-AC-8 | TC-041 | 🚧 Planned |
+| FR-029 | FR-029-AC-1 through FR-029-AC-6, FR-029-AC-8 through FR-029-AC-13 | TC-040 | 🚧 Planned; AC-8 and AC-9 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-13 is held on a QSL or owner ruling, with the setup errors `InvalidFunction`, `Name` and `DependencyLockError` |
+| FR-030 | FR-030-AC-1 through FR-030-AC-12 | TC-041 | 🚧 Planned; AC-9 waits on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-12 is held on a QSL or owner ruling, and AC-1 is held with it for that class |
 
 ## Test Case Summary
 
@@ -47,5 +47,5 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-027 | Verify Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-AC-12, FR-017-AC-13, FR-017-AC-14, FR-017-AC-15, FR-017-AC-16, FR-017-AC-17, FR-017-AC-18, FR-017-AC-19, FR-017-AC-20, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
 | TC-036 | Verify the generated harness subject ABI | Integration | P0 | FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6, FR-025-AC-7, FR-025-AC-8 | 🚧 Planned |
 | TC-039 | Verify bounded proof ceilings, their inconclusive reasons and the proof subject | Integration | P0 | FR-028-AC-1, FR-028-AC-2, FR-028-AC-3, FR-028-AC-4, FR-028-AC-5, FR-028-AC-6, FR-028-AC-7, FR-028-AC-8, FR-028-AC-9 | 🚧 Planned |
-| TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6 | 🚧 Planned |
-| TC-041 | Verify the total map from a Contract IR Kani outcome to QSL's terminal value | Integration | P0 | FR-030-AC-1, FR-030-AC-2, FR-030-AC-3, FR-030-AC-4, FR-030-AC-5, FR-030-AC-6, FR-030-AC-7, FR-030-AC-8 | 🚧 Planned |
+| TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6, FR-029-AC-8, FR-029-AC-9, FR-029-AC-10, FR-029-AC-11, FR-029-AC-12, FR-029-AC-13 | 🚧 Planned |
+| TC-041 | Verify the total map from a Contract IR Kani outcome to QSL's terminal value | Integration | P0 | FR-030-AC-1, FR-030-AC-2, FR-030-AC-3, FR-030-AC-4, FR-030-AC-5, FR-030-AC-6, FR-030-AC-7, FR-030-AC-8, FR-030-AC-9, FR-030-AC-10, FR-030-AC-11, FR-030-AC-12 | 🚧 Planned |
