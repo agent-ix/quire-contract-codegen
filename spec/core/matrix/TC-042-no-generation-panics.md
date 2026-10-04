@@ -11,7 +11,7 @@ relationships:
 ## Description
 
 Verify the production code under `src/` holds no panic token and that each measured site that a
-test can reach returns its typed value instead of aborting (NFR-005), and that the three index and
+test can reach returns its typed value instead of aborting (NFR-005), and that the four index and
 arithmetic sites of IR-577 hold no unchecked index, slice or subtraction.
 
 ## Test Procedure
@@ -50,7 +50,7 @@ arithmetic sites of IR-577 hold no unchecked index, slice or subtraction.
    `observe_clause` and `generate_boolean_oracle_inner` in the literal-free non-test code of their
    files, as the scan locates `fn digest`; assert each is found and that none holds an index token or
    a subtraction token as NFR-005-AC-8 defines them (NFR-005-AC-8). Assert on a hand-built body that
-   the check flags `a[1]`, `a[2..]`, `f(x)[0]`, `n - 1` and `n -= 1`, and passes `for l in [a, b]`,
+   the check flags `a[1]`, `a[2..]`, `f(x)[0]`, `x?[0]`, `t.0[1]`, `{ v }[0]`, `n - 1`, `x? - 1` and `n -= 1`, and passes `for l in [a, b]`,
    `vec![a]`, `let [x, ..] = y`, `#[must_use]`, an array type, `fn f() -> u8` and `-n`.
 
 ## Expected Results

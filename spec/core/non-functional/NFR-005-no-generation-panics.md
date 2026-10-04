@@ -22,7 +22,7 @@ relationships:
 - The generator's production code under `src/` shall contain no panic token: no `unwrap`, `expect`,
   `unreachable!`, `assert!` or any other call FR-014-AC-39 lists, so that no panic token aborts the
   generator instead of a typed refusal.
-- The sites of the three behavior-table rows marked PLANNED (IR-577) (in `generate_kani`,
+- The sites of the four behavior-table rows marked PLANNED (IR-577) (in `generate_kani`,
   `observe_clause` and `generate_boolean_oracle_inner`) shall not index, slice or subtract on a
   value that an earlier function establishes. PLANNED (IR-577).
 - Each of those sites shall read the value with a checked accessor (`get`, a slice pattern,
@@ -67,21 +67,26 @@ relationships:
     `read_block` and the playback scan (offsets that `find` and `split_once` return);
     `decode_values` in `src/replay/witness.rs` (`copy_from_slice` after the width check above it);
     `compute_census` and `ScalarOperation::reachable` (`i128` over `i64`); and the `as u32` casts of
-    line and column numbers, bounded by `MAX_GENERATED_SOURCE_BYTES`.
-  - Guarded only by a caller, a validator or a type: the strategy renderers' `names.fields[0]` and
-    `names.identifiers[0]` and `[1]` (`validate_names` and `validate_identifiers`);
-    `path()[0]` in `runner_source`, `oracle_arguments`, `harness_binding`, `dependency_key` and
-    `typed_dependency_parameters` (`DependencyIdentity` refuses an empty path in its constructor and
-    its `Deserialize`, and the oracle generators refuse a path of length other than one);
-    `analysis.references[key]` in `typed_dependency_parameters` (keys from
-    `analyze_supported_expression`); `parameter_kinds[0]` and `[1]` in `validate_signature` (the
-    caller matches `parameter_kinds` to `declaration.parameters`); and `function_index[&node_id]` in
-    `item_disposition` and the location map (built in the caller from the same survivors). None is
-    reachable from input today, and each rests on an invariant a validator or type states at the
-    boundary where the data enters, not on a sibling pass of a generator that could drift. This
-    requirement does not cover them: a change that moves one of those validators or removes the type
-    guard is a change to a boundary and answers to its own requirement. This is a known limit, not a
-    claim that they cannot panic.
+    line and column numbers, bounded by `MAX_GENERATED_SOURCE_BYTES`; `harness_binding`
+    (`path()[0]` after its own `path().len() != 1` refusal) and `typed_dependency_parameters`
+    (`path()[0]` after its own `path().len()` checks); and the location-map
+    `function_index[&node_id]` read in `generate_exact_function_oracles`, which builds the map in the
+    same function.
+  - Resting on an invariant that code outside the reading function establishes: the strategy
+    renderers' `names.fields[0]` and `names.identifiers[0]` and `[1]` (`validate_names` in
+    `census.rs`; `validate_identifiers` in `render_population`, a caller of `side_expression`);
+    `path()[0]` in `runner_source`, `oracle_arguments` and `dependency_key` (a type,
+    `DependencyIdentity`, refuses an empty path in its constructor and `Deserialize`, and the
+    oracle generators, upstream of those reads, refuse a path of length other than one);
+    `analysis.references[key]` in `typed_dependency_parameters` (the keys come from
+    `analyze_supported_expression`, an earlier pass of the generator); `parameter_kinds[0]` and
+    `[1]` in `validate_signature` (the caller builds `parameter_kinds` one per parameter and the
+    function checks `declaration.parameters.len()`); and `function_index[&node_id]` in
+    `item_disposition` (the caller builds the map). None is reachable from input today. Only
+    `path()[0]` rests on a type; the others rest on generator code and are the same class as the
+    covered sites. They are not covered because IR-577 covers the sites the ticket named and the
+    sites in those functions, and the measurement found these unreachable; they are deferred, not
+    shown safe, and a change that breaks one of those invariants aborts the generator.
   FR-018-AC-17 and FR-021's Behavior section keep their own index and arithmetic rules for emitted
   source.
 - Known blind spots of the scan, none present in `src/` today: a panic macro imported under another
@@ -121,8 +126,8 @@ a sibling would copy all three. It adds one more public enum variant,
 code. The measurement found no index, slice or arithmetic panic reachable from untrusted input; the
 covered sites are held by a guarantee another function gives (or, for the `regions[0]` write, by
 nothing at all, and the row removes the index), which is the class this requirement already treats
-as a site (see the invariant rows above). Other sites rest on a validator or type at a boundary and
-are a known limit, named in Scope.
+as a site (see the invariant rows above). Other sites of the same class are deferred, not covered,
+and named in Scope.
 
 ## Behavior of each measured site
 
@@ -144,7 +149,7 @@ Each site is named by function, not by line. The class is how the code must expr
 | `expression_diagnostic` (`src/oracle/boolean_v1.rs`), `debug_assert!(matches!(code, ..))` | caller contract, debug build only | The assertion is removed. The function builds the diagnostic for the code it is given in every build, as it does in a release build today. |
 | `generate_kani` (`src/routed/generate.rs`), `driver[*first_index]` on a `DuplicateItem` record | invariant of FR-015: a `DuplicateItem`'s `first_index` is an earlier position in the group it was given, and `pair_records` has already fixed the record count to the group's. Not reachable from a caller today. PLANNED (IR-577). | The step reads `driver.get(*first_index)`. A position outside the group is `RoutedGenerationError::KaniDuplicatePositionOutOfRange { first_index, items }`, with nothing generated, and the comment that says the code panics rather than leave it unmapped is removed. |
 | `observe_clause` (`src/evidence/bound_coverage.rs`), `map[1]` and `map[2..]` | invariant of `check_maps`, the only caller's guard: the map has the typed implication census plus two regions. Not reachable from a caller today (`observe_clause` is private). PLANNED (IR-577). | The function destructures the map with a slice pattern, the evaluation region and the consequent regions that follow it. A map with fewer than two regions is the `MapMismatch` diagnostic with the message `typed implication census differs from map` (the text `check_maps` already uses for a wrong region count), pushed to the row's diagnostics, with no classification, an `evaluation_count` of `None` and no consequents, whether or not a coverage export is supplied. A map with two regions behaves as it does today. |
-| `generate_boolean_oracle_inner` (`src/oracle/boolean_v1.rs`), `source_lines[offset as usize - 1]` and `source_lines[start as usize - 1]` | invariant of the renderer's own output: the fixed header makes `offset` at least 14 and each implication region starts on a line it rendered. Not reachable from input today. PLANNED (IR-577). | The lookup is `checked_sub(1)` then `get`. A missing line is the `GenerationErrorCode::InvalidGeneratedSyntax` diagnostic through `single_diagnostic`, with no artifact emitted. The source has parsed by then, so the doc comment of `InvalidGeneratedSyntax` in `src/core/diagnostic.rs` is widened to "Generated source did not parse, or did not match its own source map", and the stable code is unchanged (interface-001). |
+| `generate_boolean_oracle_inner` (`src/oracle/boolean_v1.rs`), `source_lines[offset as usize - 1]` and `source_lines[start as usize - 1]` | invariant of the renderer's own output: the fixed 15-line header makes `offset` exactly 15 and each implication region starts on a line it rendered. Not reachable from input today. PLANNED (IR-577). | The lookup is `checked_sub(1)` then `get`. A missing line is the `GenerationErrorCode::InvalidGeneratedSyntax` diagnostic through `single_diagnostic`, with no artifact emitted. The source has parsed by then, so the doc comment of `InvalidGeneratedSyntax` in `src/core/diagnostic.rs` is widened to "Generated source did not parse, or did not match its own source map", and the stable code is unchanged (interface-001). |
 | the same function, `regions[0].expected_consequents = ..` | write into a one-element vector built the line above. Cannot fail. PLANNED (IR-577). | The clause region is built with `expected_consequents` set before it is placed in the vector (a struct update or a local binding), so the body holds no index. No refusal is added. |
 
 ## Measurement and Evaluation
@@ -166,7 +171,7 @@ Each site is named by function, not by line. The class is how the code must expr
 | NFR-005-AC-5 | The step of `generate_kani` that pairs FR-015's records with the Kani group, given hand-built inputs in a `#[cfg(test)]` module, returns `RoutedGenerationError::KaniRecordCountMismatch { records, items }` carrying both counts when the counts differ, in both directions, and pairs every item with its record when they are equal. | Test (TC-042) |
 | NFR-005-AC-6 | `rewrite_duplicate_position`, a function of `src/routed/generate.rs` that `generate_kani` calls to rewrite a `DuplicateItem` record's `first_index` into the driver's request index, given hand-built records and a group in a `#[cfg(test)]` module, returns `RoutedGenerationError::KaniDuplicatePositionOutOfRange { first_index, items }` carrying the position and the group's length when `first_index` equals or exceeds the group's length, with nothing generated, and returns the request index of the earlier item when `first_index` is the last valid position. PLANNED (IR-577). | Test (TC-042) |
 | NFR-005-AC-7 | `observe_clause`, given a map of zero regions and a map of one region, each with and without a coverage export, returns a row with a `MapMismatch` diagnostic with the message `typed implication census differs from map`, no classification, an `evaluation_count` of `None` and no consequents; given a map of two probed regions and a coverage export it returns a row with no consequents and no `MapMismatch` diagnostic. PLANNED (IR-577). | Test (TC-042) |
-| NFR-005-AC-8 | The scan locates the body of `generate_kani`, `rewrite_duplicate_position`, `observe_clause` and `generate_boolean_oracle_inner` in the literal-free non-test code of its file, asserts that it found each of the four, and asserts that none contains an index token or a subtraction token, so that a later change cannot bring back one of the IR-577 sites. An index token is a `[` whose previous non-whitespace token is `)`, `]`, or an identifier that is not a Rust keyword (`in`, `let`, `mut`, `ref`, `return`, `break`, `if`, `else`, `match`, `while`, `as`, `move` are the keywords the bodies can precede a `[` with); a `[` after any other token (`(`, `,`, `=`, `:`, `&`, `#`, `!` as in `vec![`) is an array, a slice pattern, an attribute or a macro, and is not an index. A range slice is an index token, since it has a `[` in the same place. A subtraction token is a `-` that is not part of `->`, and whose previous non-whitespace token is `)`, `]`, a literal or an identifier that is not a keyword; `-=` is a subtraction token too. A unary minus (previous token `(`, `,`, `=`, an operator or a keyword) is not. The scan allows no exception. Moving a covered site into a function this AC does not name is not allowed: the four named functions are exactly where the sites live, so an index in an extracted helper has to be named here first. PLANNED (IR-577). | Test (TC-042) |
+| NFR-005-AC-8 | The scan locates the body of `generate_kani`, `rewrite_duplicate_position`, `observe_clause` and `generate_boolean_oracle_inner` in the literal-free non-test code of its file, asserts that it found each of the four, and asserts that none contains an index token or a subtraction token, so that a later change cannot bring back one of the IR-577 sites. An operand-ending token is `)`, `]`, `}`, `?`, a numeric literal (so the `0` of a tuple field `t.0` counts), or an identifier that is not a Rust keyword (`in`, `let`, `mut`, `ref`, `return`, `break`, `if`, `else`, `match`, `while`, `as`, `move` are the keywords the bodies can precede a `[` or `-` with). An index token is a `[` whose previous non-whitespace token is operand-ending; a `[` after any other token (`(`, `,`, `=`, `:`, `&`, `#`, a keyword, or `!` as in `vec![`) is an array, a slice pattern, an attribute or a macro, and is not an index. A range slice is an index token, since it has a `[` in the same place. A subtraction token is a `-` that is not part of `->` and whose previous non-whitespace token is operand-ending; `-=` is a subtraction token too. A unary minus (previous token `(`, `,`, `=`, an operator or a keyword) is not. The scan allows no exception. Moving a covered site into a function this AC does not name is not allowed: the four named functions are exactly where the sites live, so an index in an extracted helper has to be named here first. PLANNED (IR-577). | Test (TC-042) |
 
 ## Verification
 
