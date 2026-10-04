@@ -152,12 +152,14 @@ When a lock has several defects, QSL's `DependencyInput::new` reports the first 
 source owner), which differs from the order CG's removed pre-check imposed. FR-030-AC-13 is
 therefore limited to a lock whose only defect is the repeated identity.
 
-Open question, sent to QSL on IR-465 and not decided here: what `Declined` carries as its code
-for the IR `Refused`, `InvalidInput` and `IncompleteInput` outcomes. QSL's relayed answer says the
-code is the catalog code of the refusal that caused it, but the map's input, Contract IR's
-`KaniOutcome` at the revision CG locks, is a kind plus IR's own cause string (for example
-`kani_identity_invalid` or `kani_population_incomplete`), which is not a QSL catalog `Code`, and no
-typed refusal reaches the map. Either `Declined.code` carries IR's own string, which is not a QSL
-catalog code, or IR must carry the typed refusal through `KaniOutcome`. QSL's `missing_import`
-with `missing-selection` is the replay byte-provision condition, a different condition. FR-030-AC-2
-asserts the cause only until QSL answers.
+The `Declined` code. QSL ruled, relayed (a QSL ruling recorded by the planner on IR-605), that
+`Declined { cause, code }` carries the code in the registry that issued it: `code` is a
+`DeclineCode`, either a QSL catalog `Code` or IR's own registry code type. The map's input,
+Contract IR's `KaniOutcome` at the revision CG locks, is a kind plus IR's own cause string (for
+example `kani_identity_invalid` or `kani_population_incomplete`), which is not a QSL catalog
+`Code`. QSL takes IR's type, since it already depends on `quire-contract-model`: IR exports a typed
+code for its STD-001 registry from `quire-contract-model`, and `KaniOutcome.code` becomes that type
+instead of `String` (IR-605, IR lane, spec first). QSL-351 lands `DeclineCode` and its IR arm after
+IR's type merges. IR's incomplete population is not the replay's missing byte-provision input; the
+codes are distinct. FR-030-AC-2 asserts the cause only and stays cause-only until both land; this
+spec adds no code assertion to it.

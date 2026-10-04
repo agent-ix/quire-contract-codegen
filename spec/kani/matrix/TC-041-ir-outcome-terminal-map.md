@@ -58,4 +58,5 @@ cause, and that the map is one match with no wildcard arm.
 Planned. No outcome maps to QSL's terminal value at this revision. Steps 8, 10, 11 and 12 wait on the unmerged
 QSL `Inconclusive` terminal value, because they include settlements whose value is
 `Inconclusive`; step 9, which includes `InvalidFunction` and `Name` as `Failed`, does not. Step 2
-asserts the cause only; the `Declined` code is an open question sent to QSL (FR-030 Status).
+asserts the cause only; the `Declined` code waits on IR-605 and QSL-351, as relayed in FR-030
+Status.
