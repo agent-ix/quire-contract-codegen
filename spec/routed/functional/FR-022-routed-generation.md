@@ -210,7 +210,9 @@ already does for the FR-331 envelope.
 - If FR-015 reports a `DuplicateItem` whose `first_index` is not a position in the Kani group, then
   the generator shall refuse the whole call with
   `RoutedGenerationError::KaniDuplicatePositionOutOfRange { first_index, items }`, with nothing
-  generated, and shall not index the group by it (NFR-005-AC-6).
+  generated, and shall not index the group by it. `generate_kani` pairs, rewrites and joins the
+  records through `route_records`, which rewrites each position with `rewrite_duplicate_position`
+  (NFR-005-AC-6).
 - The generator shall report every routed item exactly once, under its routed
   backend and the `KindOutput` variant of its routed kind. An item the arm
   refuses keeps its typed refusal and no artifact, and no other kind's arm is

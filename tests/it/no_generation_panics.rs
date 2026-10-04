@@ -1,6 +1,6 @@
 //! NFR-005 / TC-042: no panic token on a generation or analysis path.
 //!
-//! The scan (AC-1), the public-surface seam (AC-3) and the body scan of the four IR-577
+//! The scan (AC-1), the public-surface seam (AC-3) and the body scan of the five IR-577
 //! functions (AC-8) live here. The seams that are private to the crate (AC-2, AC-4 to AC-7) are
 //! `#[cfg(test)]` tests beside the code they reach, named `tc_042_*`.
 
@@ -153,11 +153,12 @@ fn function_body(code: &str, name: &str) -> Option<std::ops::Range<usize>> {
     None
 }
 
-/// The four functions NFR-005-AC-8 scans: the file its body lives in, its name, and an identifier
+/// The five functions NFR-005-AC-8 scans: the file its body lives in, its name, and an identifier
 /// that only that function's own body holds, so a locator that returned an empty or wrong range
 /// would fail the scan instead of passing it vacuously.
-const INDEX_FREE_BODIES: [(&str, &str, &str); 4] = [
+const INDEX_FREE_BODIES: [(&str, &str, &str); 5] = [
     ("src/routed/generate.rs", "generate_kani", "route_records("),
+    ("src/routed/generate.rs", "route_records", "pair_records("),
     (
         "src/routed/generate.rs",
         "rewrite_duplicate_position",
@@ -321,11 +322,11 @@ fn tc_042_ac1_src_holds_no_panic_token_outside_the_dated_digest_exception() {
     );
 }
 
-/// Trace: NFR-005-AC-8, TC-042. The bodies of `generate_kani`, `rewrite_duplicate_position`,
+/// Trace: NFR-005-AC-8, TC-042. The bodies of `generate_kani`, `route_records`, `rewrite_duplicate_position`,
 /// `observe_clause` and `generate_boolean_oracle_inner`, located in the literal-free non-test code
 /// of their files, hold no index token and no subtraction token.
 #[test]
-fn tc_042_ac8_the_four_ir_577_bodies_hold_no_index_or_subtraction() {
+fn tc_042_ac8_the_ir_577_bodies_hold_no_index_or_subtraction() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut offences = Vec::new();
     for (file, name, marker) in INDEX_FREE_BODIES {
