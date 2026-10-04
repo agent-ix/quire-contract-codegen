@@ -201,6 +201,10 @@ already does for the FR-331 envelope.
 - If the Kani arm emits two harnesses with one `harness_symbol`, then the
   generator shall refuse the whole call with `DuplicateHarness`, naming the
   `module::harness` path of the second, with nothing generated.
+- If FR-015 reports a number of records other than the number of items in
+  the Kani group, then the generator shall refuse the whole call with
+  `RoutedGenerationError::KaniRecordCountMismatch { records, items }`, with
+  nothing generated, and shall not pair the shorter of the two (NFR-005).
 - The generator shall rewrite every position FR-015 reports into the driver's
   request index.
 - The generator shall report every routed item exactly once, under its routed

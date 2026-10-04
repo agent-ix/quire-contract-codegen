@@ -48,7 +48,8 @@ results. A human release owner alone decides source release suitability.
 ## Requirements Architecture
 
 StR-001 is the one stakeholder requirement. Every functional requirement satisfies it. NFR-001 and
-NFR-002 constrain it, and NFR-004 constrains FR-008 to FR-013.
+NFR-002 constrain it, NFR-004 constrains FR-008 to FR-013, and NFR-005 constrains the panic-free
+generation of FR-014, FR-015, FR-019, FR-021 and FR-022.
 `interface-001` defines the serialized input, the library and CLI operations, the artifact bundle,
 the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
 Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 record the owner's decisions on the
@@ -58,6 +59,7 @@ generators, the input model, the backend adapter, Kani tractability and the gene
 | Area | Requirements | Test cases |
 |---|---|---|
 | Tri-state harnesses, vacuity and publication | FR-002, FR-004, FR-005 | TC-001 to TC-004, TC-006, TC-007 |
+| No panic on a generation or analysis path | NFR-005 | TC-042 |
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings | TC-025, TC-027, TC-036, TC-039 |

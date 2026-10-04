@@ -162,7 +162,8 @@ unsatisfiable requires as `cover_unsatisfied`.
   real harness unless a ground independent of the operation (an
   i64-unrepresentable endpoint, the source ceiling) displaces it. Every other
   confirmed family is refused as `OperationNotRendered`, an unbuilt renderer in
-  this generator, not an upstream block. A claim this generator lowered but
+  this generator, not an upstream block, and so is a claim of a rendered family
+  from a claim map this generator did not produce (NFR-005-AC-2). A claim this generator lowered but
   whose operation it did not confirm against the node's own catalogued
   identity, mode or law definition is refused as `CallerDeclaredOperation`.
 - Model and graph bounds: refused as blocked on `agent-ix/quire-spec-language#120`.
