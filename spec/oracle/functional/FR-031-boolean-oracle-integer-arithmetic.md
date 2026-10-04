@@ -124,20 +124,27 @@ exemplar clause (Kani 0.68.0, CBMC 6.11.0, the exemplar's option vector):
 - The exemplar's non-equivalent mutant (`left + right + 1`) is falsified, 1 of 86 checks failed,
   with the concrete counterexample `amount_current = 999`. The equivalent mutant (dropping the
   `+ 1`) verifies, 0 of 84 checks failed.
-- An exact-bignum rendering of the same clause (`exact::evaluate_integer_arithmetic` then
-  `exact::order_numbers`, a `Meter` with unlimited limits, `amount` in `0..=1000`) gave no verdict
-  in 800 seconds at unwind 4 with the same solver, against 9 to 55 seconds for the infix
-  rendering. Exact arithmetic is not tractable for the bundle's proofs under CBMC.
+- A whole-clause exact rendering (`exact::evaluate_integer_arithmetic` then `exact::order_numbers`,
+  a `Meter` with unlimited limits, `amount` in `0..=1000`) gave no verdict in 800 seconds at
+  unwind 4 with the same solver (a second run gave none in 1000 seconds), against 9 to 55
+  seconds for the infix rendering. The exact add alone over `0..=999` verifies in 28 seconds
+  (0 of 4705 checks failed), and the FR-015-AC-37 scalar harness verifies an exact add, so the cost
+  measured is in the clause rendering through `order_numbers`, not in exact arithmetic as such.
+  This requirement does not claim that exact arithmetic is intractable under CBMC.
 
-The Kani bundle therefore keeps a checked fixed-width path: add, subtract and multiply stay the
-infix `i64` operators, in the text shape the exemplar's mutation targets, and Kani's arithmetic
+The Kani bundle keeps a checked fixed-width path. The decisive reason is the exemplar's contract,
+not the tractability measurement: IT-011-SC-03 rewrites the generated oracle's text and requires
+exactly one `+` in it, and AD-004 L-5 requires the exemplar to pass through `generate_kani_bundle`
+until step 4e. Add, subtract and multiply therefore stay the infix `i64` operators, in the text
+shape the exemplar's mutation targets, and Kani's arithmetic
 check is what makes overflow a failing property. For a `reject` type the proof is provable, because
 Contract IR discharges the range obligation from declared bounds and the harness assumes the
 declared domain; if that discharge were wrong, Kani would fail the proof.
 
 This leaves two implementations of the rule: the runtime's exact operation for the native oracle
 and the fixed-width operator for the bundle oracle (the second implementation IR-594 flagged). It
-is justified by the tractability measurement above, and it is held in step by a differential
+is justified by the exemplar's text-mutation contract and AD-004 L-5, which a call into the runtime
+would break, and it is held in step by a differential
 test (FR-031-AC-21), not by a copy of the arithmetic in a table. The two differ in one
 documented way: on an operand outside the declared domain the native oracle returns the
 runtime's refusal, and the bundle oracle fails Kani's overflow check, because under Kani the
@@ -271,14 +278,14 @@ fixed-width and its comparison of two `i64` values has no failure mode.
 - The generator shall keep the native operator and the `bool` result for a comparison of two
   arithmetic-free `i64` values, which has no failure mode. That comparison is held to the
   runtime's meaning by a differential test (FR-031-AC-4), not by a call.
-- The generator shall not use a Rust comparison operator between the two operands of a comparison
-  that has an arithmetic operand. Its outcome is the runtime's, and an `Outcome::Completed`
+- The generator, other than for the Kani bundle oracle, shall not use a Rust comparison operator
+  between the two operands of a comparison that has an arithmetic operand. Its outcome is the runtime's, and an `Outcome::Completed`
   boolean continues as above.
 
 ### Consumers
 
-- A generator that embeds the Boolean oracle where a plain `bool` is required shall refuse a
-  clause that holds an arithmetic node, shall embed no raw arithmetic operator, and shall not read
+- A generator other than the V1 Kani bundle that embeds the Boolean oracle where a plain `bool` is
+  required shall refuse a clause that holds an arithmetic node, shall embed no raw arithmetic operator, and shall not read
   an `Outcome<bool>` as a `bool`. The tri-state harness generator shall refuse with
   `UnsupportedExpression` at the first arithmetic node, in addition to the
   `UnsupportedDependency` it already returns for an integer dependency. The bound strategy
@@ -294,8 +301,8 @@ fixed-width and its comparison of two `i64` values has no failure mode.
   holds a divide, remainder or `saturate` arithmetic node with `ClauseGenerationFailed`,
   retaining the oracle's own code (`UnsupportedIntegerDivision` or
   `UnsupportedSaturatingArithmetic`) and the node's span, and emit no harness. It shall not carry
-  an `Outcome<bool>`. The exact-bignum rendering is not tractable for its proofs (measured above),
-  and the bundle is deleted at AD-004 step 4f, where FR-014-AC-38 and FR-015-AC-40 and AC-41 own
+  an `Outcome<bool>`. The exemplar's text-mutation contract and AD-004 L-5 require the infix
+  shape (see the measurements above), and the bundle is deleted at AD-004 step 4f, where FR-014-AC-38 and FR-015-AC-40 and AC-41 own
   the `Outcome<bool>` oracle of a V2 clause body. The covers that FR-015-AC-53 to AC-58 add to V1
   bundle harnesses apply to a bundle with arithmetic as to any other.
 - QSL's exemplar is the regression gate of this consumer. IT-011 in the integration repository
@@ -343,12 +350,12 @@ fixed-width and its comparison of two `i64` values has no failure mode.
 | FR-031-AC-12 | PLANNED (IR-596). The oracle generated for an expression with no arithmetic node is byte-identical to the oracle the generator produced for it before this requirement. This criterion passes on the tree before the change and is a held agreement, not a defect proof. | Test (TC-044) |
 | FR-031-AC-13 | PLANNED (IR-596). Generating the oracle of an expression with an arithmetic node twice, and from a permuted request, yields identical bytes. | Test (TC-044) |
 | FR-031-AC-14 | PLANNED (IR-596). The generated source of an oracle with an arithmetic node contains no `unwrap`, `expect` or panic macro. | Test (TC-044) |
-| FR-031-AC-15 | PLANNED (IR-596). Each of the six comparisons that has an arithmetic operand is emitted as the runtime call the table names, with no Rust comparison operator between its two operands. | Test (TC-044) |
+| FR-031-AC-15 | PLANNED (IR-596). In the native oracle, each of the six comparisons that has an arithmetic operand is emitted as the runtime call the table names, with no Rust comparison operator between its two operands. | Test (TC-044) |
 | FR-031-AC-16 | HELD (IR-601; follow-up ticket). Under a `reject` integer type, a divide or remainder of the minimum by negative one evaluates to the runtime outcome the IR-601 ruling names, and does not panic, for O-3 `i64::MIN / -1` and O-5 `i64::MIN % -1`, each built as TC-044 step 4 gives. On the tree before the change each case panics with an overflow message. | Test (TC-044) |
 | FR-031-AC-17 | HELD (IR-601; follow-up ticket). In a generated crate, the outcome of a divide or remainder oracle equals a plain-integer model of the semantics the IR-601 ruling names, computed independently of the emitter, on a grid that includes the two reproductions of the Held section: `10 / y <= 10` over a `reject` type of `1..=10` at `y = 5`, and `x % -1` over `-10..=5` at `x = -10`. Under member-only semantics both complete, with 2 and 0; the reproductions are the vectors that distinguish the member-only from the pair semantics. | Test (TC-044) |
 | FR-031-AC-18 | PLANNED (IR-596). An expression holding a divide or a remainder node, over a `reject` or a `saturate` integer type, is refused with `UnsupportedIntegerDivision` at the node's span, with no artifact and no raw `/` or `%` in any output, for each of the constructions O-3, O-5, Z-1, Z-2, Z-3 and Z-4 of TC-044 and the `saturate` rows S-1 to S-4 of TC-044 step 11, in both consumers; the diagnostic message names IR-601 and the refusal has terminal state `unsupported`. On the tree before the change each construction generates and its generated function panics in a debug build on the vector TC-044 names for its row. | Test (TC-044) |
 | FR-031-AC-19 | PLANNED (IR-596). The Kani bundle oracle renders add, subtract and multiply as the infix `+`, `-` and `*` on `i64` with one binary operator per arithmetic node, contains no `exact::` call and no `checked_`, `wrapping_`, `saturating_` or `overflowing_` method, takes no meter, and its file states that its arithmetic is checked by Kani and is not a native evaluator. | Test (TC-044) |
-| FR-031-AC-20 | PLANNED (IR-596). Under real Kani, a harness that calls a bundle oracle with unconstrained operands at which IR's discharge does not hold fails with Kani's arithmetic-overflow check and a counterexample: the oracle of `x < 5 && x * 2 <= 10` over `0..=10` under `reject`, called at `x = i64::MIN`, fails with "attempt to multiply with overflow"; a bundle whose harness assumes the declared domain on every drawn input verifies the same clause. Overflow in the bundle oracle is a falsifiable property, never a wrapped value. | Test (TC-044) |
+| FR-031-AC-20 | PLANNED (IR-596). Under real Kani, a harness that calls a bundle oracle with unconstrained operands at which IR's discharge does not hold fails with Kani's arithmetic-overflow check and a counterexample: the oracle of `x < 5 && x * 2 <= 10` over `0..=10` under `reject`, called with `x` unconstrained, fails the "attempt to multiply with overflow" check, and the counterexample's playback value satisfies `x < 5` and overflows `x * 2` (any such value is valid; the assertion does not name one); a bundle whose harness assumes the declared domain on every drawn input verifies the same clause. Overflow in the bundle oracle is a falsifiable property, never a wrapped value. | Test (TC-044) |
 | FR-031-AC-21 | PLANNED (IR-596). For each of add, subtract and multiply, the bool the Kani bundle oracle returns equals the `bool` inside `Completed` of the native oracle of the same typed expression, on every vector of a grid inside the declared domain at which the expression's guards pass and IR's discharge holds, including the domain's edges, with the bundle oracle compiled and run natively in a generated crate against `quire-contract-runtime` in plain `cargo test`, with no Kani. This is the differential that holds the two implementations of the rule in step. | Test (TC-044) |
 
 ## Dependencies

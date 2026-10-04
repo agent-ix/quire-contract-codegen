@@ -140,13 +140,20 @@ change.
     | S-3 | Divide | `i64::MIN..=i64::MAX`, `saturate` | `y != 0 && x / y <= 0` | `x = i64::MIN`, `y = -1` |
     | S-4 | Remainder | `i64::MIN..=i64::MAX`, `saturate` | `y != 0 && x % y <= 0` | `x = i64::MIN`, `y = -1` |
 
-    The existing test `tc_023_native_proven_numeric_obligations_render_without_assumptions`,
-    which asserts a guarded division renders a `/`, is rewritten to assert the refusal.
+    Three existing tests change with this requirement and are rewritten: `oracle_generation`
+    `tc_023_native_proven_numeric_obligations_render_without_assumptions`, which asserts a
+    guarded division renders a `/`, to assert the refusal; `oracle_generation`
+    `tc_003_unsupported_expression_and_root_map_to_declared_terminal_states`, for its new first
+    locus (see step 6); and the guarded-division case of TC-017 in
+    `bound_strategy_generation`, which expects `generate_bound_oracles` to generate and the
+    strategy to refuse with `UnsupportedRelation`, and now sees the oracle's refusal and
+    `UnsupportedClause` carrying `UnsupportedIntegerDivision`.
 12. Kani overflow is a falsifiable property (FR-031-AC-20). Generate the bundle oracle of
     `x < 5 && x * 2 <= 10` over `0..=10` under `reject` (construction O-4), and in a Kani crate
     call it from a harness with `x = kani::any()` and no assumption. Assert real Kani fails
-    with an arithmetic-overflow check on the multiply and a counterexample at `x = i64::MIN`.
-    Assert a harness that assumes the declared domain on `x` verifies the same oracle.
+    the "attempt to multiply with overflow" check, and that the counterexample's playback value
+    satisfies `x < 5` and overflows `x * 2`; do not assert a particular value, because any
+    `x` below `-2^62` is a valid answer. Assert a harness that assumes the declared domain on `x` verifies the same oracle.
 13. Differential between the two implementations (FR-031-AC-21). For add, subtract and multiply,
     generate the native oracle and the Kani bundle oracle of the same typed expression (the
     constructions O-1, O-2 and O-4 and one with no guard), compile both in a generated crate
