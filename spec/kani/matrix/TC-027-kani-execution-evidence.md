@@ -114,28 +114,33 @@ not contain the harness is refused with no run.
 
 ## Implementation
 
-`src/kani_execution.rs` unit tests for classification, including
+`src/kani/classify.rs` unit tests for classification, including
 `a_report_with_no_successful_check_is_inconclusive_not_verified_even_with_every_cover_satisfied` for
-FR-017-AC-13, and the launcher tests (`a_capture_thread_*`,
+FR-017-AC-13, and the launcher tests in `src/kani/run/launch.rs` (`a_capture_thread_*`,
 `a_timeout_of_duration_max_never_elapses_and_does_not_panic`,
 `a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child`) for FR-017-AC-15
 through FR-017-AC-17. The two tests that asserted the silent tail an over-long stream used to
 keep are deleted; the TC-043 refusal tests replace them;
-the `src/kani_transcript.rs` tests `tc_027_a_report_that_changed_shape_is_refused_not_classified`,
+the `src/kani/classify.rs` tests `tc_027_a_report_that_changed_shape_is_refused_not_classified`,
 `tc_027_a_report_without_exactly_one_harness_is_refused`,
 `tc_027_real_kani_the_per_check_view_carries_id_class_location_and_status`,
 `tc_027_an_unknown_line_is_none_and_a_non_numeric_line_is_refused`,
-`tc_027_the_per_check_view_has_one_serialized_wire_shape` (FR-017-AC-20),
-`tc_027_the_console_banner_never_decides_the_verdict`,
-`tc_027_playback_scanning_returns_the_property_block_and_stops_at_an_unterminated_fence` and the six
-`tc_027_real_kani_*` capture tests for FR-017-AC-12 and FR-017-AC-18; the
-`src/kani_execution.rs` tests `tc_027_execution_reads_only_the_report_its_own_run_exported`,
-`tc_027_the_report_is_read_bounded_and_refused_not_truncated`,
-`tc_027_the_launch_exports_the_report_after_the_harness_options`,
-`tc_027_concurrent_runs_in_one_target_directory_keep_their_own_reports` and
-`tc_027_an_unreadable_or_missing_report_is_refused_never_inconclusive` for FR-017-AC-18 and FR-017-AC-19, with the
-`src/kani_transcript.rs` tests `tc_027_a_success_report_listing_a_failed_check_is_refused_never_verified`
-(FR-017-AC-18) and `tc_027_a_class_spelled_cover_or_unwind_is_never_other` (FR-017-AC-20); and `tests/it/kani_obligations.rs` for the refusals, the
+`tc_027_the_console_banner_never_decides_the_verdict` and the six `tc_027_real_kani_*` capture
+tests for FR-017-AC-12 and FR-017-AC-18, with
+`tc_027_the_per_check_view_has_one_serialized_wire_shape` (FR-017-AC-20) in
+`src/kani/output/report.rs` and
+`tc_027_playback_scanning_returns_the_property_block_and_stops_at_an_unterminated_fence` in
+`src/kani/output/playback.rs`; the `src/kani/run/execute.rs` tests
+`tc_027_execution_reads_only_the_report_its_own_run_exported`,
+`tc_027_the_launch_exports_the_report_after_the_harness_options` and
+`tc_027_concurrent_runs_in_one_target_directory_keep_their_own_reports`, the
+`src/kani/run/report_file.rs` test `tc_027_the_report_is_read_bounded_and_refused_not_truncated`
+and the `src/kani/classify.rs` test
+`tc_027_an_unreadable_or_missing_report_is_refused_never_inconclusive` for FR-017-AC-18 and
+FR-017-AC-19, with the `src/kani/classify.rs` test
+`tc_027_a_success_report_listing_a_failed_check_is_refused_never_verified` (FR-017-AC-18) and the
+`src/kani/output/report.rs` test `tc_027_a_class_spelled_cover_or_unwind_is_never_other`
+(FR-017-AC-20); and `tests/it/kani_obligations.rs` for the refusals, the
 generation/execution boundary and the `make kani` lane. The lane is `#[ignore]`d and runs through
 `make kani` under a host-wide lock, because Kani and CBMC are memory-heavy and must run one harness
 at a time.

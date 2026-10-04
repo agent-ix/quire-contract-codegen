@@ -36,7 +36,9 @@ fn node_id(digit: &str) -> CheckedNodeId {
 
 const VERIFIED: &str = "        let x: u8 = kani::any();\n        kani::assume(x < 10);\n        kani::cover!(x == 3, \"x can be three\");\n        assert!(x < 10);";
 const FALSIFIED: &str = "        let x: u8 = kani::any();\n        kani::assume(x < 10);\n        kani::cover!(x == 3, \"x can be three\");\n        assert!(x < 5);";
-/// A loop of 64-bit multiplications over symbolic values: far past two seconds at unwind 400.
+/// Two assertions that fail on independent paths: Kani prints one counterexample block for each.
+const TWO_FAILED_CHECKS: &str = "        let x: u8 = kani::any();\n        kani::assume(x < 10);\n        kani::cover!(x == 3, \"x can be three\");\n        if kani::any() {\n            assert!(x < 5, \"first\");\n        } else {\n            assert!(x != 7, \"second\");\n        }";
+/// A loop of 64-bit multiplications over symbolic values: still unfinished after a minute at unwind 400.
 const SLOW: &str = "        let n: u32 = kani::any();\n        kani::assume(n < 400);\n        let mut i: u32 = 0;\n        let mut acc: u64 = 1;\n        while i < n {\n            acc = acc.wrapping_mul(acc ^ (i as u64) | 1).wrapping_add(kani::any::<u64>() % 7);\n            i += 1;\n        }\n        assert!(acc != 12_345_678_901_234);";
 
 /// A harness whose source is a module `name` holding one proof `check` over `body`, run with the
@@ -246,10 +248,11 @@ fn tc_043_real_kani_one_process_runs_n_harnesses_where_n_ran_before() {
     .unwrap();
 }
 
-/// One real batch of a verified member, a falsified member and one Kani's own per-harness timeout
-/// cuts off: the verified member stays verified, the falsified member carries the playback Kani
-/// headed for its own path, and the cut-off member is inconclusive as timed out. The same two
-/// harnesses run again in a batch at the largest `--harness-timeout` Kani accepts, and run.
+/// One real batch of a verified member, a falsified member, one that fails two assertions (two
+/// counterexample blocks under its path) and one Kani's own per-harness timeout cuts off: the
+/// verified member stays verified, each falsified member carries the playback Kani headed for its
+/// own path (the first, for the one with two), and the cut-off member is inconclusive as timed
+/// out. Two harnesses then run in a batch at the largest `--harness-timeout` Kani accepts.
 ///
 /// Trace: FR-017-AC-21, FR-017-AC-22, FR-017-AC-23, FR-028-AC-12, TC-039, TC-043
 #[test]
@@ -259,12 +262,20 @@ fn tc_043_real_kani_batch_keeps_each_members_own_result_and_times_out_one_member
     let harnesses = [
         harness("verified", VERIFIED, 400),
         harness("falsified", FALSIFIED, 400),
+        harness("two", TWO_FAILED_CHECKS, 400),
         harness("slow", SLOW, 400),
     ];
     let lane = Lane::new("mixed", &harnesses);
+    // Warm the build first: the batch's outer bound is four times T and covers the compile of the
+    // crate too, so a cold build must not eat into the time `slow` is given. `slow` runs for
+    // well over a minute at this unwind bound, so T below cuts it off whatever the host does.
+    let warm = execute_kani_obligation(&lane.request(&harnesses[0], &target, REAL_KANI_TIMEOUT))
+        .unwrap_or_else(|refusal| panic!("the warm-up run: {refusal}"));
+    assert_eq!(warm.outcome, KaniRunOutcome::Verified);
+    let timeout = Duration::from_secs(20);
     let requests: Vec<_> = harnesses
         .iter()
-        .map(|harness| lane.request(harness, &target, Duration::from_secs(2)))
+        .map(|harness| lane.request(harness, &target, timeout))
         .collect();
     let evidence: Vec<KaniExecutionEvidence> = execute_kani_obligations(&requests)
         .expect("every harness is in the crate")
@@ -273,7 +284,11 @@ fn tc_043_real_kani_batch_keeps_each_members_own_result_and_times_out_one_member
         .unwrap()
         .evidence
         .unwrap_or_else(|refusal| panic!("the batch: {refusal}"));
-    assert_eq!(lane.processes(), 1);
+    assert_eq!(
+        lane.processes(),
+        2,
+        "the warm-up run and the one batch process"
+    );
     fs::write(
         evidence_directory().join("mixed-batch.json"),
         serde_json::to_string_pretty(&evidence).unwrap(),
@@ -290,13 +305,25 @@ fn tc_043_real_kani_batch_keeps_each_members_own_result_and_times_out_one_member
         "{:?}",
         evidence[1].outcome
     );
+    // `two` fails two assertions, so Kani printed two counterexample blocks under its path: it
+    // takes the first, and neither it nor its neighbours are refused.
+    assert!(
+        matches!(
+            &evidence[2].outcome,
+            KaniRunOutcome::Falsified { counterexample }
+                if counterexample.contains("two::check")
+                    && counterexample.contains("Check for `assertion`")
+        ),
+        "{:?}",
+        evidence[2].outcome
+    );
     assert_eq!(
-        evidence[2].outcome,
+        evidence[3].outcome,
         KaniRunOutcome::Inconclusive {
             reason: KaniInconclusiveReason::TimedOut
         }
     );
-    assert_eq!(evidence[2].batch.as_ref().unwrap().timeout_seconds, 2);
+    assert_eq!(evidence[3].batch.as_ref().unwrap().timeout_seconds, 20);
     assert_eq!(evidence[0].exit_code, Some(1));
 
     let at_maximum = [

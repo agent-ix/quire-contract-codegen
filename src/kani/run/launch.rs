@@ -6,7 +6,7 @@ use std::{
     io::Read,
     num::NonZeroUsize,
     os::{fd::AsFd, unix::process::CommandExt},
-    process::{Child, Command, ExitStatus, Stdio},
+    process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -18,7 +18,7 @@ use std::{
 use rustix::{
     event::{poll, PollFd, PollFlags},
     io::Errno,
-    process::{kill_process_group, Pid, Signal},
+    process::{kill_process_group, waitid, Pid, Signal, WaitId, WaitIdOptions},
     time::Timespec,
 };
 
@@ -171,15 +171,16 @@ pub(super) fn run_launcher(
     let stderr_reader = spawn_capture(stderr, &flags, limit);
 
     let deadline = Instant::now().checked_add(timeout);
-    let waited = wait_until(&mut child, deadline, &flags.failed);
+    let exited = wait_until(&child, deadline, &flags.failed);
+    // The group is signalled while the leader, exited or not, is still unreaped (see
+    // `wait_until`); only then is it reaped.
     kill_process_tree(&mut child);
-    if !matches!(waited, Ok(Some(_))) {
-        let _ = child.wait();
-    }
+    let reaped = child.wait();
     flags.stop.store(true, Ordering::Release);
     let stdout_bytes = finish_capture(stdout_reader);
     let stderr_bytes = finish_capture(stderr_reader);
-    let status = waited?;
+    let exited = exited?;
+    let reaped = reaped?;
 
     let stdout_bytes = match stream_bytes(CaptureStream::Stdout, stdout_bytes, limit, harnesses) {
         Ok(bytes) => bytes,
@@ -190,17 +191,18 @@ pub(super) fn run_launcher(
         Err(refusal) => return Ok(refusal),
     };
 
-    match status {
-        Some(status) => Ok(LaunchOutcome::Completed {
-            exited_successfully: status.success(),
-            exit_code: status.code(),
+    if exited {
+        Ok(LaunchOutcome::Completed {
+            exited_successfully: reaped.success(),
+            exit_code: reaped.code(),
             text: format!(
                 "{}\n{}",
                 String::from_utf8_lossy(&stdout_bytes),
                 String::from_utf8_lossy(&stderr_bytes)
             ),
-        }),
-        None => Ok(LaunchOutcome::TimedOut),
+        })
+    } else {
+        Ok(LaunchOutcome::TimedOut)
     }
 }
 
@@ -230,22 +232,33 @@ struct CaptureFlags {
     failed: Arc<AtomicBool>,
 }
 
-/// Polls `child` until it exits (`Some`), `deadline` passes (`None`) or a capture thread sets
-/// `failed` (`None`; the caller reports the failure, not a timeout). A `deadline` of `None` never
-/// passes.
-fn wait_until(
-    child: &mut Child,
-    deadline: Option<Instant>,
-    failed: &AtomicBool,
-) -> io::Result<Option<ExitStatus>> {
+/// Polls `child` until it has exited (`true`), `deadline` passes (`false`) or a capture thread
+/// sets `failed` (`false`; the caller reports the failure, not a timeout). A `deadline` of `None`
+/// never passes.
+///
+/// An exited launcher is **not reaped**: `waitid` with `NOWAIT` reports it and leaves it a zombie,
+/// so its pid, which is its process group's id, stays allocated until the caller has signalled the
+/// group and then reaped it. Reaping first (`try_wait`) would free the id while a straggler of the
+/// group might not exist any more, and the group kill could then reach an unrelated process group
+/// that had been given the recycled id.
+fn wait_until(child: &Child, deadline: Option<Instant>, failed: &AtomicBool) -> io::Result<bool> {
+    let pid = i32::try_from(child.id())
+        .ok()
+        .and_then(Pid::from_raw)
+        .ok_or_else(|| io::Error::other("the launcher's process id is not a valid pid"))?;
     loop {
-        if let Some(status) = child.try_wait()? {
-            return Ok(Some(status));
+        match waitid(
+            WaitId::Pid(pid),
+            WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
+        ) {
+            Ok(Some(_)) => return Ok(true),
+            Ok(None) | Err(Errno::INTR) => {}
+            Err(errno) => return Err(errno.into()),
         }
         if failed.load(Ordering::Acquire)
             || deadline.is_some_and(|deadline| Instant::now() >= deadline)
         {
-            return Ok(None);
+            return Ok(false);
         }
         thread::sleep(LAUNCHER_POLL_INTERVAL);
     }
@@ -785,24 +798,34 @@ mod tests {
     }
 
     /// An over-limit launcher that would otherwise run on is stopped and its whole process group
-    /// is killed, not only refused: the process that printed it is gone when the call returns.
+    /// is killed, not only refused: the call returns while the launcher is still short of its
+    /// marker (it is killed at once, not left to run on and found over the limit afterwards), and
+    /// its grandchild is gone.
     ///
     /// Trace: FR-017-AC-14, TC-043
     #[cfg(target_os = "linux")]
     #[test]
-    fn tc_043_an_over_limit_run_kills_the_launcher_group() {
+    fn tc_043_an_over_limit_run_is_stopped_and_kills_the_launcher_group() {
         let directory = discover_scratch("over-limit-kill");
         let pidfile = directory.join("pid");
-        // The launcher shell forks a grandchild (recording its pid), prints past the limit, then
-        // waits for the grandchild: only a kill of the whole group ends the grandchild.
+        let marker = directory.join("ran-on");
+        // The launcher shell forks a grandchild (recording its pid), prints past the limit, sleeps
+        // two seconds, writes its marker and waits for the grandchild. A run that is stopped when
+        // the stream goes over never reaches the marker; one that waits for the launcher to end
+        // on its own writes it, and only a kill of the whole group ends the grandchild.
         let mut command = Command::new("sh");
         command.arg("-c").arg(format!(
-            "sleep 45 & echo $! > {}; head -c {} /dev/zero; wait",
+            "sleep 45 & echo $! > {}; head -c {} /dev/zero; sleep 2; touch {}; wait",
             pidfile.display(),
-            CAPTURE_LIMIT + 1
+            CAPTURE_LIMIT + 1,
+            marker.display()
         ));
         let outcome = run_launcher_with_timeout(command, Duration::from_secs(120)).unwrap();
         assert!(matches!(outcome, LaunchOutcome::OutputOverLimit { .. }));
+        assert!(
+            !marker.exists(),
+            "the launcher ran on after its stream went over the limit"
+        );
         let grandchild: i32 = fs::read_to_string(&pidfile)
             .unwrap()
             .trim()

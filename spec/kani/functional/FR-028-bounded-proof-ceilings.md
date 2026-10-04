@@ -55,7 +55,7 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
 - Where FR-017 runs several harnesses in one launcher process, the generator shall hold each
   member to the group's wall-clock budget T through the backend's own per-harness timeout, except
   that when T rounded up to whole seconds exceeds 4294967295, the most the backend accepts (it exits
-  2 with no report above that), the generator shall omit the per-member timeout for that batch.
+  2 with no report above that), the generator shall omit the per-member timeout for that group.
   The outer bound below still applies, and does not elapse only when the product does not fit, as
   in FR-017-AC-15.
 - If the backend timed out a member of a batch, then the generator shall classify that member
@@ -63,7 +63,7 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
   in the member's batch statement) and leave the other members' results as they are.
 - Where FR-017 runs several harnesses in one launcher process, the generator shall bound the
   process to T multiplied by the member count, a product too large to represent never elapsing.
-- If a batch process reaches that bound, then the generator shall kill it, refuse the batch as
+- If a group's process reaches that bound, then the generator shall kill it, refuse the group as
   timed out and classify no member, because the backend writes its report only at the end and a
   killed batch leaves none.
 - The generator shall record in each execution evidence the bounds of every symbolic argument and
@@ -95,7 +95,7 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
 | FR-028-AC-7 | A family with a supplied shadow yields a harness with proof subject `bounded_shadow` and its refinement obligation in the same result, and never the shadow harness alone. | Test (TC-039) |
 | FR-028-AC-8 | An argument narrowed inside its declared domain records the declared domain, the narrowed bound and that the harness covers only the narrowed bound, in the harness identity and in the evidence. | Test (TC-039) |
 | FR-028-AC-9 | A narrowing outside the argument's declared domain is refused with a typed reason and no harness. | Test (TC-039) |
-| FR-028-AC-12 | In a batch of N harnesses sharing a wall-clock budget T, a member the backend cuts off (entry status Failure, no checks, exit status `timeout`) is `inconclusive` timed-out naming T and never falsified, while members that finished keep their verified or falsified results; a batch still running at N times T is killed, refused as timed out, and no member is classified; an N times T too large to represent never elapses and does not panic; a T above 4294967295 whole seconds launches the batch without `--harness-timeout` and the batch still runs, its outer bound still elapsing at N times T when the product fits. | Test (TC-039) |
+| FR-028-AC-12 | In a group of N harnesses (one launcher process of a FR-017 batch) sharing a wall-clock budget T, a member the backend cuts off (entry status Failure, no checks, exit status `timeout`) is `inconclusive` timed-out naming T and never falsified, while members that finished keep their verified or falsified results; a group still running at N times T is killed, refused as timed out, and no member is classified; an N times T too large to represent never elapses and does not panic; a T above 4294967295 whole seconds launches the group without `--harness-timeout` and the group still runs, its outer bound still elapsing at N times T when the product fits. | Test (TC-039) |
 
 ## Rationale
 

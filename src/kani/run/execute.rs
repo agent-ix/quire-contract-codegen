@@ -112,16 +112,12 @@ pub enum KaniExecutionRefusal {
         /// The per-harness request timeout.
         timeout: Duration,
     },
-    /// The console holds a playback block headed for a path that is not a member of the batch,
-    /// so no block in it can be attributed to a member (FR-017-AC-23).
+    /// The console holds a playback block headed for a path that is not a member of the group, so
+    /// no block in it can be attributed to a member (FR-017-AC-23). A member that fails several
+    /// property checks has several blocks under its own path and is not this: it takes the
+    /// first, as a single run does.
     PlaybackForNonMember {
         /// The path the block is headed for.
-        harness: String,
-    },
-    /// The console holds two counterexample playback blocks headed for one member's path, so
-    /// which one is its counterexample is not known (FR-017-AC-23).
-    PlaybackDuplicated {
-        /// The member's path.
         harness: String,
     },
 }
@@ -138,8 +134,7 @@ impl KaniExecutionRefusal {
             | Self::HarnessNotInCrate { .. }
             | Self::Report(_)
             | Self::BatchTimedOut { .. }
-            | Self::PlaybackForNonMember { .. }
-            | Self::PlaybackDuplicated { .. } => None,
+            | Self::PlaybackForNonMember { .. } => None,
         }
     }
 }
@@ -172,10 +167,6 @@ impl fmt::Display for KaniExecutionRefusal {
             Self::PlaybackForNonMember { harness } => write!(
                 formatter,
                 "the console holds a playback headed for {harness}, which is not in the batch"
-            ),
-            Self::PlaybackDuplicated { harness } => write!(
-                formatter,
-                "the console holds two counterexample playbacks headed for {harness}"
             ),
         }
     }
@@ -566,17 +557,9 @@ fn run_group(
             harness: block.harness.to_owned(),
         });
     }
-    if let Some(selection) = selections.iter().find(|selection| {
-        blocks
-            .iter()
-            .filter(|block| block.counterexample && block.harness == selection.as_str())
-            .count()
-            > 1
-    }) {
-        return Err(KaniExecutionRefusal::PlaybackDuplicated {
-            harness: selection.clone(),
-        });
-    }
+    // Kani prints one counterexample block per failed property check, so a member that fails two
+    // checks has two blocks under its own path. Each member takes the first, as a single run
+    // does; only a block for a path that is not a member cannot be attributed.
     // Kani exits 1 for any failed harness and for its own errors alike: a success is believed
     // beside a non-zero exit only when some entry states the failure that exit stands for.
     let process_succeeded = exited_successfully
@@ -1466,6 +1449,77 @@ exit 0
         }
     }
 
+    /// A process has one launcher, one working directory and one target directory: requests that
+    /// name another of any of the three are never grouped, however equal their options and
+    /// timeouts. Each case runs two requests and counts the processes each launcher was started
+    /// as.
+    ///
+    /// Trace: FR-017-AC-21, TC-043
+    #[test]
+    fn tc_043_requests_naming_another_launcher_crate_or_target_directory_are_not_grouped() {
+        let (a, b) = (member("a", "check", 4), member("b", "check", 4));
+
+        // Another launcher: each launcher runs one harness.
+        let (first, second) = (StandIn::verifying("key-l1"), StandIn::verifying("key-l2"));
+        let requests = [
+            first.request(&a, T),
+            KaniExecutionRequest {
+                installation: &second.installation,
+                ..first.request(&b, T)
+            },
+        ];
+        let runs = execute_kani_obligations(&requests).unwrap();
+        assert_eq!(runs.len(), 2);
+        assert_eq!((first.calls().len(), second.calls().len()), (1, 1));
+
+        // Another crate directory: two processes of the one launcher, one in each crate.
+        let (first, second) = (StandIn::verifying("key-c1"), StandIn::verifying("key-c2"));
+        let requests = [
+            first.request(&a, T),
+            KaniExecutionRequest {
+                crate_directory: &second.crate_directory,
+                ..first.request(&b, T)
+            },
+        ];
+        let runs = execute_kani_obligations(&requests).unwrap();
+        assert_eq!(runs.len(), 2);
+        assert_eq!(first.calls().len(), 2);
+
+        // Another target directory: the same.
+        let (first, second) = (StandIn::verifying("key-t1"), StandIn::verifying("key-t2"));
+        let requests = [
+            first.request(&a, T),
+            KaniExecutionRequest {
+                target_directory: &second.target_directory,
+                ..first.request(&b, T)
+            },
+        ];
+        let runs = execute_kani_obligations(&requests).unwrap();
+        assert_eq!(runs.len(), 2);
+        assert_eq!(first.calls().len(), 2);
+    }
+
+    /// A batch of N is bounded by N times T, not by T: four members at T = 1 s run for two
+    /// seconds, longer than T and well inside N times T, and complete with every member verified.
+    ///
+    /// Trace: FR-017-AC-21, FR-028-AC-12, TC-039, TC-043
+    #[test]
+    fn tc_043_a_batch_may_run_longer_than_t_when_it_is_inside_n_times_t() {
+        let stand_in = StandIn::running(
+            "inside-n-times-t",
+            &format!("sleep 2\n{VERIFY_EVERY_HARNESS}"),
+        );
+        let harnesses: Vec<_> = (0..4)
+            .map(|index| member(&format!("m{index}"), "check", 4))
+            .collect();
+        let evidence = only_group(stand_in.batch(&harnesses, Duration::from_secs(1))).unwrap();
+        assert_eq!(
+            outcomes(&evidence),
+            vec![KaniRunOutcome::Verified; 4],
+            "a bound of T, not N times T, would have killed this batch"
+        );
+    }
+
     /// The outer bound is the member count times T, and a product that does not fit never
     /// elapses.
     ///
@@ -1742,7 +1796,9 @@ exit 0
             member("c", "check", 4),
             member("d", "check", 4),
         ];
-        let evidence = only_group(stand_in.batch(&harnesses, Duration::from_secs(90))).unwrap();
+        // 90.5 s: Kani is told 91 whole seconds and the evidence names 91, rounded up.
+        let evidence =
+            only_group(stand_in.batch(&harnesses, Duration::from_millis(90_500))).unwrap();
         assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
         assert_eq!(
             evidence[1].outcome,
@@ -1750,7 +1806,7 @@ exit 0
                 reason: KaniInconclusiveReason::TimedOut
             }
         );
-        assert_eq!(evidence[1].batch.as_ref().unwrap().timeout_seconds, 90);
+        assert_eq!(evidence[1].batch.as_ref().unwrap().timeout_seconds, 91);
         let received = &stand_in.calls()[0];
         let at = received
             .iter()
@@ -1758,7 +1814,7 @@ exit 0
             .unwrap();
         assert_eq!(
             received[at + 1],
-            "90",
+            "91",
             "the T the timed-out member is told it had"
         );
         assert_eq!(
@@ -1890,12 +1946,134 @@ exit 0
         );
     }
 
-    /// A console block headed for a path that is not a member, and two counterexample blocks for
-    /// one path, each refuse the whole batch and classify no member.
+    /// The playback section of Kani 0.68's console for a batch of `two::check`, whose two
+    /// assertions fail on independent paths, and `ok::check`, verbatim from a real run: one cover
+    /// block and one counterexample block per failed check, all headed `two::check`, then
+    /// `ok::check`'s cover block. (The trailing space after the harness path in the `Test
+    /// generated` line is Kani's.)
+    const TWO_FAILED_CHECKS_CONSOLE: &str = r#"Concrete playback unit test for `two::check`:
+```
+/// Test generated for harness `two::check`
+///
+/// Check for `cover`: "x can be three"
+
+#[test]
+fn kani_concrete_playback_check_1077496887511954657() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 3
+        vec![3],
+    ];
+    kani::concrete_playback_run(concrete_vals, check);
+}
+```
+Concrete playback unit test for `two::check`:
+```
+/// Test generated for harness `two::check`
+///
+/// Check for `assertion`: ""first""
+
+#[test]
+fn kani_concrete_playback_check_1550118722174123344() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 8
+        vec![8],
+        // 1
+        vec![1],
+    ];
+    kani::concrete_playback_run(concrete_vals, check);
+}
+```
+Concrete playback unit test for `two::check`:
+```
+/// Test generated for harness `two::check`
+///
+/// Check for `assertion`: ""second""
+
+#[test]
+fn kani_concrete_playback_check_13421931990910725816() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 7
+        vec![7],
+        // 0
+        vec![0],
+    ];
+    kani::concrete_playback_run(concrete_vals, check);
+}
+```
+INFO: To automatically add the concrete playback unit test(s) to the src code, run Kani with `--concrete-playback=inplace`.
+Concrete playback unit test for `ok::check`:
+```
+/// Test generated for harness `ok::check`
+///
+/// Check for `cover`: "x can be three"
+
+#[test]
+fn kani_concrete_playback_check_1077496887511954657() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 3
+        vec![3],
+    ];
+    kani::concrete_playback_run(concrete_vals, check);
+}
+```
+"#;
+
+    /// A member that fails two property checks has two counterexample blocks under its own path in
+    /// real Kani's console. It takes the first, as the same harness run alone does, and neither
+    /// it nor its verified neighbour loses its evidence: the group is not refused.
+    ///
+    /// Trace: FR-017-AC-22, FR-017-AC-23, TC-043
+    #[test]
+    fn tc_043_a_member_failing_two_checks_takes_its_first_block_and_keeps_its_neighbour() {
+        let report = batch_report(&[
+            entry(
+                "two::check",
+                "Failure",
+                &[("Satisfied", "cover"), FAILED, FAILED],
+            ),
+            entry("ok::check", "Success", &[PASSED, COVER_OK]),
+        ]);
+        let stand_in = StandIn::replaying(
+            "two-failed-checks",
+            Some(&report),
+            TWO_FAILED_CHECKS_CONSOLE,
+            1,
+        );
+        let harnesses = [member("two", "check", 4), member("ok", "check", 4)];
+        let evidence = only_group(stand_in.batch(&harnesses, T)).unwrap();
+        let KaniRunOutcome::Falsified { counterexample } = &evidence[0].outcome else {
+            panic!("two::check is falsified: {:?}", evidence[0].outcome);
+        };
+        assert!(counterexample.contains("\"\"first\"\""), "{counterexample}");
+        assert!(!counterexample.contains("second"), "{counterexample}");
+        assert_eq!(evidence[0].success_checks, 0);
+        assert_eq!(evidence[1].outcome, KaniRunOutcome::Verified);
+        // The same harness alone, with the same console, is falsified with that same block.
+        let alone = classify_kani_run(
+            false,
+            Some(&batch_report_single_two()),
+            TWO_FAILED_CHECKS_CONSOLE,
+            None,
+        )
+        .unwrap();
+        assert_eq!(alone.outcome, evidence[0].outcome);
+    }
+
+    /// The report of `two::check` alone, as a single run exports it.
+    fn batch_report_single_two() -> Vec<u8> {
+        batch_report(&[entry(
+            "two::check",
+            "Failure",
+            &[("Satisfied", "cover"), FAILED, FAILED],
+        )])
+    }
+
+    /// A console block headed for a path that is not a member refuses the whole group and
+    /// classifies no member.
     ///
     /// Trace: FR-017-AC-23, TC-043
     #[test]
-    fn tc_043_an_unattributable_playback_refuses_the_whole_batch() {
+    fn tc_043_an_unattributable_playback_refuses_the_whole_group() {
         let report = batch_report(&[
             entry("a::check", "Failure", &[FAILED, COVER_OK]),
             entry("b::check", "Success", &[PASSED, COVER_OK]),
@@ -1909,16 +2087,6 @@ exit 0
         assert!(matches!(
             only_group(stand_in.batch(&pair(), T)),
             Err(KaniExecutionRefusal::PlaybackForNonMember { harness }) if harness == "z::check"
-        ));
-        let twice = format!(
-            "{}{}",
-            block("a::check", "assertion", "first"),
-            block("a::check", "assertion", "second")
-        );
-        let stand_in = StandIn::replaying("playback-twice", Some(&report), &twice, 1);
-        assert!(matches!(
-            only_group(stand_in.batch(&pair(), T)),
-            Err(KaniExecutionRefusal::PlaybackDuplicated { harness }) if harness == "a::check"
         ));
     }
 
