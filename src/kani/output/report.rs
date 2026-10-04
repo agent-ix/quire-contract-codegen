@@ -66,6 +66,22 @@ pub enum KaniReportRefusal {
         /// That check's status.
         status: KaniCheckStatus,
     },
+    /// The report of a batch holds no result for a harness the launch asked for (FR-017-AC-23).
+    HarnessMissing {
+        /// The requested `module::harness` path.
+        harness: String,
+    },
+    /// The report of a batch holds two results for one harness (FR-017-AC-23).
+    HarnessDuplicated {
+        /// The `module::harness` path the report names twice.
+        harness: String,
+    },
+    /// The report of a batch holds a result for a harness the launch did not ask for
+    /// (FR-017-AC-23).
+    HarnessUnrequested {
+        /// The `module::harness` path the report names.
+        harness: String,
+    },
 }
 
 impl fmt::Display for KaniReportRefusal {
@@ -92,6 +108,17 @@ impl fmt::Display for KaniReportRefusal {
             Self::Inconsistent { check_id, status } => write!(
                 formatter,
                 "the Kani report states success but check {check_id} is {status:?}"
+            ),
+            Self::HarnessMissing { harness } => write!(
+                formatter,
+                "the Kani report holds no result for the requested harness {harness}"
+            ),
+            Self::HarnessDuplicated { harness } => {
+                write!(formatter, "the Kani report holds {harness} more than once")
+            }
+            Self::HarnessUnrequested { harness } => write!(
+                formatter,
+                "the Kani report holds a result for {harness}, which was not requested"
             ),
         }
     }
@@ -269,6 +296,8 @@ pub(crate) struct KaniHarnessReport {
 
 #[derive(Deserialize)]
 struct RawHarness {
+    /// The `module::harness` path Kani echoes for the harness. A single run does not read it.
+    harness_id: Option<String>,
     status: KaniHarnessStatus,
     checks: Vec<RawCheck>,
 }
@@ -292,6 +321,70 @@ impl TryFrom<RawHarness> for KaniHarnessReport {
 struct RawReport {
     metadata: RawMetadata,
     verification_results: RawResults,
+    /// Kani lists an entry for every harness; one that errored carries an `exit_status`.
+    #[serde(default)]
+    error_details: Vec<RawErrorDetail>,
+}
+
+#[derive(Deserialize)]
+struct RawErrorDetail {
+    harness_id: Option<String>,
+    exit_status: Option<String>,
+}
+
+/// The `exit_status` Kani gives a harness its own per-harness timeout stopped.
+const TIMEOUT_EXIT_STATUS: &str = "timeout";
+
+/// One harness result of a batch report, with the path Kani names it by.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct KaniMemberReport {
+    /// The `module::harness` path the launch passed to `--harness`, as Kani echoes it.
+    pub(crate) harness_id: String,
+    /// The typed result.
+    pub(crate) report: KaniHarnessReport,
+    /// Whether Kani's own per-harness timeout stopped this harness (its `error_details` entry
+    /// gives the exit status `timeout`).
+    pub(crate) timed_out: bool,
+}
+
+/// The harness results of `members` in the order `requested` names them, one each.
+///
+/// A result for a harness not requested, two for one harness, and a requested harness with none
+/// each refuse the whole report: which member a result belongs to is then not known, and a batch
+/// whose members cannot be told apart has no member evidence.
+pub(crate) fn members_in_request_order(
+    requested: &[String],
+    members: &[KaniMemberReport],
+) -> Result<Vec<KaniMemberReport>, KaniReportRefusal> {
+    for member in members {
+        if !requested.contains(&member.harness_id) {
+            return Err(KaniReportRefusal::HarnessUnrequested {
+                harness: member.harness_id.clone(),
+            });
+        }
+        if members
+            .iter()
+            .filter(|other| other.harness_id == member.harness_id)
+            .count()
+            > 1
+        {
+            return Err(KaniReportRefusal::HarnessDuplicated {
+                harness: member.harness_id.clone(),
+            });
+        }
+    }
+    requested
+        .iter()
+        .map(|harness| {
+            members
+                .iter()
+                .find(|member| &member.harness_id == harness)
+                .cloned()
+                .ok_or_else(|| KaniReportRefusal::HarnessMissing {
+                    harness: harness.clone(),
+                })
+        })
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -305,8 +398,8 @@ struct RawResults {
 }
 
 impl KaniHarnessReport {
-    /// Reads the single harness result of an exported Kani report.
-    pub(crate) fn parse(report: &[u8]) -> Result<Self, KaniReportRefusal> {
+    /// The report document, at the one schema version this module reads.
+    fn read(report: &[u8]) -> Result<RawReport, KaniReportRefusal> {
         let raw: RawReport =
             serde_json::from_slice(report).map_err(|error| KaniReportRefusal::Malformed {
                 detail: error.to_string(),
@@ -316,7 +409,12 @@ impl KaniHarnessReport {
                 found: raw.metadata.version,
             });
         }
-        let mut results = raw.verification_results.results;
+        Ok(raw)
+    }
+
+    /// Reads the single harness result of an exported Kani report.
+    pub(crate) fn parse(report: &[u8]) -> Result<Self, KaniReportRefusal> {
+        let mut results = Self::read(report)?.verification_results.results;
         match (results.pop(), results.is_empty()) {
             (Some(harness), true) => {
                 let report = Self::try_from(harness)?;
@@ -328,6 +426,38 @@ impl KaniHarnessReport {
             }),
             (None, _) => Err(KaniReportRefusal::HarnessCount { found: 0 }),
         }
+    }
+
+    /// Reads every harness result of an exported Kani report, in the order Kani listed them (which
+    /// is not the order the launch asked for them in). Each result is read exactly as a single
+    /// run's is, and must name its harness.
+    pub(crate) fn parse_batch(report: &[u8]) -> Result<Vec<KaniMemberReport>, KaniReportRefusal> {
+        let raw = Self::read(report)?;
+        let details = raw.error_details;
+        raw.verification_results
+            .results
+            .into_iter()
+            .map(|harness| {
+                let harness_id =
+                    harness
+                        .harness_id
+                        .clone()
+                        .ok_or_else(|| KaniReportRefusal::Malformed {
+                            detail: "a harness result names no harness_id".to_owned(),
+                        })?;
+                let report = Self::try_from(harness)?;
+                report.refuse_contradiction()?;
+                let timed_out = details.iter().any(|detail| {
+                    detail.harness_id.as_deref() == Some(harness_id.as_str())
+                        && detail.exit_status.as_deref() == Some(TIMEOUT_EXIT_STATUS)
+                });
+                Ok(KaniMemberReport {
+                    harness_id,
+                    report,
+                    timed_out,
+                })
+            })
+            .collect()
     }
 
     /// A harness that states success must list no check that failed, errored or was left

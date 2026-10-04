@@ -55,5 +55,7 @@ recorded as FR-028 states.
 
 ## Status
 
-Planned. At this revision the run is held to a caller-declared wall-clock budget, no memory ceiling
-is set, and no identity records a ceiling, a family or a proof subject.
+Planned, except step 10 (FR-028-AC-12, the batch wall-clock rule), which is implemented (IR-277)
+and run by the `tc_043_*` batch tests listed in TC-043, tagged to both cases. At this revision the
+run is held to a caller-declared wall-clock budget, no memory ceiling is set, and no identity
+records a ceiling, a family or a proof subject.
