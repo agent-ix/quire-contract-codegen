@@ -168,7 +168,7 @@ and are counted separately from the three-way vectors.
    through the public API (FR-014-AC-40).
 3. Lower a package past the 65,536-unit work ceiling and read `LoweringWorkExhausted` with its
    ceiling and counter (FR-014-AC-41, with FR-014-AC-15). In the same seam, hand the scalar
-   `Failed` arm a hand-built record for each of `depth`, `nodes`, `edges`, `occurrences` and
+   `Failed` arm a hand-built record for each of `nodes`, `edges`, `occurrences` and
    `diagnostics`; each is `LoweringLimitUnrecognised` with `limit_kind` the snake_case name and the
    record's `limit` and `consumed`, with no panic and never `LoweringWorkExhausted`
    (FR-014-AC-41).

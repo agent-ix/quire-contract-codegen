@@ -68,7 +68,7 @@ fn span(line: u64) -> Value {
 }
 
 fn int(minimum: i64, maximum: i64) -> Value {
-    json!({"kind":"integer","domain":"signed","minimum":minimum,"maximum":maximum,"overflow":"reject"})
+    json!({"kind":"integer","domain":"signed","minimum":minimum.to_string(),"maximum":maximum.to_string(),"overflow":"reject"})
 }
 
 fn owner() -> Value {
@@ -141,7 +141,7 @@ fn clauses(balance_maximum_in_invariant: i64) -> Vec<ClauseFixture> {
             values: vec![balance(31, balance_maximum_in_invariant)],
             expression: json!({"node":"compare","operator":"greater_equal",
                 "left":read("balance", "current", 32),
-                "right":{"node":"integer_literal","value":0,"value_type":int(0, balance_maximum_in_invariant),"source":span(33)},
+                "right":{"node":"integer_literal","value":"0","value_type":int(0, balance_maximum_in_invariant),"source":span(33)},
                 "source":span(31)}),
         },
         ClauseFixture {
@@ -155,13 +155,13 @@ fn clauses(balance_maximum_in_invariant: i64) -> Vec<ClauseFixture> {
             // non-zero-divisor obligation.
             expression: json!({"node":"boolean","operator":"short_circuit_and",
                 "left":{"node":"compare","operator":"not_equal","left":read("amount", "current", 42),
-                    "right":{"node":"integer_literal","value":0,"value_type":int(0, 1000),"source":span(43)},
+                    "right":{"node":"integer_literal","value":"0","value_type":int(0, 1000),"source":span(43)},
                     "source":span(42)},
                 "right":{"node":"compare","operator":"less_equal",
                     "left":{"node":"numeric","operator":"divide",
-                        "left":{"node":"integer_literal","value":1000,"value_type":int(0, 1000),"source":span(44)},
+                        "left":{"node":"integer_literal","value":"1000","value_type":int(0, 1000),"source":span(44)},
                         "right":read("amount", "current", 45),"source":span(44)},
-                    "right":{"node":"integer_literal","value":1000,"value_type":int(0, 1000),"source":span(46)},
+                    "right":{"node":"integer_literal","value":"1000","value_type":int(0, 1000),"source":span(46)},
                     "source":span(44)},
                 "source":span(41)}),
         },
@@ -174,7 +174,7 @@ fn clauses(balance_maximum_in_invariant: i64) -> Vec<ClauseFixture> {
             values: vec![amount(51)],
             expression: json!({"node":"compare","operator":"greater_equal",
                 "left":read("amount", "current", 52),
-                "right":{"node":"integer_literal","value":0,"value_type":int(0, 1000),"source":span(53)},
+                "right":{"node":"integer_literal","value":"0","value_type":int(0, 1000),"source":span(53)},
                 "source":span(51)}),
         },
     ]
@@ -187,7 +187,7 @@ const REFUND_CAPPED: &str = "refund-within-fee";
 const REFUND_NONNEGATIVE: &str = "refund-balance-nonnegative";
 
 fn literal(value: i64, line: u64) -> Value {
-    json!({"node":"integer_literal","value":value,"value_type":int(0, 1000),"source":span(line)})
+    json!({"node":"integer_literal","value":value.to_string(),"value_type":int(0, 1000),"source":span(line)})
 }
 
 fn compare(operator: &str, left: Value, right: Value, line: u64) -> Value {
@@ -265,7 +265,7 @@ fn operation_group_clauses(refund_invariant_maximum: i64) -> Vec<ClauseFixture> 
             values: vec![balance(101, refund_invariant_maximum)],
             expression: json!({"node":"compare","operator":"greater_equal",
                 "left":read("balance", "current", 102),
-                "right":{"node":"integer_literal","value":0,"value_type":int(0, refund_invariant_maximum),"source":span(103)},
+                "right":{"node":"integer_literal","value":"0","value_type":int(0, refund_invariant_maximum),"source":span(103)},
                 "source":span(101)}),
         },
     ]
@@ -1090,7 +1090,7 @@ fn tc_025_a_byte_ceiling_and_an_unrecognised_lowering_refusal_are_oracle_refused
             consumed: 1_001,
         },
         ExactScalarRefusal::LoweringLimitUnrecognised {
-            limit_kind: "depth",
+            limit_kind: "nodes",
             limit: 128,
             consumed: 129,
         },

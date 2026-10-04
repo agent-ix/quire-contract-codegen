@@ -76,7 +76,6 @@ pub(crate) fn classify_lowering_failure(
     Some(match limit_kind {
         CheckedPackageLimit::Work => LoweringFailure::WorkExhausted { limit, consumed },
         CheckedPackageLimit::Bytes => LoweringFailure::ByteLimitExceeded { limit, consumed },
-        CheckedPackageLimit::Depth => unrecognised("depth"),
         CheckedPackageLimit::Nodes => unrecognised("nodes"),
         CheckedPackageLimit::Edges => unrecognised("edges"),
         CheckedPackageLimit::Occurrences => unrecognised("occurrences"),
@@ -93,8 +92,7 @@ pub(crate) mod failed_records {
 
     /// The limit kinds that are neither `work` nor `bytes`, each with the snake_case name
     /// FR-014 gives it.
-    pub(crate) const UNRECOGNISED_KINDS: [(CheckedPackageLimit, &str); 5] = [
-        (CheckedPackageLimit::Depth, "depth"),
+    pub(crate) const UNRECOGNISED_KINDS: [(CheckedPackageLimit, &str); 4] = [
         (CheckedPackageLimit::Nodes, "nodes"),
         (CheckedPackageLimit::Edges, "edges"),
         (CheckedPackageLimit::Occurrences, "occurrences"),

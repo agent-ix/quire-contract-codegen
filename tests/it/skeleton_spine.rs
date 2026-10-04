@@ -322,7 +322,6 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
 fn dependency_lock() -> DependencyLock {
     DependencyLock {
         identity: "test/units".to_owned(),
-        version: "1".to_owned(),
         package_id: DigestRecord::mint(DigestDomain::PackageSemanticV2, [7; 32]),
         source: locked("lib-units", b"a dependency source"),
     }
@@ -367,7 +366,7 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
         entry.package_id.0.as_deref(),
         Some(DigestDomain::VerificationJcs.as_str())
     );
-    assert_eq!(entry.version, lock.version);
+    assert_eq!(entry.identity, lock.identity);
     assert_eq!(
         entry.package_id,
         (
@@ -456,19 +455,17 @@ fn library_package_id(library: &LockedSource) -> DigestRecord {
     .package_id
 }
 
-/// A unit `q(x) = u::big(x)` importing `library` under the digest the library compiles to, and
-/// the lock selecting `library` at that `package_id`.
+/// A unit `q(x) = u::big(x)` importing `library` by identity alone, and the lock selecting
+/// `library` at the `package_id` it compiles to.
 fn importing_inputs(library: &LockedSource) -> (ReplayInputs, DependencyLock) {
     let package_id = library_package_id(library);
     let unit = format!(
         "language \"ix:native\" edition \"1-draft\";\n{PROFILE}\
-         import \"test/units\" version \"2\" digest \"{}\" as u;\n\
-         function q using v(x: Int[0, 9]): Boolean pure {{ u::big(x) }}\n",
-        package_id.hex()
+         import \"test/units\" as u;\n\
+         function q using v(x: Int[0, 9]): Boolean pure {{ u::big(x) }}\n"
     );
     let lock = DependencyLock {
         identity: "test/units".to_owned(),
-        version: "2".to_owned(),
         package_id,
         source: library.clone(),
     };

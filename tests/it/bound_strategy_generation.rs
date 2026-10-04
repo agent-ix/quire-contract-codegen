@@ -72,7 +72,7 @@ fn version_projection() -> Value {
             "expression":{
                 "owner":owner,
                 "types":[],
-                "values":[{"name":"versionNumber","kind":"state","value_type":{"kind":"integer","domain":"signed","minimum":0,"maximum":1000,"overflow":"reject"},"source":span(3)}],
+                "values":[{"name":"versionNumber","kind":"state","value_type":{"kind":"integer","domain":"signed","minimum":"0","maximum":"1000","overflow":"reject"},"source":span(3)}],
                 "functions":[],
                 "expression":{"node":"compare","operator":"equal",
                     "left":{"node":"value_reference","name":"versionNumber","observation":"post","source":span(4)},
@@ -131,11 +131,11 @@ fn scalar_projection(package: &str, kind: &str, operator: &str, literal: i64) ->
             "clause":{"requirement":owner,"clause":"amount-check"},
             "expression":{
                 "owner":owner, "types":[],
-                "values":[{"name":"amount","kind":declaration_kind,"value_type":{"kind":"integer","domain":"signed","minimum":0,"maximum":1000,"overflow":"reject"},"source":span(3)}],
+                "values":[{"name":"amount","kind":declaration_kind,"value_type":{"kind":"integer","domain":"signed","minimum":"0","maximum":"1000","overflow":"reject"},"source":span(3)}],
                 "functions":[],
                 "expression":{"node":"compare","operator":operator,
                     "left":{"node":"value_reference","name":"amount","observation":"current","source":span(4)},
-                    "right":{"node":"integer_literal","value":literal,"value_type":{"kind":"integer","domain":"signed","minimum":0,"maximum":1000,"overflow":"reject"},"source":span(5)},
+                    "right":{"node":"integer_literal","value":literal.to_string(),"value_type":{"kind":"integer","domain":"signed","minimum":"0","maximum":"1000","overflow":"reject"},"source":span(5)},
                     "source":span(3)},
                 "expected_type":{"kind":"boolean"}, "execution_point":anchor, "clause_root":true
             }
@@ -390,11 +390,11 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
 
     let arithmetic_value = {
         let mut value = scalar_projection("test/arithmetic", "precondition", "less", 7);
-        let integer = json!({"kind":"integer","domain":"signed","minimum":0,"maximum":1000,"overflow":"reject"});
+        let integer = json!({"kind":"integer","domain":"signed","minimum":"0","maximum":"1000","overflow":"reject"});
         value["bindings"][0]["expression"]["expression"]["left"] = json!({
             "node":"numeric", "operator":"add",
             "left":{"node":"value_reference","name":"amount","observation":"current","source":span(4)},
-            "right":{"node":"integer_literal","value":0,"value_type":integer,"source":span(6)},
+            "right":{"node":"integer_literal","value":"0","value_type":integer,"source":span(6)},
             "source":span(4)
         });
         value
@@ -461,15 +461,15 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         .contents
         .contains("AMOUNT_CURRENT_OBSERVATION: &'static str = \"current\""));
 
-    let integer =
-        json!({"kind":"integer","domain":"signed","minimum":0,"maximum":1000,"overflow":"reject"});
+    let integer = json!({"kind":"integer","domain":"signed","minimum":"0","maximum":"1000","overflow":"reject"});
     let amount_read = || json!({"node":"value_reference","name":"amount","observation":"current","source":span(4)});
-    let amount_literal = |value| json!({"node":"integer_literal","value":value,"value_type":integer,"source":span(5)});
+    let amount_literal = |value: i64| json!({"node":"integer_literal","value":value.to_string(),"value_type":integer,"source":span(5)});
 
     let mut negated_value = amount_value.clone();
-    negated_value["bindings"][0]["expression"]["values"][0]["value_type"]["minimum"] = json!(-1000);
+    negated_value["bindings"][0]["expression"]["values"][0]["value_type"]["minimum"] =
+        json!("-1000");
     negated_value["bindings"][0]["expression"]["expression"]["right"]["value_type"]["minimum"] =
-        json!(-1000);
+        json!("-1000");
     negated_value["bindings"][0]["expression"]["expression"]["left"] = json!({
         "node":"numeric_negate", "operand":amount_read(), "source":span(4)
     });

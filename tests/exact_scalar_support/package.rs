@@ -2614,22 +2614,21 @@ pub fn corpus_package() -> PackageBuilder {
             "binary",
             op("quire.op.integer.add"),
             &integer_type,
-            // `integer_pair_for_operand` is embedded directly as operand
-            // data, not as a separate registered node: IR-216's
-            // `validate_application_keys`/`validate_operations` only ever
-            // re-derive/check a node whose own top-level `body` is an
-            // application term, never a nested application inside
-            // `body.arguments[*]` (Contract IR's module doc,
-            // `checked_package/v2/operations.rs`), so this nested blob's own
-            // placeholder-shaped `operation` is never itself validated. Its
-            // own embedded `reference` is still picked up by
+            // An operand that is neither a literal nor a reference. The V2 reader's flat
+            // wire refuses an application nested in `body.arguments[*]` as `malformed_wire`
+            // (FR-038 "The flat wire"), so the operand is an `aggregate`, a term the reader
+            // admits there and that no scalar operation takes as an operand. Its embedded
+            // `reference` is still picked up by
             // `reference_targets`'s recursive walk (FR-322 says "anywhere"),
             // so it must name `expression_operand_anchor` too, not the
             // plain shared `V_INTEGER` -- otherwise this node's exact join
             // would still include `V_INTEGER`, right back to the
             // `AmbiguousBound` `dedicated_operand` exists to avoid.
             vec![
-                integer_pair_for_operand(0, &expression_operand_anchor),
+                json!({
+                    "term": "aggregate",
+                    "members": [member("operand", reference(&expression_operand_anchor))],
+                }),
                 reference(&expression_operand_anchor),
             ],
         ),

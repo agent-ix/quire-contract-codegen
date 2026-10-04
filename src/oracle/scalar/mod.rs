@@ -3424,7 +3424,7 @@ mod tests {
             node_id: node_id('a'),
             body_node_id: node_id('c'),
             incomplete: CheckedPackageIncomplete {
-                limit_kind: CheckedPackageLimit::Depth,
+                limit_kind: CheckedPackageLimit::Nodes,
                 limit: 128,
                 consumed: 129,
                 path: None,
