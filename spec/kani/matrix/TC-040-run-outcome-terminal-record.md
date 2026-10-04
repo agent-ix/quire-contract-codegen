@@ -22,15 +22,16 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 4. Map `inconclusive` with the no-verdict reason.
 5. Map `inconclusive` with the failure-without-counterexample and missing-cover-summary reasons.
 6. Map every outcome and reason, and collect the values.
-7. Map `falsified` with a replay disagreement, and with a replay that completed no value.
+7. Map `falsified` with a replay disagreement of each `DisagreementCause` (`Verdicts`, `Witness`,
+   `NoValue`).
 8. Map `falsified` with a non-fault `ReplayRefusal`.
 9. Map `falsified` with a fault in each position: `ReplayRefusal::Fault`,
    `ReplayRefusal::Admission(AdmissionFailure::Fault)`, `CallSiteRefusal::Fault`, and
    `CallSiteRefusal::Fault` inside `ReplayPackageError::CallSite` and `FrameReplayError::CallSite`.
-10. Map `falsified` with each CG-origin failure and inspect every `ReplayRefused` value the run
-    produced.
+10. Map `falsified` with each CG-raised failure FR-029-AC-11 lists and inspect every
+    `ReplayRefused` value the run produced.
 11. Map `falsified` under every replay settlement other than reproduced.
-12. Map `falsified` with a setup refusal on data that carries a QSL catalog code.
+12. HELD: map `falsified` with a setup refusal on data.
 
 ## Expected Results
 
@@ -42,16 +43,15 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 4. `Failed` (FR-029-AC-4).
 5. Each is `Failed` (FR-029-AC-5).
 6. No value is `Tested` (FR-029-AC-6).
-7. Each is `Inconclusive(ReplayParity)`, and the disagreement case carries its `DisagreementCause`
-   (FR-029-AC-8).
+7. Each is `Inconclusive(ReplayParity)` carrying its `DisagreementCause` (FR-029-AC-8).
 8. `Inconclusive(ReplayRefused)` carrying the refusal's catalog code (FR-029-AC-9).
 9. Each is `Failed` (FR-029-AC-10).
-10. Each CG-origin failure is `Failed`, and every `ReplayRefused` value carries a code of QSL's
+10. Each CG-raised failure is `Failed`, and every `ReplayRefused` value carries a code of QSL's
     `ReplayRefusal` set (FR-029-AC-11).
 11. No value is `Refuted` (FR-029-AC-12).
-12. `Inconclusive(ReplayRefused)` carrying that code (FR-029-AC-13).
+12. HELD on a QSL or owner ruling (FR-029-AC-13).
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. Steps 7, 8 and 12 wait on QSL-351,
-and step 12 also on QSL-352 (FR-029 Status).
+Planned. No outcome maps to QSL's terminal value at this revision. Steps 7 and 8 wait on the unmerged QSL
+`Inconclusive` terminal value, and step 12 is held on a QSL or owner ruling (FR-029 Status).

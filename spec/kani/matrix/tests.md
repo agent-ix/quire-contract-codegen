@@ -28,8 +28,8 @@ type: TestMatrix
 | FR-025 | FR-025-AC-1 | TC-036 | 🚧 Planned; emission order is asserted only for the V1 `BoundClause` harness kinds, and the ascending order and the scalar-claim harness are unasserted |
 | FR-025 | FR-025-AC-2 through FR-025-AC-8 | TC-036 | 🚧 Planned |
 | FR-028 | FR-028-AC-1 through FR-028-AC-9 | TC-039 | 🚧 Planned |
-| FR-029 | FR-029-AC-1 through FR-029-AC-6, FR-029-AC-8 through FR-029-AC-13 | TC-040 | 🚧 Planned; the replay-settlement criteria (IR-465) wait on QSL-351 and QSL-352 |
-| FR-030 | FR-030-AC-1 through FR-030-AC-12 | TC-041 | 🚧 Planned; the replay-settlement criteria (IR-465) wait on QSL-351 and QSL-352 |
+| FR-029 | FR-029-AC-1 through FR-029-AC-6, FR-029-AC-8 through FR-029-AC-13 | TC-040 | 🚧 Planned; AC-8 and AC-9 wait on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-13 is held on a QSL or owner ruling |
+| FR-030 | FR-030-AC-1 through FR-030-AC-12 | TC-041 | 🚧 Planned; AC-9 waits on QSL's unmerged `Inconclusive` terminal value (IR-465); AC-12 is held on a QSL or owner ruling |
 
 ## Test Case Summary
 

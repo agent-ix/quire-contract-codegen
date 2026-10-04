@@ -27,10 +27,10 @@ cause, and that the map is one match with no wildcard arm.
    cause.
 7. Inspect the map's source for a wildcard arm (inspection step, FR-030-AC-7).
 8. Map `Counterexample` with a replay disagreement, and with a non-fault `ReplayRefusal`.
-9. Map `Counterexample` with a fault in each position FR-029-AC-10 lists, and with each CG-origin
+9. Map `Counterexample` with a fault in each position FR-029-AC-10 lists, and with each CG-raised
    failure FR-029-AC-11 lists.
 10. Map `Counterexample` under every replay settlement other than reproduced.
-11. Map `Counterexample` with a setup refusal on data that carries a QSL catalog code.
+11. HELD: map `Counterexample` with a setup refusal on data.
 
 ## Expected Results
 
@@ -46,9 +46,9 @@ cause, and that the map is one match with no wildcard arm.
    code (FR-030-AC-9).
 9. Each is `Failed` (FR-030-AC-10).
 10. No value is `Refuted` (FR-030-AC-11).
-11. `Inconclusive(ReplayRefused)` carrying that code (FR-030-AC-12).
+11. HELD on a QSL or owner ruling (FR-030-AC-12).
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. Steps 8 and 11 wait on QSL-351,
-and step 11 also on QSL-352 (FR-029 Status).
+Planned. No outcome maps to QSL's terminal value at this revision. Step 8 waits on the unmerged QSL
+`Inconclusive` terminal value, and step 11 is held on a QSL or owner ruling (FR-029 Status).

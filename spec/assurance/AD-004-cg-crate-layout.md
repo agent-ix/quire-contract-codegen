@@ -812,7 +812,10 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      step. A decode failure (`DecodeFailure`, `EvidenceFailureCause::Decode`) is not in that list:
      it is a CG defect, a playback that does not type against the bindings CG persisted, and maps
      to `Failed` (AD-003, link 7). Faults stay `Failed`. Until QSL-352's codes exist, these
-     refusals map to `Failed` as the interim.
+     refusals map to `Failed` as the interim. Measured later (IR-465 spec, QSL `main` 7c2cb303):
+     `CallSiteRefusal::code()` and `DependencyInputRefusal::code()` are already in QSL `main`, so
+     no code is missing; the class's value is a HELD question against merged QSL FR-121 (AD-003
+     R-Q1), and `Inconclusive(ReplayRefused)` is not yet in QSL's types.
    - Layering. The C-09 map is a public entry in `kani/terminal.rs` that the driver calls; the
      driver runs the obligation and the replay and pairs the two, as QSL's merged T-13 says. Its
      first input is IR's `KaniOutcome` (ADR-013 C-09's `KaniOutcomeKind`); the FR-029 map from
