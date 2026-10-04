@@ -77,12 +77,31 @@ Partial. FR-016-AC-9 through AC-11 are implemented and tested in the default sui
 `qsl_replay::replay` and settles the violation, a witness at which the function
 holds and a healthy twin settle `inconclusive` naming both verdicts, and each
 adapter refusal is its own typed error. The ignored Kani lane (`make kani`, not
-part of `make ci`) replays a real prover counterexample the same way. The native
-twin is hand-mirrored QSL source and the input package is hand-built, so the
-contract-to-Contract-IR step does not run.
+part of `make ci`) replays a real prover counterexample the same way.
+
+The verdict is tied to the exact witness values, not to any violating input. A twin whose clause
+is false at a single point is reproduced only by the transcript carrying that point, and
+neighbouring points settle `inconclusive` (default suite,
+`tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values`). In the Kani lane the point is
+read from Kani's own printed block, by a reader that shares no code with `decode_falsification`
+(the `// value` comment lines and, separately, the little-endian byte vectors, which must agree
+with each other and with the decoder), and a neighbour control must not reproduce. On a throwaway
+copy each of these turned the Kani lane red (IR-29): replacing the transcript handed to the replay
+with a constant after the printed witness is read, a decoder that adds one to each value, one that
+swaps the two values, and one that returns a fixed in-domain pair. The witness check pins the
+replay to the transcript it is given. A constant substituted at the source, right after the run is
+classified `Falsified` and before anything reads it, stays green, because the independent reader,
+the decoder and the replay then all see the same self-consistent block. The link from the Kani run
+to that transcript rests on the `Verified` then `Falsified` outcome assertions.
+
+What stays unbacked: the native twin is hand-mirrored QSL source, not derived from the contract or
+the Rust subject, and the input package is hand-built, so the contract-to-Contract-IR step does not
+run. The Kani lane is `#[ignore]` and outside `make ci`, so the real-prover mutations above are
+not gated in CI; the default suite pins the replay end and the decoder against a synthetic
+transcript only. FR-016-AC-6, AC-7 and AC-12 are planned.
 
 FR-016-AC-8 is implemented and tested in the default suite: schema
-order and naming by position (`src/kani_witness_join.rs` unit tests) and the
+order and naming by position (`src/replay/witness.rs` unit tests) and the
 harness emission order (`tests/it/kani_argument_order.rs`); the real-backend
 decode runs in the ignored Kani lane (`tests/it/kani_witness_join.rs`).
 
@@ -91,10 +110,10 @@ through `replay_counterexample`: a transcript that decodes to nothing, has the w
 value count or byte width, or names another harness is a decode evidence failure
 carrying the decoder's cause code and is never replayed (AC-1, AC-5); a value one
 past either end of its argument's bounds, or at an `i64` extreme, is a domain
-evidence failure (AC-2, `src/kani_witness_join.rs` unit tests); an in-domain
+evidence failure (AC-2, `src/replay/witness.rs` unit tests); an in-domain
 counterexample the native twin falsifies is reproduced (AC-3); a twin that holds
 the clause, or any settlement other than a reproduced violation, is a verdict
-evidence failure (AC-4, AC-13, `src/spine_replay.rs` unit tests). Decode, domain
+evidence failure (AC-4, AC-13, `src/replay/function.rs` unit tests). Decode, domain
 and verdict mismatches are one evidence-failure verdict with a typed cause. The
 decode size limit (AC-6), the charge, counter and limit comparison (AC-7) and the
 unavailable result for an executor fault (AC-12) are planned.
