@@ -1221,10 +1221,6 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         Some((_, WitnessValue::Integer(value))) => *value,
         other => panic!("{name} decodes to an integer, got {other:?}"),
     };
-    assert!(
-        get("amount_current") <= get("balance_pre"),
-        "the counterexample satisfies the proved precondition"
-    );
     let violating_twin = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
     assert_eq!(
         replay_counterexample(&harness.identity, counterexample, &violating_twin)
@@ -1252,6 +1248,10 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         (get("amount_current"), get("balance_pre")),
         (amount, balance),
         "the decoder disagrees with the values Kani printed"
+    );
+    assert!(
+        amount <= balance,
+        "the counterexample satisfies the proved precondition"
     );
 
     // The verdict is decided by the values Kani printed: a twin false only at that point is
