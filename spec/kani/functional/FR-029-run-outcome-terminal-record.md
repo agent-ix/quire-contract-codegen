@@ -134,13 +134,8 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   from `Identifier::new`, which has no code. `FrameReplayError::Name` wraps QSL's
   `EmptyQualifiedName`, which has no code; as built, no call reaches it, because every
   `QualifiedName::new` call passes a non-empty list.
-- The replay package builder shall define no duplicate-identity error of its own, so
-  `DependencyLockError` has no `Duplicate` variant.
-- The replay package builder shall refuse a repeated dependency identity only through QSL's
-  `DependencyInput::new`, so that QSL's refusal and its code reach the map as
-  `DependencyLockError::Input`. A second copy of QSL's check here would mint a CG-origin refusal for a
-  condition QSL codes, and a `Failed` for it would report an input defect as a fault. A `ReplayRefusal` wrapped in `SpineReplayError::Refused` or
-  `FrameReplayError::Refused` is the refused or fault reading by its walked content, not a CG
+- The Kani adapter shall read a `ReplayRefusal` wrapped in `SpineReplayError::Refused` or
+  `FrameReplayError::Refused` as the refused or fault reading by its walked content, not as a CG
   defect. [AD-001](../../assurance/AD-001-codegen-architecture.md)'s failure view keeps each a
   distinct typed state before the map.
 - The Kani adapter shall expose no `proof_category` function. A value's category is
@@ -166,7 +161,7 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 | FR-029-AC-11 | `falsified` with each CG-raised failure that carries no QSL code maps to `Failed`: `SpineReplayError::UnboundArgument`, `FieldDelimiter`, `Transcript`, `WrongArm` and `Identity`; `FrameReplayError::Transcript`, `Envelope` and `Name`; `ReplayPackageError::InvalidFunction`; a playback outside the harness proof bound; and a decode failure. No `Inconclusive(ReplayRefused)` value carries a code that no QSL refusal value supplied. | Test (TC-040) |
 | FR-029-AC-12 | Across every replay settlement other than reproduced, `falsified` maps to a value other than `Refuted`. | Test (TC-040) |
 | FR-029-AC-13 | `falsified` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped in `ReplayPackageError` and `FrameReplayError`, maps to `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or `DependencyInputRefusal::code()` of that refusal, and never to `Declined`. | Test (TC-040) |
-| FR-029-AC-14 | A lock that selects one library identity twice is refused by QSL's `DependencyInput::new` as `DuplicateIdentity` (`invalid_package`) and reaches the map as `DependencyLockError::Input`, so `falsified` with it maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-040) |
+| FR-029-AC-14 | `falsified` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-040) |
 
 ## Dependencies
 
@@ -211,13 +206,16 @@ and `Name` is unreachable as built.
 Repeated dependency identity. QSL ruled, relayed on IR-465 (a QSL ruling recorded by the planner),
 that this repository deletes its own duplicate pre-check and builds QSL's dependency input, so that
 `DependencyInput::new` refuses `DuplicateIdentity` as `invalid_package` with cause
-`conflicting-definition`; it arrives as `DependencyLockError::Input` and settles by timing like
-every other setup refusal. QSL rejected a second copy of QSL's check here and rejected `Failed`,
-which would report an input defect as a fault. FR-029-AC-14 states this.
+`conflicting-definition`; it arrives as `DependencyLockError::Input` and settles by timing: QSL
+settles `Declined` for a refusal before a backend run and `ReplayRefused` after a refutation. This
+repository builds the lock only after Kani refuted, so for it the settlement is always
+`ReplayRefused`. QSL rejected a second copy of QSL's check here and rejected `Failed`, which would
+report an input defect as a fault. FR-016-AC-24 states the builder's behaviour, and FR-029-AC-14
+the mapping.
 
 What is buildable now, and what is not. Merged QSL code already has `DependencyInput::new` with
 `DuplicateIdentity`, so deleting the pre-check in the lock admission and the `Duplicate` variant,
-and letting QSL's constructor refuse, needs no pending QSL type. That is the job of the code change,
-not of this spec change; the existing test that expects the repeated identity as `Duplicate` changes
-with it. The mapping of the resulting `Input` to `ReplayRefused` waits on the pending
-`Inconclusive` types above.
+and letting QSL's constructor refuse (FR-016-AC-24, which changes the test
+`tc_026_a_lock_repeating_a_dependency_is_refused`), needs no pending QSL type. That is the job of
+the code change, not of this spec change. The mapping of the resulting `Input` to `ReplayRefused`
+(FR-029-AC-14) waits on the pending `Inconclusive` types above.

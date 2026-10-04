@@ -816,7 +816,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      `Inconclusive(ReplayRefused)` with that QSL code. QSL ruled this (relayed on IR-465): `Declined`
      is only for a refusal before any backend run, and QSL amends its FR-121 to say so.
      `InvalidFunction` and `Name` carry no QSL code and map to `Failed`;
-     CG has no `DependencyLockError::Duplicate`: the lock admission drops its own duplicate
+     CG is to have no `DependencyLockError::Duplicate` (planned, FR-016-AC-24): the lock admission drops its own duplicate
      pre-check and builds QSL's dependency input, so QSL refuses a repeated identity as
      `invalid_package` and it arrives as `DependencyLockError::Input` (QSL ruling, relayed on IR-465,
      a QSL ruling recorded by the planner; AD-003 R-Q1). A decode failure (`DecodeFailure`, `EvidenceFailureCause::Decode`) is not in that list:

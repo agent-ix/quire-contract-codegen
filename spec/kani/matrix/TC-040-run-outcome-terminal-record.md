@@ -33,8 +33,8 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 11. Map `falsified` under every replay settlement other than reproduced.
 12. Map `falsified` with a non-fault `CallSiteRefusal` and with a `DependencyLockError::Input`,
     each bare and wrapped in `ReplayPackageError` and `FrameReplayError`.
-13. Map `falsified` with a lock that selects one library identity twice, refused by QSL's
-    `DependencyInput::new`.
+13. Map `falsified` with the refusal QSL's `DependencyInput::new` returns for a lock whose only
+    defect is one library identity selected twice.
 
 ## Expected Results
 

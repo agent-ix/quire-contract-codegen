@@ -32,15 +32,13 @@ cause, and that the map is one match with no wildcard arm.
 10. Map `Counterexample` under every replay settlement other than reproduced.
 11. Map `Counterexample` with a non-fault `CallSiteRefusal` and with a `DependencyLockError::Input`,
     each bare and wrapped.
-12. Map `Counterexample` with a lock that selects one library identity twice, refused by QSL's
-    `DependencyInput::new`.
+12. Map `Counterexample` with the refusal QSL's `DependencyInput::new` returns for a lock whose
+    only defect is one library identity selected twice.
 
 ## Expected Results
 
 1. Exactly one value per expressible pair, and none is `Tested` (FR-030-AC-1, FR-030-AC-6).
-2. `Declined` with three distinct causes, each carrying the catalog code of its refusal: the
-   `CheckedPackageRefusal`'s own code, `invalid_runtime_input`, and `missing_import` with
-   `missing-selection` (FR-030-AC-2).
+2. `Declined` with three distinct causes (FR-030-AC-2).
 3. `Incomplete` with three distinct causes (FR-030-AC-3).
 4. `Proved { success_checks: 3 }`, `Proved { success_checks: 0 }` and `Refuted` (FR-030-AC-4).
 5. `Proved { success_checks: 0 }` and `Failed` (FR-030-AC-5).
@@ -59,6 +57,5 @@ cause, and that the map is one match with no wildcard arm.
 
 Planned. No outcome maps to QSL's terminal value at this revision. Steps 8, 10, 11 and 12 wait on the unmerged
 QSL `Inconclusive` terminal value, because they include settlements whose value is
-`Inconclusive`; step 9, which includes `InvalidFunction` and `Name` as `Failed`, does not. The code
-half of step 2 waits on QSL's pending `Declined` that carries a code; its cause half does not
-(FR-030 Status).
+`Inconclusive`; step 9, which includes `InvalidFunction` and `Name` as `Failed`, does not. Step 2
+asserts the cause only; the `Declined` code is an open question sent to QSL (FR-030 Status).
