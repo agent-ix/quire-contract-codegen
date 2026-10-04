@@ -153,12 +153,26 @@ fn function_body(code: &str, name: &str) -> Option<std::ops::Range<usize>> {
     None
 }
 
-/// The four functions NFR-005-AC-8 scans, each with the file its body lives in.
-const INDEX_FREE_BODIES: [(&str, &str); 4] = [
-    ("src/routed/generate.rs", "generate_kani"),
-    ("src/routed/generate.rs", "rewrite_duplicate_position"),
-    ("src/evidence/bound_coverage.rs", "observe_clause"),
-    ("src/oracle/boolean_v1.rs", "generate_boolean_oracle_inner"),
+/// The four functions NFR-005-AC-8 scans: the file its body lives in, its name, and an identifier
+/// that only that function's own body holds, so a locator that returned an empty or wrong range
+/// would fail the scan instead of passing it vacuously.
+const INDEX_FREE_BODIES: [(&str, &str, &str); 4] = [
+    ("src/routed/generate.rs", "generate_kani", "route_records("),
+    (
+        "src/routed/generate.rs",
+        "rewrite_duplicate_position",
+        "KaniDuplicatePositionOutOfRange",
+    ),
+    (
+        "src/evidence/bound_coverage.rs",
+        "observe_clause",
+        "consequent_regions",
+    ),
+    (
+        "src/oracle/boolean_v1.rs",
+        "generate_boolean_oracle_inner",
+        "probe_at(",
+    ),
 ];
 
 /// The keywords a body can precede a `[` or `-` with; any other identifier ends an operand.
@@ -314,11 +328,16 @@ fn tc_042_ac1_src_holds_no_panic_token_outside_the_dated_digest_exception() {
 fn tc_042_ac8_the_four_ir_577_bodies_hold_no_index_or_subtraction() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut offences = Vec::new();
-    for (file, name) in INDEX_FREE_BODIES {
+    for (file, name, marker) in INDEX_FREE_BODIES {
         let source = fs::read_to_string(root.join(file)).expect("read a source file");
         let code = non_test_code_outside_literals(&source);
         let body = function_body(&code, name)
             .unwrap_or_else(|| panic!("`fn {name}` was not found in {file}"));
+        assert!(
+            code[body.clone()].contains(marker),
+            "the located body of `fn {name}` ({} bytes) does not hold `{marker}`",
+            body.len()
+        );
         for (kind, at) in unchecked_tokens(&code[body.clone()]) {
             let from = body.start + at;
             let context = code[from.saturating_sub(30)..]
