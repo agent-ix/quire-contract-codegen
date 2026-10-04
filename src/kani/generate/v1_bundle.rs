@@ -542,6 +542,7 @@ mod {} {{\n\
 {}    #[kani::proof_for_contract({})]\n\
     fn {}() {{\n\
 {}{}        let _post_state = {}({argument_names});\n\
+        kani::cover!(true, \"bundle requires and IR bounds are jointly satisfiable\");\n\
     }}\n\
     // END proof harness\n\
 }}\n",
