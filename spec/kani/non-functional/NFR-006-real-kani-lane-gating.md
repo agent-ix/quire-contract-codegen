@@ -107,7 +107,8 @@ leave `make ci` green. Two merged defects of that kind were found by running the
   (FR-015-AC-53 to FR-015-AC-58); their real-Kani outcomes are the evidence.
 
 Two more properties are shown only by real Kani and are not defects that merged: overflow in the
-bundle oracle is a failing Kani check, not a wrapped value (FR-031-AC-20), and the witness the replay
+bundle oracle is a failing Kani check, not a wrapped value (FR-031-AC-20, and for divide and
+remainder FR-031-AC-24), and the witness the replay
 reads is Kani's own printed block (IR-29, TC-026), which a synthetic transcript does not exercise.
 
 **Chosen rule.** The lane is required, in full, for a change that touches the set, and is not
