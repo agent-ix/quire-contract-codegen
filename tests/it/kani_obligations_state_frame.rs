@@ -2937,6 +2937,97 @@ fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_memb
     replay_of(&twin, "deposit", &run_of(&aligned, [5, 0])).expect("the aligned scope builds");
 }
 
+/// The anchor and frame nodes of the package QSL itself emits from the twin's unit
+/// (`call_site`'s package bytes, admitted by the model reader) have, as `CheckedNodeId`s, exactly
+/// the ids `call_site` names as the site's `anchor` and `frame`, and the anchor binds that frame:
+/// the node ids the generator reads from a package and the wire ids the replay requires are one
+/// id, with no rebase. The frame harness itself cannot yet be generated from this package: see
+/// `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`.
+///
+/// Trace: FR-024-AC-28, FR-024-AC-30, TC-035
+#[test]
+fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
+    let twin = Twin::new();
+    let (package, _) = twin.emitted_package("BalanceNeverDrops");
+    let site = twin.operation_site("deposit").expect("located");
+    let node_of = |form: &str| {
+        let found = package
+            .graph()
+            .nodes
+            .iter()
+            .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == form)
+            .collect::<Vec<_>>();
+        let [only] = found[..] else {
+            panic!("one `{form}` node in the package, found {}", found.len());
+        };
+        only
+    };
+    let anchor = node_of("operation_anchor");
+    let frame = node_of("frame");
+    assert_eq!(*anchor.node_id.digest, *site.anchor.to_string());
+    assert_eq!(*frame.node_id.digest, *site.frame.to_string());
+    let bound_frame = anchor
+        .body
+        .get("members")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|member| member.get("name").and_then(Value::as_str) == Some("frame"))
+        .and_then(|member| member.pointer("/value/target/digest"))
+        .and_then(Value::as_str);
+    assert_eq!(bound_frame, Some(&*frame.node_id.digest));
+    // The hand-built fixture's ids are its own, which is why the tests rebase its scope.
+    let fixture_scope = generate(&fixture(&Shape::HEALTHY)).frame.identity.scope;
+    assert_ne!(*fixture_scope.anchor.digest, *anchor.node_id.digest);
+}
+
+/// The measured limit that keeps the end-to-end harness out of reach: the object type node QSL
+/// emits has an empty body (`members: []`), so the field-range reader the harness generator and
+/// the state-clause replay share (`field_range`, FR-015-AC-27), which reads a field's range from
+/// the object body's members, finds no member and refuses with `MemberAbsent`. A harness is
+/// therefore generated from the hand-built fixture package, whose object body has the members.
+///
+/// Trace: FR-015-AC-27, TC-035
+#[test]
+fn tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits() {
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let object = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &*node.semantic_form == "object_type")
+        .expect("the package holds the object type");
+    assert_eq!(
+        object
+            .body
+            .get("members")
+            .and_then(Value::as_array)
+            .map(Vec::len),
+        Some(0),
+        "QSL emits the object type with no members in its body"
+    );
+    let refusal = generate_state_frame_obligations(&StateFrameRequest {
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect_err("no range is readable from the emitted object type");
+    assert!(
+        matches!(
+            refusal,
+            StateFrameRefusal::BoundNotResolved {
+                cause: BoundNotResolvedCause::MemberAbsent,
+                ..
+            }
+        ),
+        "{refusal}"
+    );
+}
+
 /// The frame envelope declares no domain: `declared_domains` is present and empty.
 ///
 /// Trace: FR-024-AC-29, TC-035

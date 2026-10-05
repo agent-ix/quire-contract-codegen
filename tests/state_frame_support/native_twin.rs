@@ -27,7 +27,10 @@ use quire_contract_codegen::{
     ProvidedDocument, ReplayInputs, StateClauseReplayInputs, StateFrameIdentity,
     StateObjectAddress,
 };
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
+use quire_contract_model::{
+    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
+    CheckedPackageV2ReadResult,
+};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -407,6 +410,42 @@ impl Twin {
             &self.operation(operation),
         )
         .map(|located| located.site)
+    }
+
+    /// The checked package QSL compiles from the twin's unit and the node of the clause named
+    /// `clause`, both as `qsl_replay::call_site` returns them: the package bytes are read and
+    /// admitted by the model reader, with the twin's domain package as the evidence of its model
+    /// selection. Nothing here is hand-built, so a harness generated from it carries the node
+    /// ids QSL itself names.
+    pub fn emitted_package(&self, clause: &str) -> (CheckedPackageV2, CheckedNodeId) {
+        let name = ClauseName(Identifier::new(clause).expect("identifier"));
+        let located = call_site(
+            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY,
+            &self.unit,
+            [self.domain.as_slice()],
+            &DependencyInput::default(),
+            &name,
+        )
+        .expect("the clause is located");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence
+            .insert_domain_package_document(hex(&jcs_digest(&self.domain)), self.domain.clone());
+        evidence.support_feature("quire.value.complete/v1");
+        let package = match CheckedPackageV2::read(
+            &located.package,
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("QSL's emitted package is admitted: {other:?}"),
+        };
+        let clause_node = serde_json::from_value(json!({
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": located.site.node.to_string(),
+        }))
+        .expect("a node id");
+        (package, clause_node)
     }
 
     /// `harness` with the scope's anchor and frame the ones QSL names for `operation` in this

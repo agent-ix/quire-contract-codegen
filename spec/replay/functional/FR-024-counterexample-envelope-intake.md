@@ -308,7 +308,7 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-27 | The decoded pre-state is tied to the invocation: for every state field, the integer the pre snapshot (the provided document whose `sha256-jcs` digest the invocation's `pre` names) holds for the object the invocation's `self` addresses equals the decoded value, and a field that differs returns `FrameReplayError::PreState` naming the field, the decoded value and the snapshot's value; an invocation or pre snapshot that is not among the provided documents, is not the document shape the state-clause path writes (the typed leaf shapes of `src/replay/state_clause.rs`), or lacks the object or a field returns `PreState` naming what is missing. A provided document whose bytes do not match the digest it is addressed by is not a `PreState` refusal: the tie reads the documents only after QSL's own request decode has checked every provided document against its digest, so that case returns `FrameReplayError::Refused` carrying QSL's refusal and its catalog code. None calls `replay_frame`. A forbidden-write playback replayed against the invocation of a different pre state is refused, and the invocation of its own pre state settles `reproduced-with-evaluated-witness` with category `violation`. | Test (TC-035) |
 | FR-024-AC-28 | A harness whose `scope.operation` is not the operation requested returns `FrameReplayError::ScopeMismatch` naming `operation` before `call_site` is called; one whose `scope.anchor` or `scope.frame` is not the anchor or frame `call_site` names returns `ScopeMismatch` naming that member and does not call `replay_frame`. The harness's module and harness symbols name the generated artifact, are not members of the identity, and are checked only by the decode (FR-024-AC-25). | Test (TC-035) |
 | FR-024-AC-29 | The frame envelope's `declared_domains` is the empty list, no source of `src/replay/frame.rs` builds a `DeclaredDomain` or a `DomainKey`, and the module's header states, once, that the declaration is empty until QSL-345 settles the declared-domain key and refuses an empty declaration. The frame path adopts no key shape before then, whatever shape another path builds. | Test (TC-035) |
-| FR-024-AC-30 | With the installed backend, the real playback of the falsified frame harness of a subject that writes a forbidden field is replayed through `FrameReplay::new` and `replay`, the caller supplying the harness's `StateFrameIdentity`, the playback text and the inputs of FR-024's Inputs list but no obligation identity and no transcript, and settles a reproduced violation naming the written field. The test rebases the harness's `scope.anchor` and `scope.frame` onto the node ids `qsl_replay::call_site` names for the twin's compiled unit (`Twin::aligned`): QSL's ids are the node keys of the graph QSL compiles, and the hand-built fixture package the harness is generated from cannot carry them. That a harness generated from a package QSL itself emitted already carries those ids is not asserted by any test here (see Current state). A subject that writes only a granted field leaves its harness verified and yields no playback, so it has no case here. The test is `tc_035_real_kani_frame_counterexample_replays_through_qsl` in the module `kani_obligations_state_frame`, so the `kani_obligations` filter of `make kani` selects it. | Test (TC-035) |
+| FR-024-AC-30 | With the installed backend, the real playback of the falsified frame harness of a subject that writes a forbidden field is replayed through `FrameReplay::new` and `replay`, the caller supplying the harness's `StateFrameIdentity`, the playback text and the inputs of FR-024's Inputs list but no obligation identity and no transcript, and settles a reproduced violation naming the written field. The test rebases the harness's `scope.anchor` and `scope.frame` onto the node ids `qsl_replay::call_site` names for the twin's compiled unit (`Twin::aligned`), because the hand-built fixture package the harness is generated from has node ids of its own. That the package QSL itself emits carries those same ids is asserted separately; that a harness can be generated from that package is not yet possible, because the field-range reader finds no member in the object type QSL emits (both measured in Current state). A subject that writes only a granted field leaves its harness verified and yields no playback, so it has no case here. The test is `tc_035_real_kani_frame_counterexample_replays_through_qsl` in the module `kani_obligations_state_frame`, so the `kani_obligations` filter of `make kani` selects it. | Test (TC-035) |
 
 A transcript `Witness::parse` refuses is an adapter
 refusal under FR-016-AC-11.
@@ -357,15 +357,23 @@ FR-024-AC-11 to FR-024-AC-30:
   to the node ids QSL names (`Twin::aligned`), because the fixture's checked package is hand-built
   and its node ids are its own; a harness generated from QSL's own emitted package already
   carries them. The frame path's `declared_domains` stays `Some(Vec::new())` (FR-024-AC-29).
-- Open, unchecked: no test shows that a harness CG generates from a package QSL itself emitted
-  already carries the node ids `call_site` names, so every positive frame-replay test, the
-  real-Kani one included, rebases the scope with `Twin::aligned`. Measured when this was
-  written: `qsl-replay` exports no function that returns the emitted checked package (`call_site`
-  returns the site's ids and the package id only), CG depends on no other QSL crate, and no test
-  in this repository obtains a checked package from QSL's compile path, so the test needs either a
-  QSL API that returns the emitted package or a cross-repository test above both. Until then, if
-  the two spellings of a node id ever differed, every production frame replay would be
-  `ScopeMismatch(Anchor)`, read as `Failed`.
+- Node ids, measured: `qsl_replay::call_site` returns the compiled package's
+  `quire.checked-package/v2` bytes (`CallSite::package`), and the model reader admits them given
+  the domain package. In the package QSL emits from the twin's unit, the `operation_anchor` and
+  `frame` nodes have exactly the ids `call_site` names as the site's `anchor` and `frame`, and the
+  anchor binds that frame (`tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names`),
+  so the generator's node ids and the replay's wire ids are one id and a production harness
+  generated from QSL's package needs no rebase.
+- Open, unchecked: a frame harness has not been generated from that emitted package, so every
+  positive frame-replay test, the real-Kani one included, still generates its harness from the
+  hand-built fixture package and rebases the scope with `Twin::aligned`. Measured reason: the
+  object type node QSL emits has an empty body (`members: []`), while the field-range reader the
+  harness generator and the state-clause replay share (`field_range`, FR-015-AC-27) reads a
+  field's range from the object body's members, so generation from the emitted package refuses
+  `BoundNotResolved` with cause `MemberAbsent`
+  (`tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`). Reading ranges
+  from the shape QSL emits is a change to that reader, outside FR-024-AC-20 to AC-30; until it is
+  made, the end-to-end replay from an emitted-package harness cannot be tested.
 - `FR-024-AC-1` to `FR-024-AC-10` are planned and have no test of their own. `quire coverage
   --strict` does not count them as unbacked (66 unbacked rows on `main` before IR-460; 44 on
   `main` before IR-459 and 44, none contradicted, at the head that implemented the frame path, the
