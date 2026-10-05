@@ -108,8 +108,6 @@ struct Shape {
 /// replay, which supports only an operation that declares neither.
 #[derive(Clone, Copy)]
 pub(crate) enum Declares {
-    /// No parameter and no result.
-    Nothing,
     /// One parameter, `other`.
     Parameter,
     /// A result.
@@ -578,7 +576,7 @@ fn fixture(shape: &Shape) -> Fixture {
 }
 
 /// The selected model fixture, with graph identities taken from QSL's emitted package.
-fn emitted_fixture(twin: &Twin, clause_name: &str) -> Fixture {
+pub(crate) fn emitted_fixture(twin: &Twin, clause_name: &str) -> Fixture {
     let (package, clause) = twin.emitted_package(clause_name);
     let node = |form: &str| {
         package
@@ -600,24 +598,9 @@ fn emitted_fixture(twin: &Twin, clause_name: &str) -> Fixture {
     }
 }
 
-/// The healthy fixture with `balance` typed by the plain integer: its member declares no range.
-pub(crate) fn fixture_with_unbounded_balance() -> Fixture {
-    fixture(&Shape {
-        variant: 32,
-        balance_bound: None,
-        ..Shape::HEALTHY
-    })
-}
-
-/// The node of the clause's `self` parameter, the node a state field's domain is declared on.
-pub(crate) fn self_parameter() -> CheckedNodeId {
-    code_id(SELF)
-}
-
-/// The healthy fixture, or one whose clause's operation declares `declares`.
+/// A fixture whose clause's operation declares `declares`.
 pub(crate) fn fixture_declaring(declares: Declares) -> Fixture {
     fixture(&match declares {
-        Declares::Nothing => Shape::HEALTHY,
         Declares::Parameter => Shape {
             variant: 30,
             condition: Condition::BalanceAgainstOther,
@@ -717,7 +700,7 @@ fn hand_written_identity(site: &OperationSite) -> [u8; 32] {
 
 /// The state-clause and frame-effect harness sources, for the cover-last guard (FR-015-AC-58).
 pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
-    let generated = generate(&fixture(&Shape::HEALTHY));
+    let generated = generate(&emitted_fixture(&Twin::new(), "BalanceNeverDrops"));
     vec![
         ("state clause", generated.postcondition.rust.contents),
         ("frame effect", generated.frame.rust.contents),

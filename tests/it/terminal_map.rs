@@ -25,7 +25,7 @@ use quire_contract_codegen::{
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
-use crate::kani_obligations_state_frame::{fixture_declaring, native_twin::Twin, Declares};
+use crate::kani_obligations_state_frame::{emitted_fixture, native_twin::Twin};
 
 /// Every inconclusive reason the classifier has today.
 const REASONS: [KaniInconclusiveReason; 6] = [
@@ -661,7 +661,8 @@ fn repeated_identity_refusal() -> ReplayPackageError {
 /// Trace: FR-029-AC-16, TC-040
 #[test]
 fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
-    let (twin, fixture) = (Twin::new(), fixture_declaring(Declares::Nothing));
+    let twin = Twin::new();
+    let fixture = emitted_fixture(&twin, "BalanceNeverDrops");
     let run = |pre, post| {
         StateClauseReplay::new(twin.state_clause_inputs(
             &fixture.package,

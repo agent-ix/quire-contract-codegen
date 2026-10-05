@@ -1,9 +1,8 @@
 //! FR-024 (IR-460): a postcondition state-clause counterexample is put before QSL's
 //! `replay_state_clause` as a request and a witness-arm envelope built by `StateClauseReplay`.
 //!
-//! The admitted package is the state-frame fixture of `kani_obligations_state_frame`, the same one
-//! the operation-contract harness is generated from; the QSL twin is its hand-mirrored native
-//! unit, here with two postcondition clauses on `deposit`. The invocation and snapshot documents
+//! The admitted package is emitted by QSL from the native twin of the state-frame fixture,
+//! with two postcondition clauses on `deposit`. The invocation and snapshot documents
 //! are built by the crate under test and read back from the request's byte provision, so each
 //! assertion is about the bytes QSL receives.
 //!
@@ -27,8 +26,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::kani_obligations_state_frame::{
-    falsified, fixture_declaring, fixture_with_unbounded_balance, model, native_twin::Twin,
-    playback_state, prove, self_parameter, subject, Declares, Fixture,
+    emitted_fixture, falsified, fixture_declaring, model, native_twin::Twin, playback_state, prove,
+    subject, Declares, Fixture,
 };
 
 /// The clause whose counterexample the tests replay: `balance` never drops.
@@ -103,7 +102,7 @@ fn tc_035_emitted_model_fields_bind_replay_before_playback() {
 }
 
 fn healthy() -> Fixture {
-    fixture_declaring(Declares::Nothing)
+    emitted_fixture(&Twin::new(), BALANCE)
 }
 
 fn built(
@@ -533,7 +532,17 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
         format!("<<<assertion|{operation}|{BALANCE}|balance=5;audit=7>>>")
     );
 
-    let parameter = WireNodeId::from_hex(&self_parameter().digest).expect("a node id");
+    let parameters = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .filter(|node| node.semantic_form.as_ref() == "parameter")
+        .collect::<Vec<_>>();
+    let [parameter] = parameters.as_slice() else {
+        panic!("the emitted clause has one self parameter");
+    };
+    let parameter = WireNodeId::from_hex(&parameter.node_id.digest).expect("a node id");
     let domains = replay.packet.declared_domains.as_ref().expect("domains");
     assert_eq!(domains.len(), model::FIELDS.len());
     for (position, (domain, (_, (minimum, maximum)))) in
@@ -554,8 +563,9 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
     }
 
     // `balance` declares no range: any playback value is carried, and only `audit` has a domain.
-    let unbounded = fixture_with_unbounded_balance();
-    let mut candidate = inputs(&twin, &unbounded, (5, 7), (4, 8));
+    let unbounded_twin = Twin::without_balance_range();
+    let unbounded = emitted_fixture(&unbounded_twin, BALANCE);
+    let mut candidate = inputs(&unbounded_twin, &unbounded, (5, 7), (4, 8));
     candidate.playback[0].1 = 1_000_000;
     let replay = StateClauseReplay::new(candidate).expect("an unranged field is not checked");
     let domains = replay.packet.declared_domains.as_ref().expect("domains");

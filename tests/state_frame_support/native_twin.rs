@@ -386,22 +386,22 @@ impl Twin {
         Self::build(&model::GRANTED, &CLAUSES, 0)
     }
 
-    fn with_audit_native_type(type_ref: &str) -> Self {
+    fn with_field_native_type(name: &str, type_ref: &str) -> Self {
         let mut twin = Self::new();
         let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
         let types = domain["types"].as_array_mut().expect("types");
-        types.retain(|ty| ty["identity"] != range_type("audit"));
+        types.retain(|ty| ty["identity"] != range_type(name));
         let account = types
             .iter_mut()
             .find(|ty| ty["identity"] == account_type())
             .expect("account type");
-        let audit = account["fields"]
+        let field = account["fields"]
             .as_array_mut()
             .expect("fields")
             .iter_mut()
-            .find(|field| field["name"] == "audit")
-            .expect("audit field");
-        audit["typeRef"] = json!(type_ref);
+            .find(|field| field["name"] == name)
+            .expect("field");
+        field["typeRef"] = json!(type_ref);
         twin.domain = domain.to_string().into_bytes();
         twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0).into_bytes();
         twin
@@ -409,12 +409,17 @@ impl Twin {
 
     /// A twin whose present, unread `audit` field is Boolean, with no `i64` range.
     pub fn without_audit_range() -> Self {
-        Self::with_audit_native_type("ix://quire/native/Boolean")
+        Self::with_field_native_type("audit", "ix://quire/native/Boolean")
+    }
+
+    /// A selected model whose `balance` field is an unbounded integer.
+    pub fn without_balance_range() -> Self {
+        Self::with_field_native_type("balance", "ix://quire/native/Integer")
     }
 
     /// Both clauses over a selected model whose `audit` field is an unbounded integer.
     pub fn with_unbounded_audit_clause() -> Self {
-        let mut twin = Self::with_audit_native_type("ix://quire/native/Integer");
+        let mut twin = Self::with_field_native_type("audit", "ix://quire/native/Integer");
         twin.unit = unit_source(
             &hex(&jcs_digest(&twin.domain)),
             &[
