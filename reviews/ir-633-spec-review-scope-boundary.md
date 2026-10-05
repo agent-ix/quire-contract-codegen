@@ -31,3 +31,11 @@ Inspected AD-001 boundary rows, FR-019 origin prose and AC-15, FR-022 type-locat
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | The spec assigns origin setting to the QSL registry builder, but QSL BackendDescriptor::new/admit accepts ProviderOrigin from its caller and ADR-029 PV-1 says the driver conversion sets it; Registry::register only stores/conflict-checks it. Name the driver registration conversion as the setter and QSL registry as the holder to avoid implementing origin inference inside QSL or CG. | spec/routed/functional/FR-019-capability-settlement.md:125, spec/assurance/AD-001-codegen-architecture.md:175 |
+
+## Dispositions
+
+Round 1 reviewed d60f040df385facd028976a8b3362e24169bc41a. QSL FR-288 explicitly assigns the Linked/Process choice to the driver's registry builder and says QSL's descriptor holds the passed value; ADR-029 PV-1 calls it driver supplied. FR-019, FR-022 and AD-001 now state that split.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | d60f040df385facd028976a8b3362e24169bc41a: the driver's registration conversion supplies origin to QSL new/admit; QSL registry holds and checks it. |

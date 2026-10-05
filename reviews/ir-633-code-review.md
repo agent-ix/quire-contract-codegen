@@ -31,3 +31,11 @@ Inspected AD-001 boundary rows, FR-019 origin prose and AC-15, FR-022 type-locat
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | high | CG's new typed ProviderOrigin repeats the two-variant QSL type across repositories. QSL already owns ProviderOrigin::{Linked, Process} in qsl-route; adding the same native enum to CG creates a second owner for the vocabulary. QSL ADR-013 T-7 forbids a direct qsl-route edge, so resolve this architecture conflict before mandating a duplicate type. | spec/routed/functional/FR-019-capability-settlement.md:192, spec/assurance/AD-001-codegen-architecture.md:176 |
+
+## Dispositions
+
+Round 1 reviewed d60f040df385facd028976a8b3362e24169bc41a. QSL FR-288 and ADR-013 T-7 require separate native representations, while QSL layer R owns the origin semantics. The fix states this ownership, makes CG a local projection, and requires an exhaustive two-value driver mapping; it introduces no independent CG origin category. The later implementation review must verify that mapping and its tests.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | d60f040df385facd028976a8b3362e24169bc41a: FR-019-AC-15 and AD-001 now identify QSL layer R as sole semantic owner and specify the exhaustive driver projection required by QSL ADR-013 T-7. |
