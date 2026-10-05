@@ -186,29 +186,44 @@ unsatisfiable requires as `cover_unsatisfied`.
     a request of that item only; repeat with three refused items and read three records. An
     implementation that stops at the first refusal reads one record and fails
     (FR-015-AC-59).
-20. Compare the `supported` records' harnesses with `generate_state_frame_obligations` for the
-    same clause, source byte for byte (FR-015-AC-60).
-21. Read `requires_bound` for the field with no range (the framed object as `unbounded_type`)
-    and for a request whose lowering is a requires-bound record (FR-015-AC-61).
-22. Read `unsupported` `NoFiniteEncoding` for a lowering unsupported-family record and for a
-    frame that creates, deletes or grants a relationship or a foreign field, and
+20. Compare the `supported` records' harnesses, read from `state_frame_harnesses` in request
+    order, with `generate_state_frame_obligations` for the same clause and role, source byte
+    for byte (FR-015-AC-60).
+21. Read `requires_bound` for a field whose member references a plain integer type (that
+    member's `value.target` as `unbounded_type`) and for a request whose lowering is a
+    requires-bound record (FR-015-AC-61).
+22. Read `unsupported` `NoFiniteEncoding` for a lowering unsupported-family record and
     `UnknownNodeKind` for a node that is not a `state_clause` (FR-015-AC-62).
 23. Read `unsupported` `StateFrameRefused`, never `NoFiniteEncoding`, for a negation, a literal
     comparison, an operator outside the six comparisons, a read through another parameter, two
-    fields, two reads of one side, an invariant clause, a clause with a malformed shape, a
+    fields, two reads of one side, a frame that creates, deletes or grants a relationship or a
+    foreign field (naming the effect), a member whose bound is not an `integer_range` and one
+    whose endpoint is outside `i64`, an invariant clause, a clause with a malformed shape, a
     frame granting every field and an over-budget lowering (FR-015-AC-63).
-24. Read `invalid_request` for an unparsable state path, an invalid state field name, a state
-    lacking the clause's field, an absent node, a repeated item and an item of another
-    package, and `Rejected` with every record and no harness bytes (FR-015-AC-64).
-25. Negotiate no items, `MAX_OBLIGATION_ITEMS` plus one, an unparsable subject path and an
-    unwind bound outside the range, each with `StateFrame` items present or absent as the
+24. Read `invalid_request` for an unparsable state path, an unparsable item subject path, an
+    invalid state field name, a state lacking the clause's field, an absent node, a repeated
+    item and an item of another package, and `Rejected` with every record and no harness bytes
+    (FR-015-AC-64).
+25. Negotiate no items, `MAX_OBLIGATION_ITEMS` plus one, an unparsable request subject path and
+    an unwind bound outside the range, each with `StateFrame` items present or absent as the
     case allows, and read the existing `KaniObligationError` variant with no record
     (FR-015-AC-65).
-26. Build each of the 17 `StateFrameRefusal` variants and each `CompleteLoweringRecordV2` arm of
-    `NotLowered` and read the table's record for each; the variants no public request reaches
-    (`UnwindOutOfRange`, `InvalidGeneratedSyntax`, `ResourceLimitExceeded`,
-    `RecordSerialization`) are built directly against the mapping. Inspect that the mapping is a
-    `match` with no wildcard arm (FR-015-AC-66).
+26. Build every `StateFrameRefusal` variant (each `BoundNotResolved` case the table separates,
+    each of the six `NotLowered` refusal arms) and call the mapping; read the table's record
+    for each. Build `UnwindOutOfRange`, `InvalidGeneratedSyntax` and `RecordSerialization`
+    directly, and reach `ResourceLimitExceeded` with a state-field list that passes the 1 MiB
+    ceiling or build it directly. Inspect that the mapping is a `match` with no wildcard arm
+    (FR-015-AC-66).
+27. Call the single-clause engine on a clause whose graph field name is not a Rust identifier,
+    on one with an operand node absent from the graph, and on a request whose caller-supplied
+    field name is not an identifier: read `MalformedClause`, `MalformedClause` and
+    `InvalidField` (FR-015-AC-67).
+28. Negotiate a clause whose frame grants every field in both roles, one whose condition is a
+    negation in both roles, and one whose lowering is refused in both roles: read `frame`
+    `unsupported` with `contract` `supported`, `contract` `unsupported` with `frame`
+    `supported`, and both alike (FR-015-AC-68).
+
+The first code change backs steps 26 and 27, the second steps 19 to 25 and 28.
 
 ## Blocked
 
