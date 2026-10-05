@@ -8,12 +8,12 @@
 
 use qsl_replay::{
     std001_code, CallSiteRefusal, Category, ClauseName, Code, DeclineCode, DependencyInput,
-    DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause, FrameCounterexample,
-    Identifier, IncompleteCause, InconclusiveCause, MalformedTranscript, OperationName,
-    ProofRefusalCause, QualifiedName, ReplayRefusal, ReportedInconclusiveCause, ScalarLimits,
-    SourceIdentity, StageLimits, StateClauseCounterexample, Std001Code, SuppliedLibrary,
-    TerminalValue, UnavailabilityCause, Verdict, Witness, WitnessEnvelope, WitnessFailure,
-    WitnessPacket,
+    DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause, FieldName,
+    FrameCounterexample, Identifier, IncompleteCause, InconclusiveCause, MalformedTranscript,
+    OperationName, PopulationName, ProofRefusalCause, QualifiedName, ReplayRefusal,
+    ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StageLimits,
+    StateClauseCounterexample, Std001Code, SuppliedLibrary, TerminalValue, UnavailabilityCause,
+    Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
 };
 use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
@@ -476,6 +476,21 @@ fn for_each_setup_refusal(check: impl Fn(Code, ReplaySettlement<'_>)) {
             },
             CallSiteRefusal::UnknownClause {
                 selection: ClauseName(identifier("c")),
+                package,
+            },
+            CallSiteRefusal::UnknownField {
+                selection: FieldName {
+                    model: identifier("m"),
+                    object: identifier("o"),
+                    field: identifier("f"),
+                },
+                package,
+            },
+            CallSiteRefusal::UnknownPopulation {
+                selection: PopulationName {
+                    model: identifier("m"),
+                    population: identifier("p"),
+                },
                 package,
             },
         ]
