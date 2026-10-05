@@ -148,10 +148,12 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   `TerminalValue::category()` of it and nothing else
   ([AD-003](../../assurance/AD-003-evidence-chain.md) E-9).
 - The Kani adapter shall refuse a falsified outcome given no replay settlement, and any other
-  outcome given one, with a `TerminalPairError`, and shall return no terminal value for it. The
-  refusal is typed rather than a value because `KaniRunOutcome` is the classifier's own type, so
-  no input type of the map can state the pairing without a fallible constructor that moves the
-  same refusal to the driver.
+  outcome given one, with a `TerminalPairError`, and shall return no terminal value for it. This
+  is a design choice: the map takes the outcome and an optional settlement, so the driver calls
+  one function with one shape, and the pairing the Inputs state is checked at that call. The
+  refusal is typed rather than a value, and FR-029-AC-15 asserts it. Other designs make every
+  pair total without a refusal, for example a replay callback the map calls only for a falsified
+  outcome; they were not chosen.
 - The Kani adapter shall map no outcome to `Tested`.
 - The generator shall use QSL's terminal-value type, defining none of its own and importing none
   from Contract IR.
@@ -198,9 +200,9 @@ constructor or the type through `qsl-replay`.
 
 Two points the map decides, now stated in the Description, Outputs, Behavior and criteria above
 (FR-029-AC-11 and FR-029-AC-15). A pair the driver mis-builds is a typed `TerminalPairError`, not a
-value; the map does not make that pair unrepresentable, because `KaniRunOutcome::Falsified` is the
-classifier's own variant, so any input type pairing it with a settlement needs a fallible
-constructor and only moves the refusal. A replay that settled `ReproducedWithEvaluatedWitness` in
+value. That is a design choice, not a necessity: the map takes the outcome and an optional
+settlement so the driver calls one function with one shape, and the typed refusal is asserted by
+FR-029-AC-15. A replay that settled `ReproducedWithEvaluatedWitness` in
 a category other than `violation` carries no `DisagreementCause` and is not a refutation
 (FR-016-AC-13); the conversion reads it as a CG defect, `Failed`, rather than inventing a cause.
 
