@@ -96,8 +96,8 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     `StateClauseReplayError::OutOfDomain` with the executor not called (FR-024-AC-17).
 16. The real playback settles `reproduced-with-evaluated-witness`, `violation`
     (FR-024-AC-18).
-17. The first two return `StateClauseReplayError::UnsupportedOperationShape` naming the operation,
-    with no document built and the executor not called; the third is not refused for its shape
+17. The first two return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation
+    and its declaration, with no document built and the executor not called; the third is not refused for its shape
     (FR-024-AC-19).
 
 ## Status

@@ -69,7 +69,7 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
     `UnsupportedOperationShape` are `Failed`, none `Incomplete` and none
     `Inconclusive(ReplayRefused)`, and a non-fault `CallSiteRefusal` or
     `DependencyLockError::Input` wrapped in `StateClauseReplayError` is
-    `Inconclusive(ReplayRefused)` with its code (FR-029-AC-16, FR-029-AC-13).
+    `Inconclusive(ReplayRefused)` with its code (FR-029-AC-16).
 
 ## Status
 
