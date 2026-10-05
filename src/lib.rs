@@ -122,7 +122,7 @@ pub use kani::terminal::{
 pub use routed::capability::{
     negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
     Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
-    ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
+    ItemSettlement, Mode, ProviderOrigin, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
     CAPABILITY_VOCABULARY,
 };
 pub use routed::generate::{

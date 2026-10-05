@@ -162,13 +162,27 @@ pub struct ExtentClassification {
     pub finite_bound_available: bool,
 }
 
-/// A registered backend: its identity, and what it advertises.
+/// The registry-owned provider origin projected into CG's in-process descriptor.
+///
+/// QSL layer R owns this closed vocabulary (FR-288, ADR-029 PV-1). The driver
+/// maps its registry value exhaustively; CG does not infer it from identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProviderOrigin {
+    /// A provider linked into the host at compile time.
+    Linked,
+    /// A process provider admitted through the registry.
+    Process,
+}
+
+/// A registered backend: its identity, advertised capabilities, and origin.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BackendDescriptor {
     /// Backend identity, unique within a registry.
     pub identity: String,
     /// Advertised (kind, mode) pairs.
     pub advertised: Vec<(CapabilityKind, Mode)>,
+    /// Origin supplied by the QSL registry, never derived from identity.
+    pub origin: ProviderOrigin,
 }
 
 impl BackendDescriptor {

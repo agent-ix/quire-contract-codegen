@@ -5,7 +5,7 @@
 use quire_contract_codegen::{
     negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
     Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
-    ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
+    ItemSettlement, Mode, ProviderOrigin, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
     CAPABILITY_VOCABULARY,
 };
 
@@ -13,7 +13,35 @@ fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
     BackendDescriptor {
         identity: BackendKind::Kani.identity().to_owned(),
         advertised,
+        origin: ProviderOrigin::Linked,
     }
+}
+
+/// The CG descriptor retains the registry's typed origin alongside the same
+/// identity and advertisements; the driver supplies the authoritative value.
+///
+/// Trace: FR-019-AC-15, TC-030
+#[test]
+fn tc_030_backend_descriptor_keeps_origin_independent_of_identity() {
+    let linked = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
+    let process = BackendDescriptor {
+        origin: ProviderOrigin::Process,
+        ..linked.clone()
+    };
+    let linked_envelope = envelope(vec![linked], vec![]);
+    let process_envelope = envelope(vec![process], vec![]);
+
+    assert_eq!(
+        linked_envelope.manifest[0].identity,
+        process_envelope.manifest[0].identity
+    );
+    assert_eq!(
+        linked_envelope.manifest[0].advertised,
+        process_envelope.manifest[0].advertised
+    );
+    assert_eq!(linked_envelope.manifest[0].origin, ProviderOrigin::Linked);
+    assert_eq!(process_envelope.manifest[0].origin, ProviderOrigin::Process);
+    assert_ne!(linked_envelope, process_envelope);
 }
 
 fn candidate(identity: &str) -> Candidate {
@@ -186,6 +214,7 @@ fn tc_030_an_unroutable_backend_settles_invalid_request() {
     let registered_without_arm = BackendDescriptor {
         identity: "cvc5".to_owned(),
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
+        origin: ProviderOrigin::Process,
     };
     let unarmed = settle_one(
         vec![registered_without_arm],
@@ -301,6 +330,7 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
     let second = BackendDescriptor {
         identity: "kani-nightly".to_owned(),
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
+        origin: ProviderOrigin::Process,
     };
     let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
     // Candidate order is bytewise by identity, and is a property of the set
