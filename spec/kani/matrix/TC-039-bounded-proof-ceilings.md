@@ -141,13 +141,38 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
 
 ## Status
 
-Planned, except step 10 (FR-028-AC-12, the batch wall-clock rule), which is implemented (IR-277)
-and run by the `tc_043_*` batch tests listed in TC-043, tagged to both cases. At this revision the
-run is held to a caller-declared wall-clock budget, no memory ceiling is set, and no identity
-records a ceiling, a family or a proof subject.
+Partially implemented. Steps 1 to 4 (FR-028-AC-1 to FR-028-AC-4) have required request ceilings
+on the generated contract, scalar and state-frame identities. The runner reads those identity
+ceilings, and its evidence records them together with each symbolic argument's bounds. The V1
+bundle proof graph and the canonical corpus identity also record required ceilings; this does not
+claim execution coverage for the bundle and corpus tests that invoke Kani directly.
 
-Steps 11 to 22 (FR-028-AC-13 to FR-028-AC-24, IR-241) are planned: no shadow, refinement obligation,
-proof strength or `MemoryExhausted` reason exists in `src/`, and the evidence records no tool
-version (measured: no `--version` read and no version field in `src/kani`). They are
-asserted against a stand-in family and a stand-in production subject, so the machinery is tested
-before the first real family (TC-025 steps 29 to 36).
+The focused tests backing the ceiling slice are:
+
+- `changing_either_request_ceiling_changes_the_generated_proof_identity`
+- `routed_scalar_identity_records_both_required_ceilings`
+- `both_state_obligation_identities_change_with_either_required_ceiling`
+- `bundle_proof_record_requires_and_records_each_request_ceiling`
+- `either_ceiling_changes_the_canonical_corpus_identity`
+- `identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory`
+- `child_memory_overage_is_inconclusive_and_kills_the_entire_backend_tree`
+- `batch_memory_overage_refuses_every_member_without_classifying_a_partial_report`
+- `unequal_identity_memory_ceilings_run_in_separate_backend_processes`
+- `unavailable_tree_memory_observation_refuses_before_spawn`
+- `available_observer_does_not_invent_a_peak_before_observing_a_tree`
+
+Step 10 (FR-028-AC-12, the batch wall-clock rule) remains implemented (IR-277), backed by the
+`tc_043_*` batch tests listed in TC-043. Batching now also requires equal identity memory and
+wall-clock ceilings.
+
+The process-tree part of step 19 (FR-028-AC-21) is implemented with the Linux procfs resident-memory
+observer. Its focused tests exercise an allocating child that leaves the small launcher's process
+group, kill that child and its sibling, refuse an over-ceiling batch without classifying any member,
+and refuse unavailable observation before spawning the backend. Evidence names the actual observer
+and records the largest aggregate resident-memory sample it observed; it does not claim memory
+between observations. No limit-only mechanism is implemented or claimed here.
+
+Steps 5 to 9 and steps 11 to 18 and 20 to 22 remain planned. The ceiling slice supplies no shadow,
+refinement obligation, proof strength, family/proof-subject field or tool-version evidence. In
+particular, process-tree memory enforcement does not complete the shadow contract or IR-241's
+stand-in refinement and seeded-mutant obligations.
