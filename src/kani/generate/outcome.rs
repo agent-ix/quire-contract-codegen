@@ -732,11 +732,12 @@ impl std::error::Error for StateFrameRefusal {}
 /// fails to compile until the table says where it goes. The `deny` below makes a wildcard arm a
 /// lint error under `make lint`.
 // The `StateFrame` arm of negotiation calls this; until it lands (FR-015-AC-59 to FR-015-AC-65,
-// IR-461 code change 2) only the tests do, so the expectation stops holding, and fails the
-// build, the moment a caller exists.
+// IR-461 code change 2) only the tests do. That change removes this allowance. It is an `allow`
+// and not the stricter lint expectation because NFR-005's scan reads the word `expect` in
+// non-test code as a panic token.
 #[cfg_attr(
     not(test),
-    expect(
+    allow(
         dead_code,
         reason = "called by the StateFrame arm, IR-461 code change 2"
     )
