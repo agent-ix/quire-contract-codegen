@@ -195,8 +195,10 @@ unsatisfiable requires as `cover_unsatisfied`.
     whose roles both succeed, `generate_state_frame_obligations`), source byte
     for byte (FR-015-AC-60).
 21. Read `requires_bound` and the record's `unbounded_type` for a request whose lowering is
-    a requires-bound record. For a selected model declaration's plain integer field, read
-    `unsupported`, `StateFrameRefused` with `ModelMemberNotI64Range`; for a non-model or
+    a requires-bound record. For a selected model declaration's clause read of a native
+    `Integer` field, verify lowering's `RequiresBound` wins before accessor resolution.
+    For a present listed `Integer` field not read by that clause, verify value-based
+    `NonRangeType` only if the item reaches accessor resolution. For a non-model or
     tampered model/object_type body, read `ModelFieldsUnavailable` without a fabricated
     `unbounded_type` or a body range (FR-015-AC-61, FR-015-AC-78).
 22. Read `unsupported` `NoFiniteEncoding` for a lowering unsupported-family record and
@@ -303,8 +305,9 @@ set by the code change's measurement and recorded here.
     update and implementation).
 38. For a model declaration, request an accessor-absent field; exercise each accessor error
     (`UnknownNode`, `NotModelObjectType`, `AmbiguousField`) and check a typed refusal without
-    falling back to a body or read. Exercise a present `None`, `Integer`, `Option`, and an
-    `IntRange` with one endpoint outside `i64`; read `ModelMemberNotI64Range` with the object,
+    falling back to a body or read. Exercise a present `None`, unread `Integer`,
+    `Option`, and an `IntRange` with one endpoint outside `i64` in items whose
+    lowering succeeds; read `ModelMemberNotI64Range` with the object,
     field and `NoMemberType`, `NonRangeType` or `EndpointOutsideI64` (exact `i128` endpoints)
     rather than a fabricated bound node. Check that only a present range with two `i64`
     endpoints enters `domains`, an unranged non-clause field is still drawn, and an unranged
