@@ -146,7 +146,7 @@ authored).
   their existing names; QSL gives each operation its own frame occurrence, so no member is added
   and E-1 is not widened. A frame has no parameters (its subject is `fn(&mut State)`), so its
   `arguments` are empty: the state fields and their ranges are not members, because the frame
-  node names the grants and the ranges come from the model. The harness is tied to the identity
+  node names the grants and the ranges are the model's and are checked at replay (FR-024-AC-21, FR-024-AC-26). The harness is tied to the identity
   by the replay's checks (decode against `state_fields`, field set, domain, pre state and scope),
   not by the digest. The harness's clause node, module and harness symbols, paths, unwind bound
   and options are not members either: they name the generated artifact and the harness identity
@@ -322,7 +322,7 @@ crate CG's lock selects.
   node id, the operation scope and the property, and it is the identity of the frame harness whose
   counterexample goes into an envelope (`src/replay/frame.rs`). It needs no occurrence key of its
   own, because `OperationSite` carries the frame's, but it records no draw order for the state
-  fields, which the playback decode and the identity's arguments need (FR-024-AC-23). The other
+  fields, which the playback decode needs (FR-024-AC-23). The other
   two must gain the missing members before one function can compute the O-09 value.
   Recommendation below.
 - Encoder gap (closed for the obligation identity: `core::canonical` is the one caller of
