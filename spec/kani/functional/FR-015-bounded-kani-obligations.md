@@ -291,7 +291,7 @@ unwind bound applies. The item's subject path is the one its harness calls; the 
 (`kind` `postcondition` and `frame`). The role split of the engine adds
 `generate_state_frame_role(request: &StateFrameRequest, role: StateFrameRole) ->
 Result<StateFrameHarness, StateFrameRefusal>`, one role in and its harness or its first refusal
-out; the arm calls it once per item, and it is the comparison target of FR-015-AC-60 and
+out (crate-internal, not a second public entry); the arm calls it once per item, and it is the comparison target of FR-015-AC-60 and
 FR-015-AC-68. `generate_state_frame_obligations` stays the single-clause entry: it returns both
 roles' harnesses when both succeed and otherwise the first refusal of its one clause, so for a
 clause whose roles differ it returns the refusal and the arm records one item `supported`;

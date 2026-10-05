@@ -109,7 +109,7 @@ operations:
   - name: generate_state_frame_role
     inputs: [StateFrameRequest, StateFrameRole (contract | frame)]
     output: StateFrameHarness | StateFrameRefusal
-    semantics: planned (IR-461, FR-015-AC-60, FR-015-AC-68). Builds the harness of one role of the clause or returns that role's first refusal, so a clause whose roles differ gives one harness and one refusal; the StateFrame item of negotiate_kani_obligations calls it once per item, and generate_state_frame_obligations returns both roles' harnesses when both succeed and otherwise the first refusal
+    semantics: planned (IR-461, FR-015-AC-60, FR-015-AC-68). Builds the harness of one role of the clause or returns that role's first refusal, so a clause whose roles differ gives one harness and one refusal; the StateFrame item of negotiate_kani_obligations calls it once per item, and generate_state_frame_obligations returns both roles' harnesses when both succeed and otherwise the first refusal. Not a second public generation entry: it is crate-internal, and AD-004 step 4d retires generate_state_frame_obligations as a public entry and keeps negotiate_kani_obligations as the one entry
   - name: execute_kani_obligation
     inputs: [KaniExecutionRequest, whose harness is a KaniExecutableHarness: Contract, Scalar or StateFrame]
     output: KaniExecutionEvidence | KaniExecutionRefusal
