@@ -420,11 +420,12 @@ fn tc_026_a_lock_repeating_a_dependency_is_refused() {
     let ReplayPackageError::Dependencies(DependencyLockError::Input(input)) = &refusal else {
         panic!("expected a refusal from QSL's dependency input, got {refusal}");
     };
-    assert!(
-        matches!(input, DependencyInputRefusal::DuplicateIdentity { .. }),
-        "{input}"
-    );
+    let DependencyInputRefusal::DuplicateIdentity { identity, .. } = input else {
+        panic!("expected DuplicateIdentity, got {input}");
+    };
+    assert_eq!(identity.to_string(), "test/units");
     assert_eq!(input.code(), Code::InvalidPackage);
+    assert_eq!(input.cause(), Some("conflicting-definition"));
 }
 
 const UNITS_IDENTITY: &str = "test:units";

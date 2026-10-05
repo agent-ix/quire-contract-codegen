@@ -5,11 +5,12 @@
 //! repeated dependency identity is the refusal `ReplayPackage::new` returns for a real lock.
 
 use qsl_replay::{
-    CallSiteRefusal, Category, Code, DependencyInput, DependencyInputRefusal, DigestDomain,
-    DigestRecord, DisagreementCause, FrameCounterexample, Identifier, IncompleteCause,
-    InconclusiveCause, MalformedTranscript, QualifiedName, ReplayRefusal,
-    ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StageLimits, SuppliedLibrary,
-    TerminalValue, Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
+    CallSiteRefusal, Category, ClauseName, Code, DependencyInput, DependencyInputRefusal,
+    DigestDomain, DigestRecord, DisagreementCause, FrameCounterexample, Identifier,
+    IncompleteCause, InconclusiveCause, MalformedTranscript, OperationName, QualifiedName,
+    ReplayRefusal, ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StageLimits,
+    SuppliedLibrary, TerminalValue, Verdict, Witness, WitnessEnvelope, WitnessFailure,
+    WitnessPacket,
 };
 use quire_contract_codegen::{
     run_terminal_value, DecodeFailure, DependencyLock, DependencyLockError, EvidenceFailureCause,
@@ -77,6 +78,17 @@ fn duplicate_identity() -> DependencyInputRefusal {
     DependencyInput::new([library("test/units", "one"), library("test/units", "two")])
         .map(|_| ())
         .expect_err("a repeated identity is refused")
+}
+
+/// QSL's own refusal of a library under the empty identity.
+fn empty_identity() -> DependencyInputRefusal {
+    DependencyInput::new([library("", "one")])
+        .map(|_| ())
+        .expect_err("an empty identity is refused")
+}
+
+fn identifier(name: &str) -> Identifier {
+    Identifier::new(name).expect("an identifier")
 }
 
 /// QSL's own refusal of two libraries sharing one source owner.
@@ -196,7 +208,7 @@ fn tc_040_no_outcome_maps_to_tested() {
 /// A pair outside the domain is a typed refusal, not a value: a falsified run needs its settlement
 /// and no other outcome has one.
 ///
-/// Trace: TC-040
+/// Trace: FR-029-AC-15, TC-040
 #[test]
 fn tc_040_a_settlement_accompanies_a_falsified_outcome_only() {
     assert_eq!(
@@ -331,10 +343,29 @@ fn tc_040_each_failure_this_repository_raises_is_failed() {
         source_id: String::new(),
         context: String::new(),
     });
-    for cause in [domain, decode] {
+    for cause in [domain, decode, reproduced_without_violation()] {
         let verdict = ReplayVerdict::EvidenceFailure(cause);
         assert_eq!(map_settled(&verdict), TerminalValue::Failed);
     }
+}
+
+/// A replay reproduced in a category other than `violation`: no QSL result states it, and only
+/// this crate's public `EvidenceFailureCause::Verdict` can.
+fn reproduced_without_violation() -> EvidenceFailureCause {
+    EvidenceFailureCause::Verdict {
+        settlement: qsl_replay::WitnessSettlement::ReproducedWithEvaluatedWitness,
+        category: Category::Success,
+        disagreement: None,
+    }
+}
+
+/// The fault reading is `Failed`. QSL's `InternalFault` cannot be built here, so FR-029-AC-10 is
+/// not tagged; the reading this crate owns is asserted all the same.
+///
+/// Trace: TC-040
+#[test]
+fn tc_040_a_fault_settlement_is_failed() {
+    assert_eq!(map_settled(ReplaySettlement::Fault), TerminalValue::Failed);
 }
 
 /// Across every replay settlement other than reproduced, a falsified run is not `Refuted`, and a
@@ -350,11 +381,7 @@ fn tc_040_only_a_reproduced_replay_refutes() {
     });
     assert_eq!(exercised, 5, "every reading but reproduced is exercised");
     let reproduced_without_violation =
-        ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Verdict {
-            settlement: qsl_replay::WitnessSettlement::ReproducedWithEvaluatedWitness,
-            category: Category::Success,
-            disagreement: None,
-        });
+        ReplayVerdict::EvidenceFailure(reproduced_without_violation());
     assert_ne!(
         map_settled(&reproduced_without_violation),
         TerminalValue::Refuted
@@ -409,8 +436,19 @@ fn tc_040_a_setup_refusal_after_a_refutation_is_replay_refused_never_declined() 
                 message: "library".to_owned(),
             },
             CallSiteRefusal::UnknownFunction {
-                selection: QualifiedName::new(vec![Identifier::new("f").expect("an identifier")])
-                    .expect("a name"),
+                selection: QualifiedName::new(vec![identifier("f")]).expect("a name"),
+                package,
+            },
+            CallSiteRefusal::UnknownOperation {
+                selection: OperationName {
+                    model: identifier("m"),
+                    object: identifier("o"),
+                    operation: identifier("op"),
+                },
+                package,
+            },
+            CallSiteRefusal::UnknownClause {
+                selection: ClauseName(identifier("c")),
                 package,
             },
         ]
@@ -427,7 +465,11 @@ fn tc_040_a_setup_refusal_after_a_refutation_is_replay_refused_never_declined() 
         assert_eq!(map_settled(&frame), expected, "{frame}");
     }
 
-    for refusal in [duplicate_identity(), shared_owner()] {
+    // The empty identity is the refusal whose code is not `invalid_package`, so a conversion that
+    // ignores the refusal's own code cannot pass.
+    let empty = empty_identity();
+    assert_eq!(empty.code(), Code::InvalidIdentifier);
+    for refusal in [duplicate_identity(), shared_owner(), empty] {
         let expected = replayed(refusal.code());
         let lock = DependencyLockError::Input(refusal.clone());
         assert_eq!(map_settled(&lock), expected);
