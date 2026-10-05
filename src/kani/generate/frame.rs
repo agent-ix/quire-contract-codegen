@@ -153,7 +153,10 @@ pub fn generate_state_frame_obligations(
 /// splitting the engine into roles does not change which one it names: the frame's effects, the
 /// condition's shape, a field missing from the state (the frame's grants, then the clause's),
 /// a frame granting every field, and the clause field's bound. Each role makes its own checks
-/// again; this only fixes the order of the first refusal of the pair.
+/// again; this only fixes the order of the first refusal of the pair. One case differs from the
+/// old entry: a malformed clause is common to both roles, so `prepare` returns a condition's
+/// `MalformedClause` before this reads the frame (a frame that creates an object beside a
+/// condition whose graph field name is a keyword used to report `FrameEffectUnsupported`).
 fn first_refusal(
     request: &StateFrameRequest<'_>,
     prepared: &Prepared<'_>,
