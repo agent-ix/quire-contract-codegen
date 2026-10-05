@@ -210,7 +210,9 @@ Merged in QSL `main`, read at this revision: `TerminalValue::Inconclusive`,
 `InconclusiveCause::{ReplayParity, ReplayRefused(Code)}`, `Proved { success_checks: u32 }` read as
 vacuous at zero through `ReportedInconclusiveCause`, `Declined { cause, code: DeclineCode }`, and
 `TerminalValue::from_replay_refusal`, which the map uses for a refusal `qsl_replay::replay`
-returned. `DeclineCode` has only its QSL catalog arm; the map produces no `Declined`.
+returned. `DeclineCode` has a QSL catalog arm, `Qsl(Code)`, and a STD-001 arm, `Std001(Std001Code)`
+(QSL #634); this map produces no `Declined`, which only [FR-030](./FR-030-ir-outcome-terminal-map.md)'s
+map does.
 
 Vacuous and cover-unsatisfied rows. QSL ruled, relayed on IR-465 (a QSL ruling recorded by the
 planner), that vacuity stays `Proved { success_checks: 0 }`, reported through a separate enum, with

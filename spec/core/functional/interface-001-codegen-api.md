@@ -134,6 +134,10 @@ operations:
     inputs: [KaniRunOutcome, the SUCCESS-check count, an optional ReplaySettlement (reproduced | disagreement carrying QSL's DisagreementCause | refused carrying a ReplayRefusal | setup refusal carrying a QSL Code | fault | CG defect), which the From impls of SpineReplayError, ReplayPackageError, FrameReplayError, DependencyLockError, EvidenceFailureCause, ReplayVerdict and the QSL CallSiteRefusal build; the EvidenceFailureCause impl reads a decode failure and a value outside the proof bound as a CG defect, a disagreement as its QSL cause, and a reproduction in a category other than violation as a CG defect]
     output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement)
     semantics: the one match over the pair (outcome with its inconclusive reason, replay settlement) with no wildcard arm; a falsified outcome is Refuted only with a reproduced replay, and the settlement accompanies a falsified outcome only (FR-029)
+  - name: ir_outcome_terminal_value
+    inputs: [Contract IR KaniOutcome, the SUCCESS-check count, an optional ReplaySettlement as run_terminal_value takes it]
+    output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement)
+    semantics: the one match over the pair (outcome kind, replay settlement) with no wildcard arm; a Counterexample is Refuted only with a reproduced replay, and the settlement accompanies a Counterexample only; Refused, InvalidInput and IncompleteInput are Declined carrying the outcome's Std001Code as DeclineCode::Std001, unchanged and unchecked for registration; Unavailable and Inconclusive read the code (FR-030)
   - name: generate_composite_equality_oracles
     inputs: [admitted CheckedPackageV2, CompositeEqualityItem list]
     output: CompositeEqualityOracles | OracleGenerationError
@@ -360,6 +364,7 @@ The interface's features in declaration order: every operation the contract abov
 | launch_evidence | operation |
 | classify_kani_run | operation |
 | run_terminal_value | operation |
+| ir_outcome_terminal_value | operation |
 | generate_composite_equality_oracles | operation |
 | negotiate_backend_provider | operation |
 | generate_routed | operation |

@@ -18,7 +18,8 @@ cause, and that the map is one match with no wildcard arm.
 ## Test Procedure
 
 1. Map an outcome of every `KaniOutcomeKind` and collect the values.
-2. Map `Refused`, `InvalidInput` and `IncompleteInput`.
+2. Map `Refused`, `InvalidInput` and `IncompleteInput`, each with an IR `Std001Code`, one of them a
+   code STD-001 does not register.
 3. Map `TimedOut`, `ResourceExhausted` and `Cancelled`.
 4. Map `Proved` with a transcript count of three SUCCESS checks and with a count of zero, and map
    `Counterexample` with a reproduced replay.
@@ -34,11 +35,13 @@ cause, and that the map is one match with no wildcard arm.
     each bare and wrapped.
 12. Map `Counterexample` with the refusal QSL's `DependencyInput::new` returns for a lock whose
     only defect is one library identity selected twice.
+13. Map `Counterexample` with no replay settlement, and each other `KaniOutcomeKind` with one.
 
 ## Expected Results
 
 1. Exactly one value per expressible pair, and none is `Tested` (FR-030-AC-1, FR-030-AC-6).
-2. `Declined` with three distinct causes (FR-030-AC-2).
+2. `Declined` with three distinct causes, each carrying the outcome's code unchanged as
+   `DeclineCode::Std001`, the unregistered code included (FR-030-AC-2).
 3. `Incomplete` with three distinct causes (FR-030-AC-3).
 4. `Proved { success_checks: 3 }`, `Proved { success_checks: 0 }` and `Refuted` (FR-030-AC-4).
 5. `Proved { success_checks: 0 }` and `Failed` (FR-030-AC-5).
@@ -52,10 +55,13 @@ cause, and that the map is one match with no wildcard arm.
 11. The call-site and lock-input refusals are `Inconclusive(ReplayRefused)` carrying their QSL
     catalog code and none is `Declined` (FR-030-AC-12).
 12. `Inconclusive(ReplayRefused)` carrying `invalid_package` (FR-030-AC-13).
+13. `TerminalPairError::MissingSettlement` for the counterexample and `UnexpectedSettlement` for each
+    other kind, with no terminal value (FR-030-AC-14).
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. The map is one `match` over every
-`KaniOutcomeKind`, and `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined`, whose QSL
-value carries a `DeclineCode` with no IR arm until IR-605 and QSL-351, as FR-030 Status relays. No
-step can run before that arm exists. Step 2 asserts the cause only.
+Implemented in `tests/it/terminal_map.rs` except step 9's fault half. Steps 1 to 8 and 10 to 13 run,
+and step 7's inspection is a `syn` test over `kani/terminal.rs`. Step 9 maps each CG-raised failure
+and `ReplaySettlement::Fault` in a test traced to TC-041 only: the fault wrappers FR-029-AC-10 lists
+name QSL's `InternalFault`, which `qsl-replay` does not re-export, so no test here can build one.
+FR-030-AC-10 stays planned and carries no tag, so TC-041's trace does not back it.

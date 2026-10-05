@@ -1,23 +1,26 @@
-//! FR-029: the total map from a Kani run outcome, paired with its replay settlement, to QSL's
-//! terminal value.
+//! FR-029 and FR-030: the total maps from a Kani run outcome (FR-029) and from a Contract IR
+//! outcome (FR-030), each paired with its replay settlement, to QSL's terminal value.
 //!
 //! The replay failures are built from the public types of this crate and of `qsl-replay`; a
 //! repeated dependency identity is the refusal `ReplayPackage::new` returns for a real lock.
+//! The IR outcomes are built with IR's own constructors and the `Std001Code` that `qsl-replay`
+//! re-exports, so the `Declined` code arm is built through `qsl-replay` alone.
 
 use qsl_replay::{
-    CallSiteRefusal, Category, ClauseName, Code, DependencyInput, DependencyInputRefusal,
-    DigestDomain, DigestRecord, DisagreementCause, FrameCounterexample, Identifier,
-    IncompleteCause, InconclusiveCause, MalformedTranscript, OperationName, QualifiedName,
-    ReplayRefusal, ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StageLimits,
-    SuppliedLibrary, TerminalValue, Verdict, Witness, WitnessEnvelope, WitnessFailure,
-    WitnessPacket,
+    std001_code, CallSiteRefusal, Category, ClauseName, Code, DeclineCode, DependencyInput,
+    DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause, FrameCounterexample,
+    Identifier, IncompleteCause, InconclusiveCause, MalformedTranscript, OperationName,
+    ProofRefusalCause, QualifiedName, ReplayRefusal, ReportedInconclusiveCause, ScalarLimits,
+    SourceIdentity, StageLimits, Std001Code, SuppliedLibrary, TerminalValue, UnavailabilityCause,
+    Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
 };
 use quire_contract_codegen::{
-    run_terminal_value, DecodeFailure, DependencyLock, DependencyLockError, EvidenceFailureCause,
-    FrameReplayError, KaniInconclusiveReason, KaniRunOutcome, LockedSource,
-    ObligationIdentityError, ReplayInputs, ReplayPackage, ReplayPackageError, ReplaySettlement,
-    ReplayVerdict, SpineReplayError, TerminalPairError,
+    ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
+    DependencyLockError, EvidenceFailureCause, FrameReplayError, KaniInconclusiveReason,
+    KaniRunOutcome, LockedSource, ObligationIdentityError, ReplayInputs, ReplayPackage,
+    ReplayPackageError, ReplaySettlement, ReplayVerdict, SpineReplayError, TerminalPairError,
 };
+use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
 /// Every inconclusive reason the classifier has today.
 const REASONS: [KaniInconclusiveReason; 6] = [
@@ -286,6 +289,17 @@ fn tc_040_a_replay_refusal_carries_its_code() {
 /// Trace: FR-029-AC-11, TC-040
 #[test]
 fn tc_040_each_failure_this_repository_raises_is_failed() {
+    for_each_cg_failure(|settlement| {
+        assert_eq!(
+            map_run(&falsified(), Some(settlement)),
+            TerminalValue::Failed
+        );
+    });
+}
+
+/// Hands `check` the settlement of each failure this repository raises that carries no QSL
+/// catalog code.
+fn for_each_cg_failure(check: impl Fn(ReplaySettlement<'_>)) {
     let spine = [
         SpineReplayError::UnboundArgument {
             argument: "x".to_owned(),
@@ -298,7 +312,7 @@ fn tc_040_each_failure_this_repository_raises_is_failed() {
         }),
     ];
     for error in &spine {
-        assert_eq!(map_settled(error), TerminalValue::Failed, "{error}");
+        check(error.into());
     }
 
     let empty_name = QualifiedName::new(Vec::new()).expect_err("an empty qualified name");
@@ -325,13 +339,13 @@ fn tc_040_each_failure_this_repository_raises_is_failed() {
         FrameReplayError::Name(empty_name),
     ];
     for error in &frame {
-        assert_eq!(map_settled(error), TerminalValue::Failed, "{error}");
+        check(error.into());
     }
 
     let invalid_function = ReplayPackageError::InvalidFunction {
         function: "1x".to_owned(),
     };
-    assert_eq!(map_settled(&invalid_function), TerminalValue::Failed);
+    check((&invalid_function).into());
 
     // A playback outside the harness proof bound, and a playback that does not type against the
     // persisted bindings.
@@ -345,7 +359,7 @@ fn tc_040_each_failure_this_repository_raises_is_failed() {
     });
     for cause in [domain, decode, reproduced_without_violation()] {
         let verdict = ReplayVerdict::EvidenceFailure(cause);
-        assert_eq!(map_settled(&verdict), TerminalValue::Failed);
+        check((&verdict).into());
     }
 }
 
@@ -413,6 +427,14 @@ fn with_settlements(mut check: impl FnMut(ReplaySettlement<'_>)) {
 /// Trace: FR-029-AC-13, TC-040
 #[test]
 fn tc_040_a_setup_refusal_after_a_refutation_is_replay_refused_never_declined() {
+    for_each_setup_refusal(|code, settlement| {
+        assert_eq!(map_run(&falsified(), Some(settlement)), replayed(code));
+    });
+}
+
+/// Hands `check` the code QSL's refusal supplies and the settlement of each non-fault
+/// `CallSiteRefusal` and `DependencyLockError::Input`, bare and wrapped.
+fn for_each_setup_refusal(check: impl Fn(Code, ReplaySettlement<'_>)) {
     let call_sites = || {
         let package = DigestRecord::mint(DigestDomain::PackageSemanticV2, [1; 32]);
         [
@@ -454,15 +476,15 @@ fn tc_040_a_setup_refusal_after_a_refutation_is_replay_refused_never_declined() 
         ]
     };
     for refusal in call_sites() {
-        let expected = replayed(refusal.code());
-        assert_eq!(map_settled(&refusal), expected, "{refusal}");
+        let code = refusal.code();
+        check(code, (&refusal).into());
         let package = ReplayPackageError::CallSite(Box::new(refusal));
-        assert_eq!(map_settled(&package), expected, "{package}");
+        check(code, (&package).into());
     }
     for refusal in call_sites() {
-        let expected = replayed(refusal.code());
+        let code = refusal.code();
         let frame = FrameReplayError::CallSite(Box::new(refusal));
-        assert_eq!(map_settled(&frame), expected, "{frame}");
+        check(code, (&frame).into());
     }
 
     // The empty identity is the refusal whose code is not `invalid_package`, so a conversion that
@@ -470,13 +492,13 @@ fn tc_040_a_setup_refusal_after_a_refutation_is_replay_refused_never_declined() 
     let empty = empty_identity();
     assert_eq!(empty.code(), Code::InvalidIdentifier);
     for refusal in [duplicate_identity(), shared_owner(), empty] {
-        let expected = replayed(refusal.code());
+        let code = refusal.code();
         let lock = DependencyLockError::Input(refusal.clone());
-        assert_eq!(map_settled(&lock), expected);
+        check(code, (&lock).into());
         let package = ReplayPackageError::Dependencies(DependencyLockError::Input(refusal.clone()));
-        assert_eq!(map_settled(&package), expected);
+        check(code, (&package).into());
         let frame = FrameReplayError::Dependencies(DependencyLockError::Input(refusal));
-        assert_eq!(map_settled(&frame), expected);
+        check(code, (&frame).into());
     }
 }
 
@@ -487,6 +509,17 @@ fn tc_040_a_setup_refusal_after_a_refutation_is_replay_refused_never_declined() 
 /// Trace: FR-029-AC-14, TC-040
 #[test]
 fn tc_040_a_repeated_dependency_identity_is_replay_refused_with_invalid_package() {
+    let refusal = repeated_identity_refusal();
+    assert_eq!(
+        map_settled(&refusal),
+        replayed(Code::InvalidPackage),
+        "{refusal}"
+    );
+}
+
+/// The refusal `ReplayPackage::new` returns for a lock whose only defect is a repeated identity,
+/// checked to be QSL's `DuplicateIdentity`.
+fn repeated_identity_refusal() -> ReplayPackageError {
     let unlimited = ScalarLimits {
         integer_bits: u64::MAX,
         decimal_digits: u64::MAX,
@@ -530,8 +563,431 @@ fn tc_040_a_repeated_dependency_identity_is_replay_refused_with_invalid_package(
         matches!(input, DependencyInputRefusal::DuplicateIdentity { .. }),
         "{input}"
     );
+    refusal
+}
+
+// FR-030: the map from a Contract IR outcome.
+
+/// An IR outcome of `kind` carrying `code`, built by IR's own constructors.
+fn ir(kind: KaniOutcomeKind, code: Std001Code) -> KaniOutcome {
+    match kind {
+        KaniOutcomeKind::Proved => KaniOutcome::proved("source", "context"),
+        KaniOutcomeKind::Counterexample => KaniOutcome::counterexample("source", "context"),
+        other => KaniOutcome::non_success(other, code, "source", "context")
+            .expect("a non-success kind builds"),
+    }
+}
+
+/// Every kind IR's outcome has, each with a cause code that kind could carry.
+fn ir_outcomes() -> Vec<KaniOutcome> {
+    use KaniOutcomeKind as Kind;
+    vec![
+        ir(Kind::Proved, Std001Code::KANI_PROVED),
+        ir(Kind::Counterexample, Std001Code::KANI_COUNTEREXAMPLE),
+        ir(Kind::Refused, Std001Code::KANI_CAPABILITY_MISSING),
+        ir(Kind::InvalidInput, Std001Code::KANI_IDENTITY_INVALID),
+        ir(
+            Kind::IncompleteInput,
+            Std001Code::KANI_POPULATION_INCOMPLETE,
+        ),
+        ir(Kind::Unavailable, Std001Code::KANI_SOLVER_ABSENT),
+        ir(Kind::TimedOut, Std001Code::KANI_BOUND_EXHAUSTED),
+        ir(Kind::ResourceExhausted, Std001Code::KANI_BOUND_EXHAUSTED),
+        ir(Kind::Cancelled, Std001Code::KANI_BOUND_EXHAUSTED),
+        ir(Kind::Inconclusive, Std001Code::KANI_VACUOUS_PROOF),
+    ]
+}
+
+fn counterexample() -> KaniOutcome {
+    ir(
+        KaniOutcomeKind::Counterexample,
+        Std001Code::KANI_COUNTEREXAMPLE,
+    )
+}
+
+/// An outcome that takes no settlement, mapped with three SUCCESS checks.
+fn map_ir(outcome: &KaniOutcome) -> TerminalValue {
+    ir_outcome_terminal_value(outcome, 3, None).expect("a well-paired outcome maps")
+}
+
+fn map_ir_settled<'a>(settlement: impl Into<ReplaySettlement<'a>>) -> TerminalValue {
+    ir_outcome_terminal_value(&counterexample(), 3, Some(settlement.into()))
+        .expect("a counterexample with a settlement maps")
+}
+
+/// Every pair the map's input can express maps to one value: nine kinds with no settlement and a
+/// counterexample with each of the six readings.
+///
+/// Trace: FR-030-AC-1, TC-041
+#[test]
+fn tc_041_every_expressible_pair_maps_to_one_value() {
+    let mut values = Vec::new();
+    for outcome in ir_outcomes() {
+        if outcome.kind == KaniOutcomeKind::Counterexample {
+            values.push(map_ir_settled(ReplaySettlement::Reproduced));
+        } else {
+            values.push(map_ir(&outcome));
+        }
+    }
+    with_settlements(|settlement| values.push(map_ir_settled(settlement)));
+    // Nine kinds with no settlement and the counterexample with each of the six readings.
+    assert_eq!(values.len(), 9 + 6);
+}
+
+/// A pair outside the map's input is a typed refusal, not a value: a counterexample needs its
+/// settlement and no other kind has one.
+///
+/// Trace: FR-030-AC-14, TC-041
+#[test]
+fn tc_041_a_settlement_accompanies_a_counterexample_only() {
+    for outcome in ir_outcomes() {
+        let bare = ir_outcome_terminal_value(&outcome, 3, None);
+        let settled = ir_outcome_terminal_value(&outcome, 3, Some(ReplaySettlement::Reproduced));
+        if outcome.kind == KaniOutcomeKind::Counterexample {
+            assert_eq!(bare, Err(TerminalPairError::MissingSettlement));
+            assert_eq!(settled, Ok(TerminalValue::Refuted));
+        } else {
+            assert_eq!(
+                settled,
+                Err(TerminalPairError::UnexpectedSettlement),
+                "{:?}",
+                outcome.kind
+            );
+            assert!(bare.is_ok(), "{:?}", outcome.kind);
+        }
+    }
+}
+
+/// `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined` with their own cause, and the
+/// outcome's STD-001 code is carried in `DeclineCode::Std001`: not respelled as a QSL catalog code
+/// and not refused when STD-001 does not register it.
+///
+/// Trace: FR-030-AC-2, TC-041
+#[test]
+fn tc_041_a_refusal_before_the_run_is_declined_with_its_kind_and_ir_code() {
+    use KaniOutcomeKind as Kind;
+    let unregistered = std001_code!("kani_corpus_identity_collision");
+    assert!(!unregistered.is_registered());
+    let cases = [
+        (
+            Kind::Refused,
+            ProofRefusalCause::Refused,
+            Std001Code::KANI_CAPABILITY_MISSING,
+        ),
+        (
+            Kind::InvalidInput,
+            ProofRefusalCause::InvalidInput,
+            Std001Code::KANI_IDENTITY_INVALID,
+        ),
+        (
+            Kind::IncompleteInput,
+            ProofRefusalCause::IncompleteInput,
+            Std001Code::KANI_POPULATION_INCOMPLETE,
+        ),
+        (Kind::Refused, ProofRefusalCause::Refused, unregistered),
+    ];
+    for (kind, cause, code) in cases {
+        assert_eq!(
+            map_ir(&ir(kind, code)),
+            TerminalValue::Declined {
+                cause,
+                code: DeclineCode::Std001(code),
+            }
+        );
+    }
+}
+
+/// `TimedOut`, `ResourceExhausted` and `Cancelled` map to `Incomplete` with their own cause.
+///
+/// Trace: FR-030-AC-3, TC-041
+#[test]
+fn tc_041_a_limit_or_a_cancellation_is_incomplete_with_its_cause() {
+    use KaniOutcomeKind as Kind;
+    for (kind, cause) in [
+        (Kind::TimedOut, IncompleteCause::TimedOut),
+        (Kind::ResourceExhausted, IncompleteCause::ResourceExhausted),
+        (Kind::Cancelled, IncompleteCause::Cancelled),
+    ] {
+        assert_eq!(
+            map_ir(&ir(kind, Std001Code::KANI_BOUND_EXHAUSTED)),
+            TerminalValue::Incomplete(cause)
+        );
+    }
+}
+
+/// `Proved` carries the transcript's SUCCESS check count, zero included, and a `Counterexample`
+/// with a reproduced replay is `Refuted`.
+///
+/// Trace: FR-030-AC-4, TC-041
+#[test]
+fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refutes() {
+    let proved = ir(KaniOutcomeKind::Proved, Std001Code::KANI_PROVED);
     assert_eq!(
-        map_settled(&refusal),
+        ir_outcome_terminal_value(&proved, 3, None),
+        Ok(TerminalValue::Proved { success_checks: 3 })
+    );
+    assert_eq!(
+        ir_outcome_terminal_value(&proved, 0, None),
+        Ok(TerminalValue::Proved { success_checks: 0 })
+    );
+    assert_eq!(
+        map_ir_settled(ReplaySettlement::Reproduced),
+        TerminalValue::Refuted
+    );
+}
+
+/// `Inconclusive` with `kani_vacuous_proof` is `Proved { success_checks: 0 }` whatever count the
+/// caller passes; with any other code it is `Failed`.
+///
+/// Trace: FR-030-AC-5, TC-041
+#[test]
+fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_failed() {
+    let outcome = |code| ir(KaniOutcomeKind::Inconclusive, code);
+    assert_eq!(
+        map_ir(&outcome(Std001Code::KANI_VACUOUS_PROOF)),
+        TerminalValue::Proved { success_checks: 0 }
+    );
+    for code in [
+        Std001Code::KANI_BOUND_INVALID,
+        std001_code!("kani_no_interpretation"),
+    ] {
+        assert_eq!(map_ir(&outcome(code)), TerminalValue::Failed);
+    }
+}
+
+/// No pair maps to `Tested`.
+///
+/// Trace: FR-030-AC-6, TC-041
+#[test]
+fn tc_041_no_outcome_maps_to_tested() {
+    let mut values: Vec<TerminalValue> = ir_outcomes()
+        .iter()
+        .filter(|outcome| outcome.kind != KaniOutcomeKind::Counterexample)
+        .map(map_ir)
+        .collect();
+    values.push(map_ir_settled(ReplaySettlement::Reproduced));
+    with_settlements(|settlement| values.push(map_ir_settled(settlement)));
+    assert_eq!(values.len(), 9 + 1 + 5);
+    assert!(
+        values.iter().all(|value| *value != TerminalValue::Tested),
+        "{values:?}"
+    );
+}
+
+/// The map is one `match` over the pair with no wildcard arm: inspection of the function's source.
+/// The scrutinee is a two-tuple, every arm's first element names only `KaniOutcomeKind` variants
+/// (no `_` and no binding), no arm's pattern or tuple element is a catch-all, and the variants the
+/// arms name are all ten of the kind, so a kind IR adds fails to compile in the library.
+///
+/// Trace: FR-030-AC-7, TC-041
+#[test]
+fn tc_041_the_map_is_one_match_over_the_pair_with_no_wildcard_arm() {
+    use syn::{visit::Visit, Expr, ExprMatch, Item, Pat};
+
+    #[derive(Default)]
+    struct Matches<'a>(Vec<&'a ExprMatch>);
+    impl<'a> Visit<'a> for Matches<'a> {
+        fn visit_expr_match(&mut self, node: &'a ExprMatch) {
+            self.0.push(node);
+            syn::visit::visit_expr_match(self, node);
+        }
+    }
+
+    fn catch_all(pattern: &Pat) -> bool {
+        match pattern {
+            Pat::Wild(_) => true,
+            // `None` parses as an identifier pattern; any other bare name binds everything.
+            Pat::Ident(ident) => ident.subpat.is_none() && ident.ident != "None",
+            Pat::Or(or) => or.cases.iter().any(catch_all),
+            Pat::Tuple(tuple) => tuple.elems.iter().any(catch_all),
+            Pat::Paren(paren) => catch_all(&paren.pat),
+            _ => false,
+        }
+    }
+
+    /// The `KaniOutcomeKind` variants a first-tuple-element pattern names, or `None` when it names
+    /// anything else.
+    fn kinds(pattern: &Pat, out: &mut Vec<String>) -> Option<()> {
+        match pattern {
+            Pat::Path(path) => {
+                let segments: Vec<String> = path
+                    .path
+                    .segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect();
+                let [kind, variant] = segments.as_slice() else {
+                    return None;
+                };
+                (kind == "Kind").then(|| out.push(variant.clone()))
+            }
+            Pat::Or(or) => or.cases.iter().try_for_each(|case| kinds(case, out)),
+            _ => None,
+        }
+    }
+
+    let sources = crate::layout::source_files();
+    let source = sources
+        .get("kani/terminal.rs")
+        .expect("the terminal map's source");
+    let file = syn::parse_file(source).expect("terminal.rs parses");
+    let map = file
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Fn(function) if function.sig.ident == "ir_outcome_terminal_value" => {
+                Some(function)
+            }
+            _ => None,
+        })
+        .expect("the map is a top-level function");
+    let mut found = Matches::default();
+    found.visit_block(&map.block);
+    let [pair_match] = found.0.as_slice() else {
+        panic!("the map is exactly one match, found {}", found.0.len());
+    };
+    let Expr::Tuple(scrutinee) = &*pair_match.expr else {
+        panic!("the match scrutinee is the pair");
+    };
+    assert_eq!(scrutinee.elems.len(), 2);
+    let mut named = Vec::new();
+    for arm in &pair_match.arms {
+        assert!(!catch_all(&arm.pat), "a catch-all arm");
+        let Pat::Tuple(pair) = &arm.pat else {
+            panic!("every arm destructures the pair");
+        };
+        let first = pair.elems.first().expect("a pair has a first element");
+        assert!(
+            kinds(first, &mut named).is_some(),
+            "an arm's kind is not a named `KaniOutcomeKind` variant"
+        );
+    }
+    named.sort();
+    named.dedup();
+    let mut expected: Vec<String> = [
+        "Proved",
+        "Counterexample",
+        "Refused",
+        "InvalidInput",
+        "IncompleteInput",
+        "Unavailable",
+        "TimedOut",
+        "ResourceExhausted",
+        "Cancelled",
+        "Inconclusive",
+    ]
+    .map(str::to_owned)
+    .into();
+    expected.sort();
+    assert_eq!(named, expected);
+}
+
+/// `Unavailable` with `kani_solver_absent` is `Unsupported(SolverAbsent)`; with
+/// `kani_backend_absent` or any other code it is `Unsupported(BackendAbsent)`.
+///
+/// Trace: FR-030-AC-8, TC-041
+#[test]
+fn tc_041_an_absent_solver_or_backend_is_unsupported_with_its_cause() {
+    let outcome = |code| ir(KaniOutcomeKind::Unavailable, code);
+    assert_eq!(
+        map_ir(&outcome(Std001Code::KANI_SOLVER_ABSENT)),
+        TerminalValue::Unsupported(UnavailabilityCause::SolverAbsent)
+    );
+    for code in [
+        Std001Code::KANI_BACKEND_ABSENT,
+        Std001Code::KANI_CAPABILITY_MISSING,
+    ] {
+        assert_eq!(
+            map_ir(&outcome(code)),
+            TerminalValue::Unsupported(UnavailabilityCause::BackendAbsent)
+        );
+    }
+}
+
+/// A `Counterexample` with a replay disagreement is `Inconclusive(ReplayParity)` carrying its
+/// cause, and with a non-fault `ReplayRefusal` is `Inconclusive(ReplayRefused)` carrying that
+/// refusal's `code()`.
+///
+/// Trace: FR-030-AC-9, TC-041
+#[test]
+fn tc_041_a_counterexample_disagreement_or_refusal_is_inconclusive_with_its_cause() {
+    let cause = DisagreementCause::NoValue {
+        proved: Verdict::from_category(Category::Violation),
+        replayed: Verdict::from_category(Category::Success),
+    };
+    assert_eq!(
+        map_ir_settled(ReplaySettlement::Disagreement(&cause)),
+        TerminalValue::Inconclusive(InconclusiveCause::ReplayParity(cause.clone()))
+    );
+    let refusal = non_fault_refusal();
+    assert_eq!(
+        map_ir_settled(ReplaySettlement::Refused(&refusal)),
+        replayed(refusal.code())
+    );
+}
+
+/// Each failure this repository raises that carries no QSL catalog code settles a counterexample
+/// as `Failed`. QSL's `InternalFault` cannot be built here, so the fault half of FR-030-AC-10 is
+/// not tagged and the criterion stays planned.
+///
+/// Trace: TC-041
+#[test]
+fn tc_041_a_counterexample_with_a_cg_defect_is_failed() {
+    for_each_cg_failure(|settlement| {
+        assert_eq!(
+            ir_outcome_terminal_value(&counterexample(), 3, Some(settlement)),
+            Ok(TerminalValue::Failed)
+        );
+    });
+    assert_eq!(
+        map_ir_settled(ReplaySettlement::Fault),
+        TerminalValue::Failed
+    );
+}
+
+/// Across every replay settlement other than reproduced, a counterexample is not `Refuted`.
+///
+/// Trace: FR-030-AC-11, TC-041
+#[test]
+fn tc_041_only_a_reproduced_replay_refutes_a_counterexample() {
+    let mut exercised = 0;
+    with_settlements(|settlement| {
+        exercised += 1;
+        assert_ne!(map_ir_settled(settlement), TerminalValue::Refuted);
+    });
+    assert_eq!(exercised, 5, "every reading but reproduced is exercised");
+    assert_ne!(
+        map_ir_settled(&ReplayVerdict::EvidenceFailure(
+            reproduced_without_violation()
+        )),
+        TerminalValue::Refuted
+    );
+}
+
+/// A counterexample with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, bare and
+/// wrapped, is `Inconclusive(ReplayRefused)` carrying the code QSL's refusal supplies and never
+/// `Declined`.
+///
+/// Trace: FR-030-AC-12, TC-041
+#[test]
+fn tc_041_a_setup_refusal_after_a_counterexample_is_replay_refused_never_declined() {
+    for_each_setup_refusal(|code, settlement| {
+        let value = map_ir_settled(settlement);
+        assert_eq!(value, replayed(code));
+        assert!(!matches!(value, TerminalValue::Declined { .. }));
+    });
+}
+
+/// A lock whose only defect is one repeated library identity is refused by `ReplayPackage::new`
+/// with QSL's `DuplicateIdentity`, and a counterexample with that refusal is
+/// `Inconclusive(ReplayRefused)` carrying `invalid_package`.
+///
+/// Trace: FR-030-AC-13, TC-041
+#[test]
+fn tc_041_a_repeated_dependency_identity_after_a_counterexample_is_replay_refused() {
+    let refusal = repeated_identity_refusal();
+    assert_eq!(
+        map_ir_settled(&refusal),
         replayed(Code::InvalidPackage),
         "{refusal}"
     );
