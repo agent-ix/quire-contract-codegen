@@ -30,10 +30,13 @@ contract and named harness-defect terminal cause.
    addition with both operands and result in `[-1000,1000]`, the descriptor already accepted by
    `kani_obligations::scalar_package`. Its QSL source counterpart must emit those checked ranges
    and retain its original `call_site` package/source tie before positive replay is admitted.
-   Select `(600,600)`: both operands are admitted and the exact result `1200` is outside the
-   result bound. For an actual retained Kani falsification with correct generated refusal,
-   seed a harness-assertion mutation that rejects that otherwise correct refusal, leaving the
-   oracle intact; retain that same mutated proof artifact and observe its oracle natively.
+   `(600,600)` giving `1200` is an illustrative reachable out-of-result-range case; Kani may
+   choose another pair. For an actual retained Kani falsification with correct generated
+   refusal, seed a harness-assertion mutation that rejects otherwise correct refusal outside
+   the result range, leaving the oracle intact. Decode the actual retained operand pair,
+   assert that both operands are admitted and their exact sum is outside the result range,
+   and derive the expected exact result from that pair rather than assume a solver choice.
+   Retain that same mutated proof artifact and observe its oracle natively.
    This is the harness-defect agreement control, not a source violation. An arithmetic mutation
    instead supplies the divergence control. The observed ranges and native refusal must be
    asserted; source admission failure remains a gate, not a hand-built package replacement.
@@ -79,7 +82,7 @@ contract and named harness-defect terminal cause.
 | FR-032-AC-5 | Driver executes the proved artifact and calls QSL between builder and converter; QSL measures the current four-operator completed-value/refused-outside-range projection | Execute inside the CG builder, substitute a local evaluator, stub the positive verdict, accept `Undefined`/`Incomplete` as agreement or add unproved refusal-cause/accounting-counter equality |
 | FR-032-AC-6 | Another scalar result/run yields no settlement for this binding | Remove the result/run-to-scalar binding check or omit result range/limits from it |
 | FR-032-AC-7 | Lowering divergence is `Failed`, agreement is named harness-defect `Inconclusive`, QSL refusal retains its code and faults are `Failed`; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
-| FR-032-AC-8 | Increment emission/result range is observed; separate bounded addition at `(600,600)` has exact result `1200` outside `[-1000,1000]`, with correct refusal/harness-defect agreement rather than source violation | Use a hand-built function harness, substitute increment as the unreachable refusal case, relabel expected refusal as source falsification or accept wrong emitted fixture ranges |
+| FR-032-AC-8 | Increment emission/result range is observed; the separate bounded-addition check derives the exact result from actual retained in-domain operands and asserts it is outside `[-1000,1000]`, with correct refusal/harness-defect agreement rather than source violation | Use a hand-built function harness, assume `(600,600)` instead of reading actual playback, substitute increment as the unreachable refusal case, relabel expected refusal as source falsification or accept wrong emitted fixture ranges |
 
 All checks are planned; completed-route observations have the same explicit upstream gates as
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never

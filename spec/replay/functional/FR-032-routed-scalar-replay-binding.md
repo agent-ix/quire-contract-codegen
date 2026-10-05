@@ -183,7 +183,7 @@ Cross-binding converter failures return no settlement rather than settling anoth
 | FR-032-AC-5 | PLANNED (IR-631) / GATED (QSL-641). The public consumer executes the same proved generated artifact and invokes QSL between the builder and converter. QSL compares its actual native observation with authoritative exact operator evaluation using the four-operator projection owned by [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-37, without adding refusal-cause or accounting-counter equality; changing the generated arithmetic while keeping original node/operator identity changes the measured parity result. `Undefined`, `Incomplete` and execution faults cannot be agreeing outcomes of this profile. No CG-local evaluator or replay verdict replaces QSL. | Test |
 | FR-032-AC-6 | PLANNED (IR-631) / GATED (QSL-641). The converter refuses another scalar binding's result/run with no settlement; changing only the claimed node, operation, operands, result range or limits cannot yield a settlement for the original binding. | Test |
 | FR-032-AC-7 | PLANNED (IR-631) / GATED (QSL-641). QSL's divergence between generated and authoritative exact outcomes becomes a CG lowering fault and `Failed`; agreement despite Kani falsification becomes `Inconclusive` with the upstream named harness-defect cause; QSL non-fault refusal retains its catalog code and executor fault remains `Failed`. This scalar route never returns `Reproduced`, `Refuted` or `Verified`. | Test |
-| FR-032-AC-8 | PLANNED (IR-631) / GATED (QSL-641). The real QSL-emitted `x + 1` with input `Int[0,9]` and result `Int[0,10]` exercises routed generation, actual Kani arithmetic-mutation playback and same-proved-artifact native observation. A separate bounded-addition fixture with both operands and result in `[-1000,1000]` reaches `(600,600)`, so its expected exact result-range refusal at `1200` is observed and never labelled a source violation. The fixture ranges are checked before that observation; no unreachable case counts as coverage. | Test |
+| FR-032-AC-8 | PLANNED (IR-631) / GATED (QSL-641). The real QSL-emitted `x + 1` with input `Int[0,9]` and result `Int[0,10]` exercises routed generation, actual Kani arithmetic-mutation playback and same-proved-artifact native observation. A separate bounded-addition fixture with both operands and result in `[-1000,1000]` exercises an admitted operand pair whose exact result is outside the result range. The expected exact result is derived from the actual retained playback, and its correct refusal is never labelled a source violation. The fixture ranges and witness domain/result-range relation are asserted before that observation; no unreachable case or assumed solver choice counts as coverage. | Test |
 
 ## Intent and Existing Coverage
 
@@ -208,8 +208,9 @@ The emitted increment fixture's result range is `Int[0,10]`, as
 [FR-022](../../routed/functional/FR-022-routed-generation.md) AC-15 and
 `tests/it/routed_generation.rs` record. It supplies no result-range-refusal witness. The separate
 addition descriptor already accepted by `tests/it/kani_obligations.rs::scalar_package` has
-operand/result bounds `[-1000,1000]`; `(600,600)` is a concrete in-domain operand vector with
-an out-of-result-range exact result. Its QSL source counterpart and original `call_site`
+operand/result bounds `[-1000,1000]`; `(600,600)` giving `1200` illustrates a reachable
+out-of-result-range exact result, without prescribing Kani's chosen witness. The check derives
+its expected exact result from the actual retained operand pair. Its QSL source counterpart and original `call_site`
 package/source binding must be admitted under the same upstream gates as the positive replay;
 no hand-edited emitted package or fabricated source identity substitutes for that admission.
 
