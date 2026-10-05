@@ -2549,12 +2549,136 @@ fn tc_035_the_playback_is_decoded_in_the_harnesss_draw_order() {
     );
 }
 
-/// A selected `IntRange` wider than `i64` remains in the draw order without an assumption.
-/// The persisted unranged reason accompanies QSL's refusal without asserting that it caused it.
+/// An emitted Boolean model field is drawn without an integer domain. QSL refuses an integer
+/// playback against that same source model; CG retains the field and persisted reason as context.
 ///
-/// Trace: FR-015-AC-81, FR-024-AC-35
+/// Trace: FR-015-AC-81, FR-024-AC-35, TC-035
 #[test]
 fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
+    let twin = Twin::without_audit_range();
+    let harness = generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
+        .frame
+        .identity;
+    assert_eq!(harness.state_fields, ["balance", "audit"]);
+    assert_eq!(harness.domains.len(), 1);
+    assert_eq!(harness.domains[0].field, "balance");
+    assert_eq!(harness.unranged.len(), 1);
+    assert_eq!(harness.unranged[0].field, "audit");
+    assert_eq!(
+        harness.unranged[0].reason,
+        quire_contract_codegen::StateUnrangedReason::TypeNotRange
+    );
+    let audit = 5_000_000_000_i64;
+    let invocation = twin.invocation("account", (5, audit), (5, audit));
+    let replay = twin
+        .try_frame_replay(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &run_of(&harness, [5, audit]),
+        )
+        .expect("the unranged playback builds");
+    let error = replay
+        .replay()
+        .expect_err("QSL refuses an integer for the selected Boolean field");
+    let FrameReplayError::Refused { refusal, unranged } = &error else {
+        panic!("expected QSL refusal: {error}")
+    };
+    assert_eq!(unranged, &harness.unranged);
+    let terminal = quire_contract_codegen::run_terminal_value(
+        &KaniRunOutcome::Falsified {
+            counterexample: "model-type mismatch".to_owned(),
+        },
+        0,
+        Some((&error).into()),
+    )
+    .expect("a falsified run has a settlement");
+    assert_eq!(
+        terminal,
+        TerminalValue::Inconclusive(InconclusiveCause::ReplayRefused(refusal.code()))
+    );
+}
+
+/// The same QSL source model supplies CG's selected field range and QSL replay within the
+/// integer range its current source representation can express. The out-of-range playback is
+/// stopped by CG's declared-domain check before QSL replay.
+///
+/// Trace: FR-015-AC-77, FR-024-AC-32, TC-035
+#[test]
+fn tc_035_a_source_model_range_within_jcs_safe_integer_replays_without_override() {
+    let twin = Twin::with_field_ranges((0, 1000), (0, 1_000_000));
+    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let object = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &*node.semantic_form == "object_type")
+        .expect("selected object declaration");
+    assert_eq!(
+        package
+            .model_object_fields(&object.node_id)
+            .expect("selected fields")
+            .field("audit")
+            .expect("present audit")
+            .member_type(),
+        Some(&CheckedMemberType::IntRange {
+            lower: 0,
+            upper: 1_000_000,
+        })
+    );
+    let harness = generate_state_frame_obligations(&StateFrameRequest {
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect("the source model generates")
+    .frame
+    .identity;
+    assert_eq!(
+        harness
+            .domains
+            .iter()
+            .find(|domain| domain.field == "audit")
+            .map(|domain| (domain.minimum, domain.maximum)),
+        Some((0, 1_000_000))
+    );
+    let invocation = twin.invocation("account", (5, 999_999), (5, 999_999));
+    twin.try_frame_replay(
+        "deposit",
+        &invocation,
+        "account",
+        "audit",
+        &run_of(&harness, [5, 999_999]),
+    )
+    .expect("matching source-model replay builds")
+    .replay()
+    .expect("QSL admits the source-model pre state");
+    let outside = 1_000_001;
+    let invocation = twin.invocation("account", (5, outside), (5, outside));
+    assert!(matches!(
+        twin.try_frame_replay(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &run_of(&harness, [5, outside]),
+        ),
+        Err(FrameReplayError::OutOfDomain { field, value })
+            if field == "audit" && value == outside
+    ));
+}
+
+/// A checked package admitted against a selected wide model records `TypeNotRange` and keeps
+/// that context on refusal. QSL replay recompiles the original 0..1000 source model in this
+/// fixture, so this test does not establish same-model replay of the wide override.
+///
+/// Trace: FR-015-AC-81, TC-025
+#[test]
+fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim() {
     let twin = Twin::build(&["balance"], &[CLAUSES[0]], 0);
     let (package, clause) = twin.emitted_package_with_wide_audit_range("BalanceNeverDrops");
     let object = package
@@ -2623,7 +2747,7 @@ fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
     );
     let error = replay
         .replay()
-        .expect_err("QSL refuses the pre state outside the selected model field range");
+        .expect_err("QSL refuses the pre state outside the original source model range");
     assert!(
         matches!(
             &error,
