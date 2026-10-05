@@ -1242,12 +1242,12 @@ dependencies = [
 [[package]]
 name = "qsl-attrs"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#4403f2f0eee921b7ac9eba41dd1be1914c87835b"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#8842c0b6697a9acb0f50c8991b786c022dda8dec"
 
 [[package]]
 name = "qsl-cst"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#4403f2f0eee921b7ac9eba41dd1be1914c87835b"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#8842c0b6697a9acb0f50c8991b786c022dda8dec"
 dependencies = [
  "logos",
  "qsl-attrs",
@@ -1259,7 +1259,7 @@ dependencies = [
 [[package]]
 name = "qsl-eval"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#4403f2f0eee921b7ac9eba41dd1be1914c87835b"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#8842c0b6697a9acb0f50c8991b786c022dda8dec"
 dependencies = [
  "qsl-attrs",
  "qsl-foundation",
@@ -1275,7 +1275,7 @@ dependencies = [
 [[package]]
 name = "qsl-forms"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#4403f2f0eee921b7ac9eba41dd1be1914c87835b"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#8842c0b6697a9acb0f50c8991b786c022dda8dec"
 dependencies = [
  "qsl-cst",
  "qsl-foundation",
@@ -1286,7 +1286,7 @@ dependencies = [
 [[package]]
 name = "qsl-foundation"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#4403f2f0eee921b7ac9eba41dd1be1914c87835b"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#8842c0b6697a9acb0f50c8991b786c022dda8dec"
 dependencies = [
  "qsl-attrs",
  "quire-exact",
@@ -1298,7 +1298,7 @@ dependencies = [
 [[package]]
 name = "qsl-package"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#4403f2f0eee921b7ac9eba41dd1be1914c87835b"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#8842c0b6697a9acb0f50c8991b786c022dda8dec"
 dependencies = [
  "qsl-attrs",
  "qsl-foundation",
@@ -1314,7 +1314,7 @@ dependencies = [
 [[package]]
 name = "qsl-replay"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#4403f2f0eee921b7ac9eba41dd1be1914c87835b"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#8842c0b6697a9acb0f50c8991b786c022dda8dec"
 dependencies = [
  "qsl-attrs",
  "qsl-cst",
@@ -1335,7 +1335,7 @@ dependencies = [
 [[package]]
 name = "qsl-semantics"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#4403f2f0eee921b7ac9eba41dd1be1914c87835b"
+source = "git+https://github.com/agent-ix/quire-spec-language?branch=main#8842c0b6697a9acb0f50c8991b786c022dda8dec"
 dependencies = [
  "agent-ix-extraction-frontend",
  "agent-ix-semantic-ir",
