@@ -37,22 +37,12 @@ use crate::{
         terminal::ReplaySettlement,
     },
     replay::{
-        function::{render_witness, DependencyLockError, ReplayInputs},
+        function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
         obligation::{frame_identity, frame_kind, ObligationIdentityError},
         state_clause::{IntegerValue, ObjectRef, SnapshotLink, SnapshotPopulation},
         witness::decode_playback,
     },
 };
-
-/// One document the replay reads from the request's byte provision, with the digest the request
-/// addresses it by.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProvidedDocument {
-    /// The document's digest record: `sha256-jcs` for a domain package or a state document.
-    pub digest: DigestRecord,
-    /// The document's bytes.
-    pub bytes: Vec<u8>,
-}
 
 /// Everything one frame replay needs beyond the proved unit. It names no obligation identity and
 /// no witness transcript: both are built from the harness and its playback.

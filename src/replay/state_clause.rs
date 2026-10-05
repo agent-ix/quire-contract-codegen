@@ -45,10 +45,7 @@ use crate::{
         },
         terminal::ReplaySettlement,
     },
-    replay::{
-        frame::ProvidedDocument,
-        function::{render_witness, DependencyLockError, ReplayInputs},
-    },
+    replay::function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
 };
 
 /// The state object's address in the snapshots: the population that holds it, its key in that
