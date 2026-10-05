@@ -38,12 +38,12 @@ use qsl_replay::{
     ReplayRefusal, ReplayResult, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
-    execute_kani_obligation, generate_state_frame_obligations, FrameReplayError,
-    KaniExecutionRequest, KaniInstallation, KaniRunOutcome, StateComparison, StateFieldDomain,
-    StateFrameHarness, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
-    StateFrameRequest, UnsupportedFrameEffect,
+    execute_kani_obligation, generate_state_frame_obligations, BoundNotResolvedCause,
+    FrameReplayError, KaniExecutionRequest, KaniInstallation, KaniRunOutcome, StateComparison,
+    StateFieldDomain, StateFrameHarness, StateFrameLoweringRefusal, StateFrameObligations,
+    StateFrameProperty, StateFrameRefusal, StateFrameRequest, UnsupportedFrameEffect,
 };
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2, CompleteLoweringRecordV2};
+use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use serde_json::{json, Value};
 
 const OBJECT: u32 = 4001;
@@ -76,6 +76,10 @@ struct Shape {
     /// Whether the clause binds a `result` parameter, as FR-341 binds one exactly when the
     /// operation declares a result.
     result: bool,
+    /// The name of the object's `balance` member, which the clause's reads carry in the graph.
+    condition_field: &'static str,
+    /// What the object's `balance` member holds, when it is not the `balance_bound` reference.
+    member: Member,
 }
 
 /// What the operation a fixture's clause anchors declares beyond `self`, for the state-clause
@@ -88,6 +92,19 @@ pub(crate) enum Declares {
     Parameter,
     /// A result.
     Result,
+}
+
+/// The object's `balance` member, for the grounds on which it gives the clause no `i64` range.
+#[derive(Clone, Copy, PartialEq)]
+enum Member {
+    /// A reference to the `balance_bound` range or plain integer type.
+    Declared,
+    /// A reference to a bound that is not an `integer_range`.
+    RationalBound,
+    /// A reference to an `integer_range` whose maximum is one past `i64::MAX`.
+    WideRange,
+    /// A literal value, not a reference.
+    Literal,
 }
 
 /// What a frame does beyond granting fields.
@@ -128,6 +145,8 @@ impl Shape {
         balance_bound: Some(model::FIELDS[0].1),
         audit_bound: model::FIELDS[1].1,
         result: false,
+        condition_field: "balance",
+        member: Member::Declared,
     };
 
     fn code(&self, base: u32) -> u32 {
@@ -193,9 +212,26 @@ fn pre_read(builder: &mut PackageBuilder, code: u32, read: &str, bound: &str) ->
 
 fn package_for(shape: &Shape) -> PackageBuilder {
     let mut builder = corpus_package();
-    let balance_key = match shape.balance_bound {
-        Some((minimum, maximum)) => builder.bound(&Bound::Integer(minimum, maximum)),
-        None => key(T_INTEGER),
+    let balance_key = match (shape.member, shape.balance_bound) {
+        (Member::RationalBound, _) => builder.bound(&Bound::Rational(1, 2, 1, 2)),
+        (Member::WideRange, _) => builder.bound(&Bound::Raw {
+            form: "integer_range",
+            bounded: "integer",
+            body: json!({"term": "aggregate", "members": [
+                member("min", literal("integer", "0")),
+                member("max", literal("integer", "9223372036854775808")),
+            ]}),
+            foreign: vec![],
+        }),
+        (Member::Literal, _) => key(T_INTEGER),
+        (Member::Declared, Some((minimum, maximum))) => {
+            builder.bound(&Bound::Integer(minimum, maximum))
+        }
+        (Member::Declared, None) => key(T_INTEGER),
+    };
+    let balance_value = match shape.member {
+        Member::Literal => literal("integer", "0"),
+        Member::Declared | Member::RationalBound | Member::WideRange => reference(&balance_key),
     };
     let audit_key = builder.bound(&Bound::Integer(shape.audit_bound.0, shape.audit_bound.1));
     // A second integer range keeps a bound reachable when `balance` names none.
@@ -206,7 +242,7 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         "object_type",
         &key(T_BOOLEAN),
         json!({"term": "aggregate", "members": [
-            member("balance", reference(&balance_key)),
+            member(shape.condition_field, balance_value),
             member("audit", reference(&audit_key)),
         ]}),
         &[balance_key.clone(), audit_key.clone()],
@@ -326,14 +362,21 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         ),
         &[],
     );
+    // The clause's reads are typed by an integer range even where the member gives none, so the
+    // comparison is well typed and the refusal is the engine's, not IR's.
+    let read_key = if shape.member == Member::Declared {
+        balance_key.clone()
+    } else {
+        audit_key.clone()
+    };
     let post_balance = field_read(
         &mut builder,
         shape.code(410),
         &object,
-        "balance",
-        &balance_key,
+        shape.condition_field,
+        &read_key,
     );
-    let pre_balance = pre_read(&mut builder, shape.code(411), &post_balance, &balance_key);
+    let pre_balance = pre_read(&mut builder, shape.code(411), &post_balance, &read_key);
     let post_audit = field_read(&mut builder, shape.code(400), &object, "audit", &audit_key);
     let pre_audit = pre_read(&mut builder, shape.code(401), &post_audit, &audit_key);
     let other = code_id(shape.code(420)).digest.to_string();
@@ -341,9 +384,9 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         &mut builder,
         shape.code(421),
         &other,
-        (&object, "balance", &balance_key),
+        (&object, shape.condition_field, &read_key),
     );
-    let pre_other = pre_read(&mut builder, shape.code(422), &post_other, &balance_key);
+    let pre_other = pre_read(&mut builder, shape.code(422), &post_other, &read_key);
     let zero = literal("integer", "0");
     let (left, right) = match shape.condition {
         Condition::PostGePre | Condition::PostLePre | Condition::Negated => {
@@ -711,14 +754,18 @@ fn tc_025_shapes_without_a_finite_encoding_are_refused_by_name() {
         }),
         UnsupportedFrameEffect::ForeignField
     ));
-    // The clause's own field declares no integer range.
+    // The clause's own field is typed by a plain integer type, no bound: the target is the
+    // unbounded type.
     assert_eq!(
         with(13, |shape| Shape {
             balance_bound: None,
             ..shape
         }),
         StateFrameRefusal::BoundNotResolved {
-            field: "balance".to_owned()
+            field: "balance".to_owned(),
+            cause: BoundNotResolvedCause::UnboundedType {
+                target: package::id(&key(T_INTEGER))
+            },
         }
     );
     // A field the frame grants or the clause reads that the caller's state lacks.
@@ -825,9 +872,142 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
             clause: &absent,
             ..request(&fixture, &STATE_FIELDS)
         }),
-        StateFrameRefusal::NotLowered { record }
-            if matches!(*record, CompleteLoweringRecordV2::InvalidInput { .. })
+        StateFrameRefusal::NotLowered { refusal }
+            if matches!(*refusal, StateFrameLoweringRefusal::InvalidInput { .. })
     ));
+}
+
+/// A field name read from the graph that is not a Rust identifier is a malformed clause at the
+/// node: not `InvalidField` and not `ConditionNotSupported`. IR admits a name that is an ASCII
+/// identifier but a Rust keyword, so a keyword reaches the engine in a clause's read and in a
+/// frame's grant, and each is refused there. A field name the caller supplies that is not an identifier is still
+/// `InvalidField`, naming it. Each assertion fails if the refusal moves to the other code.
+///
+/// Trace: FR-015-AC-67, TC-025
+#[test]
+fn tc_025_a_non_identifier_graph_field_name_is_a_malformed_clause() {
+    let read = Shape {
+        variant: 15,
+        condition_field: "not-an-identifier",
+        ..Shape::HEALTHY
+    };
+    assert_eq!(
+        refusal(&read, &STATE_FIELDS),
+        StateFrameRefusal::MalformedClause {
+            at: code_id(read.code(410))
+        }
+    );
+    // A Rust keyword is not an identifier to `syn` yet is one to IR's own check of a frame's
+    // granted name, so IR admits it and the engine alone refuses it: in a read at the read's
+    // node, and in a frame's grant at the frame node.
+    let keyword_read = Shape {
+        variant: 16,
+        condition_field: "type",
+        ..Shape::HEALTHY
+    };
+    assert_eq!(
+        refusal(&keyword_read, &STATE_FIELDS),
+        StateFrameRefusal::MalformedClause {
+            at: code_id(keyword_read.code(410))
+        }
+    );
+    let keyword_grant = Shape {
+        variant: 17,
+        condition_field: "type",
+        modifies: &["type"],
+        ..Shape::HEALTHY
+    };
+    assert_eq!(
+        refusal(&keyword_grant, &STATE_FIELDS),
+        StateFrameRefusal::MalformedClause {
+            at: fixture(&keyword_grant).frame
+        }
+    );
+    // The caller's own field list is the one place `InvalidField` is still named.
+    assert_eq!(
+        refusal(&Shape::HEALTHY, &["balance", "not-an-identifier"]),
+        StateFrameRefusal::InvalidField {
+            name: "not-an-identifier".to_owned()
+        }
+    );
+}
+
+/// The engine names the exact ground on which the object gives the clause's field no `i64`
+/// range, with the member's `value.target` node when it has one: the record carries the cause,
+/// so a swapped ground ships in it. Each assertion fails if its ground is reported as another.
+///
+/// Trace: FR-015-AC-66, TC-025
+#[test]
+fn tc_025_the_engine_names_the_ground_a_field_has_no_integer_range() {
+    let cause = |variant, member, balance_bound| {
+        let shape = Shape {
+            variant,
+            member,
+            balance_bound,
+            ..Shape::HEALTHY
+        };
+        match refusal(&shape, &STATE_FIELDS) {
+            StateFrameRefusal::BoundNotResolved { field, cause } => (field, cause),
+            other => panic!("expected BoundNotResolved, got {other:?}"),
+        }
+    };
+    let bound_of = |bound: Bound| package::id(&bound.key());
+    let field = "balance".to_owned();
+    assert_eq!(
+        cause(18, Member::RationalBound, None),
+        (
+            field.clone(),
+            BoundNotResolvedCause::NotIntegerRange {
+                bound: bound_of(Bound::Rational(1, 2, 1, 2))
+            }
+        )
+    );
+    assert_eq!(
+        cause(19, Member::WideRange, None),
+        (
+            field.clone(),
+            BoundNotResolvedCause::EndpointOutsideI64 {
+                bound: bound_of(Bound::Raw {
+                    form: "integer_range",
+                    bounded: "integer",
+                    body: json!({"term": "aggregate", "members": [
+                        member("min", literal("integer", "0")),
+                        member("max", literal("integer", "9223372036854775808")),
+                    ]}),
+                    foreign: vec![],
+                })
+            }
+        )
+    );
+    assert_eq!(
+        cause(21, Member::Literal, None),
+        (field, BoundNotResolvedCause::ValueNotReference)
+    );
+    // `MemberAbsent` has no engine-level case: IR refuses a read of a name its object does not
+    // declare when it admits the package, so the mapping test builds it directly.
+}
+
+/// The shape of the real-Kani test whose only valuation falsifies the contract. It owns fixture
+/// variant 20.
+fn single_valuation_shape() -> Shape {
+    Shape {
+        variant: 20,
+        balance_bound: Some((0, 0)),
+        audit_bound: (0, 0),
+        ..Shape::HEALTHY
+    }
+}
+
+/// Each variant owns its node codes, and the fixture registry panics when one code is bound to
+/// two bodies in a process. The ignored real-Kani test's fixture is built here with the default
+/// lane's, so a default-lane variant that reuses its variant fails every run, not only
+/// `--include-ignored`.
+///
+/// Trace: TC-025
+#[test]
+fn tc_025_the_kani_lanes_fixture_variant_is_not_shared_with_a_default_lane_variant() {
+    let single = fixture(&single_valuation_shape());
+    assert_eq!(single.clause, code_id(single_valuation_shape().code(300)));
 }
 
 /// `replay_frame` refuses an envelope whose `clause_node` or `occurrence_key` is not its
@@ -1087,12 +1267,7 @@ fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifi
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_a_violation_at_the_only_valuation_is_a_counterexample_not_the_covers_playback()
 {
-    let single = fixture(&Shape {
-        variant: 20,
-        balance_bound: Some((0, 0)),
-        audit_bound: (0, 0),
-        ..Shape::HEALTHY
-    });
+    let single = fixture(&single_valuation_shape());
     let counterexample = falsified(
         prove(&generate_over(&single, "deposit_debiting").postcondition),
         "postcondition `post.balance >= pre.balance` failed",

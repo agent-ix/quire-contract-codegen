@@ -143,14 +143,14 @@ pub use crate::core::diagnostic::{
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
 pub use core::canonical::DigestError;
 pub use kani::generate::frame::{
-    generate_state_frame_obligations, StateFrameObligations, StateFrameRefusal, StateFrameRequest,
-    UnsupportedFrameEffect,
+    generate_state_frame_obligations, StateFrameObligations, StateFrameRequest,
 };
 pub use kani::generate::negotiate::negotiate_kani_obligations;
 pub use kani::generate::outcome::{
-    DerivedDomain, InvalidObligationItem, KaniObligationError, KaniObligationOutcome,
-    KaniObligationRequest, ObligationDisposition, ObligationItem, ObligationRecord,
-    ObligationSubject, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    BoundNotResolvedCause, DerivedDomain, InvalidObligationItem, KaniObligationError,
+    KaniObligationOutcome, KaniObligationRequest, ObligationDisposition, ObligationItem,
+    ObligationRecord, ObligationSubject, StateFrameLoweringRefusal, StateFrameRefusal,
+    UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 pub use kani::identity::{
     EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,

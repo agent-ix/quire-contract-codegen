@@ -39,8 +39,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     core::canonical::{content_bytes, content_digest, DigestError},
     kani::{
-        generate::frame::{
-            declared_range, graph_bindings, graph_literal, ClauseShape, Graph, StateFrameRefusal,
+        generate::{
+            frame::{field_range, graph_bindings, graph_literal, ClauseShape, Graph},
+            outcome::StateFrameRefusal,
         },
         terminal::ReplaySettlement,
     },
@@ -764,7 +765,8 @@ enum Side {
 }
 
 /// Every member of the framed object, in declaration order, with the range the generator's own
-/// reader (`declared_range`) finds for it.
+/// reader (`field_range`) finds for it; a member that gives no `i64` range, for any ground
+/// `field_range` names, is a field with no range.
 fn state_fields(graph: &Graph<'_>, shape: &ClauseShape) -> Vec<StateField> {
     let object = &shape.scope.object;
     let members = graph
@@ -778,7 +780,7 @@ fn state_fields(graph: &Graph<'_>, shape: &ClauseShape) -> Vec<StateField> {
         .filter_map(|member| member.get("name")?.as_str())
         .map(|name| StateField {
             name: name.to_owned(),
-            range: declared_range(graph, object, name),
+            range: field_range(graph, object, name).ok(),
         })
         .collect()
 }
