@@ -139,7 +139,17 @@ authored).
   clause's, both read from `FunctionSite` and never derived by CG, and the existing `ObligationKind` of the
   harness replayed (O-09 adds no subject tag and no new kind: one identity per kind the function
   requests; FR-016-AC-21 to AC-23, implemented for the function path only: the V1 contract, scalar
-  and frame paths do not compute it yet). The function's `arguments` are all of its parameters
+  and frame paths do not compute it yet; the frame path's is specified by FR-024-AC-20 to
+  FR-024-AC-24, IR-459, and is planned). The frame path's subject is the operation's frame node
+  and its occurrence the frame's own occurrence, both read from `OperationSite` as the envelope's
+  `clause_node` and `occurrence_key` are (FR-015-AC-34), and the operation's anchor node is a
+  fifth member so that two operations with equal frames are two proofs (`StateFrameScope`:
+  "two harnesses with different scopes are never the same proof"). Its arguments are the
+  harness's state fields, named by field name under the anchor, each with its declared integer
+  range (the full `i64` range for a field with no declared range, which is what the harness
+  draws; open question Q-2 of FR-024). The harness's module and harness symbols, paths, unwind
+  bound and options are not members: they name the generated artifact and the harness identity
+  record (FR-015-AC-48 keeps the two distinct). The function's `arguments` are all of its parameters
   (O-09): a harness that leaves a parameter without an argument, or declares an integer with no
   bound (AD-016 arrow 5: `requires-bound`, never narrowed implicitly) or a Boolean with bounds,
   has no identity and is refused with a typed error. The retained per-argument bound is the
@@ -147,18 +157,24 @@ authored).
   The closed preimage, CG's own spelling (O-09 fixes the members, and no QSL or QSpec text pins
   the member names, the domain encoding, the node-id text form or a digest label as of this
   revision; AD-016 TK-05, the seed vector `obligationIdentitySha256`, is open): one RFC 8785
-  object with members `function` (the function node id as 64 lowercase hex digits),
-  `declaration` (`node` as 64 lowercase hex digits, `role` as the role string, `ordinal` as a
-  number), `kind` (the `ObligationKind` in snake case), and `arguments`, an array ascending by
-  the parameter's declared identifier, each `{domain, parameter}` with `parameter` the parameter
-  node id in lowercase hex and `domain` either `{"type":"boolean"}` or
+  object with members `subject` (the function node id, or for a state frame the frame node id,
+  as 64 lowercase hex digits), `occurrence` (`node` as 64 lowercase hex digits, `role` as the
+  role string, `ordinal` as a number: the function's `declaration` key, or the frame's own),
+  `kind` (the `ObligationKind` in snake case), `anchor` (the operation's anchor node id in
+  lowercase hex, present for a state-frame obligation and absent for a function) and
+  `arguments`, an array ascending by the argument's declared identifier (a parameter's, or a
+  state field's name), each `{domain, parameter}` with `parameter` the parameter node id in
+  lowercase hex, or `{domain, field}` with `field` the state field's name, and `domain` either `{"type":"boolean"}` or
   `{"type":"integerRange","minimum":"<decimal>","maximum":"<decimal>"}` (bounds are decimal
   strings because RFC 8785 integers above 2^53 are not exact). The digest is the plain SHA-256 of
   that text, with no domain label: interim, until QC-4 / TK-07 may add an FR-201 domain, which
   would change every identity. The golden text of the FR-016-AC-21 tests
   (`tests/it/skeleton_spine.rs`, `recomputed`) is the vector; it is written by hand, not by CG's
-  encoder. If QSL later recomputes or compares the identity, QSL pins the spelling and CG
-  follows in a follow-up; until then the spelling is CG's own and interim.
+  encoder. The code at this revision still spells the first two members `function` and
+  `declaration` and has no `anchor`; IR-459 renames them for the one scheme and rewrites the
+  vectors (FR-024-AC-20), and nothing reads the old spelling. If QSL later recomputes or compares
+  the identity, QSL pins the spelling and CG follows in a follow-up; until then the spelling is
+  CG's own and interim.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001).
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from
@@ -291,19 +307,28 @@ crate CG's lock selects.
   No code on those paths computes `ObligationIdentity`. QSL's type says QSL never hashes it.
   ADR-013 O-09 defines the preimage: the clause (or application) node id, its occurrence key,
   the obligation kind and the arguments (parameter node id and declared domain), source span
-  excluded. CG's frame envelope takes a caller `[u8; 32]` (`src/replay/frame.rs`); the function
-  path puts the transcript's byte digest in the request's obligation-identity slot at this base
-  (AD-002); that digest is replaced by the function-contract identity, not retained.
+  excluded. CG's frame envelope takes a caller `[u8; 32]` (`src/replay/frame.rs`, and the twin
+  passes `[1; 32]`), as does the postcondition state-clause path
+  (`StateClauseReplayInputs::obligation_identity`); the function path's transcript digest in the
+  request's slot is gone (AD-002), replaced by the function-contract identity. The frame path's
+  caller `[u8; 32]` is to be replaced by the identity minted from `OperationSite` and the
+  harness's `StateFrameIdentity` (FR-024-AC-20 to FR-024-AC-24, IR-459, planned); the state-clause
+  path's is open (FR-024, Open questions Q-1).
   The work is larger than one missing field. Three identity structs exist and none carries what
   O-09 needs. `KaniObligationIdentity` holds a `ClauseRef`, not the clause node id, and no
   occurrence key; its `ObligationBinding` (`identifier`, `role`, `primitive_type`,
   `integer_bounds`, `dependencies`) has no parameter node id. `ScalarObligationIdentity` holds a
   node id but no occurrence key, and its `ScalarObligationArgument` (`identifier`, `minimum`,
-  `maximum`) has no parameter node id. `StateFrameIdentity` (`state_frame.rs`) holds the clause
-  node id and no occurrence key, and it is the identity of the frame harness whose
-  counterexample goes into an envelope today (`src/replay/frame.rs`). Each must gain the
-  missing members before one function can compute the O-09 value. Recommendation below.
-- Encoder gap (measured at `main`): CG has no obligation-identity digest code and no
+  `maximum`) has no parameter node id. `StateFrameIdentity` (`kani/identity.rs`) holds the clause
+  node id, the operation scope and the property, and it is the identity of the frame harness whose
+  counterexample goes into an envelope (`src/replay/frame.rs`). It needs no occurrence key of its
+  own, because `OperationSite` carries the frame's, but it records no draw order for the state
+  fields, which the playback decode and the identity's arguments need (FR-024-AC-23). The other
+  two must gain the missing members before one function can compute the O-09 value.
+  Recommendation below.
+- Encoder gap (closed for the obligation identity: `core::canonical` is the one caller of
+  `quire-canonical` and the function path's identity uses it; the rest of this entry records what
+  was measured when the gap was open): CG had no obligation-identity digest code and no
   `quire_canonical` use. The content digest of a corpus case is `serde_json::to_vec` plus a
   newline in `deterministic_json` (`kani.rs:1045-1046`; a second copy at `oracle.rs:1111-1112`),
   then `ByteDigest::of` from the `qsl-replay` API (`bounded_kani_corpus.rs:340-342`). CG also

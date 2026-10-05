@@ -58,6 +58,35 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     operation-contract harness of the mutated-to-debit subject.
 17. Request a replay for an operation that declares a parameter, one that declares a result, and
     one that declares neither.
+18. Mint a frame identity and a function identity from fixed sites and arguments, and compute the
+    digest of each hand-written preimage text (members listed in an order other than the
+    encoder's). Read `Cargo.toml` and the source of `src/replay/obligation.rs`.
+19. Change one input of a frame identity at a time: the kind, the subject node, each part of the
+    occurrence key, the anchor, a field name, a field's range bound (the `i64` extremes
+    included) and the set of fields; reorder the arguments; change the module and harness
+    symbols, the state and subject paths, the unwind bound and the options. Compile, through
+    `qsl_replay::call_site`, two units that differ only in the frame's grants, two operations of
+    one object with equal frame text, and one unit twice with the second shifted by blank lines,
+    and mint each identity.
+20. Generate a frame harness and read its identity record; then request a replay with a
+    `postcondition` harness, and with a frame harness whose granted and checked fields are not
+    its state fields; read the record of a harness regenerated from equal inputs.
+21. Build a frame replay and read the request's and the envelope's `obligation_identity` against
+    the identity minted from the site and the harness; change a grant and read both again; scan
+    non-test `src/` for repeated-byte digest literals and read `FrameReplayInputs`.
+22. Decode the playback of the frame harness's falsified run into its state fields and read the
+    transcript `Witness::parse` is given; submit the playback of another harness, one with a
+    missing value and one with a value of the wrong width.
+23. Submit decoded field values at, and immediately outside, each declared range endpoint, and a
+    field with no declared range.
+24. Replay a forbidden-write playback with the invocation of its own pre state, and with the
+    invocation of a different pre state; replay with an invocation or pre snapshot that is
+    absent, unreadable, lacks the object, or lacks a field.
+25. Request a replay whose harness names another operation, another anchor and another frame.
+26. Read the frame envelope's `declared_domains` and the source of `src/replay/frame.rs`.
+27. With the installed backend (`make kani`), replay the real playback of the falsified frame
+    harness of a subject that writes a forbidden field, and of one that writes only a granted
+    field, from the harness's identity and the playback text alone.
 
 ## Expected Results
 
@@ -101,6 +130,33 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 17. The first two return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation
     and its declaration, with no document built and the executor not called; the third is not refused for its shape
     (FR-024-AC-19).
+18. Each identity equals the digest of its hand-written text, the function's under the renamed
+    members; `sha2` is not in `[dependencies]` and the source names no encoder function of
+    `quire_canonical`, no `sha2` and no `ByteDigest::of` (FR-024-AC-20).
+19. Each change alone changes the identity; the reorder and the symbol, path, unwind and option
+    changes do not; the two grant variants and the two equal-frame operations differ; the shifted
+    unit's identity equals the first (FR-024-AC-21).
+20. The record holds `state_fields` in draw order; the postcondition harness and the mismatched
+    field set each return `FrameReplayError::NotAFrame` with no `call_site` or replay; a
+    regenerated record is byte-identical (FR-024-AC-22, FR-024-AC-23).
+21. Request and envelope both equal the minted identity and both change with a grant; no
+    repeated-byte literal is in non-test source and `FrameReplayInputs` has no identity member
+    (FR-024-AC-24).
+22. The transcript is the one rendering function's, over the decoded values; the other harness's
+    playback, the short playback and the wrong-width playback each return a typed decode refusal
+    with `call_site` and replay not called (FR-024-AC-25).
+23. Endpoints are admitted; one outside returns `FrameReplayError::OutOfDomain` naming the field
+    with nothing called; the unranged field is not checked (FR-024-AC-26).
+24. The own-pre-state invocation settles `reproduced-with-evaluated-witness`, `violation`; the
+    different pre state, and each absent or unreadable document, return
+    `FrameReplayError::PreState` naming the field, both values or what is missing, with replay not
+    called (FR-024-AC-27).
+25. The operation mismatch returns `ScopeMismatch` before `call_site`; the anchor and frame
+    mismatches return it after, naming the member, with replay not called (FR-024-AC-28).
+26. `declared_domains` is empty, the source builds no `DeclaredDomain` or `DomainKey`, and the
+    header names QSL-345 once (FR-024-AC-29).
+27. The forbidden-write playback settles a reproduced violation naming the written field and the
+    granted-write playback settles `inconclusive` with no frame witness (FR-024-AC-30).
 
 ## Status
 
@@ -114,3 +170,6 @@ implemented by `src/replay/state_clause.rs` and the tests of
 is a real-Kani test in the module `kani_obligations_state_clause_replay`, run through the
 `kani_obligations` filter of `make kani`; its subject debits within the declared range, because a
 debit past the floor runs to a post state QSL's snapshot admission refuses.
+
+Steps 18 to 27 (FR-024-AC-20 to FR-024-AC-30, IR-459) are specified and not implemented: the frame
+path still takes a caller-supplied identity and renders a fixed transcript.
