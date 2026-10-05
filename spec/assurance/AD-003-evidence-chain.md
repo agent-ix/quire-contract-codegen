@@ -144,13 +144,14 @@ authored).
   and its occurrence the frame's own occurrence, both read from `OperationSite` as the envelope's
   `clause_node` and `occurrence_key` are (FR-015-AC-34), mapped into the same four members under
   their existing names; QSL gives each operation its own frame occurrence, so no member is added
-  and E-1 is not widened. Its arguments are the harness's state fields, each named by the framed
-  object's type node and the field name (FR-015-AC-48's form), with its declared integer range
-  when it declares one and no range member when it declares none, which is what the harness
-  draws. The harness's clause node, module and harness symbols, paths, unwind bound and options
-  are not members: they name the generated artifact and the harness identity record
-  (FR-015-AC-48 keeps the two distinct), and two postcondition clauses of one operation share one
-  frame identity. The function's `arguments` are all of its parameters
+  and E-1 is not widened. A frame has no parameters (its subject is `fn(&mut State)`), so its
+  `arguments` are empty: the state fields and their ranges are not members, because the frame
+  node names the grants and the ranges come from the model. The harness is tied to the identity
+  by the replay's checks (decode against `state_fields`, field set, domain, pre state and scope),
+  not by the digest. The harness's clause node, module and harness symbols, paths, unwind bound
+  and options are not members either: they name the generated artifact and the harness identity
+  record (FR-015-AC-48 keeps the two distinct), and two postcondition clauses of one operation
+  share one frame identity. The function's `arguments` are all of its parameters
   (O-09): a harness that leaves a parameter without an argument, or declares an integer with no
   bound (AD-016 arrow 5: `requires-bound`, never narrowed implicitly) or a Boolean with bounds,
   has no identity and is refused with a typed error. The retained per-argument bound is the
@@ -162,10 +163,8 @@ authored).
   as 64 lowercase hex digits), `declaration` (`node` as 64 lowercase hex digits, `role` as the
   role string, `ordinal` as a number: the function's `declaration` key, or the frame's own),
   `kind` (the `ObligationKind` in snake case), and `arguments`, an array ascending by the
-  argument's declared identifier (a parameter's, or a state field's name), each
-  `{domain, parameter}` with `parameter` the parameter node id in lowercase hex, or, for a state
-  field, `{field}` with `field` `{node, name}` (the object type node in lowercase hex and the
-  field's name) and a `domain` member only when the field declares a range; `domain` is either `{"type":"boolean"}` or
+  parameter's declared identifier (empty for a state frame), each `{domain, parameter}` with
+  `parameter` the parameter node id in lowercase hex and `domain` either `{"type":"boolean"}` or
   `{"type":"integerRange","minimum":"<decimal>","maximum":"<decimal>"}` (bounds are decimal
   strings because RFC 8785 integers above 2^53 are not exact). The digest is the plain SHA-256 of
   that text, with no domain label: interim, until QC-4 / TK-07 may add an FR-201 domain, which

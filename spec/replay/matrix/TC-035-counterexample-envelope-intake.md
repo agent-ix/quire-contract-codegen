@@ -58,16 +58,14 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     operation-contract harness of the mutated-to-debit subject.
 17. Request a replay for an operation that declares a parameter, one that declares a result, and
     one that declares neither.
-18. Mint a frame identity and a function identity from fixed sites and arguments, and compute the
+18. Mint a frame identity (empty `arguments`) and a function identity from fixed sites, and compute the
     digest of each hand-written preimage text (members listed in an order other than the
     encoder's); run the function path's existing golden vectors unedited. Read `Cargo.toml` and
     the non-test source of `src/replay/obligation.rs`.
-19. Change one input of a frame identity at a time: the kind, the `function` node, each part of
-    the `declaration` key, a field's object type node, a field name, a field's range bound (the
-    `i64` extremes included), whether a field declares a range, and the set of fields; reorder
-    the arguments; change the clause node, the module and harness symbols, the state and subject
-    paths, the unwind bound and the options; mint the identity of two clauses of one operation.
-    Compile, through
+19. Change one input of a frame identity at a time: the kind, the `function` node and each part
+    of the `declaration` key; change the clause node, the module and harness symbols, the state
+    and subject paths, the unwind bound, the options and the state fields and their ranges; mint
+    the identity of two clauses of one operation. Compile, through
     `qsl_replay::call_site`, two units that differ only in the frame's grants, two operations of
     one object with equal frame text, one unit twice with the second shifted by blank lines, and a
     unit with a clause added on an operation that sorts earlier, and mint each identity.
@@ -136,15 +134,16 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 18. Each identity equals the digest of its hand-written text, the function's golden vectors pass
     unedited; `sha2` is not in `[dependencies]` and the non-test source names no encoder function
     of `quire_canonical`, no `sha2` and no `ByteDigest::of` (FR-024-AC-20).
-19. Each change alone changes the identity; the reorder, the clause node and the symbol, path,
-    unwind and option changes do not; two clauses of one operation mint one identity; the two
+19. Each change alone changes the identity; the clause node, symbol, path, unwind, option, field
+    and range changes do not; two clauses of one operation mint one identity; the two
     grant variants and the two equal-frame operations differ; the shifted unit's identity equals
     the first; the identity after adding a clause on an earlier-sorting operation is read and
     recorded as the stated edge (FR-024-AC-21).
 20. The record holds `state_fields` in draw order; the postcondition harness returns
     `FrameReplayError::NotAFrame` and the mismatched field set `FieldSetMismatch`, each with no
-    `call_site` or replay; a regenerated record is byte-identical; a field with no declared range
-    is minted with no range member and is not refused (FR-024-AC-22, FR-024-AC-23).
+    `call_site` or replay; the minted frame identity has empty `arguments`; a regenerated record
+    is byte-identical; a field with no declared range is listed in `state_fields`, decoded and not
+    refused (FR-024-AC-22, FR-024-AC-23).
 21. Request and envelope both equal the minted identity and both change with a grant; the twin
     passes no identity and `FrameReplayInputs` has no identity member (FR-024-AC-24).
 22. The transcript is the one rendering function's, over the decoded values; the other harness's
