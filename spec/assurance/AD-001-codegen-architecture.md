@@ -209,8 +209,11 @@ The views and decisions above state the target. At this revision:
 
 - Kani publishes no machine-readable verdict, so a Kani release that changes its wording changes
   what the transcript parser recognises.
-- Kani tractability over production data structures is unmeasured beyond single scalar operations,
-  so which families need a bounded shadow is known only once their runs are measured (ADR-003).
+- Kani tractability over production data structures is measured only for single scalar operations
+  and, as of IR-241, for composite equality, where reaching the production `Value` type did not
+  finish in the probes FR-028's Rationale records; composite equality therefore takes a bounded
+  shadow (FR-015-AC-69). Which other families need one is known only once their runs are measured
+  (ADR-003).
 - The frame lowering waits on QSpec (ADR-004).
 - Platform formatting and path behaviour can threaten byte reproducibility.
 - The runtime release decision remains a human decision.
