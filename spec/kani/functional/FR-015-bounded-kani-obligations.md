@@ -91,8 +91,8 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
   the operation parameters (for a
   precondition or invariant, the state the clause is judged on is the drawn state); a
   postcondition's result and its bare post-state reads are the values the customer subject
-  produces, never drawn. A drawn value's declared domain is the object member's
-  `integer_range` for a state field and the IR `bounded_domain` of its type for a
+  produces, never drawn. A drawn value's declared domain is the `integer_range` that the
+  field's read declares for a state field (FR-015-AC-77) and the IR `bounded_domain` of its type for a
   parameter, never a caller descriptor; a produced value's domain is asserted, not
   assumed. The clause body is the node's Boolean condition, an inline term of the
   node, which may hold Boolean connectives, bounded-integer comparisons and the integer
@@ -342,8 +342,8 @@ whose harness it is. So a frame granting every field leaves the `contract` item 
 | Refusal (arm) | Disposition and reason |
 |---|---|
 | `NotLowered` (`RequiresBound`) | `requires_bound`, `unbounded_type` the record's |
-| `BoundNotResolved`, where the clause field's member `value.target` is an unbounded type (a node that is not a bound) | `requires_bound`, `unbounded_type` that target node |
-| `BoundNotResolved`, where that target is a bound that is not an `integer_range`, or an `integer_range` with an endpoint that does not fit `i64`, or the object has no member of that name, or the member's value is not a reference and so has no `value.target` | `unsupported`, `StateFrameRefused` carrying the refusal, which names the field and the bound node |
+| `BoundNotResolved`, where the clause field's read `result_type` is an unbounded type (a node that is not a bound; FR-015-AC-78) | `requires_bound`, `unbounded_type` that `result_type` node |
+| `BoundNotResolved`, where that `result_type` is a bound that is not an `integer_range`, or an `integer_range` with an endpoint that does not fit `i64`, or no read of the field names the object (`FieldNotRead`), or two reads of the field name two different `result_type` nodes (`ConflictingFieldReads`; FR-015-AC-78) | `unsupported`, `StateFrameRefused` carrying the refusal, which names the field and the bound node where it has one |
 | `NotLowered` (`Unsupported`) | `unsupported`, `NoFiniteEncoding` naming the record's `unsupported_node_id` and its family, the mapping negotiate gives a scalar `ExactScalarRefusal::Unsupported` |
 | `NotAStateClause` | `unsupported`, `UnknownNodeKind` naming the node, family and form |
 | `ConditionNotSupported` (a shape other than one integer comparison of one pre and one post read of one field through `self`: negation, a literal operand, an operator other than the six integer comparisons, a read through another parameter), `ObservationsDiffer`, `ObservationsSameSide` | `unsupported`, `StateFrameRefused` carrying the refusal. Not `NoFiniteEncoding`: these shapes have a finite encoding (planned FR-015-AC-40 encodes `not` and the six comparisons for the same node), this arm does not render them |
@@ -359,8 +359,11 @@ whose harness it is. So a frame granting every field leaves the `contract` item 
 
 The engine's `BoundNotResolved` is split to carry what the table keys on: the field, and a
 `cause` (`BoundNotResolvedCause`) that separates an unbounded type from a bound that is not an
-`integer_range`, an endpoint outside `i64`, an absent member and a value that is not a
-reference, each carrying the member's `value.target` node when it has one. The new reasons are
+`integer_range`, an endpoint outside `i64`, a field no read names (`FieldNotRead`) and a field whose
+reads disagree on their type (`ConflictingFieldReads`), each carrying the field read's `result_type`
+node when it has one (IR-624 renames the cause `MemberAbsent` to `FieldNotRead`, removes
+`ValueNotReference`, which has no ground once the type is read from a `result_type` the IR
+reader requires, and adds `ConflictingFieldReads`). The new reasons are
 `UnsupportedObligation::StateFrameRefused { refusal }`, serialized as
 `code: state_frame_refused` with the refusal's snake_case code and the node, field and
 effect it names (never the IR record), and `InvalidObligationItem::InvalidStatePath { path }`,
@@ -417,6 +420,63 @@ about items in a negotiated request.
   engine shall refuse with `MalformedClause` at the node (FR-015-AC-67).
 - If a refusal concerns only one role of a clause, then the generator shall record the other
   role's item by that role's own result (FR-015-AC-68).
+
+IR-624 (planned): where a state field's declared range is read from. Measured on the package QSL
+emits (`qsl_replay::call_site`'s `CallSite::package`, admitted by `CheckedPackageV2::read` with the
+domain package document and `quire.value.complete/v1` as evidence; the twin of
+`tests/state_frame_support/native_twin.rs`, `Twin::emitted_package`): the framed object's
+`model`/`object_type` node has body `{"members": [], "term": "aggregate"}`, and QSpec FR-322
+("Model-owned members") says it stays so: a model declaration node's semantic type is its own id, it carries no
+declaration and its body is empty, and its fields are resolved against the selected domain package
+document, not against the node. The `bounded_domain`/`integer_range` node (0 to 1000 for `balance`
+and for `audit`, one node since the bounds are equal) is the `result_type` of each
+`expression`/`query` node that reads a field: an application of `quire.op.record.project` over a
+`quire.op.model.deref` whose `operation.member` is `{kind: "field", name, declaration}`, with
+`declaration` the framed object's node. The Contract IR reader admits such an application only when
+its `result_type` names the node of the field's member type, which it derives from the selected
+domain document by the model-owned member resolution (QSpec FR-322 step 4, FR-322-AC-31 and
+FR-322-AC-34; Contract IR FR-038 and FR-040 "Model forms"; `check_model_member` in the reader's
+`operations.rs`). So in an admitted package the `result_type` of a field's read is the field's
+declared type, and an `integer_range` there is its declared range. That is the one place the
+package carries a range. The generator reads it and resolves nothing: it reads no domain document,
+walks no supertype and derives no type, because the reader's own resolution already ran at
+admission and no typed accessor for it is exported (Open question Q-5 of FR-024).
+
+The shared reader `field_range` therefore takes the field's reads, and not the object body:
+
+- A read of `field` on `object` is an `expression`/`query` node whose application operation is
+  `quire.op.record.project` with member kind `field`, member name `field` and member declaration
+  `object`; a `pre_read` node wraps such a read and names no member.
+- When the package holds reads of `field` on `object` that all name one `result_type`, the
+  generator shall take that node as the field's declared type, and as its range when the node is a
+  `bounded_domain`/`integer_range` with `i64` endpoints (FR-015-AC-77).
+- The generator shall not read the object node's body for a range (FR-015-AC-77).
+- If no read of `field` on `object` exists, then `field_range` shall return `FieldNotRead`; for the
+  clause's own field that cannot happen, because the clause reads it, and for any other field it
+  means the unit reads no such field (FR-015-AC-78).
+- If two reads of `field` on `object` name two different `result_type` nodes, then `field_range` shall
+  return `ConflictingFieldReads` and shall not pick one. An admitted package whose object is a model
+  declaration node cannot reach this, since the reader fixes each read's type to the one declared
+  type; a package whose object is not a model declaration node can (FR-015-AC-78).
+- The other grounds keep their causes (`UnboundedType`, `NotIntegerRange`, `EndpointOutsideI64`),
+  now carrying the `result_type` node (FR-015-AC-78).
+- Where a state field has no range, the clause's own field is refused (FR-015-AC-27, FR-015-AC-61)
+  and any other state field is listed in `state_fields`, has no entry in `domains` and is drawn
+  without an assumption, as FR-024-AC-23 settled for the record (FR-015-AC-78).
+- The field set and the draw order are not read from the package, which carries no field list: the
+  object body is empty, and the frame names only the granted fields. They are the request's
+  `state_fields`, the fields of the subject's state struct (FR-025), in the caller's order, as
+  today. The generator keeps its refusals that the clause's field and every granted field are among
+  them (FR-015-AC-29, FR-015-AC-79).
+- A field the model declares with a range that no read in the package names is listed without a
+  range: the harness draws it unconstrained, which is sound for the proof and wider than the model.
+  Closing that gap needs a typed accessor from the reader (Q-5 of FR-024); this generator does not
+  re-implement the resolution to close it.
+
+The code that follows this specification changes `field_range`, `state_domains` and the state-clause
+replay's field reader, and its fixture, in one change, so the generator and the replay cannot
+disagree on one package. Until it lands, those readers still read the object body, and the criteria
+below are planned.
 
 IR-264 (planned): the composite-equality family. Its shadow is the equality walk of QSpec FR-149's
 occurrence-pair plan over a fixed record, tuple and option shape, written as straight-line Rust over
@@ -499,7 +559,7 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-24 | A falsifying in-domain assignment of a plain bounded-integer comparison claim is reported through Kani's concrete playback. | Test (TC-025) |
 | FR-015-AC-25 | A valid declared census is folded into the harness identity, readiness is `ready` only when every dependency passed and `incomplete` while any is missing or failed, and proof execution is recorded `not_run`. | Test (TC-025) |
 | FR-015-AC-26 | One `postcondition` `state_clause` of an admitted package, whose condition is one integer comparison of the pre and post reads of one field through its first parameter `self`, yields a separate operation-contract harness and frame-effect harness for the operation its anchor names. Each has exactly one non-vacuity cover, and its identity is scoped to the operation, anchor, frame and framed object; the two harnesses of two clauses of one operation are written to different paths. | Test (TC-025) |
-| FR-015-AC-27 | The operation-contract harness assumes each state field in the integer range that the framed object's body member of the same name declares, and asserts the clause's comparison between the pre-state snapshot and the state after the subject runs; a clause whose field has no such range is refused. | Test (TC-025) |
+| FR-015-AC-27 | The operation-contract harness assumes each state field in the integer range that the field's read in the package declares (FR-015-AC-77), and asserts the clause's comparison between the pre-state snapshot and the state after the subject runs; a clause whose field has no such range is refused. | Test (TC-025) |
 | FR-015-AC-28 | The frame-effect harness takes the granted fields from the frame node's `modifies` entries and asserts every other state field the caller names unchanged. | Test (TC-025) |
 | FR-015-AC-29 | A state clause that is not a postcondition, whose condition is not one comparison of the pre and post reads of one field through `self` (a literal operand, a negation, two fields, two reads of one side, or a read through another parameter), whose frame creates, deletes or grants a relationship or a foreign field, whose frame grants every state field, whose field the caller's state lacks, or whose clause field declares no integer range, is refused with a typed reason and no harness; a malformed request is refused first. | Test (TC-025) |
 | FR-015-AC-30 | With the installed backend, the operation contract verifies for a healthy subject and is falsified, naming the postcondition, for a subject mutated to debit. | Test (TC-025) |
@@ -533,9 +593,9 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-58 | A test generates a harness through every emitting entry point (the precondition, V1 contract, scalar, state-clause and frame-effect families, `generate_kani_bundle`, and the corpus generator for each of its three families), parses each emitted source, and fails for any function attributed `#[kani::proof]` or `#[kani::proof_for_contract]` whose body does not contain exactly one `kani::cover!`, which must be the last statement, with no assertion after it and no other cover; and a scan of the non-test string literals of `src/` fails when a file other than the ones the test drives spells a proof attribute, or a driven file spells more proof attributes than the test counts; a spelling is `#[kani::` other than `requires`, `ensures`, `stub` and `unwind`, `kani::proof` or `proof_for_contract` in one literal, with `\` line continuations joined, which includes a `format!` template and a split `concat!` whose first fragment holds `#[kani::`, and the scan does not see a spelling assembled from fragments none of which holds `#[kani::` or `kani::proof`. | Test (TC-025) |
 | FR-015-AC-59 | A request of `StateFrame` items in which the first item is refused and later items are supported, requires-bound, unsupported or invalid yields exactly one `ObligationRecord` per item in request order, `kind` `postcondition` for a `contract` item and `frame` for a `frame` item; and each later item's record (disposition and reason) equals the record the same item has in a request holding that item only; a request of three refused items yields three records. | Test (TC-025) |
 | FR-015-AC-60 | A `StateFrame` item that yields is recorded `supported` carrying its harness symbol, and its harness, returned in the `state_frame_harnesses` field of `KaniObligationOutcome::Emitted` in request order, is byte-identical to the harness `generate_state_frame_role` returns for the same clause and role, and for a clause both of whose roles succeed to the corresponding harness `generate_state_frame_obligations` returns. PLANNED (IR-461): the comparison against `generate_state_frame_role` is not testable from `tests/it` (crate-private) and no V2 package builder exists under `src/`; byte identity holds by construction; the test compares against the public entry for a clause whose roles both succeed, and carries no trace tag of this criterion. | Test (TC-025) |
-| FR-015-AC-61 | A `StateFrame` item whose clause field's member references an unbounded type (a plain integer type, no bound) is recorded `requires_bound` with that member's `value.target` node as `unbounded_type`, and one whose lowering is a requires-bound record is recorded `requires_bound` with that record's `unbounded_type`, each with no harness. | Test (TC-025) |
+| FR-015-AC-61 | A `StateFrame` item whose clause field's read is typed by an unbounded type (a plain integer type, no bound) is recorded `requires_bound` with that read's `result_type` node as `unbounded_type`, and one whose lowering is a requires-bound record is recorded `requires_bound` with that record's `unbounded_type`, each with no harness. | Test (TC-025) |
 | FR-015-AC-62 | A `StateFrame` item whose lowering is an unsupported-family record is recorded `unsupported` with reason `NoFiniteEncoding` naming the record's node and family, and an item whose node is not a `state_clause` is recorded `unsupported` with `UnknownNodeKind`, each with no harness. | Test (TC-025) |
-| FR-015-AC-63 | A `StateFrame` item whose condition is a negation, compares to a literal, uses an operator other than the six integer comparisons, reads through a parameter other than `self`, compares two fields or compares two reads of one side, an item whose frame creates or deletes an object or grants a relationship or a foreign field (naming the effect), an item whose clause field's member references a bound that is not an `integer_range` or one with an endpoint outside `i64`, one whose member is absent from the object, one whose member's value is not a reference, and an item whose clause is not a postcondition, is malformed, whose frame grants every field, or whose lowering is an invalid-body, incomplete or over-budget record, is recorded `unsupported` with reason `StateFrameRefused` carrying that refusal and never `NoFiniteEncoding`, with no harness. Covered through a negotiated request except for a member absent from the object and the invalid-body, incomplete and over-budget lowering records, which no fixture reaches and which are covered only through the mapping test of FR-015-AC-66. | Test (TC-025) |
+| FR-015-AC-63 | A `StateFrame` item whose condition is a negation, compares to a literal, uses an operator other than the six integer comparisons, reads through a parameter other than `self`, compares two fields or compares two reads of one side, an item whose frame creates or deletes an object or grants a relationship or a foreign field (naming the effect), an item whose clause field's read is typed by a bound that is not an `integer_range` or one with an endpoint outside `i64`, one whose reads of the clause field name two different types (`ConflictingFieldReads`), one no read of whose field names the object (`FieldNotRead`), and an item whose clause is not a postcondition, is malformed, whose frame grants every field, or whose lowering is an invalid-body, incomplete or over-budget record, is recorded `unsupported` with reason `StateFrameRefused` carrying that refusal and never `NoFiniteEncoding`, with no harness. Covered through a negotiated request except for `FieldNotRead` and the invalid-body, incomplete and over-budget lowering records, which no fixture reaches and which are covered only through the mapping test of FR-015-AC-66. | Test (TC-025) |
 | FR-015-AC-64 | A `StateFrame` item with an unparsable state path or an unparsable item subject path, an invalid or lacking state field, an absent node, a repeat of an earlier item or a package other than the first item's is recorded `invalid_request` (`InvalidStatePath`, `InvalidStateField`, `UnknownNode`, `DuplicateItem`, `MixedStatePackages`), and the outcome is `Rejected` with every item's record and no harness bytes. | Test (TC-025) |
 | FR-015-AC-65 | A request holding `StateFrame` items and no items, more than `MAX_OBLIGATION_ITEMS`, an unparsable request subject path or an unwind bound outside `1..=MAX_OBLIGATION_UNWIND` is refused whole with the existing `KaniObligationError` variant and no record. | Test (TC-025) |
 | FR-015-AC-66 | A test builds every `StateFrameRefusal` variant (each `BoundNotResolved` case the table separates, and each of the six refusal arms of `NotLowered`) and calls the mapping on it, and each yields the disposition and reason of the table; the variants a request reaches only with a defective generator or a source over 1 MiB (`UnwindOutOfRange`, `InvalidGeneratedSyntax`, `RecordSerialization`) are built directly, and `ResourceLimitExceeded` is built directly or reached with a state-field list large enough to pass the ceiling; an inspection confirms the mapping is a `match` with no wildcard arm. | Test (TC-025) |
@@ -549,6 +609,10 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-74 | With the installed backend, the harness of the corpus case (two record-typed and two tuple-typed values compared with `=` and `!=`, a record with an optional field and a nested option, Boolean and bounded-integer leaves) is classified `Verified` with its cover satisfied within the memory and wall-clock ceilings its identity records, and its execution evidence records the versions and options of FR-028-AC-23; the refinement run of the same case agrees on every case it runs, and the case's refinement domain is at most the case cap, so the run is classified `exhaustive` and records its case count; a second case whose domain exceeds the cap (two unconstrained `i64`-range leaves) is classified `sampled`, which shows both classes. PLANNED (IR-264). | Test (TC-025) |
 | FR-015-AC-75 | With the installed backend each seeded mutant of the shadow is `Falsified` with a concrete playback: an `absent` slot read equal to a `null` slot; one field of the left operand compared with the next field of the right; the pair count omitting the payload pair of two present options; the count stopping after the first unequal field; the operator `NotEqual` rendered as `Equal`; and a field left out of the comparison. Run natively, each seeded mutant of the production oracle settles `refinement_failed` naming the first disagreeing case: the opposite operator emitted; an `absent` slot compared equal to a `null` slot; one pair charged too many for two present options; an optional field's declaration emitted as required (caught as the construction refusal `MissingField` or `NullForRequiredField` of the oracle's own environment, FR-028-AC-14, since the verdict and count do not change); and an oracle that completes a legal pair as `Refused`. A seeded mutant of the closure reader that the shadow, its expectation and the production oracle share is caught by FR-018-AC-23's independent read, not by refinement: one that drops a member, narrows an integer bound by one, or reads an optional member as required. A mutation of the order of the members the reader returns is not a mutant of this set (the `order_only` exemption of FR-028-AC-18). The unmutated corpus case verifies and its refinement run agrees. PLANNED (IR-264). | Test (TC-025) |
 | FR-015-AC-76 | The identity of a composite-equality harness records family `composite_equality`, proof subject `bounded_shadow`, the closure's declaration keys each with its leaves' declared domains, the operator, the size budget and the closure's pair-node count, the abstractions `representation`, `integer_widening`, `absent_payload` and `unrolled_walk` each with its discharging evidence, and the behaviours the proof does not exercise (`meter_limits`, `ill_typed_operands`, `charge_amounts_other_than_pairs`, `foreign_reference`, `declaration_reconstruction`) each with the native criterion that covers it (FR-018-AC-9, FR-018-AC-8, FR-018-AC-2, FR-018-AC-7, FR-018-AC-23) and that criterion's backing state, `backed` where the test matrix lists it covered and `unbacked` otherwise, which a test asserts against the matrix rows (today FR-018-AC-7, AC-8 and AC-9 are planned and FR-018-AC-2 is partly covered, so each of those four reads `unbacked`); a result whose covering criterion is `unbacked` is reported with that state and is not offered as closing a family row; changing the closure, a bound, the operator or the budget changes the identity; and regeneration from equal inputs is byte-identical. PLANNED (IR-264). | Test (TC-025) |
+| FR-015-AC-77 | PLANNED (IR-624). `field_range` reads a state field's declared range from the field's reads, and not from the framed object's body. Over the package QSL emits for the twin's unit (`Twin::emitted_package`, whose object body is empty) it returns 0 to 1000 for `balance` and for `audit`; over the hand-built fixture package it returns the same range for each field; the harness generator's `domains` and the state-clause replay's declared ranges hold the same range for each field of one package; and over a fixture whose object body is emptied, and over one whose object body declares a different range for a field, it still returns the range of that field's read. | Test (TC-025) |
+| FR-015-AC-78 | PLANNED (IR-624). For a field of the framed object, `field_range` returns `FieldNotRead` when no read names the object, `ConflictingFieldReads` naming both nodes when two reads name two types, `UnboundedType` carrying the `result_type` node when the type is a plain integer, `NotIntegerRange` for a bound that is not an `integer_range` and `EndpointOutsideI64` for an endpoint beyond `i64`; each cause of the clause's own field refuses the item as FR-015-AC-61 and FR-015-AC-63 state, and each maps to the disposition of the table (FR-015-AC-66). For the package QSL emits from a unit whose clauses read only `balance`, a harness is generated whose `state_fields` lists `audit`, whose `domains` has no entry for it and whose draw of it is unconstrained. | Test (TC-025) |
+| FR-015-AC-79 | PLANNED (IR-624). From the package QSL emits for the twin's unit, with no `Twin::aligned`, both roles of each clause (`BalanceNeverDrops`, `AuditNeverDrops`) are generated; each identity's `state_fields` equals the request's list in the request's order, its `domains` are the ranges of FR-015-AC-77, and its `scope.anchor` and `scope.frame` equal the ids `qsl_replay::call_site` names for the operation, with no rebase; a request whose list omits the clause's field or a granted field is refused as FR-015-AC-29 states. | Test (TC-025) |
+| FR-015-AC-80 | PLANNED (IR-624). With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. | Test (TC-025) |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 
@@ -562,6 +626,15 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-74 | Pass a corpus case whose cover is unsatisfiable, whose refinement ran over a narrower domain than the shadow drew, or whose refinement was `sampled` where its domain fits the cap. |
 | FR-015-AC-75 | Mutate only the production oracle or only the shadow; or accept an equivalent mutant as the test of a check (a permutation of member order, or swapping two descriptors of one type). |
 | FR-015-AC-76 | Record `backed` for a covering criterion the matrix lists planned, omit `declaration_reconstruction`, or leave the identity unchanged when a bound changes. |
+
+### Mutations FR-015-AC-77 to FR-015-AC-80 detect
+
+| ID | Mutation that breaks it |
+|----|-------------------------|
+| FR-015-AC-77 | Read the range from the object body's members, which the emitted package leaves empty; take the first or the last of two reads and not their agreement; or let the generator and the state-clause replay carry two readers that disagree on one package. |
+| FR-015-AC-78 | Pick the first of two disagreeing reads, treat a field no read names as the whole `i64` or as an error for a field that is not the clause's, return the `result_type` of another field's read, or collapse the five causes into one. |
+| FR-015-AC-79 | Rebase the scope onto the ids `call_site` names, reorder `state_fields` by name or by body position, or give an unread field a range of the whole `i64` in `domains`. |
+| FR-015-AC-80 | Generate the harness from the hand-built fixture and not from the emitted package, so the test never reads the emitted shape. |
 
 ## Dependencies
 

@@ -95,9 +95,10 @@ members against the operation's declaration in the domain package.
   - the state object's address (population, object key and object type), the `OperationName`, and
     one identity label (authority, identity, revision namespace and revision) for each of the
     invocation and its two snapshots, all supplied by the caller;
-  - each state field's declared integer range (FR-015-AC-27), and the operation's declared
-    parameters and result, read from the admitted package and the clause's node, which the
-    caller supplies.
+  - each state field's declared integer range, read from the field's reads in the admitted
+    package (FR-015-AC-77), the state fields in draw order, which the caller supplies
+    (FR-024-AC-31), and the operation's declared parameters and result, read from the admitted
+    package and the clause's node, which the caller supplies.
 - For a frame counterexample (IR-459): the falsified harness's `StateFrameIdentity` and the
   falsified run's playback text, both read by the generator, and the proving run's members, the
   operation, the invocation document reference, the pre, post and invocation documents and the
@@ -125,7 +126,7 @@ members against the operation's declaration in the domain package.
 - When a counterexample is to be replayed, the generator shall check every decoded or canonical
   value against the declared domain of the parameter it binds before it builds a replay request.
   For a state-clause counterexample the value is a state field, bound through `self`, and its
-  declared domain is the integer range its framed object's body member declares (FR-015-AC-27).
+  declared domain is the integer range the field's read in the package declares (FR-015-AC-77).
 - If a value lies outside its declared domain, then the generator shall report an out-of-domain
   counterexample and shall not call `replay`, `replay_frame` or `replay_state_clause`.
 - The generator shall fill every `WitnessPacket` member from the proving run's envelope members and
@@ -243,10 +244,15 @@ members against the operation's declaration in the domain package.
 - The generator shall add no second encoder, no hand-written key sorting or string escaping and no
   hashing outside `core::canonical` to the state-clause module, and no hashing dependency to
   `[dependencies]`.
-- The generator shall take the state fields to be the members of the framed object type that the
-  clause's anchor names, read from the supplied admitted package by the reader the harness
-  generator uses (FR-015-AC-27), so the generator and the replay read one range per field. Where
-  a field's member declares no integer range, the generator shall carry the field as an integer in
+- The generator shall take the declared state fields to be the `state_fields` that
+  `StateClauseReplayInputs` gains (IR-624), the fields the harness draws in the order it draws them,
+  because the package QSL emits holds no field list (the framed object's body is empty,
+  FR-015-AC-77) and the generator does not read the domain package's fields itself
+  (FR-024-AC-31).
+- The generator shall read each declared state field's range from the supplied admitted package
+  by the reader the harness generator uses (FR-015-AC-77), so the generator and the replay read
+  one range per field.
+- Where a declared state field has no range, the generator shall carry the field as an integer in
   both snapshots, shall not range-check it and shall give it no `DeclaredDomain`.
 - If the playback or the post state binds no value for a declared state field, then the generator
   shall return `StateClauseReplayError::MissingField` naming the field and shall supply no
@@ -293,7 +299,7 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name, and the payload's `clause` is that name and its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node and occurrence. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. | Test (TC-035) |
 | FR-024-AC-13 | The pre snapshot holds, for every declared field of the state object, the value the Kani playback bound to that field, and the post snapshot holds the post-state value the caller supplied for it; each is one `complete` population holding one object with each field as an integer. The invocation document holds the members the Behavior bullets state, with `parameters` empty, `result` null and `created` and `deleted` empty, and its `pre` and `post` carry each snapshot's identity and `sha256-jcs` digest. Changing one playback value changes the pre snapshot's bytes and digest, and changing one post-state value changes the post snapshot's. | Test (TC-035) |
 | FR-024-AC-14 | For a document vector whose members are in non-sorted source order, whose text holds characters JSON escapes (a quote, a backslash, a control character, a non-ASCII letter) and whose numeric members include a large integer, a number with a fractional part and an exponent form, the bytes and the digest the state-clause builder returns equal what `core::canonical`'s bytes and digest functions return for the same value. The source of the new state-clause module names none of `quire_canonical`'s encoder functions, `sha2`, `ByteDigest::of`, a `sort` call over document members or a hand-written string-escaping routine, and `sha2` stays out of `[dependencies]`. | Test (TC-035) |
-| FR-024-AC-15 | A playback that binds no value for a declared state field returns `StateClauseReplayError::MissingField` naming that field, the executor is not called, and no snapshot holds a default for it. A name the framed object does not declare returns `StateClauseReplayError::UndeclaredField` and a field bound twice returns `DuplicateField`, each naming the field, in the playback and in the post state alike. | Test (TC-035) |
+| FR-024-AC-15 | A playback that binds no value for a declared state field returns `StateClauseReplayError::MissingField` naming that field, the executor is not called, and no snapshot holds a default for it. A name that is not among the replay's declared state fields (FR-024-AC-31) returns `StateClauseReplayError::UndeclaredField` and a field bound twice returns `DuplicateField`, each naming the field, in the playback and in the post state alike. | Test (TC-035) |
 | FR-024-AC-16 | For a subject mutated to violate the postcondition, the replay settles `reproduced-with-evaluated-witness` with category `violation` and an evaluated `false`. For the unmutated subject's run over the same pre state it settles `inconclusive` with cause `Verdicts` (`violation` proved, `success` replayed). The envelope is on the `Witness` arm with a payload `witness` of none in both cases. | Test (TC-035) |
 | FR-024-AC-17 | A state field value outside its declared integer range returns `StateClauseReplayError::OutOfDomain` naming the field and the executor is not called. The range's two endpoints are admitted and the values one below and one above are not. | Test (TC-035) |
 | FR-024-AC-18 | With the installed backend, the falsified operation-contract harness of a postcondition state clause over a subject mutated to debit is replayed from its real Kani playback through `replay_state_clause` and settles `reproduced-with-evaluated-witness`, `violation`. The test is `tc_035_real_kani_state_clause_counterexample_replays_through_qsl` in the module `kani_obligations_state_clause_replay`, so the `kani_obligations` filter of `make kani` selects it. | Test (TC-035) |
@@ -308,7 +314,20 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-27 | The decoded pre-state is tied to the invocation: for every state field, the integer the pre snapshot (the provided document whose `sha256-jcs` digest the invocation's `pre` names) holds for the object the invocation's `self` addresses equals the decoded value, and a field that differs returns `FrameReplayError::PreState` naming the field, the decoded value and the snapshot's value; an invocation or pre snapshot that is not among the provided documents, is not the document shape the state-clause path writes (the typed leaf shapes of `src/replay/state_clause.rs`), or lacks the object or a field returns `PreState` naming what is missing. A provided document whose bytes do not match the digest it is addressed by is not a `PreState` refusal: the tie reads the documents only after QSL's own request decode has checked every provided document against its digest, so that case returns `FrameReplayError::Refused` carrying QSL's refusal and its catalog code. None calls `replay_frame`. A forbidden-write playback replayed against the invocation of a different pre state is refused, and the invocation of its own pre state settles `reproduced-with-evaluated-witness` with category `violation`. | Test (TC-035) |
 | FR-024-AC-28 | A harness whose `scope.operation` is not the operation requested returns `FrameReplayError::ScopeMismatch` naming `operation` before `call_site` is called; one whose `scope.anchor` or `scope.frame` is not the anchor or frame `call_site` names returns `ScopeMismatch` naming that member and does not call `replay_frame`. The harness's module and harness symbols name the generated artifact, are not members of the identity, and are checked only by the decode (FR-024-AC-25). | Test (TC-035) |
 | FR-024-AC-29 | The frame envelope's `declared_domains` is the empty list, no source of `src/replay/frame.rs` builds a `DeclaredDomain` or a `DomainKey`, and the module's header states, once, that the declaration is empty until QSL-345 settles the declared-domain key and refuses an empty declaration. The frame path adopts no key shape before then, whatever shape another path builds. | Test (TC-035) |
-| FR-024-AC-30 | With the installed backend, the real playback of the falsified frame harness of a subject that writes a forbidden field is replayed through `FrameReplay::new` and `replay`, the caller supplying the harness's `StateFrameIdentity`, the playback text and the inputs of FR-024's Inputs list but no obligation identity and no transcript, and settles a reproduced violation naming the written field. The test rebases the harness's `scope.anchor` and `scope.frame` onto the node ids `qsl_replay::call_site` names for the twin's compiled unit (`Twin::aligned`), because the hand-built fixture package the harness is generated from has node ids of its own. That the package QSL itself emits carries those same ids is asserted separately; that a harness can be generated from that package is not yet possible, because the field-range reader finds no member in the object type QSL emits (both measured in Current state). A subject that writes only a granted field leaves its harness verified and yields no playback, so it has no case here. The test is `tc_035_real_kani_frame_counterexample_replays_through_qsl` in the module `kani_obligations_state_frame`, so the `kani_obligations` filter of `make kani` selects it. | Test (TC-035) |
+| FR-024-AC-30 | With the installed backend, the real playback of the falsified frame harness of a subject that writes a forbidden field is replayed through `FrameReplay::new` and `replay`, the caller supplying the harness's `StateFrameIdentity`, the playback text and the inputs of FR-024's Inputs list but no obligation identity and no transcript, and settles a reproduced violation naming the written field. The test rebases the harness's `scope.anchor` and `scope.frame` onto the node ids `qsl_replay::call_site` names for the twin's compiled unit (`Twin::aligned`), because the hand-built fixture package the harness is generated from has node ids of its own. That the package QSL itself emits carries those same ids is asserted separately; that a harness can be generated from that package and replayed with no rebase is the case of FR-024-AC-34 (planned, IR-624; measured in Current state). A subject that writes only a granted field leaves its harness verified and yields no playback, so it has no case here. The test is `tc_035_real_kani_frame_counterexample_replays_through_qsl` in the module `kani_obligations_state_frame`, so the `kani_obligations` filter of `make kani` selects it. | Test (TC-035) |
+| FR-024-AC-31 | PLANNED (IR-624). The state-clause replay's declared state fields are the `state_fields` of its inputs, in that order, and not the members of the framed object's body. Over the package QSL emits for the twin's unit (`Twin::emitted_package`, object body empty), a playback and a post state that bind `balance` and `audit` are not refused as `UndeclaredField`; a field of the list that a playback omits returns `MissingField` naming it, and a bound name outside the list returns `UndeclaredField` naming it; each field's range is the one FR-015-AC-77 reads, so the endpoints are admitted and the values one below and one above return `OutOfDomain` (FR-024-AC-17); a listed field with no range is carried as an integer, is not range-checked and has no `DeclaredDomain`. | Test (TC-035) |
+| FR-024-AC-32 | PLANNED (IR-624). A frame harness generated from the package QSL emits for the twin's unit, with `Twin::aligned` not called, is replayed through `FrameReplay::new` and `replay`: its `scope.anchor` and `scope.frame` are the ids `call_site` names, so no `ScopeMismatch` arises; the playback of a forbidden write over the invocation of its own pre state settles `reproduced-with-evaluated-witness` with category `violation` naming the written field; the harness's `state_fields` and `domains` equal those generated from the hand-built fixture for the same request; and a playback value one outside a declared range returns `OutOfDomain` (FR-024-AC-26). | Test (TC-035) |
+| FR-024-AC-33 | PLANNED (IR-624). A postcondition harness generated from the package QSL emits for the twin's unit, with no alignment of any identity, is replayed through `StateClauseReplay::new` and `replay`: the playback of the subject mutated to debit settles `reproduced-with-evaluated-witness` with category `violation` and an evaluated `false`, and the unmutated subject's run over the same pre state settles `inconclusive` with cause `Verdicts` (the cases of FR-024-AC-16), the clause node being the one `call_site` names for `BalanceNeverDrops`. | Test (TC-035) |
+| FR-024-AC-34 | PLANNED (IR-624). With the installed backend, the real playback of the falsified frame harness of a subject that writes a forbidden field (the case of FR-024-AC-30) and the real playback of the falsified postcondition harness of a subject mutated to debit (the case of FR-024-AC-18) each replay and settle as those criteria state, the harness of each generated from the package QSL emits and no `Twin::aligned` call in either test. The tests are in the modules `kani_obligations_state_frame` and `kani_obligations_state_clause_replay`, so the `kani_obligations` filter of `make kani` selects them. | Test (TC-035) |
+
+### Mutations FR-024-AC-31 to FR-024-AC-34 detect
+
+| ID | Mutation that breaks it |
+|----|-------------------------|
+| FR-024-AC-31 | Read the declared fields from the framed object's body, so the emitted package declares none; sort the list by name; accept a name outside the list; or give an unranged listed field a range of the whole `i64`. |
+| FR-024-AC-32 | Rebase the harness's scope onto `call_site`'s ids before the replay, generate the harness from the hand-built fixture, or drop the ranged field from `domains`. |
+| FR-024-AC-33 | Generate the harness from the hand-built fixture, or give the replay a field list read from the package's object body. |
+| FR-024-AC-34 | Run the real-Kani cases over the hand-built fixture's harness, or keep `Twin::aligned` in either test. |
 
 A transcript `Witness::parse` refuses is an adapter
 refusal under FR-016-AC-11.
@@ -363,16 +382,25 @@ FR-024-AC-11 to FR-024-AC-30:
   anchor binds that frame (`tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names`),
   so the generator's node ids and the replay's wire ids are one id and a production harness
   generated from QSL's package needs no rebase.
-- Open, unchecked: a frame harness has not been generated from that emitted package, so every
-  positive frame-replay test, the real-Kani one included, still generates its harness from the
-  hand-built fixture package and rebases the scope with `Twin::aligned`. Measured reason: the
-  object type node QSL emits has an empty body (`members: []`), while the field-range reader the
-  harness generator and the state-clause replay share (`field_range`, FR-015-AC-27) reads a
-  field's range from the object body's members, so generation from the emitted package refuses
-  `BoundNotResolved` with cause `MemberAbsent`
-  (`tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`). Reading ranges
-  from the shape QSL emits is a change to that reader, outside FR-024-AC-20 to AC-30; until it is
-  made, the end-to-end replay from an emitted-package harness cannot be tested.
+- Planned, IR-624 (FR-015-AC-77 to FR-015-AC-80 and FR-024-AC-31 to FR-024-AC-34): until the code
+  change lands, no harness has been generated from that emitted package, so every positive
+  frame-replay and state-clause test, the real-Kani ones included, still generates its harness from
+  the hand-built fixture package and rebases the scope with `Twin::aligned`. Measured reason: the
+  object type node QSL emits has an empty body (`members: []`, as QSpec FR-322 requires of a model
+  declaration node), while the field-range reader the harness generator and the state-clause
+  replay share (`field_range`, FR-015-AC-27) reads a field's range from the object body's members,
+  so generation from the emitted package refuses `BoundNotResolved` with cause `MemberAbsent`
+  (`tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`), and the
+  state-clause replay, which takes its state fields from the same body, finds none. Measured
+  remedy, tried in a scratch probe that was not committed: with `field_range` reading the
+  `result_type` of the field's `expression`/`query` read, both roles generate from the emitted
+  package and `domains` is `balance` 0 to 1000 and `audit` 0 to 1000; for a unit whose clauses
+  read only `balance`, `audit` has no read, so no range. The design is FR-015's IR-624 section:
+  the range is read from the field's read, whose type the IR reader admits only as the declared
+  member type; the field set and draw order are the request's `state_fields` (FR-024-AC-31); the
+  rest is Q-5. The two criteria this changes in text, FR-015-AC-27 and FR-024-AC-15, are
+  asserted by their existing tests against the pre-IR-624 reader until the code change replaces
+  both.
 - `FR-024-AC-1` to `FR-024-AC-10` are planned and have no test of their own. `quire coverage
   --strict` does not count them as unbacked (66 unbacked rows on `main` before IR-460; 44 on
   `main` before IR-459 and 44, none contradicted, at the head that implemented the frame path, the
@@ -392,14 +420,30 @@ an answer to Q-1, Q-3 or Q-4, and a later answer to Q-3 would change every ident
 
 - Q-1. The postcondition state-clause path takes a caller-supplied `obligation_identity`
   (`StateClauseReplayInputs`). Whether it takes the harness's `StateFrameIdentity` and mints the
-  identity too, and how a postcondition harness names the state fields it draws, belongs to the
-  state-clause code. Packet assembly stays local to each path and whichever code change lands
+  identity too belongs to the state-clause code; how the replay is given the state fields the
+  harness draws is settled by FR-024-AC-31 (a `state_fields` member of its inputs). Packet assembly stays local to each path and whichever code change lands
   second extracts the shared piece; this requirement assigns neither.
 - Q-3. Whether the identity needs a digest domain label (AD-003 R-S3, QC-4 / TK-07). Adding one
   changes every identity once.
 - Q-4. The claimed change is caller-supplied and is not tied to the post snapshot, as the pre
   state now is tied (FR-024-AC-27). Deriving it from the two snapshots needs the shared document
   building piece of Q-1.
+
+- Q-5 (Contract IR, IR-624). The checked package QSL emits carries no field list and no range for
+  a field no clause reads: the object body is empty by QSpec FR-322, and a range is the
+  `result_type` of a field read (FR-015's IR-624 section). The declared range of every field of
+  the framed object, read or not, and the object's effective field set, own and inherited, live
+  only in the selected domain package document, which the Contract IR reader resolves at admission
+  (`DomainModel::resolve` and `field_type`, FR-038 and FR-040 "Model forms") and then drops: that
+  module and its types are private (`model_members`, `pub(super)`), and an admitted
+  `CheckedPackageV2` retains only its wire, node kinds and byte limit. CG will not re-read or
+  re-resolve the document (no copy of the resolution). What would close it: a public typed accessor
+  on the admitted package that returns, for a `model`/`object_type` node, its effective field
+  members each with its name and derived member type (`Int[lo, hi]` as its bounds), computed by the
+  resolution the reader already runs, which needs the reader to retain the resolved model. Until it
+  exists, an unread field is carried without a range and a harness draws it unconstrained, which is
+  wider than the model, and the field set stays the request's. Not decided here: whether QSL
+  should instead emit a read-free declaration of each state field's type.
 
 Settled here and not open: a frame's `arguments` are empty and E-1 is not widened. A state field
 with no declared range is carried in the record and decode, which draw it unconstrained, and is
