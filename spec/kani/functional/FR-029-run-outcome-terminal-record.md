@@ -72,12 +72,18 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   [FR-028](./FR-028-bounded-proof-ceilings.md)) and the SUCCESS check count its transcript reports.
 - For a falsified outcome, the replay settlement of its counterexample, as the Description states
   it.
+- Planned (IR-241): the proof subject of the harness (`production` or `bounded_shadow`, FR-028) and,
+  for a verified outcome, its proof strength (FR-028-AC-17). A harness whose family has no shadow
+  carries subject `production` and strength `production_proved`.
 
 ## Outputs
 
 - One `qsl_replay::TerminalValue` for every pair the Inputs define.
 - A typed refusal, `TerminalPairError`, for a pair they do not: a falsified outcome with no replay
   settlement (`MissingSettlement`), or any other outcome with one (`UnexpectedSettlement`).
+- Planned (IR-241): two more `TerminalPairError` variants, `NonProductionProof` (carrying the proof
+  strength) for a verified outcome whose strength is not `production_proved`, and `ShadowCounterexample`
+  for a falsified outcome of a `bounded_shadow` harness. Neither returns a terminal value.
 
 ## Behavior
 
@@ -122,6 +128,36 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   contract, not a verdict on the property.
 - The Kani adapter shall map a falsified outcome to `Refuted` only with a reproduced replay. A
   falsified outcome whose replay did not reproduce it is never `Refuted`.
+- Planned (IR-241): the Kani adapter shall map a verified outcome to `Proved` only when its proof
+  strength is `production_proved` (FR-029-AC-17). The `verified` rows of the first table read that
+  way, and only that way, once FR-028-AC-17 lands.
+- Planned (IR-241): The Kani adapter shall map every proof strength of a verified outcome by the
+  strength table below, in one `match` over the closed set of FR-028-AC-17's strengths with no
+  wildcard arm, so a strength added to FR-028-AC-17 fails to compile until the table has its row
+  (FR-029-AC-17).
+
+  | Proof strength of a verified outcome | Result |
+  |---|---|
+  | `production_proved` | `Proved { success_checks: n }`, as the first table states |
+  | `shadow_proved_refinement_exhaustive` | `TerminalPairError::NonProductionProof` carrying the strength, no terminal value |
+  | `shadow_proved_refinement_sampled` | the same |
+  | `shadow_proved_refinement_not_run` | the same |
+  | `shadow_proved_refinement_inconclusive` | the same |
+  | `refinement_failed` | the same |
+
+  No row yields `Proved`, `Refuted`, `Failed` or `Incomplete` but the first, whatever the shadow
+  harness settled.
+- Planned (IR-241): If a falsified outcome is of a `bounded_shadow` harness, then the Kani adapter shall
+  refuse the pair with `TerminalPairError::ShadowCounterexample` and return no terminal value,
+  because a shadow counterexample has no replay: FR-025 has no binding for a composite leaf, so it
+  cannot reach `qsl_replay::replay`, and it is never `Refuted` (FR-029-AC-17).
+- Planned (IR-241): an inconclusive outcome of a `bounded_shadow` harness maps as every other
+  inconclusive outcome does, because it asserts no proof.
+
+The two refusals above are interim and are an exception to "every run item has exactly one terminal
+record": no QSL terminal value says "proved over a bounded shadow", and this repository invents none.
+Which value a shadow-proved or shadow-falsified composite equality settles to is an open question for
+QSL, below.
 - The Kani adapter shall classify a fault by walking the whole error the replay path returned, not
   by its top variant. A fault is `ReplayRefusal::Fault`, `ReplayRefusal::Admission` carrying
   `AdmissionFailure::Fault`, and `CallSiteRefusal::Fault`, which reaches the map directly and wrapped
@@ -184,6 +220,22 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 | FR-029-AC-14 | `falsified` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-040) |
 | FR-029-AC-15 | A falsified outcome given no replay settlement is refused with `TerminalPairError::MissingSettlement`, and each other outcome (`verified`, `cover-unsatisfied` and every inconclusive reason) given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns a terminal value. | Test (TC-040) |
 | FR-029-AC-16 | The state-clause replay path (FR-024) settles as the other replay paths do: a `StateClauseReplayResult` that settles `ReproducedWithEvaluatedWitness` in category `violation` is a reproduction and an `inconclusive` one is a disagreement carrying its `DisagreementCause`, so `falsified` maps to `Refuted` and `Inconclusive(ReplayParity)`; `StateClauseReplayError::Refused` and `CallSite` read as `ReplayRefusal` and `CallSiteRefusal` do for a non-fault refusal (`Inconclusive(ReplayRefused)` with its catalog code; their fault reading is FR-029-AC-10's), and `Dependencies` as `DependencyLockError` does; `Name`, `Transcript`, `Envelope`, `Document`, `MissingField`, `UndeclaredField`, `DuplicateField`, `OutOfDomain` and `UnsupportedOperationShape` carry no QSL code and each maps to `Failed`. A missing state field in CG's own harness playback and a value outside the proof bound are CG defects, and an operation shape CG does not support is a CG limit, not a QSL data refusal; none maps to `Incomplete` or to `Inconclusive(ReplayRefused)`. | Test (TC-040) |
+| FR-029-AC-17 | A verified outcome with proof strength `production_proved` maps to `Proved { success_checks: n }`; a verified outcome with each other strength of the strength table (the four `shadow_proved_*` strengths, `exhaustive`, `sampled`, `not_run` and `inconclusive`, and `refinement_failed`: every strength FR-028-AC-17 names) is refused with `TerminalPairError::NonProductionProof` carrying that strength and yields no terminal value, never `Proved`; a falsified outcome of a `bounded_shadow` harness is refused with `TerminalPairError::ShadowCounterexample` and yields no terminal value, never `Refuted`; and an inconclusive outcome of a `bounded_shadow` harness maps as FR-029's other inconclusive rows do; and the strength map is total: the set of strengths the test enumerates equals the set FR-028-AC-17 names, and a strength with no row fails the build or the test. PLANNED (IR-241). | Test (TC-040) |
+
+### Mutation FR-029-AC-17 detects
+
+| ID | Mutation that breaks it |
+|----|-------------------------|
+| FR-029-AC-17 | Add a proof strength to FR-028-AC-17 without a row here, or map it through a wildcard arm to `Proved` or `Failed`, so a verified shadow harness whose refinement hit a ceiling has no defined output or reads as proved. |
+
+## Open Questions
+
+- **Which terminal value does a shadow result settle to? (QSL)** `Proved` is read over the property
+  the run proved, and a `bounded_shadow` result proves the shadow, not the production code. FR-029-AC-17
+  refuses it a terminal value for now. Candidates: `Inconclusive` with a new cause; or a proved
+  strength carried to QSL beside `Proved`. This repository does not choose, and invents no terminal
+  value. The same question covers a falsified shadow harness, which also has no replay path until
+  FR-025 binds a composite leaf.
 
 ## Dependencies
 

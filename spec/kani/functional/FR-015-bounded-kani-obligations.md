@@ -7,6 +7,8 @@ relationships:
     type: satisfies
   - target: ix://agent-ix/quire-contract-codegen/FR-014
     type: depends_on
+  - target: ix://agent-ix/quire-contract-codegen/FR-018
+    type: references
   - target: ix://agent-ix/quire-specification/FR-196
     type: references
   - target: ix://agent-ix/quire-specification/TC-218
@@ -39,6 +41,15 @@ bundle generator (`generate_kani_bundle`) and the bounded Kani corpus generator 
 a harness with none, so a run of either could not classify `Verified` (FR-017-AC-4); both
 now end their harness with one. FR-015-AC-53 to FR-015-AC-58 state what each of the seven
 kinds' covers witnesses and guard against an emitted harness without one.
+
+Planned (IR-264, IR-241): composite equality over records and tuples is the first family whose
+production harness cannot verify within any ceiling this crate has measured (FR-028, Rationale), so
+it proves its claim over a bounded shadow together with a refinement obligation, as ADR-003 Q1
+decides. FR-015-AC-69 to FR-015-AC-76 state that family's item, drawn arguments, assertions,
+source shape, refusals, real-Kani corpus case, seeded mutants and identity; FR-028-AC-13 to
+FR-028-AC-24 state the family-agnostic contract they use. The scalar families (Boolean, bounded
+integer) keep their production harnesses, and the shadow supports no other family yet (FR-015-AC-73
+refuses each).
 
 Rationale (IR-464): a corpus case draws no symbolic input and assumes nothing, so it has
 no precondition for a cover to witness and no assumption that could make its cover
@@ -89,6 +100,13 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
 - The V2 census input: an optional declared proof-dependency census per V2
   obligation, carried by the same typed census request and readiness types the
   corpus uses, and not by `ProofDependencyGraph`.
+- A composite-equality claim: one `binary` `expression` node of an admitted `CheckedPackageV2`
+  that [FR-018](../../oracle/functional/FR-018-composite-equality-oracles.md) generated an oracle
+  for, with that oracle's claim-map entry (its reconstructed declaration closure, in declaration
+  order, with each member's presence and each leaf's type and bound) and its typed equality
+  descriptor. The descriptor selects the operator and the operand types and never a bound; every
+  bound comes from the IR `bounded_domain` nodes the closure reaches. Each operand is a parameter
+  or a literal. The request also carries the refinement case cap of FR-028.
 
 ## Outputs
 
@@ -400,6 +418,57 @@ about items in a negotiated request.
 - If a refusal concerns only one role of a clause, then the generator shall record the other
   role's item by that role's own result (FR-015-AC-68).
 
+IR-264 (planned): the composite-equality family. Its shadow is the equality walk of QSpec FR-149's
+occurrence-pair plan over a fixed record, tuple and option shape, written as straight-line Rust over
+`bool`, `i64`, `Option` and plain structs. It is generated from the item's declaration closure, so
+the closure's shape is the only thing it knows about the operands, and it imports nothing from the
+evaluator the production oracle calls. The assertion's expectation is computed from the same drawn
+values by FR-149's own rules and shares no function with the shadow where one can be written
+without; the helper they cannot avoid sharing, the closure reader, is listed in the identity
+(FR-028-AC-18). Its outputs are of two kinds. What it returns that the comparison reads (which
+members exist, their presence, each leaf's bound) is `value_bearing`: the production oracle is built
+through the same reader (FR-018-AC-21), so refinement cannot see a fault in it, and FR-018-AC-23
+checks it against an independent read of the package. The order of the members it returns is
+`order_only`: FR-149's verdict is a conjunction over fields and its pair count a sum with no early
+exit, so a consistent permutation changes neither, and no mutation of the order is a mutant any
+check can or need catch.
+
+- When a request names a composite-equality claim that the shadow supports, the generator shall
+  emit one harness for it with family `composite_equality`, proof subject `bounded_shadow` and its
+  refinement obligation in the same result (FR-015-AC-69).
+- The generator shall draw one nondeterministic value per leaf of each parameter operand and
+  constrain a literal operand's leaves to exactly its value (FR-015-AC-70).
+- The generator shall assert, over every drawn pair, that the shadow's verdict and pair count equal
+  the expectation's, and shall end the harness with one cover that the drawn operands compare equal
+  (FR-015-AC-71).
+- The generator shall emit the shadow and the harness with no loop, no recursion and no heap
+  allocation, and shall hold the closure's pair-node count to the crate's shadow size budget
+  (FR-015-AC-72).
+- If a composite-equality claim reaches a shape the shadow does not support, then the generator shall refuse it as the table above states and emit no harness (FR-015-AC-73).
+- The generator shall emit, for the corpus case, a harness whose run the backend classifies
+  `Verified` within the ceilings its identity records, with a refinement run classified
+  `exhaustive` (FR-015-AC-74).
+- The generator shall emit a shadow harness that the backend classifies `Falsified` for each
+  seeded mutant of the shadow (FR-015-AC-75).
+- The generator shall record in the identity the closure, the operator, the size budget, the
+  abstractions, the behaviours the proof does not exercise and, for each, the backing state of the
+  criterion that covers it (FR-015-AC-76).
+
+Shapes the composite-equality shadow does not support, and the disposition each takes. Every row
+is an interim refusal that names a capability; none is the end state of this family or of the
+families it names, each of which is owed a shadow or a production harness of its own:
+
+| Shape reached | Disposition and reason |
+|---|---|
+| an integer leaf whose type is a plain `integer` with no bound | `requires_bound`, `unbounded_type` naming that node |
+| an integer leaf whose bound is not an `integer_range`, or has an endpoint outside `i64` | `unsupported`, `domain_not_representable_in_i64` naming the bound node, as FR-015-AC-17 states for a scalar |
+| a declaration that reaches itself (a recursive record or tuple) | `requires_bound`, `unbounded_type` naming the declaration's node: its depth has no declared bound, and none is invented |
+| a leaf or member of family text, enum, rational, decimal, quantity, float, sequence, set, bag or ordered set | `unsupported`, `ShadowFamilyNotBuilt` naming the family and the node; the equality oracle of FR-018 still generates for it |
+| a `reference` composite, or a model or relation node | `unsupported`, blocked on `agent-ix/quire-spec-language#120`, as FR-018-AC-7 states |
+| an operand that is neither a parameter nor a literal, or an operand that is a `convert<T>` | `unsupported`, `OperandNotSupported` naming the operand's node |
+| a closure whose pair-node count exceeds the shadow size budget | `unsupported`, `ShadowShapeOverBudget` naming the count and the budget |
+| a descriptor `check_equality` refuses, or an item FR-018 refused | the refusal FR-018 recorded, unchanged, and no harness |
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -472,6 +541,27 @@ about items in a negotiated request.
 | FR-015-AC-66 | A test builds every `StateFrameRefusal` variant (each `BoundNotResolved` case the table separates, and each of the six refusal arms of `NotLowered`) and calls the mapping on it, and each yields the disposition and reason of the table; the variants a request reaches only with a defective generator or a source over 1 MiB (`UnwindOutOfRange`, `InvalidGeneratedSyntax`, `RecordSerialization`) are built directly, and `ResourceLimitExceeded` is built directly or reached with a state-field list large enough to pass the ceiling; an inspection confirms the mapping is a `match` with no wildcard arm. | Test (TC-025) |
 | FR-015-AC-67 | `generate_state_frame_obligations` refuses with `MalformedClause` at the node, not `InvalidField` or `ConditionNotSupported`, for a clause whose graph field name is not a Rust identifier; a field name the caller supplies that is not an identifier is still `InvalidField`. | Test (TC-025) |
 | FR-015-AC-68 | A `StateFrame` request whose frame grants every state field records its `frame` item `unsupported` (`StateFrameRefused`) and its `contract` item `supported` with the harness `generate_state_frame_role` returns for the `contract` role; a request whose condition is a negation records its `contract` item `unsupported` and its `frame` item `supported` with the harness `generate_state_frame_role` returns for the `frame` role; in both, `generate_state_frame_obligations` returns the refusal of the failing role; a request whose lowering is refused records both items alike. PLANNED (IR-461): the comparison against `generate_state_frame_role` is not testable from `tests/it` (crate-private) and no V2 package builder exists under `src/`; byte identity holds by construction; the test checks the independence, the records and the engine's refusal, and carries no trace tag of this criterion. | Test (TC-025) |
+| FR-015-AC-69 | A composite-equality claim over operands that are parameters or literals of one record, tuple or option type whose leaves are Boolean or bounded integers, with the descriptor FR-018 generated, yields one harness whose identity records family `composite_equality`, proof subject `bounded_shadow` and a refinement obligation in the same result (FR-028-AC-7), separate from the harness of every other item; both operators (`Equal`, `NotEqual`) yield one; and the operator and operand types are read from the descriptor while no bound is. PLANNED (IR-264). | Test (TC-025) |
+| FR-015-AC-70 | The harness draws one nondeterministic value per leaf of each parameter operand and no other value: a `bool` per Boolean leaf, an `i64` per bounded-integer leaf assumed inside its `integer_range` (FR-015-AC-11), a presence `bool` per option and a payload only for a present option, and for a record field of optional presence one of `present`, `absent` or `null`; a literal operand's leaves are constrained to exactly its value (FR-015-AC-16); the drawn arguments ascend by parameter node id then by leaf path, each bound to its node id and path (FR-025-AC-1, FR-025-AC-2), and no composite is itself an argument (FR-025-AC-7). PLANNED (IR-264). | Test (TC-025) |
+| FR-015-AC-71 | Over every drawn pair the harness asserts that the shadow's verdict equals the expectation's and that the shadow's pair count equals the expectation's, where the expectation is computed from the drawn values by QSpec FR-149's rules (same declaration and pairwise-equal fields or positions in order; two `none` equal; `none` and present unequal; `absent` equals `absent`, `null` equals `null`, `absent` and `null` unequal; the pair count is the node count of the occurrence-pair tree with no early exit after an unequal pair), the verdict of `NotEqual` is the negation of `Equal`'s with the same count, and the harness ends with exactly one `kani::cover!` that the drawn operands compare equal, after every assertion (FR-015-AC-7). PLANNED (IR-264). | Test (TC-025) |
+| FR-015-AC-72 | The emitted shadow and harness, parsed, contain no loop (`while`, `loop`, `for`), no recursive call, no `Box`, `Vec`, `Rc`, `String` or map, and no integer type wider than `i64`; and a closure whose pair-node count (the node count of the largest occurrence-pair tree its type admits) exceeds `SHADOW_PAIR_NODE_BUDGET` is refused as `ShadowShapeOverBudget` naming the count and the budget, one at the budget generates, and the budget and the count are recorded in the identity and the evidence. The value of the budget is set by the measurement of the code change and recorded in TC-025's status. PLANNED (IR-264). | Test (TC-025) |
+| FR-015-AC-73 | Each row of the unsupported-shape table above is produced by an item reaching that shape and yields its disposition and reason with no harness: an unbounded integer leaf `requires_bound`; a bound outside `i64` `domain_not_representable_in_i64`; a recursive declaration `requires_bound` naming the declaration; one leaf of each family the table lists `ShadowFamilyNotBuilt` naming that family; a `reference` composite, as FR-018-AC-7; an operand that is neither a parameter nor a literal, and a `convert<T>` operand, `OperandNotSupported`; an over-budget closure `ShadowShapeOverBudget`; an item FR-018 refused carries FR-018's refusal; and a supported item in the same request settles as it does alone. PLANNED (IR-264). | Test (TC-025) |
+| FR-015-AC-74 | With the installed backend, the harness of the corpus case (two record-typed and two tuple-typed values compared with `=` and `!=`, a record with an optional field and a nested option, Boolean and bounded-integer leaves) is classified `Verified` with its cover satisfied within the memory and wall-clock ceilings its identity records, and its execution evidence records the versions and options of FR-028-AC-23; the refinement run of the same case agrees on every case it runs, and the case's refinement domain is at most the case cap, so the run is classified `exhaustive` and records its case count; a second case whose domain exceeds the cap (two unconstrained `i64`-range leaves) is classified `sampled`, which shows both classes. PLANNED (IR-264). | Test (TC-025) |
+| FR-015-AC-75 | With the installed backend each seeded mutant of the shadow is `Falsified` with a concrete playback: an `absent` slot read equal to a `null` slot; one field of the left operand compared with the next field of the right; the pair count omitting the payload pair of two present options; the count stopping after the first unequal field; the operator `NotEqual` rendered as `Equal`; and a field left out of the comparison. Run natively, each seeded mutant of the production oracle settles `refinement_failed` naming the first disagreeing case: the opposite operator emitted; an `absent` slot compared equal to a `null` slot; one pair charged too many for two present options; an optional field's declaration emitted as required (caught as the construction refusal `MissingField` or `NullForRequiredField` of the oracle's own environment, FR-028-AC-14, since the verdict and count do not change); and an oracle that completes a legal pair as `Refused`. A seeded mutant of the closure reader that the shadow, its expectation and the production oracle share is caught by FR-018-AC-23's independent read, not by refinement: one that drops a member, narrows an integer bound by one, or reads an optional member as required. A mutation of the order of the members the reader returns is not a mutant of this set (the `order_only` exemption of FR-028-AC-18). The unmutated corpus case verifies and its refinement run agrees. PLANNED (IR-264). | Test (TC-025) |
+| FR-015-AC-76 | The identity of a composite-equality harness records family `composite_equality`, proof subject `bounded_shadow`, the closure's declaration keys each with its leaves' declared domains, the operator, the size budget and the closure's pair-node count, the abstractions `representation`, `integer_widening`, `absent_payload` and `unrolled_walk` each with its discharging evidence, and the behaviours the proof does not exercise (`meter_limits`, `ill_typed_operands`, `charge_amounts_other_than_pairs`, `foreign_reference`, `declaration_reconstruction`) each with the native criterion that covers it (FR-018-AC-9, FR-018-AC-8, FR-018-AC-2, FR-018-AC-7, FR-018-AC-23) and that criterion's backing state, `backed` where the test matrix lists it covered and `unbacked` otherwise, which a test asserts against the matrix rows (today FR-018-AC-7, AC-8 and AC-9 are planned and FR-018-AC-2 is partly covered, so each of those four reads `unbacked`); a result whose covering criterion is `unbacked` is reported with that state and is not offered as closing a family row; changing the closure, a bound, the operator or the budget changes the identity; and regeneration from equal inputs is byte-identical. PLANNED (IR-264). | Test (TC-025) |
+
+### Mutations FR-015-AC-69 to FR-015-AC-76 detect
+
+| ID | Mutation that breaks it |
+|----|-------------------------|
+| FR-015-AC-69 | Emit only the `Equal` harness for a `NotEqual` item, emit a `production` harness for the family, or read a bound from the descriptor. |
+| FR-015-AC-70 | Draw a payload for an absent option, collapse `absent` and `null` into one draw, take a bound from the whole `i64`, or leave a literal operand's leaf unpinned. |
+| FR-015-AC-71 | Compute the expectation by calling the shadow, so the assertion is `x == x`; stop counting after the first unequal field; or place the cover before the assertions. |
+| FR-015-AC-72 | Emit a loop or a `Vec` in the shadow, or raise `SHADOW_PAIR_NODE_BUDGET` to fit a closure instead of refusing it. |
+| FR-015-AC-73 | Refuse every shape as one reason, treat an unbounded integer as the whole `i64`, a recursive declaration as depth one, or a `convert<T>` operand as its source type, or let a refused item drop a supported sibling. |
+| FR-015-AC-74 | Pass a corpus case whose cover is unsatisfiable, whose refinement ran over a narrower domain than the shadow drew, or whose refinement was `sampled` where its domain fits the cap. |
+| FR-015-AC-75 | Mutate only the production oracle or only the shadow; or accept an equivalent mutant as the test of a check (a permutation of member order, or swapping two descriptors of one type). |
+| FR-015-AC-76 | Record `backed` for a covering criterion the matrix lists planned, omit `declaration_reconstruction`, or leave the identity unchanged when a bound changes. |
 
 ## Dependencies
 

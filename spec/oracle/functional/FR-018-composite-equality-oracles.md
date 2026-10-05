@@ -253,6 +253,23 @@ in the `NODE_KEY_DOMAIN` domain.
   today.
 - If the generated source exceeds its size ceiling, then the generator shall
   return a typed error and no partial output.
+- Planned (IR-241, IR-264): the generator shall record, in each generated item's claim-map entry,
+  the declaration closure with each declaration's key, form, members in declaration order (name,
+  presence and type) and each leaf's family and declared bound, read from the same
+  reconstruction the item's environment constructor is emitted from, so that
+  [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md)'s shadow and this oracle read
+  one closure (FR-018-AC-21).
+- Planned (IR-241, IR-264): the generator shall emit, for an item whose leaves are Boolean or
+  bounded integers, an oracle that completes every pair of operand values in the item's
+  refinement domain (FR-028-AC-16) with the FR-149 verdict and the FR-149 charge schedule under an
+  unlimited `Meter`, and never returns `Refused` or `Incomplete` for such a pair (FR-018-AC-22).
+  That is the property the shadow of FR-015-AC-69 leaves out of its model and the refinement
+  obligation of FR-028-AC-15 checks. It is stated of the oracle function, so it holds whichever
+  evaluator the function calls; over the whole declared domain it is the refinement class's claim
+  (exhaustive or sampled), not a universal one made here.
+- Planned (IR-241, IR-264): the generator shall check each claim-map closure against an independent
+  read of the checked package's declared types, taken through Contract IR's reader and not through
+  the generator's reconstruction (FR-018-AC-23).
 
 The runtime's `DeclarationCause` has no cause for an empty interval, a zero
 denominator or an empty cardinality bound, which is why the emitted constructor
@@ -288,6 +305,9 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-18 | `render_value_type` called with `ValueType::Quantity` and with `ValueType::Reference` returns `Err(RenderError::UnsupportedValueType { family })` with `family` equal to `"quantity"` and `"reference"` respectively and does not panic, and the item-boundary mapping turns `RenderError::UnsupportedValueType` into `CompositeEqualityRefusal::Unsupported` with `node_tag` equal to `family` and `unsupported_node_id` equal to the item's expression node id, emitting no code for the item and leaving its siblings unchanged, while `RenderError::Generation(OracleGenerationError::UnknownRuntimeVariant { .. })` still fails the whole call. No request reaches these arms through `generate_composite_equality_oracles`: a quantity operand is refused earlier as `CompositeEqualityRefusal::Unsupported { node_tag: "quantity" }` and a reference operand by Contract IR (FR-018-AC-7), each a per-item refusal that leaves its siblings unchanged, so the criterion is asserted by a unit test in the module's own `#[cfg(test)]` tests. | Test (TC-029) |
 | FR-018-AC-19 | The non-test code of `src/oracle/equality/mod.rs` (comments and every `#[cfg(test)]` item removed wherever the item sits, string literals the generator emits counted) contains zero panic tokens: the identifiers `unwrap`, `expect`, `unwrap_unchecked`, `unwrap_err`, `expect_err`, `unwrap_err_unchecked`, `panic_any` and `resume_unwind` however written (called, with whitespace before the paren, named on a path such as `Option::unwrap`, or imported); the macros `panic`, `unreachable`, `todo`, `unimplemented`, `assert`, `assert_eq`, `assert_ne`, `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form, with any whitespace before the `!` and any path prefix; and the identifier `abort` anywhere except as a method call (`.abort()`), so `process::abort` and a bare `abort` after an import are both counted. | Test (TC-029) |
 | FR-018-AC-20 | A `failed` lowering record is refused as `CompositeEqualityRefusal::LoweringWorkExhausted` for the `work` limit, as `LoweringByteLimitExceeded { limit, consumed }` with the record's `limit` and `consumed` for the `bytes` limit (Contract IR FR-038-AC-95), and as `LoweringLimitUnrecognised` with `limit_kind` the snake_case name FR-014 states for each of `nodes`, `edges`, `occurrences` and `diagnostics`, never as another arm's refusal and without a panic. Each is asserted on hand-built `Failed` records given to the equality `Failed` arm itself in the module's `#[cfg(test)]` seam, so a mapping of an unrecognised kind to `LoweringWorkExhausted` in this module fails it, and a hand-built `bytes` record is refused with the record's own `limit` and `consumed` (the per-node case of Contract IR FR-038-AC-95, which CG's public API cannot reach; the arm maps one record to one refusal, so no sibling isolation is asserted there). Through a whole call of `generate_composite_equality_oracles` whose input is read under a byte ceiling that admits the checked package and is one byte below the canonical length of the lowered contract package of that call (not the checked package, which the fixture makes shorter), every requested item is refused as `LoweringByteLimitExceeded` with `limit` equal to that ceiling and the same `consumed`, and none generates. | Test (TC-029) |
+| FR-018-AC-21 | Each generated item's claim-map entry records its declaration closure as every declaration's key, form (record, tuple or option), members in declaration order with each member's name, presence and type, and each leaf's family and declared bound, and the closure equals member by member (name, presence, value type, order) the declarations of the `TypeEnvironment` the item's generated environment constructor returns, for every item of the TC-029 corpus whose leaves are Boolean or bounded integers. PLANNED (IR-264). | Test (TC-029) |
+| FR-018-AC-22 | For every pair of operand values in the item's refinement domain (FR-028-AC-16: every case where the domain fits the case cap, the boundary and seeded cases otherwise; every presence state of an option and of an optional field included) of an item whose leaves are Boolean or bounded integers, the generated oracle called with its own environment and a `Meter` whose every limit is `u64::MAX` returns `Outcome::Completed` with the verdict of QSpec FR-149 for the item's operator and admits exactly `equality.plan-form`, `equality.plan`, one `equality.pair` per node of the occurrence-pair tree, then `equality.result-retain`; no such pair returns `Refused` or `Incomplete`. PLANNED (IR-264). | Test (TC-029) |
+| FR-018-AC-23 | For every item of the TC-029 corpus whose leaves are Boolean or bounded integers, the claim-map closure's member names, presence and each integer leaf's inclusive bounds equal those of an independent read of the checked package (the V2 composite and `bounded_domain` nodes read through Contract IR's reader, never through the generator's reconstruction); a closure that dropped a member, narrowed a bound by one or read an optional member as required fails the check. PLANNED (IR-264). | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -323,13 +343,20 @@ without one is not written.
 | FR-018-AC-18 | Keep a defensive `ValueType::Quantity => unreachable!(..)` or `ValueType::Reference => unreachable!(..)` arm after the earlier refusal, so a change to that refusal turns a bad request into a generator panic. |
 | FR-018-AC-19 | Add an `assert!`, `debug_assert!`, `process::abort()` or `.unwrap_unchecked()` to the generator, or re-add an `.expect(..)` template, none of which a scan limited to `unwrap`, `expect` and four macros catches; or spell a panic so a substring scan misses it (`Option::unwrap`, `.unwrap ()`, a bare `abort()` after `use std::process::abort`). |
 | FR-018-AC-20 | Keep the single `Failed` arm that reports every failure as `LoweringWorkExhausted`, so a byte-ceiling failure reads as work exhaustion with a byte count in `consumed`; or add a `bytes` arm and leave a `_ => LoweringWorkExhausted` fallthrough so an unrecognised kind reads as work; or panic on an unrecognised kind. |
+| FR-018-AC-21 | Record the closure from a second reading of the package (a second reader that reads presence differently), so the shadow of FR-015 and the production oracle disagree on presence and each is correct against its own reading. Member order is not a mutant: a permutation changes no compared observable. |
+| FR-018-AC-22 | Refuse or stop a legal pair (an `absent` against a `null` slot, two `none`, a nested option) as `Refused(CheckedInvariant)`, charge one pair too many for a `some`/`some` option or too few for an unequal pair that stops early, or complete with the verdict of the other operator. |
+| FR-018-AC-23 | Check the closure against the generator's own reconstruction (the check of AC-21 alone), so a reader that narrows a bound or reads `T?` as `T` shrinks the shadow's domain, the refinement domain and the oracle's declaration together and every check agrees. |
 
 ## Dependencies
 
 - **Upstream**: [FR-014](./FR-014-exact-scalar-oracles.md), Contract IR FR-036/FR-038
   (CheckedPackage V2 lowering), Contract Runtime FR-008 (composite, collection
   and equality families), the quire-spec-language value authority.
-- **Downstream**: [TC-029](../matrix/TC-029-composite-equality-oracles.md).
+- **Downstream**: [TC-029](../matrix/TC-029-composite-equality-oracles.md);
+  [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md), whose composite-equality
+  shadow reads this item's closure (FR-018-AC-21) and whose refinement obligation
+  ([FR-028](../../kani/functional/FR-028-bounded-proof-ceilings.md)) runs this oracle
+  (FR-018-AC-22).
 
 ## Out of Scope
 
