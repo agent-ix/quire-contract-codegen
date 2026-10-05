@@ -848,7 +848,9 @@ impl Twin {
         run: &Run,
         tamper: Tamper,
     ) -> Result<FrameReplayResult, ReplayRefusal> {
-        let FrameReplay { wire, mut packet } = self.frame_replay(invocation, account, field, run);
+        let FrameReplay {
+            wire, mut packet, ..
+        } = self.frame_replay(invocation, account, field, run);
         let payload = packet
             .family_payload
             .as_ref()

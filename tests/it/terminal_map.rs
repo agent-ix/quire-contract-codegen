@@ -284,7 +284,10 @@ fn tc_040_a_replay_refusal_carries_its_code() {
     );
     let spine = SpineReplayError::Refused(Box::new(non_fault_refusal()));
     assert_eq!(map_settled(&spine), expected);
-    let frame = FrameReplayError::Refused(Box::new(non_fault_refusal()));
+    let frame = FrameReplayError::Refused {
+        refusal: Box::new(non_fault_refusal()),
+        unranged: Vec::new(),
+    };
     assert_eq!(map_settled(&frame), expected);
 }
 
@@ -431,7 +434,13 @@ fn for_each_fault(check: impl Fn(ReplaySettlement<'_>)) -> usize {
     for refusal in replay_faults {
         check(ReplaySettlement::Refused(&refusal()));
         check((&SpineReplayError::Refused(Box::new(refusal()))).into());
-        check((&FrameReplayError::Refused(Box::new(refusal()))).into());
+        check(
+            (&FrameReplayError::Refused {
+                refusal: Box::new(refusal()),
+                unranged: Vec::new(),
+            })
+                .into(),
+        );
         check((&StateClauseReplayError::Refused(Box::new(refusal()))).into());
     }
     let bare = call_site();

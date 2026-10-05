@@ -748,7 +748,7 @@ fn tc_035_an_operation_declaring_a_parameter_or_a_result_is_refused_by_shape() {
 /// How a violation that yields such a post state should settle is a pending QSL ruling and is not
 /// decided here (see the replay spec's Current state).
 ///
-/// Trace: FR-024-AC-18, TC-035
+/// Trace: FR-024-AC-18, FR-024-AC-34, TC-035
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {

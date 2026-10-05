@@ -32,7 +32,7 @@ use serde::Deserialize;
 use crate::{
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
-        identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty},
+        identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty, StateUnrangedField},
         output::playback::DecodeFailure,
         terminal::ReplaySettlement,
     },
@@ -179,8 +179,14 @@ pub enum FrameReplayError {
     Transcript(MalformedTranscript),
     /// The envelope this adapter built is not one QSL admits.
     Envelope(WitnessRefusal),
-    /// QSL refused the request or the envelope before settling a result.
-    Refused(Box<ReplayRefusal>),
+    /// QSL refused the request or the envelope before settling a result. The persisted unranged
+    /// fields are context, not a claim that any one of them caused QSL's refusal.
+    Refused {
+        /// QSL's original refusal and catalog code.
+        refusal: Box<ReplayRefusal>,
+        /// Fields the harness drew without an `i64` domain, with their persisted reasons.
+        unranged: Vec<StateUnrangedField>,
+    },
     /// The harness's property is not a frame.
     NotAFrame,
     /// The harness's granted and checked fields are not exactly its state fields.
@@ -224,7 +230,10 @@ impl fmt::Display for FrameReplayError {
             Self::Name(cause) => write!(f, "the operation's name is not admitted: {cause}"),
             Self::Transcript(cause) => write!(f, "the witness transcript is not admitted: {cause}"),
             Self::Envelope(cause) => write!(f, "the envelope is not admitted: {cause}"),
-            Self::Refused(refusal) => write!(f, "the frame replay was refused: {refusal}"),
+            Self::Refused { refusal, unranged } => write!(
+                f,
+                "the frame replay was refused: {refusal}; harness unranged fields: {unranged:?}"
+            ),
             Self::NotAFrame => f.write_str("the harness's property is not a frame"),
             Self::FieldSetMismatch {
                 state_fields,
@@ -282,7 +291,7 @@ impl<'a> From<&'a FrameReplayError> for ReplaySettlement<'a> {
             | FrameReplayError::PreState(_)
             | FrameReplayError::ScopeMismatch { .. }
             | FrameReplayError::Identity(_) => Self::CgDefect,
-            FrameReplayError::Refused(refusal) => Self::Refused(refusal),
+            FrameReplayError::Refused { refusal, .. } => Self::Refused(refusal),
         }
     }
 }
@@ -295,6 +304,8 @@ pub struct FrameReplay {
     /// The envelope's members. `clause_node` is the payload's frame node and `occurrence_key`
     /// its frame occurrence.
     pub packet: WitnessPacket<FrameCounterexample>,
+    /// Persisted context for QSL refusals; an unranged field is not necessarily their cause.
+    unranged: Vec<StateUnrangedField>,
 }
 
 /// A frame harness is a frame over its state only when its granted and checked fields, taken
@@ -583,8 +594,12 @@ impl FrameReplay {
         // QSL's own decode of the request checks every provided document against its digest
         // and refuses with its own code; the pre-state tie reads those documents only after it
         // has passed, so a document whose bytes do not match its digest is QSL's refusal.
+        let unranged = harness.unranged.clone();
         ReplayRequest::decode(request(ReplaySource::Witness(witness.clone()))).map_err(
-            |refusal| FrameReplayError::Refused(Box::new(ReplayRefusal::Request(refusal))),
+            |refusal| FrameReplayError::Refused {
+                refusal: Box::new(ReplayRefusal::Request(refusal)),
+                unranged: unranged.clone(),
+            },
         )?;
         tie_pre_state(&payload.invocation, &state_documents, &values)
             .map_err(FrameReplayError::PreState)?;
@@ -604,7 +619,11 @@ impl FrameReplay {
             source: Some(ReplaySource::Witness(witness)),
             family_payload: Some(payload),
         };
-        Ok(Self { wire, packet })
+        Ok(Self {
+            wire,
+            packet,
+            unranged,
+        })
     }
 
     /// Replays the counterexample through [`qsl_replay::replay_frame`].
@@ -614,10 +633,16 @@ impl FrameReplay {
     /// [`FrameReplayError::Envelope`] when the packet is no admitted envelope, and
     /// [`FrameReplayError::Refused`] when QSL refuses the request or the envelope.
     pub fn replay(self) -> Result<FrameReplayResult, FrameReplayError> {
-        let envelope =
-            WitnessEnvelope::reconstruct(self.packet).map_err(FrameReplayError::Envelope)?;
-        replay_frame(self.wire, &envelope)
-            .map_err(|refusal| FrameReplayError::Refused(Box::new(refusal)))
+        let Self {
+            wire,
+            packet,
+            unranged,
+        } = self;
+        let envelope = WitnessEnvelope::reconstruct(packet).map_err(FrameReplayError::Envelope)?;
+        replay_frame(wire, &envelope).map_err(|refusal| FrameReplayError::Refused {
+            refusal: Box::new(refusal),
+            unranged,
+        })
     }
 }
 

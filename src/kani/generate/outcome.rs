@@ -1117,10 +1117,24 @@ mod tests {
                 },
             ),
             same(
+                "bound not resolved: unknown model node",
+                unbound(BoundNotResolvedCause::ModelFieldsUnavailable {
+                    object: node(9),
+                    error: CheckedModelFieldsError::UnknownNode,
+                }),
+            ),
+            same(
                 "bound not resolved: model accessor refusal",
                 unbound(BoundNotResolvedCause::ModelFieldsUnavailable {
                     object: node(9),
                     error: CheckedModelFieldsError::NotModelObjectType,
+                }),
+            ),
+            same(
+                "bound not resolved: ambiguous model member",
+                unbound(BoundNotResolvedCause::ModelFieldsUnavailable {
+                    object: node(9),
+                    error: CheckedModelFieldsError::AmbiguousField("balance".into()),
                 }),
             ),
             same(
@@ -1129,6 +1143,25 @@ mod tests {
                     object: node(9),
                     field: "balance".to_owned(),
                     reason: Box::new(ModelMemberRangeReason::NoMemberType),
+                }),
+            ),
+            same(
+                "bound not resolved: nonrange model member",
+                unbound(BoundNotResolvedCause::ModelMemberNotI64Range {
+                    object: node(9),
+                    field: "balance".to_owned(),
+                    reason: Box::new(ModelMemberRangeReason::NonRangeType),
+                }),
+            ),
+            same(
+                "bound not resolved: model member endpoint outside i64",
+                unbound(BoundNotResolvedCause::ModelMemberNotI64Range {
+                    object: node(9),
+                    field: "balance".to_owned(),
+                    reason: Box::new(ModelMemberRangeReason::EndpointOutsideI64 {
+                        lower: i128::from(i64::MIN) - 1,
+                        upper: -1,
+                    }),
                 }),
             ),
             same(
@@ -1172,8 +1205,9 @@ mod tests {
     fn tc_025_every_state_frame_refusal_maps_to_the_disposition_the_table_gives() {
         let rows = table();
         // 17 variants, with `NotLowered` split into its 6 arms (+5), `BoundNotResolved` into its
-        // 3 grounds (+2) and `FrameEffectUnsupported` into its 4 effects (+3).
-        assert_eq!(rows.len(), 17 + 5 + 2 + 3);
+        // 3 grounds (+2), with accessor and type causes (+4), and
+        // `FrameEffectUnsupported` into its 4 effects (+3).
+        assert_eq!(rows.len(), 17 + 5 + 2 + 4 + 3);
         for (label, refusal, expected) in rows {
             assert_eq!(state_frame_disposition(refusal), expected, "{label}");
         }
