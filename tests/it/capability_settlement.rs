@@ -5,7 +5,7 @@
 use quire_contract_codegen::{
     negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
     Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
-    ItemSettlement, Mode, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
+    ItemSettlement, Mode, ProviderOrigin, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
     CAPABILITY_VOCABULARY,
 };
 
@@ -13,6 +13,7 @@ fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
     BackendDescriptor {
         identity: BackendKind::Kani.identity().to_owned(),
         advertised,
+        origin: ProviderOrigin::Linked,
     }
 }
 
@@ -186,6 +187,7 @@ fn tc_030_an_unroutable_backend_settles_invalid_request() {
     let registered_without_arm = BackendDescriptor {
         identity: "cvc5".to_owned(),
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
+        origin: ProviderOrigin::Process,
     };
     let unarmed = settle_one(
         vec![registered_without_arm],
@@ -301,6 +303,7 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
     let second = BackendDescriptor {
         identity: "kani-nightly".to_owned(),
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
+        origin: ProviderOrigin::Process,
     };
     let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
     // Candidate order is bytewise by identity, and is a property of the set
