@@ -50,6 +50,7 @@ use quire_contract_codegen::{
     StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
     MAX_OBLIGATION_UNWIND,
 };
+use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -2271,6 +2272,14 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
     let mut harness = frame_harness(&twin);
     harness.clause = harness.scope.object.clone();
     assert_eq!(base, minted(&twin, "deposit", &run_of(&harness, [5, 0])));
+
+    // A unit with one postcondition clause on `deposit` and the unit with two mint one identity.
+    let one_clause = Twin::build(&model::GRANTED, &[CLAUSES[0]], 0);
+    assert_eq!(
+        base,
+        identity(&one_clause, "deposit"),
+        "one clause against two on one operation"
+    );
 }
 
 /// The edge the spec states and does not hide: occurrence ordinals run over the operations the
@@ -2290,7 +2299,9 @@ fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() 
 
 /// The identity does not change when any one of the harness's own members changes: its clause
 /// node, module symbol, harness symbol, state path, subject path, unwind bound, options, the
-/// ranges of its fields or the order of its state fields.
+/// ranges of its fields or the order of its state fields. The solver is not edited: `KaniSolver`
+/// has one variant (`Cadical`), so no other solver can be built, and the identity function takes
+/// no solver.
 ///
 /// Trace: FR-024-AC-21, TC-035
 #[test]
@@ -2307,6 +2318,10 @@ fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
         (
             "module symbol",
             Box::new(|h| h.module_symbol = ModuleSymbol::try_from("renamed_module").unwrap()),
+        ),
+        (
+            "harness symbol",
+            Box::new(|h| h.harness_symbol = HarnessSymbol::try_from("renamed_check").unwrap()),
         ),
         (
             "state path",
@@ -2736,9 +2751,10 @@ fn tc_035_the_invocation_of_the_playbacks_own_pre_state_replays_and_another_is_r
     }
 }
 
-/// An invocation or pre snapshot that is not provided, is not readable JSON, does not name the
-/// pre digest or the object, lacks the object, or lacks a field or holds a non-integer for it is
-/// refused naming what is missing.
+/// An invocation or pre snapshot that is not provided, is not of the shape `state_clause`
+/// writes, lacks the object, or lacks a field or holds a non-integer for it is refused naming what
+/// is missing. Every provided document here hashes to its digest (`Invocation::edited`
+/// re-addresses it), so these refusals are the tie's own.
 ///
 /// Trace: FR-024-AC-27, TC-035
 #[test]
@@ -2757,28 +2773,25 @@ fn tc_035_a_pre_state_that_cannot_be_read_from_the_invocation_is_refused_by_name
         fault(&base.without(INVOCATION_DOCUMENT)),
         PreStateFault::InvocationNotProvided
     );
-    assert_eq!(
-        fault(&base.replaced(INVOCATION_DOCUMENT, b"not json")),
-        PreStateFault::InvocationUnreadable
-    );
-    assert_eq!(
-        fault(&base.edited(INVOCATION_DOCUMENT, |document| {
-            document.as_object_mut().expect("object").remove("pre");
-        })),
-        PreStateFault::PreNotNamed
-    );
-    assert_eq!(
-        fault(&base.edited(INVOCATION_DOCUMENT, |document| {
-            document.as_object_mut().expect("object").remove("self");
-        })),
-        PreStateFault::ObjectNotAddressed
-    );
+    // An invocation that does not name its pre snapshot or address its object is not the
+    // document `state_clause` writes.
+    for member in ["pre", "self"] {
+        assert_eq!(
+            fault(&base.edited(INVOCATION_DOCUMENT, |document| {
+                document.as_object_mut().expect("object").remove(member);
+            })),
+            PreStateFault::InvocationUnreadable,
+            "{member}"
+        );
+    }
     assert!(matches!(
         fault(&base.without(PRE_DOCUMENT)),
         PreStateFault::PreNotProvided { .. }
     ));
     assert_eq!(
-        fault(&base.replaced(PRE_DOCUMENT, b"not json")),
+        fault(&base.edited(PRE_DOCUMENT, |document| {
+            document["populations"] = json!("none");
+        })),
         PreStateFault::PreUnreadable
     );
     assert_eq!(
@@ -2809,6 +2822,69 @@ fn tc_035_a_pre_state_that_cannot_be_read_from_the_invocation_is_refused_by_name
         PreStateFault::FieldNotInteger {
             field: "balance".to_owned()
         }
+    );
+}
+
+/// A provided document whose bytes do not match the digest it is addressed by is QSL's refusal,
+/// with its own code, and not a pre-state refusal: the tie reads the documents only after QSL's
+/// request decode has checked them. The same replay over documents that hash to their digests
+/// builds.
+///
+/// Trace: FR-024-AC-27, TC-035
+#[test]
+fn tc_035_a_document_that_does_not_match_its_digest_is_qsls_refusal_not_a_pre_state_one() {
+    let twin = Twin::new();
+    let run = forbidden_run(&twin);
+    let base = twin.invocation("account", (5, 0), (6, 1));
+    for index in [INVOCATION_DOCUMENT, PRE_DOCUMENT] {
+        let mismatched = base.replaced(index, br#"{"unrelated":true}"#);
+        let error =
+            refused(twin.try_frame_replay("deposit", &mismatched, "account", "audit", &run));
+        assert!(
+            matches!(
+                &error,
+                FrameReplayError::Refused(refusal)
+                    if matches!(**refusal, ReplayRefusal::Request(_))
+            ),
+            "{index}: {error}"
+        );
+    }
+    twin.try_frame_replay("deposit", &base, "account", "audit", &run)
+        .map(|_| ())
+        .unwrap_or_else(|error| panic!("the matching documents build: {error}"));
+}
+
+/// A state field listed twice is refused: the decoder refuses the schema, and a record that lists
+/// one is not read as a frame identity.
+///
+/// Trace: FR-024-AC-23, TC-035
+#[test]
+fn tc_035_a_repeated_state_field_is_refused_by_the_decoder_and_the_record() {
+    let twin = Twin::new();
+    let mut harness = frame_harness(&twin);
+    harness.state_fields = vec!["balance".to_owned(), "balance".to_owned()];
+    harness.property = StateFrameProperty::Frame {
+        granted: vec!["balance".to_owned()],
+        checked: vec!["balance".to_owned()],
+    };
+    let error = refused(replay_of(&twin, "deposit", &run_of(&harness, [5, 0])));
+    assert!(
+        matches!(
+            &error,
+            FrameReplayError::Decode(cause)
+                if cause.code == "cg_witness_schema_duplicate_binding" && cause.context == "balance"
+        ),
+        "{error}"
+    );
+
+    let generated = generate(&fixture(&Shape::HEALTHY)).frame;
+    let mut record: Value = serde_json::from_str(&generated.record.contents).expect("record");
+    record["identity"]["state_fields"] = json!(["balance", "balance"]);
+    let error = StateFrameIdentity::from_record(&record.to_string())
+        .expect_err("a repeated field is not a draw order");
+    assert!(
+        matches!(&error, StateFrameRecordError::RepeatedField { field } if field == "balance"),
+        "{error}"
     );
 }
 

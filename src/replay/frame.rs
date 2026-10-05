@@ -18,16 +18,16 @@
 //! The envelope's `declared_domains` is empty until QSL-345 settles the declared-domain key and
 //! refuses an empty declaration; no key shape is adopted here before then (FR-024-AC-29).
 
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
     call_site, replay_frame, CallSiteRefusal, ClaimedChange, DigestDomain, DigestRecord,
     DocumentRef, EmptyQualifiedName, FrameCounterexample, FrameOperation, FrameReplayResult,
-    MalformedTranscript, OperationName, OperationSite, QualifiedName, ReplayRefusal,
+    MalformedTranscript, OperationName, OperationSite, QualifiedName, ReplayRefusal, ReplayRequest,
     ReplayRequestWire, ReplaySource, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal,
     WitnessValue,
 };
-use serde_json::Value;
+use serde::Deserialize;
 
 use crate::{
     kani::{
@@ -39,6 +39,7 @@ use crate::{
     replay::{
         function::{render_witness, DependencyLockError, ReplayInputs},
         obligation::{frame_identity, frame_kind, ObligationIdentityError},
+        state_clause::{IntegerValue, ObjectRef, SnapshotLink, SnapshotPopulation},
         witness::decode_playback,
     },
 };
@@ -101,13 +102,11 @@ impl fmt::Display for ScopeMember {
 pub enum PreStateFault {
     /// The invocation document is not among the provided documents.
     InvocationNotProvided,
-    /// The invocation document is not JSON.
+    /// The invocation document is not JSON of the shape `state_clause` writes, or does not
+    /// address its state object by population and key or name its pre snapshot.
     InvocationUnreadable,
-    /// The invocation names no `sha256-jcs` digest for its `pre` snapshot.
-    PreNotNamed,
-    /// The invocation does not address its state object by population and key.
-    ObjectNotAddressed,
-    /// The pre snapshot the invocation names is not among the provided documents.
+    /// The pre snapshot the invocation names, by a `sha256-jcs` digest, is not among the provided
+    /// documents.
     PreNotProvided {
         /// The digest the invocation names, as lowercase hexadecimal.
         digest: String,
@@ -146,10 +145,8 @@ impl fmt::Display for PreStateFault {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvocationNotProvided => f.write_str("the invocation is not a provided document"),
-            Self::InvocationUnreadable => f.write_str("the invocation is not readable JSON"),
-            Self::PreNotNamed => f.write_str("the invocation names no `sha256-jcs` pre digest"),
-            Self::ObjectNotAddressed => {
-                f.write_str("the invocation addresses no object by population and key")
+            Self::InvocationUnreadable => {
+                f.write_str("the invocation is not a readable invocation document")
             }
             Self::PreNotProvided { digest } => {
                 write!(f, "the pre snapshot `{digest}` is not a provided document")
@@ -311,8 +308,10 @@ pub struct FrameReplay {
 }
 
 /// A frame harness is a frame over its state only when its granted and checked fields, taken
-/// together, are exactly its state fields: a field neither granted nor checked, one named twice
-/// and one named though the harness does not draw it each refuse.
+/// together, are exactly its state fields: a field neither granted nor checked, one both granted
+/// and checked and one named though the harness does not draw it each refuse. A state field
+/// listed twice is refused by the decoder (`cg_witness_schema_duplicate_binding`) and by
+/// `StateFrameIdentity::from_record`.
 fn field_set_matches(harness: &StateFrameIdentity) -> Result<(), FrameReplayError> {
     let StateFrameProperty::Frame { granted, checked } = &harness.property else {
         return Err(FrameReplayError::NotAFrame);
@@ -397,49 +396,53 @@ fn provided<'a>(documents: &'a [ProvidedDocument], hex: &str) -> Option<&'a [u8]
         .map(|document| document.bytes.as_slice())
 }
 
-/// The state object the invocation's `self` addresses, in the pre snapshot it names.
-fn pre_object(
+/// The members of the invocation document this check reads, as `state_clause` writes them.
+#[derive(Deserialize)]
+struct InvocationRead {
+    #[serde(rename = "self")]
+    self_object: ObjectRef,
+    pre: SnapshotLink,
+}
+
+/// The members of a snapshot document this check reads, as `state_clause` writes them.
+#[derive(Deserialize)]
+struct SnapshotRead {
+    populations: Vec<SnapshotPopulation>,
+}
+
+/// The fields of the state object the invocation's `self` addresses, in the pre snapshot it
+/// names. A document is read only after QSL's own request decode has checked every provided
+/// document's bytes against its digest (`FrameReplay::new`), so a document whose bytes do not
+/// match its digest is QSL's refusal and never reaches this reader. A document that is absent or
+/// not of the written shape is this check's refusal: it cannot tie a pre state it cannot read.
+fn pre_fields(
     invocation: &DocumentRef,
     documents: &[ProvidedDocument],
-) -> Result<Value, PreStateFault> {
+) -> Result<BTreeMap<String, IntegerValue>, PreStateFault> {
     let own = DigestRecord::mint(DigestDomain::Sha256Jcs, invocation.digest).hex();
     let bytes = provided(documents, &own).ok_or(PreStateFault::InvocationNotProvided)?;
-    let invocation: Value =
-        serde_json::from_slice(bytes).map_err(|_| PreStateFault::InvocationUnreadable)?;
-    let pre = invocation
-        .get("pre")
-        .and_then(|pre| pre.get("digest"))
-        .and_then(Value::as_str)
-        .and_then(|digest| digest.strip_prefix("sha256-jcs:"))
-        .ok_or(PreStateFault::PreNotNamed)?;
-    let address = |member: &str| {
-        invocation
-            .get("self")
-            .and_then(|address| address.get(member))
-            .and_then(Value::as_str)
-    };
-    let (population, key) = address("population")
-        .zip(address("key"))
-        .ok_or(PreStateFault::ObjectNotAddressed)?;
-    let snapshot = provided(documents, pre).ok_or_else(|| PreStateFault::PreNotProvided {
-        digest: pre.to_owned(),
+    let InvocationRead {
+        self_object: ObjectRef { population, key },
+        pre,
+    } = serde_json::from_slice(bytes).map_err(|_| PreStateFault::InvocationUnreadable)?;
+    let digest =
+        pre.digest
+            .strip_prefix("sha256-jcs:")
+            .ok_or_else(|| PreStateFault::PreNotProvided {
+                digest: pre.digest.clone(),
+            })?;
+    let snapshot = provided(documents, digest).ok_or_else(|| PreStateFault::PreNotProvided {
+        digest: digest.to_owned(),
     })?;
-    let snapshot: Value =
+    let SnapshotRead { populations } =
         serde_json::from_slice(snapshot).map_err(|_| PreStateFault::PreUnreadable)?;
-    snapshot
-        .get("populations")
-        .and_then(Value::as_array)
+    populations
         .into_iter()
-        .flatten()
-        .filter(|candidate| candidate.get("population").and_then(Value::as_str) == Some(population))
-        .filter_map(|candidate| candidate.get("objects").and_then(Value::as_array))
-        .flatten()
-        .find(|object| object.get("key").and_then(Value::as_str) == Some(key))
-        .cloned()
-        .ok_or_else(|| PreStateFault::ObjectMissing {
-            population: population.to_owned(),
-            key: key.to_owned(),
-        })
+        .filter(|candidate| candidate.population == population)
+        .flat_map(|candidate| candidate.objects)
+        .find(|object| object.key == key)
+        .map(|object| object.fields)
+        .ok_or(PreStateFault::ObjectMissing { population, key })
 }
 
 /// Checks that the pre snapshot the invocation names holds, for the object its `self` addresses,
@@ -450,22 +453,19 @@ fn tie_pre_state(
     documents: &[ProvidedDocument],
     values: &[(String, i64)],
 ) -> Result<(), PreStateFault> {
-    let object = pre_object(invocation, documents)?;
+    let fields = pre_fields(invocation, documents)?;
     values.iter().try_for_each(|(field, decoded)| {
-        let not_integer = || PreStateFault::FieldNotInteger {
-            field: field.clone(),
-        };
-        let held = object
-            .get("fields")
-            .and_then(|fields| fields.get(field))
+        let held = fields
+            .get(field)
             .ok_or_else(|| PreStateFault::FieldMissing {
                 field: field.clone(),
             })?;
         let snapshot = held
-            .get("integer")
-            .and_then(Value::as_str)
-            .and_then(|text| text.parse::<i64>().ok())
-            .ok_or_else(not_integer)?;
+            .integer
+            .parse::<i64>()
+            .map_err(|_| PreStateFault::FieldNotInteger {
+                field: field.clone(),
+            })?;
         if snapshot == *decoded {
             Ok(())
         } else {
@@ -546,8 +546,6 @@ impl FrameReplay {
         let site = located.site;
         same_node(ScopeMember::Anchor, &harness.scope.anchor, site.anchor)?;
         same_node(ScopeMember::Frame, &harness.scope.frame, site.frame)?;
-        tie_pre_state(&invocation, &state_documents, &values)
-            .map_err(FrameReplayError::PreState)?;
         let obligation = *frame_identity(&site, kind)
             .map_err(FrameReplayError::Identity)?
             .as_bytes();
@@ -583,13 +581,24 @@ impl FrameReplay {
             .chain(&state_documents)
             .map(|document| (document.digest, document.bytes.as_slice()))
             .collect::<Vec<_>>();
-        let wire = run.wire(
-            located.package_id,
-            selected.clone(),
-            ReplaySource::Witness(witness.clone()),
-            obligation,
-            &documents,
-        );
+        let request = |source: ReplaySource| {
+            run.wire(
+                located.package_id,
+                selected.clone(),
+                source,
+                obligation,
+                &documents,
+            )
+        };
+        // QSL's own decode of the request checks every provided document against its digest
+        // and refuses with its own code; the pre-state tie reads those documents only after it
+        // has passed, so a document whose bytes do not match its digest is QSL's refusal.
+        ReplayRequest::decode(request(ReplaySource::Witness(witness.clone()))).map_err(
+            |refusal| FrameReplayError::Refused(Box::new(ReplayRefusal::Request(refusal))),
+        )?;
+        tie_pre_state(&payload.invocation, &state_documents, &values)
+            .map_err(FrameReplayError::PreState)?;
+        let wire = request(ReplaySource::Witness(witness.clone()));
         let packet = WitnessPacket {
             obligation_identity: Some(obligation),
             occurrence_key: Some(payload.occurrence.clone()),

@@ -32,6 +32,8 @@
 //! It does not validate a decoded value against its IR domain ([`first_out_of_domain`] does) or
 //! replay it ([`crate::replay::function`] does).
 
+use std::collections::BTreeSet;
+
 use qsl_replay::WitnessValue;
 
 use crate::kani::{
@@ -99,7 +101,8 @@ const fn byte_width(primitive: KaniPrimitiveType) -> usize {
 /// arguments}` JSON fields can call it.
 ///
 /// `transcript` is expected verbatim from the backend. Every failure is a named
-/// [`DecodeFailure`]: `cg_witness_schema_non_argument_binding`; a transcript that is not a
+/// [`DecodeFailure`]: `cg_witness_schema_non_argument_binding`;
+/// `cg_witness_schema_duplicate_binding` (a name bound twice); a transcript that is not a
 /// single selected assertion playback block (`kani_witness_harness_missing`,
 /// `kani_witness_check_missing`, `kani_witness_check_text_missing`,
 /// `kani_witness_cover_refused`, `kani_witness_check_kind_refused`,
@@ -150,6 +153,18 @@ pub(crate) fn decode_playback(
             &identifier,
         ),
     })?;
+    // A name bound twice would type two playback positions as one value: refuse the schema.
+    let mut seen = BTreeSet::new();
+    if let Some((identifier, _)) = schema
+        .iter()
+        .find(|(identifier, _)| !seen.insert(*identifier))
+    {
+        return Err(DecodeFailure::new(
+            "cg_witness_schema_duplicate_binding",
+            harness_symbol,
+            identifier,
+        ));
+    }
     let block = select_assertion_block(transcript, harness_symbol, module_symbol)?;
     let playback = read_block(block, harness_symbol, module_symbol)?;
     let declared = format!("{module_symbol}::{harness_symbol}");
@@ -295,6 +310,23 @@ mod tests {
                 ("balance_pre", KaniPrimitiveType::I64),
             ]
         );
+    }
+
+    /// A binding name used twice refuses the schema rather than typing two playback positions as
+    /// one value.
+    ///
+    /// Trace: FR-024-AC-23, TC-035
+    #[test]
+    fn decode_falsification_refuses_a_repeated_binding_name() {
+        let transcript = two_value_transcript("mod::h", 1, false);
+        let twice = [
+            argument("a", KaniPrimitiveType::I64),
+            argument("a", KaniPrimitiveType::Boolean),
+        ];
+        let error = decode_falsification("h", "mod", &twice, &transcript)
+            .expect_err("a repeated name is refused");
+        assert_eq!(error.code, "cg_witness_schema_duplicate_binding");
+        assert_eq!(error.context, "a");
     }
 
     /// A `Result`-role binding refuses rather than being silently included: it does not

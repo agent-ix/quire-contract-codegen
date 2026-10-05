@@ -357,7 +357,7 @@ fn for_each_cg_failure(check: impl Fn(ReplaySettlement<'_>)) {
             field: "a".to_owned(),
             value: 1,
         },
-        FrameReplayError::PreState(PreStateFault::PreNotNamed),
+        FrameReplayError::PreState(PreStateFault::InvocationUnreadable),
         FrameReplayError::ScopeMismatch {
             member: ScopeMember::Frame,
             harness: "h".to_owned(),

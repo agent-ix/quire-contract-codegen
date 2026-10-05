@@ -542,8 +542,8 @@ impl DocumentLabel {
 }
 
 /// A document's identity member.
-#[derive(Clone, Serialize, FixedShape)]
-struct IdentityMember {
+#[derive(Clone, Deserialize, Serialize, FixedShape)]
+pub(crate) struct IdentityMember {
     authority: String,
     identity: String,
     revision_namespace: String,
@@ -570,24 +570,28 @@ struct ModelHeader {
 }
 
 /// An integer value as the snapshot grammar spells it: a decimal string.
-#[derive(Serialize, FixedShape)]
-struct IntegerValue {
-    integer: String,
+///
+/// The leaf shapes below (`IntegerValue`, `SnapshotObject`, `SnapshotPopulation`, `ObjectRef`,
+/// `SnapshotLink`) are written and read through one definition: the frame replay reads the
+/// invocation and pre snapshot it ties to a playback with them (`replay::frame`).
+#[derive(Deserialize, Serialize, FixedShape)]
+pub(crate) struct IntegerValue {
+    pub(crate) integer: String,
 }
 
-#[derive(Serialize, FixedShape)]
-struct SnapshotObject {
-    key: String,
+#[derive(Deserialize, Serialize, FixedShape)]
+pub(crate) struct SnapshotObject {
+    pub(crate) key: String,
     #[serde(rename = "type")]
     object_type: String,
-    fields: BTreeMap<String, IntegerValue>,
+    pub(crate) fields: BTreeMap<String, IntegerValue>,
 }
 
-#[derive(Serialize, FixedShape)]
-struct SnapshotPopulation {
-    population: String,
+#[derive(Deserialize, Serialize, FixedShape)]
+pub(crate) struct SnapshotPopulation {
+    pub(crate) population: String,
     complete: bool,
-    objects: Vec<SnapshotObject>,
+    pub(crate) objects: Vec<SnapshotObject>,
 }
 
 #[derive(Serialize, FixedShape)]
@@ -600,17 +604,17 @@ struct SnapshotDocument {
 }
 
 /// An object named by its population and key.
-#[derive(Serialize, FixedShape)]
-struct ObjectRef {
-    population: String,
-    key: String,
+#[derive(Deserialize, Serialize, FixedShape)]
+pub(crate) struct ObjectRef {
+    pub(crate) population: String,
+    pub(crate) key: String,
 }
 
 /// A snapshot as the invocation names it: its identity and `sha256-jcs` digest.
-#[derive(Serialize, FixedShape)]
-struct SnapshotLink {
+#[derive(Deserialize, Serialize, FixedShape)]
+pub(crate) struct SnapshotLink {
     identity: IdentityMember,
-    digest: String,
+    pub(crate) digest: String,
 }
 
 #[derive(Serialize, FixedShape)]

@@ -310,22 +310,35 @@ pub const INVOCATION_DOCUMENT: usize = 0;
 pub const PRE_DOCUMENT: usize = 1;
 
 impl Invocation {
-    /// This invocation with the document at `index` edited as JSON. The document keeps the
-    /// digest it is addressed by, so the edit is what a reader of the provided bytes finds, not
-    /// what the digest names.
+    /// This invocation with the document at `index` edited as JSON and addressed by the digest
+    /// of its new bytes. An edited pre snapshot is re-linked from the invocation, which is
+    /// re-addressed in turn, so every provided document still hashes to its digest and the
+    /// edit is what the replay reads.
     pub fn edited(&self, index: usize, edit: impl FnOnce(&mut Value)) -> Self {
         let mut documents = self.documents.clone();
         let mut value: Value =
             serde_json::from_slice(&documents[index].1).expect("a JSON document");
         edit(&mut value);
         documents[index].1 = value.to_string().into_bytes();
+        documents[index].0.digest = jcs_digest(&documents[index].1);
+        if index == PRE_DOCUMENT {
+            let mut invocation: Value =
+                serde_json::from_slice(&documents[INVOCATION_DOCUMENT].1).expect("JSON");
+            invocation["pre"]["digest"] = json!(format!(
+                "sha256-jcs:{}",
+                hex(&documents[PRE_DOCUMENT].0.digest)
+            ));
+            documents[INVOCATION_DOCUMENT].1 = invocation.to_string().into_bytes();
+            documents[INVOCATION_DOCUMENT].0.digest = jcs_digest(&documents[INVOCATION_DOCUMENT].1);
+        }
         Self {
-            reference: self.reference.clone(),
+            reference: documents[INVOCATION_DOCUMENT].0.clone(),
             documents,
         }
     }
 
-    /// This invocation with the bytes of the document at `index` replaced.
+    /// This invocation with the bytes of the document at `index` replaced and its digest left
+    /// as it was: a provided document whose bytes do not match the digest it is addressed by.
     pub fn replaced(&self, index: usize, bytes: &[u8]) -> Self {
         let mut documents = self.documents.clone();
         documents[index].1 = bytes.to_vec();

@@ -291,23 +291,39 @@ pub struct StateFrameIdentity {
 /// A persisted state-frame record is not a state-frame identity: it is no JSON object of the
 /// record's shape, or it lacks a member the identity requires, `state_fields` among them.
 #[derive(Debug)]
-pub struct StateFrameRecordError {
-    cause: serde_json::Error,
+pub enum StateFrameRecordError {
+    /// The record is not a JSON object of the record's shape, or lacks a member.
+    Json(serde_json::Error),
+    /// A state field is listed twice: the draw order would type two playback positions as one.
+    RepeatedField {
+        /// The repeated field.
+        field: String,
+    },
 }
 
 impl std::fmt::Display for StateFrameRecordError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            formatter,
-            "the record is not a state-frame identity: {}",
-            self.cause
-        )
+        match self {
+            Self::Json(cause) => write!(
+                formatter,
+                "the record is not a state-frame identity: {cause}"
+            ),
+            Self::RepeatedField { field } => {
+                write!(
+                    formatter,
+                    "the record lists the state field `{field}` twice"
+                )
+            }
+        }
     }
 }
 
 impl std::error::Error for StateFrameRecordError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.cause)
+        match self {
+            Self::Json(cause) => Some(cause),
+            Self::RepeatedField { .. } => None,
+        }
     }
 }
 
@@ -337,10 +353,22 @@ impl StateFrameIdentity {
     ///
     /// [`StateFrameRecordError`] when `record` is not a state-frame record: a record written
     /// before the identity carried `state_fields` has no draw order to decode a playback by and
-    /// is refused, not read with a guessed one.
+    /// is refused, not read with a guessed one, and so is a record that lists a state field
+    /// twice.
     pub fn from_record(record: &str) -> Result<Self, StateFrameRecordError> {
-        serde_json::from_str::<StateFrameRecord>(record)
+        let identity = serde_json::from_str::<StateFrameRecord>(record)
             .map(|record| record.identity)
-            .map_err(|cause| StateFrameRecordError { cause })
+            .map_err(StateFrameRecordError::Json)?;
+        let mut seen = std::collections::BTreeSet::new();
+        match identity
+            .state_fields
+            .iter()
+            .find(|field| !seen.insert(field.as_str()))
+        {
+            Some(field) => Err(StateFrameRecordError::RepeatedField {
+                field: field.clone(),
+            }),
+            None => Ok(identity),
+        }
     }
 }
