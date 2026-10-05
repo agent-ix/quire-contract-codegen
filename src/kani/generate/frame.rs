@@ -140,13 +140,68 @@ pub fn generate_state_frame_obligations(
     request: &StateFrameRequest<'_>,
 ) -> Result<StateFrameObligations, StateFrameRefusal> {
     let prepared = prepare(request)?;
-    // The frame is read before the condition, as this entry always has: a clause refused by both
-    // roles reports the frame's refusal.
+    first_refusal(request, &prepared)?;
     let frame = frame_harness(request, &prepared)?;
     let postcondition = contract_harness(request, &prepared)?;
     Ok(StateFrameObligations {
         postcondition,
         frame,
+    })
+}
+
+/// The refusal this entry has always reported first for a clause that both roles refuse, so that
+/// splitting the engine into roles does not change which one it names: the frame's effects, the
+/// condition's shape, a field missing from the state (the frame's grants, then the clause's),
+/// a frame granting every field, and the clause field's bound. Each role makes its own checks
+/// again; this only fixes the order of the first refusal of the pair.
+fn first_refusal(
+    request: &StateFrameRequest<'_>,
+    prepared: &Prepared<'_>,
+) -> Result<(), StateFrameRefusal> {
+    let granted = prepared.grants.as_ref().map_err(Clone::clone)?;
+    let condition = prepared.condition.as_ref().map_err(Clone::clone)?;
+    for field in granted
+        .iter()
+        .map(String::as_str)
+        .chain([condition.field.as_str()])
+    {
+        require_state_field(request, field)?;
+    }
+    checked_fields(request, prepared, granted)?;
+    require_bound(prepared, condition)
+}
+
+/// The state fields the frame does not grant, or why there are none.
+fn checked_fields(
+    request: &StateFrameRequest<'_>,
+    prepared: &Prepared<'_>,
+    granted: &BTreeSet<String>,
+) -> Result<Vec<String>, StateFrameRefusal> {
+    let checked = request
+        .state_fields
+        .iter()
+        .filter(|field| !granted.contains(**field))
+        .map(|field| (*field).to_owned())
+        .collect::<Vec<_>>();
+    if checked.is_empty() {
+        return Err(StateFrameRefusal::NothingForbidden {
+            frame: prepared.shape.scope.frame.clone(),
+        });
+    }
+    Ok(checked)
+}
+
+/// The framed object must declare an `i64` integer range for the clause's field.
+fn require_bound(prepared: &Prepared<'_>, condition: &Condition) -> Result<(), StateFrameRefusal> {
+    field_range(
+        &prepared.graph,
+        &prepared.shape.scope.object,
+        &condition.field,
+    )
+    .map(drop)
+    .map_err(|cause| StateFrameRefusal::BoundNotResolved {
+        field: condition.field.clone(),
+        cause,
     })
 }
 
@@ -238,12 +293,7 @@ fn contract_harness(
     } = prepared;
     let condition = condition.as_ref().map_err(Clone::clone)?;
     require_state_field(request, &condition.field)?;
-    if let Err(cause) = field_range(graph, &shape.scope.object, &condition.field) {
-        return Err(StateFrameRefusal::BoundNotResolved {
-            field: condition.field.clone(),
-            cause,
-        });
-    }
+    require_bound(prepared, condition)?;
     let domains = state_domains(graph, &shape.scope.object, request);
     render(
         request,
@@ -275,17 +325,7 @@ fn frame_harness(
     for field in granted {
         require_state_field(request, field)?;
     }
-    let checked = request
-        .state_fields
-        .iter()
-        .filter(|field| !granted.contains(**field))
-        .map(|field| (*field).to_owned())
-        .collect::<Vec<_>>();
-    if checked.is_empty() {
-        return Err(StateFrameRefusal::NothingForbidden {
-            frame: shape.scope.frame.clone(),
-        });
-    }
+    let checked = checked_fields(request, prepared, granted)?;
     let domains = state_domains(graph, &shape.scope.object, request);
     render(
         request,

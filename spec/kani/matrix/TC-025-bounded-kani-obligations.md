@@ -227,12 +227,13 @@ unsatisfiable requires as `cover_unsatisfied`.
     refusal of the failing role (FR-015-AC-68).
 
 The first code change backs steps 26 and 27, and the second steps 19, 21 to 25 and, apart from
-one comparison, steps 20 and 28; both have landed. That comparison is of a `supported` harness
-with `generate_state_frame_role`, a crate-internal function that no test of `tests/it` can call,
-so steps 20 and 28 compare the harnesses with `generate_state_frame_obligations` where a clause's
-roles both succeed and read the refusal it returns where one fails, and FR-015-AC-60 and
-FR-015-AC-68 stay planned until that comparison has a test. The tests are in
-`tests/it/kani_obligations_state_frame.rs`; the package they negotiate holds twenty-three shapes,
+one comparison, steps 20 and 28; both have landed. The comparison against
+`generate_state_frame_role` is not testable from `tests/it` (crate-private) and no V2 package
+builder exists under `src/`; byte identity holds by construction. Steps 20 and 28 therefore
+compare the harnesses with `generate_state_frame_obligations` where a clause's roles both succeed
+and read the refusal it returns where one fails, and their tests carry no trace tag of
+FR-015-AC-60 or FR-015-AC-68, which stay planned until that comparison has a test. The tests are in
+`tests/it/kani_obligations_state_frame.rs`; the package they negotiate holds twenty-four shapes,
 each over nodes of its own and read under a byte ceiling above the default, which the corpus
 package alone nearly fills.
 

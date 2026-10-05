@@ -1049,6 +1049,7 @@ const KEYWORD_READ: usize = 19;
 const SPARE_A: usize = 20;
 const SPARE_B: usize = 21;
 const SPARE_C: usize = 22;
+const NEGATION_GRANTS_ALL: usize = 23;
 
 fn arm_shapes() -> Vec<Shape> {
     let edits: Vec<fn(Shape) -> Shape> = vec![
@@ -1135,6 +1136,11 @@ fn arm_shapes() -> Vec<Shape> {
         |shape| shape,
         |shape| shape,
         |shape| shape,
+        |shape| Shape {
+            condition: Condition::Negated,
+            modifies: &["audit", "balance"],
+            ..shape
+        },
     ];
     edits
         .into_iter()
@@ -1353,7 +1359,13 @@ fn tc_025_every_state_frame_item_has_a_record_whatever_an_earlier_item_refused()
 /// role; the record carries its symbol. The harness calls the item's own subject path, and the
 /// request's `subject_path` is not read.
 ///
-/// Trace: FR-015-AC-60, TC-025
+/// This does not back FR-015-AC-60, which stays planned and is not traced here: the comparison
+/// with `generate_state_frame_role` is not testable from `tests/it` (the function is
+/// crate-private and no V2 package builder exists under `src/`); byte identity holds by
+/// construction, and this test compares against the public entry for a clause whose roles both
+/// succeed.
+///
+/// Trace: TC-025
 #[test]
 fn tc_025_a_supported_state_frame_item_returns_the_harness_the_engine_generates() {
     use StateFrameRole::{Contract, Frame};
@@ -1775,12 +1787,50 @@ fn tc_025_a_state_frame_request_is_refused_whole_for_the_requests_own_faults() {
     );
 }
 
+/// The single-clause entry names the refusal it always named first for a clause both roles
+/// refuse: the condition's shape before a frame granting every field. The first assertion fails
+/// if the roles are simply run frame-first; the second pins the refusal for a missing granted
+/// field and does not tell the orders apart.
+///
+/// Trace: FR-015-AC-29, TC-025
+#[test]
+fn tc_025_the_single_clause_entry_keeps_its_first_refusal_when_both_roles_refuse() {
+    let refuse = |shape: usize, fields: &[&str]| {
+        generate_state_frame_obligations(&StateFrameRequest {
+            package: &world().package,
+            clause: &world().ids[shape].clause,
+            state_path: STATE_PATH,
+            state_fields: fields,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        })
+        .expect_err("both roles refuse")
+    };
+    // A negation (contract) on a frame granting every field (frame).
+    assert!(matches!(
+        refuse(NEGATION_GRANTS_ALL, &STATE_FIELDS),
+        StateFrameRefusal::ConditionNotSupported { .. }
+    ));
+    // A granted field the state lacks (frame) precedes the check that nothing is forbidden.
+    assert_eq!(
+        refuse(GRANTS_ALL, &["audit"]),
+        StateFrameRefusal::UnknownStateField {
+            field: "balance".to_owned()
+        }
+    );
+}
+
 /// The two roles of a clause settle independently: a frame granting every field leaves the
 /// contract item `supported`, a negation leaves the frame item `supported`, and a refused
 /// lowering refuses both alike. `generate_state_frame_obligations` returns the refusal of the
 /// failing role, and a supported harness is the role's own.
 ///
-/// Trace: FR-015-AC-68, TC-025
+/// This does not back FR-015-AC-68, which stays planned and is not traced here: the comparison
+/// with `generate_state_frame_role` is not testable from `tests/it` (the function is
+/// crate-private and no V2 package builder exists under `src/`); byte identity holds by
+/// construction, and the harnesses are checked only for their role and clause.
+///
+/// Trace: TC-025
 #[test]
 fn tc_025_the_two_roles_of_a_state_clause_settle_independently() {
     use StateFrameRole::{Contract, Frame};

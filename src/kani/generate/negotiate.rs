@@ -71,8 +71,8 @@ use crate::{
     kani::generate::outcome::{
         state_frame_disposition, InvalidObligationItem, KaniObligationError, KaniObligationOutcome,
         KaniObligationRequest, ObligationDisposition, ObligationItem, ObligationRecord,
-        ObligationSubject, StateFrameRole, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
-        MAX_OBLIGATION_UNWIND,
+        ObligationSubject, StateFrameRefusal, StateFrameRole, UnsupportedObligation,
+        MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
     },
     kani::generate::precondition::render_precondition,
     kani::generate::record::{artifact, harness_path, record},
@@ -218,10 +218,9 @@ enum Outcome<'a> {
     LoweredScalar(Box<LoweredScalarClaim>),
     /// A `StateFrame` item that yielded its harness.
     StateFrame(Box<StateFrameHarness>),
-    /// A `StateFrame` item the engine refused, already settled by the one refusal-to-record
-    /// mapping. Never [`ObligationDisposition::Supported`]: a supported item is
-    /// [`Self::StateFrame`].
-    StateFrameRefused(ObligationDisposition),
+    /// A `StateFrame` item the engine refused. The refusal is held, not its record, so the item
+    /// cannot be `supported`; `state_frame_disposition` maps it where the record is built.
+    StateFrameRefused(StateFrameRefusal),
     RequiresBound(CheckedNodeId),
     Unsupported(UnsupportedObligation),
     Invalid(InvalidObligationItem),
@@ -230,11 +229,18 @@ enum Outcome<'a> {
 impl Outcome<'_> {
     /// Whether this item rejects the whole request.
     fn is_invalid(&self) -> bool {
-        matches!(
-            self,
-            Self::Invalid(_)
-                | Self::StateFrameRefused(ObligationDisposition::InvalidRequest { .. })
-        )
+        match self {
+            Self::Invalid(_) => true,
+            Self::StateFrameRefused(refusal) => matches!(
+                state_frame_disposition(refusal.clone()),
+                ObligationDisposition::InvalidRequest { .. }
+            ),
+            Self::Lowered(_)
+            | Self::LoweredScalar(_)
+            | Self::StateFrame(_)
+            | Self::RequiresBound(_)
+            | Self::Unsupported(_) => false,
+        }
     }
 
     fn disposition_without_harness(self) -> ObligationDisposition {
@@ -245,7 +251,7 @@ impl Outcome<'_> {
             Self::StateFrame(harness) => ObligationDisposition::Supported {
                 harness_symbol: harness.identity.harness_symbol,
             },
-            Self::StateFrameRefused(disposition) => disposition,
+            Self::StateFrameRefused(refusal) => state_frame_disposition(refusal),
             Self::RequiresBound(unbounded_type) => {
                 ObligationDisposition::RequiresBound { unbounded_type }
             }
@@ -306,7 +312,7 @@ fn classify_state_frame<'a>(
 ) -> ItemState<'a> {
     let outcome = match generate_state_frame_role(request, role) {
         Ok(harness) => Outcome::StateFrame(Box::new(harness)),
-        Err(refusal) => Outcome::StateFrameRefused(state_frame_disposition(refusal)),
+        Err(refusal) => Outcome::StateFrameRefused(refusal),
     };
     ItemState {
         kind: Some(role.obligation_kind()),
