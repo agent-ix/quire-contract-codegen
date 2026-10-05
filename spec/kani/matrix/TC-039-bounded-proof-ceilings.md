@@ -50,8 +50,9 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
     abstraction function's module and the imports of the shadow, the expectation and the harness
     (only `core`, `alloc`, `std` and `kani`).
 13. Run the refinement over the stand-in subject unmutated, over one that charges one extra
-    `equality.pair`, over one that refuses a legal pair, and over one that returns the other
-    verdict, reading each case outcome.
+    `equality.pair`, over one that refuses a legal pair, over one that returns the other
+    verdict, and over one whose environment refuses to construct a value the shadow draws, reading
+    each case outcome.
 14. Run the refinement over a domain of exactly the case cap, one case larger, and one whose case
     count overflows `u128`, twice each with equal inputs and one run with another seed, reading the
     class, the case count, the cases run, the seed, that a sampled run executed the boundary cases
@@ -108,8 +109,8 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
     abstraction function's module is imported by neither the shadow, the expectation nor the
     harness (FR-028-AC-14); the shadow source names no crate but `core`, `alloc`, `std` and `kani`
     (FR-028-AC-13).
-13. The unmutated subject agrees on every case; the extra charge, the refused legal pair and the
-    other verdict are each a recorded disagreement carrying the case and both results, none
+13. The unmutated subject agrees on every case; the extra charge, the refused legal pair, the
+    other verdict and the construction refusal are each a recorded disagreement carrying the case and both results, none
     skipped (FR-028-AC-15).
 14. The domain of exactly the cap is `exhaustive` with every case run; the larger and the
     overflowing domains are `sampled` with the boundary cases plus exactly the sample size of
