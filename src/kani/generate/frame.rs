@@ -39,7 +39,10 @@ use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     kani::abi::{adapter_options, i64_literal, KaniSolver},
-    kani::generate::outcome::MAX_OBLIGATION_UNWIND,
+    kani::generate::outcome::{
+        BoundNotResolvedCause, StateFrameLoweringRefusal, StateFrameRefusal,
+        UnsupportedFrameEffect, MAX_OBLIGATION_UNWIND,
+    },
     kani::identity::{
         StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
         StateFrameProperty, StateFrameScope,
@@ -128,197 +131,6 @@ enum Side {
     Post,
 }
 
-/// A frame effect this generator has no finite encoding for.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UnsupportedFrameEffect {
-    /// The frame creates an object type.
-    Creates,
-    /// The frame deletes an object type.
-    Deletes,
-    /// The frame grants a relationship.
-    Relationship,
-    /// The frame grants a field of a type other than the clause's object.
-    ForeignField,
-}
-
-/// Why a request produced no harness.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum StateFrameRefusal {
-    /// The unwind bound is outside `1..=MAX_OBLIGATION_UNWIND`.
-    UnwindOutOfRange {
-        /// The requested bound.
-        unwind: u32,
-    },
-    /// A path is not a Rust path.
-    InvalidPath {
-        /// The offending path.
-        path: String,
-    },
-    /// A field name is not a Rust identifier, or is named twice.
-    InvalidField {
-        /// The offending name.
-        name: String,
-    },
-    /// Lowering did not produce the clause: an unsupported family, a missing bound or an
-    /// unknown node.
-    NotLowered {
-        /// IR's own record.
-        record: Box<CompleteLoweringRecordV2>,
-    },
-    /// The node is not a `state`/`state_clause` node.
-    NotAStateClause {
-        /// The node's family.
-        node_tag: String,
-        /// The node's form.
-        semantic_form: String,
-    },
-    /// The clause is an invariant or a precondition.
-    NotAPostcondition {
-        /// The clause kind the node names.
-        clause: String,
-    },
-    /// A node does not have the shape QSpec FR-341 and FR-342 fix, or names a node the graph
-    /// does not hold.
-    MalformedClause {
-        /// The node that failed to decode.
-        at: CheckedNodeId,
-    },
-    /// The condition is not one integer comparison of pre and post reads of one field.
-    ConditionNotSupported {
-        /// The node that is outside the supported shape.
-        at: CheckedNodeId,
-    },
-    /// The two sides of the comparison read different fields.
-    ObservationsDiffer {
-        /// The left operand's field.
-        left: String,
-        /// The right operand's field.
-        right: String,
-    },
-    /// Both sides of the comparison observe the same side of the operation.
-    ObservationsSameSide,
-    /// The frame has an effect with no finite encoding.
-    FrameEffectUnsupported {
-        /// The frame node.
-        frame: CheckedNodeId,
-        /// The effect.
-        effect: UnsupportedFrameEffect,
-    },
-    /// The framed object's member for the clause's field declares no `i64` integer range.
-    BoundNotResolved {
-        /// The clause's field.
-        field: String,
-    },
-    /// A field the clause reads or the frame grants is not in `state_fields`.
-    UnknownStateField {
-        /// The field.
-        field: String,
-    },
-    /// The frame grants every state field, so it forbids no effect and there is nothing to
-    /// assert.
-    NothingForbidden {
-        /// The frame node.
-        frame: CheckedNodeId,
-    },
-    /// The generated source exceeds [`MAX_GENERATED_SOURCE_BYTES`].
-    ResourceLimitExceeded {
-        /// The generated size.
-        bytes: usize,
-    },
-    /// The generated source does not parse as Rust.
-    InvalidGeneratedSyntax {
-        /// The parse error.
-        error: String,
-    },
-    /// The identity record failed to serialize.
-    RecordSerialization,
-}
-
-impl std::fmt::Display for StateFrameRefusal {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnwindOutOfRange { unwind } => {
-                write!(
-                    formatter,
-                    "unwind bound {unwind} is outside 1..={MAX_OBLIGATION_UNWIND}"
-                )
-            }
-            Self::InvalidPath { path } => write!(formatter, "`{path}` is not a Rust path"),
-            Self::InvalidField { name } => {
-                write!(
-                    formatter,
-                    "`{name}` is not a distinct Rust field identifier"
-                )
-            }
-            Self::NotLowered { record } => {
-                write!(formatter, "the clause did not lower: {record:?}")
-            }
-            Self::NotAStateClause {
-                node_tag,
-                semantic_form,
-            } => {
-                write!(
-                    formatter,
-                    "node is `{node_tag}`/`{semantic_form}`, not state/state_clause"
-                )
-            }
-            Self::NotAPostcondition { clause } => {
-                write!(formatter, "clause kind `{clause}` is not a postcondition")
-            }
-            Self::MalformedClause { at } => write!(formatter, "malformed clause at {}", at.digest),
-            Self::ConditionNotSupported { at } => {
-                write!(
-                    formatter,
-                    "condition is outside the supported shape at {}",
-                    at.digest
-                )
-            }
-            Self::ObservationsDiffer { left, right } => {
-                write!(
-                    formatter,
-                    "the condition reads `{left}` and `{right}`, not one field"
-                )
-            }
-            Self::ObservationsSameSide => {
-                formatter.write_str("the condition compares two reads of the same side")
-            }
-            Self::FrameEffectUnsupported { frame, effect } => {
-                write!(
-                    formatter,
-                    "frame {} has unsupported effect {effect:?}",
-                    frame.digest
-                )
-            }
-            Self::BoundNotResolved { field } => {
-                write!(
-                    formatter,
-                    "the object declares no i64 integer range for `{field}`"
-                )
-            }
-            Self::UnknownStateField { field } => {
-                write!(formatter, "`{field}` is not a declared state field")
-            }
-            Self::NothingForbidden { frame } => {
-                write!(formatter, "frame {} grants every state field", frame.digest)
-            }
-            Self::ResourceLimitExceeded { bytes } => {
-                write!(
-                    formatter,
-                    "generated source of {bytes} bytes exceeds the ceiling"
-                )
-            }
-            Self::InvalidGeneratedSyntax { error } => {
-                write!(formatter, "generated source does not parse: {error}")
-            }
-            Self::RecordSerialization => {
-                formatter.write_str("the identity record did not serialize")
-            }
-        }
-    }
-}
-
-impl std::error::Error for StateFrameRefusal {}
-
 /// Generates the operation-contract and frame-effect harnesses of one postcondition clause.
 ///
 /// # Errors
@@ -360,12 +172,13 @@ pub fn generate_state_frame_obligations(
             frame: shape.scope.frame.clone(),
         });
     }
-    let domains = state_domains(&graph, &shape.scope.object, request);
-    if !domains.iter().any(|domain| domain.field == condition.field) {
+    if let Err(cause) = field_range(&graph, &shape.scope.object, &condition.field) {
         return Err(StateFrameRefusal::BoundNotResolved {
             field: condition.field,
+            cause,
         });
     }
+    let domains = state_domains(&graph, &shape.scope.object, request);
     let postcondition = render(
         request,
         &shape.scope,
@@ -439,12 +252,70 @@ fn lower_clause(request: &StateFrameRequest<'_>) -> Result<(), StateFrameRefusal
         .package
         .lower(std::slice::from_ref(request.clause), &profile);
     match result.records.into_iter().next() {
-        Some(CompleteLoweringRecordV2::Lowered { .. }) => Ok(()),
-        Some(record) => Err(StateFrameRefusal::NotLowered {
-            record: Box::new(record),
-        }),
+        Some(record) => match lowering_refusal(record) {
+            None => Ok(()),
+            Some(refusal) => Err(StateFrameRefusal::NotLowered {
+                refusal: Box::new(refusal),
+            }),
+        },
         None => Err(StateFrameRefusal::MalformedClause {
             at: request.clause.clone(),
+        }),
+    }
+}
+
+/// `None` for a lowered record, else the refusal arm it is. An exhaustive `match` with no
+/// wildcard arm, so an arm Contract IR adds fails to compile here until it is classed.
+fn lowering_refusal(record: CompleteLoweringRecordV2) -> Option<StateFrameLoweringRefusal> {
+    match record {
+        CompleteLoweringRecordV2::Lowered { .. } => None,
+        CompleteLoweringRecordV2::Unsupported {
+            node_id,
+            unsupported_node_id,
+            node_tag,
+        } => Some(StateFrameLoweringRefusal::Unsupported {
+            node_id,
+            unsupported_node_id,
+            node_tag,
+        }),
+        CompleteLoweringRecordV2::RequiresBound {
+            node_id,
+            unbounded_type,
+        } => Some(StateFrameLoweringRefusal::RequiresBound {
+            node_id,
+            unbounded_type,
+        }),
+        CompleteLoweringRecordV2::InvalidInput { node_id } => {
+            Some(StateFrameLoweringRefusal::InvalidInput { node_id })
+        }
+        CompleteLoweringRecordV2::InvalidBody {
+            node_id,
+            body_node_id,
+            refusal,
+        } => Some(StateFrameLoweringRefusal::InvalidBody {
+            node_id,
+            body_node_id,
+            refusal,
+        }),
+        CompleteLoweringRecordV2::BodyIncomplete {
+            node_id,
+            body_node_id,
+            incomplete,
+        } => Some(StateFrameLoweringRefusal::BodyIncomplete {
+            node_id,
+            body_node_id,
+            incomplete,
+        }),
+        CompleteLoweringRecordV2::Failed {
+            node_id,
+            limit_kind,
+            limit,
+            consumed,
+        } => Some(StateFrameLoweringRefusal::Failed {
+            node_id,
+            limit_kind,
+            limit,
+            consumed,
         }),
     }
 }
@@ -527,6 +398,7 @@ impl ClauseShape {
         let node = *graph.nodes.get(clause).ok_or_else(malformed)?;
         if &*node.node_tag != "state" || &*node.semantic_form != "state_clause" {
             return Err(StateFrameRefusal::NotAStateClause {
+                node: clause.clone(),
                 node_tag: node.node_tag.to_string(),
                 semantic_form: node.semantic_form.to_string(),
             });
@@ -606,10 +478,9 @@ impl ClauseShape {
                 .get("name")
                 .and_then(Value::as_str)
                 .ok_or_else(malformed)?;
+            // A name read from the graph, not one the caller supplied.
             if !is_identifier(name) {
-                return Err(StateFrameRefusal::InvalidField {
-                    name: name.to_owned(),
-                });
+                return Err(malformed());
             }
             granted.insert(name.to_owned());
         }
@@ -658,17 +529,15 @@ impl ClauseShape {
         clause: &'g CheckedNodeId,
         term: &'g Value,
     ) -> Result<Observation, StateFrameRefusal> {
-        let unsupported =
-            |at: &CheckedNodeId| StateFrameRefusal::ConditionNotSupported { at: at.clone() };
-        let operand = graph
-            .follow(term, clause)
-            .ok_or_else(|| unsupported(clause))?;
+        // An operand the graph cannot follow is a malformed clause, not an unsupported shape.
+        let dangling = |at: &CheckedNodeId| StateFrameRefusal::MalformedClause { at: at.clone() };
+        let operand = graph.follow(term, clause).ok_or_else(|| dangling(clause))?;
         if let Some([inner]) = application(operand.body, "pre", "quire.op.state.pre")
             .and_then(|arguments| <&[Value; 1]>::try_from(arguments).ok())
         {
             let read = graph
                 .follow(inner, operand.id)
-                .ok_or_else(|| unsupported(operand.id))?;
+                .ok_or_else(|| dangling(operand.id))?;
             let field = self.field_read(graph, &read)?;
             return Ok(Observation {
                 field,
@@ -705,18 +574,26 @@ impl ClauseShape {
             .and_then(Value::as_str)
             .filter(|_| is_own_field)
             .ok_or_else(unsupported)?;
+        // A name read from the graph, not one the caller supplied.
         if !is_identifier(name) {
-            return Err(StateFrameRefusal::InvalidField {
-                name: name.to_owned(),
+            return Err(StateFrameRefusal::MalformedClause {
+                at: read.id.clone(),
             });
         }
-        let dereference = graph.follow(dereference, read.id).ok_or_else(unsupported)?;
+        let dereference = graph.follow(dereference, read.id).ok_or_else(|| {
+            StateFrameRefusal::MalformedClause {
+                at: read.id.clone(),
+            }
+        })?;
         let [subject] = application(dereference.body, "deref", "quire.op.model.deref")
             .and_then(|arguments| <&[Value; 1]>::try_from(arguments).ok())
             .ok_or_else(unsupported)?;
         let subject = graph
             .follow(subject, dereference.id)
-            .and_then(|subject| subject.node)
+            .ok_or_else(|| StateFrameRefusal::MalformedClause {
+                at: dereference.id.clone(),
+            })?
+            .node
             .ok_or_else(unsupported)?;
         let is_self = &*subject.node_tag == "value"
             && &*subject.semantic_form == "parameter"
@@ -761,47 +638,73 @@ fn read_scope(graph: &Graph<'_>, anchor: &CheckedSemanticNodeV2) -> Option<State
     })
 }
 
-fn integer_range(body: &Value) -> Option<(i64, i64)> {
+/// The endpoint literals of an `integer_range` body, minimum then maximum.
+fn range_literals(body: &Value) -> Option<(&str, &str)> {
     let members = body.get("members")?.as_array()?;
     let [minimum, maximum] = bound_members(members, INTEGER_RANGE_MEMBERS)?;
-    Some((
-        literal(minimum, "integer")?.parse().ok()?,
-        literal(maximum, "integer")?.parse().ok()?,
-    ))
+    Some((literal(minimum, "integer")?, literal(maximum, "integer")?))
 }
 
-/// The range of each state field: the `integer_range` the field's own member of the framed
-/// object's body references, for each field whose member declares one.
-fn state_domains(
+/// The `i64` range the framed object's member of `field` declares, or the ground it declares
+/// none: the member's `value.target` is not a bound, is a bound that is not a readable
+/// `integer_range`, or is one with an endpoint outside `i64`; or the member is absent or its
+/// value is not a reference.
+fn field_range(
     graph: &Graph<'_>,
     object: &CheckedNodeId,
-    request: &StateFrameRequest<'_>,
-) -> Vec<StateFieldDomain> {
+    field: &str,
+) -> Result<(i64, i64), BoundNotResolvedCause> {
     let members = graph
         .nodes
         .get(object)
         .and_then(|node| node.body.get("members")?.as_array())
         .map(Vec::as_slice)
         .unwrap_or_default();
-    let declared = |field: &str| {
-        let member = members
-            .iter()
-            .find(|member| member.get("name").and_then(Value::as_str) == Some(field))?;
-        let target = node_id(member.get("value")?.get("target")?)?;
-        let bound = graph.nodes.get(&target)?;
-        (&*bound.semantic_form == "integer_range")
-            .then(|| integer_range(&bound.body))
-            .flatten()
+    let member = members
+        .iter()
+        .find(|member| member.get("name").and_then(Value::as_str) == Some(field))
+        .ok_or(BoundNotResolvedCause::MemberAbsent)?;
+    let target = member
+        .get("value")
+        .and_then(|value| value.get("target"))
+        .and_then(node_id)
+        .ok_or(BoundNotResolvedCause::ValueNotReference)?;
+    let Some(bound) = graph
+        .nodes
+        .get(&target)
+        .filter(|node| &*node.node_tag == CheckedNodeTag::BoundedDomain.as_wire())
+    else {
+        return Err(BoundNotResolvedCause::UnboundedType { target });
     };
+    if &*bound.semantic_form != "integer_range" {
+        return Err(BoundNotResolvedCause::NotIntegerRange { bound: target });
+    }
+    let Some((minimum, maximum)) = range_literals(&bound.body) else {
+        return Err(BoundNotResolvedCause::NotIntegerRange { bound: target });
+    };
+    match (minimum.parse(), maximum.parse()) {
+        (Ok(minimum), Ok(maximum)) => Ok((minimum, maximum)),
+        _ => Err(BoundNotResolvedCause::EndpointOutsideI64 { bound: target }),
+    }
+}
+
+/// The range of each state field whose member of the framed object declares one.
+fn state_domains(
+    graph: &Graph<'_>,
+    object: &CheckedNodeId,
+    request: &StateFrameRequest<'_>,
+) -> Vec<StateFieldDomain> {
     request
         .state_fields
         .iter()
         .filter_map(|field| {
-            declared(field).map(|(minimum, maximum)| StateFieldDomain {
-                field: (*field).to_owned(),
-                minimum,
-                maximum,
-            })
+            field_range(graph, object, field)
+                .ok()
+                .map(|(minimum, maximum)| StateFieldDomain {
+                    field: (*field).to_owned(),
+                    minimum,
+                    maximum,
+                })
         })
         .collect()
 }

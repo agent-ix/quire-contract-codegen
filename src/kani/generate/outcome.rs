@@ -3,10 +3,11 @@
 //! `generate/`: it imports no family.
 
 use quire_contract_model::{
-    BoundPackage, CheckedNodeId, CheckedPackageV2, CheckedSourceMapEntry, ClauseKind, ClauseRef,
+    BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete, CheckedPackageLimit,
+    CheckedPackageRefusal, CheckedPackageV2, CheckedSourceMapEntry, ClauseKind, ClauseRef,
     DependencyIdentity, SourceSpan,
 };
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 use crate::{
     core::diagnostic::GenerationErrorCode,
@@ -300,6 +301,16 @@ pub enum UnsupportedObligation {
         /// The node's own form within that family.
         semantic_form: String,
     },
+    /// The single-clause state and frame engine refused the clause for a ground that has no
+    /// code of its own here: a condition shape, a frame effect, a clause field's bound, a
+    /// malformed clause or a lowering refusal. It is not [`Self::NoFiniteEncoding`], which says
+    /// a node family has no finite encoding: the shapes this reason carries have one that this
+    /// arm does not render. Serialized as `code: state_frame_refused` with the refusal's own
+    /// snake_case code beside it, never the IR record.
+    StateFrameRefused {
+        /// The engine's refusal.
+        refusal: StateFrameRefusal,
+    },
 }
 
 /// Why an item is not a valid request.
@@ -322,6 +333,25 @@ pub enum InvalidObligationItem {
     MixedBoundPackages,
     /// The claim map was not generated from the package.
     PackageMismatch,
+    /// A `StateFrame` item's state path or subject path is not a Rust path.
+    InvalidStatePath {
+        /// The offending path.
+        path: String,
+    },
+    /// A `StateFrame` item's state fields hold a name that is not a distinct Rust identifier, or
+    /// lack the field its clause reads or its frame grants.
+    InvalidStateField {
+        /// The offending name.
+        name: String,
+    },
+    /// The unwind bound is outside `1..=MAX_OBLIGATION_UNWIND` where the item's own engine
+    /// checks it.
+    InvalidStateUnwind {
+        /// The offending bound.
+        unwind: u32,
+    },
+    /// `StateFrame` items name more than one admitted package.
+    MixedStatePackages,
 }
 
 /// Per-item negotiation outcome.
@@ -389,5 +419,737 @@ impl KaniObligationOutcome {
         match self {
             Self::Emitted { records, .. } | Self::Rejected { records } => records,
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The single-clause state and frame engine's refusals, and their one mapping to a record
+// ---------------------------------------------------------------------------
+
+/// A frame effect the state and frame engine has no finite encoding for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnsupportedFrameEffect {
+    /// The frame creates an object type.
+    Creates,
+    /// The frame deletes an object type.
+    Deletes,
+    /// The frame grants a relationship.
+    Relationship,
+    /// The frame grants a field of a type other than the clause's object.
+    ForeignField,
+}
+
+/// The six refusal arms of Contract IR's lowering record, and not its `Lowered` arm: a value of
+/// this type cannot hold a lowered node, so the mapping to a record has no row for one. Built
+/// from IR's record by an exhaustive `match` with no wildcard arm. The fields are IR's own public
+/// field types; IR's refusal and limit details are carried for the caller and never serialized.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "arm", rename_all = "snake_case")]
+pub enum StateFrameLoweringRefusal {
+    /// A reachable node's family is outside the lowering profile.
+    Unsupported {
+        /// The requested node.
+        node_id: CheckedNodeId,
+        /// The first unsupported reachable node.
+        unsupported_node_id: CheckedNodeId,
+        /// Its family.
+        #[serde(serialize_with = "serialize_node_tag")]
+        node_tag: CheckedNodeTag,
+    },
+    /// A reachable unbounded type has no reachable bounding domain.
+    RequiresBound {
+        /// The requested node.
+        node_id: CheckedNodeId,
+        /// The first unbounded reachable type.
+        unbounded_type: CheckedNodeId,
+    },
+    /// The requested node is not in the admitted graph.
+    InvalidInput {
+        /// The requested node.
+        node_id: CheckedNodeId,
+    },
+    /// A reachable node body refused re-validation.
+    InvalidBody {
+        /// The requested node.
+        node_id: CheckedNodeId,
+        /// The node whose body refused.
+        body_node_id: CheckedNodeId,
+        /// The term validator's refusal.
+        #[serde(skip)]
+        refusal: CheckedPackageRefusal,
+    },
+    /// A reachable node body stopped at a validation limit.
+    BodyIncomplete {
+        /// The requested node.
+        node_id: CheckedNodeId,
+        /// The node whose body stopped.
+        body_node_id: CheckedNodeId,
+        /// The term validator's limit stop.
+        #[serde(skip)]
+        incomplete: CheckedPackageIncomplete,
+    },
+    /// The request exceeded its work budget or the byte limit the package was read under.
+    Failed {
+        /// The requested node.
+        node_id: CheckedNodeId,
+        /// The limit that failed.
+        #[serde(skip)]
+        limit_kind: CheckedPackageLimit,
+        /// The ceiling.
+        limit: u64,
+        /// The counter at the failed charge.
+        consumed: u64,
+    },
+}
+
+fn serialize_node_tag<S: Serializer>(
+    tag: &CheckedNodeTag,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(tag.as_wire())
+}
+
+/// Why the single-clause state and frame engine produced no harness.
+///
+/// Serialized with the snake_case `code` of the variant and the node, field and effect it names.
+/// No IR record is serialized.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "code", rename_all = "snake_case")]
+pub enum StateFrameRefusal {
+    /// The unwind bound is outside `1..=MAX_OBLIGATION_UNWIND`.
+    UnwindOutOfRange {
+        /// The requested bound.
+        unwind: u32,
+    },
+    /// A path is not a Rust path.
+    InvalidPath {
+        /// The offending path.
+        path: String,
+    },
+    /// A field name the caller supplied is not a Rust identifier, or is named twice.
+    InvalidField {
+        /// The offending name.
+        name: String,
+    },
+    /// Lowering did not produce the clause: an unsupported family, a missing bound or an
+    /// unknown node.
+    NotLowered {
+        /// The refusal arm of IR's lowering record, boxed to keep the refusal small.
+        refusal: Box<StateFrameLoweringRefusal>,
+    },
+    /// The node is not a `state`/`state_clause` node.
+    NotAStateClause {
+        /// The node.
+        node: CheckedNodeId,
+        /// The node's family.
+        node_tag: String,
+        /// The node's form.
+        semantic_form: String,
+    },
+    /// The clause is an invariant or a precondition.
+    NotAPostcondition {
+        /// The clause kind the node names.
+        clause: String,
+    },
+    /// A node does not have the shape QSpec FR-341 and FR-342 fix, a field name read from the
+    /// graph is not a Rust identifier, or an operand names a node the graph does not hold.
+    MalformedClause {
+        /// The node that failed to decode.
+        at: CheckedNodeId,
+    },
+    /// The condition is not one integer comparison of pre and post reads of one field.
+    ConditionNotSupported {
+        /// The node that is outside the supported shape.
+        at: CheckedNodeId,
+    },
+    /// The two sides of the comparison read different fields.
+    ObservationsDiffer {
+        /// The left operand's field.
+        left: String,
+        /// The right operand's field.
+        right: String,
+    },
+    /// Both sides of the comparison observe the same side of the operation.
+    ObservationsSameSide,
+    /// The frame has an effect with no finite encoding.
+    FrameEffectUnsupported {
+        /// The frame node.
+        frame: CheckedNodeId,
+        /// The effect.
+        effect: UnsupportedFrameEffect,
+    },
+    /// The framed object's member for the clause's field declares no `i64` integer range.
+    BoundNotResolved {
+        /// The clause's field.
+        field: String,
+        /// Which ground, with the node it names when the member has one.
+        cause: BoundNotResolvedCause,
+    },
+    /// A field the clause reads or the frame grants is not in the caller's state fields.
+    UnknownStateField {
+        /// The field.
+        field: String,
+    },
+    /// The frame grants every state field, so it forbids no effect and there is nothing to
+    /// assert.
+    NothingForbidden {
+        /// The frame node.
+        frame: CheckedNodeId,
+    },
+    /// The generated source exceeds
+    /// [`MAX_GENERATED_SOURCE_BYTES`](crate::core::artifact::MAX_GENERATED_SOURCE_BYTES).
+    ResourceLimitExceeded {
+        /// The generated size.
+        bytes: usize,
+    },
+    /// The generated source does not parse as Rust.
+    InvalidGeneratedSyntax {
+        /// The parse error.
+        error: String,
+    },
+    /// The identity record failed to serialize.
+    RecordSerialization,
+}
+
+/// Why the framed object gives the clause's field no `i64` integer range: the one split of
+/// [`StateFrameRefusal::BoundNotResolved`] that the mapping to a record keys on.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "ground", rename_all = "snake_case")]
+pub enum BoundNotResolvedCause {
+    /// The member's `value.target` is an unbounded type, a node that is not a bound.
+    UnboundedType {
+        /// That target node.
+        target: CheckedNodeId,
+    },
+    /// The member's `value.target` is a bound that is not a readable `integer_range`.
+    NotIntegerRange {
+        /// The bound node.
+        bound: CheckedNodeId,
+    },
+    /// The member's `value.target` is an `integer_range` with an endpoint that does not fit `i64`.
+    EndpointOutsideI64 {
+        /// The bound node.
+        bound: CheckedNodeId,
+    },
+    /// The object has no member of the field's name.
+    MemberAbsent,
+    /// The member's value is not a reference, so it has no `value.target`.
+    ValueNotReference,
+}
+
+impl std::fmt::Display for StateFrameRefusal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnwindOutOfRange { unwind } => {
+                write!(
+                    formatter,
+                    "unwind bound {unwind} is outside 1..={MAX_OBLIGATION_UNWIND}"
+                )
+            }
+            Self::InvalidPath { path } => write!(formatter, "`{path}` is not a Rust path"),
+            Self::InvalidField { name } => {
+                write!(
+                    formatter,
+                    "`{name}` is not a distinct Rust field identifier"
+                )
+            }
+            Self::NotLowered { refusal } => {
+                write!(formatter, "the clause did not lower: {refusal:?}")
+            }
+            Self::NotAStateClause {
+                node_tag,
+                semantic_form,
+                ..
+            } => {
+                write!(
+                    formatter,
+                    "node is `{node_tag}`/`{semantic_form}`, not state/state_clause"
+                )
+            }
+            Self::NotAPostcondition { clause } => {
+                write!(formatter, "clause kind `{clause}` is not a postcondition")
+            }
+            Self::MalformedClause { at } => write!(formatter, "malformed clause at {}", at.digest),
+            Self::ConditionNotSupported { at } => {
+                write!(
+                    formatter,
+                    "condition is outside the supported shape at {}",
+                    at.digest
+                )
+            }
+            Self::ObservationsDiffer { left, right } => {
+                write!(
+                    formatter,
+                    "the condition reads `{left}` and `{right}`, not one field"
+                )
+            }
+            Self::ObservationsSameSide => {
+                formatter.write_str("the condition compares two reads of the same side")
+            }
+            Self::FrameEffectUnsupported { frame, effect } => {
+                write!(
+                    formatter,
+                    "frame {} has unsupported effect {effect:?}",
+                    frame.digest
+                )
+            }
+            Self::BoundNotResolved { field, cause } => {
+                write!(
+                    formatter,
+                    "the object declares no i64 integer range for `{field}`: {cause:?}"
+                )
+            }
+            Self::UnknownStateField { field } => {
+                write!(formatter, "`{field}` is not a declared state field")
+            }
+            Self::NothingForbidden { frame } => {
+                write!(formatter, "frame {} grants every state field", frame.digest)
+            }
+            Self::ResourceLimitExceeded { bytes } => {
+                write!(
+                    formatter,
+                    "generated source of {bytes} bytes exceeds the ceiling"
+                )
+            }
+            Self::InvalidGeneratedSyntax { error } => {
+                write!(formatter, "generated source does not parse: {error}")
+            }
+            Self::RecordSerialization => {
+                formatter.write_str("the identity record did not serialize")
+            }
+        }
+    }
+}
+
+impl std::error::Error for StateFrameRefusal {}
+
+/// The disposition and reason a refusal of the single-clause engine takes as a record (FR-015,
+/// the refusal-to-record table).
+///
+/// One total `match` over every [`StateFrameRefusal`] variant and every [`BoundNotResolvedCause`]
+/// and [`StateFrameLoweringRefusal`] arm, with no wildcard arm, so a variant added to any of them
+/// fails to compile until the table says where it goes. The `deny` below makes a wildcard arm a
+/// lint error under `make lint`.
+// The `StateFrame` arm of negotiation calls this; until it lands (FR-015-AC-59 to FR-015-AC-65,
+// IR-461 code change 2) only the tests do, so the expectation stops holding, and fails the
+// build, the moment a caller exists.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "called by the StateFrame arm, IR-461 code change 2"
+    )
+)]
+#[deny(
+    clippy::wildcard_enum_match_arm,
+    clippy::match_wildcard_for_single_variants
+)]
+pub(crate) fn state_frame_disposition(refusal: StateFrameRefusal) -> ObligationDisposition {
+    use BoundNotResolvedCause as Cause;
+    use StateFrameLoweringRefusal as Lowering;
+    let refused = |refusal| ObligationDisposition::Unsupported {
+        reason: UnsupportedObligation::StateFrameRefused { refusal },
+    };
+    let unsupported = |reason| ObligationDisposition::Unsupported { reason };
+    let invalid = |reason| ObligationDisposition::InvalidRequest { reason };
+    match refusal {
+        // The lowering refusal is boxed, so it is read through a reference; the two arms that
+        // keep a node clone it, and the arms that carry the refusal keep the box whole.
+        StateFrameRefusal::NotLowered {
+            refusal: ref lowering,
+        } => match &**lowering {
+            Lowering::RequiresBound { unbounded_type, .. } => {
+                ObligationDisposition::RequiresBound {
+                    unbounded_type: unbounded_type.clone(),
+                }
+            }
+            Lowering::Unsupported {
+                unsupported_node_id,
+                node_tag,
+                ..
+            } => unsupported(UnsupportedObligation::NoFiniteEncoding {
+                node_id: unsupported_node_id.clone(),
+                node_tag: node_tag.as_wire(),
+            }),
+            Lowering::InvalidInput { .. } => invalid(InvalidObligationItem::UnknownNode),
+            Lowering::InvalidBody { .. }
+            | Lowering::BodyIncomplete { .. }
+            | Lowering::Failed { .. } => refused(refusal),
+        },
+        StateFrameRefusal::BoundNotResolved {
+            cause: Cause::UnboundedType {
+                target: unbounded_type,
+            },
+            ..
+        } => ObligationDisposition::RequiresBound { unbounded_type },
+        StateFrameRefusal::NotAStateClause {
+            node,
+            node_tag,
+            semantic_form,
+        } => unsupported(UnsupportedObligation::UnknownNodeKind {
+            node_id: node,
+            node_tag,
+            semantic_form,
+        }),
+        StateFrameRefusal::BoundNotResolved {
+            cause:
+                Cause::NotIntegerRange { .. }
+                | Cause::EndpointOutsideI64 { .. }
+                | Cause::MemberAbsent
+                | Cause::ValueNotReference,
+            ..
+        }
+        | StateFrameRefusal::NotAPostcondition { .. }
+        | StateFrameRefusal::MalformedClause { .. }
+        | StateFrameRefusal::ConditionNotSupported { .. }
+        | StateFrameRefusal::ObservationsDiffer { .. }
+        | StateFrameRefusal::ObservationsSameSide
+        | StateFrameRefusal::FrameEffectUnsupported { .. }
+        | StateFrameRefusal::NothingForbidden { .. } => refused(refusal),
+        StateFrameRefusal::ResourceLimitExceeded { bytes } => {
+            unsupported(UnsupportedObligation::ResourceLimitExceeded { bytes })
+        }
+        StateFrameRefusal::InvalidGeneratedSyntax { error } => {
+            unsupported(UnsupportedObligation::InvalidGeneratedSyntax { error })
+        }
+        StateFrameRefusal::RecordSerialization => unsupported(UnsupportedObligation::RenderFailed),
+        StateFrameRefusal::InvalidPath { path } => {
+            invalid(InvalidObligationItem::InvalidStatePath { path })
+        }
+        StateFrameRefusal::InvalidField { name: field }
+        | StateFrameRefusal::UnknownStateField { field } => {
+            invalid(InvalidObligationItem::InvalidStateField { name: field })
+        }
+        StateFrameRefusal::UnwindOutOfRange { unwind } => {
+            invalid(InvalidObligationItem::InvalidStateUnwind { unwind })
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn node(seed: u8) -> CheckedNodeId {
+        CheckedNodeId {
+            domain: "quire.checked-semantic-node/v1".into(),
+            digest: format!("{seed:064x}").into(),
+        }
+    }
+
+    fn unsupported(reason: UnsupportedObligation) -> ObligationDisposition {
+        ObligationDisposition::Unsupported { reason }
+    }
+
+    fn refused(refusal: StateFrameRefusal) -> ObligationDisposition {
+        unsupported(UnsupportedObligation::StateFrameRefused { refusal })
+    }
+
+    fn invalid(reason: InvalidObligationItem) -> ObligationDisposition {
+        ObligationDisposition::InvalidRequest { reason }
+    }
+
+    fn not_lowered(refusal: StateFrameLoweringRefusal) -> StateFrameRefusal {
+        StateFrameRefusal::NotLowered {
+            refusal: Box::new(refusal),
+        }
+    }
+
+    fn unbound(cause: BoundNotResolvedCause) -> StateFrameRefusal {
+        StateFrameRefusal::BoundNotResolved {
+            field: "balance".to_owned(),
+            cause,
+        }
+    }
+
+    /// Every refusal the engine returns, with the disposition and reason the FR-015 table gives
+    /// it, built directly: each `BoundNotResolved` ground the table separates, each of the six
+    /// refusal arms of `NotLowered`, and the variants a request reaches only with a defective
+    /// generator or a source over 1 MiB.
+    fn table() -> Vec<(&'static str, StateFrameRefusal, ObligationDisposition)> {
+        let refusal_detail = CheckedPackageRefusal {
+            code: quire_contract_model::CheckedPackageRefusalCode::MalformedWire,
+            path: None,
+            cause: None,
+            locus: None,
+            contract_version: None,
+            document_pointer: None,
+        };
+        let incomplete = CheckedPackageIncomplete {
+            limit_kind: CheckedPackageLimit::Work,
+            limit: 10,
+            consumed: 11,
+            path: None,
+        };
+        let same = |label, refusal: StateFrameRefusal| (label, refusal.clone(), refused(refusal));
+        vec![
+            (
+                "unwind out of range",
+                StateFrameRefusal::UnwindOutOfRange { unwind: 0 },
+                invalid(InvalidObligationItem::InvalidStateUnwind { unwind: 0 }),
+            ),
+            (
+                "invalid path",
+                StateFrameRefusal::InvalidPath {
+                    path: "not a path".to_owned(),
+                },
+                invalid(InvalidObligationItem::InvalidStatePath {
+                    path: "not a path".to_owned(),
+                }),
+            ),
+            (
+                "invalid field",
+                StateFrameRefusal::InvalidField {
+                    name: "bad name".to_owned(),
+                },
+                invalid(InvalidObligationItem::InvalidStateField {
+                    name: "bad name".to_owned(),
+                }),
+            ),
+            (
+                "unknown state field",
+                StateFrameRefusal::UnknownStateField {
+                    field: "audit".to_owned(),
+                },
+                invalid(InvalidObligationItem::InvalidStateField {
+                    name: "audit".to_owned(),
+                }),
+            ),
+            (
+                "not lowered: requires bound",
+                not_lowered(StateFrameLoweringRefusal::RequiresBound {
+                    node_id: node(1),
+                    unbounded_type: node(2),
+                }),
+                ObligationDisposition::RequiresBound {
+                    unbounded_type: node(2),
+                },
+            ),
+            (
+                "not lowered: unsupported",
+                not_lowered(StateFrameLoweringRefusal::Unsupported {
+                    node_id: node(1),
+                    unsupported_node_id: node(3),
+                    node_tag: CheckedNodeTag::Temporal,
+                }),
+                unsupported(UnsupportedObligation::NoFiniteEncoding {
+                    node_id: node(3),
+                    node_tag: "temporal",
+                }),
+            ),
+            (
+                "not lowered: invalid input",
+                not_lowered(StateFrameLoweringRefusal::InvalidInput { node_id: node(1) }),
+                invalid(InvalidObligationItem::UnknownNode),
+            ),
+            same(
+                "not lowered: invalid body",
+                not_lowered(StateFrameLoweringRefusal::InvalidBody {
+                    node_id: node(1),
+                    body_node_id: node(4),
+                    refusal: refusal_detail,
+                }),
+            ),
+            same(
+                "not lowered: body incomplete",
+                not_lowered(StateFrameLoweringRefusal::BodyIncomplete {
+                    node_id: node(1),
+                    body_node_id: node(4),
+                    incomplete,
+                }),
+            ),
+            same(
+                "not lowered: failed",
+                not_lowered(StateFrameLoweringRefusal::Failed {
+                    node_id: node(1),
+                    limit_kind: CheckedPackageLimit::Work,
+                    limit: 10,
+                    consumed: 11,
+                }),
+            ),
+            (
+                "not a state clause",
+                StateFrameRefusal::NotAStateClause {
+                    node: node(5),
+                    node_tag: "state".to_owned(),
+                    semantic_form: "frame".to_owned(),
+                },
+                unsupported(UnsupportedObligation::UnknownNodeKind {
+                    node_id: node(5),
+                    node_tag: "state".to_owned(),
+                    semantic_form: "frame".to_owned(),
+                }),
+            ),
+            same(
+                "not a postcondition",
+                StateFrameRefusal::NotAPostcondition {
+                    clause: "precondition".to_owned(),
+                },
+            ),
+            same(
+                "malformed clause",
+                StateFrameRefusal::MalformedClause { at: node(6) },
+            ),
+            same(
+                "condition not supported",
+                StateFrameRefusal::ConditionNotSupported { at: node(7) },
+            ),
+            same(
+                "observations differ",
+                StateFrameRefusal::ObservationsDiffer {
+                    left: "balance".to_owned(),
+                    right: "audit".to_owned(),
+                },
+            ),
+            same(
+                "observations same side",
+                StateFrameRefusal::ObservationsSameSide,
+            ),
+            same(
+                "frame creates",
+                StateFrameRefusal::FrameEffectUnsupported {
+                    frame: node(8),
+                    effect: UnsupportedFrameEffect::Creates,
+                },
+            ),
+            same(
+                "frame deletes",
+                StateFrameRefusal::FrameEffectUnsupported {
+                    frame: node(8),
+                    effect: UnsupportedFrameEffect::Deletes,
+                },
+            ),
+            same(
+                "frame grants a relationship",
+                StateFrameRefusal::FrameEffectUnsupported {
+                    frame: node(8),
+                    effect: UnsupportedFrameEffect::Relationship,
+                },
+            ),
+            same(
+                "frame grants a foreign field",
+                StateFrameRefusal::FrameEffectUnsupported {
+                    frame: node(8),
+                    effect: UnsupportedFrameEffect::ForeignField,
+                },
+            ),
+            (
+                "bound not resolved: unbounded type",
+                unbound(BoundNotResolvedCause::UnboundedType { target: node(9) }),
+                ObligationDisposition::RequiresBound {
+                    unbounded_type: node(9),
+                },
+            ),
+            same(
+                "bound not resolved: not an integer range",
+                unbound(BoundNotResolvedCause::NotIntegerRange { bound: node(9) }),
+            ),
+            same(
+                "bound not resolved: endpoint outside i64",
+                unbound(BoundNotResolvedCause::EndpointOutsideI64 { bound: node(9) }),
+            ),
+            same(
+                "bound not resolved: member absent",
+                unbound(BoundNotResolvedCause::MemberAbsent),
+            ),
+            same(
+                "bound not resolved: value not a reference",
+                unbound(BoundNotResolvedCause::ValueNotReference),
+            ),
+            same(
+                "nothing forbidden",
+                StateFrameRefusal::NothingForbidden { frame: node(8) },
+            ),
+            (
+                "resource limit exceeded",
+                StateFrameRefusal::ResourceLimitExceeded { bytes: 1_048_577 },
+                unsupported(UnsupportedObligation::ResourceLimitExceeded { bytes: 1_048_577 }),
+            ),
+            (
+                "invalid generated syntax",
+                StateFrameRefusal::InvalidGeneratedSyntax {
+                    error: "expected item".to_owned(),
+                },
+                unsupported(UnsupportedObligation::InvalidGeneratedSyntax {
+                    error: "expected item".to_owned(),
+                }),
+            ),
+            (
+                "record serialization",
+                StateFrameRefusal::RecordSerialization,
+                unsupported(UnsupportedObligation::RenderFailed),
+            ),
+        ]
+    }
+
+    /// Every `StateFrameRefusal` variant, each `BoundNotResolved` ground and each `NotLowered`
+    /// arm maps to the disposition and reason of the table; a mutant that moves any one to
+    /// another disposition or reason fails its row. The mapping is one `match` with no wildcard
+    /// arm: `deny(clippy::wildcard_enum_match_arm)` rejects one under `make lint`, and the
+    /// inspection below reads the function's text.
+    ///
+    /// Trace: FR-015-AC-66, TC-025.
+    #[test]
+    fn tc_025_every_state_frame_refusal_maps_to_the_disposition_the_table_gives() {
+        let rows = table();
+        // 17 variants, with `NotLowered` split into its 6 arms (+5), `BoundNotResolved` into its
+        // 5 grounds (+4) and `FrameEffectUnsupported` into its 4 effects (+3).
+        assert_eq!(rows.len(), 17 + 5 + 4 + 3);
+        for (label, refusal, expected) in rows {
+            assert_eq!(state_frame_disposition(refusal), expected, "{label}");
+        }
+
+        // The reason serializes as `state_frame_refused` with the refusal's snake_case code and
+        // the effect it names, and no IR record.
+        let serialized = serde_json::to_value(refused(StateFrameRefusal::FrameEffectUnsupported {
+            frame: node(8),
+            effect: UnsupportedFrameEffect::ForeignField,
+        }))
+        .expect("the reason serializes");
+        assert_eq!(
+            serialized,
+            serde_json::json!({
+                "disposition": "unsupported",
+                "reason": {
+                    "code": "state_frame_refused",
+                    "refusal": {
+                        "code": "frame_effect_unsupported",
+                        "frame": {"domain": "quire.checked-semantic-node/v1", "digest": node(8).digest},
+                        "effect": "foreign_field",
+                    },
+                },
+            })
+        );
+        let lowering =
+            serde_json::to_value(refused(not_lowered(StateFrameLoweringRefusal::Failed {
+                node_id: node(1),
+                limit_kind: CheckedPackageLimit::Work,
+                limit: 10,
+                consumed: 11,
+            })))
+            .expect("the reason serializes");
+        assert_eq!(
+            lowering["reason"]["refusal"],
+            serde_json::json!({
+                "code": "not_lowered",
+                "refusal": {
+                    "arm": "failed",
+                    "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": node(1).digest},
+                    "limit": 10,
+                    "consumed": 11,
+                },
+            })
+        );
+
+        // Inspection: the mapping is a `match` over the refusal with no wildcard arm.
+        let source = include_str!("outcome.rs");
+        let start = source
+            .find("pub(crate) fn state_frame_disposition(")
+            .expect("the mapping is in this file");
+        let body = &source[start..];
+        let body = &body[..body.find("\n}\n").expect("the mapping ends")];
+        assert!(body.contains("match refusal {"));
+        assert!(!body.contains("_ =>"), "the mapping has a wildcard arm");
     }
 }

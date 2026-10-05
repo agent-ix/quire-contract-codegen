@@ -38,12 +38,12 @@ use qsl_replay::{
     ReplayRefusal, ReplayResult, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
-    execute_kani_obligation, generate_state_frame_obligations, FrameReplayError,
-    KaniExecutionRequest, KaniInstallation, KaniRunOutcome, StateComparison, StateFieldDomain,
-    StateFrameHarness, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
-    StateFrameRequest, UnsupportedFrameEffect,
+    execute_kani_obligation, generate_state_frame_obligations, BoundNotResolvedCause,
+    FrameReplayError, KaniExecutionRequest, KaniInstallation, KaniRunOutcome, StateComparison,
+    StateFieldDomain, StateFrameHarness, StateFrameLoweringRefusal, StateFrameObligations,
+    StateFrameProperty, StateFrameRefusal, StateFrameRequest, UnsupportedFrameEffect,
 };
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2, CompleteLoweringRecordV2};
+use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use serde_json::{json, Value};
 
 const OBJECT: u32 = 4001;
@@ -72,6 +72,8 @@ struct Shape {
     /// The range the object's `balance` member declares; `None` types it by the plain integer.
     balance_bound: Option<(i64, i64)>,
     audit_bound: (i64, i64),
+    /// The name of the object's `balance` member, which the clause's reads carry in the graph.
+    condition_field: &'static str,
 }
 
 /// What a frame does beyond granting fields.
@@ -111,6 +113,7 @@ impl Shape {
         condition: Condition::PostGePre,
         balance_bound: Some(model::FIELDS[0].1),
         audit_bound: model::FIELDS[1].1,
+        condition_field: "balance",
     };
 
     fn code(&self, base: u32) -> u32 {
@@ -189,7 +192,7 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         "object_type",
         &key(T_BOOLEAN),
         json!({"term": "aggregate", "members": [
-            member("balance", reference(&balance_key)),
+            member(shape.condition_field, reference(&balance_key)),
             member("audit", reference(&audit_key)),
         ]}),
         &[balance_key.clone(), audit_key.clone()],
@@ -306,7 +309,7 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         &mut builder,
         shape.code(410),
         &object,
-        "balance",
+        shape.condition_field,
         &balance_key,
     );
     let pre_balance = pre_read(&mut builder, shape.code(411), &post_balance, &balance_key);
@@ -317,7 +320,7 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         &mut builder,
         shape.code(421),
         &other,
-        (&object, "balance", &balance_key),
+        (&object, shape.condition_field, &balance_key),
     );
     let pre_other = pre_read(&mut builder, shape.code(422), &post_other, &balance_key);
     let zero = literal("integer", "0");
@@ -653,14 +656,18 @@ fn tc_025_shapes_without_a_finite_encoding_are_refused_by_name() {
         }),
         UnsupportedFrameEffect::ForeignField
     ));
-    // The clause's own field declares no integer range.
+    // The clause's own field is typed by a plain integer type, no bound: the target is the
+    // unbounded type.
     assert_eq!(
         with(13, |shape| Shape {
             balance_bound: None,
             ..shape
         }),
         StateFrameRefusal::BoundNotResolved {
-            field: "balance".to_owned()
+            field: "balance".to_owned(),
+            cause: BoundNotResolvedCause::UnboundedType {
+                target: package::id(&key(T_INTEGER))
+            },
         }
     );
     // A field the frame grants or the clause reads that the caller's state lacks.
@@ -767,9 +774,38 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
             clause: &absent,
             ..request(&fixture, &STATE_FIELDS)
         }),
-        StateFrameRefusal::NotLowered { record }
-            if matches!(*record, CompleteLoweringRecordV2::InvalidInput { .. })
+        StateFrameRefusal::NotLowered { refusal }
+            if matches!(*refusal, StateFrameLoweringRefusal::InvalidInput { .. })
     ));
+}
+
+/// A field name the clause reads from the graph that is not a Rust identifier is a malformed
+/// clause at the read's node: not `InvalidField` and not `ConditionNotSupported`. (A frame's
+/// granted name is checked by IR when it admits the package, so no admitted package reaches the
+/// engine's own check of it.) A field name the caller supplies that is not an identifier is still
+/// `InvalidField`, naming it. Each assertion fails if the refusal moves to the other code.
+///
+/// Trace: FR-015-AC-67, TC-025
+#[test]
+fn tc_025_a_non_identifier_graph_field_name_is_a_malformed_clause() {
+    let read = Shape {
+        variant: 15,
+        condition_field: "not-an-identifier",
+        ..Shape::HEALTHY
+    };
+    assert_eq!(
+        refusal(&read, &STATE_FIELDS),
+        StateFrameRefusal::MalformedClause {
+            at: code_id(read.code(410))
+        }
+    );
+    // The caller's own field list is the one place `InvalidField` is still named.
+    assert_eq!(
+        refusal(&Shape::HEALTHY, &["balance", "not-an-identifier"]),
+        StateFrameRefusal::InvalidField {
+            name: "not-an-identifier".to_owned()
+        }
+    );
 }
 
 /// `replay_frame` refuses an envelope whose `clause_node` or `occurrence_key` is not its
