@@ -1149,6 +1149,8 @@ mod batch_tests {
 echo $! > "$CALLS.sibling"
 python3 -c 'import os, pathlib, signal, sys
 root = pathlib.Path(sys.argv[1])
+os.setsid()
+pathlib.Path(str(root) + ".groups").write_text(str(os.getpgrp()) + " " + str(os.getpgid(os.getppid())))
 parent = pathlib.Path("/proc") / str(os.getppid()) / "status"
 rss = next(line.split()[1] for line in parent.read_text().splitlines() if line.startswith("VmRSS:"))
 pathlib.Path(str(root) + ".parent-rss").write_text(rss)
@@ -1215,6 +1217,16 @@ wait
             parent_kib * 1024 < ceiling,
             "the launcher's own resident memory must be below the ceiling"
         );
+        let groups = fs::read_to_string(stand_in.directory.join("calls.groups")).unwrap();
+        let groups: Vec<u32> = groups
+            .split_whitespace()
+            .map(|pid| pid.parse().unwrap())
+            .collect();
+        assert_eq!(groups.len(), 2);
+        assert_ne!(
+            groups[0], groups[1],
+            "the allocating descendant must have left the launcher group"
+        );
         recorded_process_gone(&stand_in.directory.join("calls.child"));
         recorded_process_gone(&stand_in.directory.join("calls.sibling"));
         assert_eq!(evidence.exit_code, None);
@@ -1255,10 +1267,26 @@ wait
     #[test]
     fn identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory() {
         let mut harness = memory_member("a", 128 * 1024 * 1024);
+        harness.identity.state_fields = vec!["input".to_owned()];
+        harness.identity.domains = vec![crate::StateFieldDomain {
+            field: "input".to_owned(),
+            minimum: -3,
+            maximum: 7,
+        }];
         let verifying = StandIn::verifying("successful-memory-bound");
         let evidence = execute_kani_obligation(&verifying.request(&harness, T)).unwrap();
         assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
         assert_eq!(evidence.ceilings, harness.identity.ceilings);
+        assert_eq!(
+            evidence.symbolic_arguments,
+            vec![crate::SymbolicArgumentBounds {
+                identifier: "input".to_owned(),
+                bounds: crate::SymbolicBounds::Integer {
+                    minimum: -3,
+                    maximum: 7
+                },
+            }]
+        );
         assert_eq!(
             evidence.memory.mechanism,
             crate::MemoryMechanism::LinuxProcfsTreeRss
