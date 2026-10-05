@@ -37,6 +37,26 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 8. Submit a counterexample through the generator's replay entry point and pass the `Witness`,
    `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` and `ObligationIdentity` values it produces
    directly to `qsl_replay`'s own functions.
+9. Over a unit with two `postcondition` state clauses, replay a violating and a respecting run
+   through `StateClauseReplay::replay`, and call `qsl_replay::replay_state_clause` directly with
+   the same request and envelope. Replay once more through `replay_through` with an executor that
+   records its arguments and returns a sentinel result.
+10. Read back each clause's payload `clause` and `observation` and the envelope's `clause_node`
+    and `occurrence_key`, and the `ClauseSite` that `qsl_replay::call_site` returns for each
+    clause name. Request an undeclared clause name.
+11. Read the invocation document and its pre and post snapshots and their digests; change one
+    playback value and one post-state value and read the digests again.
+12. Build the document vector of FR-024-AC-14 (unsorted members, escaped characters, a large
+    integer, a fractional number and an exponent form) through the builder and through
+    `core::canonical`, and read the source of the new module and `Cargo.toml`.
+13. Submit a playback that binds no value for one declared state field.
+14. Replay the mutated subject's counterexample and the unmutated subject's run over the same pre
+    state, and read the envelope's arm and payload `witness`.
+15. Submit state field values at, and immediately outside, each declared range endpoint.
+16. With the installed backend (`make kani`), replay the real playback of the falsified
+    operation-contract harness of the mutated-to-debit subject.
+17. Request a replay for an operation that declares a parameter, one that declares a result, and
+    one that declares neither.
 
 ## Expected Results
 
@@ -56,10 +76,37 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    candidate is an `Input`-arm envelope.
 8. Every value is QSL's own `qsl_replay` type and is accepted by `qsl_replay` unchanged
    (FR-024-AC-10).
+9. `replay` returns the direct `replay_state_clause` result for each run, the two runs' results
+   differ, and the sentinel executor's value is returned as it is (FR-024-AC-11).
+10. Each payload names its clause and the `Invocation` arm, each envelope's identities equal that
+    clause's `ClauseSite` node and occurrence, and the undeclared name returns
+    `StateClauseReplayError::CallSite` with the executor not called (FR-024-AC-12).
+11. The pre snapshot holds the playback's values and the post snapshot the supplied post-state
+    values, and the invocation document holds the stated members with its two digests; each
+    changed value changes its snapshot's digest (FR-024-AC-13).
+12. The builder's bytes and digest equal `core::canonical`'s, and the module names no encoder
+    function of `quire_canonical`, no `sha2`, no `ByteDigest::of`, no member sort or hand-written
+    escaping, and `sha2` is not in `[dependencies]` (FR-024-AC-14).
+13. `StateClauseReplayError::MissingField` names the field, the executor is not called and no
+    snapshot holds a default (FR-024-AC-15).
+14. The mutated subject settles `reproduced-with-evaluated-witness`, `violation`, evaluated
+    `false`; the unmutated run settles `inconclusive`, `Verdicts`; both envelopes are on the
+    `Witness` arm with a payload `witness` of none (FR-024-AC-16).
+15. The endpoint values replay, and a value outside the range returns
+    `StateClauseReplayError::OutOfDomain` with the executor not called (FR-024-AC-17).
+16. The real playback settles `reproduced-with-evaluated-witness`, `violation`
+    (FR-024-AC-18).
+17. The first two return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation
+    and its declaration, with no document built and the executor not called; the third is not refused for its shape
+    (FR-024-AC-19).
 
 ## Status
 
 Planned. No step is implemented. The skeleton spine renders a QSL transcript from decoded values
 (`src/replay/function.rs`, TC-026), which is the shape step 2 checks, but it builds no envelope. Step 8
 holds for the decode path: `src/replay/witness.rs` uses no Contract IR witness type. The bounded-Kani corpus retains
-no counterexample packet, so step 5 (FR-024-AC-5) has nothing to submit.
+no counterexample packet, so step 5 (FR-024-AC-5) has nothing to submit. Steps 9 to 17
+(FR-024-AC-11 to FR-024-AC-19, IR-460) are planned: `src` has no consumer of
+`qsl_replay::replay_state_clause` and builds no invocation document. Step 16 is a real-Kani test in
+the module `kani_obligations_state_clause_replay`, run through the `kani_obligations` filter of
+`make kani`.

@@ -1,6 +1,6 @@
 ---
 id: AD-002
-title: "CG to QSL replay seam: call_site, replay, replay_frame and the counterexample envelope"
+title: "CG to QSL replay seam: call_site, replay, replay_frame, replay_state_clause and the counterexample envelope"
 type: ArchitectureDescription
 status: proposed
 owner: codegen-maintainers
@@ -30,8 +30,9 @@ value is [AD-003](AD-003-evidence-chain.md).
 
 A Kani falsification becomes evidence only if QSL's native evaluation reproduces it. This AD
 states what CG hands QSL for that, what QSL returns, and who is responsible for each part. It
-covers `qsl_replay::call_site`, `replay`, `replay_frame`, the backend-witness transcript, the
-counterexample envelope and the replay request.
+covers `qsl_replay::call_site`, `replay`, `replay_frame`, `replay_state_clause`, the backend-witness
+transcript, the counterexample envelope, the replay request and the invocation and snapshot
+documents CG builds for a state-clause replay.
 
 Out of scope: how Kani output is read (CG's transcript parser), QSL's evaluation, the terminal
 value of a run (AD-003) and the driver.
@@ -50,6 +51,9 @@ and who reports each failure.
 | Backend-witness transcript, admitted by `Witness::parse` | CG to QSL | QSL grammar | CG renders it from decoded values, never from Kani text |
 | `ReplayRequestWire` (and `ReplaySource::{Witness, Input}`) | CG to QSL | QSL | CG fills it; `replay` reads it |
 | `WitnessEnvelope` / `WitnessPacket` (frame counterexamples) | CG to QSL | QSL | CG builds through `WitnessEnvelope::reconstruct` |
+| `WitnessEnvelope<StateClauseCounterexample>` (postcondition state clause, `Invocation` observation) and `replay_state_clause` (planned, IR-460, FR-024-AC-11) | CG to QSL | QSL | CG builds the payload, with the clause node and occurrence from `call_site`'s `ClauseSite`, and the envelope through `WitnessEnvelope::reconstruct`; QSL replays |
+| `quire.state.invocation/v1` and `quire.state.snapshot/v1` documents (pre from the Kani playback, post from the caller's native run of the subject), in the request's byte provision (planned, IR-460, FR-024-AC-13) | CG to QSL | QSL grammar (FR-106) | CG builds them from its own inputs and encodes them only through `core::canonical`; QSL admits them by `sha256-jcs` digest |
+| `StateClauseReplayResult` | QSL to CG | QSL | CG reads; the terminal map reads it as FR-029-AC-16 states |
 | `ObligationIdentity` (32 bytes), in the envelope and in the request's obligation-identity slot | CG to QSL | QSL type; CG is to mint the value | see AD-003 |
 | `ReplayResult`, `FrameReplayResult`, `WitnessSettlement`, `Category` (QSL's `ProofCategory`, folded into one `Category` and re-exported by `qsl-replay`) | QSL to CG | QSL | CG reads; CG defines its own verdict only as a partition of QSL's (`ReplayVerdict`) |
 | `DeclaredDomain(ProofBound{DomainKey, FiniteBound})` | CG to QSL (in the envelope) | QSL (re-exported by `qsl-replay`) | CG is to build it from its argument bindings' bounds |
@@ -79,8 +83,10 @@ anywhere on this seam, and none is proposed.
   or `witness` module and no QSL dependency.
 - CG depends on `qsl-replay` and on IR; `qsl-replay` depends on the model crate through
   `qsl-package`. No cycle.
-- CG calls `qsl_replay::replay` and `replay_frame` only. No path takes a caller-supplied
-  executor.
+- CG calls `qsl_replay::replay`, `replay_frame` and `replay_state_clause` only. The function path
+  (`replay_counterexample_through`) and the state-clause path (`StateClauseReplay::replay_through`,
+  planned, IR-460) take a caller-supplied executor, which ends in the matching QSL function so a
+  caller can observe the request QSL receives; the frame path takes none.
 - The replay verdict is QSL's evaluation. CG supplies no value that decides it.
 
 ### Failure outcomes and who reports them
@@ -92,6 +98,8 @@ anywhere on this seam, and none is proposed.
 | A qualified name built from the operation's identifiers is not admitted (`FrameReplayError::Name`) | CG | typed refusal, no replay |
 | The frame witness transcript or the envelope CG built is not admitted (`FrameReplayError::Transcript`, `FrameReplayError::Envelope`, from `WitnessEnvelope::reconstruct`) | CG | typed refusal, no replay; CG built a value its own contract says QSL admits, so AD-003 maps it to a failure |
 | `replay` / `replay_frame` refuses the request or envelope | QSL (`ReplayRefusal`) | CG carries it unchanged in `Refused`; it is not a verdict on the evidence |
+| State-clause replay (planned, IR-460): a playback binds no value for a declared state field (`StateClauseReplayError::MissingField`), a state field lies outside its declared range (`OutOfDomain`), the operation declares a parameter or a result (`UnsupportedOperationShape`), a document is not encodable (`Document`), a name, transcript or envelope is not admitted (`Name`, `Transcript`, `Envelope`) | CG | typed error before any replay and no executor call; each carries no QSL code, so FR-029-AC-16 maps each to `Failed`, never `Incomplete` and never `Inconclusive(ReplayRefused)` |
+| State-clause replay (planned, IR-460): dependency selections not admitted or the clause not located (`StateClauseReplayError::Dependencies`, `CallSite`), or `replay_state_clause` refuses (`Refused`) | CG wrapping QSL | typed error, no result; read as the function and frame paths read the same refusals (FR-029-AC-13, FR-029-AC-16) |
 | Decoded value outside its declared domain (function path) | CG (`EvidenceFailureCause::Domain`) before any request is built | evidence failure; AD-003 link 7 maps it to a failure value, since it is CG's own defect and not a `ReplayRefusal` |
 | Replay ran and did not settle `ReproducedWithEvaluatedWitness` in category `violation` | QSL settles; CG partitions (`verdict_of`) | evidence failure with QSL's settlement and category |
 | A witness-sourced request settles on the input arm | CG (`WrongArm`) | typed refusal |
@@ -177,9 +185,9 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   that obligation join (FR-016-AC-21 to AC-23, implemented); the missing envelope remains.
 - `first_out_of_domain` is crate-private; `decode_falsification` is public
   (`src/replay/witness.rs:116`) and decodes to `qsl_replay::WitnessValue`.
-- QSL's `call_site` accepts a `ClauseSite` selection and QSL has a state-clause replay entry;
-  CG has no clause-replay entry in `src`. Not a gap against this AD; recorded so nobody assumes
-  it.
+- QSL's `call_site` accepts a `ClauseSite` selection and QSL has a state-clause replay entry
+  (`replay_state_clause`); CG has no clause-replay entry in `src` yet. The IR-412 postcondition
+  harness is its consumer, specified by FR-024-AC-11 to FR-024-AC-19 and planned (IR-460).
 - AD-001's Replay view and Current state describe the same function-path facts. AD-001 is not
   edited here.
 
@@ -187,7 +195,6 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
 
 | Question | Owner | Recommendation | Cost of the alternative |
 | --- | --- | --- | --- |
-| `call_site` selection for state clauses (`ClauseSite`) has no CG consumer | CG | Leave until a state-clause harness needs it. | none now |
 | The domain check before replay exists on the function path only | CG with QSL | CG keeps its own pre-check: a playback outside the harness's proof bound is a CG harness defect, and a QSL-side check of admitted values against `DeclaredDomain`, if QSL adds one, would report it as an invalid input and hide the defect. Do not drop the CG check on QSL's account. | Without CG's check a QSL refusal would hide a CG defect. |
 
 No compatibility layer is proposed or needed. If QSL changes the facade, CG changes its calls.
