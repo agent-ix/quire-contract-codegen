@@ -67,6 +67,10 @@ fn harness(name: &str, body: &str, unwind: u32) -> StateFrameHarness {
     .to_vec();
     StateFrameHarness {
         identity: StateFrameIdentity {
+            ceilings: quire_contract_codegen::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+                wall_clock: REAL_KANI_TIMEOUT,
+            },
             clause: node_id("1"),
             scope: StateFrameScope {
                 operation: "check".to_owned(),
@@ -159,12 +163,12 @@ impl Lane {
         target: &'a Path,
         timeout: Duration,
     ) -> KaniExecutionRequest<'a> {
+        assert_eq!(harness.identity.ceilings.wall_clock, timeout);
         KaniExecutionRequest {
             installation: &self.installation,
             harness: harness.into(),
             crate_directory: &self.crate_directory,
             target_directory: target,
-            timeout,
         }
     }
 }
@@ -262,7 +266,7 @@ fn tc_043_real_kani_one_process_runs_n_harnesses_where_n_ran_before() {
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_043_real_kani_batch_keeps_each_members_own_result_and_times_out_one_member() {
     let target = target();
-    let harnesses = [
+    let mut harnesses = [
         harness("verified", VERIFIED, 400),
         harness("falsified", FALSIFIED, 400),
         harness("two", TWO_FAILED_CHECKS, 400),
@@ -276,6 +280,9 @@ fn tc_043_real_kani_batch_keeps_each_members_own_result_and_times_out_one_member
         .unwrap_or_else(|refusal| panic!("the warm-up run: {refusal}"));
     assert_eq!(warm.outcome, KaniRunOutcome::Verified);
     let timeout = Duration::from_secs(20);
+    for harness in &mut harnesses {
+        harness.identity.ceilings.wall_clock = timeout;
+    }
     let requests: Vec<_> = harnesses
         .iter()
         .map(|harness| lane.request(harness, &target, timeout))
@@ -329,10 +336,13 @@ fn tc_043_real_kani_batch_keeps_each_members_own_result_and_times_out_one_member
     assert_eq!(evidence[3].batch.as_ref().unwrap().timeout_seconds, 20);
     assert_eq!(evidence[0].exit_code, Some(1));
 
-    let at_maximum = [
+    let mut at_maximum = [
         harness("verified", VERIFIED, 4),
         harness("verified_again", VERIFIED, 4),
     ];
+    for harness in &mut at_maximum {
+        harness.identity.ceilings.wall_clock = Duration::from_secs(u64::from(u32::MAX));
+    }
     let lane = Lane::new("maximum", &at_maximum);
     let requests: Vec<_> = at_maximum
         .iter()

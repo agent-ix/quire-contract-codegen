@@ -55,6 +55,8 @@ pub struct RoutedGenerationItem {
 /// The Kani generation context. Its fields have FR-015's meanings.
 #[derive(Clone, Copy, Debug)]
 pub struct KaniGenerationContext<'a> {
+    /// Resource ceilings recorded by every generated harness.
+    pub ceilings: crate::ProofCeilings,
     /// Rust path of the customer subject.
     pub subject_path: &'a str,
     /// Loop unwind bound.
@@ -310,6 +312,7 @@ fn generate_kani(
         })
         .collect::<Vec<_>>();
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: context.ceilings,
         items: &items,
         subject_path: context.subject_path,
         unwind: context.unwind,
@@ -618,6 +621,10 @@ mod tests {
         .expect("a checked node id");
         KaniScalarObligationHarness {
             identity: ScalarObligationIdentity {
+                ceilings: crate::ProofCeilings {
+                    memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+                    wall_clock: std::time::Duration::from_secs(600),
+                },
                 node_id,
                 operation_identity: "quire.op.integer.add".to_owned(),
                 oracle_symbol: "oracle".to_owned(),

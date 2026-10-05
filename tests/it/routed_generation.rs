@@ -79,6 +79,10 @@ fn route(request_index: usize, node_id: &CheckedNodeId) -> RoutedGenerationItem 
 fn kani_context(subject_path: &str, unwind: u32) -> GenerationContexts<'_> {
     GenerationContexts {
         kani: Some(KaniGenerationContext {
+            ceilings: quire_contract_codegen::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+                wall_clock: std::time::Duration::from_secs(600),
+            },
             subject_path,
             unwind,
         }),
@@ -101,6 +105,10 @@ fn fr015(
         })
         .collect::<Vec<_>>();
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: std::time::Duration::from_secs(600),
+        },
         items: &items,
         subject_path: "crate::subject",
         unwind: 1,

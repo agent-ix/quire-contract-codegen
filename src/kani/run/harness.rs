@@ -6,7 +6,7 @@ use crate::{
     kani::abi::KaniSolver,
     kani::identity::{
         KaniObligationHarness, KaniScalarObligationHarness, ObligationKind, StateFrameHarness,
-        StateFrameProperty,
+        StateFrameProperty, SymbolicArgumentBounds, SymbolicBounds,
     },
 };
 
@@ -44,6 +44,8 @@ impl<'a> From<&'a StateFrameHarness> for KaniExecutableHarness<'a> {
 
 /// Exactly what execution reads from a harness, whichever kind it is.
 pub(super) struct HarnessView<'a> {
+    pub(super) ceilings: crate::ProofCeilings,
+    pub(super) arguments: Vec<SymbolicArgumentBounds>,
     pub(super) rust: &'a Artifact,
     /// The `module::harness` path Kani names the harness by, which a batch passes to `--harness`
     /// and finds again as the `harness_id` of the report entry.
@@ -60,6 +62,26 @@ impl<'a> KaniExecutableHarness<'a> {
             Self::Contract(harness) => {
                 let identity = &harness.identity;
                 HarnessView {
+                    ceilings: identity.ceilings,
+                    arguments: identity
+                        .arguments
+                        .iter()
+                        .map(|argument| SymbolicArgumentBounds {
+                            identifier: argument.identifier.clone(),
+                            bounds: match (&argument.primitive_type, &argument.integer_bounds) {
+                                (crate::KaniPrimitiveType::Boolean, _) => SymbolicBounds::Boolean,
+                                (crate::KaniPrimitiveType::I64, Some(bounds)) => {
+                                    SymbolicBounds::Integer {
+                                        minimum: bounds.minimum,
+                                        maximum: bounds.maximum,
+                                    }
+                                }
+                                (crate::KaniPrimitiveType::I64, None) => {
+                                    SymbolicBounds::Unspecified
+                                }
+                            },
+                        })
+                        .collect(),
                     rust: &harness.rust,
                     selection: identity.harness_path().to_string(),
                     kind: Some(identity.kind),
@@ -71,6 +93,18 @@ impl<'a> KaniExecutableHarness<'a> {
             Self::Scalar(harness) => {
                 let identity = &harness.identity;
                 HarnessView {
+                    ceilings: identity.ceilings,
+                    arguments: identity
+                        .arguments
+                        .iter()
+                        .map(|argument| SymbolicArgumentBounds {
+                            identifier: argument.identifier.clone(),
+                            bounds: SymbolicBounds::Integer {
+                                minimum: argument.minimum,
+                                maximum: argument.maximum,
+                            },
+                        })
+                        .collect(),
                     rust: &harness.rust,
                     selection: identity.harness_path().to_string(),
                     kind: None,
@@ -82,6 +116,24 @@ impl<'a> KaniExecutableHarness<'a> {
             Self::StateFrame(harness) => {
                 let identity = &harness.identity;
                 HarnessView {
+                    ceilings: identity.ceilings,
+                    arguments: identity
+                        .state_fields
+                        .iter()
+                        .map(|field| SymbolicArgumentBounds {
+                            identifier: field.clone(),
+                            bounds: identity
+                                .domains
+                                .iter()
+                                .find(|domain| &domain.field == field)
+                                .map_or(SymbolicBounds::Unspecified, |domain| {
+                                    SymbolicBounds::Integer {
+                                        minimum: domain.minimum,
+                                        maximum: domain.maximum,
+                                    }
+                                }),
+                        })
+                        .collect(),
                     rust: &harness.rust,
                     selection: format!("{}::{}", identity.module_symbol, identity.harness_symbol),
                     kind: Some(match identity.property {

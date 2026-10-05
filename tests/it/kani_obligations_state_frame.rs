@@ -616,6 +616,10 @@ pub(crate) fn fixture_declaring(declares: Declares) -> Fixture {
 
 fn request<'a>(fixture: &'a Fixture, fields: &'a [&'a str]) -> StateFrameRequest<'a> {
     StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         package: &fixture.package,
         clause: &fixture.clause,
         state_path: STATE_PATH,
@@ -643,6 +647,10 @@ fn generated_from_twin(
 ) -> StateFrameObligations {
     let (package, clause) = twin.emitted_package(clause_name);
     generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         package: &package,
         clause: &clause,
         state_path: STATE_PATH,
@@ -797,6 +805,10 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
     // Equal inputs regenerate byte-identically, and the unwind bound is part of the identity.
     assert_eq!(generate(&fixture), generated);
     let unwound = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         unwind: 5,
         ..request(&fixture, &STATE_FIELDS)
     })
@@ -981,6 +993,10 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
     };
     assert_eq!(
         refused(StateFrameRequest {
+            ceilings: quire_contract_codegen::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+                wall_clock: KANI_TIMEOUT
+            },
             unwind: 0,
             ..request(&fixture, &STATE_FIELDS)
         }),
@@ -988,6 +1004,10 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
     );
     assert_eq!(
         refused(StateFrameRequest {
+            ceilings: quire_contract_codegen::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+                wall_clock: KANI_TIMEOUT
+            },
             subject_path: "not a path",
             ..request(&fixture, &STATE_FIELDS)
         }),
@@ -1002,6 +1022,10 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
         }
     );
     let frame_node = refused(StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         clause: &fixture.frame,
         ..request(&fixture, &STATE_FIELDS)
     });
@@ -1012,6 +1036,7 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
     let absent = package::id(&key(9999));
     assert!(matches!(
         refused(StateFrameRequest {
+            ceilings: quire_contract_codegen::ProofCeilings { memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(), wall_clock: KANI_TIMEOUT },
             clause: &absent,
             ..request(&fixture, &STATE_FIELDS)
         }),
@@ -1306,6 +1331,10 @@ fn item(shape: usize, role: StateFrameRole) -> ObligationItem<'static> {
 
 fn negotiate(items: &[ObligationItem<'_>]) -> KaniObligationOutcome {
     negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         items,
         subject_path: REQUEST_SUBJECT,
         unwind: 4,
@@ -1456,6 +1485,10 @@ fn tc_025_a_supported_state_frame_item_returns_the_harness_the_engine_generates(
     let items = [selected(Frame), selected(Contract)];
     let (records, harnesses) = emitted_state_frame(negotiate(&items));
     let engine = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         package: &fixture.package,
         clause: &fixture.clause,
         state_path: STATE_PATH,
@@ -1508,6 +1541,10 @@ fn tc_025_a_state_frame_item_with_no_bound_is_requires_bound() {
     let (package, audit) = twin.emitted_package("AuditNeverDrops");
     let balance = twin.emitted_package("BalanceNeverDrops").1;
     let expected = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         package: &package,
         clause: &audit,
         state_path: STATE_PATH,
@@ -1821,6 +1858,10 @@ fn tc_025_a_state_frame_request_is_refused_whole_for_the_requests_own_faults() {
     let one = [item(OK, StateFrameRole::Contract)];
     let refuse = |items: &[ObligationItem<'_>], subject_path: &str, unwind: u32| {
         negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: quire_contract_codegen::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+                wall_clock: KANI_TIMEOUT,
+            },
             items,
             subject_path,
             unwind,
@@ -1864,6 +1905,10 @@ fn tc_025_a_state_frame_request_is_refused_whole_for_the_requests_own_faults() {
 fn tc_025_the_single_clause_entry_keeps_its_first_refusal_when_both_roles_refuse() {
     let refuse = |shape: usize, fields: &[&str]| {
         generate_state_frame_obligations(&StateFrameRequest {
+            ceilings: quire_contract_codegen::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+                wall_clock: KANI_TIMEOUT,
+            },
             package: &world().package,
             clause: &world().ids[shape].clause,
             state_path: STATE_PATH,
@@ -1903,6 +1948,10 @@ fn tc_025_the_two_roles_of_a_state_clause_settle_independently() {
     use StateFrameRole::{Contract, Frame};
     let engine = |fixture: &Fixture| {
         generate_state_frame_obligations(&StateFrameRequest {
+            ceilings: quire_contract_codegen::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+                wall_clock: KANI_TIMEOUT,
+            },
             package: &fixture.package,
             clause: &fixture.clause,
             state_path: STATE_PATH,
@@ -2398,6 +2447,10 @@ fn tc_035_the_record_carries_the_draw_order_and_a_record_without_it_is_not_read(
     );
 
     let reversed = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         state_fields: &["audit", "balance"],
         ..request(&fixture, &STATE_FIELDS)
     })
@@ -2485,6 +2538,10 @@ fn tc_025_model_member_types_without_i64_ranges_remain_unranged() {
             ),
         }
         let generated = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
             package: &package,
             clause: &clause,
             state_path: STATE_PATH,
@@ -2628,6 +2685,10 @@ fn tc_035_a_source_model_range_within_jcs_safe_integer_replays_without_override(
         })
     );
     let harness = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         package: &package,
         clause: &clause,
         state_path: STATE_PATH,
@@ -2700,6 +2761,10 @@ fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim(
         })
     );
     let harness = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         package: &package,
         clause: &clause,
         state_path: STATE_PATH,
@@ -3232,6 +3297,10 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
         "QSL emits the object type with no members in its body"
     );
     let generated = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         package: &package,
         clause: &clause,
         state_path: STATE_PATH,
@@ -3287,6 +3356,10 @@ fn tc_025_model_field_table_preserves_the_requested_draw_order() {
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let fields = ["audit", "balance"];
     let generated = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         package: &package,
         clause: &clause,
         state_path: STATE_PATH,
@@ -3308,8 +3381,16 @@ fn tc_025_model_field_table_preserves_the_requested_draw_order() {
     );
 
     let absent = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
         state_fields: &["balance", "ghost", "audit"],
         ..StateFrameRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: KANI_TIMEOUT,
+        },
             package: &package,
             clause: &clause,
             state_path: STATE_PATH,
@@ -3380,7 +3461,6 @@ pub(crate) fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
         harness: harness.into(),
         crate_directory: &directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("state-frame-kani"),
-        timeout: KANI_TIMEOUT,
     })
     .unwrap_or_else(|refusal| panic!("the run must start: {refusal}"));
     let _ = fs::remove_dir_all(directory);

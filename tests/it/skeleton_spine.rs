@@ -34,9 +34,7 @@ use quire_contract_codegen::{
     ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 
-use super::kani_obligations::{
-    bound_package, supported_contract_harnesses, write_crate, REAL_KANI_TIMEOUT,
-};
+use super::kani_obligations::{bound_package, supported_contract_harnesses, write_crate};
 
 const SUBJECT_PATH: &str = "crate::subject::withdraw";
 
@@ -1164,7 +1162,6 @@ fn prove(harness: &KaniObligationHarness, subject: &str) -> KaniRunOutcome {
         harness: harness.into(),
         crate_directory: &directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-spine"),
-        timeout: REAL_KANI_TIMEOUT,
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
     let _ = fs::remove_dir_all(directory);

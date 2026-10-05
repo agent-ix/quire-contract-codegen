@@ -54,11 +54,6 @@ const ASSERTION: &str = "amount-nonnegative";
 /// time-heavy on these small obligations; this is a ceiling against a genuine hang, not a
 /// performance target.
 pub(crate) const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
-/// Placeholder budget for tests that refuse before any process is spawned (a
-/// missing backend component, or a harness the crate does not contain): the value is never
-/// consulted, since `execute_kani_obligation` returns before reaching the launcher.
-const UNUSED_TIMEOUT: Duration = Duration::from_secs(60);
-
 // ---- V1 fixture --------------------------------------------------------------
 
 fn span(line: u64) -> Value {
@@ -331,6 +326,10 @@ fn request<'a>(
     subject_path: &'a str,
 ) -> KaniObligationRequest<'a> {
     KaniObligationRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: REAL_KANI_TIMEOUT,
+        },
         items,
         subject_path,
         unwind: 4,
@@ -1748,7 +1747,6 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
         harness: (&harness).into(),
         crate_directory: &directory,
         target_directory: &directory.join("target"),
-        timeout: UNUSED_TIMEOUT,
     })
     .unwrap_err();
     assert!(matches!(
@@ -1819,7 +1817,6 @@ fn run(
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligations"),
-        timeout: REAL_KANI_TIMEOUT,
     })
     .unwrap_or_else(|refusal| panic!("{label}: {refusal}"));
     fs::write(
@@ -1916,14 +1913,15 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
     // verifies. This call's own wall-clock elapsed time is not that proof — a real run that
     // happened to finish quickly would satisfy an elapsed-time bound too — so none is asserted
     // here.
-    let harness = &harnesses[0];
+    let mut harness = harnesses[0].clone();
+    harness.identity.ceilings.wall_clock = Duration::from_millis(1);
+    let harness = &harness;
     let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
-        timeout: Duration::from_millis(1),
     })
     .unwrap_or_else(|refusal| {
         panic!("a run that started must not surface as a refusal: {refusal}")
@@ -1950,7 +1948,6 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         harness: (&harness).into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
-        timeout: UNUSED_TIMEOUT,
     })
     .unwrap_err();
     assert!(matches!(
@@ -1981,6 +1978,10 @@ fn routed_scalar_increment() -> (
         }],
         &GenerationContexts {
             kani: Some(KaniGenerationContext {
+                ceilings: quire_contract_codegen::ProofCeilings {
+                    memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+                    wall_clock: REAL_KANI_TIMEOUT,
+                },
                 subject_path: "crate::subject",
                 unwind: 3,
             }),
@@ -2093,7 +2094,6 @@ fn run_scalar_under_real_kani(
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar"),
-        timeout: REAL_KANI_TIMEOUT,
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
     let _ = fs::remove_dir_all(&crate_directory);
@@ -2127,7 +2127,6 @@ fn tc_027_a_routed_scalar_harness_verifies() {
         harness: (&harness).into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
-        timeout: UNUSED_TIMEOUT,
     })
     .unwrap_err();
     assert!(matches!(

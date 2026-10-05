@@ -15,7 +15,7 @@ use crate::kani::{
     },
 };
 
-/// Why a run proves nothing. Every variant but [`TimedOut`](Self::TimedOut) is a completed run
+/// Why a run proves nothing. Every variant but [`TimedOut`](Self::TimedOut) and [`MemoryExhausted`](Self::MemoryExhausted) is a completed run
 /// the backend printed no usable verdict for; `TimedOut` is not a completed run at all — it is
 /// killed before it ever prints one.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -45,6 +45,8 @@ pub enum KaniInconclusiveReason {
     /// process it forked were killed; no verdict, failed-check count or playback is available
     /// because none was ever printed.
     TimedOut,
+    /// The observed backend-tree resident memory exceeded the harness identity ceiling.
+    MemoryExhausted,
 }
 
 /// The backend-reported outcome of one run.

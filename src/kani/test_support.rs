@@ -37,6 +37,10 @@ pub(crate) fn named_state_frame_harness(
     };
     StateFrameHarness {
         identity: StateFrameIdentity {
+            ceilings: crate::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+                wall_clock: std::time::Duration::from_secs(30),
+            },
             clause: id("1"),
             scope: StateFrameScope {
                 operation: "deposit".to_owned(),

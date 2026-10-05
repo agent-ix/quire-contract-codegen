@@ -4,6 +4,8 @@
 //! them, so they live below both: a harness is run from its identity and its source text, and
 //! no reader imports a generator.
 
+use std::{num::NonZeroU64, time::Duration};
+
 use quire_canonical::FixedShape;
 use quire_contract_model::{CheckedNodeId, ClauseRef, DependencyIdentity, SourceSpan};
 use serde::{Deserialize, Serialize};
@@ -13,6 +15,43 @@ use crate::{
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol},
     kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver},
 };
+
+/// Resource ceilings bound into a proof identity (FR-028).
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProofCeilings {
+    /// Maximum aggregate resident memory of the backend tree, in bytes.
+    pub memory_bytes: NonZeroU64,
+    /// Maximum duration of one harness run.
+    pub wall_clock: Duration,
+}
+
+/// The inclusive domain of one symbolic argument, recorded in execution evidence.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "domain", rename_all = "snake_case")]
+pub enum SymbolicBounds {
+    /// Both Boolean values.
+    Boolean,
+    /// The inclusive integer range drawn by the harness.
+    Integer {
+        /// Inclusive lower bound.
+        minimum: i64,
+        /// Inclusive upper bound.
+        maximum: i64,
+    },
+    /// The identity carries no finite integer range for this field.
+    Unspecified,
+}
+
+/// One argument's identity and the symbolic bounds the run used.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolicArgumentBounds {
+    /// Identifier of the symbolic argument.
+    pub identifier: String,
+    /// Its recorded domain.
+    pub bounds: SymbolicBounds,
+}
 
 /// The contract role of one obligation.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, FixedShape)]
@@ -62,6 +101,8 @@ pub struct EmbeddedOracle {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KaniObligationIdentity {
+    /// Request resource ceilings the backend must run under.
+    pub ceilings: ProofCeilings,
     /// Contract role.
     pub kind: ObligationKind,
     /// The obligation's clause.
@@ -121,6 +162,8 @@ pub struct ScalarObligationArgument {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScalarObligationIdentity {
+    /// Request resource ceilings the backend must run under.
+    pub ceilings: ProofCeilings,
     /// The claimed node.
     pub node_id: CheckedNodeId,
     /// The node's own catalogued operation identity, IR-confirmed at package admission.
@@ -258,6 +301,8 @@ pub struct StateFrameScope {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StateFrameIdentity {
+    /// Request resource ceilings the backend must run under.
+    pub ceilings: ProofCeilings,
     /// The `state_clause` node both obligations of a request come from.
     pub clause: CheckedNodeId,
     /// The operation scope.

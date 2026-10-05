@@ -5,6 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "ceilings",
     "schemaVersion",
     "proofId",
     "requirementId",
@@ -18,6 +19,21 @@
     "dependencies"
   ],
   "properties": {
+    "ceilings": {
+      "type": "object", "additionalProperties": false,
+      "required": ["memoryBytes", "wallClock"],
+      "properties": {
+        "memoryBytes": {"type": "integer", "minimum": 1},
+        "wallClock": {
+          "type": "object", "additionalProperties": false,
+          "required": ["secs", "nanos"],
+          "properties": {
+            "secs": {"type": "integer", "minimum": 0},
+            "nanos": {"type": "integer", "minimum": 0, "maximum": 999999999}
+          }
+        }
+      }
+    },
     "schemaVersion": {"const": "quire.kani-proof-graph/v2"},
     "proofId": {"type": "string", "minLength": 1},
     "requirementId": {"type": "string", "minLength": 1},

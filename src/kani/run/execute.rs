@@ -42,7 +42,10 @@ use crate::kani::{
     },
     run::{
         harness::{HarnessView, KaniExecutableHarness},
-        launch::{run_launcher, CaptureStream, LaunchOutcome},
+        launch::{
+            run_bounded_launcher, BoundedLaunch, BoundedLaunchError, CaptureStream, LaunchOutcome,
+        },
+        memory::MemoryObservation,
         report_file::{fresh_report_path, read_report, remove_stale_report},
         tool::{KaniInstallation, KaniTool, KaniToolError},
     },
@@ -64,11 +67,6 @@ pub struct KaniExecutionRequest<'a> {
     pub crate_directory: &'a Path,
     /// Cargo target directory for the run.
     pub target_directory: &'a Path,
-    /// Wall-clock budget for the launcher. The caller states this explicitly on every
-    /// request; there is no default that would let a run go unbounded silently. A run
-    /// that has not concluded when the budget elapses is killed and reported as
-    /// [`KaniRunOutcome::Inconclusive`] with [`KaniInconclusiveReason::TimedOut`].
-    pub timeout: Duration,
 }
 
 /// Why a harness was not run.
@@ -76,6 +74,25 @@ pub struct KaniExecutionRequest<'a> {
 pub enum KaniExecutionRefusal {
     /// The installed backend could not be located or started.
     Tool(KaniToolError),
+    /// No memory-enforcement mechanism is available; the backend was never spawned.
+    MemoryMechanismUnavailable {
+        /// The failed mechanism check.
+        cause: std::io::Error,
+    },
+    /// Memory observation failed during a launch, so the backend tree was killed.
+    MemoryObservationFailed {
+        /// The observation failure.
+        detail: String,
+    },
+    /// A batch exceeded its one aggregate memory ceiling. No member was classified.
+    BatchMemoryExhausted {
+        /// Members whose backend tree was killed.
+        members: usize,
+        /// The memory ceiling in bytes.
+        memory_bytes: u64,
+        /// Actual mechanism and its observations.
+        memory: MemoryObservation,
+    },
     /// The crate's `src/lib.rs` does not contain the harness source.
     HarnessNotInCrate {
         /// The generated artifact path.
@@ -134,6 +151,9 @@ impl KaniExecutionRefusal {
             | Self::HarnessNotInCrate { .. }
             | Self::Report(_)
             | Self::BatchTimedOut { .. }
+            | Self::MemoryMechanismUnavailable { .. }
+            | Self::MemoryObservationFailed { .. }
+            | Self::BatchMemoryExhausted { .. }
             | Self::PlaybackForNonMember { .. } => None,
         }
     }
@@ -143,6 +163,22 @@ impl fmt::Display for KaniExecutionRefusal {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tool(error) => write!(formatter, "{error}"),
+            Self::MemoryMechanismUnavailable { cause } => write!(
+                formatter,
+                "backend tree memory enforcement is unavailable: {cause}"
+            ),
+            Self::MemoryObservationFailed { detail } => write!(
+                formatter,
+                "backend tree memory observation failed: {detail}"
+            ),
+            Self::BatchMemoryExhausted {
+                members,
+                memory_bytes,
+                ..
+            } => write!(
+                formatter,
+                "the backend tree of {members} harnesses exceeded {memory_bytes} resident bytes"
+            ),
             Self::HarnessNotInCrate { harness_path } => {
                 write!(formatter, "the crate does not contain {harness_path}")
             }
@@ -190,6 +226,12 @@ impl From<KaniToolError> for KaniExecutionRefusal {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KaniExecutionEvidence {
+    /// The identity ceilings actually enforced by this run.
+    pub ceilings: crate::ProofCeilings,
+    /// Actual backend-tree memory mechanism and observed peak.
+    pub memory: MemoryObservation,
+    /// Every symbolic argument and its identity bounds.
+    pub symbolic_arguments: Vec<crate::SymbolicArgumentBounds>,
     /// Contract role of a contract harness; `None` for an exact-scalar harness, whose claim
     /// has no contract role.
     pub kind: Option<ObligationKind>,
@@ -269,13 +311,18 @@ fn start(
     command: Command,
     timeout: Duration,
     harnesses: NonZeroUsize,
-) -> Result<LaunchOutcome, KaniExecutionRefusal> {
-    run_launcher(command, timeout, harnesses).map_err(|error| {
-        KaniExecutionRefusal::Tool(KaniToolError::Io {
+) -> Result<BoundedLaunch, KaniExecutionRefusal> {
+    let mut ceilings = request.harness.view().ceilings;
+    ceilings.wall_clock = timeout;
+    run_bounded_launcher(command, ceilings, harnesses).map_err(|error| match error {
+        BoundedLaunchError::Unavailable(cause) => {
+            KaniExecutionRefusal::MemoryMechanismUnavailable { cause }
+        }
+        BoundedLaunchError::Io(error) => KaniExecutionRefusal::Tool(KaniToolError::Io {
             tool: KaniTool::Launcher,
             path: request.installation.launcher.clone(),
             error,
-        })
+        }),
     })
 }
 
@@ -288,6 +335,8 @@ fn take_report(
     let report = match launch {
         LaunchOutcome::Completed { .. } => read_report(report_path),
         LaunchOutcome::TimedOut
+        | LaunchOutcome::MemoryExhausted
+        | LaunchOutcome::MemoryUnobserved { .. }
         | LaunchOutcome::OutputOverLimit { .. }
         | LaunchOutcome::OutputUnread { .. } => Ok(None),
     };
@@ -303,8 +352,12 @@ fn evidence_of(
     exit_code: Option<i32>,
     run: ClassifiedRun,
     batch: Option<KaniBatchInvocation>,
+    memory: MemoryObservation,
 ) -> KaniExecutionEvidence {
     KaniExecutionEvidence {
+        ceilings: harness.ceilings,
+        symbolic_arguments: harness.arguments.clone(),
+        memory,
         kind: harness.kind,
         harness_path: harness.rust.path.clone(),
         launcher_path: request.installation.launcher.display().to_string(),
@@ -327,11 +380,22 @@ fn run_single(
     let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
     let (arguments, command) = launch_command(request, &report_path);
-    let launch = start(request, command, request.timeout, NonZeroUsize::MIN)?;
-    let report = take_report(&launch, &report_path);
-    let (run, exit_code) = launch_evidence(launch, report?.as_deref(), harness.kind)?;
+    let launch = start(
+        request,
+        command,
+        request.harness.view().ceilings.wall_clock,
+        NonZeroUsize::MIN,
+    )?;
+    let report = take_report(&launch.outcome, &report_path);
+    let (run, exit_code) = launch_evidence(launch.outcome, report?.as_deref(), harness.kind)?;
     Ok(evidence_of(
-        request, &harness, arguments, exit_code, run, None,
+        request,
+        &harness,
+        arguments,
+        exit_code,
+        run,
+        None,
+        launch.memory,
     ))
 }
 
@@ -398,7 +462,7 @@ pub fn execute_kani_obligations(
 /// harness selection is removed, the same timeout, and the same launcher, crate and target
 /// directory.
 fn shares_process(first: &KaniExecutionRequest<'_>, other: &KaniExecutionRequest<'_>) -> bool {
-    first.timeout == other.timeout
+    first.harness.view().ceilings == other.harness.view().ceilings
         && first.installation.launcher == other.installation.launcher
         && first.crate_directory == other.crate_directory
         && first.target_directory == other.target_directory
@@ -454,7 +518,7 @@ fn batch_launch_command(
     }
     // Kani 0.68 refuses a value above `u32::MAX` (exit 2, no report); then there is no per-member
     // bound, only the process's own.
-    if let Ok(seconds) = u32::try_from(whole_seconds(first.timeout)) {
+    if let Ok(seconds) = u32::try_from(whole_seconds(first.harness.view().ceilings.wall_clock)) {
         arguments.extend(["--harness-timeout".to_owned(), seconds.to_string()]);
     }
     arguments.extend(without_selection(first.harness.view().options));
@@ -490,26 +554,33 @@ fn run_group(
     let launch = start(
         first,
         command,
-        outer_bound(first.timeout, group.len()),
+        outer_bound(first.harness.view().ceilings.wall_clock, group.len()),
         count,
     )?;
-    let report = take_report(&launch, &report_path);
-    let (exited_successfully, exit_code, text) = match settle(launch)? {
+    let report = take_report(&launch.outcome, &report_path);
+    let (exited_successfully, exit_code, text) = match settle(launch.outcome)? {
         Concluded::Completed {
             exited_successfully,
             exit_code,
             text,
         } => (exited_successfully, exit_code, text),
+        Concluded::MemoryExhausted => {
+            return Err(KaniExecutionRefusal::BatchMemoryExhausted {
+                members: group.len(),
+                memory_bytes: first.harness.view().ceilings.memory_bytes.get(),
+                memory: launch.memory,
+            });
+        }
         Concluded::TimedOut => {
             return Err(KaniExecutionRefusal::BatchTimedOut {
                 members: group.len(),
-                timeout: first.timeout,
+                timeout: first.harness.view().ceilings.wall_clock,
             })
         }
     };
     let invocation = KaniBatchInvocation {
         members: selections.clone(),
-        timeout_seconds: whole_seconds(first.timeout),
+        timeout_seconds: whole_seconds(first.harness.view().ceilings.wall_clock),
     };
     let evidence = |run: Vec<ClassifiedRun>| -> Vec<KaniExecutionEvidence> {
         group
@@ -524,6 +595,7 @@ fn run_group(
                     exit_code,
                     run,
                     Some(invocation.clone()),
+                    launch.memory.clone(),
                 )
             })
             .collect()
@@ -594,6 +666,7 @@ enum Concluded {
     },
     /// The budget elapsed and the group was killed.
     TimedOut,
+    MemoryExhausted,
 }
 
 /// The launch as a conclusion, or the refusal of a launch whose output cannot be vouched for: a
@@ -610,6 +683,10 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
             text,
         }),
         LaunchOutcome::TimedOut => Ok(Concluded::TimedOut),
+        LaunchOutcome::MemoryExhausted => Ok(Concluded::MemoryExhausted),
+        LaunchOutcome::MemoryUnobserved { detail } => {
+            Err(KaniExecutionRefusal::MemoryObservationFailed { detail })
+        }
         LaunchOutcome::OutputOverLimit {
             stream,
             limit,
@@ -673,6 +750,11 @@ pub fn launch_evidence(
     report: Option<&[u8]>,
     kind: Option<ObligationKind>,
 ) -> Result<(ClassifiedRun, Option<i32>), KaniExecutionRefusal> {
+    let stopped_reason = if matches!(launch, LaunchOutcome::MemoryExhausted) {
+        KaniInconclusiveReason::MemoryExhausted
+    } else {
+        KaniInconclusiveReason::TimedOut
+    };
     match settle(launch)? {
         Concluded::Completed {
             exited_successfully,
@@ -682,10 +764,10 @@ pub fn launch_evidence(
             classify_kani_run(exited_successfully, report, &text, kind)?,
             exit_code,
         )),
-        Concluded::TimedOut => Ok((
+        Concluded::TimedOut | Concluded::MemoryExhausted => Ok((
             ClassifiedRun {
                 outcome: KaniRunOutcome::Inconclusive {
-                    reason: KaniInconclusiveReason::TimedOut,
+                    reason: stopped_reason,
                 },
                 success_checks: 0,
                 checks: Vec::new(),
@@ -836,7 +918,6 @@ mod tests {
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: &crate_directory,
             target_directory: &target_directory,
-            timeout: Duration::from_secs(30),
         });
         if stale.is_some() {
             assert!(
@@ -913,7 +994,6 @@ mod tests {
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: Path::new("/crate"),
             target_directory: Path::new("/target"),
-            timeout: Duration::from_secs(1),
         };
         let (arguments, _) = kani_launch_command(&request);
         let options = request.harness.view().options;
@@ -1197,12 +1277,12 @@ exit 0
             harness: &'a StateFrameHarness,
             timeout: Duration,
         ) -> KaniExecutionRequest<'a> {
+            assert_eq!(harness.identity.ceilings.wall_clock, timeout);
             KaniExecutionRequest {
                 installation: &self.installation,
                 harness: harness.into(),
                 crate_directory: &self.crate_directory,
                 target_directory: &self.target_directory,
-                timeout,
             }
         }
 
@@ -1212,6 +1292,14 @@ exit 0
             harnesses: &[StateFrameHarness],
             timeout: Duration,
         ) -> Result<Vec<KaniGroupRun>, KaniExecutionRefusal> {
+            let harnesses: Vec<_> = harnesses
+                .iter()
+                .cloned()
+                .map(|mut harness| {
+                    harness.identity.ceilings.wall_clock = timeout;
+                    harness
+                })
+                .collect();
             let requests: Vec<_> = harnesses
                 .iter()
                 .map(|harness| self.request(harness, timeout))
@@ -1371,7 +1459,11 @@ exit 0
         // requested interleaved so that a group is not a contiguous run of the request list.
         let cells = [(4, 30), (5, 30), (4, 60), (5, 60)];
         let harnesses: Vec<_> = (0..8)
-            .map(|index| member(&format!("m{index}"), "check", cells[index % 4].0))
+            .map(|index| {
+                let mut harness = member(&format!("m{index}"), "check", cells[index % 4].0);
+                harness.identity.ceilings.wall_clock = Duration::from_secs(cells[index % 4].1);
+                harness
+            })
             .collect();
         let stand_in = StandIn::verifying("grouping");
         let requests: Vec<_> = harnesses
@@ -1419,12 +1511,13 @@ exit 0
         };
         let harness = member("a", "check", 4);
         let timeout_argument = |timeout: Duration| -> Option<String> {
+            let mut harness = harness.clone();
+            harness.identity.ceilings.wall_clock = timeout;
             let request = KaniExecutionRequest {
                 installation: &installation,
                 harness: (&harness).into(),
                 crate_directory: Path::new("/crate"),
                 target_directory: Path::new("/target"),
-                timeout,
             };
             let (arguments, _) = batch_launch_command(
                 &request,

@@ -15,6 +15,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use super::memory::{MemoryObservation, MemoryObserver};
+
 use rustix::{
     event::{poll, PollFd, PollFlags},
     io::Errno,
@@ -41,6 +43,13 @@ pub enum LaunchOutcome {
     /// killed and the launcher reaped; a descendant that left the group is not killed, and this
     /// call does not wait for it.
     TimedOut,
+    /// Observed aggregate resident memory exceeded the identity ceiling; the tree was killed.
+    MemoryExhausted,
+    /// The tree could no longer be observed, so the run was stopped without classifying it.
+    MemoryUnobserved {
+        /// What prevented observation.
+        detail: String,
+    },
     /// A stream carried more than `limit` bytes. The run was stopped and the launcher's whole
     /// process group killed; no text is retained, because a truncated stream is evidence nobody
     /// can vouch for (FR-017-AC-14).
@@ -148,9 +157,51 @@ pub fn run_launcher_with_timeout(command: Command, timeout: Duration) -> io::Res
 /// [`run_launcher_with_timeout`] for a process that runs `harnesses` harnesses: each stream may
 /// carry [`CAPTURE_LIMIT`] bytes for every one.
 pub(super) fn run_launcher(
+    command: Command,
+    timeout: Duration,
+    harnesses: NonZeroUsize,
+) -> io::Result<LaunchOutcome> {
+    run_monitored(command, timeout, harnesses, None)
+}
+
+/// A bounded launch together with the observations made by its enforcement mechanism.
+pub(super) struct BoundedLaunch {
+    pub(super) outcome: LaunchOutcome,
+    pub(super) memory: MemoryObservation,
+}
+
+/// Refuse unavailable memory enforcement before starting a backend.
+pub(super) enum BoundedLaunchError {
+    Unavailable(io::Error),
+    Io(io::Error),
+}
+
+/// Every production backend launch carries memory enforcement, including a native refinement.
+pub(super) fn run_bounded_launcher(
+    command: Command,
+    ceilings: crate::ProofCeilings,
+    harnesses: NonZeroUsize,
+) -> Result<BoundedLaunch, BoundedLaunchError> {
+    let mut observer = MemoryObserver::prepare(std::path::Path::new("/proc"))
+        .map_err(BoundedLaunchError::Unavailable)?;
+    let outcome = run_monitored(
+        command,
+        ceilings.wall_clock,
+        harnesses,
+        Some((&mut observer, ceilings.memory_bytes.get())),
+    )
+    .map_err(BoundedLaunchError::Io)?;
+    Ok(BoundedLaunch {
+        outcome,
+        memory: observer.observation(),
+    })
+}
+
+fn run_monitored(
     mut command: Command,
     timeout: Duration,
     harnesses: NonZeroUsize,
+    mut memory: Option<(&mut MemoryObserver, u64)>,
 ) -> io::Result<LaunchOutcome> {
     command
         .stdout(Stdio::piped())
@@ -171,7 +222,10 @@ pub(super) fn run_launcher(
     let stderr_reader = spawn_capture(stderr, &flags, limit);
 
     let deadline = Instant::now().checked_add(timeout);
-    let exited = wait_until(&child, deadline, &flags.failed);
+    let exited = wait_until(&child, deadline, &flags.failed, &mut memory);
+    if let Some((observer, _)) = &memory {
+        observer.kill_known();
+    }
     // The group is signalled while the leader, exited or not, is still unreaped (see
     // `wait_until`); only then is it reaped.
     kill_process_tree(&mut child);
@@ -191,8 +245,8 @@ pub(super) fn run_launcher(
         Err(refusal) => return Ok(refusal),
     };
 
-    if exited {
-        Ok(LaunchOutcome::Completed {
+    let outcome = match exited {
+        WaitConclusion::Completed => LaunchOutcome::Completed {
             exited_successfully: reaped.success(),
             exit_code: reaped.code(),
             text: format!(
@@ -200,10 +254,12 @@ pub(super) fn run_launcher(
                 String::from_utf8_lossy(&stdout_bytes),
                 String::from_utf8_lossy(&stderr_bytes)
             ),
-        })
-    } else {
-        Ok(LaunchOutcome::TimedOut)
-    }
+        },
+        WaitConclusion::TimedOut => LaunchOutcome::TimedOut,
+        WaitConclusion::MemoryExhausted => LaunchOutcome::MemoryExhausted,
+        WaitConclusion::MemoryUnobserved { detail } => LaunchOutcome::MemoryUnobserved { detail },
+    };
+    Ok(outcome)
 }
 
 /// The bytes of `stream`, or the outcome that refuses the run because they were not all read or
@@ -241,24 +297,49 @@ struct CaptureFlags {
 /// group and then reaped it. Reaping first (`try_wait`) would free the id while a straggler of the
 /// group might not exist any more, and the group kill could then reach an unrelated process group
 /// that had been given the recycled id.
-fn wait_until(child: &Child, deadline: Option<Instant>, failed: &AtomicBool) -> io::Result<bool> {
+enum WaitConclusion {
+    Completed,
+    TimedOut,
+    MemoryExhausted,
+    MemoryUnobserved { detail: String },
+}
+
+fn wait_until(
+    child: &Child,
+    deadline: Option<Instant>,
+    failed: &AtomicBool,
+    memory: &mut Option<(&mut MemoryObserver, u64)>,
+) -> io::Result<WaitConclusion> {
     let pid = i32::try_from(child.id())
         .ok()
         .and_then(Pid::from_raw)
         .ok_or_else(|| io::Error::other("the launcher's process id is not a valid pid"))?;
     loop {
+        // Observe before consulting exit: a backend that exited beside an observed overage
+        // must never turn that overage into a completed verdict.
+        if let Some((observer, ceiling)) = memory {
+            match observer.observe(child.id()) {
+                Ok(bytes) if bytes > *ceiling => return Ok(WaitConclusion::MemoryExhausted),
+                Ok(_) => {}
+                Err(error) => {
+                    return Ok(WaitConclusion::MemoryUnobserved {
+                        detail: error.to_string(),
+                    })
+                }
+            }
+        }
         match waitid(
             WaitId::Pid(pid),
             WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
         ) {
-            Ok(Some(_)) => return Ok(true),
+            Ok(Some(_)) => return Ok(WaitConclusion::Completed),
             Ok(None) | Err(Errno::INTR) => {}
             Err(errno) => return Err(errno.into()),
         }
         if failed.load(Ordering::Acquire)
             || deadline.is_some_and(|deadline| Instant::now() >= deadline)
         {
-            return Ok(false);
+            return Ok(WaitConclusion::TimedOut);
         }
         thread::sleep(LAUNCHER_POLL_INTERVAL);
     }

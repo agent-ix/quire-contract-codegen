@@ -183,3 +183,9 @@ pub use strategy::campaign::{
 pub use oracle::boolean_v1::{
     generate_boolean_oracle, GeneratedArtifactBundle, OracleArtifactBundle, OracleRequest,
 };
+
+/// Resource ceilings bound into each generated proof identity.
+pub use kani::identity::{ProofCeilings, SymbolicArgumentBounds, SymbolicBounds};
+
+/// The actual tree memory mechanism and observations recorded by bounded backend runs.
+pub use kani::run::memory::{MemoryMechanism, MemoryObservation};

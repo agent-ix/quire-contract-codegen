@@ -213,6 +213,10 @@ fn withdraw_harnesses() -> Vec<KaniObligationHarness> {
         })
         .collect::<Vec<_>>();
     let request = KaniObligationRequest {
+        ceilings: quire_contract_codegen::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
+            wall_clock: REAL_KANI_TIMEOUT,
+        },
         items: &items,
         subject_path: "crate::withdraw",
         unwind: 4,
@@ -279,7 +283,6 @@ fn run_falsifying(installation: &KaniInstallation, harness: &KaniObligationHarne
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &target_directory,
-        timeout: REAL_KANI_TIMEOUT,
     })
     .unwrap_or_else(|refusal| panic!("real run must not refuse: {refusal}"));
     let counterexample = match evidence.outcome {
