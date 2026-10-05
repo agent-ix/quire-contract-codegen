@@ -78,6 +78,7 @@ fn harness(name: &str, body: &str, unwind: u32) -> StateFrameHarness {
                 granted: Vec::new(),
                 checked: Vec::new(),
             },
+            state_fields: Vec::new(),
             domains: Vec::new(),
             state_path: "crate::State".to_owned(),
             subject_path: "crate::operate".to_owned(),

@@ -3,11 +3,12 @@
 //! A harness is named by a module symbol and a harness symbol, and the two are different kinds of
 //! name: swapping them at a call site must not compile. Each is a validated Rust identifier,
 //! built once where a harness is generated, and [`HarnessPath`] is the pair. They serialize as
-//! the bare string, so a persisted identity record is unchanged.
+//! the bare string, so a persisted identity record is unchanged, and they deserialize from it
+//! through the same validation.
 
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// A string offered as a harness or module symbol is not a Rust identifier.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -42,8 +43,8 @@ fn validated(text: String) -> Result<String, SymbolError> {
 macro_rules! symbol {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
-        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-        #[serde(transparent)]
+        #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+        #[serde(try_from = "String")]
         pub struct $name(String);
 
         impl $name {

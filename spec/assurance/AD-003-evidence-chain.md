@@ -138,9 +138,9 @@ authored).
   too, with the checked function node id and its `declaration` occurrence key in place of the
   clause's, both read from `FunctionSite` and never derived by CG, and the existing `ObligationKind` of the
   harness replayed (O-09 adds no subject tag and no new kind: one identity per kind the function
-  requests; FR-016-AC-21 to AC-23, implemented for the function path only: the V1 contract, scalar
-  and frame paths do not compute it yet; the frame path's is specified by FR-024-AC-20 to
-  FR-024-AC-24, IR-459, and is planned). The frame path's subject is the operation's frame node
+  requests; FR-016-AC-21 to AC-23, implemented for the function path and, by FR-024-AC-20 to
+  FR-024-AC-24 (IR-459), for the frame path: the V1 contract and scalar paths do not compute it
+  yet). The frame path's subject is the operation's frame node
   and its occurrence the frame's own occurrence, both read from `OperationSite` as the envelope's
   `clause_node` and `occurrence_key` are (FR-015-AC-34), mapped into the same four members under
   their existing names; QSL gives each operation its own frame occurrence, so no member is added
@@ -301,17 +301,16 @@ crate CG's lock selects.
 
 - E-1 gap, function path closed (IR-553): `ReplayPackage::obligation_identity` computes the
   function-contract identity through `core::canonical` (`quire-canonical`, a direct
-  `branch = "main"` dependency) and the function path's request carries it. The V1 contract, scalar
-  and frame paths still compute none, and the rest of this entry describes them.
+  `branch = "main"` dependency) and the function path's request carries it. The frame path's
+  request and envelope carry the identity minted by the same function from `OperationSite` and
+  the harness's `StateFrameIdentity` (FR-024-AC-20 to FR-024-AC-24, IR-459). The V1 contract and
+  scalar paths still compute none, and the rest of this entry describes them.
   No code on those paths computes `ObligationIdentity`. QSL's type says QSL never hashes it.
   ADR-013 O-09 defines the preimage: the clause (or application) node id, its occurrence key,
   the obligation kind and the arguments (parameter node id and declared domain), source span
-  excluded. CG's frame envelope takes a caller `[u8; 32]` (`src/replay/frame.rs`, and the twin
-  passes `[1; 32]`), as does the postcondition state-clause path
+  excluded. The postcondition state-clause path takes a caller `[u8; 32]`
   (`StateClauseReplayInputs::obligation_identity`); the function path's transcript digest in the
-  request's slot is gone (AD-002), replaced by the function-contract identity. The frame path's
-  caller `[u8; 32]` is to be replaced by the identity minted from `OperationSite` and the
-  harness's `StateFrameIdentity` (FR-024-AC-20 to FR-024-AC-24, IR-459, planned); the state-clause
+  request's slot is gone (AD-002), replaced by the function-contract identity. The state-clause
   path's is open (FR-024, Open questions Q-1).
   The work is larger than one missing field. Three identity structs exist and none carries what
   O-09 needs. `KaniObligationIdentity` holds a `ClauseRef`, not the clause node id, and no

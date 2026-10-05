@@ -175,5 +175,11 @@ is a real-Kani test in the module `kani_obligations_state_clause_replay`, run th
 `kani_obligations` filter of `make kani`; its subject debits within the declared range, because a
 debit past the floor runs to a post state QSL's snapshot admission refuses.
 
-Steps 18 to 27 (FR-024-AC-20 to FR-024-AC-30, IR-459) are specified and not implemented: the frame
-path still takes a caller-supplied identity and renders a fixed transcript.
+Steps 18 to 27 (FR-024-AC-20 to FR-024-AC-30, IR-459) are implemented by `src/replay/obligation.rs`
+and `src/replay/frame.rs`, the `src` unit tests of steps 18 and 26, and the tests of
+`tests/it/kani_obligations_state_frame.rs` over the QSL twin of the state-frame fixture. The twin's
+harness scope is aligned to the node ids QSL names for the twin's compiled unit (`Twin::aligned`),
+because the fixture's checked package is hand-built. Step 27 is a real-Kani test in the module
+`kani_obligations_state_frame`, run through the `kani_obligations` filter of `make kani`. Step 19's
+last case (a clause added on an operation that sorts earlier) is measured on the twin's operations
+`deposit` and `transfer`: a clause added on `deposit` changes the identity of `transfer`.

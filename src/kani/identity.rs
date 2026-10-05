@@ -6,7 +6,7 @@
 
 use quire_canonical::FixedShape;
 use quire_contract_model::{CheckedNodeId, ClauseRef, DependencyIdentity, SourceSpan};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     core::artifact::Artifact,
@@ -187,7 +187,7 @@ pub struct StateFrameHarness {
 }
 
 /// An integer comparison operator of the closed `quire.op.integer` ordering family.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StateComparison {
     /// `<`.
@@ -205,8 +205,8 @@ pub enum StateComparison {
 }
 
 /// The property one harness proves.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case", tag = "kind")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
 pub enum StateFrameProperty {
     /// `left <op> right` between the named observations of one field.
     Postcondition {
@@ -228,7 +228,8 @@ pub enum StateFrameProperty {
 
 /// The inclusive integer range the IR carries for one state field. Every harness assumes it of
 /// the symbolic pre-state, so a counterexample is a state the model admits.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct StateFieldDomain {
     /// The state field.
     pub field: String,
@@ -240,7 +241,8 @@ pub struct StateFieldDomain {
 
 /// The operation a harness is scoped to. Two harnesses with different scopes are never the same
 /// proof.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct StateFrameScope {
     /// The operation's name, from its anchor.
     pub operation: String,
@@ -253,7 +255,8 @@ pub struct StateFrameScope {
 }
 
 /// Everything a generated harness proves, persisted with it.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct StateFrameIdentity {
     /// The `state_clause` node both obligations of a request come from.
     pub clause: CheckedNodeId,
@@ -261,6 +264,12 @@ pub struct StateFrameIdentity {
     pub scope: StateFrameScope,
     /// The property proved.
     pub property: StateFrameProperty,
+    /// Every state field the harness draws, in draw order: the order of the harness's
+    /// `kani::any()` calls, hence of the values a playback of it holds. It is what the decoder
+    /// types a playback by; `domains` lists the ranged fields only and `property`'s lists are
+    /// unordered. It decodes and orders and is no member of an obligation identity
+    /// (FR-024-AC-23). A record that lacks it is not read as a frame identity.
+    pub state_fields: Vec<String>,
     /// The IR range assumed of each state field that has one, in `state_fields` order.
     pub domains: Vec<StateFieldDomain>,
     /// Rust path of the state struct.
@@ -277,4 +286,61 @@ pub struct StateFrameIdentity {
     pub unwind: u32,
     /// The exact Kani option vector.
     pub options: Vec<String>,
+}
+
+/// A persisted state-frame record is not a state-frame identity: it is no JSON object of the
+/// record's shape, or it lacks a member the identity requires, `state_fields` among them.
+#[derive(Debug)]
+pub struct StateFrameRecordError {
+    cause: serde_json::Error,
+}
+
+impl std::fmt::Display for StateFrameRecordError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "the record is not a state-frame identity: {}",
+            self.cause
+        )
+    }
+}
+
+impl std::error::Error for StateFrameRecordError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.cause)
+    }
+}
+
+/// The persisted `kani-obligations/<module>.json` record of a state-frame harness: its identity
+/// and the path of the source it was generated beside.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StateFrameRecord {
+    identity: StateFrameIdentity,
+    #[serde(rename = "rustPath")]
+    _rust_path: String,
+}
+
+impl StateFrameIdentity {
+    /// The `module::harness` path of this harness.
+    #[must_use]
+    pub fn harness_path(&self) -> HarnessPath {
+        HarnessPath {
+            module: self.module_symbol.clone(),
+            harness: self.harness_symbol.clone(),
+        }
+    }
+
+    /// The identity a persisted state-frame record holds.
+    ///
+    /// # Errors
+    ///
+    /// [`StateFrameRecordError`] when `record` is not a state-frame record: a record written
+    /// before the identity carried `state_fields` has no draw order to decode a playback by and
+    /// is refused, not read with a guessed one.
+    pub fn from_record(record: &str) -> Result<Self, StateFrameRecordError> {
+        serde_json::from_str::<StateFrameRecord>(record)
+            .map(|record| record.identity)
+            .map_err(|cause| StateFrameRecordError { cause })
+    }
 }

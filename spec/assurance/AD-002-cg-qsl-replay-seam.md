@@ -70,7 +70,7 @@ obligation identity type, and neither does IR. CG's only QSL dependency is the `
 | Request version and vocabulary members | none | QSL deleted `contract_version`, `capability_vocabulary` and `package_contract_version` from `ReplayRequestWire` and `WitnessPacket` (R-Q5, done in QSL), so the request carries no contract spelling and CG writes none. |
 | `package_id` (`quire.package.semantic/v2`) | QSL | QSL recompiles the provided source and requires the recompiled `package_id` to equal the request's (`execute.rs`, "Rule 5"; `execute/frame.rs` for the frame path). This is the one canonical content-identity digest the whole replay seam rests on: it binds a replay to the content that was proved. |
 | Source bytes | CG computes the digest with QSL's `ByteDigest` | QSL checks each provided byte against its digest (`stale_dependency/byte-digest-mismatch`). |
-| Request `obligation_identity` slot (QSL renamed it from `originating_counterexample_identity`, R-Q7) | CG fills it. The frame path passes `FrameReplayInputs::obligation_identity`, a caller-supplied value, until IR-459 mints it from the `OperationSite` and the harness's `StateFrameIdentity` by the same function and preimage as the function path (FR-024-AC-20 to AC-24, planned). The function path holds the ADR-013 O-09 function-contract obligation digest, which CG computes over the checked function node id and `declaration` occurrence key that `call_site`'s `FunctionSite` carries (QSL-352, FR-121-AC-15), the requested `ObligationKind` and the arguments (AD-003 E-1, FR-016-AC-21 to AC-23). `ReplayPackage::obligation_identity` builds it (`src/replay/obligation.rs`, encoded in `core::canonical`) and `replay_counterexample` passes it to `ReplayPackage::request`; the transcript's `ByteDigest` that stood there before is gone. | QSL does not check it against any content: `replay` passes it into witness decoding as a label (`execute.rs`, `arguments`). |
+| Request `obligation_identity` slot (QSL renamed it from `originating_counterexample_identity`, R-Q7) | CG fills it. The frame path mints it from the `OperationSite` and the harness's `StateFrameIdentity` by the same function and preimage as the function path (FR-024-AC-20 to AC-24, IR-459); `FrameReplayInputs` has no identity member. The function path holds the ADR-013 O-09 function-contract obligation digest, which CG computes over the checked function node id and `declaration` occurrence key that `call_site`'s `FunctionSite` carries (QSL-352, FR-121-AC-15), the requested `ObligationKind` and the arguments (AD-003 E-1, FR-016-AC-21 to AC-23). `ReplayPackage::obligation_identity` builds it (`src/replay/obligation.rs`, encoded in `core::canonical`) and `replay_counterexample` passes it to `ReplayPackage::request`; the transcript's `ByteDigest` that stood there before is gone. | QSL does not check it against any content: `replay` passes it into witness decoding as a label (`execute.rs`, `arguments`). |
 | Backend identity | request `backend` member | carried; QSL records it, does not interpret it |
 
 The obligation identity is the other content identity on the replay path; it is discussed in
@@ -129,8 +129,8 @@ authored).
 - R-5. Only a `ReproducedWithEvaluatedWitness` settlement in category `violation` reproduces;
   every other settlement, including `Inconclusive` in any category, is evidence failure.
 - R-6. Every envelope and every request CG builds carries, as its obligation identity, a QSL `ObligationIdentity` computed by CG from the
-  obligation's identity members (AD-003, E-1; met for the function path, planned for the frame
-  path by FR-024-AC-20 to AC-24, IR-459).
+  obligation's identity members (AD-003, E-1; met for the function path and the frame path,
+  FR-024-AC-20 to AC-24, IR-459).
 - R-7. A request names the `package_id` returned by `call_site` for the same source, and the
   replay is refused (not reproduced) when one source byte changes.
 - R-8. A request carries no contract spelling CG wrote itself. Met: QSL deleted the version and
@@ -162,12 +162,10 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   spelling and CG follows in a follow-up.
 - Frame path: `src/replay/frame.rs` calls `call_site` with an `OperationSite` (:112), builds the
   envelope with `WitnessEnvelope::reconstruct` (:182) and calls `replay_frame` (:183).
-  `obligation_identity` is a caller-supplied `[u8; 32]` field (:47) that the request and the
-  envelope both carry; the only value in the repository is `[1; 32]` in a test
-  (`tests/state_frame_support/native_twin.rs`). No code computes it; IR-459 specifies minting it
-  (FR-024-AC-20 to AC-24), and reading the playback and tying its pre state to the invocation
-  (FR-024-AC-25 to AC-28). The frame inputs no longer carry a separate counterexample identity:
-  QSL's request has no slot for one.
+  The obligation identity is minted from the `OperationSite` and the harness (FR-024-AC-20 to
+  AC-24) and carried by the request and the envelope; the playback is decoded and its pre state
+  tied to the invocation (FR-024-AC-25 to AC-28, IR-459). The frame inputs carry no obligation
+  identity and no separate counterexample identity: QSL's request has no slot for one.
 - No domain check precedes the frame path, and the frame envelope carries
   `declared_domains: Some(Vec::new())` (`frame.rs`): the proof bound is not in the envelope.
   At the QSL revision CG's lock selects, replay checks only that the member is present. The frame

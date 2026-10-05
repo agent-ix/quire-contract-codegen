@@ -937,6 +937,11 @@ fn render(
         clause: request.clause.clone(),
         scope: scope.clone(),
         property,
+        state_fields: request
+            .state_fields
+            .iter()
+            .map(|field| (*field).to_owned())
+            .collect(),
         domains: domains.to_vec(),
         state_path: request.state_path.to_owned(),
         subject_path: request.subject_path.to_owned(),
