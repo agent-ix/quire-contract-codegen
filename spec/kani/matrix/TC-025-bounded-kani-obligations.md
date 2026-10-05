@@ -226,7 +226,8 @@ unsatisfiable requires as `cover_unsatisfied`.
     `generate_state_frame_role` and reading `generate_state_frame_obligations` return the
     refusal of the failing role (FR-015-AC-68).
 
-The first code change backs steps 26 and 27, the second steps 19 to 25 and 28.
+The first code change backs steps 26 and 27 and has landed; the second backs steps 19 to 25 and
+28.
 
 ## Blocked
 
