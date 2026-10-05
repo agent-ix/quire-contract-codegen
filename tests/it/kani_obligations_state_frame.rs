@@ -3088,6 +3088,21 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
         *generated.frame.identity.scope.frame.digest,
         site.frame.to_string()
     );
+
+    let balance_only = Twin::build(&model::GRANTED, &[CLAUSES[0]], 0);
+    let unread = generated_from_twin(
+        &balance_only,
+        "BalanceNeverDrops",
+        &STATE_FIELDS,
+        SUBJECT_PATH,
+    );
+    assert_eq!(unread.frame.identity.domains, expected);
+    assert_eq!(unread.postcondition.identity.domains, expected);
+
+    let audit = generated_from_twin(&twin, "AuditNeverDrops", &STATE_FIELDS, SUBJECT_PATH);
+    assert_eq!(audit.frame.identity.domains, expected);
+    assert_eq!(audit.postcondition.identity.domains, expected);
+    assert_eq!(audit.frame.identity.state_fields, STATE_FIELDS);
 }
 
 /// The accessor's sorted table validates names but never changes the caller's draw order.
