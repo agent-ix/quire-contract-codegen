@@ -320,6 +320,13 @@ FR-024-AC-11 to FR-024-AC-19:
   `qsl_replay::replay_state_clause`, so FR-024-AC-11 to FR-024-AC-19 are backed by tagged tests
   (FR-024-AC-18 in the `kani` lane; its test uses the fixture subject that debits to the floor of
   the range, `deposit_debiting_within_range`).
+- Declared-domain key divergence, open: `src/replay/state_clause.rs` keys each state field's
+  `DeclaredDomain` as `DomainKey::Node { node: the self parameter node, path: [CG's field
+  position] }`. QSL `main` bcca433 (ADR-012 section 15.4, QSL-345 item 4) defines a state field's
+  key as `Node { the declaring object_type node, [the field's ordinal in ascending UTF-8 name
+  order] }` and returns it from `call_site` as `FieldSite.domain`. Nothing breaks today, because
+  QSL has no declared-domain check yet. The state-clause path should adopt `FieldSite.domain`
+  before that check lands, and compute no key of its own.
 - Known gap, open: the post-state values are not range-checked, and a post state outside a
   field's declared range is refused by QSL admission and reads as `Inconclusive(ReplayRefused)`
   (FR-029-AC-16). The wrapping debit subject `deposit_debiting` reaches such a post state at the
