@@ -86,7 +86,7 @@ mod tests {
         )
         .expect_err("zero divisor must refuse");
         assert_eq!(outcome.kind, KaniOutcomeKind::Refused);
-        assert_eq!(outcome.code, "kani_definedness_nonzero_divisor");
+        assert_eq!(outcome.code.as_str(), "kani_definedness_nonzero_divisor");
         assert_eq!(outcome.boolean_claim(), None);
     }
 
@@ -160,7 +160,7 @@ mod tests {
             },
         )
         .expect_err("outside result must not lower");
-        assert_eq!(refused.code, "kani_definedness_checked_range");
+        assert_eq!(refused.code.as_str(), "kani_definedness_checked_range");
         assert_eq!(refused.boolean_claim(), None);
     }
 }

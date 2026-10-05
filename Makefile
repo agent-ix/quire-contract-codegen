@@ -157,7 +157,8 @@ LOCAL_PATCHES ?= quire-contract-ir:quire-contract-ir:. quire-contract-ir:quire-c
 	quire-spec-language:qsl-attrs:qsl-attrs quire-spec-language:qsl-cst:qsl-cst quire-spec-language:qsl-eval:qsl-eval \
 	quire-spec-language:qsl-forms:qsl-forms quire-spec-language:qsl-foundation:qsl-foundation \
 	quire-spec-language:qsl-package:qsl-package quire-spec-language:qsl-replay:qsl-replay \
-	quire-spec-language:qsl-semantics:qsl-semantics quire-spec-language:quire-exact:quire-exact
+	quire-spec-language:qsl-semantics:qsl-semantics \
+	quire-exact:quire-exact:. quire-semantic-value:quire-semantic-value:.
 
 .PHONY: use-local
 use-local:

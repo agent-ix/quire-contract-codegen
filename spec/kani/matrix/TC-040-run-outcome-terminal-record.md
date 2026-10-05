@@ -28,13 +28,15 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 9. Map `falsified` with a fault in each position: `ReplayRefusal::Fault`,
    `ReplayRefusal::Admission(AdmissionFailure::Fault)`, `CallSiteRefusal::Fault`, and
    `CallSiteRefusal::Fault` inside `ReplayPackageError::CallSite` and `FrameReplayError::CallSite`.
-10. Map `falsified` with each CG-raised failure FR-029-AC-11 lists and inspect every
+10. Map `falsified` with each CG-raised failure FR-029-AC-11 lists, including a replay reproduced
+    in a category other than `violation`, and inspect every
     `ReplayRefused` value the run produced.
 11. Map `falsified` under every replay settlement other than reproduced.
 12. Map `falsified` with a non-fault `CallSiteRefusal` and with a `DependencyLockError::Input`,
     each bare and wrapped in `ReplayPackageError` and `FrameReplayError`.
 13. Map `falsified` with the refusal QSL's `DependencyInput::new` returns for a lock whose only
     defect is one library identity selected twice.
+14. Map `falsified` with no replay settlement, and map each other outcome and reason with one.
 
 ## Expected Results
 
@@ -49,16 +51,21 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 7. Each is `Inconclusive(ReplayParity)` carrying its `DisagreementCause` (FR-029-AC-8).
 8. `Inconclusive(ReplayRefused)` carrying the refusal's catalog code (FR-029-AC-9).
 9. Each is `Failed` (FR-029-AC-10).
-10. Each CG-raised failure, including `ReplayPackageError::InvalidFunction` and
-    `FrameReplayError::Name`, is `Failed`, and every `ReplayRefused` value carries a code a QSL
+10. Each CG-raised failure, including `ReplayPackageError::InvalidFunction`,
+    `FrameReplayError::Name` and a replay reproduced in a category other than `violation`, is
+    `Failed`, and every `ReplayRefused` value carries a code a QSL
     refusal value supplied (FR-029-AC-11).
 11. No value is `Refuted` (FR-029-AC-12).
 12. Each is `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or
     `DependencyInputRefusal::code()` of the refusal, and none is `Declined` (FR-029-AC-13).
 13. `Inconclusive(ReplayRefused)` carrying `invalid_package` (FR-029-AC-14).
+14. `TerminalPairError::MissingSettlement` and `TerminalPairError::UnexpectedSettlement`, with no
+    value (FR-029-AC-15).
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. Steps 7, 8, 11, 12 and 13, and the `ReplayRefused`
-inspection of step 10, wait on the unmerged QSL `Inconclusive` terminal value; step 9 and the
-`Failed` half of step 10 do not.
+Partly covered. Steps 1, 2, 4 to 8 and 10 to 14 are tests of `tests/it/terminal_map.rs`. Step 3
+asserts the timed-out and exhausted-unwind-bound reasons only, because no memory-exhausted reason
+exists until FR-028-AC-3 adds it. Step 9 is not tested: it needs a QSL `InternalFault`, which
+`qsl-replay` does not re-export, so a fault value cannot be built in this repository. FR-029-AC-3
+and FR-029-AC-10 stay planned for those two reasons.

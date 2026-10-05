@@ -40,8 +40,8 @@ pub use strategy::bound::relation::{
 
 pub use kani::generate::corpus::bounded_kani_corpus::{
     generate_bounded_kani_corpus_case, BoundedCorpusArtifacts, BoundedCorpusCase,
-    BoundedCorpusFamily, BoundedCorpusRequest, CorpusProofDependencyGraph, EmittedCorpusIdentities,
-    CORPUS_PROOF_GRAPH_SCHEMA,
+    BoundedCorpusError, BoundedCorpusFamily, BoundedCorpusRequest, CorpusProofDependencyGraph,
+    EmittedCorpusIdentities, CORPUS_PROOF_GRAPH_SCHEMA,
 };
 pub use kani::generate::lower::bounded_collections::prepare_bounded_collection_query;
 pub use kani::generate::lower::bounded_kani_profile::{
@@ -116,6 +116,9 @@ pub use kani::run::execute::{
 pub use kani::run::harness::KaniExecutableHarness;
 pub use kani::run::launch::{run_launcher_with_timeout, CaptureStream, LaunchOutcome};
 pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
+pub use kani::terminal::{
+    ir_outcome_terminal_value, run_terminal_value, ReplaySettlement, TerminalPairError,
+};
 pub use routed::capability::{
     negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
     Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,

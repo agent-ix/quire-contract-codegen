@@ -210,8 +210,8 @@ pub struct KaniExecutionEvidence {
     pub outcome: KaniRunOutcome,
     /// How many checks the report lists as holding: the non-cover checks with status success,
     /// plus, for a precondition harness, whose one property is its cover, the satisfied covers.
-    /// Zero when the run produced no report. It is the SUCCESS-check count FR-017 defines; the
-    /// terminal map that will read it (FR-029) is not implemented yet.
+    /// Zero when the run produced no report. It is the SUCCESS-check count FR-017 defines, which
+    /// the terminal maps (FR-029, FR-030) take as an explicit input.
     pub success_checks: u32,
     /// Every check Kani reported, with its class, source location and status, in report order.
     /// Empty when the run produced no report. A consumer attributes proof to source with it.

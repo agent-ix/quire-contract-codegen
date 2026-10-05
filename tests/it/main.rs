@@ -66,4 +66,5 @@ mod routed_generation;
 pub(crate) mod scratch_crate;
 mod skeleton_spine;
 mod strategy_generation;
+mod terminal_map;
 mod vacuity_primitives;
