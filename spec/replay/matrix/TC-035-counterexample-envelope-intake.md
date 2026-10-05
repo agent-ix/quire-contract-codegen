@@ -161,6 +161,29 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     header names QSL-345 once (FR-024-AC-29).
 27. The forbidden-write playback settles a reproduced violation naming the written field
     (FR-024-AC-30).
+28. Over the package QSL emits for the twin's unit (object body empty), replay a playback and a
+    post state binding `balance` and `audit` through `StateClauseReplay` with `state_fields`
+    listing them, and read no `UndeclaredField`; omit one from the playback and bind a third
+    name, and read `MissingField` and `UndeclaredField` naming each; read the endpoints of each
+    range admitted and one outside refused `OutOfDomain`; list a field no read names and read
+    it carried unranged (FR-024-AC-31, planned, IR-624, GATED on IR-627 or IR-628).
+29. Generate the frame harness from the emitted package, assert its anchor and frame ids equal
+    `call_site`'s before any replay, replay the forbidden-write playback over the invocation of
+    its own pre state, and read a reproduced violation naming the field with no `ScopeMismatch`;
+    scan `tests/` and find no `Twin::aligned`; compare the harness's `state_fields` and `domains`
+    with those generated from the hand-built fixture; submit a value one outside a range and read
+    `OutOfDomain` (FR-024-AC-32, planned, IR-624, GATED on IR-627 or IR-628).
+30. Generate the postcondition harness from the emitted package, replay the debiting and the
+    unmutated subjects' runs through `StateClauseReplay`, and read `violation` with evaluated
+    `false` and `inconclusive` with `Verdicts` (FR-024-AC-33, planned, IR-624, GATED on IR-627 or
+    IR-628).
+31. With the installed backend, replay the real playbacks of the falsified frame harness and of
+    the falsified postcondition harness, each generated from the emitted package, and read the
+    settlements of steps 27 and 16 (FR-024-AC-34, planned, IR-624, GATED on IR-627 or IR-628).
+32. Replay a falsified run of a harness that draws an unranged field with that field bound outside
+    the model's range, and read `Inconclusive` with `ReplayRefused` and the unranged field with
+    its reason `NoRead` or `TypeNotRange`; replay one inside every range and read it unaffected
+    (FR-024-AC-35, planned, IR-624, GATED on IR-627 or IR-628).
 
 ## Status
 
@@ -183,8 +206,9 @@ because the fixture's checked package is hand-built and its node ids are its own
 itself emits (`call_site`'s package bytes, admitted by the model reader) carries exactly the anchor
 and frame ids `call_site` names (step 25's ids, read from the emitted package); a harness cannot yet
 be generated from that package, because the object type QSL emits has an empty body and the
-field-range reader finds no member, so the end-to-end replay from an emitted-package harness is
-open (FR-024 Current state). Step 27 is a real-Kani test in the module
+field-range reader finds no member. Steps 28 to 32 (FR-024-AC-31 to FR-024-AC-35, IR-624) are
+planned: they specify the end-to-end replay from an emitted-package harness once the reader takes
+a range from the field's read (FR-015-AC-77; FR-024 Current state). Step 27 is a real-Kani test in the module
 `kani_obligations_state_frame`, run through the `kani_obligations` filter of `make kani`. Step 19's
 last case (a clause added on an operation that sorts earlier) is measured on the twin's operations
 `deposit` and `transfer`: a clause added on `deposit` changes the identity of `transfer`.
