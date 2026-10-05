@@ -161,6 +161,7 @@ The focused tests backing the ceiling slice are:
 - `unavailable_tree_memory_observation_refuses_before_spawn`
 - `available_observer_does_not_invent_a_peak_before_observing_a_tree`
 - `resident_memory_of_a_reused_pid_is_excluded_from_the_backend_sample`
+- `released_address_space_is_observed_before_zombie_status_but_missing_rss_is_refused`
 
 Step 10 (FR-028-AC-12, the batch wall-clock rule) remains implemented (IR-277), backed by the
 `tc_043_*` batch tests listed in TC-043. Batching now also requires equal identity memory and

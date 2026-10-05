@@ -42,6 +42,8 @@ struct Process {
     parent: u32,
     group: u32,
     start: u64,
+    virtual_bytes: u64,
+    resident_pages: u64,
 }
 
 pub(super) struct MemoryObserver {
@@ -226,11 +228,14 @@ impl MemoryObserver {
                 });
             }
         }
-        // Exited processes have no address space and no VmRSS entry.
-        if status
-            .lines()
-            .any(|line| line.starts_with("State:") && line.split_whitespace().nth(1) == Some("Z"))
-        {
+        // Linux can release task->mm before publishing a zombie state. Its status then has
+        // no VmRSS; stat reports zero virtual bytes and resident pages. Verify both from a
+        // fresh, identity-matched stat instead of treating an unexplained missing field as zero.
+        let latest = parse_process(&fs::read_to_string(directory.join("stat"))?)?;
+        if latest.start != start {
+            return Ok(None);
+        }
+        if latest.virtual_bytes == 0 && latest.resident_pages == 0 {
             return Ok(Some(0));
         }
         Err(io::Error::new(
@@ -269,11 +274,21 @@ fn parse_process(text: &str) -> io::Result<Process> {
         .nth(16)
         .and_then(|value| value.parse().ok())
         .ok_or_else(malformed)?;
+    let virtual_bytes = fields
+        .next()
+        .and_then(|value| value.parse().ok())
+        .ok_or_else(malformed)?;
+    let resident_pages = fields
+        .next()
+        .and_then(|value| value.parse().ok())
+        .ok_or_else(malformed)?;
     Ok(Process {
         pid: pid.parse().map_err(|_| malformed())?,
         parent,
         group,
         start,
+        virtual_bytes,
+        resident_pages,
     })
 }
 
@@ -287,7 +302,7 @@ mod tests {
         let root = crate::kani::test_support::discover_scratch("memory-pid-reuse");
         let directory = root.join("42");
         fs::create_dir(&directory).unwrap();
-        let mut fields = ["0"; 20];
+        let mut fields = ["0"; 22];
         fields[0] = "S";
         fields[1] = "1";
         fields[2] = "42";
@@ -310,6 +325,40 @@ mod tests {
         assert_eq!(
             observer.resident_bytes(42, 200).unwrap(),
             Some(64 * 1024 * 1024)
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn released_address_space_is_observed_before_zombie_status_but_missing_rss_is_refused() {
+        let root = crate::kani::test_support::discover_scratch("memory-address-space-release");
+        let directory = root.join("42");
+        fs::create_dir(&directory).unwrap();
+        let mut fields = ["0"; 22];
+        fields[0] = "R";
+        fields[1] = "1";
+        fields[2] = "42";
+        fields[19] = "200";
+        let stat = |fields: &[&str]| format!("42 (exiting) {}", fields.join(" "));
+        fs::write(directory.join("stat"), stat(&fields)).unwrap();
+        fs::write(directory.join("status"), "State:\tR (running)\n").unwrap();
+        let mut observer = MemoryObserver {
+            root: root.clone(),
+            known: BTreeMap::new(),
+            observation: MemoryObservation {
+                mechanism: MemoryMechanism::LinuxProcfsTreeRss,
+                peak_resident_bytes: None,
+            },
+        };
+        assert_eq!(observer.observe(42).unwrap(), 0);
+        assert_eq!(observer.observation().peak_resident_bytes, Some(0));
+        fields[20] = "4096";
+        fields[21] = "1";
+        fs::write(directory.join("stat"), stat(&fields)).unwrap();
+        assert_eq!(
+            observer.observe(42).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
         );
         fs::remove_dir_all(root).unwrap();
     }
