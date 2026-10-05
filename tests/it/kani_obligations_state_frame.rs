@@ -2552,7 +2552,7 @@ fn tc_035_the_playback_is_decoded_in_the_harnesss_draw_order() {
 /// An emitted Boolean model field is drawn without an integer domain. QSL refuses an integer
 /// playback against that same source model; CG retains the field and persisted reason as context.
 ///
-/// Trace: FR-015-AC-81, FR-024-AC-35, TC-035
+/// Trace: FR-015-AC-81, TC-035
 #[test]
 fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
     let twin = Twin::without_audit_range();
