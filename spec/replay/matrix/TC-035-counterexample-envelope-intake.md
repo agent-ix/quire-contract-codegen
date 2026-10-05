@@ -165,8 +165,13 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     `model_object_fields(&object_id)` and replay them in the order of input `state_fields`;
     endpoints of their 0 to 1000 ranges admit, one outside refuses `OutOfDomain`, a missing
     playback binding returns `MissingField`, and a binding outside the input list returns
-    `UndeclaredField`. A name absent from the accessor or an accessor error refuses the inputs.
-    A present field with a non-range type remains unranged (FR-024-AC-31, IR-624; gated on
+    `UndeclaredField`. A listed name absent from the accessor returns `ModelFields` with
+    `Absent { field }`; an accessor error returns `ModelFields` with `Accessor(error)` and the
+    unchanged IR error. Supply both an absent listed name and a missing playback binding,
+    then an ambiguous accessor table and a missing playback binding; in both cases read
+    `ModelFields` before `MissingField`, with no replay or executor call. A valid table with a
+    missing binding still returns `MissingField`. A present field with a non-range type remains
+    unranged (FR-024-AC-31, IR-624; gated on
     CG dependency update and implementation).
 29. Generate the frame harness from the emitted package with accessor ranges, assert scope
     ids equal `call_site`'s before replay, remove `Twin::aligned`, and replay the forbidden

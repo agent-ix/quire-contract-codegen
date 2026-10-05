@@ -190,18 +190,19 @@ unsatisfiable requires as `cover_unsatisfied`.
     order, with `generate_state_frame_role` for the same clause and role (and, for a clause
     whose roles both succeed, `generate_state_frame_obligations`), source byte
     for byte (FR-015-AC-60).
-21. Read `requires_bound` for a field whose member references a plain integer type (that
-    member's `value.target` as `unbounded_type`) and for a request whose lowering is a
-    requires-bound record (FR-015-AC-61).
+21. Over a hand-built non-declaration object, read `requires_bound` for a field whose body
+    member references a plain integer type (that member's `value.target` as `unbounded_type`)
+    and for a request whose lowering is a requires-bound record (FR-015-AC-61).
 22. Read `unsupported` `NoFiniteEncoding` for a lowering unsupported-family record and
     `UnknownNodeKind` for a node that is not a `state_clause` (FR-015-AC-62).
 23. Read `unsupported` `StateFrameRefused`, never `NoFiniteEncoding`, for a negation, a literal
     comparison, an operator outside the six comparisons, a read through another parameter, two
     fields, two reads of one side, a frame that creates, deletes or grants a relationship or a
-    foreign field (naming the effect), a member whose bound is not an `integer_range` and one
-    whose endpoint is outside `i64`, a member absent from the object, a member whose value is
-    not a reference, an invariant clause, a clause with a malformed shape, a
-    frame granting every field and an over-budget lowering (FR-015-AC-63).
+    foreign field (naming the effect), an invariant clause, a clause with a malformed shape,
+    a frame granting every field and an over-budget lowering. On a non-declaration object,
+    also check a clause field whose body member references a bound other than `integer_range`,
+    has an endpoint outside `i64`, is absent, or has a value that is not a reference
+    (FR-015-AC-63).
 24. Read `invalid_request` for an unparsable state path, an unparsable item subject path, an
     invalid state field name, a state lacking the clause's field, an absent node, a repeated
     item and an item of another package, and `Rejected` with every record and no harness bytes
@@ -295,10 +296,13 @@ set by the code change's measurement and recorded here.
 38. For a model declaration, request an accessor-absent field; exercise each accessor error
     (`UnknownNode`, `NotModelObjectType`, `AmbiguousField`) and check a typed refusal without
     falling back to a body or read. Exercise a present `None`, `Integer`, `Option`, and an
-    `IntRange` with one endpoint outside `i64`; check only a present range with two `i64`
+    `IntRange` with one endpoint outside `i64`; read `ModelMemberNotI64Range` with the object,
+    field and `NoMemberType`, `NonRangeType` or `EndpointOutsideI64` (exact `i128` endpoints)
+    rather than a fabricated bound node. Check that only a present range with two `i64`
     endpoints enters `domains`, an unranged non-clause field is still drawn, and an unranged
-    clause field refuses its item. For a hand-built non-declaration object, verify its old
-    body-member causes, and refuse a range read through a grouped derived-shape node without
+    clause field refuses its item as `unsupported`, `StateFrameRefused`. For a hand-built
+    non-declaration object, verify its old body-member causes, and refuse a range read through
+    a grouped derived-shape node without
     an assumption or `domains` entry (FR-015-AC-78; body range positives gated on IR-627).
 39. Generate both roles of each twin clause from the emitted package with no `Twin::aligned`;
     assert request order rather than accessor name order for `state_fields`, accessor ranges
