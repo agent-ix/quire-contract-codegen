@@ -84,19 +84,34 @@ A second backend registers in these steps:
 3. The new adapter implements the adapter trait, with real transcript captures of its own under
    `tests/fixtures/`.
 4. The adapter owns its own execution evidence type.
-5. FR-019, FR-022 and the test matrix gain the kind's rows. For the process-provider variant FR-019
-   and the matrix have them (IR-629), and FR-022's wait on FR-019 open question 3.
+5. FR-019, FR-022 and the test matrix gain the kind's rows. For the process-provider variant FR-019,
+   FR-022 and the matrix have them (IR-629).
 
 ### Amendment (IR-629): the process-provider variant
 
 QSL ADR-029 PV-4 gives `BackendKind` one variant for process providers. Its `negotiate_*` arm settles
 from the provider's manifest alone and never calls the plugin
 ([FR-019](../routed/functional/FR-019-capability-settlement.md)). Q4's step 2 applies to it as to any
-variant. PV-4 states only the negotiation arm, so the variant's generation, adapter, execution and
-terminal-record arms are open until the QSL owner states them (FR-019 open question 3).
+variant. The QSL planner answered the questions the first version of this amendment left open
+(QSL-637, answered 2026-10-05; its PV-4 amendment was not on QSL `origin/main` when this was written):
+
+- The variant is `BackendKind::Process(BackendId)`. The plugin's identity is data inside the variant, and
+  `from_identity` keeps mapping the built-in identities only. The driver's pre-negotiation conversion
+  builds `Process(id)` for every descriptor that came from a plugin `hello`.
+- Only negotiation is this crate's. Its arm checks the advertised (kind, mode) pairs, domains and bounds.
+  Generation gives `KindOutput::Process` with no artifact, because the plugin receives the v2 package
+  bytes. The adapter, execution and terminal record are the driver's plugin host and its typed FR-331
+  reader (QSL ADR-029 PL-7), so every arm of this crate over the variant is a typed pass-through or an
+  empty output, never a panic. This repeats Q4's rule that each match has an arm, with the arm stated.
+- A plugin that declares `kani` conflicts with the built-in registration in QSL's registry, which
+  withdraws both. That is decided at registration in QSL, independent of order, and this crate keeps no
+  logic for it.
+
+FR-019 and FR-022 state the criteria. Still open: the variant's serialized label, and the QSpec FR-290
+cause for an unadvertised domain or bound.
 
 ## Consequences
 
 - FR-026 and FR-029 state the adapter trait and the terminal-record map.
-- FR-019 and FR-022 gain rows when a backend kind is added: FR-019 has the process-provider rows, and
-  FR-022 gains its rows once FR-019 open question 3 is answered.
+- FR-019 and FR-022 gain rows when a backend kind is added: FR-019 and FR-022 have the process-provider
+  rows.

@@ -312,10 +312,19 @@ set by the code change's measurement and recorded here.
     read `NoRead` and `TypeNotRange` in the two identities and their records, byte-identical on
     regeneration (FR-015-AC-81, GATED on IR-627 or IR-628).
 
+42. Over a package whose `Sequence<Tree>[0, 3]` and `collection_bounds` nodes carry a
+    `recursion_group`, read a bound through the `collection_bounds` node and through the
+    collection's body `reference` and `semantic_type`, with the `collection_bounds` `max` changed
+    and its `node_id` kept, and read `unsupported` with a refusal naming the node and its label, no
+    harness and no oracle; read the same item with the label removed read as before, an
+    `integer_range` node with and without a label read as FR-015-AC-77 reads it, and the same
+    result before and after IR-627's code merges (FR-015-AC-82, GATED on IR-630).
+
 Steps 37 to 41 are planned and every one is GATED on IR-627 or IR-628: the IR-624 code shall not
-emit a harness from the model declaration path before IR-627 (planned in IR's open spec PR #295)
-has landed or IR-628's accessor is in use, either one; the planned order is IR-627 first, then
-IR-628. The pre-IR-624 test
+emit a harness from the model declaration path before IR-627's stage (specified in IR's merged
+FR-038, code open as IR #297) has landed or IR-628's accessor (code open as IR #299) is in use,
+either one; neither order is required. Step 42 is planned and GATED on IR-630, which IR's stage does
+not replace. The pre-IR-624 test
 `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits` measures the refusal
 that the code change retires; it is replaced by step 37's test, not kept beside it. The code
 change also owes the edits FR-015's IR-624 section lists: three added causes and mapping arms

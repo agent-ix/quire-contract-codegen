@@ -450,11 +450,76 @@ repository does not make. The dependency is on IR: either IR re-derives anonymou
 keys at admission (IR-627) or it exports a typed accessor that returns the bounds as values
 (IR-628, Q-5 of FR-024). FR-015-AC-77 to FR-015-AC-81 and FR-024-AC-31 to FR-024-AC-35, every
 criterion that reads a range from an emitted package, are GATED on IR-627 or IR-628; they stay
-planned. IR-627's check is planned in Contract IR's open spec PR #295 (AC-123 to AC-127: an
-arithmetic check of the read's range node against the derived member type), and is not landed.
-The IR-624 code shall not emit a harness from the model declaration path until IR-627 has landed
-or IR-628's accessor is in use, so the unsound range of the stated limit is never accepted; the
-code change is gated on IR-627 or IR-628, either one. The planned order is IR-627 first, then IR-628.
+planned. Both are specified in Contract IR's merged FR-038 and neither is landed: IR-627's decided stage
+(IR #295, amended by #298: FR-038-AC-123 to AC-127 and AC-145 to AC-150) and IR-628's accessor
+`CheckedPackageV2::model_object_fields` (IR #296: FR-038-AC-136 to AC-144, TC-227) are specification
+only, and their code is open as IR #297 (IR-627) and IR #299 (IR-628), not merged at the time of writing.
+The gate lifts, and the word "landed" applies, only when the IR code merges. The IR-624 code shall not emit
+a harness from the model declaration path until IR-627's stage has landed or IR-628's accessor is in use,
+so the unsound range of the stated limit is never accepted; the code change is gated on IR-627 or IR-628,
+either one. IR-628's accessor is independent of IR-627's stage (FR-038 "What the accessor guarantees"), so
+neither order is required.
+
+What each IR route covers, as measured in the merged FR-038 text (an IR claim, re-read there, and
+unlanded):
+
+- IR-628's accessor reads a model declaration object's effective fields and their member types from the
+  field table the reader retains from the selected domain document, not from any node body: for a
+  model declaration node it returns each field with its type, `IntRange` bounds as values, `None` for a
+  type the tables give no type, and `UnknownNode`, `NotModelObjectType` and `AmbiguousField` as typed
+  errors. It is the route for a model declaration object's declared fields and ranges. It does not make a
+  node body trustworthy, closes no body route, and does not extend to an object that is not a model
+  declaration node. When it lands this crate adapts: FR-015-AC-77, AC-78 and AC-81 (`result_type` route,
+  `FieldNotRead`, `ConflictingFieldReads`, `MemberDisagreesWithRead`, `NoRead`) and the FR-024 criteria
+  that restate them (FR-024-AC-31 to AC-35) are amended to the accessor route and not only ungated,
+  retiring the `result_type` route, its three causes and the `NoRead` reason for that path, keeping the body
+  path for objects that are not model declaration nodes, and keeping the IR-627 gate on every range read
+  from a node body. That adaptation is not made here: those criteria are PLANNED and read consistently
+  with the code that has not landed (each names "IR-627 or IR-628" and its route), so amending them
+  before the accessor exists would describe an interface that does not exist.
+- IR-627's decided stage always re-derives and checks the key of `bounded_domain` `integer_range`,
+  `scalar_type` `boolean` and `integer`, and `composite_type` `reference`, whatever `recursion_group` a node
+  carries (FR-038-AC-146). A range read through an `integer_range` node is therefore verified in every
+  package once IR-627 lands, which is the route FR-015-AC-77 reads.
+- IR-627's stage does not verify an `option`, `set`, `bag`, `sequence`, `ordered_set` or
+  `collection_bounds` node that carries a `recursion_group`, lies on a cycle of the names graph and sits in a
+  component whose every node carries that label: it skips it, and a changed `max` of the in-group
+  `collection_bounds` node of `Sequence<Tree>[0, 3]` admits (the stated limit, FR-038-AC-148). A forged group
+  extends the limit to a node a tamperer places on a cycle. Verifying them waits on IR-630 (in-group
+  re-derivation, FR-038-AC-150), which is blocked by QSL-638 (the owner on the v2 wire).
+
+An in-group node, in this crate's rule below, is a node of one of those six shapes that carries a
+`recursion_group`. This crate does not compute the names graph, so it does not decide which labelled node
+IR skips; the label is the test.
+
+- The generator shall not trust a range, a count or any other bound that it reads from an in-group node,
+  nor one read through the body `reference` or the `semantic_type` of an in-group node (an element type of
+  an in-group `option` or collection, the `collection_bounds` of an in-group collection), nor treat that
+  bound as verified (FR-015-AC-82).
+- If a read of a bound reaches an in-group node, then the generator shall settle the item `unsupported`,
+  never `supported` and never `requires_bound`, with a typed refusal that names the node and its
+  `recursion_group` label and reuses the cause family of the reading path; it shall invent no third
+  disposition (FR-015-AC-82). `requires_bound` is not used: the bound exists and is unverified, and a caller
+  cannot supply a bound that closes the gap, so the existing request for a bound would mislead. The
+  generator shall emit no harness, oracle or `domains` entry from that read.
+- The generator shall keep this rule until IR-630 has landed and this repository's specification has been
+  amended to name the verified shapes; a merge of IR-627's code does not lift it (FR-015-AC-82).
+- A range read through an `integer_range`, `boolean`, `integer` or `reference` node is outside this rule: it
+  is governed by the gate above, because IR-627 verifies those shapes whatever label they carry, and a node
+  retagged to a skippable shape is not an `integer_range` and gives no range.
+
+CG reads affected by the rule, measured in this repository's specification and source: the
+`collection_bounds` `min` and `max` and the element and payload type nodes of `option`, `sequence`, `set`,
+`bag` and `ordered_set` that FR-018's composite equality oracle reads (FR-018-AC-14, the declaration
+encoding of FR-018 "Inputs"), and the `collection_bounds` limits the scalar derivation reads to detect an
+unsatisfiable bound (`unsatisfiable` in `src/kani/generate/scalar.rs`). Not affected: the state field
+ranges of FR-015-AC-77 to AC-81 and of FR-024 (they read an `integer_range` node, or the accessor), the
+`integer_range` operand bounds of FR-014 and FR-015's scalar route, and a declaration that reaches itself,
+which FR-015's unsupported-shape table already settles `requires_bound`, `unbounded_type` (FR-015-AC-73).
+IR's stated open routes that are not in-group (a `value` or `parameter` node's `semantic_type`, an alias,
+record, tuple or union composite over a range, and a declared `bounded_domain`) stay open until IR's
+FR-038-AC-131 gate lifts; this rule places no new obligation for them and the existing GATED criteria keep
+that gate.
 
 The shared reader `field_range` separates two kinds of framed object:
 
@@ -653,6 +718,7 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-79 | PLANNED (IR-624), GATED on IR-627 or IR-628. From the package QSL emits for the twin's unit, both roles of each clause (`BalanceNeverDrops`, `AuditNeverDrops`) are generated; each identity's `state_fields` equals the request's list in the request's order, its `domains` are the ranges of FR-015-AC-77, and its `scope.anchor` and `scope.frame` equal the ids `qsl_replay::call_site` names for the operation, asserted on the generated identity before any replay; a request whose list omits the clause's field or a granted field is refused as FR-015-AC-29 states. | Test (TC-025) |
 | FR-015-AC-80 | PLANNED (IR-624), GATED on IR-627 or IR-628. With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. | Test (TC-025) |
 | FR-015-AC-81 | PLANNED (IR-624), GATED on IR-627 or IR-628. A harness whose state field has no range records that field and its reason in `StateFrameIdentity` and its persisted record: `NoRead` for a model declaration node's field no read names, and `TypeNotRange` for a field whose type is known and is no `i64` `integer_range`; the two reasons give different records, a regenerated harness from equal inputs has a byte-identical record, and a record naming a field twice is not read as an identity. | Test (TC-025) |
+| FR-015-AC-82 | PLANNED (IR-624), GATED on IR-630 (in-group re-derivation; IR-630 is blocked by QSL-638). Over a package whose `option`, `set`, `bag`, `sequence`, `ordered_set` or `collection_bounds` node carries a `recursion_group` (the `Tree` and `List` shapes of IR's FR-038-AC-145), a read of a bound from that node, or through its body `reference` or `semantic_type`, settles the item `unsupported` with a typed refusal naming the node and its label, never `supported` and never `requires_bound`, and emits no harness, no oracle and no `domains` entry from the read; the same read over the same node with its `recursion_group` removed is read as before; a `collection_bounds` node whose `max` was changed with its `node_id` kept (IR's FR-038-AC-148 mutation, with IR-627's stage as merged) settles `unsupported` and never carries the changed `max` into a harness; and a range read through an `integer_range` node, with or without a label, is not refused by this rule. Merging IR-627's code leaves the criterion as written. | Test (TC-025) |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 
@@ -667,7 +733,7 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-75 | Mutate only the production oracle or only the shadow; or accept an equivalent mutant as the test of a check (a permutation of member order, or swapping two descriptors of one type). |
 | FR-015-AC-76 | Record `backed` for a covering criterion the matrix lists planned, omit `declaration_reconstruction`, or leave the identity unchanged when a bound changes. |
 
-### Mutations FR-015-AC-77 to FR-015-AC-81 detect
+### Mutations FR-015-AC-77 to FR-015-AC-82 detect
 
 | ID | Mutation that breaks it |
 |----|-------------------------|
@@ -676,6 +742,7 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-79 | Emit the hand-built fixture's anchor or frame id in the identity, reorder `state_fields` by name or by body position, or give an unread field a range of the whole `i64` in `domains`. |
 | FR-015-AC-80 | Generate the harness from the hand-built fixture and not from the emitted package, so the test never reads the emitted shape. |
 | FR-015-AC-81 | Record no reason, record `NoRead` for a field whose type is known and not a range, or record both reasons alike. |
+| FR-015-AC-82 | Trust the bound of a labelled node because IR admitted the package; test the label only on the node read and not on the collection or option it was reached through; settle the item `requires_bound`, or `supported` with a harness, instead of `unsupported`; refuse by name a labelled `integer_range` that IR-627 verifies; refuse by shape and ignore the label; or lift the rule when IR-627's code merges. |
 
 ## Dependencies
 

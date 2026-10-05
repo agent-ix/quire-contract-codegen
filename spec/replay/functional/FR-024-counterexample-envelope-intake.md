@@ -415,7 +415,13 @@ FR-024-AC-11 to FR-024-AC-30:
   declaration node. CG does not defend itself, because the structural-key preimage is unpublished
   and IR exports no function for it. Until IR-627 (re-derive anonymous structural node keys at
   admission) or IR-628 (typed accessor, Q-5) lands, the criteria marked GATED must not be
-  closed, and nothing here claims the range is verified.
+  closed, and nothing here claims the range is verified. Both are specified in IR's merged FR-038 and
+  neither has landed (IR #297 and IR #299 are open). The state-clause replay reads the same
+  `field_range` as the generator, which reads an `integer_range` node (IR-627's stage verifies that
+  shape whatever label it carries) or IR-628's accessor, so FR-024's range reads are not among the
+  reads IR's stated in-group limit affects. That limit, a `recursion_group` node IR-627 skips, is
+  FR-015's rule (FR-015-AC-82, GATED on IR-630, which is blocked by QSL-638); FR-024 reads no
+  collection bound and adds no criterion for it.
 - `FR-024-AC-1` to `FR-024-AC-10` are planned and have no test of their own. `quire coverage
   --strict` does not count them as unbacked (66 unbacked rows on `main` before IR-460; 44 on
   `main` before IR-459 and 44, none contradicted, at the head that implemented the frame path, the
@@ -457,7 +463,12 @@ an answer to Q-1, Q-3 or Q-4, and a later answer to Q-3 would change every ident
   members each with its name and derived member type, `Int[lo, hi]` with its bounds as values,
   computed by the resolution the reader already runs, which needs the reader to retain the resolved
   model. Returning the bounds as values also closes the two gaps in the stated limit above, since a
-  consumer then reads no bounds from a node whose key IR does not re-derive. Until it exists, an
+  consumer then reads no bounds from a node whose key IR does not re-derive. IR specifies it in merged
+  FR-038 as `CheckedPackageV2::model_object_fields` (FR-038-AC-136 to AC-144, TC-227; code open as IR
+  #299, not landed): it reads from the field table retained from the selected domain document and from no
+  node body, it is independent of IR-627's stage, and when it lands this requirement's FR-024-AC-31 to
+  AC-35 are amended to it, as FR-015's IR-624 section states. This answers Q-5 on the IR side only when
+  the code merges. Until it exists, an
   unread field is carried without a range (FR-015-AC-81) and a harness draws it unconstrained,
   which is wider than the model, and the field set stays the request's. Only if IR answers no: a
   read-free declaration of each state field's type would be a node form QSpec FR-322 does not define
