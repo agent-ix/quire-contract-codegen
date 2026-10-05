@@ -37,10 +37,9 @@ pub(crate) fn named_state_frame_harness(
     };
     StateFrameHarness {
         identity: StateFrameIdentity {
-            ceilings: crate::kani::identity::ProofCeilings {
-                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
-                wall_clock: std::time::Duration::from_secs(30),
-            },
+            ceilings: crate::kani::test_support::proof_ceilings_with_wall_clock(
+                std::time::Duration::from_secs(30),
+            ),
             clause: id("1"),
             scope: StateFrameScope {
                 operation: "deposit".to_owned(),
@@ -183,3 +182,8 @@ pub(crate) fn discover_scratch(name: &str) -> PathBuf {
     fs::create_dir_all(&path).unwrap();
     path
 }
+
+use crate::kani::identity::ProofCeilings;
+#[path = "../../tests/common/proof_ceilings.rs"]
+mod proof_ceilings;
+pub(crate) use proof_ceilings::{proof_ceilings, proof_ceilings_with_wall_clock};

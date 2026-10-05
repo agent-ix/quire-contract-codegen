@@ -431,10 +431,7 @@ fn tc_042_ac2_a_claim_map_this_generator_did_not_produce_is_operation_not_render
             node_id: &target,
         }];
         let outcome = negotiate_kani_obligations(&KaniObligationRequest {
-            ceilings: quire_contract_codegen::ProofCeilings {
-                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
-                wall_clock: std::time::Duration::from_secs(600),
-            },
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
             items: &items,
             subject_path: "crate::subject",
             unwind: 1,

@@ -256,10 +256,7 @@ impl Built {
         let pre = ClauseId::new("pre").unwrap();
         let post = ClauseId::new("post").unwrap();
         generate_kani_bundle(&KaniRequest {
-            ceilings: quire_contract_codegen::ProofCeilings {
-                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
-                wall_clock: std::time::Duration::from_secs(600),
-            },
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
             requirement: self.environment.owner(),
             precondition_clause: &pre,
             postcondition_clause: &post,
@@ -1893,10 +1890,7 @@ fn tc_044_consumers_that_need_a_plain_bool_refuse_arithmetic() {
             clause: &clause,
         }];
         let outcome = negotiate_kani_obligations(&KaniObligationRequest {
-            ceilings: quire_contract_codegen::ProofCeilings {
-                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
-                wall_clock: std::time::Duration::from_secs(600),
-            },
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
             items: &items,
             subject_path: "crate::subject",
             unwind: 4,

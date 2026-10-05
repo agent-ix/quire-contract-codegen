@@ -11,3 +11,5 @@ pub(crate) mod tool;
 
 // Backend-tree resident-memory observation.
 pub(crate) mod memory;
+
+mod namespace;

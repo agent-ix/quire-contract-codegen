@@ -45,7 +45,6 @@ impl<'a> From<&'a StateFrameHarness> for KaniExecutableHarness<'a> {
 /// Exactly what execution reads from a harness, whichever kind it is.
 pub(super) struct HarnessView<'a> {
     pub(super) ceilings: crate::kani::identity::ProofCeilings,
-    pub(super) arguments: Vec<SymbolicArgumentBounds>,
     pub(super) rust: &'a Artifact,
     /// The `module::harness` path Kani names the harness by, which a batch passes to `--harness`
     /// and finds again as the `harness_id` of the report entry.
@@ -57,33 +56,83 @@ pub(super) struct HarnessView<'a> {
 }
 
 impl<'a> KaniExecutableHarness<'a> {
+    /// Record argument bounds only when producing execution evidence.
+    pub(super) fn symbolic_arguments(self) -> Vec<SymbolicArgumentBounds> {
+        match self {
+            Self::Contract(harness) => {
+                let identity = &harness.identity;
+                identity
+                    .arguments
+                    .iter()
+                    .map(|argument| SymbolicArgumentBounds {
+                        identifier: argument.identifier.clone(),
+                        bounds: match (&argument.primitive_type, &argument.integer_bounds) {
+                            (crate::kani::abi::KaniPrimitiveType::Boolean, _) => {
+                                SymbolicBounds::Boolean
+                            }
+                            (crate::kani::abi::KaniPrimitiveType::I64, Some(bounds)) => {
+                                SymbolicBounds::Integer {
+                                    minimum: bounds.minimum,
+                                    maximum: bounds.maximum,
+                                }
+                            }
+                            (crate::kani::abi::KaniPrimitiveType::I64, None) => {
+                                SymbolicBounds::Integer {
+                                    minimum: i64::MIN,
+                                    maximum: i64::MAX,
+                                }
+                            }
+                        },
+                    })
+                    .collect()
+            }
+            Self::Scalar(harness) => {
+                let identity = &harness.identity;
+                identity
+                    .arguments
+                    .iter()
+                    .map(|argument| SymbolicArgumentBounds {
+                        identifier: argument.identifier.clone(),
+                        bounds: SymbolicBounds::Integer {
+                            minimum: argument.minimum,
+                            maximum: argument.maximum,
+                        },
+                    })
+                    .collect()
+            }
+            Self::StateFrame(harness) => {
+                let identity = &harness.identity;
+                identity
+                    .state_fields
+                    .iter()
+                    .map(|field| SymbolicArgumentBounds {
+                        identifier: field.clone(),
+                        bounds: identity
+                            .domains
+                            .iter()
+                            .find(|domain| &domain.field == field)
+                            .map_or(
+                                SymbolicBounds::Integer {
+                                    minimum: i64::MIN,
+                                    maximum: i64::MAX,
+                                },
+                                |domain| SymbolicBounds::Integer {
+                                    minimum: domain.minimum,
+                                    maximum: domain.maximum,
+                                },
+                            ),
+                    })
+                    .collect()
+            }
+        }
+    }
+
     pub(super) fn view(self) -> HarnessView<'a> {
         match self {
             Self::Contract(harness) => {
                 let identity = &harness.identity;
                 HarnessView {
                     ceilings: identity.ceilings,
-                    arguments: identity
-                        .arguments
-                        .iter()
-                        .map(|argument| SymbolicArgumentBounds {
-                            identifier: argument.identifier.clone(),
-                            bounds: match (&argument.primitive_type, &argument.integer_bounds) {
-                                (crate::kani::abi::KaniPrimitiveType::Boolean, _) => {
-                                    SymbolicBounds::Boolean
-                                }
-                                (crate::kani::abi::KaniPrimitiveType::I64, Some(bounds)) => {
-                                    SymbolicBounds::Integer {
-                                        minimum: bounds.minimum,
-                                        maximum: bounds.maximum,
-                                    }
-                                }
-                                (crate::kani::abi::KaniPrimitiveType::I64, None) => {
-                                    SymbolicBounds::Unspecified
-                                }
-                            },
-                        })
-                        .collect(),
                     rust: &harness.rust,
                     selection: identity.harness_path().to_string(),
                     kind: Some(identity.kind),
@@ -96,17 +145,6 @@ impl<'a> KaniExecutableHarness<'a> {
                 let identity = &harness.identity;
                 HarnessView {
                     ceilings: identity.ceilings,
-                    arguments: identity
-                        .arguments
-                        .iter()
-                        .map(|argument| SymbolicArgumentBounds {
-                            identifier: argument.identifier.clone(),
-                            bounds: SymbolicBounds::Integer {
-                                minimum: argument.minimum,
-                                maximum: argument.maximum,
-                            },
-                        })
-                        .collect(),
                     rust: &harness.rust,
                     selection: identity.harness_path().to_string(),
                     kind: None,
@@ -119,23 +157,6 @@ impl<'a> KaniExecutableHarness<'a> {
                 let identity = &harness.identity;
                 HarnessView {
                     ceilings: identity.ceilings,
-                    arguments: identity
-                        .state_fields
-                        .iter()
-                        .map(|field| SymbolicArgumentBounds {
-                            identifier: field.clone(),
-                            bounds: identity
-                                .domains
-                                .iter()
-                                .find(|domain| &domain.field == field)
-                                .map_or(SymbolicBounds::Unspecified, |domain| {
-                                    SymbolicBounds::Integer {
-                                        minimum: domain.minimum,
-                                        maximum: domain.maximum,
-                                    }
-                                }),
-                        })
-                        .collect(),
                     rust: &harness.rust,
                     selection: format!("{}::{}", identity.module_symbol, identity.harness_symbol),
                     kind: Some(match identity.property {
@@ -179,6 +200,42 @@ mod tests {
         assert_eq!(
             KaniExecutableHarness::from(&frame).view().kind,
             Some(ObligationKind::Frame)
+        );
+    }
+    /// Trace: FR-028-AC-4.
+    #[test]
+    fn unranged_state_draws_record_the_full_i64_domain() {
+        let mut harness = state_frame_harness(
+            StateFrameProperty::Frame {
+                granted: vec!["input".to_owned()],
+                checked: vec!["audit".to_owned()],
+            },
+            Vec::new(),
+        );
+        harness.identity.state_fields = vec!["input".to_owned(), "audit".to_owned()];
+        harness.identity.domains = vec![crate::kani::identity::StateFieldDomain {
+            field: "input".to_owned(),
+            minimum: -3,
+            maximum: 7,
+        }];
+        assert_eq!(
+            KaniExecutableHarness::from(&harness).symbolic_arguments(),
+            vec![
+                SymbolicArgumentBounds {
+                    identifier: "input".to_owned(),
+                    bounds: SymbolicBounds::Integer {
+                        minimum: -3,
+                        maximum: 7
+                    }
+                },
+                SymbolicArgumentBounds {
+                    identifier: "audit".to_owned(),
+                    bounds: SymbolicBounds::Integer {
+                        minimum: i64::MIN,
+                        maximum: i64::MAX
+                    }
+                },
+            ]
         );
     }
 }

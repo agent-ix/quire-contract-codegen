@@ -39,8 +39,6 @@ pub enum SymbolicBounds {
         /// Inclusive upper bound.
         maximum: i64,
     },
-    /// The identity carries no finite integer range for this field.
-    Unspecified,
 }
 
 /// One argument's identity and the symbolic bounds the run used.

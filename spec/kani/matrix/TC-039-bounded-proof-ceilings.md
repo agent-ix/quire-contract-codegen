@@ -156,6 +156,7 @@ The focused tests backing the ceiling slice are:
 - `either_ceiling_changes_the_canonical_corpus_identity`
 - `identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory`
 - `zero_wall_ceiling_cannot_accept_an_already_exited_launcher`
+- `expired_dispatch_deadline_starts_no_helper`
 - `child_memory_overage_is_inconclusive_and_kills_the_entire_backend_tree`
 - `batch_memory_overage_refuses_every_member_without_classifying_a_partial_report`
 - `unequal_identity_memory_ceilings_run_in_separate_backend_processes`
@@ -163,17 +164,38 @@ The focused tests backing the ceiling slice are:
 - `available_observer_does_not_invent_a_peak_before_observing_a_tree`
 - `resident_memory_of_a_reused_pid_is_excluded_from_the_backend_sample`
 - `released_address_space_is_observed_before_zombie_status_but_missing_rss_is_refused`
+- `released_leader_mm_uses_live_worker_rss_or_refuses_observation`
+- `missing_task_ancestry_refuses_a_zombie_leader_with_live_workers`
+- `unranged_state_draws_record_the_full_i64_domain`
+- `gated_startup_abort_kills_init_before_gate_eof_and_never_dispatches_backend`
+- `completed_monitor_cleanup_kills_an_orphan_and_its_fork_after_the_last_sample`
+- `observation_failure_after_spawn_refuses_a_valid_report_and_stops_the_run`
 
 Step 10 (FR-028-AC-12, the batch wall-clock rule) remains implemented (IR-277), backed by the
 `tc_043_*` batch tests listed in TC-043. Batching now also requires equal identity memory and
 wall-clock ceilings.
 
-The process-tree part of step 19 (FR-028-AC-21) is implemented with the Linux procfs resident-memory
-observer. Its focused tests exercise an allocating child that leaves the small launcher's process
-group, kill that child and its sibling, refuse an over-ceiling batch without classifying any member,
-and refuse unavailable observation before spawning the backend. Evidence names the actual observer
-and records the largest aggregate resident-memory sample it observed; it does not claim memory
-between observations. No limit-only mechanism is implemented or claimed here.
+The process-tree part of step 19 (FR-028-AC-21) is implemented for the current execution entries
+with mandatory Linux PID-namespace ownership and a procfs resident-memory observer. Bubblewrap,
+permission to create the namespaces, and readable owned-process procfs observations are required;
+an unavailable mechanism refuses before backend dispatch. Gated startup claims the namespace init
+by pidfd and start identity. Startup abort kills the owned, still-pinned process group before the
+gate closes. Every run conclusion kills and confirms namespace-init teardown, including a completed
+backend whose orphaned descendants remain alive. The focused fixtures exercise double-forked and
+session-escaped children, and a descendant forked after the final memory sample.
+
+The observer follows the owned processes' task-child lists rather than scanning every host process
+on each sample. Evidence names `linux_pid_namespace_procfs_tree_rss` and records the largest observed
+sum of per-process RSS. Shared resident pages can appear in more than one process's RSS, so this is
+a conservative aggregate metric, not an instantaneous physical-memory footprint. Memory between
+samples is not claimed. A released thread-group leader's address space uses a live worker's RSS
+when available; ambiguous live-worker observation is refused rather than recorded as zero.
+
+AC-21's obligation to hold every run to its ceiling continues throughout execution. Losing memory
+observation or descendant ownership therefore stops the owned run and yields the typed
+`MemoryObservationFailed` refusal, even beside a valid success report. The real procfs-failure
+fixture backs this interpretation of the existing criterion; it adds no new normative obligation.
+No limit-only mechanism or bounded native-refinement execution is implemented or claimed here.
 
 Steps 5 to 9 and steps 11 to 18 and 20 to 22 remain planned. The ceiling slice supplies no shadow,
 refinement obligation, proof strength, family/proof-subject field or tool-version evidence. In

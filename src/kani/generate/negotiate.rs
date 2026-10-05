@@ -1113,10 +1113,7 @@ mod tests {
 
     fn render_probe_request<'a>(items: &'a [ObligationItem<'a>]) -> KaniObligationRequest<'a> {
         KaniObligationRequest {
-            ceilings: crate::kani::identity::ProofCeilings {
-                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
-                wall_clock: std::time::Duration::from_secs(600),
-            },
+            ceilings: crate::kani::test_support::proof_ceilings(),
             items,
             subject_path: "render_probe::subject",
             unwind: 4,

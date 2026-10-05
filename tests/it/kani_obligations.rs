@@ -357,10 +357,7 @@ fn request<'a>(
     subject_path: &'a str,
 ) -> KaniObligationRequest<'a> {
     KaniObligationRequest {
-        ceilings: quire_contract_codegen::ProofCeilings {
-            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
-            wall_clock: REAL_KANI_TIMEOUT,
-        },
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(REAL_KANI_TIMEOUT),
         items,
         subject_path,
         unwind: 4,
@@ -2009,10 +2006,9 @@ fn routed_scalar_increment() -> (
         }],
         &GenerationContexts {
             kani: Some(KaniGenerationContext {
-                ceilings: quire_contract_codegen::ProofCeilings {
-                    memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
-                    wall_clock: REAL_KANI_TIMEOUT,
-                },
+                ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+                    REAL_KANI_TIMEOUT,
+                ),
                 subject_path: "crate::subject",
                 unwind: 3,
             }),

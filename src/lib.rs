@@ -109,12 +109,12 @@ pub use kani::output::report::{
     OtherCheckClass,
 };
 pub use kani::run::execute::{
-    execute_kani_obligation, execute_kani_obligations, kani_launch_command, launch_evidence,
-    KaniBatchInvocation, KaniExecutionEvidence, KaniExecutionRefusal, KaniExecutionRequest,
-    KaniGroupRun, OUTPUT_OVER_LIMIT_CODE, OUTPUT_UNREAD_CODE,
+    execute_kani_obligation, execute_kani_obligations, KaniBatchInvocation, KaniExecutionEvidence,
+    KaniExecutionRefusal, KaniExecutionRequest, KaniGroupRun, OUTPUT_OVER_LIMIT_CODE,
+    OUTPUT_UNREAD_CODE,
 };
 pub use kani::run::harness::KaniExecutableHarness;
-pub use kani::run::launch::{run_launcher_with_timeout, CaptureStream, LaunchOutcome};
+pub use kani::run::launch::CaptureStream;
 pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
 pub use kani::terminal::{
     ir_outcome_terminal_value, run_terminal_value, ReplaySettlement, TerminalPairError,

@@ -1,4 +1,4 @@
-//! Linux procfs observation of aggregate backend-tree resident memory (FR-028-AC-21).
+//! Linux procfs observation of the sum of backend-process resident memory (FR-028-AC-21).
 //!
 //! The peak is the largest resident total observed at a polling instant. It is not an
 //! allocation limit or an estimate of memory between observations. Descendants are retained
@@ -6,23 +6,23 @@
 //! counted or signalled as the old process.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs, io,
     io::Read,
     path::{Path, PathBuf},
 };
 
+use rustix::process::Pid;
 #[cfg(target_os = "linux")]
-use rustix::process::{pidfd_open, pidfd_send_signal, PidfdFlags};
-use rustix::process::{Pid, Signal};
+use rustix::process::{pidfd_open, PidfdFlags};
 use serde::Serialize;
 
 /// The mechanism that actually enforced the run's memory ceiling.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryMechanism {
-    /// Poll the aggregate resident bytes of the launcher and its observed descendants.
-    LinuxProcfsTreeRss,
+    /// Own all descendants with a PID namespace and poll their conservative per-process RSS sum.
+    LinuxPidNamespaceProcfsTreeRss,
 }
 
 /// Memory observed by the mechanism during one launch.
@@ -31,7 +31,8 @@ pub enum MemoryMechanism {
 pub struct MemoryObservation {
     /// The actual mechanism used, rather than a requested mechanism.
     pub mechanism: MemoryMechanism,
-    /// Largest aggregate resident memory observed, in bytes. Absent until a tree was observed.
+    /// Largest observed sum of per-process RSS, in bytes; shared pages count once per process.
+    /// This conservative metric can exceed the physical footprint. Absent until observed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub peak_resident_bytes: Option<u64>,
 }
@@ -40,7 +41,6 @@ pub struct MemoryObservation {
 struct Process {
     pid: u32,
     parent: u32,
-    group: u32,
     start: u64,
     virtual_bytes: u64,
     resident_pages: u64,
@@ -65,22 +65,15 @@ impl MemoryObserver {
             root: root.to_path_buf(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
-                mechanism: MemoryMechanism::LinuxProcfsTreeRss,
+                mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
                 peak_resident_bytes: None,
             },
         };
         // Reading a directory alone is insufficient: verify both ancestry and resident bytes.
-        let processes = observer.processes()?;
         let own = std::process::id();
-        let own_process = processes
-            .iter()
-            .find(|process| process.pid == own)
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "procfs does not expose the caller's process",
-                )
-            })?;
+        let own_process = parse_process(&fs::read_to_string(
+            root.join(own.to_string()).join("stat"),
+        )?)?;
         observer
             .resident_bytes(own, own_process.start)?
             .ok_or_else(|| {
@@ -97,34 +90,40 @@ impl MemoryObserver {
         Ok(observer)
     }
 
+    pub(super) fn bind_root(&mut self, pid: u32, start: u64) -> io::Result<()> {
+        let process = parse_process(&fs::read_to_string(
+            self.root.join(pid.to_string()).join("stat"),
+        )?)?;
+        if process.start != start {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "owned namespace init identity changed",
+            ));
+        }
+        self.resident_bytes(pid, start)?.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "owned init RSS identity changed",
+            )
+        })?;
+        self.known.insert(pid, start);
+        Ok(())
+    }
+
     pub(super) fn observation(&self) -> MemoryObservation {
         self.observation.clone()
     }
 
     pub(super) fn observe(&mut self, launcher: u32) -> io::Result<u64> {
-        let processes = self.processes()?;
+        let processes = self.processes(launcher)?;
         self.known.retain(|pid, start| {
-            processes
-                .iter()
-                .any(|process| process.pid == *pid && process.start == *start)
+            *pid == launcher
+                || processes
+                    .iter()
+                    .any(|process| process.pid == *pid && process.start == *start)
         });
-        // Group membership finds a descendant even if its parent exited between polls. Parent
-        // membership also finds descendants that changed their group or session.
-        loop {
-            let mut added = false;
-            for process in &processes {
-                if (process.pid == launcher
-                    || process.group == launcher
-                    || self.known.contains_key(&process.parent))
-                    && !self.known.contains_key(&process.pid)
-                {
-                    self.known.insert(process.pid, process.start);
-                    added = true;
-                }
-            }
-            if !added {
-                break;
-            }
+        for process in &processes {
+            self.known.insert(process.pid, process.start);
         }
         let mut total = 0u64;
         let mut observed = false;
@@ -146,50 +145,89 @@ impl MemoryObserver {
         Ok(total)
     }
 
-    /// Kill descendants that escaped the group, checking start time before signalling them.
-    pub(super) fn kill_known(&self) {
-        for (pid, start) in &self.known {
-            #[cfg(target_os = "linux")]
-            {
-                let Some(signal_pid) = i32::try_from(*pid).ok().and_then(Pid::from_raw) else {
-                    continue;
-                };
-                // Claim the process handle before checking ancestry. If its pid is recycled
-                // after that check, the signal still addresses this handle's process.
-                let Ok(handle) = pidfd_open(signal_pid, PidfdFlags::empty()) else {
-                    continue;
-                };
-                let stat = self.root.join(pid.to_string()).join("stat");
-                let Ok(text) = fs::read_to_string(stat) else {
-                    continue;
-                };
-                let Ok(process) = parse_process(&text) else {
-                    continue;
-                };
-                if process.start == *start {
-                    let _ = pidfd_send_signal(&handle, Signal::KILL);
-                }
-            }
-        }
-    }
-
-    fn processes(&self) -> io::Result<Vec<Process>> {
+    /// Walk only the owned namespace subtree, including children created by worker threads.
+    fn processes(&self, launcher: u32) -> io::Result<Vec<Process>> {
+        let mut pending: Vec<(u32, Option<(u32, u64)>)> = vec![(launcher, None)];
+        let mut seen = BTreeSet::new();
         let mut processes = Vec::new();
-        for entry in fs::read_dir(&self.root)? {
-            let entry = entry?;
-            if entry
-                .file_name()
-                .to_str()
-                .and_then(|name| name.parse::<u32>().ok())
-                .is_none()
-            {
+        while let Some((pid, parent)) = pending.pop() {
+            if !seen.insert(pid) {
                 continue;
             }
-            match fs::read_to_string(entry.path().join("stat")) {
-                Ok(text) => processes.push(parse_process(&text)?),
-                Err(error) if process_disappeared(&error) => {}
+            let directory = self.root.join(pid.to_string());
+            let process = match fs::read_to_string(directory.join("stat")) {
+                Ok(text) => parse_process(&text)?,
+                Err(error) if process_disappeared(&error) => continue,
                 Err(error) => return Err(error),
+            };
+            if pid == launcher
+                && self
+                    .known
+                    .get(&pid)
+                    .is_some_and(|start| *start != process.start)
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "owned namespace init was recycled",
+                ));
             }
+            if let Some((parent_pid, parent_start)) = parent {
+                if process.parent != parent_pid {
+                    continue;
+                }
+                let parent_stat =
+                    match fs::read_to_string(self.root.join(parent_pid.to_string()).join("stat")) {
+                        Ok(text) => parse_process(&text)?,
+                        Err(error) if process_disappeared(&error) => continue,
+                        Err(error) => return Err(error),
+                    };
+                if parent_stat.start != parent_start {
+                    continue;
+                }
+            }
+            let tasks = match fs::read_dir(directory.join("task")) {
+                Ok(tasks) => tasks,
+                Err(error) if process_disappeared(&error) => {
+                    // A reaped child can vanish after its stat was read. A live leader whose
+                    // workers still exist is different: missing task ancestry stays fail-closed.
+                    match fs::read_to_string(directory.join("stat")) {
+                        Err(error) if process_disappeared(&error) => continue,
+                        Err(error) => return Err(error),
+                        Ok(stat) => {
+                            let fresh = parse_process(&stat)?;
+                            if fresh.start != process.start {
+                                continue;
+                            }
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "live owned task ancestry unavailable",
+                            ));
+                        }
+                    }
+                }
+                Err(error) => return Err(error),
+            };
+            for task in tasks {
+                let task = task?;
+                match fs::read_to_string(task.path().join("children")) {
+                    Ok(children) => {
+                        for child in children.split_whitespace() {
+                            pending.push((
+                                child.parse::<u32>().map_err(|_| {
+                                    io::Error::new(
+                                        io::ErrorKind::InvalidData,
+                                        "invalid owned child pid",
+                                    )
+                                })?,
+                                Some((pid, process.start)),
+                            ));
+                        }
+                    }
+                    Err(error) if process_disappeared(&error) => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            processes.push(process);
         }
         Ok(processes)
     }
@@ -205,28 +243,65 @@ impl MemoryObserver {
         }
         let mut status = String::new();
         status_file.read_to_string(&mut status)?;
-        for line in status.lines() {
-            if let Some(rss) = line.strip_prefix("VmRSS:") {
-                let mut words = rss.split_whitespace();
-                let kib = words
-                    .next()
-                    .and_then(|word| word.parse::<u64>().ok())
-                    .ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "invalid procfs resident memory")
-                    })?;
-                if words.next() != Some("kB") || words.next().is_some() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "invalid procfs resident-memory unit",
-                    ));
-                }
-                return kib.checked_mul(1024).map(Some).ok_or_else(|| {
+        if let Some(bytes) = status_rss(&status)? {
+            return Ok(Some(bytes));
+        }
+        let threads = status
+            .lines()
+            .find_map(|line| line.strip_prefix("Threads:"))
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "procfs has no thread count")
+            })?;
+        if threads > 1 {
+            // An exited leader can have no mm while workers still share the live address space.
+            // Use one worker's RSS, never sum threads that share the same mm.
+            let workers = fs::read_dir(directory.join("task")).map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("live worker RSS unavailable: {error}"),
+                )
+            })?;
+            for worker in workers {
+                let worker = worker.map_err(|error| {
                     io::Error::new(
                         io::ErrorKind::InvalidData,
-                        "procfs resident memory overflows bytes",
+                        format!("live worker enumeration failed: {error}"),
                     )
-                });
+                })?;
+                let mut pinned = match fs::File::open(worker.path().join("status")) {
+                    Ok(pinned) => pinned,
+                    Err(error) if process_disappeared(&error) => continue,
+                    Err(error) => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("live worker status unavailable: {error}"),
+                        ))
+                    }
+                };
+                let latest = parse_process(&fs::read_to_string(directory.join("stat"))?)?;
+                if latest.start != start {
+                    return Ok(None);
+                }
+                let mut text = String::new();
+                match pinned.read_to_string(&mut text) {
+                    Ok(_) => {}
+                    Err(error) if process_disappeared(&error) => continue,
+                    Err(error) => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("live worker RSS unavailable: {error}"),
+                        ))
+                    }
+                }
+                if let Some(bytes) = status_rss(&text)? {
+                    return Ok(Some(bytes));
+                }
             }
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "live worker RSS unavailable",
+            ));
         }
         // Linux can release task->mm before publishing a zombie state. Its status then has
         // no VmRSS; stat reports zero virtual bytes and resident pages. Verify both from a
@@ -243,6 +318,33 @@ impl MemoryObserver {
             "procfs has no resident-memory value",
         ))
     }
+}
+
+fn status_rss(status: &str) -> io::Result<Option<u64>> {
+    for line in status.lines() {
+        if let Some(rss) = line.strip_prefix("VmRSS:") {
+            let mut words = rss.split_whitespace();
+            let kib = words
+                .next()
+                .and_then(|word| word.parse::<u64>().ok())
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, "invalid procfs resident memory")
+                })?;
+            if words.next() != Some("kB") || words.next().is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid procfs resident-memory unit",
+                ));
+            }
+            return kib.checked_mul(1024).map(Some).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "procfs resident memory overflows bytes",
+                )
+            });
+        }
+    }
+    Ok(None)
 }
 
 fn process_disappeared(error: &io::Error) -> bool {
@@ -262,11 +364,11 @@ fn parse_process(text: &str) -> io::Result<Process> {
     let (_, tail) = text.rsplit_once(')').ok_or_else(malformed)?;
     let mut fields = tail.split_whitespace();
     fields.next().ok_or_else(malformed)?;
-    let parent = fields
+    let parent: u32 = fields
         .next()
         .and_then(|value| value.parse().ok())
         .ok_or_else(malformed)?;
-    let group = fields
+    let _group: u32 = fields
         .next()
         .and_then(|value| value.parse().ok())
         .ok_or_else(malformed)?;
@@ -285,7 +387,6 @@ fn parse_process(text: &str) -> io::Result<Process> {
     Ok(Process {
         pid: pid.parse().map_err(|_| malformed())?,
         parent,
-        group,
         start,
         virtual_bytes,
         resident_pages,
@@ -317,7 +418,7 @@ mod tests {
             root: root.clone(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
-                mechanism: MemoryMechanism::LinuxProcfsTreeRss,
+                mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
                 peak_resident_bytes: None,
             },
         };
@@ -334,7 +435,8 @@ mod tests {
     fn released_address_space_is_observed_before_zombie_status_but_missing_rss_is_refused() {
         let root = crate::kani::test_support::discover_scratch("memory-address-space-release");
         let directory = root.join("42");
-        fs::create_dir(&directory).unwrap();
+        fs::create_dir_all(directory.join("task/42")).unwrap();
+        fs::write(directory.join("task/42/children"), []).unwrap();
         let mut fields = ["0"; 22];
         fields[0] = "R";
         fields[1] = "1";
@@ -342,12 +444,16 @@ mod tests {
         fields[19] = "200";
         let stat = |fields: &[&str]| format!("42 (exiting) {}", fields.join(" "));
         fs::write(directory.join("stat"), stat(&fields)).unwrap();
-        fs::write(directory.join("status"), "State:\tR (running)\n").unwrap();
+        fs::write(
+            directory.join("status"),
+            "State:\tR (running)\nThreads:\t1\n",
+        )
+        .unwrap();
         let mut observer = MemoryObserver {
             root: root.clone(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
-                mechanism: MemoryMechanism::LinuxProcfsTreeRss,
+                mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
                 peak_resident_bytes: None,
             },
         };
@@ -369,8 +475,84 @@ mod tests {
         let observer = MemoryObserver::prepare(Path::new("/proc")).unwrap();
         assert_eq!(
             observer.observation().mechanism,
-            MemoryMechanism::LinuxProcfsTreeRss
+            MemoryMechanism::LinuxPidNamespaceProcfsTreeRss
         );
         assert_eq!(observer.observation().peak_resident_bytes, None);
+    }
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn missing_task_ancestry_refuses_a_zombie_leader_with_live_workers() {
+        let root = crate::kani::test_support::discover_scratch("memory-task-exit");
+        let directory = root.join("42");
+        fs::create_dir(&directory).unwrap();
+        let mut fields = ["0"; 22];
+        fields[0] = "Z";
+        fields[1] = "1";
+        fields[2] = "42";
+        fields[19] = "200";
+        let stat = |fields: &[&str]| format!("42 (exiting) {}", fields.join(" "));
+        fs::write(directory.join("stat"), stat(&fields)).unwrap();
+        let observer = MemoryObserver {
+            root: root.clone(),
+            known: BTreeMap::from([(42, 200)]),
+            observation: MemoryObservation {
+                mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+                peak_resident_bytes: None,
+            },
+        };
+        fs::write(
+            directory.join("status"),
+            "State:\tZ (zombie)\nThreads:\t2\n",
+        )
+        .unwrap();
+        assert_eq!(
+            observer.processes(42).err().unwrap().kind(),
+            io::ErrorKind::InvalidData
+        );
+        fields[0] = "R";
+        fs::write(directory.join("stat"), stat(&fields)).unwrap();
+        assert_eq!(
+            observer.processes(42).err().unwrap().kind(),
+            io::ErrorKind::InvalidData
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn released_leader_mm_uses_live_worker_rss_or_refuses_observation() {
+        let root = crate::kani::test_support::discover_scratch("memory-live-worker");
+        let directory = root.join("42");
+        fs::create_dir_all(directory.join("task/43")).unwrap();
+        let mut fields = ["0"; 22];
+        fields[0] = "Z";
+        fields[1] = "1";
+        fields[2] = "42";
+        fields[19] = "200";
+        fs::write(
+            directory.join("stat"),
+            format!("42 (leader) {}", fields.join(" ")),
+        )
+        .unwrap();
+        fs::write(directory.join("status"), "Threads:\t2\n").unwrap();
+        fs::write(directory.join("task/43/status"), "VmRSS:\t65536 kB\n").unwrap();
+        let observer = MemoryObserver {
+            root: root.clone(),
+            known: BTreeMap::new(),
+            observation: MemoryObservation {
+                mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+                peak_resident_bytes: None,
+            },
+        };
+        assert_eq!(
+            observer.resident_bytes(42, 200).unwrap(),
+            Some(64 * 1024 * 1024)
+        );
+        fs::remove_dir_all(directory.join("task")).unwrap();
+        assert_eq!(
+            observer.resident_bytes(42, 200).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 }

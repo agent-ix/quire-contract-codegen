@@ -213,10 +213,7 @@ fn withdraw_harnesses() -> Vec<KaniObligationHarness> {
         })
         .collect::<Vec<_>>();
     let request = KaniObligationRequest {
-        ceilings: quire_contract_codegen::ProofCeilings {
-            memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
-            wall_clock: REAL_KANI_TIMEOUT,
-        },
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(REAL_KANI_TIMEOUT),
         items: &items,
         subject_path: "crate::withdraw",
         unwind: 4,

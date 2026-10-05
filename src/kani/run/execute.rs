@@ -10,7 +10,7 @@
 //! harness. A harness is found in the report by the `module::harness` path the launch passed to
 //! `--harness`, and its playback in the console by the path its block is headed for.
 
-use std::{fmt, fs, num::NonZeroUsize, path::Path, process::Command, time::Duration};
+use std::{fmt, fs, num::NonZeroUsize, path::Path, time::Duration};
 
 use serde::Serialize;
 
@@ -295,7 +295,7 @@ fn require_in_crate(request: &KaniExecutionRequest<'_>) -> Result<(), KaniExecut
 /// failure to start it to the refusal that names the launcher.
 fn start(
     request: &KaniExecutionRequest<'_>,
-    command: Command,
+    command: super::namespace::BackendCommand,
     timeout: Duration,
     harnesses: NonZeroUsize,
 ) -> Result<BoundedLaunch, KaniExecutionRefusal> {
@@ -343,7 +343,7 @@ fn evidence_of(
 ) -> KaniExecutionEvidence {
     KaniExecutionEvidence {
         ceilings: harness.ceilings,
-        symbolic_arguments: harness.arguments.clone(),
+        symbolic_arguments: request.harness.symbolic_arguments(),
         memory,
         kind: harness.kind,
         harness_path: harness.rust.path.clone(),
@@ -494,7 +494,7 @@ fn batch_launch_command(
     first: &KaniExecutionRequest<'_>,
     selections: &[String],
     report_path: &Path,
-) -> (Vec<String>, Command) {
+) -> (Vec<String>, super::namespace::BackendCommand) {
     let mut arguments = vec!["kani".to_owned()];
     for selection in selections {
         arguments.extend([
@@ -515,7 +515,7 @@ fn batch_launch_command(
         "--export-json".to_owned(),
         report_path.display().to_string(),
     ]);
-    let mut command = Command::new(&first.installation.launcher);
+    let mut command = super::namespace::BackendCommand::new(&first.installation.launcher);
     command
         .args(&arguments)
         .env("CARGO_TARGET_DIR", first.target_directory)
@@ -689,22 +689,24 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
     }
 }
 
-/// Builds the exact argument vector and [`Command`] [`execute_kani_obligation`] launches for
-/// `request`, without spawning it, so a caller driving [`crate::run_launcher_with_timeout`] itself
-/// launches exactly what `execute_kani_obligation` does.
+/// Builds the exact argument vector and backend recipe [`execute_kani_obligation`] launches for
+/// `request`, without spawning it, for owning-module argument-vector checks.
 ///
 /// The vector is the harness identity's option vector followed by the flags that make Kani export
 /// its report to a file in the target directory, which is where the verdict is read from. The
 /// file's name is unique to this call (the last argument), so two runs sharing a target
 /// directory never write, remove or read each other's report.
-pub fn kani_launch_command(request: &KaniExecutionRequest<'_>) -> (Vec<String>, Command) {
+#[cfg(test)]
+fn kani_launch_command(
+    request: &KaniExecutionRequest<'_>,
+) -> (Vec<String>, super::namespace::BackendCommand) {
     launch_command(request, &fresh_report_path(request.target_directory))
 }
 
 fn launch_command(
     request: &KaniExecutionRequest<'_>,
     report_path: &Path,
-) -> (Vec<String>, Command) {
+) -> (Vec<String>, super::namespace::BackendCommand) {
     let mut arguments = vec!["kani".to_owned()];
     arguments.extend(request.harness.view().options.iter().cloned());
     arguments.extend([
@@ -713,7 +715,7 @@ fn launch_command(
         "--export-json".to_owned(),
         report_path.display().to_string(),
     ]);
-    let mut command = Command::new(&request.installation.launcher);
+    let mut command = super::namespace::BackendCommand::new(&request.installation.launcher);
     command
         .args(&arguments)
         .env("CARGO_TARGET_DIR", request.target_directory)
@@ -732,7 +734,7 @@ fn launch_command(
 /// A launch stopped over a stream's limit or over a stream that was not read is the refusal
 /// [`KaniExecutionRefusal::OutputOverLimit`] or [`KaniExecutionRefusal::OutputUnread`], never an
 /// outcome.
-pub fn launch_evidence(
+pub(super) fn launch_evidence(
     launch: LaunchOutcome,
     report: Option<&[u8]>,
     kind: Option<ObligationKind>,
@@ -1146,7 +1148,13 @@ mod batch_tests {
 echo $! > "$CALLS.sibling"
 python3 -c 'import os, pathlib, signal, sys
 root = pathlib.Path(sys.argv[1])
+child = os.fork()
+if child:
+    os._exit(0)
 os.setsid()
+while os.getppid() != 1:
+    os.sched_yield()
+pathlib.Path(str(root) + ".namespace").write_text(os.readlink("/proc/self/ns/pid"))
 pathlib.Path(str(root) + ".groups").write_text(str(os.getpgrp()) + " " + str(os.getpgid(os.getppid())))
 parent = pathlib.Path("/proc") / str(os.getppid()) / "status"
 rss = next(line.split()[1] for line in parent.read_text().splitlines() if line.startswith("VmRSS:"))
@@ -1160,23 +1168,31 @@ wait
 
     fn recorded_process_gone(path: &Path) {
         let pid = fs::read_to_string(path).expect("a child must have started before the overage");
-        let status = PathBuf::from("/proc").join(pid.trim()).join("stat");
+        let namespace_path = path.with_file_name("calls.namespace");
+        let namespace = fs::read_to_string(namespace_path)
+            .expect("the allocating descendant records its namespace");
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         loop {
-            match fs::read_to_string(&status) {
-                Err(error)
-                    if error.kind() == std::io::ErrorKind::NotFound
-                        || error.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error()) =>
-                {
-                    return
-                }
-                Ok(stat)
-                    if stat.rsplit_once(')').unwrap().1.split_whitespace().next() == Some("Z") =>
-                {
-                    return
-                }
-                Ok(_) => {}
-                Err(error) => panic!("cannot observe the killed child: {error}"),
+            let alive = fs::read_dir("/proc")
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entry| {
+                    let directory = entry.path();
+                    let same_namespace = fs::read_link(directory.join("ns/pid"))
+                        .is_ok_and(|link| link.as_os_str() == namespace.as_str());
+                    if !same_namespace {
+                        return false;
+                    }
+                    let Ok(status) = fs::read_to_string(directory.join("status")) else {
+                        return false;
+                    };
+                    status
+                        .lines()
+                        .find_map(|line| line.strip_prefix("NSpid:"))
+                        .is_some_and(|ids| ids.split_whitespace().last() == Some(pid.trim()))
+                });
+            if !alive {
+                return;
             }
             assert!(
                 std::time::Instant::now() < deadline,
@@ -1208,7 +1224,7 @@ wait
         assert_eq!(evidence.ceilings, harness.identity.ceilings);
         assert_eq!(
             evidence.memory.mechanism,
-            crate::kani::run::memory::MemoryMechanism::LinuxProcfsTreeRss
+            crate::kani::run::memory::MemoryMechanism::LinuxPidNamespaceProcfsTreeRss
         );
         assert!(evidence.memory.peak_resident_bytes.unwrap() > ceiling);
         let parent_kib: u64 = fs::read_to_string(stand_in.directory.join("calls.parent-rss"))
@@ -1257,7 +1273,7 @@ wait
                 assert_eq!(memory_bytes, ceiling);
                 assert_eq!(
                     memory.mechanism,
-                    crate::kani::run::memory::MemoryMechanism::LinuxProcfsTreeRss
+                    crate::kani::run::memory::MemoryMechanism::LinuxPidNamespaceProcfsTreeRss
                 );
                 assert!(memory.peak_resident_bytes.unwrap() > ceiling);
             }
@@ -1294,7 +1310,7 @@ wait
         );
         assert_eq!(
             evidence.memory.mechanism,
-            crate::kani::run::memory::MemoryMechanism::LinuxProcfsTreeRss
+            crate::kani::run::memory::MemoryMechanism::LinuxPidNamespaceProcfsTreeRss
         );
         assert!(evidence.memory.peak_resident_bytes.is_some());
         harness.identity.ceilings.wall_clock = Duration::from_millis(200);

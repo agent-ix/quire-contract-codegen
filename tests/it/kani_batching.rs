@@ -67,10 +67,9 @@ fn harness(name: &str, body: &str, unwind: u32) -> StateFrameHarness {
     .to_vec();
     StateFrameHarness {
         identity: StateFrameIdentity {
-            ceilings: quire_contract_codegen::ProofCeilings {
-                memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
-                wall_clock: REAL_KANI_TIMEOUT,
-            },
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+                REAL_KANI_TIMEOUT,
+            ),
             clause: node_id("1"),
             scope: StateFrameScope {
                 operation: "check".to_owned(),
