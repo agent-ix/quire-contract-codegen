@@ -106,6 +106,10 @@ operations:
     inputs: [StateFrameRequest]
     output: StateFrameObligations | StateFrameRefusal
     semantics: from one postcondition state_clause of an admitted CheckedPackageV2 over one integer field, returns one operation-contract harness and one frame-effect harness of the clause's operation, each with a scoped identity and one non-vacuity cover; every other shape is a typed refusal with no harness (FR-015-AC-26 to FR-015-AC-29)
+  - name: generate_state_frame_dispositions
+    inputs: [list of StateFrameRequest]
+    output: one StateFrameRecord per request, in request order | StateFrameBatchError
+    semantics: planned (IR-461, FR-015-AC-59 to FR-015-AC-65). Settles every request however an earlier one settled and gives each exactly one disposition: generated (carrying the two harnesses generate_state_frame_obligations returns for it), requires_bound, no_finite_encoding or refused, the last three carrying the StateFrameRefusal the single-clause entry returns for that request, with no harness; only an empty list or one over MAX_OBLIGATION_ITEMS is a whole-call error. Unlike negotiate_kani_obligations, a malformed request is a refused record, not a whole-call rejection, so one package yields a disposition per clause for the QSL-20 gate
   - name: execute_kani_obligation
     inputs: [KaniExecutionRequest, whose harness is a KaniExecutableHarness: Contract, Scalar or StateFrame]
     output: KaniExecutionEvidence | KaniExecutionRefusal

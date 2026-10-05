@@ -275,6 +275,42 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
   the gate does not drive, or a driven file spells more of them than the gate counts
   (FR-015-AC-58).
 
+Planned (IR-461): the state and frame lane gives every clause of a package a disposition,
+as the negotiation of FR-015-AC-23 does for its items. QSL-20 (the proof, witness and
+native-replay gate) needs the disposition of every construct of a package, so one refused
+clause must not hide the rest. The single-clause entry `generate_state_frame_obligations`
+returns on the first refusal of its one clause and is unchanged; the criteria below add a
+batch entry beside it. A disposition is generated, `requires_bound`, `no_finite_encoding` or
+`refused`. The batch entry maps each refusal the single-clause entry can return to exactly
+one of the last three, so the two entries never disagree about a clause.
+
+- When a request names a batch of state-clause requests (`generate_state_frame_dispositions`),
+  the generator shall return exactly one record per request, in request order, each carrying
+  the request's clause and one disposition, and shall settle every request whether or not an
+  earlier one was refused (FR-015-AC-59).
+- When a request in the batch yields both harnesses, the generator shall record it
+  `generated` carrying the operation-contract and frame-effect harnesses
+  `generate_state_frame_obligations` returns for that request, byte-identical
+  (FR-015-AC-60).
+- If a request's lowering is a requires-bound record, or the framed object's member for the
+  clause's field declares no `i64` integer range, then the generator shall record it
+  `requires_bound` with the typed reason and emit no harness for it (FR-015-AC-61).
+- If a request's condition is outside the one-comparison shape (not a comparison of pre and
+  post reads, two fields, or two reads of one side) or its frame has an effect with no finite
+  encoding (creating or deleting an object, granting a relationship or a foreign field), then
+  the generator shall record it `no_finite_encoding` with the typed reason and emit no harness
+  for it (FR-015-AC-62).
+- If a request is refused on any other ground (a malformed request, a lowering that is not a
+  requires-bound record, a node that is not a postcondition state clause, a malformed clause,
+  a field the caller's state lacks, a frame granting every field, or a generated source over
+  the ceiling or not parsing as Rust), then the generator shall record it `refused` with the
+  typed reason and emit no harness for it, and shall not reject the batch (FR-015-AC-63).
+- If a batch names no request or more than `MAX_OBLIGATION_ITEMS`, then the generator shall
+  refuse the whole call with a typed error and return no record (FR-015-AC-64).
+- The generator shall give a clause the same outcome from the single-clause entry as from the
+  batch: the refusal `generate_state_frame_obligations` returns equals the reason of the
+  record the batch gives the same request (FR-015-AC-65).
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -337,6 +373,13 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
 | FR-015-AC-56 | With the installed backend, a V1 bundle harness whose requires clause some bounded argument satisfies and whose `ensures` holds for every such argument classifies `Verified` (FR-017-AC-4); the same bundle with a requires clause no bounded argument satisfies classifies `CoverUnsatisfied` with its satisfied and total cover counts, never `Verified` and never `Falsified`. | Test (TC-025) |
 | FR-015-AC-57 | With the installed backend, a bounded-corpus harness of each of the arithmetic, graph and collection families whose oracle is true classifies `Verified`, and a graph or collection harness whose oracle is false (an arithmetic case's oracle is always true) classifies `Falsified` carrying the assertion's playback (empty-valued, since a corpus case draws no input), never `Inconclusive` for lack of a counterexample. | Test (TC-023) |
 | FR-015-AC-58 | A test generates a harness through every emitting entry point (the precondition, V1 contract, scalar, state-clause and frame-effect families, `generate_kani_bundle`, and the corpus generator for each of its three families), parses each emitted source, and fails for any function attributed `#[kani::proof]` or `#[kani::proof_for_contract]` whose body does not contain exactly one `kani::cover!`, which must be the last statement, with no assertion after it and no other cover; and a scan of the non-test string literals of `src/` fails when a file other than the ones the test drives spells a proof attribute, or a driven file spells more proof attributes than the test counts; a spelling is `#[kani::` other than `requires`, `ensures`, `stub` and `unwind`, `kani::proof` or `proof_for_contract` in one literal, with `\` line continuations joined, which includes a `format!` template and a split `concat!` whose first fragment holds `#[kani::`, and the scan does not see a spelling assembled from fragments none of which holds `#[kani::` or `kani::proof`. | Test (TC-025) |
+| FR-015-AC-59 | A batch of state-clause requests in which an early request is refused and later requests are generated, requires-bound, no-finite-encoding or refused yields exactly one record per request in request order, each carrying that request's clause, and every later request has the disposition it has alone; a batch of three refused requests yields three records. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-60 | A request that generates records `generated` with the operation-contract and frame-effect harnesses that `generate_state_frame_obligations` returns for it, byte-identical, and with no reason. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-61 | A request whose clause field has no integer range on the framed object, and a request whose lowering is a requires-bound record, are each recorded `requires_bound` carrying the typed reason, with no harness. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-62 | A request whose condition is a negation, a literal comparison, two fields or two reads of one side, and a request whose frame creates, deletes or grants a relationship or a foreign field, are each recorded `no_finite_encoding` carrying the typed reason, with no harness. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-63 | A request that is not a postcondition state clause, names an absent node, names a field the caller's state lacks, has a frame granting every field, has an out-of-range unwind bound, an unparsable path or an invalid field name, or whose generated source is over the ceiling or does not parse as Rust, is recorded `refused` carrying the typed reason, with no harness, and its sibling requests are recorded as they are alone. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-64 | A batch of no requests, and a batch of `MAX_OBLIGATION_ITEMS` plus one requests, are each refused whole with a typed error and no record. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-65 | For every refusal shape of FR-015-AC-61 to FR-015-AC-63, the `StateFrameRefusal` the single-clause entry returns equals the reason of the record the batch gives the same request, and the single-clause entry's result for a generating request equals the `generated` record's harnesses. PLANNED (IR-461). | Test (TC-025) |
 
 ## Dependencies
 

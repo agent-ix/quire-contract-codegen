@@ -176,6 +176,36 @@ unsatisfiable requires as `cover_unsatisfied`.
     fail it until driven. A spelling built from fragments none of which holds `#[kani::` or
     `kani::proof` is not seen (FR-015-AC-58).
 
+## A disposition for every state clause (planned, IR-461)
+
+19. Build one batch of state-clause requests over one admitted package in which the first
+    request is refused (a precondition clause) and the later ones are one that generates,
+    one with a clause field of no integer range, one comparing two fields, one with a frame
+    that grants a relationship, one over a frame granting every field, and one with an
+    unparsable subject path. Read one record per request in request order, each with that
+    request's clause, and every record equal to the disposition the same request has alone;
+    repeat with a batch of three refused requests and read three records. A test that
+    returns at the first refusal reads one record and fails (FR-015-AC-59).
+20. Compare the `generated` record's harnesses with `generate_state_frame_obligations` for
+    the same request, source byte for byte, and read that it carries no reason
+    (FR-015-AC-60).
+21. Read `requires_bound` for the clause field with no integer range and for a request whose
+    lowering is a requires-bound record, each with its typed reason and no harness
+    (FR-015-AC-61).
+22. Read `no_finite_encoding` for a negation, a literal comparison, two fields, two reads of
+    one side, and each frame that creates, deletes or grants a relationship or a foreign
+    field, each with its typed reason and no harness (FR-015-AC-62).
+23. Read `refused`, with its typed reason and no harness, for each remaining shape: a
+    non-postcondition clause, an absent node, a state lacking the clause's field, a frame
+    granting every field, an out-of-range unwind bound, an unparsable path, an invalid field
+    name, and a generated source over the ceiling and one that does not parse, each beside a
+    generating sibling that is unaffected (FR-015-AC-63).
+24. Submit a batch of no requests and one of `MAX_OBLIGATION_ITEMS` plus one; each is
+    refused whole with a typed error and no record (FR-015-AC-64).
+25. For each refusal shape of items 21 to 23, compare the refusal
+    `generate_state_frame_obligations` returns with the reason of the batch record for the
+    same request (FR-015-AC-65).
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
