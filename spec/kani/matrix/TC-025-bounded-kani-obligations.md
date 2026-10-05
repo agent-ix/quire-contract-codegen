@@ -176,7 +176,7 @@ unsatisfiable requires as `cover_unsatisfied`.
     fail it until driven. A spelling built from fragments none of which holds `#[kani::` or
     `kani::proof` is not seen (FR-015-AC-58).
 
-## A disposition for every state clause (planned, IR-461)
+## A disposition for every state clause (IR-461)
 
 19. Negotiate one request of `StateFrame` items over one admitted package: first a
     `precondition` clause (refused), then one clause in both roles that yields, one whose field
@@ -226,8 +226,15 @@ unsatisfiable requires as `cover_unsatisfied`.
     `generate_state_frame_role` and reading `generate_state_frame_obligations` return the
     refusal of the failing role (FR-015-AC-68).
 
-The first code change backs steps 26 and 27 and has landed; the second backs steps 19 to 25 and
-28.
+The first code change backs steps 26 and 27, and the second steps 19, 21 to 25 and, apart from
+one comparison, steps 20 and 28; both have landed. That comparison is of a `supported` harness
+with `generate_state_frame_role`, a crate-internal function that no test of `tests/it` can call,
+so steps 20 and 28 compare the harnesses with `generate_state_frame_obligations` where a clause's
+roles both succeed and read the refusal it returns where one fails, and FR-015-AC-60 and
+FR-015-AC-68 stay planned until that comparison has a test. The tests are in
+`tests/it/kani_obligations_state_frame.rs`; the package they negotiate holds twenty-three shapes,
+each over nodes of its own and read under a byte ceiling above the default, which the corpus
+package alone nearly fills.
 
 ## Blocked
 

@@ -40,7 +40,7 @@ use crate::{
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     kani::abi::{adapter_options, i64_literal, KaniSolver},
     kani::generate::outcome::{
-        BoundNotResolvedCause, StateFrameLoweringRefusal, StateFrameRefusal,
+        BoundNotResolvedCause, StateFrameLoweringRefusal, StateFrameRefusal, StateFrameRole,
         UnsupportedFrameEffect, MAX_OBLIGATION_UNWIND,
     },
     kani::identity::{
@@ -139,27 +139,141 @@ enum Side {
 pub fn generate_state_frame_obligations(
     request: &StateFrameRequest<'_>,
 ) -> Result<StateFrameObligations, StateFrameRefusal> {
+    let prepared = prepare(request)?;
+    // The frame is read before the condition, as this entry always has: a clause refused by both
+    // roles reports the frame's refusal.
+    let frame = frame_harness(request, &prepared)?;
+    let postcondition = contract_harness(request, &prepared)?;
+    Ok(StateFrameObligations {
+        postcondition,
+        frame,
+    })
+}
+
+/// Generates the harness of one role of one `postcondition` clause, or that role's first refusal.
+///
+/// The roles are independent (FR-015-AC-68): a ground common to both refuses both, a ground of
+/// the operation-contract harness refuses [`StateFrameRole::Contract`] only, and a ground of the
+/// frame-effect harness refuses [`StateFrameRole::Frame`] only. Crate-internal: the `StateFrame`
+/// arm of negotiation calls it once per item, and
+/// [`generate_state_frame_obligations`] is both roles of one clause.
+///
+/// # Errors
+///
+/// The role's first [`StateFrameRefusal`]; nothing is partially returned.
+pub(crate) fn generate_state_frame_role(
+    request: &StateFrameRequest<'_>,
+    role: StateFrameRole,
+) -> Result<StateFrameHarness, StateFrameRefusal> {
+    let prepared = prepare(request)?;
+    match role {
+        StateFrameRole::Contract => contract_harness(request, &prepared),
+        StateFrameRole::Frame => frame_harness(request, &prepared),
+    }
+}
+
+/// What both roles start from: the request validated, its clause lowered and its shape read, with
+/// the frame and the condition each decoded once. A refusal of `prepare` is a ground common to
+/// both roles; a refusal a role finds in `grants` or `condition` is that role's own.
+struct Prepared<'g> {
+    graph: Graph<'g>,
+    shape: ClauseShape,
+    /// The frame's granted field names, or why the frame has no encoding.
+    grants: Result<BTreeSet<String>, StateFrameRefusal>,
+    /// The condition as one comparison, or why it is not one.
+    condition: Result<Condition, StateFrameRefusal>,
+}
+
+fn prepare<'g>(request: &StateFrameRequest<'g>) -> Result<Prepared<'g>, StateFrameRefusal> {
     validate_request(request)?;
     let graph = Graph::of(request.package);
     lower_clause(request)?;
     let shape = ClauseShape::read(&graph, request.clause)?;
-    let granted = shape.frame_grants(&graph)?;
-    let condition = shape.condition(&graph, request.clause)?;
-    let known = request
-        .state_fields
-        .iter()
-        .copied()
-        .collect::<BTreeSet<_>>();
-    for field in granted
-        .iter()
-        .map(String::as_str)
-        .chain([condition.field.as_str()])
+    let grants = shape.frame_grants(&graph);
+    let condition = shape.condition(&graph, request.clause);
+    // A node that does not decode is a ground of the clause itself, not of one harness, so it
+    // refuses both roles. The frame is read first, as it always has been.
+    for refusal in [grants.as_ref().err(), condition.as_ref().err()]
+        .into_iter()
+        .flatten()
     {
-        if !known.contains(field) {
-            return Err(StateFrameRefusal::UnknownStateField {
-                field: field.to_owned(),
-            });
+        if matches!(refusal, StateFrameRefusal::MalformedClause { .. }) {
+            return Err(refusal.clone());
         }
+    }
+    Ok(Prepared {
+        graph,
+        shape,
+        grants,
+        condition,
+    })
+}
+
+/// `field` must be one of the caller's state fields.
+fn require_state_field(
+    request: &StateFrameRequest<'_>,
+    field: &str,
+) -> Result<(), StateFrameRefusal> {
+    if request.state_fields.contains(&field) {
+        Ok(())
+    } else {
+        Err(StateFrameRefusal::UnknownStateField {
+            field: field.to_owned(),
+        })
+    }
+}
+
+/// The operation-contract harness. Its own grounds are the condition shapes, the clause field
+/// missing from the state and the clause field's bound. A condition node that does not decode
+/// is a malformed clause, which `prepare` already refused for both roles.
+fn contract_harness(
+    request: &StateFrameRequest<'_>,
+    prepared: &Prepared<'_>,
+) -> Result<StateFrameHarness, StateFrameRefusal> {
+    let Prepared {
+        graph,
+        shape,
+        condition,
+        ..
+    } = prepared;
+    let condition = condition.as_ref().map_err(Clone::clone)?;
+    require_state_field(request, &condition.field)?;
+    if let Err(cause) = field_range(graph, &shape.scope.object, &condition.field) {
+        return Err(StateFrameRefusal::BoundNotResolved {
+            field: condition.field.clone(),
+            cause,
+        });
+    }
+    let domains = state_domains(graph, &shape.scope.object, request);
+    render(
+        request,
+        &shape.scope,
+        &domains,
+        StateFrameProperty::Postcondition {
+            field: condition.field.clone(),
+            comparison: condition.comparison,
+            left_is_pre: condition.left == Side::Pre,
+        },
+        &format!("post_{}", short(&request.clause.digest)),
+    )
+}
+
+/// The frame-effect harness. Its own grounds are a frame effect outside the encoding, a granted
+/// field missing from the state and a frame that grants every field. A frame node that does not
+/// decode is a malformed clause, which `prepare` already refused for both roles.
+fn frame_harness(
+    request: &StateFrameRequest<'_>,
+    prepared: &Prepared<'_>,
+) -> Result<StateFrameHarness, StateFrameRefusal> {
+    let Prepared {
+        graph,
+        shape,
+        grants,
+        ..
+    } = prepared;
+    let granted = grants.as_ref().map_err(Clone::clone)?;
+    for field in granted {
+        require_state_field(request, field)?;
     }
     let checked = request
         .state_fields
@@ -172,30 +286,13 @@ pub fn generate_state_frame_obligations(
             frame: shape.scope.frame.clone(),
         });
     }
-    if let Err(cause) = field_range(&graph, &shape.scope.object, &condition.field) {
-        return Err(StateFrameRefusal::BoundNotResolved {
-            field: condition.field,
-            cause,
-        });
-    }
-    let domains = state_domains(&graph, &shape.scope.object, request);
-    let postcondition = render(
-        request,
-        &shape.scope,
-        &domains,
-        StateFrameProperty::Postcondition {
-            field: condition.field,
-            comparison: condition.comparison,
-            left_is_pre: condition.left == Side::Pre,
-        },
-        &format!("post_{}", short(&request.clause.digest)),
-    )?;
-    let frame = render(
+    let domains = state_domains(graph, &shape.scope.object, request);
+    render(
         request,
         &shape.scope,
         &domains,
         StateFrameProperty::Frame {
-            granted: granted.into_iter().collect(),
+            granted: granted.iter().cloned().collect(),
             checked,
         },
         &format!(
@@ -203,11 +300,7 @@ pub fn generate_state_frame_obligations(
             short(&shape.scope.anchor.digest),
             short(&request.clause.digest)
         ),
-    )?;
-    Ok(StateFrameObligations {
-        postcondition,
-        frame,
-    })
+    )
 }
 
 fn validate_request(request: &StateFrameRequest<'_>) -> Result<(), StateFrameRefusal> {
