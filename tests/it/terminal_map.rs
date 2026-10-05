@@ -1129,7 +1129,8 @@ fn tc_041_a_counterexample_disagreement_or_refusal_is_inconclusive_with_its_caus
 }
 
 /// A counterexample settles as `Failed` with a fault walked through every wrapper the run-outcome
-/// map's fault criterion lists and with each failure this repository raises that carries no QSL catalog code.
+/// map's fault criterion lists and with each failure this repository raises that carries no QSL
+/// catalog code.
 ///
 /// Trace: FR-030-AC-10, TC-041
 #[test]
