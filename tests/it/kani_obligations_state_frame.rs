@@ -922,11 +922,34 @@ fn tc_025_the_engine_names_the_ground_a_field_has_no_integer_range() {
         )
     );
     assert_eq!(
-        cause(20, Member::Literal, None),
+        cause(21, Member::Literal, None),
         (field, BoundNotResolvedCause::ValueNotReference)
     );
     // `MemberAbsent` has no engine-level case: IR refuses a read of a name its object does not
     // declare when it admits the package, so the mapping test builds it directly.
+}
+
+/// The shape of the real-Kani test whose only valuation falsifies the contract. It owns fixture
+/// variant 20.
+fn single_valuation_shape() -> Shape {
+    Shape {
+        variant: 20,
+        balance_bound: Some((0, 0)),
+        audit_bound: (0, 0),
+        ..Shape::HEALTHY
+    }
+}
+
+/// Each variant owns its node codes, and the fixture registry panics when one code is bound to
+/// two bodies in a process. The ignored real-Kani test's fixture is built here with the default
+/// lane's, so a default-lane variant that reuses its variant fails every run, not only
+/// `--include-ignored`.
+///
+/// Trace: TC-025
+#[test]
+fn tc_025_the_kani_lanes_fixture_variant_is_not_shared_with_a_default_lane_variant() {
+    let single = fixture(&single_valuation_shape());
+    assert_eq!(single.clause, code_id(single_valuation_shape().code(300)));
 }
 
 /// `replay_frame` refuses an envelope whose `clause_node` or `occurrence_key` is not its
@@ -1186,12 +1209,7 @@ fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifi
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_a_violation_at_the_only_valuation_is_a_counterexample_not_the_covers_playback()
 {
-    let single = fixture(&Shape {
-        variant: 20,
-        balance_bound: Some((0, 0)),
-        audit_bound: (0, 0),
-        ..Shape::HEALTHY
-    });
+    let single = fixture(&single_valuation_shape());
     let counterexample = falsified(
         prove(&generate_over(&single, "deposit_debiting").postcondition),
         "postcondition `post.balance >= pre.balance` failed",
