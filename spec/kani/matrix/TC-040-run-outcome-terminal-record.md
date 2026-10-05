@@ -37,6 +37,8 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 13. Map `falsified` with the refusal QSL's `DependencyInput::new` returns for a lock whose only
     defect is one library identity selected twice.
 14. Map `falsified` with no replay settlement, and map each other outcome and reason with one.
+15. Map `falsified` with each `StateClauseReplayError` variant and with a reproduced and an
+    inconclusive `StateClauseReplayResult` (FR-024).
 
 ## Expected Results
 
@@ -61,6 +63,10 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 13. `Inconclusive(ReplayRefused)` carrying `invalid_package` (FR-029-AC-14).
 14. `TerminalPairError::MissingSettlement` and `TerminalPairError::UnexpectedSettlement`, with no
     value (FR-029-AC-15).
+15. The reproduced result is `Refuted`, the inconclusive result is `Inconclusive(ReplayParity)`
+    carrying its cause, `Refused` and `CallSite` read as their QSL refusals do, and `Name`,
+    `Transcript`, `Envelope`, `Document`, `MissingField` and `OutOfDomain` are `Failed`, none
+    `Incomplete` (FR-029-AC-16).
 
 ## Status
 
@@ -68,4 +74,5 @@ Partly covered. Steps 1, 2, 4 to 8 and 10 to 14 are tests of `tests/it/terminal_
 asserts the timed-out and exhausted-unwind-bound reasons only, because no memory-exhausted reason
 exists until FR-028-AC-3 adds it. Step 9 is not tested: it needs a QSL `InternalFault`, which
 `qsl-replay` does not re-export, so a fault value cannot be built in this repository. FR-029-AC-3
-and FR-029-AC-10 stay planned for those two reasons.
+and FR-029-AC-10 stay planned for those two reasons. Step 15 (FR-029-AC-16, IR-460) is planned:
+the state-clause replay path is not built.
