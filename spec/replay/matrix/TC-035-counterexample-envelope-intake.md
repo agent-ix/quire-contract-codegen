@@ -171,17 +171,20 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     then an ambiguous accessor table and a missing playback binding; in both cases read
     `ModelFields` before `MissingField`, with no replay or executor call. A valid table with a
     missing binding still returns `MissingField`. A present field with a non-range type remains
-    unranged. Also check a non-model object and an admitted tampered model/object_type with
+    unranged. Also check a non-model object and an admitted unselected model/object_type with
     a nonempty body: each returns `ModelFields` with `Accessor(NotModelObjectType)` and no
-    replay despite an apparently valid body range. For `None` or out-of-`i64` accessor types
+    replay despite an apparently valid body range. A selected/read nonempty-body tamper
+    instead refuses `StaleNodeKey` during IR admission, before CG replay receives a package;
+    do not expect a CG `ModelFields` result from it (IR TC-227). For `None` or out-of-`i64` accessor types
     QSL cannot emit, use an admitted QSL-emitted graph with selected-model-document override
     and recomputed digests (FR-024-AC-31, IR-624; gated on
     CG dependency update and implementation).
 29. Generate the frame harness from the emitted package with accessor ranges, assert scope
     ids equal `call_site`'s before replay, remove `Twin::aligned`, and replay the forbidden
     write to a violation. Check request order and domains, including unread ranged `audit`;
-    one outside a declared range returns `OutOfDomain`. A non-model or tampered
-    model/object_type body cannot supply a range (FR-024-AC-32, IR-624).
+    one outside a declared range returns `OutOfDomain`. A non-model object or admitted
+    unselected model/object_type body cannot supply a range; a selected/read body tamper
+    is rejected by IR admission before frame replay (FR-024-AC-32, IR-624).
 30. Generate the postcondition harness from the emitted package, replay the debiting and
     unmutated subjects, read `violation` with evaluated `false` and `inconclusive` with
     `Verdicts`, and assert its replay domains equal accessor ranges (FR-024-AC-33, IR-624).
