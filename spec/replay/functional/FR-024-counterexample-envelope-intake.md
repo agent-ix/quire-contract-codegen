@@ -57,6 +57,14 @@ module and does not edit `src/replay/frame.rs`. Whichever of the frame-envelope 
 state-clause code lands second extracts the shared packet-assembly piece, in its own change; the
 one that lands first leaves it local.
 
+The frame path's obligation identity, witness and pre-state tie are specified by FR-024-AC-20 to
+FR-024-AC-30 (IR-459). That slice is the single-`self` frame harness only: its only symbolic
+quantities are fields of the one state struct and it has no parameters, so the `arguments` of its
+identity are empty, and its `declared_domains` stay empty (FR-024-AC-29). The postcondition state-clause path's
+caller-supplied `obligation_identity` is outside that slice; the one identity function accepts a
+`postcondition` harness's `StateFrameIdentity` only once its field list is settled (Open
+questions, Q-1).
+
 The state-clause path supports an operation that declares no parameter and no result, the shape
 of the single-`self` operation-contract harness. An operation that declares either is refused up
 front (FR-024-AC-19), because QSL checks the invocation document's `parameters` and `result`
@@ -90,6 +98,11 @@ members against the operation's declaration in the domain package.
   - each state field's declared integer range (FR-015-AC-27), and the operation's declared
     parameters and result, read from the admitted package and the clause's node, which the
     caller supplies.
+- For a frame counterexample (IR-459): the falsified harness's `StateFrameIdentity` and the
+  falsified run's playback text, both read by the generator, and the proving run's members, the
+  operation, the invocation document reference, the pre, post and invocation documents and the
+  claimed change, which the caller supplies as `FrameReplayInputs` does today. The caller supplies
+  no obligation identity and no witness transcript.
 
 ## Outputs
 
@@ -128,6 +141,50 @@ members against the operation's declaration in the domain package.
   the `Input` arm, keyed by parameter node id, and shall never build a `Witness` for it.
 - When a counterexample is a frame counterexample, the generator shall submit a
   `WitnessEnvelope<FrameCounterexample>` through `qsl_replay::replay_frame`.
+- The generator shall mint every obligation identity, for a function and for a state frame, by
+  the one function of `src/replay/obligation.rs`, over the four members AD-003 E-1 names and
+  under their existing spelling: `function`, `declaration`, `kind` and `arguments`. The members
+  are not widened and no function-path identity changes. For a frame the existing names read
+  awkwardly: `function` holds the frame node and `declaration` the frame's own occurrence key.
+  The digest is `core::canonical`'s and nothing else encodes or hashes it (FR-024-AC-20).
+- The generator shall read the frame obligation's `function` and `declaration` members from the
+  `OperationSite` that `qsl_replay::call_site` returns (`frame` and `frame_occurrence`, the pair
+  the envelope names, FR-015-AC-34); QSL gives each operation its own frame occurrence, so no
+  further member names the operation (FR-024-AC-22).
+- The generator shall derive a frame obligation's `kind` from the harness's `property` and set
+  its `arguments` to the empty list, because a frame harness's subject is `fn(&mut State)` and
+  declares no parameter (FR-024-AC-22). The state fields and their ranges are not in the
+  preimage: the frame node names the grants, the ranges are the model's and are checked at replay, and the harness is
+  tied to the identity by the checks below, not by the digest. E-1 is not widened.
+- The generator shall derive no node id and accept no caller-supplied obligation identity
+  (FR-024-AC-24).
+- If the harness's property is not `frame`, then the generator shall return
+  `FrameReplayError::NotAFrame` and shall not call `call_site` or `replay_frame`.
+- If the harness's granted and checked fields are not exactly its state fields, then the
+  generator shall return `FrameReplayError::FieldSetMismatch`, before `call_site` is called
+  (FR-024-AC-22).
+- The generator shall record in `StateFrameIdentity` and its persisted record every state field
+  the harness draws, in draw order, as `state_fields` (FR-024-AC-23).
+- The generator shall decode the falsified run's playback only through the one decoder of
+  `src/replay/witness.rs`, against the harness's state fields in the order the harness draws them
+  (FR-024-AC-25).
+- The generator shall render the frame witness transcript only through the one adapter rendering
+  function, from the decoded values (FR-024-AC-25).
+- If the playback does not decode against the harness, then the generator shall return a typed
+  refusal and shall not call `call_site` or `replay_frame` (FR-024-AC-25).
+- If a decoded value lies outside its field's declared domain, then the generator shall return
+  `FrameReplayError::OutOfDomain` and shall not call `call_site` or `replay_frame`
+  (FR-024-AC-26).
+- If the pre snapshot that the invocation document names does not hold, for every state field,
+  the value the playback decoded for it, then the generator shall return
+  `FrameReplayError::PreState` naming the field and both values, and shall not call
+  `replay_frame` (FR-024-AC-27).
+- If the harness's operation, anchor or frame is not the operation, anchor and frame that
+  `call_site` names, then the generator shall return `FrameReplayError::ScopeMismatch` naming the
+  member (FR-024-AC-28).
+- The generator shall leave the frame envelope's `declared_domains` empty and build no
+  `DeclaredDomain` for it until QSL-345 settles the key and refuses an empty declaration
+  (FR-024-AC-29).
 - When a counterexample is a postcondition state-clause counterexample, the generator shall
   submit a `WitnessEnvelope<StateClauseCounterexample>` through
   `qsl_replay::replay_state_clause`. It is the falsification of the operation-contract harness of
@@ -214,7 +271,7 @@ members against the operation's declaration in the domain package.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-024-AC-1 | The envelope's obligation identity is QSL's `ObligationIdentity` built as the ADR-013 O-09 digest: the subject node id (clause, application or function, FR-016-AC-21), its occurrence key, the obligation kind and the arguments, each a parameter node id with its declared domain, and no `source_span`. Changing `source_span` leaves it unchanged, and changing the obligation kind or any argument binding changes it. | Test (TC-035) |
+| FR-024-AC-1 | The envelope's obligation identity is QSL's `ObligationIdentity` built as the ADR-013 O-09 digest by the one scheme of FR-024-AC-20: the subject node id (function or state frame; a clause or application subject is not yet built), its occurrence key, the obligation kind and the arguments, each a parameter node id with its declared domain (empty for a frame, which has no parameters), and no `source_span`. Changing `source_span` leaves it unchanged, and changing the obligation kind or any argument binding changes it. The scheme's spelling is CG's own and carries no digest label (AD-003 E-1, open question Q-3). | Test (TC-035) |
 | FR-024-AC-2 | Every backend-witness transcript the generator passes to `Witness::parse` is produced by the one adapter rendering function from decoded values, and that function takes no backend-native text as input. | Test (TC-035) |
 | FR-024-AC-3 | A counterexample with any value outside its declared domain is reported out-of-domain and neither `replay` nor `replay_frame` is called. The endpoints of each declared domain are admitted, and the values immediately outside it are not. | Test (TC-035) |
 | FR-024-AC-4 | For each `WitnessPacket` member in turn, a packet missing that member is refused by `WitnessEnvelope::reconstruct` with QSL's `MissingMember` naming it, and no replay runs. A packet whose trace position is present with the value none is admitted. | Test (TC-035) |
@@ -233,6 +290,17 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-17 | A state field value outside its declared integer range returns `StateClauseReplayError::OutOfDomain` naming the field and the executor is not called. The range's two endpoints are admitted and the values one below and one above are not. | Test (TC-035) |
 | FR-024-AC-18 | With the installed backend, the falsified operation-contract harness of a postcondition state clause over a subject mutated to debit is replayed from its real Kani playback through `replay_state_clause` and settles `reproduced-with-evaluated-witness`, `violation`. The test is `tc_035_real_kani_state_clause_counterexample_replays_through_qsl` in the module `kani_obligations_state_clause_replay`, so the `kani_obligations` filter of `make kani` selects it. | Test (TC-035) |
 | FR-024-AC-19 | An operation that declares a parameter, and one that declares a result, each return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and the declaration (its parameters and result), build no document, and do not call the executor; an operation that declares neither is not refused for its shape. The shape check reads the admitted package the caller supplies, and QSL's admission reads the documents provided in the byte provision; where the two disagree, the disagreement surfaces as a QSL refusal and not as this error. The error is not read as a QSL refusal: FR-029-AC-16 maps it to `Failed`. | Test (TC-035) |
+| FR-024-AC-20 | One obligation-identity function in `src/replay/obligation.rs` mints the identity of the function path and of the frame path: the SHA-256 of the RFC 8785 encoding, made by `core::canonical`, of one object with the four members `function`, `declaration`, `kind` and `arguments` of AD-003 E-1, under their existing spelling. No function-path identity changes: the existing golden vectors still pass unedited. A frame identity over a fixed site and kind, with empty `arguments`, equals the digest of a hand-written text of that preimage, written in an order other than the encoder's. `sha2` stays out of `[dependencies]`, and the non-test source of `src/replay/obligation.rs` (outside its `#[cfg(test)]` module, where the hand-written vector may use `sha2`) names none of `quire_canonical`'s encoder functions, `sha2` or `ByteDigest::of`. PLANNED (IR-459). | Test (TC-035) |
+| FR-024-AC-21 | The identity changes when any one of these changes alone: the kind, the `function` node and the `declaration` key (node, role or ordinal); it does not change when the harness's clause node, module symbol, harness symbol, state or subject path, solver, unwind bound, options, state fields or their ranges change, and no input of the function is a source span. Two postcondition clauses of one operation therefore mint one frame identity, as QSL gives them one shared frame occurrence. Two units that differ only in the frame's `modifies` grants have different frame identities, and two operations of one object whose frames are equal text have different identities, each measured through `qsl_replay::call_site` and not assumed of the node ids. The same operation in a unit shifted by blank lines has the same identity. Edge, stated and not hidden: occurrence ordinals run over the operations the unit's clauses name, so adding a clause on another operation that sorts earlier can change this operation's frame occurrence and so its identity. Not asserted, on purpose: that a changed declared range in the model changes the frame node. A range is a member of the framed object type and not of the frame, so the identity does not name it; a range is tied to the replay by the package QSL recompiles and by the domain check (FR-024-AC-26), and the ranges the identity omits are not claimed to reach the node id. PLANNED (IR-459). | Test (TC-035) |
+| FR-024-AC-22 | A frame obligation's identity takes `function` and `declaration` from the `OperationSite`'s `frame` and `frame_occurrence`, so they equal the envelope's `clause_node` and `occurrence_key`; its `kind` is `frame` and is derived from the harness's `property`, never supplied; its `arguments` are the empty list, since a frame has no parameters, and no state field or range is a member. A harness whose `property` is a postcondition returns `FrameReplayError::NotAFrame`, and a frame whose granted and checked fields are not exactly its state fields returns `FrameReplayError::FieldSetMismatch`; neither calls `call_site` or `replay_frame`. PLANNED (IR-459). | Test (TC-035) |
+| FR-024-AC-23 | `StateFrameIdentity` and its persisted record carry `state_fields`, every field the harness draws in draw order, which `domains` (ranged fields only) and `property`'s granted and checked lists (unordered) do not give. `state_fields` is used for decoding and ordering only and is not minted. A field with no declared range is listed in `state_fields`, has no entry in `domains`, is decoded and is not range-checked or refused (the AD-003 owner may tighten that later). A regenerated harness from equal inputs has a byte-identical record, and a record without `state_fields` is not read as a frame identity. PLANNED (IR-459). | Test (TC-035) |
+| FR-024-AC-24 | `FrameReplayInputs` has no `obligation_identity` member. The frame request's `obligation_identity` and the envelope's both equal the identity minted from the site and the harness, and a harness with a changed grant gives a different value in both. The frame twin of `tests/state_frame_support/native_twin.rs` passes no identity of its own, so no stand-in value reaches either member; no source scan is part of this criterion. The state-clause path's caller-supplied `obligation_identity` is not covered by this criterion (Q-1). PLANNED (IR-459). | Test (TC-035) |
+| FR-024-AC-25 | The frame witness is built from the real playback: the playback text decodes through the one decoder of `src/replay/witness.rs` against bindings built from the harness's `state_fields` (each `i64`, in draw order), and the transcript passed to `Witness::parse` is rendered by the one adapter rendering function from the decoded values, with the harness path and the check text the decode names. The fixed per-operation assertion text that `frame.rs` passes to `Witness::parse` today is gone. A playback of another harness, a playback with the wrong number of values and one with a wrong-width value each return a typed decode refusal carrying the decoder's cause, and call neither `call_site` nor `replay_frame`. PLANNED (IR-459). | Test (TC-035) |
+| FR-024-AC-26 | A decoded state-field value outside the field's declared range returns `FrameReplayError::OutOfDomain` naming the field and its value, and calls neither `call_site` nor `replay_frame`; the range's two endpoints are admitted and the values one below and one above are not. A field with no declared range is not range-checked. PLANNED (IR-459). | Test (TC-035) |
+| FR-024-AC-27 | The decoded pre-state is tied to the invocation: for every state field, the integer the pre snapshot (the provided document whose `sha256-jcs` digest the invocation's `pre` names) holds for the object the invocation's `self` addresses equals the decoded value, and a field that differs returns `FrameReplayError::PreState` naming the field, the decoded value and the snapshot's value; an invocation or pre snapshot that is not among the provided documents, is not readable, or lacks the object or a field returns `PreState` naming what is missing. None calls `replay_frame`. A forbidden-write playback replayed against the invocation of a different pre state is refused, and the invocation of its own pre state settles `reproduced-with-evaluated-witness` with category `violation`. PLANNED (IR-459). | Test (TC-035) |
+| FR-024-AC-28 | A harness whose `scope.operation` is not the operation requested returns `FrameReplayError::ScopeMismatch` naming `operation` before `call_site` is called; one whose `scope.anchor` or `scope.frame` is not the anchor or frame `call_site` names returns `ScopeMismatch` naming that member and does not call `replay_frame`. The harness's module and harness symbols name the generated artifact, are not members of the identity, and are checked only by the decode (FR-024-AC-25). PLANNED (IR-459). | Test (TC-035) |
+| FR-024-AC-29 | The frame envelope's `declared_domains` is the empty list, no source of `src/replay/frame.rs` builds a `DeclaredDomain` or a `DomainKey`, and the module's header states, once, that the declaration is empty until QSL-345 settles the declared-domain key and refuses an empty declaration. The frame path adopts no key shape before then, whatever shape another path builds. PLANNED (IR-459). | Test (TC-035) |
+| FR-024-AC-30 | With the installed backend, the real playback of the falsified frame harness of a subject that writes a forbidden field is replayed through `FrameReplay::new` and `replay`, the caller supplying the harness's `StateFrameIdentity`, the playback text and the inputs of FR-024's Inputs list but no obligation identity and no transcript, and settles a reproduced violation naming the written field. A subject that writes only a granted field leaves its harness verified and yields no playback, so it has no case here. The test is `tc_035_real_kani_frame_counterexample_replays_through_qsl` in the module `kani_obligations_state_frame`, so the `kani_obligations` filter of `make kani` selects it. PLANNED (IR-459). | Test (TC-035) |
 
 A transcript `Witness::parse` refuses is an adapter
 refusal under FR-016-AC-11.
@@ -264,13 +332,49 @@ FR-024-AC-11 to FR-024-AC-19:
 - The frame path's own hand-built invocation document and encoder remain in
   `tests/state_frame_support/native_twin.rs`; its `result` member is now `null`, as the twin's
   operations declare no result.
-- `FR-024-AC-1` to `FR-024-AC-10` are planned and have no test. `quire coverage --strict` does not
+- The frame path (IR-459, re-measured at this revision and not taken from the parked draft): its
+  obligation identity is the caller-supplied `FrameReplayInputs::obligation_identity`
+  (`[u8; 32]`, `src/replay/frame.rs`) and the twin passes `[1; 32]`; its witness is the fixed text
+  `<<<assertion|{operation}|frame|>>>` and no playback is read; its `declared_domains` is
+  `Some(Vec::new())` and QSL's replay checks only that the member is present; nothing ties the
+  invocation's pre snapshot to any value a Kani run drew, because none is read; the harness
+  subject is `fn(&mut State)` with no operation parameters and no populations, so its only
+  symbolic quantities are the fields of the one state struct. The function path's identity
+  (`src/replay/obligation.rs`) is real and is encoded and digested by `core::canonical`, which
+  orders members itself, so the parked draft's concern about member order resting on
+  `serde_json`'s map type does not apply to code that uses it. `StateFrameIdentity` does not
+  record the draw order of the state fields, so the playback of a frame harness cannot be decoded
+  from it today (FR-024-AC-23).
+- `FR-024-AC-1` to `FR-024-AC-10` and `FR-024-AC-20` to `FR-024-AC-30` are planned and have no
+  test. `quire coverage --strict` does not
   count them as unbacked now (66 unbacked rows on `main`, 44 at the head that added the state-clause
   replay) only because TC-035 now has tagged tests; that is a property of the tool's AC to TC to
   code walk, accepted here, and the criteria stay planned.
 - The one adapter transcript rendering function is `render_witness` in `src/replay/function.rs`,
   used by the skeleton spine and the state-clause path; the frame path still renders its own
   transcript (`src/replay/frame.rs`, not edited by IR-460).
+
+## Open questions
+
+None of these is decided here. FR-024-AC-24 excludes the state-clause path because of Q-1, and
+FR-024-AC-1 and FR-024-AC-20 carry no digest label because of Q-3; no other criterion depends on
+an answer to Q-1, Q-3 or Q-4, and a later answer to Q-3 would change every identity once.
+
+- Q-1. The postcondition state-clause path takes a caller-supplied `obligation_identity`
+  (`StateClauseReplayInputs`). Whether it takes the harness's `StateFrameIdentity` and mints the
+  identity too, and how a postcondition harness names the state fields it draws, belongs to the
+  state-clause code. Packet assembly stays local to each path and whichever code change lands
+  second extracts the shared piece; this requirement assigns neither.
+- Q-3. Whether the identity needs a digest domain label (AD-003 R-S3, QC-4 / TK-07). Adding one
+  changes every identity once.
+- Q-4. The claimed change is caller-supplied and is not tied to the post snapshot, as the pre
+  state now is tied (FR-024-AC-27). Deriving it from the two snapshots needs the shared document
+  building piece of Q-1.
+
+Settled here and not open: a frame's `arguments` are empty and E-1 is not widened. A state field
+with no declared range is carried in the record and decode, which draw it unconstrained, and is
+not refused (FR-024-AC-23; the AD-003 owner may tighten that later, as a function argument with
+no bound is refused under AD-016 arrow 5).
 
 ## Dependencies
 
