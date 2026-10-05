@@ -178,33 +178,37 @@ unsatisfiable requires as `cover_unsatisfied`.
 
 ## A disposition for every state clause (planned, IR-461)
 
-19. Build one batch of state-clause requests over one admitted package in which the first
-    request is refused (a precondition clause) and the later ones are one that generates,
-    one with a clause field of no integer range, one comparing two fields, one with a frame
-    that grants a relationship, one over a frame granting every field, and one with an
-    unparsable subject path. Read one record per request in request order, each with that
-    request's clause, and every record equal to the disposition the same request has alone;
-    repeat with a batch of three refused requests and read three records. A test that
-    returns at the first refusal reads one record and fails (FR-015-AC-59).
-20. Compare the `generated` record's harnesses with `generate_state_frame_obligations` for
-    the same request, source byte for byte, and read that it carries no reason
-    (FR-015-AC-60).
-21. Read `requires_bound` for the clause field with no integer range and for a request whose
-    lowering is a requires-bound record, each with its typed reason and no harness
-    (FR-015-AC-61).
-22. Read `no_finite_encoding` for a negation, a literal comparison, two fields, two reads of
-    one side, and each frame that creates, deletes or grants a relationship or a foreign
-    field, each with its typed reason and no harness (FR-015-AC-62).
-23. Read `refused`, with its typed reason and no harness, for each remaining shape: a
-    non-postcondition clause, an absent node, a state lacking the clause's field, a frame
-    granting every field, an out-of-range unwind bound, an unparsable path, an invalid field
-    name, and a generated source over the ceiling and one that does not parse, each beside a
-    generating sibling that is unaffected (FR-015-AC-63).
-24. Submit a batch of no requests and one of `MAX_OBLIGATION_ITEMS` plus one; each is
-    refused whole with a typed error and no record (FR-015-AC-64).
-25. For each refusal shape of items 21 to 23, compare the refusal
-    `generate_state_frame_obligations` returns with the reason of the batch record for the
-    same request (FR-015-AC-65).
+19. Negotiate one request of `StateFrame` items over one admitted package: first a
+    `precondition` clause (refused), then one clause in both roles that yields, one whose field
+    has no integer range, one comparing two fields, one whose frame grants a relationship and
+    one whose frame grants every field. Read one record per item in request order, `kind`
+    `postcondition` or `frame`, and each later record equal to the record the same item has in
+    a request of that item only; repeat with three refused items and read three records. An
+    implementation that stops at the first refusal reads one record and fails
+    (FR-015-AC-59).
+20. Compare the `supported` records' harnesses with `generate_state_frame_obligations` for the
+    same clause, source byte for byte (FR-015-AC-60).
+21. Read `requires_bound` for the field with no range (the framed object as `unbounded_type`)
+    and for a request whose lowering is a requires-bound record (FR-015-AC-61).
+22. Read `unsupported` `NoFiniteEncoding` for a lowering unsupported-family record and for a
+    frame that creates, deletes or grants a relationship or a foreign field, and
+    `UnknownNodeKind` for a node that is not a `state_clause` (FR-015-AC-62).
+23. Read `unsupported` `StateFrameRefused`, never `NoFiniteEncoding`, for a negation, a literal
+    comparison, an operator outside the six comparisons, a read through another parameter, two
+    fields, two reads of one side, an invariant clause, a clause with a malformed shape, a
+    frame granting every field and an over-budget lowering (FR-015-AC-63).
+24. Read `invalid_request` for an unparsable state path, an invalid state field name, a state
+    lacking the clause's field, an absent node, a repeated item and an item of another
+    package, and `Rejected` with every record and no harness bytes (FR-015-AC-64).
+25. Negotiate no items, `MAX_OBLIGATION_ITEMS` plus one, an unparsable subject path and an
+    unwind bound outside the range, each with `StateFrame` items present or absent as the
+    case allows, and read the existing `KaniObligationError` variant with no record
+    (FR-015-AC-65).
+26. Build each of the 17 `StateFrameRefusal` variants and each `CompleteLoweringRecordV2` arm of
+    `NotLowered` and read the table's record for each; the variants no public request reaches
+    (`UnwindOutOfRange`, `InvalidGeneratedSyntax`, `ResourceLimitExceeded`,
+    `RecordSerialization`) are built directly against the mapping. Inspect that the mapping is a
+    `match` with no wildcard arm (FR-015-AC-66).
 
 ## Blocked
 

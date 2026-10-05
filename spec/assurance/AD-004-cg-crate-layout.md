@@ -1058,7 +1058,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | The persisted-record helpers | `kani/generate/record.rs` | not scheduled; `artifact` by step 1a |
 | Each family renders its own template; the corpus keeps its own, with its cover after the assertion (FR-015-AC-55) | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4g for the corpus |
 | The IR-forwarding thin modules | `kani/generate/lower/*` | IR-347 schedules the move |
-| `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations`; its batch form `generate_state_frame_dispositions` (FR-015-AC-59, planned, IR-461) lives in the same file | `kani/generate/frame.rs` | step 4d |
+| `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |
 
 #### Item tables
 

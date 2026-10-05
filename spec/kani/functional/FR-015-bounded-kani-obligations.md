@@ -275,41 +275,78 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
   the gate does not drive, or a driven file spells more of them than the gate counts
   (FR-015-AC-58).
 
-Planned (IR-461): the state and frame lane gives every clause of a package a disposition,
-as the negotiation of FR-015-AC-23 does for its items. QSL-20 (the proof, witness and
-native-replay gate) needs the disposition of every construct of a package, so one refused
-clause must not hide the rest. The single-clause entry `generate_state_frame_obligations`
-returns on the first refusal of its one clause and is unchanged; the criteria below add a
-batch entry beside it. A disposition is generated, `requires_bound`, `no_finite_encoding` or
-`refused`. The batch entry maps each refusal the single-clause entry can return to exactly
-one of the last three, so the two entries never disagree about a clause.
+Planned (IR-461): the state and frame lane gives every state-clause obligation of a package
+a disposition through `negotiate_kani_obligations`, as the scalar lane does, so the
+per-construct accounting QSL-20 needs comes from the one machinery of FR-015-AC-23. It adds
+one `ObligationItem` arm, `StateFrame`, which is the frame arm AD-004 step 4d plans, and no
+public entry and no disposition type: the records are `ObligationRecord`s, the dispositions
+are `ObligationDisposition`'s four, and the reasons are `UnsupportedObligation`'s and
+`InvalidObligationItem`'s, plus the five new reasons named below. A `StateFrame` item names
+one clause (the `state`/`state_clause` node of a `postcondition`), one role (`contract` for
+the operation-contract harness, `frame` for the frame-effect harness), the state struct path,
+its fields and the operation's subject path, the inputs of `StateFrameRequest`; the request's
+unwind bound applies. A clause asked in both roles has two items and two records
+(`kind` `postcondition` and `frame`). `generate_state_frame_obligations` stays the single-clause
+engine and returns on the first refusal of its one clause; AD-004 step 4d retires it as a public
+entry. This arm does not change FR-025's rule that a V1 frame item is `unsupported`
+(`FrameNotClauseRendered`); that rule is about `BoundClause` items.
 
-- When a request names a batch of state-clause requests (`generate_state_frame_dispositions`),
-  the generator shall return exactly one record per request, in request order, each carrying
-  the request's clause and one disposition, and shall settle every request whether or not an
-  earlier one was refused (FR-015-AC-59).
-- When a request in the batch yields both harnesses, the generator shall record it
-  `generated` carrying the operation-contract and frame-effect harnesses
-  `generate_state_frame_obligations` returns for that request, byte-identical
-  (FR-015-AC-60).
-- If a request's lowering is a requires-bound record, or the framed object's member for the
-  clause's field declares no `i64` integer range, then the generator shall record it
-  `requires_bound` with the typed reason and emit no harness for it (FR-015-AC-61).
-- If a request's condition is outside the one-comparison shape (not a comparison of pre and
-  post reads, two fields, or two reads of one side) or its frame has an effect with no finite
-  encoding (creating or deleting an object, granting a relationship or a foreign field), then
-  the generator shall record it `no_finite_encoding` with the typed reason and emit no harness
-  for it (FR-015-AC-62).
-- If a request is refused on any other ground (a malformed request, a lowering that is not a
-  requires-bound record, a node that is not a postcondition state clause, a malformed clause,
-  a field the caller's state lacks, a frame granting every field, or a generated source over
-  the ceiling or not parsing as Rust), then the generator shall record it `refused` with the
-  typed reason and emit no harness for it, and shall not reject the batch (FR-015-AC-63).
-- If a batch names no request or more than `MAX_OBLIGATION_ITEMS`, then the generator shall
-  refuse the whole call with a typed error and return no record (FR-015-AC-64).
-- The generator shall give a clause the same outcome from the single-clause entry as from the
-  batch: the refusal `generate_state_frame_obligations` returns equals the reason of the
-  record the batch gives the same request (FR-015-AC-65).
+A refusal of the single-clause engine becomes a record by one total mapping, a `match` over
+every `StateFrameRefusal` variant and, for `NotLowered`, over every `CompleteLoweringRecordV2`
+arm, with no wildcard arm, so a new variant fails to compile. Both roles of a clause get the
+same record reason, so they never disagree.
+
+| Refusal (arm) | Disposition and reason |
+|---|---|
+| `NotLowered` (`RequiresBound`) | `requires_bound`, `unbounded_type` the record's |
+| `BoundNotResolved` | `requires_bound`, `unbounded_type` the framed object's node (the field is named in the object's members, not by a type node of its own) |
+| `NotLowered` (`Unsupported`) | `unsupported`, `NoFiniteEncoding` naming the record's `unsupported_node_id` and its family, the mapping negotiate gives a scalar `ExactScalarRefusal::Unsupported` |
+| `FrameEffectUnsupported` | `unsupported`, `NoFiniteEncoding` naming the frame node, family `state` |
+| `NotAStateClause` | `unsupported`, `UnknownNodeKind` naming the node, family and form |
+| `ConditionNotSupported` (a shape other than one integer comparison of one pre and one post read of one field through `self`: negation, a literal operand, an operator other than the six integer comparisons, a read through another parameter), `ObservationsDiffer`, `ObservationsSameSide` | `unsupported`, `StateFrameRefused` carrying the refusal. Not `NoFiniteEncoding`: these shapes have a finite encoding (planned FR-015-AC-40 encodes `not` and the six comparisons for the same node), this arm does not render them |
+| `NotAPostcondition`, `MalformedClause`, `NothingForbidden`, `NotLowered` (`InvalidBody`, `BodyIncomplete`, `Failed`) | `unsupported`, `StateFrameRefused` carrying the refusal |
+| `ResourceLimitExceeded` | `unsupported`, `ResourceLimitExceeded` with the same size |
+| `InvalidGeneratedSyntax` | `unsupported`, `InvalidGeneratedSyntax` with the same error |
+| `RecordSerialization` | `unsupported`, `RenderFailed` |
+| `NotLowered` (`InvalidInput`) | `invalid_request`, `UnknownNode` |
+| `InvalidPath` | `invalid_request`, `InvalidStatePath` naming the path |
+| `InvalidField`, `UnknownStateField` | `invalid_request`, `InvalidStateField` naming the field |
+| `UnwindOutOfRange` | `invalid_request`, `InvalidStateUnwind` naming the bound; a request reaches it only through the mapping, since the request-level `InvalidUnwind` error precedes it |
+
+The new reasons are `UnsupportedObligation::StateFrameRefused { refusal }`, serialized as
+`code: state_frame_refused` with the refusal's snake_case code and the node, field and
+effect it names (never the IR record), and `InvalidObligationItem::InvalidStatePath { path }`,
+`InvalidStateField { name }`, `InvalidStateUnwind { unwind }` and `MixedStatePackages`. A field
+name read from the graph that is not a Rust identifier is a malformed clause, `MalformedClause`
+at the node, not `InvalidField`, which names only a name the caller supplied; an operand node
+that cannot be followed in the graph is likewise `MalformedClause`, not `ConditionNotSupported`.
+Both the engine and the arm report them so.
+
+- When a request holds `StateFrame` items, the generator shall return one `ObligationRecord`
+  per item, in request order, with `kind` `postcondition` for the `contract` role and `frame`
+  for the `frame` role (FR-015-AC-59).
+- If a `StateFrame` item is refused, then the generator shall settle every other item of the
+  request by the rule it has in a request holding that item only (FR-015-AC-59).
+- When a `StateFrame` item yields its harness, the generator shall record it `supported`
+  carrying the harness symbol and return the harness the single-clause engine returns for that
+  clause and role, byte-identical (FR-015-AC-60).
+- If a `StateFrame` item's refusal is `requires_bound` by the table above, then the generator
+  shall record it `requires_bound` and emit no harness for it (FR-015-AC-61).
+- If a `StateFrame` item's refusal is `unsupported` by the table above, then the generator
+  shall record it `unsupported` with the reason the table gives and emit no harness for it
+  (FR-015-AC-62, FR-015-AC-63).
+- If a `StateFrame` item's refusal is `invalid_request` by the table above, or it repeats an
+  earlier item (the same clause and role), or names a package other than the first
+  `StateFrame` item's, then the generator shall record it `invalid_request` and shall return
+  every item's record with no harness bytes, as negotiate does for any invalid item
+  (FR-015-AC-64).
+- If a request holding `StateFrame` items names no items, more than `MAX_OBLIGATION_ITEMS`,
+  an unparsable subject path or an out-of-range unwind bound, then the generator shall refuse
+  the whole call with the existing `KaniObligationError` and account no item (FR-015-AC-65).
+- The refusal-to-record mapping shall be a `match` with no wildcard arm over every
+  `StateFrameRefusal` variant and `CompleteLoweringRecordV2` arm, and for each refusal the
+  single-clause engine returns, the item's record shall carry the disposition and reason the
+  table gives (FR-015-AC-66).
 
 ## Acceptance Criteria
 
@@ -373,13 +410,14 @@ one of the last three, so the two entries never disagree about a clause.
 | FR-015-AC-56 | With the installed backend, a V1 bundle harness whose requires clause some bounded argument satisfies and whose `ensures` holds for every such argument classifies `Verified` (FR-017-AC-4); the same bundle with a requires clause no bounded argument satisfies classifies `CoverUnsatisfied` with its satisfied and total cover counts, never `Verified` and never `Falsified`. | Test (TC-025) |
 | FR-015-AC-57 | With the installed backend, a bounded-corpus harness of each of the arithmetic, graph and collection families whose oracle is true classifies `Verified`, and a graph or collection harness whose oracle is false (an arithmetic case's oracle is always true) classifies `Falsified` carrying the assertion's playback (empty-valued, since a corpus case draws no input), never `Inconclusive` for lack of a counterexample. | Test (TC-023) |
 | FR-015-AC-58 | A test generates a harness through every emitting entry point (the precondition, V1 contract, scalar, state-clause and frame-effect families, `generate_kani_bundle`, and the corpus generator for each of its three families), parses each emitted source, and fails for any function attributed `#[kani::proof]` or `#[kani::proof_for_contract]` whose body does not contain exactly one `kani::cover!`, which must be the last statement, with no assertion after it and no other cover; and a scan of the non-test string literals of `src/` fails when a file other than the ones the test drives spells a proof attribute, or a driven file spells more proof attributes than the test counts; a spelling is `#[kani::` other than `requires`, `ensures`, `stub` and `unwind`, `kani::proof` or `proof_for_contract` in one literal, with `\` line continuations joined, which includes a `format!` template and a split `concat!` whose first fragment holds `#[kani::`, and the scan does not see a spelling assembled from fragments none of which holds `#[kani::` or `kani::proof`. | Test (TC-025) |
-| FR-015-AC-59 | A batch of state-clause requests in which an early request is refused and later requests are generated, requires-bound, no-finite-encoding or refused yields exactly one record per request in request order, each carrying that request's clause, and every later request has the disposition it has alone; a batch of three refused requests yields three records. PLANNED (IR-461). | Test (TC-025) |
-| FR-015-AC-60 | A request that generates records `generated` with the operation-contract and frame-effect harnesses that `generate_state_frame_obligations` returns for it, byte-identical, and with no reason. PLANNED (IR-461). | Test (TC-025) |
-| FR-015-AC-61 | A request whose clause field has no integer range on the framed object, and a request whose lowering is a requires-bound record, are each recorded `requires_bound` carrying the typed reason, with no harness. PLANNED (IR-461). | Test (TC-025) |
-| FR-015-AC-62 | A request whose condition is a negation, a literal comparison, two fields or two reads of one side, and a request whose frame creates, deletes or grants a relationship or a foreign field, are each recorded `no_finite_encoding` carrying the typed reason, with no harness. PLANNED (IR-461). | Test (TC-025) |
-| FR-015-AC-63 | A request that is not a postcondition state clause, names an absent node, names a field the caller's state lacks, has a frame granting every field, has an out-of-range unwind bound, an unparsable path or an invalid field name, or whose generated source is over the ceiling or does not parse as Rust, is recorded `refused` carrying the typed reason, with no harness, and its sibling requests are recorded as they are alone. PLANNED (IR-461). | Test (TC-025) |
-| FR-015-AC-64 | A batch of no requests, and a batch of `MAX_OBLIGATION_ITEMS` plus one requests, are each refused whole with a typed error and no record. PLANNED (IR-461). | Test (TC-025) |
-| FR-015-AC-65 | For every refusal shape of FR-015-AC-61 to FR-015-AC-63, the `StateFrameRefusal` the single-clause entry returns equals the reason of the record the batch gives the same request, and the single-clause entry's result for a generating request equals the `generated` record's harnesses. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-59 | A request of `StateFrame` items in which the first item is refused and later items are supported, requires-bound, unsupported or invalid yields exactly one `ObligationRecord` per item in request order, `kind` `postcondition` for a `contract` item and `frame` for a `frame` item; and each later item's record (disposition and reason) equals the record the same item has in a request holding that item only; a request of three refused items yields three records. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-60 | A `StateFrame` item that yields is recorded `supported` carrying its harness symbol, and its harness is byte-identical to the harness `generate_state_frame_obligations` returns for the same clause and role. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-61 | A `StateFrame` item whose clause field has no integer range on the framed object is recorded `requires_bound` with the framed object as `unbounded_type`, and one whose lowering is a requires-bound record is recorded `requires_bound` with that record's `unbounded_type`, each with no harness. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-62 | A `StateFrame` item whose lowering is an unsupported-family record, and one whose frame creates or deletes an object or grants a relationship or a foreign field, are recorded `unsupported` with reason `NoFiniteEncoding` naming the record's node and the frame node respectively, and an item whose node is not a `state_clause` with `UnknownNodeKind`, each with no harness. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-63 | A `StateFrame` item whose condition is a negation, compares to a literal, uses an operator other than the six integer comparisons, reads through a parameter other than `self`, compares two fields or compares two reads of one side, and an item whose clause is not a postcondition, is malformed, whose frame grants every field, or whose lowering is an invalid-body, incomplete or over-budget record, is recorded `unsupported` with reason `StateFrameRefused` carrying that refusal and never `NoFiniteEncoding`, with no harness. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-64 | A `StateFrame` item with an unparsable state path, an invalid or lacking state field, an absent node, a repeat of an earlier item or a package other than the first item's is recorded `invalid_request` (`InvalidStatePath`, `InvalidStateField`, `UnknownNode`, `DuplicateItem`, `MixedStatePackages`), and the outcome is `Rejected` with every item's record and no harness bytes. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-65 | A request holding `StateFrame` items and no items, more than `MAX_OBLIGATION_ITEMS`, an unparsable subject path or an unwind bound outside `1..=MAX_OBLIGATION_UNWIND` is refused whole with the existing `KaniObligationError` variant and no record. PLANNED (IR-461). | Test (TC-025) |
+| FR-015-AC-66 | The mapping from a `StateFrameRefusal` to a record is checked over every one of the 17 `StateFrameRefusal` variants and every `CompleteLoweringRecordV2` arm of `NotLowered` by a test that builds each (those no public request reaches, `UnwindOutOfRange`, `InvalidGeneratedSyntax`, `ResourceLimitExceeded` and `RecordSerialization`, are built directly), and each yields the disposition and reason of the table; an inspection confirms the mapping is a `match` with no wildcard arm. PLANNED (IR-461). | Test (TC-025) |
 
 ## Dependencies
 
