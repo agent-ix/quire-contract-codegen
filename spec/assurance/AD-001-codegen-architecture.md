@@ -20,6 +20,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-spec-language/ADR-015
     type: references
+  - target: ix://agent-ix/quire-spec-language/FR-288
+    type: references
   - target: ix://agent-ix/quire-specification/AD-016
     type: references
 ---
@@ -72,7 +74,9 @@ Contract IR's `CheckedPackageV2` (ADR-001). Every generator reads it.
 The routed path runs in four steps:
 
 1. The driver passes the FR-331 backend provider envelope to `negotiate_backend_provider`
-   (FR-019). Each item settles once, in the `negotiate_*` arm of its `BackendKind`.
+   (FR-019). The driver makes one projection per registered QSL descriptor into CG's own
+   `BackendDescriptor`, copying its identity, advertised pairs and typed provider origin. Each
+   item settles once, in the `negotiate_*` arm of its `BackendKind`.
 2. QSL `route` routes each item that settled `supported`. The generator reads the candidate set
    and computes none.
 3. `generate_routed` (FR-022) runs the generation arm of each routed item's `BackendKind`, keyed
@@ -145,7 +149,7 @@ success fallback, and no requirement converts one into another.
 |---|---|---|---|
 | IR → CG | `CheckedPackageV2`, lowered claims and `bounded_domain` bounds | Contract IR | Reads them and never re-derives a bound from a caller descriptor. |
 | CG → RT | Generated calls into `quire_contract_runtime::exact`: kernel scalar operations, `check_equality`, `PackageDeclarations::check`, `CheckedPackage::call`, `Meter`, `Outcome` | Contract Runtime | Emits calls and charges nothing itself. |
-| QSL → CG | The FR-331 envelope and its `candidates` | QSpec wire; QSL `route` computes candidates | FR-019 reads the envelope, and FR-022 generates for what was routed. |
+| QSL → CG | The FR-331 envelope, its `candidates`, and the registered descriptor's typed `ProviderOrigin` | QSpec owns the envelope and candidate wire; QSL `route` computes candidates and its registry holds origin | The driver projects one QSL registry descriptor to CG's own descriptor, copying identity, advertised pairs and `origin()` without changing meaning. FR-019 reads that value; FR-022 generates for what was routed. No direct CG dependency on `qsl-route` and no origin member is added to FR-331 wire. |
 | CG → QSL | `Witness`, `ReplaySource`, the counterexample envelope `WitnessEnvelope`, `ObligationIdentity`, the replay request, `replay` and `replay_frame` | QSL `qsl-replay` | Builds them and calls the facade. Target: no copy of these types in CG or in Contract IR; see Current state. |
 | CG → QSL | The FR-331 terminal value of a run | QSL `qsl-replay` | The Kani adapter maps `KaniRunOutcome` to `TerminalValue` in one total match, one value per run (FR-029). An item settled `unsupported` at negotiation has no terminal value. |
 | CG ↔ Kani | The option vector in, the exported JSON report and the printed concrete playback out | Kani | Only `src/kani_transcript.rs` reads either. The verdict comes from the report; the playback is a payload. |
@@ -170,6 +174,17 @@ success fallback, and no requirement converts one into another.
 - A backend adapter is one implementation of one adapter trait, reached only through an exhaustive
   match on the closed `BackendKind` enum, and it owns its own execution evidence type (ADR-002,
   FR-026). Adding a kind without an arm is a compile error (FR-019, FR-022).
+- At registration, the driver's manifest-to-QSL-descriptor conversion supplies
+  `ProviderOrigin::Linked` for a compile-time provider or `ProviderOrigin::Process` for a plugin
+  `hello` to QSL `BackendDescriptor::new` or `admit` (QSL ADR-029 PV-1). The QSL registry holds
+  that value and checks conflicts. QSL layer R owns the closed origin vocabulary and descriptor
+  semantics (QSL FR-288, ADR-029 PV-1). CG's typed `ProviderOrigin` is a local projection of QSL's
+  two-valued semantics under
+  ADR-013 T-7, with no independently defined category: the driver maps both QSL
+  variants exhaustively into CG's corresponding variants, with no wildcard, and tests each.
+  CG never infers origin from identity text, executable or provider bytes, or an
+  identity-to-origin side map. Built-in Kani remains linked.
+  The later process-kind classification and settlement belong to IR-629 (QSL ADR-029 PV-4).
 - Every harness is bounded: inclusive bounds from the declared model domains, and a memory ceiling
   and a wall-clock ceiling in its identity. A family proves the production code where it verifies
   within them, and a bounded shadow with a refinement obligation elsewhere. Coverage is reportable
