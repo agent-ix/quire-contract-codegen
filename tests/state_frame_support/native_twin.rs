@@ -386,19 +386,25 @@ impl Twin {
         Self::build(&model::GRANTED, &CLAUSES, 0)
     }
 
-    /// A twin whose present `audit` field has plain Integer rather than an `i64` range.
+    /// A twin whose present, unread `audit` field is Boolean, with no `i64` range.
     pub fn without_audit_range() -> Self {
         let mut twin = Self::new();
         let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
-        let audit = domain["types"]
-            .as_array_mut()
-            .expect("types")
+        let types = domain["types"].as_array_mut().expect("types");
+        types.retain(|ty| ty["identity"] != range_type("audit"));
+        let account = types
             .iter_mut()
-            .find(|ty| ty["identity"] == range_type("audit"))
-            .expect("audit value type");
-        audit["constraints"] = json!([]);
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let audit = account["fields"]
+            .as_array_mut()
+            .expect("fields")
+            .iter_mut()
+            .find(|field| field["name"] == "audit")
+            .expect("audit field");
+        audit["typeRef"] = json!("ix://quire/native/Boolean");
         twin.domain = domain.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &CLAUSES, 0).into_bytes();
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0).into_bytes();
         twin
     }
 

@@ -692,7 +692,7 @@ pub enum BoundNotResolvedCause {
         /// The field's name.
         field: String,
         /// Why its member type is not a representable range.
-        reason: ModelMemberRangeReason,
+        reason: Box<ModelMemberRangeReason>,
     },
     /// The member's `value.target` is an unbounded type, a node that is not a bound.
     UnboundedType {

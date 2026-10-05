@@ -37,7 +37,8 @@ use package::{
 };
 use qsl_replay::{
     CallSiteRefusal, Category, DisagreementCause, FrameChange, FrameIdentityMismatch,
-    OperationSite, ReplayRefusal, ReplayResult, ReplaySource, Verdict, WitnessSettlement,
+    InconclusiveCause, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
+    Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
     execute_kani_obligation, generate_state_frame_obligations, negotiate_kani_obligations,
@@ -2553,11 +2554,10 @@ fn tc_035_the_playback_is_decoded_in_the_harnesss_draw_order() {
     );
 }
 
-/// A field with no declared range is listed in `state_fields`, has no entry in `domains`, is
-/// decoded and is neither range-checked nor refused: its value far outside any range the twin's
-/// package declares is carried into the transcript.
+/// A present field with no `i64` range remains in the draw order and transcript without an
+/// assumption; QSL still judges whether its model type admits the resulting native pre state.
 ///
-/// Trace: FR-024-AC-23, FR-024-AC-26, TC-035
+/// Trace: FR-015-AC-81, FR-024-AC-35
 #[test]
 fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
     let twin = Twin::without_audit_range();
@@ -2601,6 +2601,22 @@ fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
         "{}",
         witness.transcript()
     );
+    let error = replay
+        .replay()
+        .expect_err("QSL refuses a Boolean field bound as an integer");
+    assert!(matches!(error, FrameReplayError::Refused(_)));
+    let terminal = quire_contract_codegen::run_terminal_value(
+        &KaniRunOutcome::Falsified {
+            counterexample: "model-type mismatch".to_owned(),
+        },
+        0,
+        Some((&error).into()),
+    )
+    .expect("a falsified run has a settlement");
+    assert!(matches!(
+        terminal,
+        TerminalValue::Inconclusive(InconclusiveCause::ReplayRefused(_))
+    ));
 }
 
 /// The transcript `Witness::parse` is given is the one rendering function's, over the decoded

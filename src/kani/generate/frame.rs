@@ -849,10 +849,10 @@ pub(crate) fn field_range(
                         _ => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
                             object: object.clone(),
                             field: field.to_owned(),
-                            reason: crate::kani::generate::outcome::ModelMemberRangeReason::EndpointOutsideI64 {
+                            reason: Box::new(crate::kani::generate::outcome::ModelMemberRangeReason::EndpointOutsideI64 {
                                 lower: *lower,
                                 upper: *upper,
-                            },
+                            }),
                         }),
                     }
                 }
@@ -865,12 +865,16 @@ pub(crate) fn field_range(
                 ) => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
                     object: object.clone(),
                     field: field.to_owned(),
-                    reason: crate::kani::generate::outcome::ModelMemberRangeReason::NonRangeType,
+                    reason: Box::new(
+                        crate::kani::generate::outcome::ModelMemberRangeReason::NonRangeType,
+                    ),
                 }),
                 None => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
                     object: object.clone(),
                     field: field.to_owned(),
-                    reason: crate::kani::generate::outcome::ModelMemberRangeReason::NoMemberType,
+                    reason: Box::new(
+                        crate::kani::generate::outcome::ModelMemberRangeReason::NoMemberType,
+                    ),
                 }),
             };
         }

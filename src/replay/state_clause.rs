@@ -794,9 +794,9 @@ enum Side {
     PostState,
 }
 
-/// Every member of the framed object, in declaration order, with the range the generator's own
-/// reader (`field_range`) finds for it; a member that gives no `i64` range, for any ground
-/// `field_range` names, is a field with no range.
+/// The framed object's fields and ranges. A model declaration uses the caller's draw order after
+/// checking every name against the admitted table; a non-declaration uses body-member order.
+/// A present field without a representable `i64` range remains unranged.
 fn state_fields(
     graph: &Graph<'_>,
     shape: &ClauseShape,
