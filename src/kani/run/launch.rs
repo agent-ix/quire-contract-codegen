@@ -176,7 +176,7 @@ pub(super) enum BoundedLaunchError {
     Io(io::Error),
 }
 
-/// Every production backend launch carries memory enforcement, including a native refinement.
+/// Run a backend with both ceilings, retaining the actual memory observations.
 pub(super) fn run_bounded_launcher(
     command: Command,
     ceilings: crate::ProofCeilings,
