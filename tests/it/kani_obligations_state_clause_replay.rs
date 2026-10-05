@@ -15,9 +15,9 @@ use std::cell::RefCell;
 
 use qsl_replay::{
     replay_state_clause, CallSiteRefusal, Category, ClauseName, ClauseSelectionInput,
-    DisagreementCause, EvaluatedValue, FiniteBound, Identifier, Integer, ReplayRequestWire,
-    ReplayResult, ReplaySource, StateClauseReplayResult, Verdict, WireNodeId, WitnessEnvelope,
-    WitnessSettlement,
+    DisagreementCause, DomainKey, EvaluatedValue, FiniteBound, Identifier, Integer,
+    ReplayRequestWire, ReplayResult, ReplaySource, StateClauseReplayResult, Verdict, WireNodeId,
+    WitnessEnvelope, WitnessSettlement,
 };
 use quire_contract_codegen::{
     DocumentLabel, OperationDeclaration, StateClauseReplay, StateClauseReplayError,
@@ -473,10 +473,12 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
     for (position, (domain, (_, (minimum, maximum)))) in
         domains.iter().zip(model::FIELDS).enumerate()
     {
-        assert_eq!(domain.parameter(), parameter);
         assert_eq!(
-            domain.domain().path(),
-            [u32::try_from(position).expect("small")]
+            domain.domain(),
+            &DomainKey::Node {
+                node: parameter,
+                path: vec![u32::try_from(position).expect("small")],
+            }
         );
         assert_eq!(
             domain.bound(),
@@ -492,7 +494,10 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
     let replay = StateClauseReplay::new(candidate).expect("an unranged field is not checked");
     let domains = replay.packet.declared_domains.as_ref().expect("domains");
     assert_eq!(domains.len(), 1);
-    assert_eq!(domains[0].domain().path(), [1]);
+    assert!(matches!(
+        domains[0].domain(),
+        DomainKey::Node { path, .. } if path == &[1]
+    ));
 }
 
 /// The mutated subject's counterexample settles `reproduced-with-evaluated-witness` in category
