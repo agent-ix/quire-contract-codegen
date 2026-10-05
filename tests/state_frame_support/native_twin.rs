@@ -655,6 +655,7 @@ impl Twin {
             packages: self.packages(),
             package,
             clause_node,
+            state_fields: model::FIELDS.map(|(name, _)| name.to_owned()).to_vec(),
             operation: self.operation("deposit"),
             clause: ClauseName(Identifier::new(clause).expect("identifier")),
             object: StateObjectAddress {

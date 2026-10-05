@@ -29,8 +29,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2,
-    CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    CheckedMemberType, CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
+    CheckedSemanticNodeV2, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -45,7 +45,7 @@ use crate::{
     },
     kani::identity::{
         StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
-        StateFrameProperty, StateFrameScope,
+        StateFrameProperty, StateFrameScope, StateUnrangedField, StateUnrangedReason,
     },
     oracle::scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
 };
@@ -297,11 +297,12 @@ fn contract_harness(
     let condition = condition.as_ref().map_err(Clone::clone)?;
     require_state_field(request, &condition.field)?;
     require_bound(prepared, condition)?;
-    let domains = state_domains(graph, &shape.scope.object, request);
+    let (domains, unranged) = state_domains(graph, &shape.scope.object, request)?;
     render(
         request,
         &shape.scope,
         &domains,
+        &unranged,
         StateFrameProperty::Postcondition {
             field: condition.field.clone(),
             comparison: condition.comparison,
@@ -329,11 +330,12 @@ fn frame_harness(
         require_state_field(request, field)?;
     }
     let checked = checked_fields(request, prepared, granted)?;
-    let domains = state_domains(graph, &shape.scope.object, request);
+    let (domains, unranged) = state_domains(graph, &shape.scope.object, request)?;
     render(
         request,
         &shape.scope,
         &domains,
+        &unranged,
         StateFrameProperty::Frame {
             granted: granted.iter().cloned().collect(),
             checked,
@@ -458,12 +460,14 @@ fn lowering_refusal(record: CompleteLoweringRecordV2) -> Option<StateFrameLoweri
 
 /// The admitted graph by node id.
 pub(crate) struct Graph<'g> {
+    pub(crate) package: &'g CheckedPackageV2,
     pub(crate) nodes: BTreeMap<&'g CheckedNodeId, &'g CheckedSemanticNodeV2>,
 }
 
 impl<'g> Graph<'g> {
     pub(crate) fn of(package: &'g CheckedPackageV2) -> Self {
         Self {
+            package,
             nodes: package
                 .graph()
                 .nodes
@@ -829,6 +833,55 @@ pub(crate) fn field_range(
     object: &CheckedNodeId,
     field: &str,
 ) -> Result<(i64, i64), BoundNotResolvedCause> {
+    let object_node = graph.nodes.get(object);
+    let has_body_members = object_node
+        .and_then(|node| node.body.get("members")?.as_array())
+        .is_some_and(|members| !members.is_empty());
+    match graph.package.model_object_fields(object) {
+        Ok(fields) => {
+            let member = fields
+                .field(field)
+                .ok_or(BoundNotResolvedCause::MemberAbsent)?;
+            return match member.member_type() {
+                Some(CheckedMemberType::IntRange { lower, upper }) => {
+                    match (i64::try_from(*lower), i64::try_from(*upper)) {
+                        (Ok(minimum), Ok(maximum)) => Ok((minimum, maximum)),
+                        _ => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
+                            object: object.clone(),
+                            field: field.to_owned(),
+                            reason: crate::kani::generate::outcome::ModelMemberRangeReason::EndpointOutsideI64 {
+                                lower: *lower,
+                                upper: *upper,
+                            },
+                        }),
+                    }
+                }
+                Some(
+                    CheckedMemberType::Boolean
+                    | CheckedMemberType::Integer
+                    | CheckedMemberType::Reference(_)
+                    | CheckedMemberType::Option(_)
+                    | CheckedMemberType::Collection { .. },
+                ) => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
+                    object: object.clone(),
+                    field: field.to_owned(),
+                    reason: crate::kani::generate::outcome::ModelMemberRangeReason::NonRangeType,
+                }),
+                None => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
+                    object: object.clone(),
+                    field: field.to_owned(),
+                    reason: crate::kani::generate::outcome::ModelMemberRangeReason::NoMemberType,
+                }),
+            };
+        }
+        Err(CheckedModelFieldsError::NotModelObjectType) if has_body_members => {}
+        Err(error) => {
+            return Err(BoundNotResolvedCause::ModelFieldsUnavailable {
+                object: object.clone(),
+                error,
+            });
+        }
+    }
     let members = graph
         .nodes
         .get(object)
@@ -868,20 +921,32 @@ fn state_domains(
     graph: &Graph<'_>,
     object: &CheckedNodeId,
     request: &StateFrameRequest<'_>,
-) -> Vec<StateFieldDomain> {
-    request
-        .state_fields
-        .iter()
-        .filter_map(|field| {
-            field_range(graph, object, field)
-                .ok()
-                .map(|(minimum, maximum)| StateFieldDomain {
+) -> Result<(Vec<StateFieldDomain>, Vec<StateUnrangedField>), StateFrameRefusal> {
+    let mut domains = Vec::new();
+    let mut unranged = Vec::new();
+    for field in request.state_fields {
+        match field_range(graph, object, field) {
+            Ok((minimum, maximum)) => domains.push(StateFieldDomain {
+                field: (*field).to_owned(),
+                minimum,
+                maximum,
+            }),
+            Err(
+                cause @ (BoundNotResolvedCause::MemberAbsent
+                | BoundNotResolvedCause::ModelFieldsUnavailable { .. }),
+            ) => {
+                return Err(StateFrameRefusal::BoundNotResolved {
                     field: (*field).to_owned(),
-                    minimum,
-                    maximum,
-                })
-        })
-        .collect()
+                    cause,
+                });
+            }
+            Err(_) => unranged.push(StateUnrangedField {
+                field: (*field).to_owned(),
+                reason: StateUnrangedReason::TypeNotRange,
+            }),
+        }
+    }
+    Ok((domains, unranged))
 }
 
 // ---------------------------------------------------------------------------
@@ -892,6 +957,7 @@ fn render(
     request: &StateFrameRequest<'_>,
     scope: &StateFrameScope,
     domains: &[StateFieldDomain],
+    unranged: &[StateUnrangedField],
     property: StateFrameProperty,
     module: &str,
 ) -> Result<StateFrameHarness, StateFrameRefusal> {
@@ -943,6 +1009,7 @@ fn render(
             .map(|field| (*field).to_owned())
             .collect(),
         domains: domains.to_vec(),
+        unranged: unranged.to_vec(),
         state_path: request.state_path.to_owned(),
         subject_path: request.subject_path.to_owned(),
         module_symbol: path.module,

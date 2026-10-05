@@ -272,6 +272,8 @@ pub struct StateFrameIdentity {
     pub state_fields: Vec<String>,
     /// The IR range assumed of each state field that has one, in `state_fields` order.
     pub domains: Vec<StateFieldDomain>,
+    /// Present state fields without an `i64` range, in `state_fields` order.
+    pub unranged: Vec<StateUnrangedField>,
     /// Rust path of the state struct.
     pub state_path: String,
     /// Rust path of the operation subject.
@@ -286,6 +288,24 @@ pub struct StateFrameIdentity {
     pub unwind: u32,
     /// The exact Kani option vector.
     pub options: Vec<String>,
+}
+
+/// A present state field whose model type does not provide an `i64` range.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StateUnrangedField {
+    /// The field's declared name.
+    pub field: String,
+    /// Why no range can be assumed.
+    pub reason: StateUnrangedReason,
+}
+
+/// Why a state field has no `i64` range.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StateUnrangedReason {
+    /// The declared member type is not a representable `i64` range.
+    TypeNotRange,
 }
 
 /// A persisted state-frame record is not a state-frame identity: it is no JSON object of the
@@ -360,15 +380,25 @@ impl StateFrameIdentity {
             .map(|record| record.identity)
             .map_err(StateFrameRecordError::Json)?;
         let mut seen = std::collections::BTreeSet::new();
-        match identity
+        if let Some(field) = identity
             .state_fields
             .iter()
             .find(|field| !seen.insert(field.as_str()))
         {
-            Some(field) => Err(StateFrameRecordError::RepeatedField {
+            return Err(StateFrameRecordError::RepeatedField {
                 field: field.clone(),
-            }),
-            None => Ok(identity),
+            });
         }
+        seen.clear();
+        if let Some(field) = identity
+            .unranged
+            .iter()
+            .find(|field| !seen.insert(field.field.as_str()))
+        {
+            return Err(StateFrameRecordError::RepeatedField {
+                field: field.field.clone(),
+            });
+        }
+        Ok(identity)
     }
 }

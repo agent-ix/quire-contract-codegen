@@ -2477,6 +2477,34 @@ fn tc_035_the_record_carries_the_draw_order_and_a_record_without_it_is_not_read(
     assert!(StateFrameIdentity::from_record("{}").is_err());
 }
 
+/// A persisted unranged field records its type reason, and duplicate names cannot be decoded.
+///
+/// Trace: FR-015-AC-81
+#[test]
+fn tc_025_unranged_fields_have_a_reason_and_no_duplicate_record_names() {
+    let fixture = fixture(&Shape {
+        audit_unbounded: true,
+        ..Shape::HEALTHY
+    });
+    let generated = generate(&fixture);
+    assert_eq!(generated.frame.identity.unranged.len(), 1);
+    assert_eq!(generated.frame.identity.unranged[0].field, "audit");
+    assert_eq!(
+        generated.frame.identity.unranged[0].reason,
+        quire_contract_codegen::StateUnrangedReason::TypeNotRange
+    );
+    let mut record: Value = serde_json::from_str(&generated.frame.record.contents).expect("record");
+    let first = record["identity"]["unranged"][0].clone();
+    record["identity"]["unranged"]
+        .as_array_mut()
+        .expect("unranged list")
+        .push(first);
+    assert!(matches!(
+        StateFrameIdentity::from_record(&record.to_string()),
+        Err(StateFrameRecordError::RepeatedField { field }) if field == "audit"
+    ));
+}
+
 /// The playback is decoded against the harness's draw order, not the order of its ranges or its
 /// grants: a harness that draws `audit` first reads the first playback value as `audit`, and the
 /// pre snapshot tie sees that.
@@ -2981,15 +3009,12 @@ fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
     assert_ne!(*fixture_scope.anchor.digest, *anchor.node_id.digest);
 }
 
-/// The measured limit that keeps the end-to-end harness out of reach: the object type node QSL
-/// emits has an empty body (`members: []`), so the field-range reader the harness generator and
-/// the state-clause replay share (`field_range`, FR-015-AC-27), which reads a field's range from
-/// the object body's members, finds no member and refuses with `MemberAbsent`. A harness is
-/// therefore generated from the hand-built fixture package, whose object body has the members.
+/// QSL's emitted object body is empty; the admitted model's accessor supplies both ranges,
+/// including the unread `audit` field.
 ///
-/// Trace: FR-015-AC-27, TC-025
+/// Trace: FR-015-AC-77, FR-015-AC-79
 #[test]
-fn tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits() {
+fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
     let twin = Twin::new();
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let object = package
@@ -3007,7 +3032,7 @@ fn tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits() {
         Some(0),
         "QSL emits the object type with no members in its body"
     );
-    let refusal = generate_state_frame_obligations(&StateFrameRequest {
+    let generated = generate_state_frame_obligations(&StateFrameRequest {
         package: &package,
         clause: &clause,
         state_path: STATE_PATH,
@@ -3015,17 +3040,78 @@ fn tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits() {
         subject_path: SUBJECT_PATH,
         unwind: 4,
     })
-    .expect_err("no range is readable from the emitted object type");
-    assert!(
-        matches!(
-            refusal,
-            StateFrameRefusal::BoundNotResolved {
-                cause: BoundNotResolvedCause::MemberAbsent,
-                ..
-            }
-        ),
-        "{refusal}"
+    .expect("the accessor supplies both ranges");
+    let expected = model::FIELDS
+        .map(|(field, (minimum, maximum))| StateFieldDomain {
+            field: field.to_owned(),
+            minimum,
+            maximum,
+        })
+        .to_vec();
+    assert_eq!(generated.frame.identity.domains, expected);
+    assert_eq!(generated.postcondition.identity.domains, expected);
+    assert_eq!(generated.frame.identity.state_fields, STATE_FIELDS);
+    assert_eq!(generated.frame.identity.scope.object, object.node_id);
+    assert!(generated.frame.identity.unranged.is_empty());
+    let site = twin.operation_site("deposit").expect("located");
+    assert_eq!(
+        *generated.frame.identity.scope.anchor.digest,
+        site.anchor.to_string()
     );
+    assert_eq!(
+        *generated.frame.identity.scope.frame.digest,
+        site.frame.to_string()
+    );
+}
+
+/// The accessor's sorted table validates names but never changes the caller's draw order.
+///
+/// Trace: FR-015-AC-77, FR-015-AC-79
+#[test]
+fn tc_025_model_field_table_preserves_the_requested_draw_order() {
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let fields = ["audit", "balance"];
+    let generated = generate_state_frame_obligations(&StateFrameRequest {
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &fields,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect("both named fields resolve");
+    assert_eq!(generated.frame.identity.state_fields, fields);
+    assert_eq!(
+        generated
+            .frame
+            .identity
+            .domains
+            .iter()
+            .map(|domain| domain.field.as_str())
+            .collect::<Vec<_>>(),
+        fields
+    );
+
+    let absent = generate_state_frame_obligations(&StateFrameRequest {
+        state_fields: &["balance", "ghost", "audit"],
+        ..StateFrameRequest {
+            package: &package,
+            clause: &clause,
+            state_path: STATE_PATH,
+            state_fields: &fields,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        }
+    })
+    .expect_err("a requested name absent from the accessor refuses");
+    assert!(matches!(
+        absent,
+        StateFrameRefusal::BoundNotResolved {
+            field,
+            cause: BoundNotResolvedCause::MemberAbsent,
+        } if field == "ghost"
+    ));
 }
 
 /// The frame envelope declares no domain: `declared_domains` is present and empty.

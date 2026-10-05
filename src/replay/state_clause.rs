@@ -33,7 +33,7 @@ use qsl_replay::{
     WitnessSettlement,
 };
 use quire_canonical::{Encode, FixedShape};
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
+use quire_contract_model::{CheckedModelFieldsError, CheckedNodeId, CheckedPackageV2};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -87,6 +87,8 @@ pub struct StateClauseReplayInputs<'a> {
     pub package: &'a CheckedPackageV2,
     /// The package's `state`/`state_clause` node of the clause.
     pub clause_node: &'a CheckedNodeId,
+    /// The state struct's fields in the harness draw order.
+    pub state_fields: Vec<String>,
     /// The operation the clause anchors.
     pub operation: OperationName,
     /// The clause's declared name.
@@ -106,6 +108,18 @@ pub struct StateClauseReplayInputs<'a> {
     pub post_state: Vec<(String, i64)>,
     /// The identity of the obligation the counterexample falsified.
     pub obligation_identity: [u8; 32],
+}
+
+/// Why the framed model declaration does not supply the requested field list.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StateClauseModelFieldsCause {
+    /// The Contract IR model-fields accessor refused the object.
+    Accessor(CheckedModelFieldsError),
+    /// A requested field is absent from the accessor's table.
+    Absent {
+        /// The first absent field in caller order.
+        field: String,
+    },
 }
 
 /// What an operation declares beyond `self`: the parameters and the result the supported shape
@@ -208,6 +222,13 @@ pub enum StateClauseReplayError {
     Envelope(WitnessRefusal),
     /// A document could not be built.
     Document(DocumentError),
+    /// The framed model declaration does not provide the requested field list.
+    ModelFields {
+        /// The model declaration node.
+        object: CheckedNodeId,
+        /// The exact accessor error or first missing field.
+        cause: StateClauseModelFieldsCause,
+    },
     /// The playback or the post state binds no value for a declared state field.
     MissingField {
         /// The field.
@@ -249,6 +270,13 @@ impl fmt::Display for StateClauseReplayError {
             Self::Transcript(cause) => write!(f, "the witness transcript is not admitted: {cause}"),
             Self::Envelope(cause) => write!(f, "the envelope is not admitted: {cause}"),
             Self::Document(cause) => write!(f, "a document was not built: {cause}"),
+            Self::ModelFields { object, cause } => {
+                write!(
+                    f,
+                    "model fields of {} are unavailable: {cause:?}",
+                    object.digest
+                )
+            }
             Self::MissingField { field } => {
                 write!(f, "no value is bound for the state field `{field}`")
             }
@@ -290,6 +318,7 @@ impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
             | StateClauseReplayError::Transcript(_)
             | StateClauseReplayError::Envelope(_)
             | StateClauseReplayError::Document(_)
+            | StateClauseReplayError::ModelFields { .. }
             | StateClauseReplayError::MissingField { .. }
             | StateClauseReplayError::UndeclaredField { .. }
             | StateClauseReplayError::DuplicateField { .. }
@@ -349,6 +378,7 @@ impl StateClauseReplay {
             packages,
             package,
             clause_node,
+            state_fields,
             operation,
             clause,
             object,
@@ -383,7 +413,7 @@ impl StateClauseReplay {
                 declaration,
             });
         }
-        let fields = state_fields(&graph, &shape);
+        let fields = state_fields(&graph, &shape, &state_fields)?;
         let pre = bind(&fields, &playback, Side::Playback)?;
         let post = bind(&fields, &post_state, Side::PostState)?;
         let domains = declared_domains(&shape, &fields)?;
@@ -768,22 +798,59 @@ enum Side {
 /// Every member of the framed object, in declaration order, with the range the generator's own
 /// reader (`field_range`) finds for it; a member that gives no `i64` range, for any ground
 /// `field_range` names, is a field with no range.
-fn state_fields(graph: &Graph<'_>, shape: &ClauseShape) -> Vec<StateField> {
+fn state_fields(
+    graph: &Graph<'_>,
+    shape: &ClauseShape,
+    requested: &[String],
+) -> Result<Vec<StateField>, StateClauseReplayError> {
     let object = &shape.scope.object;
+    let body_members = graph
+        .nodes
+        .get(object)
+        .and_then(|node| node.body.get("members")?.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    match graph.package.model_object_fields(object) {
+        Ok(fields) => {
+            let mut resolved = Vec::with_capacity(requested.len());
+            for name in requested {
+                if fields.field(name).is_none() {
+                    return Err(StateClauseReplayError::ModelFields {
+                        object: object.clone(),
+                        cause: StateClauseModelFieldsCause::Absent {
+                            field: name.clone(),
+                        },
+                    });
+                }
+                resolved.push(StateField {
+                    name: name.clone(),
+                    range: field_range(graph, object, name).ok(),
+                });
+            }
+            return Ok(resolved);
+        }
+        Err(CheckedModelFieldsError::NotModelObjectType) if !body_members.is_empty() => {}
+        Err(cause) => {
+            return Err(StateClauseReplayError::ModelFields {
+                object: object.clone(),
+                cause: StateClauseModelFieldsCause::Accessor(cause),
+            });
+        }
+    }
     let members = graph
         .nodes
         .get(object)
         .and_then(|node| node.body.get("members")?.as_array())
         .map(Vec::as_slice)
         .unwrap_or_default();
-    members
+    Ok(members
         .iter()
         .filter_map(|member| member.get("name")?.as_str())
         .map(|name| StateField {
             name: name.to_owned(),
             range: field_range(graph, object, name).ok(),
         })
-        .collect()
+        .collect())
 }
 
 /// The value bound to each declared field in `values`, in declaration order. A name the object

@@ -3,9 +3,9 @@
 //! `generate/`: it imports no family.
 
 use quire_contract_model::{
-    BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete, CheckedPackageLimit,
-    CheckedPackageRefusal, CheckedPackageV2, CheckedSourceMapEntry, ClauseKind, ClauseRef,
-    DependencyIdentity, SourceSpan,
+    BoundPackage, CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
+    CheckedPackageLimit, CheckedPackageRefusal, CheckedPackageV2, CheckedSourceMapEntry,
+    ClauseKind, ClauseRef, DependencyIdentity, SourceSpan,
 };
 use serde::{Serialize, Serializer};
 
@@ -677,6 +677,23 @@ pub enum StateFrameRefusal {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "ground", rename_all = "snake_case")]
 pub enum BoundNotResolvedCause {
+    /// The model field table could not be read for the declared object.
+    ModelFieldsUnavailable {
+        /// The model declaration object.
+        object: CheckedNodeId,
+        /// The accessor's exact error.
+        #[serde(serialize_with = "serialize_model_fields_error")]
+        error: CheckedModelFieldsError,
+    },
+    /// A present model field does not have a representable `i64` range.
+    ModelMemberNotI64Range {
+        /// The model declaration object.
+        object: CheckedNodeId,
+        /// The field's name.
+        field: String,
+        /// Why its member type is not a representable range.
+        reason: ModelMemberRangeReason,
+    },
     /// The member's `value.target` is an unbounded type, a node that is not a bound.
     UnboundedType {
         /// That target node.
@@ -696,6 +713,42 @@ pub enum BoundNotResolvedCause {
     MemberAbsent,
     /// The member's value is not a reference, so it has no `value.target`.
     ValueNotReference,
+}
+
+fn serialize_model_fields_error<S: Serializer>(
+    error: &CheckedModelFieldsError,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    #[serde(tag = "kind", rename_all = "snake_case")]
+    enum Wire<'a> {
+        UnknownNode,
+        NotModelObjectType,
+        AmbiguousField { name: &'a str },
+    }
+    match error {
+        CheckedModelFieldsError::UnknownNode => Wire::UnknownNode,
+        CheckedModelFieldsError::NotModelObjectType => Wire::NotModelObjectType,
+        CheckedModelFieldsError::AmbiguousField(name) => Wire::AmbiguousField { name },
+    }
+    .serialize(serializer)
+}
+
+/// Why a present model field has no `i64` range.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum ModelMemberRangeReason {
+    /// No checked member type was derived.
+    NoMemberType,
+    /// The checked member type is not an integer range.
+    NonRangeType,
+    /// The inclusive `i128` endpoints cannot both fit `i64`.
+    EndpointOutsideI64 {
+        /// Inclusive lower endpoint.
+        lower: i128,
+        /// Inclusive upper endpoint.
+        upper: i128,
+    },
 }
 
 impl std::fmt::Display for StateFrameRefusal {
@@ -847,7 +900,9 @@ pub(crate) fn state_frame_disposition(refusal: StateFrameRefusal) -> ObligationD
                 Cause::NotIntegerRange { .. }
                 | Cause::EndpointOutsideI64 { .. }
                 | Cause::MemberAbsent
-                | Cause::ValueNotReference,
+                | Cause::ValueNotReference
+                | Cause::ModelFieldsUnavailable { .. }
+                | Cause::ModelMemberNotI64Range { .. },
             ..
         }
         | StateFrameRefusal::NotAPostcondition { .. }

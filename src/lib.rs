@@ -148,16 +148,16 @@ pub use kani::generate::frame::{
 pub use kani::generate::negotiate::negotiate_kani_obligations;
 pub use kani::generate::outcome::{
     BoundNotResolvedCause, DerivedDomain, InvalidObligationItem, KaniObligationError,
-    KaniObligationOutcome, KaniObligationRequest, ObligationDisposition, ObligationItem,
-    ObligationRecord, ObligationSubject, StateFrameLoweringRefusal, StateFrameRefusal,
-    StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
-    MAX_OBLIGATION_UNWIND,
+    KaniObligationOutcome, KaniObligationRequest, ModelMemberRangeReason, ObligationDisposition,
+    ObligationItem, ObligationRecord, ObligationSubject, StateFrameLoweringRefusal,
+    StateFrameRefusal, StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation,
+    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 pub use kani::identity::{
     EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
     ObligationBinding, ObligationKind, ScalarObligationArgument, ScalarObligationIdentity,
     StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
-    StateFrameRecordError, StateFrameScope,
+    StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
 };
 pub use kani::output::playback::DecodeFailure;
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
@@ -171,8 +171,8 @@ pub use replay::function::{
 };
 pub use replay::obligation::ObligationIdentityError;
 pub use replay::state_clause::{
-    DocumentError, DocumentLabel, ModelError, OperationDeclaration, StateClauseReplay,
-    StateClauseReplayError, StateClauseReplayInputs, StateObjectAddress,
+    DocumentError, DocumentLabel, ModelError, OperationDeclaration, StateClauseModelFieldsCause,
+    StateClauseReplay, StateClauseReplayError, StateClauseReplayInputs, StateObjectAddress,
 };
 pub use replay::witness::decode_falsification;
 pub use strategy::campaign::{

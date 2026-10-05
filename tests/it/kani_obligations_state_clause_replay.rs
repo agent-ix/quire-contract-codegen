@@ -20,8 +20,8 @@ use qsl_replay::{
     WitnessEnvelope, WitnessSettlement,
 };
 use quire_contract_codegen::{
-    DocumentLabel, OperationDeclaration, StateClauseReplay, StateClauseReplayError,
-    StateClauseReplayInputs, StateObjectAddress,
+    DocumentLabel, OperationDeclaration, StateClauseModelFieldsCause, StateClauseReplay,
+    StateClauseReplayError, StateClauseReplayInputs, StateObjectAddress,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -35,6 +35,53 @@ use super::kani_obligations_state_frame::{
 const BALANCE: &str = "BalanceNeverDrops";
 /// The second postcondition clause on `deposit`: `audit` never drops.
 const AUDIT: &str = "AuditNeverDrops";
+
+/// QSL's emitted checked package has an empty model body, yet replay takes the caller's field
+/// order and both inclusive ranges from the admitted model declaration's accessor.
+///
+/// Trace: FR-024-AC-31, FR-024-AC-33
+#[test]
+fn tc_035_emitted_model_fields_bind_replay_before_playback() {
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package(BALANCE);
+    let input = twin.state_clause_inputs(&package, &clause, BALANCE, (5, 7), (4, 7));
+    let replay = StateClauseReplay::new(input.clone()).expect("model fields resolve");
+    let domains = replay.packet.declared_domains.as_ref().expect("domains");
+    assert_eq!(domains.len(), model::FIELDS.len());
+    for (position, (domain, (_, (lower, upper)))) in domains.iter().zip(model::FIELDS).enumerate() {
+        assert!(matches!(
+            domain.domain(),
+            DomainKey::Node { path, .. } if path == &[u32::try_from(position).expect("small")]
+        ));
+        assert_eq!(
+            domain.bound(),
+            &FiniteBound::integer_range(Integer::from(lower), Integer::from(upper)).expect("range")
+        );
+    }
+    let result = replay.replay().expect("the debit replays");
+    assert_eq!(
+        witness_arm(&result).settlement(),
+        WitnessSettlement::ReproducedWithEvaluatedWitness
+    );
+
+    let mut absent = input.clone();
+    absent.state_fields.push("ghost".to_owned());
+    absent.playback.clear();
+    let error = StateClauseReplay::new(absent).expect_err("model absence precedes binding");
+    assert!(matches!(
+        error,
+        StateClauseReplayError::ModelFields {
+            cause: StateClauseModelFieldsCause::Absent { field }, ..
+        } if field == "ghost"
+    ));
+
+    let mut outside = input;
+    outside.playback[1].1 = 1001;
+    assert!(matches!(
+        StateClauseReplay::new(outside),
+        Err(StateClauseReplayError::OutOfDomain { field }) if field == "audit"
+    ));
+}
 
 fn healthy() -> Fixture {
     fixture_declaring(Declares::Nothing)
