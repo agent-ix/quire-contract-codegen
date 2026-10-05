@@ -1,6 +1,6 @@
 ---
 id: TC-044
-title: "Verify Boolean oracle integer arithmetic and comparison take the runtime's meaning"
+title: "Verify Boolean oracle integer arithmetic and comparison take the exact kernel's meaning"
 type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-031
@@ -8,7 +8,7 @@ relationships:
   - target: ix://agent-ix/quire-contract-runtime/FR-007
     type: references
 ---
-# TC-044: Verify Boolean oracle integer arithmetic and comparison take the runtime's meaning
+# TC-044: Verify Boolean oracle integer arithmetic and comparison take the exact kernel's meaning
 
 ## Description
 
@@ -33,8 +33,13 @@ integration repository) is pending: it needs a checkout of the integration repos
 run of the same bundle shape is the closest equivalent, not a substitute. The divide and remainder
 change (IR-602) is planned: the O-3 and O-5 rows of step 4, step 5, the divide and remainder half
 of step 7 and the rewritten step 11 (FR-031-AC-2, AC-6, AC-16, AC-17 and AC-18), and the new steps
-14 to 17 (FR-031-AC-22 to AC-25). Until that code lands the divide and remainder constructions are
+14 to 17 (FR-031-AC-22 to AC-26). Until that code lands the divide and remainder constructions are
 refused at generation with the interim code, which is the failing run those steps record first.
+The steps that call `quire_exact::divide` or migrate the native oracle (1's divide half, 4's O-3
+and O-5, 5, 7's divide and remainder half, 14 and 16) are gated on a prerequisite: QSL moves to the
+single-member `divide`, and CG then bumps QSL and `quire-exact` together, because CG's one
+`quire-exact` lock entry is shared with QSL's crates. Step 14 is also contingent on the owner's
+decision OD-2. Steps 10's divide and remainder bundle shape and 15 call no kernel.
 
 ## Test Procedure
 
@@ -138,6 +143,12 @@ refused at generation with the interim code, which is the failing run those step
    | R-1 | Divide | `1..=10` | `10 / y <= 10` | `y = 5` | `Completed(true)`: the quotient 2 is in range, the remainder 0 is not |
    | R-2 | Remainder | `-10..=5` | `x % -1 <= 5` | `x = -10` | `Completed(true)`: the remainder 0 is in range, the quotient 10 is not |
 
+   The oracle returns `Outcome<bool>`, so a member's value shows only through the comparison, and
+   R-1 and R-2 complete `true` under every law. The grid therefore also carries the law vector
+   `y != 0 && x / y <= -4` over a `reject` type of `-10..=10` (built through `check_expression`)
+   at `x = -7`, `y = 2`: `Completed(false)` under truncating (quotient -3), where floor and
+   Euclidean give `Completed(true)` (quotient -4). Step 1 pins the law in the source.
+
    A division that checked the unselected member as well, as the earlier pair operation did,
    returns `Refused` on both rows, which is why they are the named vectors.
 8. Propagation (FR-031-AC-9). Build clauses with an add, subtract or multiply stop in the left
@@ -202,16 +213,22 @@ refused at generation with the interim code, which is the failing run those step
 13. Differential between the two implementations (FR-031-AC-21). For add, subtract and multiply,
     generate the native oracle and the Kani bundle oracle of the same typed expression (the
     constructions O-1, O-2 and O-4 and one with no guard), compile both in a generated crate
-    against `quire-exact` in plain `cargo test` with no Kani, and over a grid of
+    against `quire-contract-runtime` in plain `cargo test` with no Kani (against `quire-exact`
+    once the migration of step 14 lands), and over a grid of
     vectors inside the declared domain, its edges included, at which the guards pass, assert the
     bundle oracle's `bool` equals the `bool` inside `Completed` of the native oracle.
-14. Kernel family (FR-031-AC-22). Generate a native oracle with an arithmetic node and the
+14. Kernel family and connectives (FR-031-AC-22, AC-26). Generate a native oracle with an arithmetic node and the
     construction Z-3 (an add and a remainder in one oracle), and assert the source aliases
     `quire_exact` as `rt`, takes `&mut rt::Meter`, returns `rt::Outcome<bool>`, and holds no
     `quire_contract_runtime::exact` path. Compile and run them in a generated crate whose manifest
     names `quire-exact`, and assert the crate's resolved graph holds one `quire-exact`. Assert
     CG's `Cargo.toml` names `quire-exact` directly from `agent-ix/quire-exact`, and that `make
-    deny`'s one-copy check passes over CG's lock.
+    deny`'s one-copy check passes over CG's lock, with `qsl-replay` and `qsl-semantics` resolving
+    that one entry. This step is contingent on the owner's decision OD-2 and gated on the lock
+    prerequisite of FR-031. Assert, for the migrated oracle (FR-031-AC-26), that no
+    `operators::*_short_circuit` path appears, that the connectives are inline matches, that the
+    outcomes of step 8's cases and of Z-3 equal their outcomes under Contract Runtime's
+    rendering, and that no connective charges a point.
 15. Kani divide and remainder are falsifiable properties (FR-031-AC-24). Generate the bundle
     oracle of Z-1 and of Z-3, and in a Kani crate call each from a harness with unconstrained
     operands. Assert real Kani fails "attempt to divide by zero" and "attempt to divide with
@@ -250,4 +267,5 @@ nowhere; the six comparisons agree with the kernel; every other consumer that ne
 refuses an arithmetic clause; and the overflow, zero-divisor, minimum-by-negative-one, `saturate`
 and differential cases each failed on the tree before the change and pass after it, with the code
 change recording both runs and the exemplar's runs. The divide and remainder rows (FR-031-AC-2,
-AC-6, AC-16, AC-17, AC-18 and AC-22 to AC-25) are verified by the IR-602 code change.
+AC-6, AC-16, AC-17, AC-18 and AC-22 to AC-26) are verified by the IR-602 code change, which is
+gated on the lock prerequisite as the status above states.
