@@ -71,6 +71,11 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
     `Inconclusive(ReplayRefused)`, and a non-fault `CallSiteRefusal` or
     `DependencyLockError::Input` wrapped in `StateClauseReplayError` is
     `Inconclusive(ReplayRefused)` with its code (FR-029-AC-16).
+16. Map `verified` with each proof strength (`production_proved`, the three `shadow_proved_*`
+    strengths and `refinement_failed`); map `falsified` of a `bounded_shadow` harness and
+    `inconclusive` of a `bounded_shadow` harness (FR-029-AC-17, planned, IR-241): `Proved` for
+    `production_proved` only, `NonProductionProof` carrying the strength for each other, `ShadowCounterexample`
+    for the falsified shadow, with no value for any of them, and the usual value for the inconclusive one.
 
 ## Status
 

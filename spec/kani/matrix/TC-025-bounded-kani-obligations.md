@@ -261,15 +261,21 @@ package alone nearly fills.
     the supported item settles as it does alone (FR-015-AC-73).
 34. With the installed backend, run the corpus case's harness and its refinement run: read
     `Verified` with its cover satisfied inside the identity's ceilings, the versions and options in
-    the evidence, and the refinement class and agreement (FR-015-AC-74).
-35. With the installed backend, run each of the six shadow mutants, and natively each of the three
-    production mutants and the closure-reader mutant, and the unmutated case: read `Falsified` with
+    the evidence, and the refinement class `exhaustive` with its case count (the case's domain fits
+    the cap) and agreement; run a second case whose domain exceeds the cap and read `sampled`
+    (FR-015-AC-74).
+35. With the installed backend, run each of the six shadow mutants, and natively each of the five
+    production mutants (opposite operator, `absent` equal to `null`, one pair too many, an optional
+    field declared required, a legal pair `Refused`) and the unmutated case: read `Falsified` with
     a playback for each shadow mutant, `refinement_failed` naming the first disagreeing case for
-    each other mutant, and `Verified` with an agreeing refinement for the unmutated case
-    (FR-015-AC-75).
+    each production mutant, and `Verified` with an agreeing refinement for the unmutated case. Run
+    the closure-reader mutants (a dropped member, a bound narrowed by one, an optional member read
+    as required) against FR-018-AC-23's independent check, which they fail, and permute the member
+    order and read that no check is required to fail (FR-015-AC-75).
 36. Read the identity's closure, domains, operator, budget, count, abstractions and unexercised
-    behaviours, change each of the closure, a bound, the operator and the budget in turn, and
-    regenerate from equal inputs (FR-015-AC-76).
+    behaviours with each covering criterion's backing state against the matrix rows, change each
+    of the closure, a bound, the operator and the budget in turn, and regenerate from equal inputs
+    (FR-015-AC-76).
 
 Steps 29 to 36 are planned. Nothing in `src/` renders a composite harness: the corpus families
 (arithmetic, graph, collection) draw no input, FR-025's argument table has rows for Boolean and

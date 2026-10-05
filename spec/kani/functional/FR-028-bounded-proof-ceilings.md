@@ -28,11 +28,12 @@ ceilings, and a bounded shadow together with a refinement obligation where it do
 ([ADR-003](../../decisions/ADR-003-kani-tractability.md)).
 
 Planned (IR-241): ADR-003 decides that a shadow exists and that a refinement obligation always
-accompanies it. FR-028-AC-13 to FR-028-AC-23 state what the decision leaves open: what makes a shadow
+accompanies it. FR-028-AC-13 to FR-028-AC-24 state what the decision leaves open: what makes a shadow
 independent of the code it stands for, what the refinement obligation compares and how strongly
 it settles, what each simplification the shadow makes owes, which shapes the shadow refuses, how
-the memory ceiling is held and named, and which seeded mutants the machinery must catch. They are
-family-agnostic. [FR-015](./FR-015-bounded-kani-obligations.md) states the first family that uses
+the memory ceiling is held and named, how the refinement run is bounded, and which seeded mutants
+the machinery must catch. They are written for any family: where a criterion needs a comparison,
+it names the family's observables and gives composite equality's as the first. [FR-015](./FR-015-bounded-kani-obligations.md) states the first family that uses
 them, composite equality over records and tuples (IR-264, FR-015-AC-69 to FR-015-AC-76), and
 [FR-018](../../oracle/functional/FR-018-composite-equality-oracles.md) states what the production
 oracle owes that family (FR-018-AC-21 and FR-018-AC-22). FR-028-AC-1 to FR-028-AC-12 stay as they
@@ -58,8 +59,11 @@ other.
   `(&TypeEnvironment, &Value, &Value, &mut Meter) -> Outcome<bool>`), whatever evaluator that
   function calls: the Contract Runtime `exact` module today, and the QSL evaluation seam of IR-583
   once it lands. No requirement here relies on either.
-- A request-level refinement case cap, a positive integer, above which a refinement domain is
-  sampled and no longer enumerated (FR-028-AC-16).
+- Three request-level refinement values: a case cap, a positive integer, above which a refinement
+  domain is sampled and no longer enumerated; a sample size, a positive integer, the number of
+  seeded cases a sampled run adds; and a seed, a `u64` the request carries and never taken from the
+  clock (FR-028-AC-16). The refinement run is also held to the memory and wall-clock ceilings of
+  the harness identity (FR-028-AC-24).
 
 ## Outputs
 
@@ -114,29 +118,35 @@ other.
   the harness identity and in the evidence.
 - If a narrowed bound is not inside the argument's declared domain, then the generator shall refuse
   the obligation with a typed reason and emit no harness.
-- The generator shall emit a `bounded_shadow` harness over a shadow and an expectation that name
-  no item of the evaluation crate the production oracle calls, contain no `kani::stub` and no
-  `kani::assume` other than the argument-domain assumptions of FR-015-AC-11 (FR-028-AC-13).
+- The generator shall emit a `bounded_shadow` harness over a shadow and an expectation that use
+  no crate but `core`, `alloc`, `std` and `kani`, so none of the evaluation crates the production
+  oracle calls, and that contain no `kani::stub` and no `kani::assume` other than the
+  argument-domain assumptions of FR-015-AC-11 (FR-028-AC-13).
 - The generator shall derive a shadow's expectation from the semantic authority's own rule for the
   claim (QSpec FR-149 for equality) and from the declared model domains, never from the production
   oracle or from a runtime function, and shall list in the harness identity every helper the
-  shadow and the expectation share (FR-028-AC-18).
+  shadow and the expectation share, each marked `value_bearing` or `order_only` (FR-028-AC-18).
 - The generator shall emit, with every `bounded_shadow` harness and in the same result, a
   refinement obligation naming the production subject, the shadow, the bounded domain, the
-  abstraction function from a shadow value to a production value, and the comparison it makes
-  (FR-028-AC-14).
+  abstraction function from a shadow value to a production value, and the observables the
+  family's comparison reads (FR-028-AC-14).
 - When the refinement obligation runs, the generator shall compare, for each case of the bounded
   domain, the production subject's complete outcome under an unlimited meter with the shadow's
-  result: the same completed verdict, the same count of admitted `equality.pair` charges, and no
-  `Refused` or `Incomplete` outcome. A case the production subject does not complete is a
-  disagreement, never an excluded case (FR-028-AC-15).
+  result on the observables the family names: for composite equality, a `Completed` outcome with
+  the shadow's verdict and an admitted `equality.pair` count equal to the shadow's. A case the
+  production subject does not complete is a disagreement, never an excluded case (FR-028-AC-15).
 - The generator shall classify a refinement run `exhaustive` when it executed every case of a
   domain no larger than the request's refinement case cap, and `sampled` in every other case.
-- The generator shall record the class of a refinement run, the domain's case count (or that it overflowed), the cases run and the seed (FR-028-AC-16).
+- The generator shall record the class of a refinement run, the domain's case count (or that it
+  overflowed), the cases run and the seed (FR-028-AC-16).
+- The generator shall hold the refinement run to the memory and wall-clock ceilings of the harness
+  identity, run it through one typed refinement execution entry that reuses FR-017's launcher and
+  ceiling machinery, and record its evidence beside the shadow run's (FR-028-AC-24).
 - The generator shall report a shadow family's result under exactly one proof strength:
   `production_proved` for a verified `production` harness; `shadow_proved_refinement_exhaustive`,
-  `shadow_proved_refinement_sampled` or `shadow_proved_refinement_not_run` for a verified
-  `bounded_shadow` harness by the refinement run's class; and `refinement_failed` for a refinement
+  `shadow_proved_refinement_sampled`, `shadow_proved_refinement_not_run` or
+  `shadow_proved_refinement_inconclusive` for a verified `bounded_shadow` harness by the refinement
+  run's class (`inconclusive` when the run hit a ceiling); and `refinement_failed` for a refinement
   disagreement, whatever the shadow harness settled. Only `production_proved` reads as a proof
   over the production code (FR-028-AC-17).
 - The generator shall record, for each simplification a shadow makes, a named abstraction with the
@@ -150,10 +160,11 @@ other.
   bound, `unsupported` with a named capability for a shape with no shadow) and emit no harness,
   and shall never invent a bound or fall back to a production harness it has no ceiling for
   (FR-028-AC-20).
-- The generator shall hold the backend process tree to its memory ceiling by observing the tree's
-  peak resident memory, and shall record that peak in the execution evidence of every run. If the
-  platform offers it no means to observe or limit that memory, then the generator shall refuse the
-  run with a typed reason and shall not run the backend without a memory ceiling (FR-028-AC-21).
+- The generator shall hold the backend process tree to its memory ceiling by a mechanism that
+  observes or limits the tree's memory, and shall record the mechanism in the execution evidence
+  of every run, with the tree's peak resident memory where the mechanism observes it. If the
+  platform offers it no such mechanism, then the generator shall refuse the run with a typed
+  reason and shall not run the backend without a memory ceiling (FR-028-AC-21).
 - If a run exceeds its memory ceiling, then the generator shall classify it inconclusive with the
   `MemoryExhausted` reason, serialized `memory_exhausted`, which is a variant of
   `KaniInconclusiveReason` distinct from every existing reason (FR-028-AC-3, FR-028-AC-21).
@@ -174,20 +185,21 @@ other.
 | FR-028-AC-8 | An argument narrowed inside its declared domain records the declared domain, the narrowed bound and that the harness covers only the narrowed bound, in the harness identity and in the evidence. | Test (TC-039) |
 | FR-028-AC-9 | A narrowing outside the argument's declared domain is refused with a typed reason and no harness. | Test (TC-039) |
 | FR-028-AC-12 | In a group of N harnesses (one launcher process of a FR-017 batch) sharing a wall-clock budget T, a member the backend cuts off (entry status Failure, no checks, exit status `timeout`) is `inconclusive` timed-out naming T and never falsified, while members that finished keep their verified or falsified results; a group still running at N times T is killed, refused as timed out, and no member is classified; an N times T too large to represent never elapses and does not panic; a T above 4294967295 whole seconds launches the group without `--harness-timeout` and the group still runs, its outer bound still elapsing at N times T when the product fits. | Test (TC-039) |
-| FR-028-AC-13 | The source of a `bounded_shadow` harness, parsed, contains no path into the evaluation crate the production oracle calls (neither `quire_contract_runtime`, `quire_exact` nor any crate that oracle's crate depends on), no `kani::stub` or `kani::stub_verified`, and no `kani::assume` outside the argument-domain assumptions of FR-015-AC-11; a mutated generator that imports a runtime type, emits a stub or assumes a relation between two drawn values fails each check. PLANNED (IR-241). | Test (TC-039) |
-| FR-028-AC-14 | The result of a `bounded_shadow` family carries a refinement obligation, as generated Rust source in the same result, that names the production subject by its symbol, the shadow, the bounded domain as one inclusive bound per drawn argument, the abstraction function from a shadow value to a production value, and the comparison of FR-028-AC-15; the abstraction function lives in one module that the shadow, the expectation and the Kani harness do not import. A result with a shadow harness and no obligation, or an obligation naming no production subject, is not returned. PLANNED (IR-241). | Test (TC-039) |
-| FR-028-AC-15 | For every case the refinement run executes, the production subject's outcome under an unlimited meter is `Completed` with the shadow's verdict and with an admitted `equality.pair` count equal to the shadow's count; a case whose production outcome is `Refused` or `Incomplete`, or whose verdict or count differs, is recorded as a disagreement carrying the case's drawn values and both results, and is never skipped as outside the domain. PLANNED (IR-241). | Test (TC-039) |
-| FR-028-AC-16 | A refinement run over a domain of at most the request's case cap cases executes every case and is classified `exhaustive`; a run over a larger domain, or one whose case count overflows `u128`, is classified `sampled`, runs a fixed boundary set (each integer bound, its neighbour inside the bound, zero where inside, both Booleans, every presence state of an option or optional slot) and a seeded remainder, and records the class, the case count or that it overflowed, the cases run and the seed; two runs with equal inputs run the same cases. PLANNED (IR-241). | Test (TC-039) |
-| FR-028-AC-17 | A verified `production` harness reports `production_proved`; a verified `bounded_shadow` harness reports `shadow_proved_refinement_exhaustive`, `shadow_proved_refinement_sampled` or `shadow_proved_refinement_not_run` by its refinement run's class (`not_run` when none ran); a refinement disagreement reports `refinement_failed` whatever the shadow harness settled, including a verified one; and no result of a `bounded_shadow` harness reports `production_proved`. PLANNED (IR-241). | Test (TC-039) |
-| FR-028-AC-18 | A harness identity of a shadow family lists each abstraction the shadow makes by name with the evidence that discharges it (a Kani check of the harness or a refinement comparison), each behaviour of the production subject the proof does not exercise, and each helper the shadow shares with its expectation; a shadow holding an abstraction no evidence discharges is refused with a typed reason naming it and emits no harness; and a mutation of each listed shared helper, run through the shadow harness and the refinement run together, fails at least one of them. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-13 | The source of a `bounded_shadow` harness, parsed, names no crate but `core`, `alloc`, `std` and `kani` (so no path into `quire_contract_runtime`, `quire_exact` or any other crate the production oracle's crate depends on), no `kani::stub` or `kani::stub_verified`, and no `kani::assume` outside the argument-domain assumptions of FR-015-AC-11; a mutated generator that imports a runtime type, emits a stub or assumes a relation between two drawn values fails each check. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-14 | The result of a `bounded_shadow` family carries a refinement obligation, as generated Rust source in the same result, that names the production subject by its symbol, the shadow, the bounded domain as one inclusive bound per drawn argument, the abstraction function from a shadow value to a production value, and the observables the family's comparison reads (FR-028-AC-15); the abstraction function lives in one module that the shadow, the expectation and the Kani harness do not import. An obligation naming no production subject is not returned (a result with no obligation at all is FR-028-AC-7's). PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-15 | For every case the refinement run executes, the production subject's complete outcome under an unlimited meter agrees with the shadow's result on the observables its family names; for composite equality (FR-015-AC-71) that is `Completed` with the shadow's verdict and an admitted `equality.pair` count equal to the shadow's count. A case whose production outcome is `Refused` or `Incomplete`, or that differs on a named observable, is recorded as a disagreement carrying the case's drawn values and both results, and is never skipped as outside the domain. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-16 | A refinement run over a domain of at most the request's case cap cases executes every case and is classified `exhaustive`; a run over a larger domain, or one whose case count overflows `u128`, is classified `sampled`, runs the boundary cases and then exactly the request's sample size of seeded cases drawn uniformly over the whole domain from the request's seed, and records the class, the case count or that it overflowed, the cases run and the seed; two runs with equal inputs run the same cases. The boundary cases are each leaf's boundary values (each integer bound, its neighbour inside the bound, zero where inside, both Booleans, every presence state of an option or optional slot) taken one leaf at a time with every other leaf at its lower bound or first state, plus the case of every leaf at its lower bound and the case of every leaf at its upper bound: they are not a cross product. A run that executed fewer than the boundary cases plus the sample size is not `sampled`. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-17 | A verified `production` harness reports `production_proved`; a verified `bounded_shadow` harness reports `shadow_proved_refinement_exhaustive`, `shadow_proved_refinement_sampled`, `shadow_proved_refinement_not_run` or `shadow_proved_refinement_inconclusive` by its refinement run's class (`not_run` when none ran, `inconclusive` when the run reached a ceiling, FR-028-AC-24); a refinement disagreement reports `refinement_failed` whatever the shadow harness settled, including a verified one; and no result of a `bounded_shadow` harness reports `production_proved`. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-18 | A harness identity of a shadow family lists each abstraction the shadow makes by name with the evidence that discharges it (a Kani check of the harness or a refinement comparison), each behaviour of the production subject the proof does not exercise, and each helper the shadow shares with its expectation, marked `value_bearing` (it returns a bound, a presence, a member set or a count the comparison reads) or `order_only` (it returns only an order the compared observables do not read, as FR-149's conjunction and node count do not read field order), with the reason for each `order_only`; a shadow holding an abstraction no evidence discharges is refused with a typed reason naming it and emits no harness; and a mutation of each `value_bearing` helper that changes what it returns fails the shadow harness, the refinement run or the family's independent check of that helper (FR-018-AC-23 for the composite closure), at least one of them. An `order_only` helper is exempt from that mutation rule. PLANNED (IR-241). | Test (TC-039) |
 | FR-028-AC-19 | A refinement domain that does not contain every case the shadow harness's assumptions admit (a bound narrower on any argument) is refused with a typed reason naming the argument, with no harness; and the domain a shadow harness draws from equals the declared domain, or the narrowed bound FR-028-AC-8 records. PLANNED (IR-241). | Test (TC-039) |
 | FR-028-AC-20 | An item whose shape lies outside its family's shadow support is refused: a missing bound as `requires_bound` naming the unbounded node, a shape no shadow covers as `unsupported` naming the family and the capability, a shape over the family's size budget as `unsupported` naming the size and the budget; none emits a harness, none invents a bound, and none falls back to a `production` harness; siblings of a refused item settle as they do alone. PLANNED (IR-241). | Test (TC-039) |
-| FR-028-AC-21 | The backend process tree of every run is held to the harness identity's memory ceiling by observing the tree's peak resident memory; every execution evidence records that peak; a tree that exceeds the ceiling is killed whole and settles `inconclusive` with `KaniInconclusiveReason::MemoryExhausted`, serialized `memory_exhausted`, naming the ceiling and the observed peak; a FR-017 batch's launcher process tree is held to the ceiling as one group, killed whole when it exceeds it and refused as memory-exhausted with no member classified (the report is written only at the end); and on a platform where the generator can neither observe nor limit that memory, the run is refused with a typed reason before the backend starts. PLANNED (IR-241). | Test (TC-039) |
-| FR-028-AC-22 | A shadow family's machinery catches each seeded mutant: a shadow harness over a mutated shadow is `Falsified` with a concrete playback, a refinement run over a mutated production subject settles `refinement_failed` naming the first disagreeing case, a mutant that changes the shadow and its expectation together through a shared helper settles `refinement_failed`, and the unmutated family verifies with its cover satisfied and a refinement run that agrees; the mutant set of the first family is FR-015-AC-75's. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-21 | The backend process tree of every run is held to the harness identity's memory ceiling by a mechanism that observes or limits the tree's memory (the choice is the code change's, Open Questions); every execution evidence records the mechanism and, where it observes memory, the tree's peak resident memory; a tree that exceeds the ceiling is killed whole and settles as FR-028-AC-3 states, with `KaniInconclusiveReason::MemoryExhausted`, serialized `memory_exhausted`, a variant distinct from every existing reason; a FR-017 batch's launcher process tree is held to the ceiling as one group, killed whole when it exceeds it and refused as memory-exhausted with no member classified (the report is written only at the end); and on a platform where the generator has no mechanism that observes or limits that memory, the run is refused with a typed reason before the backend starts. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-22 | A shadow family's machinery catches each seeded mutant: a shadow harness over a mutated shadow is `Falsified` with a concrete playback, a refinement run over a mutated production subject settles `refinement_failed` naming the first disagreeing case, a mutant of a `value_bearing` shared helper that the production subject reads independently settles `refinement_failed`, one that it reads through the same helper is caught by the family's independent check of that helper (FR-018-AC-23 for the composite closure), and the unmutated family verifies with its cover satisfied and a refinement run that agrees; the mutant set of the first family is FR-015-AC-75's. PLANNED (IR-241). | Test (TC-039) |
 | FR-028-AC-23 | Every execution evidence records the Kani version, the Rust compiler version, the solver name and version, the unwind bound and the complete option vector the run used, for a `production` harness and a `bounded_shadow` harness alike, and a refinement evidence records the Rust compiler version and the production subject's crate version. PLANNED (IR-241). | Test (TC-039) |
+| FR-028-AC-24 | The refinement run is a native process launched through one typed refinement execution entry that reuses FR-017's launcher and FR-028's ceilings: it is held to the memory and wall-clock ceilings its harness identity records, its evidence (class, case count, cases run, seed, both ceilings, mechanism, peak where observed, outcome, versions) is recorded beside the shadow run's evidence, and a run that reaches either ceiling is stopped, records the ceiling, and yields strength `shadow_proved_refinement_inconclusive`, never `exhaustive`, `sampled`, `not_run` or `refinement_failed`. PLANNED (IR-241). | Test (TC-039) |
 ### Mutations these criteria detect
 
-Each of FR-028-AC-13 to FR-028-AC-23 is recorded with the mutation it exists to catch.
+Each of FR-028-AC-13 to FR-028-AC-24 is recorded with the mutation it exists to catch.
 
 | ID | Mutation that breaks it |
 |----|-------------------------|
@@ -196,11 +208,12 @@ Each of FR-028-AC-13 to FR-028-AC-23 is recorded with the mutation it exists to 
 | FR-028-AC-15 | Skip a case whose production outcome is `Refused`, or compare verdicts only, so a production subject that charges one pair too many, or refuses a legal pair, agrees with the shadow. |
 | FR-028-AC-16 | Report every run as `exhaustive`, or enumerate only the first cap cases of a larger domain and call it `exhaustive`, so a sampled run reads as a complete one. |
 | FR-028-AC-17 | Map a verified shadow harness to `production_proved`, or report the shadow harness's verdict when the refinement run disagrees. |
-| FR-028-AC-18 | Leave an abstraction undischarged (for example the omitted payload of an absent slot) and pass; or let the shadow and its expectation share one field-order helper and list none, so a mutation of that helper moves both and the proof holds vacuously (ADR-011 FB-10). |
+| FR-028-AC-18 | Leave an abstraction undischarged (for example the omitted payload of an absent slot) and pass; or let the shadow and its expectation share one bound-reading helper and list none, so a mutation of that helper moves both and the proof holds vacuously (ADR-011 FB-10); or mark a bound-reading helper `order_only` to escape the mutation rule. |
 | FR-028-AC-19 | Refine over a smaller integer range than the shadow draws, so the cases the shadow proves and the production subject was never compared on coincide only in the cases that were. |
 | FR-028-AC-20 | Treat an unbounded integer leaf as the whole `i64`, a recursive declaration as depth one, or an unsupported family as a production harness, so a harness exists that neither covers the declared domain nor says it does not. |
-| FR-028-AC-21 | Enforce the ceiling on the launcher process alone (CBMC runs as a child and holds the memory), classify a memory kill as `timed_out` or `no_verdict`, or run the backend unbounded when the platform offers no way to measure. |
-| FR-028-AC-22 | A suite that mutates only the production side, so a shadow that always answers `true` verifies; or only the shadow side, so a production subject that never compares a field agrees. |
+| FR-028-AC-21 | Enforce the ceiling on the launcher process alone (CBMC runs as a child and holds the memory), classify a memory kill as `timed_out` or `no_verdict`, or run the backend unbounded when the platform offers no mechanism, or record a peak that was never observed. |
+| FR-028-AC-24 | Run the refinement in the test process with no ceiling, so an unbounded domain hangs the lane; or report a refinement that hit a ceiling as `not_run` or `sampled`, so a run that never finished reads as one that did. |
+| FR-028-AC-22 | A suite that mutates only the production side, so a shadow that always answers `true` verifies; or only the shadow side, so a production subject that never compares a field agrees; or counts a permutation of an order-only helper as a mutant the machinery must catch. |
 | FR-028-AC-23 | Record the version of the first `kani` or `rustc` on `PATH` rather than the one the run launched, or omit the solver, so two runs under different backends read as one. |
 
 ## Rationale
@@ -260,13 +273,19 @@ stays FR-017's "no memory ceiling"; the FR-028 ceilings join the grouping key th
 
 None of these is decided here, and none is guessed.
 
-- **Is an exhaustive native refinement enough for the MVP bar? (owner)** A
+- **What does "complete Kani" accept as an end state? (owner)** A
   `shadow_proved_refinement_exhaustive` result says the production oracle agrees with a Kani-proved
   shadow on every case of the bounded domain; it is not a Kani proof of the production code, and
-  no probe here showed one tractable (Rationale), so the result is never `production_proved`. IR-264
-  asks for a harness that verifies. Whether the owner counts the exhaustive class, and only that
-  class, as meeting it, or requires a production proof, is the owner's scope decision.
-  `shadow_proved_refinement_sampled` is differential testing and is not offered as meeting it.
+  no probe here showed one tractable (Rationale), so no criterion here reports it as
+  `production_proved`. IR-264 asks for a harness that verifies. No criterion here decides: (a)
+  whether `shadow_proved_refinement_exhaustive` is an honest end state, or a production proof is
+  required; (b) whether a family row can close on `exhaustive` when realistic ranges are too wide
+  to enumerate and their items report `sampled`; (c) whether `sampled`, `not_run` or `inconclusive`
+  is ever acceptable; (d) whether `requires_bound` on an unbounded integer leaf is an accepted end
+  state (ADR-003 Q2 says an item with no finite bound gets no harness). The strengths are reported
+  as they are and the owner's answer decides which of them closes a row.
+- **Which QSL terminal value a shadow result settles to (QSL).** FR-029 Open Questions carries it;
+  FR-029-AC-17 gives a shadow result no terminal value and invents none, so it is never `Proved`.
 - **The refinement subject after the evaluation seam moves (QSL, IR-583; Contract Runtime and
   `quire-exact`, IR-349).** The refinement obligation targets the generated oracle's signature and
   isolates the abstraction function in one module (FR-028-AC-14), so only that module changes if the
@@ -285,10 +304,12 @@ None of these is decided here, and none is guessed.
   its parameter node id and a leaf path; FR-025-AC-1 and FR-025-AC-2 bind by parameter node id and
   declared domain alone, and FR-025-AC-7 refuses a composite as an argument. Adding the leaf path
   to FR-025 is not done here.
-- **How a memory ceiling is observed (code change, owner for platform support).** FR-028-AC-21
-  states the observable result and refuses a platform with no way to observe or limit memory; it
-  does not choose between polling the process tree's resident memory, an address-space limit or a
-  control group, and the choice decides which platforms are supported.
+- **Which memory mechanism, and which platforms (code change, owner for platform support).**
+  FR-028-AC-21 is mechanism-neutral: any mechanism that observes or limits the tree's memory
+  (polling resident memory, an address-space limit, a control group) meets it, the evidence names
+  the mechanism, and a platform with none is refused. The choice decides which platforms are
+  supported. An address-space limit is not a resident-memory limit (the Rationale's probe held a
+  12 GB cap while CBMC's resident memory was about 4 GB), so the mechanism's meaning is recorded.
 - **A batch's memory ceiling.** FR-017's batches run one launcher for N harnesses and write one
   report at the end. FR-028-AC-21 holds the group's process tree to the ceiling, as the
   wall-clock bound does (FR-028-AC-12); the group is killed whole and no member classified. Whether
@@ -314,6 +335,20 @@ change.
 - A shadow for function application (FR-021) and for the kernel types ADR-003 Q1 names.
 - A bounded depth, declared in the model, for a recursive declaration, so it can leave
   `requires_bound`.
+- The other interim refusals of FR-015's unsupported-shape table, none an end state: an integer
+  bound outside `i64` (`domain_not_representable_in_i64`, a limit of the shadow's representation,
+  since the production `Integer` is unbounded), `ShadowShapeOverBudget`, and the reference, model
+  and relation blocker (`agent-ix/quire-spec-language#120`). A `requires_bound` on an unbounded
+  integer leaf is the owner's question (a, d above), not a checklist item.
+- A refinement run that is `exhaustive` for each family: `shadow_proved_refinement_sampled`,
+  `shadow_proved_refinement_not_run` and `shadow_proved_refinement_inconclusive` are interim
+  strengths (ADR-003 Q1 asks for agreement on the bounded domain, which none of them shows). Whether
+  `sampled` may ever close a row is the owner's question (c).
+- Backing the native criteria that cover what the shadow proof does not exercise: FR-018-AC-7,
+  AC-8 and AC-9 are planned and FR-018-AC-2 is partly covered, so FR-015-AC-76 records each as
+  unbacked until the matrix lists it covered.
+- A replay path for a shadow counterexample, which needs FR-025's binding for a composite leaf;
+  until then a falsified shadow harness has no terminal value (FR-029-AC-17).
 - Renaming ADR-003's Q1 sentence on co-ownership once the question above is answered.
 - The charge amounts the shadow does not model (`equality.plan-form` work units,
   `equality.result-retain`) stay under FR-018-AC-2's native agreement.
