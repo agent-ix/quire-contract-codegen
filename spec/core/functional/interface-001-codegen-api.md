@@ -130,6 +130,10 @@ operations:
     inputs: [process exit success, exported Kani report bytes, console text, optional obligation kind]
     output: ClassifiedRun (KaniRunOutcome, SUCCESS-check count and the per-check KaniCheckResult view) | KaniReportRefusal
     semantics: the classifier execute_kani_obligation uses, so a test asserting falsification routes through production classification and an inconclusive run is never read as a decided failure; the verdict is read from the report only and the console text is read only for the falsifying playback; a report it cannot read exactly is a refusal, never an outcome (FR-017)
+  - name: run_terminal_value
+    inputs: [KaniRunOutcome, the SUCCESS-check count, an optional ReplaySettlement (reproduced | disagreement carrying QSL's DisagreementCause | refused carrying a ReplayRefusal | setup refusal carrying a QSL Code | fault | CG defect), which the From impls of SpineReplayError, ReplayPackageError, FrameReplayError, DependencyLockError, EvidenceFailureCause, ReplayVerdict and the QSL CallSiteRefusal build; the EvidenceFailureCause impl reads a decode failure and a value outside the proof bound as a CG defect, a disagreement as its QSL cause, and a reproduction in a category other than violation as a CG defect]
+    output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement)
+    semantics: the one match over the pair (outcome with its inconclusive reason, replay settlement) with no wildcard arm; a falsified outcome is Refuted only with a reproduced replay, and the settlement accompanies a falsified outcome only (FR-029)
   - name: generate_composite_equality_oracles
     inputs: [admitted CheckedPackageV2, CompositeEqualityItem list]
     output: CompositeEqualityOracles | OracleGenerationError
@@ -155,8 +159,8 @@ operations:
     output: the qsl-replay WitnessArmResult | SpineReplayError (UnboundArgument{argument} | FieldDelimiter | Transcript(MalformedTranscript) | Refused(ReplayRefusal) | WrongArm)
     semantics: builds the backend-witness transcript keyed by parameter node id and calls qsl_replay::replay, returning QSL's own settlement; a Boolean value is replayed as 1 or 0 (FR-016)
   - name: ReplayPackage::new
-    inputs: [ReplayInputs (proved unit LockedSource, DependencyLock list, backend manifest digest, accounting and stage limits), function name]
-    output: ReplayPackage | ReplayPackageError (InvalidFunction{function} | Dependencies(DependencyLockError: Duplicate{identity} | Input(DependencyInputRefusal)); planned (IR-465, FR-016-AC-24): Duplicate is removed and a repeated dependency identity arrives as Input, refused by QSL's DependencyInput::new | CallSite(CallSiteRefusal))
+    inputs: [ReplayInputs (proved unit LockedSource, DependencyLock list, accounting and stage limits), function name]
+    output: ReplayPackage | ReplayPackageError (InvalidFunction{function} | Dependencies(DependencyLockError: Input(DependencyInputRefusal), where a repeated dependency identity is QSL's DuplicateIdentity refusal from DependencyInput::new, FR-016-AC-24) | CallSite(CallSiteRefusal))
     semantics: compiles the proved unit, together with the lock's dependency selections as its dependency input, through qsl_replay::call_site and keeps the package id and each parameter's node id; ReplayPackage::request builds the complete ReplayRequestWire from the same lock, filling package.dependencies with one entry per lock dependency selection in ascending identity order (identity, the lock's recorded package_id, the dependency's own source); every source's bytes, the unit's and each dependency's, are provided by digest; QSL refuses a request naming a dependency the unit does not import (FR-016)
   - name: ReplayPackage::obligation_identity
     inputs: [ReplayPackage, KaniObligationIdentity (the harness replayed)]
@@ -172,7 +176,7 @@ operations:
     semantics: compiles the proved unit with its domain packages and dependencies through qsl_replay::call_site selected by the operation's name, and builds the frame counterexample payload from the answer (anchor, frame, frame occurrence); the envelope's clause_node is the payload's frame node and its occurrence_key the payload's frame occurrence; FrameReplay::replay reconstructs the envelope and calls qsl_replay::replay_frame, returning QSL's result (FR-015)
   - name: replay_counterexample
     inputs: [KaniObligationIdentity, Kani playback transcript, ReplayPackage]
-    output: ReplayVerdict (Reproduced | EvidenceFailure(Decode(DecodeFailure) | Domain | Verdict)) | SpineReplayError (the replay_falsification variants | Identity(ObligationIdentityError))
+    output: ReplayVerdict (Reproduced | EvidenceFailure(Decode(DecodeFailure) | Domain | Verdict, which carries QSL's DisagreementCause when the settlement is inconclusive)) | SpineReplayError (the replay_falsification variants | Identity(ObligationIdentityError))
     semantics: decodes the transcript, checks every integer value against its argument's declared bounds before any replay, builds the O-09 obligation identity of the harness (ReplayPackage::obligation_identity), replays natively, and reports a decode, domain or verdict mismatch as the one EvidenceFailure verdict, never as a clause success or failure; Boolean and i64 values only (FR-016)
   - name: replay_counterexample_through
     inputs: [KaniObligationIdentity, Kani playback transcript, ReplayPackage, an executor from the built ReplayRequestWire to a qsl-replay ReplayResult or ReplayRefusal]
@@ -355,6 +359,7 @@ The interface's features in declaration order: every operation the contract abov
 | run_launcher_with_timeout | operation |
 | launch_evidence | operation |
 | classify_kani_run | operation |
+| run_terminal_value | operation |
 | generate_composite_equality_oracles | operation |
 | negotiate_backend_provider | operation |
 | generate_routed | operation |

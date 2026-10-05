@@ -16,7 +16,10 @@ use qsl_replay::{
     ReplayRequestWire, ReplaySource, Witness, WitnessEnvelope, WitnessPacket, WitnessRefusal,
 };
 
-use crate::replay::function::{DependencyLockError, ReplayInputs};
+use crate::{
+    kani::terminal::ReplaySettlement,
+    replay::function::{DependencyLockError, ReplayInputs},
+};
 
 /// One document the replay reads from the request's byte provision, with the digest the request
 /// addresses it by.
@@ -78,6 +81,22 @@ impl fmt::Display for FrameReplayError {
 }
 
 impl std::error::Error for FrameReplayError {}
+
+/// A frame replay failure, read as the settlement of a falsified run (FR-029): the failures this
+/// repository raised carry no QSL code and are defects, and the QSL refusals read by their walked
+/// content.
+impl<'a> From<&'a FrameReplayError> for ReplaySettlement<'a> {
+    fn from(error: &'a FrameReplayError) -> Self {
+        match error {
+            FrameReplayError::Dependencies(cause) => cause.into(),
+            FrameReplayError::CallSite(refusal) => refusal.as_ref().into(),
+            FrameReplayError::Name(_)
+            | FrameReplayError::Transcript(_)
+            | FrameReplayError::Envelope(_) => Self::CgDefect,
+            FrameReplayError::Refused(refusal) => Self::Refused(refusal),
+        }
+    }
+}
 
 /// A frame counterexample ready to replay: QSL's request and the packet the envelope is
 /// reconstructed from.

@@ -55,8 +55,7 @@ cause, and that the map is one match with no wildcard arm.
 
 ## Status
 
-Planned. No outcome maps to QSL's terminal value at this revision. Steps 8, 10, 11 and 12 wait on the unmerged
-QSL `Inconclusive` terminal value, because they include settlements whose value is
-`Inconclusive`; step 9, which includes `InvalidFunction` and `Name` as `Failed`, does not. Step 2
-asserts the cause only; the `Declined` code waits on IR-605 and QSL-351, as relayed in FR-030
-Status.
+Planned. No outcome maps to QSL's terminal value at this revision. The map is one `match` over every
+`KaniOutcomeKind`, and `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined`, whose QSL
+value carries a `DeclineCode` with no IR arm until IR-605 and QSL-351, as FR-030 Status relays. No
+step can run before that arm exists. Step 2 asserts the cause only.

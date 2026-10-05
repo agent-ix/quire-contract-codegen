@@ -365,7 +365,6 @@ impl Twin {
                 bytes: self.unit.clone(),
             },
             dependencies: Vec::<DependencyLock>::new(),
-            backend_manifest: DigestRecord::mint(DigestDomain::ToolManifestJcsV1, [3; 32]),
             accounting_limits: limits(1_000_000),
             stage_limits: StageLimits {
                 s1: ScalarLimits {

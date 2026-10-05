@@ -41,7 +41,10 @@ The replay settlement is the result of replaying the falsified run's counterexam
 - fault: an `InternalFault` anywhere in the error the replay path returned;
 - CG defect: exactly the errors FR-029-AC-11 lists, which this repository raised and which carry no
   QSL catalog code, including `ReplayPackageError::InvalidFunction` and
-  `FrameReplayError::Name`;
+  `FrameReplayError::Name`, and a replay that settled `ReproducedWithEvaluatedWitness` in a
+  category other than `violation`. QSL proves `violation` for every replay, so no QSL result is
+  that state; only this repository's public `EvidenceFailureCause::Verdict` can state it, which
+  makes it a CG defect (FR-016-AC-13: never a reproduced failure);
 - setup refusal on data: a refusal of the replay setup that this repository reaches after the run
   was falsified, that is not a `ReplayRefusal` returned by `qsl_replay::replay`, and that carries
   a QSL catalog code: a `CallSiteRefusal` other than `Fault` (code from `CallSiteRefusal::code()`)
@@ -70,7 +73,9 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 
 ## Outputs
 
-- One `qsl_replay::TerminalValue`.
+- One `qsl_replay::TerminalValue` for every pair the Inputs define.
+- A typed refusal, `TerminalPairError`, for a pair they do not: a falsified outcome with no replay
+  settlement (`MissingSettlement`), or any other outcome with one (`UnexpectedSettlement`).
 
 ## Behavior
 
@@ -90,6 +95,7 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   | `falsified` | setup refusal on data | `Inconclusive(InconclusiveCause::ReplayRefused)`, carrying the refusal's QSL catalog code |
   | `falsified` | fault | `Failed` |
   | `falsified` | CG defect | `Failed` |
+  | `falsified` | reproduced in a category other than `violation` (a CG defect; no QSL result states it) | `Failed` |
 
   The remaining outcomes take no settlement:
 
@@ -128,9 +134,9 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 - The Kani adapter shall map to `Failed` exactly these failures, which this repository raises and
   which carry no QSL catalog code: `SpineReplayError::{UnboundArgument, FieldDelimiter, Transcript,
   WrongArm, Identity}`, `FrameReplayError::{Transcript, Envelope, Name}`,
-  `ReplayPackageError::InvalidFunction`, a Kani playback outside the harness proof bound, and a
+  `ReplayPackageError::InvalidFunction`, a Kani playback outside the harness proof bound, a
   decode failure (`DecodeFailure`), which is a playback that does not type against the bindings
-  this repository persisted. `ReplayPackageError::InvalidFunction` wraps a discarded `InvalidIdentifier`
+  this repository persisted, and a replay reproduced in a category other than `violation`. `ReplayPackageError::InvalidFunction` wraps a discarded `InvalidIdentifier`
   from `Identifier::new`, which has no code. `FrameReplayError::Name` wraps QSL's
   `EmptyQualifiedName`, which has no code; as built, no call reaches it, because every
   `QualifiedName::new` call passes a non-empty list.
@@ -141,6 +147,13 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 - The Kani adapter shall expose no `proof_category` function. A value's category is
   `TerminalValue::category()` of it and nothing else
   ([AD-003](../../assurance/AD-003-evidence-chain.md) E-9).
+- The Kani adapter shall refuse a falsified outcome given no replay settlement, and any other
+  outcome given one, with a `TerminalPairError`, and shall return no terminal value for it. This
+  is a design choice: the map takes the outcome and an optional settlement, so the driver calls
+  one function with one shape, and the pairing the Inputs state is checked at that call. The
+  refusal is typed rather than a value, and FR-029-AC-15 asserts it. Other designs make every
+  pair total without a refusal, for example a replay callback the map calls only for a falsified
+  outcome; they were not chosen.
 - The Kani adapter shall map no outcome to `Tested`.
 - The generator shall use QSL's terminal-value type, defining none of its own and importing none
   from Contract IR.
@@ -158,10 +171,11 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 | FR-029-AC-8 | `falsified` with a replay disagreement of each `DisagreementCause` (`Verdicts`, `Witness` and `NoValue`) maps to `Inconclusive(ReplayParity)` carrying that `DisagreementCause`. | Test (TC-040) |
 | FR-029-AC-9 | `falsified` with a non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()` of that refusal. | Test (TC-040) |
 | FR-029-AC-10 | `falsified` with a fault maps to `Failed` for each of `ReplayRefusal::Fault`, `ReplayRefusal::Admission(AdmissionFailure::Fault)`, `CallSiteRefusal::Fault`, `CallSiteRefusal::Fault` wrapped in `ReplayPackageError::CallSite`, and `CallSiteRefusal::Fault` wrapped in `FrameReplayError::CallSite`. | Test (TC-040) |
-| FR-029-AC-11 | `falsified` with each CG-raised failure that carries no QSL code maps to `Failed`: `SpineReplayError::UnboundArgument`, `FieldDelimiter`, `Transcript`, `WrongArm` and `Identity`; `FrameReplayError::Transcript`, `Envelope` and `Name`; `ReplayPackageError::InvalidFunction`; a playback outside the harness proof bound; and a decode failure. No `Inconclusive(ReplayRefused)` value carries a code that no QSL refusal value supplied. | Test (TC-040) |
+| FR-029-AC-11 | `falsified` with each CG-raised failure that carries no QSL code maps to `Failed`: `SpineReplayError::UnboundArgument`, `FieldDelimiter`, `Transcript`, `WrongArm` and `Identity`; `FrameReplayError::Transcript`, `Envelope` and `Name`; `ReplayPackageError::InvalidFunction`; a playback outside the harness proof bound; a decode failure; and a replay reproduced in a category other than `violation`. No `Inconclusive(ReplayRefused)` value carries a code that no QSL refusal value supplied. | Test (TC-040) |
 | FR-029-AC-12 | Across every replay settlement other than reproduced, `falsified` maps to a value other than `Refuted`. | Test (TC-040) |
 | FR-029-AC-13 | `falsified` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped in `ReplayPackageError` and `FrameReplayError`, maps to `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or `DependencyInputRefusal::code()` of that refusal, and never to `Declined`. | Test (TC-040) |
 | FR-029-AC-14 | `falsified` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-040) |
+| FR-029-AC-15 | A falsified outcome given no replay settlement is refused with `TerminalPairError::MissingSettlement`, and each other outcome (`verified`, `cover-unsatisfied` and every inconclusive reason) given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns a terminal value. | Test (TC-040) |
 
 ## Dependencies
 
@@ -169,23 +183,34 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   [FR-028](./FR-028-bounded-proof-ceilings.md), which classify the outcome; QSL's `qsl-replay`, which
   defines `TerminalValue` and the replay result and refusal types; QSL ADR-013 O-16 and C-09, ADR-011
   T-13 and FR-121; QSpec FR-331. The `Inconclusive` terminal value and its `ReplayParity` and
-  `ReplayRefused` causes are not yet in QSL.
+  `ReplayRefused` causes are merged in QSL `main`.
 - **Downstream**: [TC-040](../matrix/TC-040-run-outcome-terminal-record.md).
 
 ## Status
 
-Planned (Linear IR-465). No code implements this map at this revision. The code half is blocked on
-QSL types that are not merged.
+Built (Linear IR-465) in `kani/terminal.rs` as `run_terminal_value`, with the typed
+`ReplaySettlement` it reads and, in `replay/`, the `From` conversions from every error the replay
+path returns. Every criterion is backed by a tagged test except two. FR-029-AC-3 is backed for the
+timed-out and exhausted-unwind-bound reasons only: `KaniInconclusiveReason` has no memory-exhausted
+reason until FR-028-AC-3 adds one, and the map's `match` fails to compile there until that arm is
+written. FR-029-AC-10 is not backed: the map and the conversions read each fault as `Failed`, but a
+test cannot construct QSL's `InternalFault`, which `qsl-replay` does not re-export and which this
+repository may not name through another QSL crate; the criterion stays planned until QSL exports a
+constructor or the type through `qsl-replay`.
 
-Merged in QSL `main`, read at this revision: `TerminalValue` has seven variants and no
-`Inconclusive`, `Declined` carries a `ProofRefusalCause` only, `InconclusiveCause` has only
-`KaniVacuousProof`, and `Proved` carries a `u32`. `ReplayRefusal::code()`,
-`CallSiteRefusal::code()` and `DependencyInputRefusal::code()` are public, so every code the map
-carries exists. Pending in QSL (QSL-351, in progress; what has merged under it is the `ToolPin`
-deletion only): `TerminalValue::Inconclusive`, `InconclusiveCause::ReplayParity` and
-`ReplayRefused(Code)`, a `Declined` that carries a code, and a typed request index in the terminal
-record. FR-029-AC-8, AC-9, AC-13 and AC-14 cannot be built until those types merge, and the code is
-written against the merged API then.
+Two points the map decides, now stated in the Description, Outputs, Behavior and criteria above
+(FR-029-AC-11 and FR-029-AC-15). A pair the driver mis-builds is a typed `TerminalPairError`, not a
+value. That is a design choice, not a necessity: the map takes the outcome and an optional
+settlement so the driver calls one function with one shape, and the typed refusal is asserted by
+FR-029-AC-15. A replay that settled `ReproducedWithEvaluatedWitness` in
+a category other than `violation` carries no `DisagreementCause` and is not a refutation
+(FR-016-AC-13); the conversion reads it as a CG defect, `Failed`, rather than inventing a cause.
+
+Merged in QSL `main`, read at this revision: `TerminalValue::Inconclusive`,
+`InconclusiveCause::{ReplayParity, ReplayRefused(Code)}`, `Proved { success_checks: u32 }` read as
+vacuous at zero through `ReportedInconclusiveCause`, `Declined { cause, code: DeclineCode }`, and
+`TerminalValue::from_replay_refusal`, which the map uses for a refusal `qsl_replay::replay`
+returned. `DeclineCode` has only its QSL catalog arm; the map produces no `Declined`.
 
 Vacuous and cover-unsatisfied rows. QSL ruled, relayed on IR-465 (a QSL ruling recorded by the
 planner), that vacuity stays `Proved { success_checks: 0 }`, reported through a separate enum, with
@@ -213,9 +238,7 @@ repository builds the lock only after Kani refuted, so for it the settlement is 
 report an input defect as a fault. FR-016-AC-24 states the builder's behaviour, and FR-029-AC-14
 the mapping.
 
-What is buildable now, and what is not. Merged QSL code already has `DependencyInput::new` with
-`DuplicateIdentity`, so deleting the pre-check in the lock admission and the `Duplicate` variant,
-and letting QSL's constructor refuse (FR-016-AC-24, which changes the test
-`tc_026_a_lock_repeating_a_dependency_is_refused`), needs no pending QSL type. That is the job of
-the code change, not of this spec change. The mapping of the resulting `Input` to `ReplayRefused`
-(FR-029-AC-14) waits on the pending `Inconclusive` types above.
+The pre-check in the lock admission and the `Duplicate` variant are deleted, and QSL's
+`DependencyInput::new` refuses the repeated identity (FR-016-AC-24, asserted by
+`tc_026_a_lock_repeating_a_dependency_is_refused`); the resulting `Input` maps to `ReplayRefused`
+(FR-029-AC-14).
