@@ -71,11 +71,19 @@ the kind as this crate's `BackendKind`, and the node as the IR
 `CheckedNodeId`. The driver converts its own routed value into it, as it
 already does for the FR-331 envelope.
 
+For that envelope, the driver projects each registered QSL descriptor once into
+CG's own `BackendDescriptor`, copying identity, advertised (kind, mode) pairs
+and `origin()` without changing their meaning (FR-019-AC-15). QSL's registry
+builder sets the origin; neither this routed-item conversion nor CG infers one
+from the backend identity, provider bytes or a side map. The current built-in
+Kani route remains linked. The planned process-kind classification and its
+generation output belong to IR-629; they do not change this crate boundary.
+
 - Not `quire-driver`: the driver depends on this crate, so the reverse edge is
   a Cargo package cycle.
 - Not `qsl-route`'s `BackendId`: QSL ADR-011 §2.1 and ADR-013 T-7 put no
   shared Rust crate between QSL and CG for these types; each side converts
-  from the wire. Taking it would also widen this crate's one QSL edge
+  its data at the driver boundary. Taking it would also widen this crate's one QSL edge
   (`qsl-replay`) that quire-driver FR-001-AC-1 asserts.
 - Not the IR model crate: the IR is target-neutral and cannot name a CG
   backend kind, and this crate depends on the IR, not the other way round.
