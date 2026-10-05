@@ -1,6 +1,6 @@
 ---
 id: TC-047
-title: "Check public routed scalar replay binding and proposition preservation"
+title: "Check public routed scalar lowering replay and generated-content binding"
 type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-032
@@ -8,61 +8,61 @@ relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-029
     type: verifies
 ---
-# TC-047: Check public routed scalar replay binding and proposition preservation
+# TC-047: Check public routed scalar lowering replay and generated-content binding
 
 ## Description
 
 Planned public-consumer coverage of
-[FR-032](../functional/FR-032-routed-scalar-replay-binding.md), including the distinction between
-an arithmetic-parity falsifier and a source violation. No test implementation or passing
-positive replay is claimed. Positive scalar execution/evidence remains gated on that
-requirement's unresolved QSL capability and proposition decision.
+[FR-032](../functional/FR-032-routed-scalar-replay-binding.md), distinguishing lowering parity
+failure from source-property refutation. No implementation or passing replay is claimed. The
+completed QSL route is gated on QSL-641's typed scalar arm, native generated-oracle observation
+contract and named harness-defect terminal cause.
 
 ## Test Procedure
 
-1. Obtain a real QSL-emitted checked package for `x + 1` over `Int[0,9]` and route its scalar
-   node through public `generate_routed`. Retain the actual returned identity and harness;
-   compile a public scalar builder call using those types directly.
-2. In the named real-Kani lane, run the generated harness and its arithmetic mutation control.
-   Retain the selected assertion playback, including the qualified harness name and actual
-   symbolic operand bytes. An unmutated out-of-result-range value is an expected refusal;
-   do not fabricate a source-domain falsifier or a function-contract harness.
-3. Build the scalar request from the actual identity, playback and proving package. In today's
-   unsupported proposition, require the typed setup refusal and observe no QSL replay call.
-   Independently try missing/extra operands, wrong widths, malformed/over-limit playback,
-   another harness name, each out-of-domain endpoint, swapped operands, another node or
-   operation, and a symbolic value that would replace the source's literal `1`.
-4. Once the upstream proposition and typed capability exist, use their admitted request and
-   evidence, call QSL in the public consumer, and pass its actual result to the CG converter.
-   Observe the request selection, node/operation identity and operand correspondence against
-   the original QSL emission. Compare an admitted boundary operand with the adjacent refused
-   one; change the witness and verify that the evaluated evidence changes accordingly.
-5. For admitted scalar evidence, compare genuine same-proposition reproduction, disagreement,
-   QSL non-fault refusal and executor fault. Bind another run/result to the first scalar binding;
-   separately change its node and operation and require a typed binding refusal with no
-   settlement. Error-path seam observations may use a recording/failing executor, but the
-   positive integration must use QSL's actual evaluation.
-6. Pass each converter settlement to public `run_terminal_value` with the corresponding
-   falsified run. Repeat with no settlement to reuse
-   [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15. Trace the actual
-   executable tests to each criterion they assert; this document alone supplies no coverage.
+1. Obtain a real QSL-emitted checked package for `x + 1` over `Int[0,9]`; call public
+   `generate_routed` for its scalar node and retain the returned identity and generated harness.
+   Compile a public scalar builder call using those types directly, without a function identity.
+2. In the named real-Kani lane, run the generated harness and an arithmetic mutation control.
+   Retain its actual selected assertion playback and proved generated content. An unmutated
+   out-of-result-range value is an expected refusal; do not fabricate a source-domain falsifier.
+3. Build the scalar plan from the actual identity, decoded playback, proving package and
+   canonical identity of that same proved generated oracle. Until the upstream capability exists,
+   require the unsupported-capability refusal. Try another harness name, missing/extra operands,
+   wrong widths, malformed/over-limit playback, adjacent out-of-domain endpoints, reordered
+   operands, another node/operation, changed result range and changed accounting limits.
+4. For the admitted upstream route, record the exact QSL request's operator, operands, operand
+   ranges, result range and limits. Ensure the literal operand stays in its singleton range.
+   Execute the same proved oracle artifact natively over those operands and limits, following the
+   upstream observation contract, and retain the typed outcome. Attempt
+   replay without that observation, with another artifact's observation and with a regenerated
+   correct oracle replacing the proved arithmetic mutation.
+5. Call QSL's scalar arm in the public consumer, then pass its result to the CG converter.
+   Compare generated/exact divergence, agreement despite retained Kani falsification, a QSL
+   non-fault refusal and an executor fault. Change the actual generated arithmetic, not the
+   claimed replay verdict. Error-path seam observations may use a recording/failing executor;
+   the positive evaluation must use QSL and the actual generated artifact.
+6. Bind another scalar result/run to the first binding and require no settlement; repeat by
+   changing node, operator, operands, result range and limits individually. Pass valid converter
+   settlements to `run_terminal_value`; repeat with no settlement to reuse
+   [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15. Trace executable
+   tests to each criterion they actually assert; this document alone provides no coverage.
 
 ## Expected Results
 
 | Criterion | Planned observation | Mutation that must fail the check |
 |---|---|---|
-| FR-032-AC-1 | The public typed consumer uses only the scalar identity; an unavailable scalar selection refuses | Make the builder require a function identity or accept an unrelated function as the scalar selection |
-| FR-032-AC-2 | Real ordered playback decodes or gives the distinct typed refusal before replay | Decode with alphabetic operand order, ignore a mismatched harness name, or silently discard extra bytes |
-| FR-032-AC-3 | Bound endpoints and authoritative source operands stay tied to this node/operation; each invalid variant refuses | Skip one bound check, accept a changed operation/node, or substitute a drawn operand for literal `1` |
-| FR-032-AC-4 | Arithmetic parity failure and expected result-range refusal do not become a source violation | Treat every Kani falsification or every runtime refusal as `Reproduced` |
-| FR-032-AC-5 | Public consumer executes QSL between builder and converter (admitted branch gated) | Execute replay inside the builder or return a locally computed replay verdict |
-| FR-032-AC-6 | Another scalar result/run cannot yield a settlement for this binding (positive evidence gated) | Remove the result/run-to-scalar binding check |
-| FR-032-AC-7 | Existing terminal readings and QSL codes survive conversion (QSL-admitted branch gated); CG-only setup refusal is `Failed` | Convert disagreement to `Refuted`, fault to `ReplayRefused`, or invent a QSL code for an unsupported CG selection |
-| FR-032-AC-8 | Real routed emission and playback exercise the seam; absent settlement refuses; positive `Refuted` remains gated | Replace routed generation with a hand-built function harness, invent a source-domain falsifier, or synthesize a settlement when it is absent |
+| FR-032-AC-1 | Public typed consumer uses scalar identity; unavailable scalar capability refuses | Require function identity or admit a synthetic predicate as the scalar route |
+| FR-032-AC-2 | Ordered actual playback decodes or gives a distinct typed refusal | Decode in alphabetic order, ignore another harness name or discard extra bytes |
+| FR-032-AC-3 | Operand endpoints and request operator/ranges/limits agree with the persisted harness/package | Skip a bound check, replace operator/node, use result bounds for a literal or swap operands |
+| FR-032-AC-4 | Same-proved-artifact observation is required and tied to operands/limits/content | Treat playback as a generated result or accept fresh regeneration that removes the mutation |
+| FR-032-AC-5 | Driver executes the proved artifact and calls QSL between builder and converter; QSL measures the current completed-value/refused-outside-range projection | Execute inside the CG builder, substitute a local evaluator, stub the positive verdict or add unproved refusal-cause/accounting-counter equality |
+| FR-032-AC-6 | Another scalar result/run yields no settlement for this binding | Remove the result/run-to-scalar binding check or omit result range/limits from it |
+| FR-032-AC-7 | Lowering divergence is `Failed`, agreement is named harness-defect `Inconclusive`, QSL refusal retains its code and faults are `Failed`; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
+| FR-032-AC-8 | Real routed QSL emission, Kani playback and proved-oracle observation exercise the seam; absent settlement refuses; expected result-range refusal is not a violation | Use a hand-built function harness, relabel expected refusal as falsification or synthesize absent settlement |
 
-For admitted same-proposition evidence, `Refuted` requires QSL's genuine typed reproduction of
-that violation and this scalar binding. Disagreement is `Inconclusive(ReplayParity)`, non-fault
-QSL refusal is `Inconclusive(ReplayRefused)` with its original code, and faults/CG defects are
-`Failed`. Another obligation's evidence yields no settlement. No settlement yields
-`TerminalPairError::MissingSettlement` and no terminal value. The positive reproduction
-observation is not accepted until the missing upstream semantics are resolved.
+All checks are planned; completed-route observations have the same explicit upstream gates as
+[FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never
+produces a source-property `Refuted` or `Verified` terminal. No settlement yields
+`TerminalPairError::MissingSettlement` and no terminal value. Missing upstream types/causes
+must be reported as a gate, not implemented as local QSL lookalikes.
