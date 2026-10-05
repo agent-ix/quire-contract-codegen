@@ -794,64 +794,36 @@ enum Side {
     PostState,
 }
 
-/// The framed object's fields and ranges. A model declaration uses the caller's draw order after
-/// checking every name against the admitted table; a non-declaration uses body-member order.
-/// A present field without a representable `i64` range remains unranged.
+/// The framed object's selected model fields in caller draw order, checked against the admitted
+/// table. A present field without a representable `i64` range remains unranged.
 fn state_fields(
     graph: &Graph<'_>,
     shape: &ClauseShape,
     requested: &[String],
 ) -> Result<Vec<StateField>, StateClauseReplayError> {
     let object = &shape.scope.object;
-    let body_members = graph
-        .nodes
-        .get(object)
-        .and_then(|node| node.body.get("members")?.as_array())
-        .map(Vec::as_slice)
-        .unwrap_or_default();
-    match graph.package.model_object_fields(object) {
-        Ok(fields) => {
-            let mut resolved = Vec::with_capacity(requested.len());
-            for name in requested {
-                if fields.field(name).is_none() {
-                    return Err(StateClauseReplayError::ModelFields {
-                        object: object.clone(),
-                        cause: StateClauseModelFieldsCause::Absent {
-                            field: name.clone(),
-                        },
-                    });
-                }
-                resolved.push(StateField {
-                    name: name.clone(),
-                    range: replay_range(graph, object, name)?,
-                });
-            }
-            return Ok(resolved);
+    let fields = graph.package.model_object_fields(object).map_err(|cause| {
+        StateClauseReplayError::ModelFields {
+            object: object.clone(),
+            cause: StateClauseModelFieldsCause::Accessor(cause),
         }
-        Err(CheckedModelFieldsError::NotModelObjectType) if !body_members.is_empty() => {}
-        Err(cause) => {
+    })?;
+    let mut resolved = Vec::with_capacity(requested.len());
+    for name in requested {
+        if fields.field(name).is_none() {
             return Err(StateClauseReplayError::ModelFields {
                 object: object.clone(),
-                cause: StateClauseModelFieldsCause::Accessor(cause),
+                cause: StateClauseModelFieldsCause::Absent {
+                    field: name.clone(),
+                },
             });
         }
+        resolved.push(StateField {
+            name: name.clone(),
+            range: replay_range(graph, object, name)?,
+        });
     }
-    let members = graph
-        .nodes
-        .get(object)
-        .and_then(|node| node.body.get("members")?.as_array())
-        .map(Vec::as_slice)
-        .unwrap_or_default();
-    members
-        .iter()
-        .filter_map(|member| member.get("name")?.as_str())
-        .map(|name| {
-            Ok(StateField {
-                name: name.to_owned(),
-                range: replay_range(graph, object, name)?,
-            })
-        })
-        .collect()
+    Ok(resolved)
 }
 
 /// The shared field reader's range or its typed refusal, with only known non-range types
@@ -877,13 +849,7 @@ fn replay_range(
                 cause: StateClauseModelFieldsCause::Accessor(error),
             })
         }
-        Err(
-            BoundNotResolvedCause::ModelMemberNotI64Range { .. }
-            | BoundNotResolvedCause::UnboundedType { .. }
-            | BoundNotResolvedCause::NotIntegerRange { .. }
-            | BoundNotResolvedCause::EndpointOutsideI64 { .. }
-            | BoundNotResolvedCause::ValueNotReference,
-        ) => Ok(None),
+        Err(BoundNotResolvedCause::ModelMemberNotI64Range { .. }) => Ok(None),
     }
 }
 

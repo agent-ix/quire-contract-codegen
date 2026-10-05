@@ -694,28 +694,11 @@ pub enum BoundNotResolvedCause {
         /// Why its member type is not a representable range.
         reason: Box<ModelMemberRangeReason>,
     },
-    /// The member's `value.target` is an unbounded type, a node that is not a bound.
-    UnboundedType {
-        /// That target node.
-        target: CheckedNodeId,
-    },
-    /// The member's `value.target` is a bound that is not a readable `integer_range`.
-    NotIntegerRange {
-        /// The bound node.
-        bound: CheckedNodeId,
-    },
-    /// The member's `value.target` is an `integer_range` with an endpoint that does not fit `i64`.
-    EndpointOutsideI64 {
-        /// The bound node.
-        bound: CheckedNodeId,
-    },
     /// The object has no member of the field's name.
     MemberAbsent {
         /// The framed object whose field is missing.
         object: CheckedNodeId,
     },
-    /// The member's value is not a reference, so it has no `value.target`.
-    ValueNotReference,
 }
 
 fn serialize_model_fields_error<S: Serializer>(
@@ -883,12 +866,6 @@ pub(crate) fn state_frame_disposition(refusal: StateFrameRefusal) -> ObligationD
             | Lowering::BodyIncomplete { .. }
             | Lowering::Failed { .. } => refused(refusal),
         },
-        StateFrameRefusal::BoundNotResolved {
-            cause: Cause::UnboundedType {
-                target: unbounded_type,
-            },
-            ..
-        } => ObligationDisposition::RequiresBound { unbounded_type },
         StateFrameRefusal::NotAStateClause {
             node,
             node_tag,
@@ -900,10 +877,7 @@ pub(crate) fn state_frame_disposition(refusal: StateFrameRefusal) -> ObligationD
         }),
         StateFrameRefusal::BoundNotResolved {
             cause:
-                Cause::NotIntegerRange { .. }
-                | Cause::EndpointOutsideI64 { .. }
-                | Cause::MemberAbsent { .. }
-                | Cause::ValueNotReference
+                Cause::MemberAbsent { .. }
                 | Cause::ModelFieldsUnavailable { .. }
                 | Cause::ModelMemberNotI64Range { .. },
             ..
@@ -1142,28 +1116,24 @@ mod tests {
                     effect: UnsupportedFrameEffect::ForeignField,
                 },
             ),
-            (
-                "bound not resolved: unbounded type",
-                unbound(BoundNotResolvedCause::UnboundedType { target: node(9) }),
-                ObligationDisposition::RequiresBound {
-                    unbounded_type: node(9),
-                },
+            same(
+                "bound not resolved: model accessor refusal",
+                unbound(BoundNotResolvedCause::ModelFieldsUnavailable {
+                    object: node(9),
+                    error: CheckedModelFieldsError::NotModelObjectType,
+                }),
             ),
             same(
-                "bound not resolved: not an integer range",
-                unbound(BoundNotResolvedCause::NotIntegerRange { bound: node(9) }),
-            ),
-            same(
-                "bound not resolved: endpoint outside i64",
-                unbound(BoundNotResolvedCause::EndpointOutsideI64 { bound: node(9) }),
+                "bound not resolved: model member without i64 range",
+                unbound(BoundNotResolvedCause::ModelMemberNotI64Range {
+                    object: node(9),
+                    field: "balance".to_owned(),
+                    reason: Box::new(ModelMemberRangeReason::NoMemberType),
+                }),
             ),
             same(
                 "bound not resolved: member absent",
                 unbound(BoundNotResolvedCause::MemberAbsent { object: node(9) }),
-            ),
-            same(
-                "bound not resolved: value not a reference",
-                unbound(BoundNotResolvedCause::ValueNotReference),
             ),
             same(
                 "nothing forbidden",
@@ -1202,8 +1172,8 @@ mod tests {
     fn tc_025_every_state_frame_refusal_maps_to_the_disposition_the_table_gives() {
         let rows = table();
         // 17 variants, with `NotLowered` split into its 6 arms (+5), `BoundNotResolved` into its
-        // 5 grounds (+4) and `FrameEffectUnsupported` into its 4 effects (+3).
-        assert_eq!(rows.len(), 17 + 5 + 4 + 3);
+        // 3 grounds (+2) and `FrameEffectUnsupported` into its 4 effects (+3).
+        assert_eq!(rows.len(), 17 + 5 + 2 + 3);
         for (label, refusal, expected) in rows {
             assert_eq!(state_frame_disposition(refusal), expected, "{label}");
         }

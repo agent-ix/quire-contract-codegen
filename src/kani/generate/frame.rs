@@ -29,8 +29,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    CheckedMemberType, CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
-    CheckedSemanticNodeV2, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    CheckedMemberType, CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2,
+    CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -47,7 +47,7 @@ use crate::{
         StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
         StateFrameProperty, StateFrameScope, StateUnrangedField, StateUnrangedReason,
     },
-    oracle::scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
+    oracle::scalar::{bound_members, literal},
 };
 
 /// Work budget for lowering one clause and its closure.
@@ -815,110 +815,56 @@ fn read_scope(graph: &Graph<'_>, anchor: &CheckedSemanticNodeV2) -> Option<State
     })
 }
 
-/// The endpoint literals of an `integer_range` body, minimum then maximum.
-fn range_literals(body: &Value) -> Option<(&str, &str)> {
-    let members = body.get("members")?.as_array()?;
-    let [minimum, maximum] = bound_members(members, INTEGER_RANGE_MEMBERS)?;
-    Some((literal(minimum, "integer")?, literal(maximum, "integer")?))
-}
-
-/// The `i64` range admitted for one state field. Model declaration objects read the checked
-/// field table retained at admission; a non-declaration object reads its body member's target.
-/// The harness generator and state-clause replay both use this reader, so their bounds agree.
+/// The `i64` range admitted for one selected model state field. The harness generator and
+/// state-clause replay both use this checked reader, so their bounds agree.
 pub(crate) fn field_range(
     graph: &Graph<'_>,
     object: &CheckedNodeId,
     field: &str,
 ) -> Result<(i64, i64), BoundNotResolvedCause> {
-    let object_node = graph.nodes.get(object);
-    let has_body_members = object_node
-        .and_then(|node| node.body.get("members")?.as_array())
-        .is_some_and(|members| !members.is_empty());
-    match graph.package.model_object_fields(object) {
-        Ok(fields) => {
-            let member =
-                fields
-                    .field(field)
-                    .ok_or_else(|| BoundNotResolvedCause::MemberAbsent {
-                        object: object.clone(),
-                    })?;
-            return match member.member_type() {
-                Some(CheckedMemberType::IntRange { lower, upper }) => {
-                    match (i64::try_from(*lower), i64::try_from(*upper)) {
-                        (Ok(minimum), Ok(maximum)) => Ok((minimum, maximum)),
-                        _ => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
-                            object: object.clone(),
-                            field: field.to_owned(),
-                            reason: Box::new(crate::kani::generate::outcome::ModelMemberRangeReason::EndpointOutsideI64 {
-                                lower: *lower,
-                                upper: *upper,
-                            }),
-                        }),
-                    }
-                }
-                Some(
-                    CheckedMemberType::Boolean
-                    | CheckedMemberType::Integer
-                    | CheckedMemberType::Reference(_)
-                    | CheckedMemberType::Option(_)
-                    | CheckedMemberType::Collection { .. },
-                ) => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
-                    object: object.clone(),
-                    field: field.to_owned(),
-                    reason: Box::new(
-                        crate::kani::generate::outcome::ModelMemberRangeReason::NonRangeType,
-                    ),
-                }),
-                None => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
-                    object: object.clone(),
-                    field: field.to_owned(),
-                    reason: Box::new(
-                        crate::kani::generate::outcome::ModelMemberRangeReason::NoMemberType,
-                    ),
-                }),
-            };
+    let fields = graph.package.model_object_fields(object).map_err(|error| {
+        BoundNotResolvedCause::ModelFieldsUnavailable {
+            object: object.clone(),
+            error,
         }
-        Err(CheckedModelFieldsError::NotModelObjectType) if has_body_members => {}
-        Err(error) => {
-            return Err(BoundNotResolvedCause::ModelFieldsUnavailable {
-                object: object.clone(),
-                error,
-            });
-        }
-    }
-    let members = graph
-        .nodes
-        .get(object)
-        .and_then(|node| node.body.get("members")?.as_array())
-        .map(Vec::as_slice)
-        .unwrap_or_default();
-    let member = members
-        .iter()
-        .find(|member| member.get("name").and_then(Value::as_str) == Some(field))
+    })?;
+    let member = fields
+        .field(field)
         .ok_or_else(|| BoundNotResolvedCause::MemberAbsent {
             object: object.clone(),
         })?;
-    let target = member
-        .get("value")
-        .and_then(|value| value.get("target"))
-        .and_then(node_id)
-        .ok_or(BoundNotResolvedCause::ValueNotReference)?;
-    let Some(bound) = graph
-        .nodes
-        .get(&target)
-        .filter(|node| &*node.node_tag == CheckedNodeTag::BoundedDomain.as_wire())
-    else {
-        return Err(BoundNotResolvedCause::UnboundedType { target });
-    };
-    if &*bound.semantic_form != "integer_range" {
-        return Err(BoundNotResolvedCause::NotIntegerRange { bound: target });
-    }
-    let Some((minimum, maximum)) = range_literals(&bound.body) else {
-        return Err(BoundNotResolvedCause::NotIntegerRange { bound: target });
-    };
-    match (minimum.parse(), maximum.parse()) {
-        (Ok(minimum), Ok(maximum)) => Ok((minimum, maximum)),
-        _ => Err(BoundNotResolvedCause::EndpointOutsideI64 { bound: target }),
+    match member.member_type() {
+        Some(CheckedMemberType::IntRange { lower, upper }) => {
+            match (i64::try_from(*lower), i64::try_from(*upper)) {
+                (Ok(minimum), Ok(maximum)) => Ok((minimum, maximum)),
+                _ => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
+                    object: object.clone(),
+                    field: field.to_owned(),
+                    reason: Box::new(
+                        crate::kani::generate::outcome::ModelMemberRangeReason::EndpointOutsideI64 {
+                            lower: *lower,
+                            upper: *upper,
+                        },
+                    ),
+                }),
+            }
+        }
+        Some(
+            CheckedMemberType::Boolean
+            | CheckedMemberType::Integer
+            | CheckedMemberType::Reference(_)
+            | CheckedMemberType::Option(_)
+            | CheckedMemberType::Collection { .. },
+        ) => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
+            object: object.clone(),
+            field: field.to_owned(),
+            reason: Box::new(crate::kani::generate::outcome::ModelMemberRangeReason::NonRangeType),
+        }),
+        None => Err(BoundNotResolvedCause::ModelMemberNotI64Range {
+            object: object.clone(),
+            field: field.to_owned(),
+            reason: Box::new(crate::kani::generate::outcome::ModelMemberRangeReason::NoMemberType),
+        }),
     }
 }
 
@@ -946,16 +892,12 @@ fn state_domains(
                     cause,
                 });
             }
-            Err(
-                BoundNotResolvedCause::ModelMemberNotI64Range { .. }
-                | BoundNotResolvedCause::UnboundedType { .. }
-                | BoundNotResolvedCause::NotIntegerRange { .. }
-                | BoundNotResolvedCause::EndpointOutsideI64 { .. }
-                | BoundNotResolvedCause::ValueNotReference,
-            ) => unranged.push(StateUnrangedField {
-                field: (*field).to_owned(),
-                reason: StateUnrangedReason::TypeNotRange,
-            }),
+            Err(BoundNotResolvedCause::ModelMemberNotI64Range { .. }) => {
+                unranged.push(StateUnrangedField {
+                    field: (*field).to_owned(),
+                    reason: StateUnrangedReason::TypeNotRange,
+                })
+            }
         }
     }
     Ok((domains, unranged))
