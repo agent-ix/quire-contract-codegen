@@ -38,6 +38,13 @@ type: TestMatrix
 | FR-029 | FR-029-AC-10 | TC-040 | 🚧 Planned; the fault readings (`ReplayRefusal::Fault`, `AdmissionFailure::Fault`, `CallSiteRefusal::Fault`, bare and wrapped) are built in the map and its conversions, but no test constructs a QSL `InternalFault`: `qsl-replay` does not re-export the type and this crate may depend on `qsl-replay` alone, so a fault value is unreachable from a test here |
 | FR-030 | FR-030-AC-1 through FR-030-AC-13 | TC-041 | 🚧 Planned; the map is one `match` over every `KaniOutcomeKind`, and `Refused`, `InvalidInput` and `IncompleteInput` must map to `Declined`, whose QSL value now carries a `DeclineCode` with only a QSL catalog arm until IR-605 and QSL-351 add IR's arm; IR's `kani_*` cause is not a QSL catalog code, so no total map is buildable, and none is written |
 
+## Non-Functional Requirement Coverage
+
+| Non-Functional Req | Verification Method | Evidence/Test Cases | Status |
+|---|---|---|---|
+| NFR-006 | Test | TC-045 (NFR-006-AC-1 through NFR-006-AC-12, NFR-006-AC-18) | 🚧 Planned; the `kani-scope` and `kani-gate` targets, their scripts and `tests/it/kani_gate.rs` do not exist yet |
+| NFR-006 | Inspection | NFR-006-AC-13 through NFR-006-AC-17 | 🚧 Planned; the pull-request and release-ticket evidence line is read by the merger, and no workflow enforces it |
+
 ## Test Case Summary
 
 The coverage tables above -- Functional, Interface, Non-Functional and
@@ -53,6 +60,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-025 | Verify separate bounded Kani obligations | Analysis | P0 | FR-015-AC-1, FR-015-AC-2, FR-015-AC-3, FR-015-AC-4, FR-015-AC-5, FR-015-AC-6, FR-015-AC-7, FR-015-AC-8, FR-015-AC-9, FR-015-AC-10, FR-015-AC-11, FR-015-AC-12, FR-015-AC-13, FR-015-AC-14, FR-015-AC-19, FR-015-AC-20, FR-015-AC-21, FR-015-AC-22, FR-015-AC-23, FR-015-AC-24, FR-015-AC-25, FR-015-AC-26, FR-015-AC-27, FR-015-AC-28, FR-015-AC-29, FR-015-AC-30, FR-015-AC-31, FR-015-AC-32, FR-015-AC-33, FR-015-AC-34, FR-015-AC-35, FR-015-AC-36, FR-015-AC-37, FR-015-AC-38, FR-015-AC-39, FR-015-AC-40, FR-015-AC-41, FR-015-AC-42, FR-015-AC-43, FR-015-AC-44, FR-015-AC-45, FR-015-AC-46, FR-015-AC-47, FR-015-AC-48, FR-015-AC-49, FR-015-AC-50, FR-015-AC-53, FR-015-AC-54, FR-015-AC-56, FR-015-AC-58 | 🚧 Planned |
 | TC-027 | Verify Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-AC-12, FR-017-AC-13, FR-017-AC-15, FR-017-AC-16, FR-017-AC-17, FR-017-AC-18, FR-017-AC-19, FR-017-AC-20, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned |
 | TC-043 | Verify Kani harness batching, the output cap and launcher cleanup | Integration | P0 | FR-017-AC-14, FR-017-AC-21, FR-017-AC-22, FR-017-AC-23, FR-017-AC-24, FR-017-AC-25 | ✅ Covered |
+| TC-045 | Verify the real-Kani lane gate targets | Integration | P0 | NFR-006-AC-1, NFR-006-AC-2, NFR-006-AC-3, NFR-006-AC-4, NFR-006-AC-5, NFR-006-AC-6, NFR-006-AC-7, NFR-006-AC-8, NFR-006-AC-9, NFR-006-AC-10, NFR-006-AC-11, NFR-006-AC-12, NFR-006-AC-18 | 🚧 Planned |
 | TC-036 | Verify the generated harness subject ABI | Integration | P0 | FR-025-AC-1, FR-025-AC-2, FR-025-AC-3, FR-025-AC-4, FR-025-AC-5, FR-025-AC-6, FR-025-AC-7, FR-025-AC-8 | 🚧 Planned |
 | TC-039 | Verify bounded proof ceilings, their inconclusive reasons and the proof subject | Integration | P0 | FR-028-AC-1, FR-028-AC-2, FR-028-AC-3, FR-028-AC-4, FR-028-AC-5, FR-028-AC-6, FR-028-AC-7, FR-028-AC-8, FR-028-AC-9, FR-028-AC-12 | 🚧 Planned |
 | TC-040 | Verify the total map from a Kani run outcome to QSL's terminal value | Integration | P0 | FR-029-AC-1, FR-029-AC-2, FR-029-AC-3, FR-029-AC-4, FR-029-AC-5, FR-029-AC-6, FR-029-AC-8, FR-029-AC-9, FR-029-AC-10, FR-029-AC-11, FR-029-AC-12, FR-029-AC-13, FR-029-AC-14 | 🚧 Planned; every criterion but FR-029-AC-3 and FR-029-AC-10 is covered in the Functional Requirement Coverage table above |
