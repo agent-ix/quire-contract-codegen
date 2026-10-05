@@ -1164,7 +1164,12 @@ wait
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         loop {
             match fs::read_to_string(&status) {
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::NotFound
+                        || error.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error()) =>
+                {
+                    return
+                }
                 Ok(stat)
                     if stat.rsplit_once(')').unwrap().1.split_whitespace().next() == Some("Z") =>
                 {
