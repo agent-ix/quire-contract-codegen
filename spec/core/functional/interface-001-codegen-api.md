@@ -88,8 +88,8 @@ operations:
     semantics: finite reference-graph reachability lowering; identity, snapshot and reference validation stay Contract IR-owned, and malformed or exhausted requests stay typed non-Boolean outcomes
   - name: generate_bounded_kani_corpus_case
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
-    output: BoundedCorpusCase | KaniOutcome
-    semantics: one bounded Kani corpus case and its proof dependency graph; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts; a serialization failure of the case's proof graph refuses as kani_corpus_serialization_failed (NFR-005)
+    output: BoundedCorpusCase | BoundedCorpusError
+    semantics: one bounded Kani corpus case and its proof dependency graph; a refusal is a BoundedCorpusError whose Outcome variant carries the typed KaniOutcome (its code a quire_contract_model Std001Code) and whose OutcomeConstruction variant carries Contract IR's refusal to build a non-success outcome; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts; a serialization failure of the case's proof graph refuses as kani_corpus_serialization_failed (NFR-005)
   - name: generate_exact_scalar_oracles
     inputs: [admitted CheckedPackageV2, ExactScalarItem list]
     output: ExactScalarOracles | OracleGenerationError

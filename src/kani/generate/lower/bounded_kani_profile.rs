@@ -60,6 +60,7 @@ mod tests {
     use quire_contract_ir::kani::{
         CapabilityDisposition, CapabilityEntry, KaniProfile, ProfileSelection,
     };
+    use quire_contract_model::{std001_code, Std001Code};
 
     use super::classify_bounded_kani_profile;
 
@@ -91,7 +92,7 @@ mod tests {
             entry(
                 "collection.contains",
                 CapabilityDisposition::Inconclusive {
-                    code: "unavailable".to_owned(),
+                    code: std001_code!("unavailable"),
                 },
             ),
             entry(
@@ -103,7 +104,7 @@ mod tests {
             entry(
                 "arithmetic.add",
                 CapabilityDisposition::Refused {
-                    code: "unsupported".to_owned(),
+                    code: std001_code!("unsupported"),
                 },
             ),
             entry(
@@ -162,7 +163,7 @@ mod tests {
         assert_eq!(
             census[0].disposition,
             CapabilityDisposition::Refused {
-                code: "unsupported".to_owned(),
+                code: std001_code!("unsupported"),
             },
             "the refused construct's disposition must still appear in the census"
         );
@@ -176,7 +177,7 @@ mod tests {
         assert_eq!(
             census[2].disposition,
             CapabilityDisposition::Inconclusive {
-                code: "unavailable".to_owned(),
+                code: std001_code!("unavailable"),
             },
             "an inconclusive construct after a refusal must not be discarded"
         );
@@ -199,6 +200,6 @@ mod tests {
             outcome.kind,
             quire_contract_ir::kani::KaniOutcomeKind::Refused
         );
-        assert_eq!(outcome.code, "kani_capability_missing");
+        assert_eq!(outcome.code, Std001Code::KANI_CAPABILITY_MISSING);
     }
 }

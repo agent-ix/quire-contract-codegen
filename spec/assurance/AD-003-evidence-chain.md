@@ -102,12 +102,18 @@ success.
   IR-347 (as relayed by the IR planner) moves the Kani family lowerings (`lower_checked_arithmetic`,
   `lower_query`, `lower_reaches`) out of IR into CG and has IR delete them after, and CG then
   reads the model crate for model items, so the glob goes away.
-- Cause codes cross IR to CG as strings (`KaniOutcome.code`). IR spells `kani_vacuous_proof` only
-  inside `KaniOutcome::proved_from_checks`; `kani_solver_absent` and `kani_backend_absent` are
-  named in IR's and CG's specs (FR-030) and defined by no IR constant or enum. CG code spells `kani_vacuous_proof` as a literal
-  (`kani_execution.rs:690`) and the other two nowhere yet, so CG's map will spell them itself. A
-  typo is not a compile error.
-  IR-347 (reopened) already covers the free-string cause codes; no new ticket is filed.
+- Cause codes cross IR to CG as `quire_contract_model::Std001Code` (IR FR-044), not as strings:
+  `KaniOutcome.code`, `KaniProviderRecord.cause` and the `CapabilityDisposition` codes carry the
+  type, which guarantees the STD-001 code form and nothing else. A code STD-001 registers outside
+  `DiagnosticCode` is a `Std001Code` constant (`Std001Code::KANI_VACUOUS_PROOF`, which CG's
+  `classify_success` compares against), so a typo there is a compile error. A code CG mints
+  itself (`kani_corpus_dependency_invalid`, `kani_corpus_identity_collision`,
+  `kani_corpus_serialization_failed`, `kani_profile_input_mismatch`) is built with the
+  `std001_code!` macro, which checks the form at compile time; STD-001 does not list those, and
+  `Std001Code::is_registered` is false for them. `KaniOutcome::non_success` returns a `Result`
+  because it refuses a `proved` or `counterexample` kind; CG's corpus generator asks only for
+  `Refused` and `InvalidInput` and carries IR's refusal, should it ever occur, as the typed
+  `BoundedCorpusError::OutcomeConstruction`.
 
 ## Decisions
 
@@ -358,7 +364,7 @@ crate CG's lock selects.
 | --- | --- | --- |
 | What is the obligation-identity preimage, now that three CG identity structs exist and none carries the O-09 members? | CG proposes, QSL and QSpec confirm | State it by ADR-013 O-09's member list, not by struct name: the node id, occurrence key, kind and arguments (parameter node id and domain), source span excluded, RFC 8785 encoded by `quire_canonical`, one implementation in CG used by all three identities. This is the one canonical content-identity digest that binds a proof to its content; CG adds no other. QSL's `ObligationIdentity` stays opaque (it carries 32 bytes). CG writes E-1. QSL's doc says the digest domain is not in the closed FR-201 set; QSpec decides whether it needs a domain name (R-S3). |
 | Replace IR's `KaniProviderResult` map | IR | Delete the type and its map as FR-039 already says, together with the CG import change above (IR-347). |
-| IR cause codes as strings | IR | Export constants (or a typed cause enum) for the three codes (IR-347). |
+| IR cause codes as strings | IR | Resolved for the code type: IR exports `Std001Code` with constants for the registered codes (IR FR-044). IR's free-string codes in the family lowerings remain IR-347's. |
 | One map instead of two | CG after QSL | After the pending inconclusive types of (a) land. |
 
 No compatibility layer is proposed. If a seam above would need one (for example a CG copy of
@@ -391,5 +397,5 @@ filed):
 | Id | Stated need |
 | --- | --- |
 | R-I1 | Delete `KaniProviderResult`, `KaniProviderRecord` and the `provider_result` map from the root crate (`src/kani/outcome.rs`, `src/kani/mod.rs:23`); they duplicate the terminal map CG owns. In IR-347's reopened scope. |
-| R-I2 | Export cause-code constants or a typed cause enum: the Kani cause codes cross as bare strings that consumers re-spell. Overlaps IR-347's free-string cause codes. |
+| R-I2 | Export cause-code constants or a typed cause enum: the Kani cause codes crossed as bare strings that consumers re-spelled. Met by IR FR-044 (`Std001Code` and its constants); the family lowerings' own codes remain IR-347's. |
 | R-I3 | Remove `pub use quire_contract_model::*` (`src/lib.rs:12`) together with CG adding a direct `quire-contract-model` dependency; CG imports model types through the glob. In IR-347's reopened scope. |

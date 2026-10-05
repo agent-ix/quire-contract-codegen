@@ -187,6 +187,9 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
         &mut emitted,
     )
     .unwrap_err();
+    let exhausted = exhausted
+        .outcome()
+        .expect("a bound refusal is a typed outcome");
     assert_eq!(exhausted.kind, KaniOutcomeKind::ResourceExhausted);
     assert_eq!(exhausted.boolean_claim(), None);
 

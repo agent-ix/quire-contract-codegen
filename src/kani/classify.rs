@@ -1,6 +1,7 @@
 //! Classification of one Kani run from the report Kani exported for it (FR-017).
 
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
+use quire_contract_model::Std001Code;
 use serde::Serialize;
 
 use crate::kani::{
@@ -222,7 +223,7 @@ fn classify_success(report: &KaniHarnessReport, kind: Option<ObligationKind>) ->
             "report_checks",
         );
         if checks_outcome.kind == KaniOutcomeKind::Inconclusive
-            && checks_outcome.code == "kani_vacuous_proof"
+            && checks_outcome.code == Std001Code::KANI_VACUOUS_PROOF
         {
             return inconclusive(KaniInconclusiveReason::VacuousProof);
         }
