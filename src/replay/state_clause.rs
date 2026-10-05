@@ -851,7 +851,10 @@ fn declared_domains(
         let bound = FiniteBound::integer_range(Integer::from(minimum), Integer::from(maximum))
             .map_err(|_| unreadable(&shape.scope.object))?;
         domains.push(DeclaredDomain::new(ProofBound {
-            domain: DomainKey::new(parameter, vec![path]),
+            domain: DomainKey::Node {
+                node: parameter,
+                path: vec![path],
+            },
             bound,
         }));
     }

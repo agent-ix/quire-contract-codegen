@@ -201,9 +201,9 @@ path returns, and for the state-clause path (FR-029-AC-16, IR-460). Every criter
 timed-out and exhausted-unwind-bound reasons only: `KaniInconclusiveReason` has no memory-exhausted
 reason until FR-028-AC-3 adds one, and the map's `match` fails to compile there until that arm is
 written. FR-029-AC-10 is not backed: the map and the conversions read each fault as `Failed`, but a
-test cannot construct QSL's `InternalFault`, which `qsl-replay` does not re-export and which this
-repository may not name through another QSL crate; the criterion stays planned until QSL exports a
-constructor or the type through `qsl-replay`. The fault readings of
+test has not yet been written. QSL's `InternalFault` is now re-exported by `qsl-replay` and
+constructible (`InternalFault::new`, QSL `main` bcca433, QSL #635), so the criterion is buildable;
+it stays planned and untagged until a follow-up code change adds its tests. The fault readings of
 `StateClauseReplayError::Refused` and `CallSite` are listed under FR-029-AC-10 for that reason, so
 FR-029-AC-16 holds only clauses a test asserts.
 
