@@ -171,13 +171,20 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     then an ambiguous accessor table and a missing playback binding; in both cases read
     `ModelFields` before `MissingField`, with no replay or executor call. A valid table with a
     missing binding still returns `MissingField`. A present field with a non-range type remains
-    unranged (FR-024-AC-31, IR-624; gated on
+    unranged. Also check a non-model object and an admitted unselected model/object_type with
+    a nonempty body: each returns `ModelFields` with `Accessor(NotModelObjectType)` and no
+    replay despite an apparently valid body range. A selected/read nonempty-body tamper
+    instead refuses `StaleNodeKey` during IR admission, before CG replay receives a package;
+    do not expect a CG `ModelFields` result from it (IR TC-227). For `None` or out-of-`i64` accessor types
+    QSL cannot emit, use an admitted QSL-emitted graph with selected-model-document override
+    and recomputed digests (FR-024-AC-31, IR-624; gated on
     CG dependency update and implementation).
 29. Generate the frame harness from the emitted package with accessor ranges, assert scope
     ids equal `call_site`'s before replay, remove `Twin::aligned`, and replay the forbidden
     write to a violation. Check request order and domains, including unread ranged `audit`;
-    one outside a declared range returns `OutOfDomain`. Comparing the hand-built body's
-    ranges remains gated on IR-627 (FR-024-AC-32, IR-624).
+    one outside a declared range returns `OutOfDomain`. A non-model object or admitted
+    unselected model/object_type body cannot supply a range; a selected/read body tamper
+    is rejected by IR admission before frame replay (FR-024-AC-32, IR-624).
 30. Generate the postcondition harness from the emitted package, replay the debiting and
     unmutated subjects, read `violation` with evaluated `false` and `inconclusive` with
     `Verdicts`, and assert its replay domains equal accessor ranges (FR-024-AC-33, IR-624).
@@ -187,7 +194,8 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     so CG records `TypeNotRange`, and whose `i64` playback lies outside the model range;
     read `Inconclusive` with `ReplayRefused`, not a violation or `Verified`. Replay inside the
     range is unaffected, and an unread present `IntRange` within `i64` is never called
-    unranged (FR-024-AC-35, IR-624).
+    unranged. Build the out-of-`i64` model type through a selected-model-document override
+    with recomputed digests on a QSL-emitted graph (FR-024-AC-35, IR-624).
 
 ## Status
 
@@ -202,7 +210,7 @@ is a real-Kani test in the module `kani_obligations_state_clause_replay`, run th
 `kani_obligations` filter of `make kani`; its subject debits within the declared range, because a
 debit past the floor runs to a post state QSL's snapshot admission refuses.
 
-Steps 18 to 27 (FR-024-AC-20 to FR-024-AC-30, IR-459) are implemented by `src/replay/obligation.rs`
+Steps 18 to 26 (FR-024-AC-20 to FR-024-AC-29, IR-459) are implemented by `src/replay/obligation.rs`
 and `src/replay/frame.rs`, the `src` unit tests of steps 18 and 26, and the tests of
 `tests/it/kani_obligations_state_frame.rs` over the QSL twin of the state-frame fixture. The twin's
 harness scope is aligned to the node ids QSL names for the twin's compiled unit (`Twin::aligned`),
@@ -210,7 +218,9 @@ because the fixture's checked package is hand-built and its node ids are its own
 itself emits (`call_site`'s package bytes, admitted by the model reader) carries exactly the anchor
 and frame ids `call_site` names (step 25's ids, read from the emitted package); a harness cannot yet
 be generated from that package, because the object type QSL emits has an empty body and the
-field-range reader finds no member. Steps 28 to 32 (FR-024-AC-31 to FR-024-AC-35, IR-624) are
+field-range reader finds no member. Step 27's formerly implemented hand-built positive
+must be migrated to the emitted package to meet the restated FR-024-AC-30; that
+criterion is planned with steps 28 to 32 (FR-024-AC-31 to FR-024-AC-35, IR-624). They are
 planned: they specify end-to-end replay from an emitted-package harness whose field ranges come
 from `model_object_fields` (FR-015-AC-77), after CG updates its IR dependency and implements the
 merged accessor. Step 27 is a real-Kani test in the module

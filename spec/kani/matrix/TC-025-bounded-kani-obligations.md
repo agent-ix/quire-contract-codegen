@@ -178,10 +178,14 @@ unsatisfiable requires as `cover_unsatisfied`.
 
 ## A disposition for every state clause (IR-461)
 
-19. Negotiate one request of `StateFrame` items over one admitted package: first a
-    `precondition` clause (refused), then one clause in both roles that yields, one whose field
-    has no integer range, one comparing two fields, one whose frame grants a relationship and
-    one whose frame grants every field. Read one record per item in request order, `kind`
+19. Negotiate one request of `StateFrame` items over one admitted QSL-emitted package with
+    selected model declarations: first a `precondition` clause (refused), then one clause in
+    both roles that yields, one whose lowering is a `RequiresBound` record, one whose selected
+    model field has no representable `i64` range, one comparing two fields, one whose frame
+    grants a relationship and one whose frame grants every field. The `RequiresBound`
+    case must come from lowering in that same admitted package; a separate request or
+    a body-member target does not satisfy this mixed-disposition check. Read one record
+    per item in request order, `kind`
     `postcondition` or `frame`, and each later record equal to the record the same item has in
     a request of that item only; repeat with three refused items and read three records. An
     implementation that stops at the first refusal reads one record and fails
@@ -190,19 +194,25 @@ unsatisfiable requires as `cover_unsatisfied`.
     order, with `generate_state_frame_role` for the same clause and role (and, for a clause
     whose roles both succeed, `generate_state_frame_obligations`), source byte
     for byte (FR-015-AC-60).
-21. Over a hand-built non-declaration object, read `requires_bound` for a field whose body
-    member references a plain integer type (that member's `value.target` as `unbounded_type`)
-    and for a request whose lowering is a requires-bound record (FR-015-AC-61).
+21. Read `requires_bound` and the record's `unbounded_type` for a request whose lowering is
+    a requires-bound record. For a selected model declaration's clause read of a native
+    `Integer` field, verify lowering's `RequiresBound` wins before accessor resolution.
+    For a present listed `Integer` field not read by that clause, verify value-based
+    `NonRangeType` only if the item reaches accessor resolution. For a non-model or
+    admitted unselected model/object_type body, read `ModelFieldsUnavailable` without a
+    fabricated `unbounded_type` or a body range (FR-015-AC-61, FR-015-AC-78).
 22. Read `unsupported` `NoFiniteEncoding` for a lowering unsupported-family record and
     `UnknownNodeKind` for a node that is not a `state_clause` (FR-015-AC-62).
 23. Read `unsupported` `StateFrameRefused`, never `NoFiniteEncoding`, for a negation, a literal
     comparison, an operator outside the six comparisons, a read through another parameter, two
     fields, two reads of one side, a frame that creates, deletes or grants a relationship or a
     foreign field (naming the effect), an invariant clause, a clause with a malformed shape,
-    a frame granting every field and an over-budget lowering. On a non-declaration object,
-    also check a clause field whose body member references a bound other than `integer_range`,
-    has an endpoint outside `i64`, is absent, or has a value that is not a reference
-    (FR-015-AC-63).
+    a frame granting every field and an over-budget lowering. For a selected model
+    declaration, check an accessor-absent field, a non-range member type, and an endpoint
+    outside `i64`; for a non-model object and an admitted unselected model/object_type
+    with a nonempty body, check `NotModelObjectType` and no harness. These replace the old body's
+    `NotIntegerRange`, `EndpointOutsideI64`, `MemberAbsent` and `ValueNotReference`
+    probes (FR-015-AC-63, FR-015-AC-78).
 24. Read `invalid_request` for an unparsable state path, an unparsable item subject path, an
     invalid state field name, a state lacking the clause's field, an absent node, a repeated
     item and an item of another package, and `Rejected` with every record and no harness bytes
@@ -211,12 +221,15 @@ unsatisfiable requires as `cover_unsatisfied`.
     an unwind bound outside the range, each with `StateFrame` items present or absent as the
     case allows, and read the existing `KaniObligationError` variant with no record
     (FR-015-AC-65).
-26. Build every `StateFrameRefusal` variant (each `BoundNotResolved` case the table separates,
-    each of the six `NotLowered` refusal arms) and call the mapping; read the table's record
-    for each. Build `UnwindOutOfRange`, `InvalidGeneratedSyntax` and `RecordSerialization`
-    directly, and reach `ResourceLimitExceeded` with a state-field list that passes the 1 MiB
-    ceiling or build it directly. Inspect that the mapping is a `match` with no wildcard arm
-    (FR-015-AC-66).
+26. Build every retained `StateFrameRefusal` variant and call the mapping; read the table's
+    record for each. Include `ModelFieldsUnavailable` for `UnknownNode`,
+    `NotModelObjectType` and `AmbiguousField`, `MemberAbsent`, and
+    `ModelMemberNotI64Range` with `NoMemberType`, `NonRangeType` and
+    `EndpointOutsideI64`, plus each of the six `NotLowered` refusal arms. Do not construct
+    retired body-member `BoundNotResolvedCause` cases. Build `UnwindOutOfRange`,
+    `InvalidGeneratedSyntax` and `RecordSerialization` directly, and reach
+    `ResourceLimitExceeded` with a state-field list that passes the 1 MiB ceiling or build
+    it directly. Inspect that the mapping is a `match` with no wildcard arm (FR-015-AC-66).
 27. Call the single-clause engine on a clause whose graph field name is not a Rust identifier
     and on a request whose caller-supplied field name is not an identifier: read
     `MalformedClause` and `InvalidField` (FR-015-AC-67).
@@ -295,15 +308,21 @@ set by the code change's measurement and recorded here.
     update and implementation).
 38. For a model declaration, request an accessor-absent field; exercise each accessor error
     (`UnknownNode`, `NotModelObjectType`, `AmbiguousField`) and check a typed refusal without
-    falling back to a body or read. Exercise a present `None`, `Integer`, `Option`, and an
-    `IntRange` with one endpoint outside `i64`; read `ModelMemberNotI64Range` with the object,
+    falling back to a body or read. Exercise a present `None`, unread `Integer`,
+    `Option`, and an `IntRange` with one endpoint outside `i64` in items whose
+    lowering succeeds; read `ModelMemberNotI64Range` with the object,
     field and `NoMemberType`, `NonRangeType` or `EndpointOutsideI64` (exact `i128` endpoints)
     rather than a fabricated bound node. Check that only a present range with two `i64`
     endpoints enters `domains`, an unranged non-clause field is still drawn, and an unranged
-    clause field refuses its item as `unsupported`, `StateFrameRefused`. For a hand-built
-    non-declaration object, verify its old body-member causes, and refuse a range read through
-    a grouped derived-shape node without
-    an assumption or `domains` entry (FR-015-AC-78; body range positives gated on IR-627).
+    clause field refuses its item as `unsupported`, `StateFrameRefused`. For a non-model
+    object and an admitted unselected model/object_type with a nonempty body, verify
+    `NotModelObjectType` refuses without any assumption, `domains` entry or harness, even
+    when the body contains an apparent range. Use an admitted QSL-emitted graph with
+    selected-model-document override and recomputed digests for `None` and out-of-`i64`
+    type cases QSL cannot emit directly. Separately submit a selected model/object_type
+    whose nonempty body is read by the state clause and verify IR admission refuses
+    `StaleNodeKey` before CG receives a package; do not expect a CG `NotModelObjectType`
+    result from that rejected input (FR-015-AC-78; IR TC-227).
 39. Generate both roles of each twin clause from the emitted package with no `Twin::aligned`;
     assert request order rather than accessor name order for `state_fields`, accessor ranges
     for `domains`, and scope ids equal to `call_site`'s. An absent accessor field, an omitted
@@ -316,12 +335,12 @@ set by the code change's measurement and recorded here.
     Regenerate for byte identity, and reject a record naming a field twice (FR-015-AC-81).
 
 Steps 37 to 41 are planned. The IR-628 accessor has merged; the QSL-emitted model declaration
-path awaits CG's dependency update and implementation. The hand-built fixture's non-declaration
-body-member range path is separately gated on IR-627: until its admission binds anonymous structural
-node keys to body bounds, an agreeing read does not make that range trusted. The code change
+path awaits CG's dependency update and implementation. The hand-built non-declaration
+body-member range path is retired; an agreeing read does not make that body trusted. The code change
 replaces `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`, updates
 the typed accessor refusal and AC-66 mapping tests, and edits or supersedes the test of
-FR-024-AC-30 that calls `Twin::aligned`; AC-30's text stays as merged.
+FR-024-AC-30 that calls `Twin::aligned`; this PR restates AC-30 over the emitted-package
+harness, so its previous test evidence remains planned until that migration lands.
 
 ## Blocked
 
