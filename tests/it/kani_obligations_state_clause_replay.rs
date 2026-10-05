@@ -63,6 +63,23 @@ fn tc_035_emitted_model_fields_bind_replay_before_playback() {
         witness_arm(&result).settlement(),
         WitnessSettlement::ReproducedWithEvaluatedWitness
     );
+    let respecting = StateClauseReplay::new(twin.state_clause_inputs(
+        &package,
+        &clause,
+        BALANCE,
+        (5, 7),
+        (6, 7),
+    ))
+    .expect("the same emitted package builds a respecting replay");
+    let result = respecting.replay().expect("the respecting run replays");
+    assert_eq!(
+        witness_arm(&result).settlement(),
+        WitnessSettlement::Inconclusive
+    );
+    assert!(matches!(
+        witness_arm(&result).disagreement(),
+        Some(DisagreementCause::Verdicts { .. })
+    ));
 
     let mut absent = input.clone();
     absent.state_fields.push("ghost".to_owned());

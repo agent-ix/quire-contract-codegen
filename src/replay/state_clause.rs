@@ -40,7 +40,7 @@ use crate::{
     kani::{
         generate::{
             frame::{field_range, ClauseShape, Graph},
-            outcome::StateFrameRefusal,
+            outcome::{BoundNotResolvedCause, StateFrameRefusal},
         },
         terminal::ReplaySettlement,
     },
@@ -823,7 +823,7 @@ fn state_fields(
                 }
                 resolved.push(StateField {
                     name: name.clone(),
-                    range: field_range(graph, object, name).ok(),
+                    range: replay_range(graph, object, name)?,
                 });
             }
             return Ok(resolved);
@@ -842,14 +842,49 @@ fn state_fields(
         .and_then(|node| node.body.get("members")?.as_array())
         .map(Vec::as_slice)
         .unwrap_or_default();
-    Ok(members
+    members
         .iter()
         .filter_map(|member| member.get("name")?.as_str())
-        .map(|name| StateField {
-            name: name.to_owned(),
-            range: field_range(graph, object, name).ok(),
+        .map(|name| {
+            Ok(StateField {
+                name: name.to_owned(),
+                range: replay_range(graph, object, name)?,
+            })
         })
-        .collect())
+        .collect()
+}
+
+/// The shared field reader's range or its typed refusal, with only known non-range types
+/// carried without a domain. An absent field and an accessor failure cannot become unranged.
+fn replay_range(
+    graph: &Graph<'_>,
+    object: &CheckedNodeId,
+    name: &str,
+) -> Result<Option<(i64, i64)>, StateClauseReplayError> {
+    match field_range(graph, object, name) {
+        Ok(range) => Ok(Some(range)),
+        Err(BoundNotResolvedCause::MemberAbsent { .. }) => {
+            Err(StateClauseReplayError::ModelFields {
+                object: object.clone(),
+                cause: StateClauseModelFieldsCause::Absent {
+                    field: name.to_owned(),
+                },
+            })
+        }
+        Err(BoundNotResolvedCause::ModelFieldsUnavailable { error, .. }) => {
+            Err(StateClauseReplayError::ModelFields {
+                object: object.clone(),
+                cause: StateClauseModelFieldsCause::Accessor(error),
+            })
+        }
+        Err(
+            BoundNotResolvedCause::ModelMemberNotI64Range { .. }
+            | BoundNotResolvedCause::UnboundedType { .. }
+            | BoundNotResolvedCause::NotIntegerRange { .. }
+            | BoundNotResolvedCause::EndpointOutsideI64 { .. }
+            | BoundNotResolvedCause::ValueNotReference,
+        ) => Ok(None),
+    }
 }
 
 /// The value bound to each declared field in `values`, in declaration order. A name the object

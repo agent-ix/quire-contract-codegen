@@ -946,7 +946,13 @@ fn state_domains(
                     cause,
                 });
             }
-            Err(_) => unranged.push(StateUnrangedField {
+            Err(
+                BoundNotResolvedCause::ModelMemberNotI64Range { .. }
+                | BoundNotResolvedCause::UnboundedType { .. }
+                | BoundNotResolvedCause::NotIntegerRange { .. }
+                | BoundNotResolvedCause::EndpointOutsideI64 { .. }
+                | BoundNotResolvedCause::ValueNotReference,
+            ) => unranged.push(StateUnrangedField {
                 field: (*field).to_owned(),
                 reason: StateUnrangedReason::TypeNotRange,
             }),
