@@ -237,6 +237,46 @@ FR-015-AC-60 or FR-015-AC-68, which stay planned until that comparison has a tes
 each over nodes of its own and read under a byte ceiling above the default, which the corpus
 package alone nearly fills.
 
+## Composite equality over a bounded shadow (planned, IR-264, IR-241)
+
+29. Request a composite-equality claim over parameters of one record type, one tuple type and one
+    option type (Boolean and bounded-integer leaves, an optional field, a nested option), under
+    `Equal` and `NotEqual`: read one harness per item with family `composite_equality`, proof subject
+    `bounded_shadow` and a refinement obligation in the same result, distinct from every other
+    item's, with the operator and operand types from the descriptor and no bound from it
+    (FR-015-AC-69).
+30. Read the harness's drawn values (a `bool` or `i64` per leaf, the presence draws, the
+    `present`/`absent`/`null` draw of an optional field), the assumption on each integer leaf, the
+    pinned leaves of a literal operand, the order of the arguments by parameter node id then leaf
+    path with each bound to both, and that no composite is an argument (FR-015-AC-70).
+31. Read the harness's assertions against the expectation computed from the drawn values (verdict
+    and pair count, `absent` against `null`, two `none`, `none` against present, a `some`/`some`
+    option, no early exit, the negation under `NotEqual`) and that it ends with one cover after
+    them (FR-015-AC-71).
+32. Parse the shadow and the harness for loops, recursion and heap types; generate a closure one
+    pair node under, at and one over `SHADOW_PAIR_NODE_BUDGET` and read the identity's budget and
+    count (FR-015-AC-72).
+33. Request one item reaching each row of the unsupported-shape table, beside one supported item,
+    and read each disposition and reason, that no harness exists for the refused ones, and that
+    the supported item settles as it does alone (FR-015-AC-73).
+34. With the installed backend, run the corpus case's harness and its refinement run: read
+    `Verified` with its cover satisfied inside the identity's ceilings, the versions and options in
+    the evidence, and the refinement class and agreement (FR-015-AC-74).
+35. With the installed backend, run each of the six shadow mutants, and natively each of the three
+    production mutants and the closure-reader mutant, and the unmutated case: read `Falsified` with
+    a playback for each shadow mutant, `refinement_failed` naming the first disagreeing case for
+    each other mutant, and `Verified` with an agreeing refinement for the unmutated case
+    (FR-015-AC-75).
+36. Read the identity's closure, domains, operator, budget, count, abstractions and unexercised
+    behaviours, change each of the closure, a bound, the operator and the budget in turn, and
+    regenerate from equal inputs (FR-015-AC-76).
+
+Steps 29 to 36 are planned. Nothing in `src/` renders a composite harness: the corpus families
+(arithmetic, graph, collection) draw no input, FR-025's argument table has rows for Boolean and
+bounded integer only, and composite equality has an oracle (FR-018) and a native agreement corpus
+(TC-029) but no Kani harness. The value of `SHADOW_PAIR_NODE_BUDGET` and the case cap's default are
+set by the code change's measurement and recorded here.
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
