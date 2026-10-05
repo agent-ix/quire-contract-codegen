@@ -56,6 +56,7 @@ mod kani_argument_order;
 mod kani_batching;
 mod kani_generation;
 mod kani_obligations;
+mod kani_obligations_state_clause_replay;
 mod kani_obligations_state_frame;
 mod kani_witness_join;
 mod layout;

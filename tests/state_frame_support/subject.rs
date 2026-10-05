@@ -37,3 +37,14 @@ pub fn deposit_touching_audit(account: &mut Account) {
 pub fn deposit_debiting(account: &mut Account) {
     account.balance = account.balance.wrapping_sub(1);
 }
+
+/// Seeded defect: debits instead of crediting, but never below the floor of `balance`'s declared
+/// range. It violates the postcondition at every valuation but the floor, and its post state
+/// always lies inside the model's range, which QSL's snapshot admission requires: the playback
+/// `deposit_debiting` is falsified by may be the floor, where it runs to a value outside the range
+/// and QSL refuses the post snapshot.
+pub fn deposit_debiting_within_range(account: &mut Account) {
+    if account.balance > 0 {
+        account.balance -= 1;
+    }
+}

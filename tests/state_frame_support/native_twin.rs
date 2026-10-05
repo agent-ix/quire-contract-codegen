@@ -14,14 +14,16 @@
 use super::model;
 
 use qsl_replay::{
-    ClaimedChange, DigestDomain, DigestRecord, DocumentRef, FrameReplayResult, Identifier,
-    OccurrenceKey, OperationName, ReplayRefusal, ScalarLimits, SelectedObject, StageLimits,
+    call_site, CallSiteRefusal, ClaimedChange, ClauseName, ClauseSite, DependencyInput,
+    DigestDomain, DigestRecord, DocumentRef, FrameReplayResult, Identifier, OccurrenceKey,
+    OperationName, ReplayRefusal, ScalarLimits, SelectedObject, SourceIdentity, StageLimits,
     WitnessEnvelope, MAX_ENCODED_BYTES,
 };
 use quire_contract_codegen::{
-    DependencyLock, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
-    ProvidedDocument, ReplayInputs,
+    DependencyLock, DocumentLabel, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
+    ProvidedDocument, ReplayInputs, StateClauseReplayInputs, StateObjectAddress,
 };
+use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -109,7 +111,8 @@ fn field(owner: &str, name: &str) -> Value {
 
 /// The `test/bank` domain package: `Account` with the integer fields and ranges of `model`, one
 /// operation `deposit` whose frame modifies the fields `model` grants, a declared operation
-/// `transfer` no clause names, and one closed population.
+/// `transfer` no clause names, and one closed population. Neither operation declares a parameter
+/// or a result, the shape the state-clause replay supports.
 fn domain_document() -> Vec<u8> {
     let account = account_type();
     let bound = |field: &str, keyword: &str, value: i64| {
@@ -143,11 +146,6 @@ fn domain_document() -> Vec<u8> {
             "identity": format!("{account}/{name}"),
             "name": name,
             "params": [],
-            "returns": {
-                "typeRef": "ix://quire/native/Boolean",
-                "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
-                "nullable": false,
-            },
             "pre": [],
             "post": [],
             "origin": {"source": {
@@ -220,7 +218,9 @@ fn unit_source(model_digest: &str) -> String {
          profile v = \"quire.value.complete/v1\";\n\
          model Bank = {PACKAGE:?} version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n\
          post BalanceNeverDrops using v on Bank::Account::deposit {{ \
-         self.balance >= pre(self.balance) }}\n"
+         self.balance >= pre(self.balance) }}\n\
+         post AuditNeverDrops using v on Bank::Account::deposit {{ \
+         self.audit >= pre(self.audit) }}\n"
     )
 }
 
@@ -322,7 +322,7 @@ impl Twin {
                 "digest": format!("sha256-jcs:{}", hex(&post_ref.digest)),
             },
             "parameters": {},
-            "result": {"boolean": true},
+            "result": null,
             "created": [],
             "deleted": [],
         })
@@ -354,9 +354,31 @@ impl Twin {
         account: &str,
         field: &str,
     ) -> Result<FrameReplay, FrameReplayError> {
-        let identifier = |name| Identifier::new(name).expect("identifier");
+        FrameReplay::new(FrameReplayInputs {
+            run: self.run(),
+            packages: self.packages(),
+            state_documents: invocation
+                .documents
+                .iter()
+                .map(|(reference, bytes)| document(reference, bytes))
+                .collect(),
+            operation: self.operation(operation),
+            invocation: invocation.reference.clone(),
+            change: ClaimedChange::FieldWrite {
+                object: SelectedObject {
+                    population: population(),
+                    key: account.to_owned(),
+                },
+                field: field.to_owned(),
+            },
+            obligation_identity: [1; 32],
+        })
+    }
+
+    /// The proving run's lock: the unit, no dependency, and the limits the twin replays under.
+    fn run(&self) -> ReplayInputs {
         let unlimited = limits(u64::MAX);
-        let run = ReplayInputs {
+        ReplayInputs {
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
                 identity: IDENTITY.to_owned(),
@@ -375,33 +397,80 @@ impl Twin {
                 s3: unlimited,
                 s4: unlimited,
             },
+        }
+    }
+
+    /// The domain package, provided by its `sha256-jcs` digest.
+    fn packages(&self) -> Vec<ProvidedDocument> {
+        vec![ProvidedDocument {
+            digest: DigestRecord::mint(DigestDomain::Sha256Jcs, jcs_digest(&self.domain)),
+            bytes: self.domain.clone(),
+        }]
+    }
+
+    /// The `ClauseSite` `qsl_replay::call_site` returns for the clause named `clause`: the
+    /// identities QSL itself gives it, read directly and not through the crate under test.
+    pub fn clause_site(&self, clause: &str) -> Result<ClauseSite, Box<CallSiteRefusal>> {
+        let name = ClauseName(Identifier::new(clause).expect("identifier"));
+        call_site(
+            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY,
+            &self.unit,
+            [self.domain.as_slice()],
+            &DependencyInput::default(),
+            &name,
+        )
+        .map(|located| located.site)
+    }
+
+    /// `Bank::Account::<operation>`.
+    fn operation(&self, operation: &str) -> OperationName {
+        let identifier = |name| Identifier::new(name).expect("identifier");
+        OperationName {
+            model: identifier("Bank"),
+            object: identifier("Account"),
+            operation: identifier(operation),
+        }
+    }
+
+    /// The state-clause replay inputs for the clause `clause` of `deposit` on `account`, over the
+    /// pre state the playback binds and the post state the subject ran to, each
+    /// `(balance, audit)`, with the admitted `package` and `clause_node` the harness was
+    /// generated from.
+    pub fn state_clause_inputs<'a>(
+        &self,
+        package: &'a CheckedPackageV2,
+        clause_node: &'a CheckedNodeId,
+        clause: &str,
+        playback: (i64, i64),
+        post: (i64, i64),
+    ) -> StateClauseReplayInputs<'a> {
+        let label = |name: &str| DocumentLabel {
+            authority: "test".to_owned(),
+            identity: name.to_owned(),
+            revision_namespace: "ns".to_owned(),
+            revision: "1".to_owned(),
         };
-        FrameReplay::new(FrameReplayInputs {
-            run,
-            packages: vec![ProvidedDocument {
-                digest: DigestRecord::mint(DigestDomain::Sha256Jcs, jcs_digest(&self.domain)),
-                bytes: self.domain.clone(),
-            }],
-            state_documents: invocation
-                .documents
-                .iter()
-                .map(|(reference, bytes)| document(reference, bytes))
-                .collect(),
-            operation: OperationName {
-                model: identifier("Bank"),
-                object: identifier("Account"),
-                operation: identifier(operation),
+        let [balance, audit] = model::FIELDS.map(|(name, _)| name.to_owned());
+        StateClauseReplayInputs {
+            run: self.run(),
+            packages: self.packages(),
+            package,
+            clause_node,
+            operation: self.operation("deposit"),
+            clause: ClauseName(Identifier::new(clause).expect("identifier")),
+            object: StateObjectAddress {
+                population: population(),
+                key: "account".to_owned(),
+                object_type: account_type(),
             },
-            invocation: invocation.reference.clone(),
-            change: ClaimedChange::FieldWrite {
-                object: SelectedObject {
-                    population: population(),
-                    key: account.to_owned(),
-                },
-                field: field.to_owned(),
-            },
+            invocation_label: label("twin-invocation"),
+            pre_label: label("twin-pre"),
+            post_label: label("twin-post"),
+            playback: vec![(balance.clone(), playback.0), (audit.clone(), playback.1)],
+            post_state: vec![(balance, post.0), (audit, post.1)],
             obligation_identity: [1; 32],
-        })
+        }
     }
 
     /// Replays `invocation` as a counterexample to the frame of `deposit`, claiming `field` of

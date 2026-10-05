@@ -11,16 +11,20 @@ use qsl_replay::{
     DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause, FrameCounterexample,
     Identifier, IncompleteCause, InconclusiveCause, MalformedTranscript, OperationName,
     ProofRefusalCause, QualifiedName, ReplayRefusal, ReportedInconclusiveCause, ScalarLimits,
-    SourceIdentity, StageLimits, Std001Code, SuppliedLibrary, TerminalValue, UnavailabilityCause,
-    Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
+    SourceIdentity, StageLimits, StateClauseCounterexample, Std001Code, SuppliedLibrary,
+    TerminalValue, UnavailabilityCause, Verdict, Witness, WitnessEnvelope, WitnessFailure,
+    WitnessPacket,
 };
 use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
-    DependencyLockError, EvidenceFailureCause, FrameReplayError, KaniInconclusiveReason,
-    KaniRunOutcome, LockedSource, ObligationIdentityError, ReplayInputs, ReplayPackage,
-    ReplayPackageError, ReplaySettlement, ReplayVerdict, SpineReplayError, TerminalPairError,
+    DependencyLockError, DocumentError, EvidenceFailureCause, FrameReplayError,
+    KaniInconclusiveReason, KaniRunOutcome, LockedSource, ObligationIdentityError,
+    OperationDeclaration, ReplayInputs, ReplayPackage, ReplayPackageError, ReplaySettlement,
+    ReplayVerdict, SpineReplayError, StateClauseReplay, StateClauseReplayError, TerminalPairError,
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
+
+use crate::kani_obligations_state_frame::{fixture_declaring, native_twin::Twin, Declares};
 
 /// Every inconclusive reason the classifier has today.
 const REASONS: [KaniInconclusiveReason; 6] = [
@@ -564,6 +568,114 @@ fn repeated_identity_refusal() -> ReplayPackageError {
         "{input}"
     );
     refusal
+}
+
+/// The state-clause replay path settles as the other replay paths do (FR-029-AC-16): a
+/// reproduced result is `Refuted` and an inconclusive one `Inconclusive(ReplayParity)` carrying
+/// its cause, a refusal or a call-site or dependency refusal is read by its own code, and each
+/// failure this repository raises that carries no QSL code is `Failed`.
+///
+/// Trace: FR-029-AC-16, TC-040
+#[test]
+fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
+    let (twin, fixture) = (Twin::new(), fixture_declaring(Declares::Nothing));
+    let run = |pre, post| {
+        StateClauseReplay::new(twin.state_clause_inputs(
+            &fixture.package,
+            &fixture.clause,
+            "BalanceNeverDrops",
+            pre,
+            post,
+        ))
+        .expect("the replay is built")
+        .replay()
+        .expect("the replay settles")
+    };
+    // Both directions of the result: a debiting run reproduces, a crediting run is a disagreement
+    // carrying QSL's own cause.
+    assert_eq!(map_settled(&run((5, 0), (4, 0))), TerminalValue::Refuted);
+    let cause = DisagreementCause::Verdicts {
+        proved: Verdict::from_category(Category::Violation),
+        replayed: Verdict::from_category(Category::Success),
+    };
+    assert_eq!(
+        map_settled(&run((5, 0), (6, 0))),
+        TerminalValue::Inconclusive(InconclusiveCause::ReplayParity(cause))
+    );
+
+    // The failures this repository raises, none of which carries a QSL code.
+    let empty_packet = || WitnessPacket::<StateClauseCounterexample> {
+        obligation_identity: None,
+        occurrence_key: None,
+        clause_node: None,
+        selected_function: None,
+        package_id: None,
+        source_digests: None,
+        profile_selections: None,
+        run_limits: None,
+        declared_domains: None,
+        backend: None,
+        trace_position: None,
+        source: None,
+        family_payload: None,
+    };
+    let envelope = WitnessEnvelope::reconstruct(empty_packet())
+        .map(|_| ())
+        .expect_err("an envelope with no members is refused");
+    let defects = [
+        StateClauseReplayError::Name(
+            QualifiedName::new(Vec::new()).expect_err("an empty qualified name"),
+        ),
+        StateClauseReplayError::Transcript(malformed()),
+        StateClauseReplayError::Envelope(envelope),
+        StateClauseReplayError::Document(DocumentError::NoRange {
+            field: "balance".to_owned(),
+        }),
+        StateClauseReplayError::MissingField {
+            field: "balance".to_owned(),
+        },
+        StateClauseReplayError::OutOfDomain {
+            field: "balance".to_owned(),
+        },
+        StateClauseReplayError::UnsupportedOperationShape {
+            operation: OperationName {
+                model: identifier("m"),
+                object: identifier("o"),
+                operation: identifier("op"),
+            },
+            declaration: OperationDeclaration::default(),
+        },
+    ];
+    for defect in &defects {
+        assert_eq!(map_settled(defect), TerminalValue::Failed, "{defect}");
+    }
+
+    // The QSL refusals, read as the frame path reads them: by their own code, never `Failed`,
+    // `Incomplete` or `Declined`.
+    let refusal = non_fault_refusal();
+    let expected = replayed(refusal.code());
+    assert_eq!(
+        map_settled(&StateClauseReplayError::Refused(Box::new(refusal))),
+        expected
+    );
+    let package = DigestRecord::mint(DigestDomain::PackageSemanticV2, [1; 32]);
+    let unknown = CallSiteRefusal::UnknownClause {
+        selection: ClauseName(identifier("c")),
+        package,
+    };
+    let code = unknown.code();
+    assert_eq!(
+        map_settled(&StateClauseReplayError::CallSite(Box::new(unknown))),
+        replayed(code)
+    );
+    let input = shared_owner();
+    let code = input.code();
+    assert_eq!(
+        map_settled(&StateClauseReplayError::Dependencies(
+            DependencyLockError::Input(input)
+        )),
+        replayed(code)
+    );
 }
 
 // FR-030: the map from a Contract IR outcome.

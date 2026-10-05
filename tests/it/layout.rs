@@ -80,6 +80,7 @@ const MODULE_FILES: &[&str] = &[
     "kani/run/tool.rs",
     "replay/frame.rs",
     "replay/function.rs",
+    "replay/state_clause.rs",
     "replay/witness.rs",
     "routed/capability.rs",
     "routed/generate.rs",

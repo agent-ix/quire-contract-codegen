@@ -181,7 +181,7 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 | FR-029-AC-13 | `falsified` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped in `ReplayPackageError` and `FrameReplayError`, maps to `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or `DependencyInputRefusal::code()` of that refusal, and never to `Declined`. | Test (TC-040) |
 | FR-029-AC-14 | `falsified` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-040) |
 | FR-029-AC-15 | A falsified outcome given no replay settlement is refused with `TerminalPairError::MissingSettlement`, and each other outcome (`verified`, `cover-unsatisfied` and every inconclusive reason) given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns a terminal value. | Test (TC-040) |
-| FR-029-AC-16 | The state-clause replay path (FR-024) settles as the other replay paths do: a `StateClauseReplayResult` that settles `ReproducedWithEvaluatedWitness` in category `violation` is a reproduction and an `inconclusive` one is a disagreement carrying its `DisagreementCause`, so `falsified` maps to `Refuted` and `Inconclusive(ReplayParity)`; `StateClauseReplayError::Refused` and `CallSite` read as `ReplayRefusal` and `CallSiteRefusal` do (fault `Failed`, any other refusal `Inconclusive(ReplayRefused)` with its catalog code), and `Dependencies` as `DependencyLockError` does; `Name`, `Transcript`, `Envelope`, `Document`, `MissingField`, `OutOfDomain` and `UnsupportedOperationShape` carry no QSL code and each maps to `Failed`. A missing state field in CG's own harness playback and a value outside the proof bound are CG defects, and an operation shape CG does not support is a CG limit, not a QSL data refusal; none maps to `Incomplete` or to `Inconclusive(ReplayRefused)`. PLANNED (IR-460). | Test (TC-040) |
+| FR-029-AC-16 | The state-clause replay path (FR-024) settles as the other replay paths do: a `StateClauseReplayResult` that settles `ReproducedWithEvaluatedWitness` in category `violation` is a reproduction and an `inconclusive` one is a disagreement carrying its `DisagreementCause`, so `falsified` maps to `Refuted` and `Inconclusive(ReplayParity)`; `StateClauseReplayError::Refused` and `CallSite` read as `ReplayRefusal` and `CallSiteRefusal` do (fault `Failed`, any other refusal `Inconclusive(ReplayRefused)` with its catalog code), and `Dependencies` as `DependencyLockError` does; `Name`, `Transcript`, `Envelope`, `Document`, `MissingField`, `OutOfDomain` and `UnsupportedOperationShape` carry no QSL code and each maps to `Failed`. A missing state field in CG's own harness playback and a value outside the proof bound are CG defects, and an operation shape CG does not support is a CG limit, not a QSL data refusal; none maps to `Incomplete` or to `Inconclusive(ReplayRefused)`. | Test (TC-040) |
 
 ## Dependencies
 
@@ -196,13 +196,15 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 
 Built (Linear IR-465) in `kani/terminal.rs` as `run_terminal_value`, with the typed
 `ReplaySettlement` it reads and, in `replay/`, the `From` conversions from every error the replay
-path returns. Every criterion is backed by a tagged test except two, and FR-029-AC-16 (planned, IR-460). FR-029-AC-3 is backed for the
+path returns, and for the state-clause path (FR-029-AC-16, IR-460). Every criterion is backed by a tagged test except two. FR-029-AC-3 is backed for the
 timed-out and exhausted-unwind-bound reasons only: `KaniInconclusiveReason` has no memory-exhausted
 reason until FR-028-AC-3 adds one, and the map's `match` fails to compile there until that arm is
 written. FR-029-AC-10 is not backed: the map and the conversions read each fault as `Failed`, but a
 test cannot construct QSL's `InternalFault`, which `qsl-replay` does not re-export and which this
 repository may not name through another QSL crate; the criterion stays planned until QSL exports a
-constructor or the type through `qsl-replay`.
+constructor or the type through `qsl-replay`. The same holds for the fault reading of a
+`StateClauseReplayError::Refused` (FR-029-AC-16): no test builds a fault, and the conversion reads
+the refusal by the same walk as the frame path's.
 
 Two points the map decides, now stated in the Description, Outputs, Behavior and criteria above
 (FR-029-AC-11 and FR-029-AC-15). A pair the driver mis-builds is a typed `TerminalPairError`, not a

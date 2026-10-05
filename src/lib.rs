@@ -167,6 +167,10 @@ pub use replay::function::{
     ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use replay::obligation::ObligationIdentityError;
+pub use replay::state_clause::{
+    DocumentError, DocumentLabel, OperationDeclaration, StateClauseReplay, StateClauseReplayError,
+    StateClauseReplayInputs, StateObjectAddress,
+};
 pub use replay::witness::decode_falsification;
 pub use strategy::campaign::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
