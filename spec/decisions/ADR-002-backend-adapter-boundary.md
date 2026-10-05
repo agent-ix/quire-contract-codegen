@@ -84,7 +84,8 @@ A second backend registers in these steps:
 3. The new adapter implements the adapter trait, with real transcript captures of its own under
    `tests/fixtures/`.
 4. The adapter owns its own execution evidence type.
-5. FR-019, FR-022 and the test matrix gain the kind's rows.
+5. FR-019, FR-022 and the test matrix gain the kind's rows. For the process-provider variant FR-019
+   and the matrix have them (IR-629), and FR-022's wait on FR-019 open question 3.
 
 ### Amendment (IR-629): the process-provider variant
 
@@ -97,4 +98,5 @@ terminal-record arms are open until the QSL owner states them (FR-019 open quest
 ## Consequences
 
 - FR-026 and FR-029 state the adapter trait and the terminal-record map.
-- FR-019 and FR-022 gain rows only when a second backend is added.
+- FR-019 and FR-022 gain rows when a backend kind is added: FR-019 has the process-provider rows, and
+  FR-022 gains its rows once FR-019 open question 3 is answered.

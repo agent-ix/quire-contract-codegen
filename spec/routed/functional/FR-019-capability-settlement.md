@@ -99,20 +99,28 @@ nothing says so.
 
 ### The process-provider kind (QSL ADR-029 PV-4)
 
-- The generator shall give the closed backend kind one variant for process providers, beside `Kani`,
-  and shall list it in `BackendKind::ALL`.
+- The generator shall give the closed backend kind one variant for process providers, beside `Kani`.
+- The generator shall list that variant in `BackendKind::ALL`.
 - The generator shall settle an item whose candidate is a process-provider backend in that variant's
-  `negotiate_*` arm, and in no other place.
+  `negotiate_*` arm.
+- The generator shall settle such an item in no other place.
 - The process-provider arm shall settle an item from the candidate's descriptor in the envelope manifest
   and the item's extent classification alone.
-- The process-provider arm shall apply the advertised-mode rules above to that descriptor's advertised
-  (kind, mode) pairs, with the same dispositions and causes as every other arm.
+- The process-provider arm shall never settle an unbounded extent `supported` against a descriptor that
+  advertises `bounded` only for the item's kind, and shall never narrow an extent.
 - The process-provider arm shall never call, start, open or otherwise reach the plugin that
   descriptor stands for.
-- The process-provider arm shall return a negotiation disposition only, and shall never return a
-  terminal value, a verification result or an artifact.
-- The generator shall leave the mapping from a plugin `BackendId` to the process-provider variant to
-  the driver's pre-negotiation conversion, and shall do no plugin discovery of its own.
+- The process-provider arm shall return a `Disposition` and nothing else.
+- The generator shall never return a terminal value, a verification result or an artifact from settling.
+- When `BackendKind::from_identity` is given a backend identity that a built-in variant names, the
+  generator shall return that variant, as it does today for `kani`.
+- If `BackendKind::from_identity` is given an identity no variant names, then the generator shall return
+  `None`, so that the item settles `invalid-request`/`unknown-backend`, and the process-provider variant
+  shall not act as a catch-all for it.
+
+How a plugin `BackendId` reaches the process-provider variant is open question 2. CG's own
+`from_identity` calls (settlement's unknown-backend check and single-candidate arm, and routed
+generation's `BackendKindDisagrees` check) keep their stated behaviour for the identities above.
 
 Adding the variant breaks the public `BackendKind` enum for every exhaustive match outside this crate. The
 quire-driver lane's pre-negotiation conversion is the paired adaptation (QSL ADR-029 Amendments, ADR-012
@@ -135,6 +143,15 @@ Open questions for the QSL owner (PV-4 does not settle them, and the criteria th
    error until it has an arm, so each needs a stated arm. What do they do for a process provider?
 4. PV-4 does not name the variant or its serialized label. The label is public (`BackendKind`
    serializes kebab-case).
+5. PV-4 says the arm settles "under QSpec FR-290's rules", and FR-290's advertised-mode table
+   answers the rows (`bounded` against an advertisement that includes `bounded`, `bounded` against
+   `unbounded` only, `unbounded` against one that includes `unbounded`) with "the negotiation arm's own
+   disposition for the IR form". PV-4 does not state that disposition for the process-provider arm, so
+   this requirement states none of those rows for it. What does the arm settle for each? The Kani
+   arm's disposition for them is not assumed to carry over.
+6. PV-4 says the driver "maps every plugin `BackendId` to that variant", and a plugin may declare the
+   `BackendId` `kani`, which `BackendKind::from_identity` resolves to `Kani`. Which wins for such a
+   plugin, and where is that enforced, in the driver's conversion or in CG? No criterion states it.
 
 ## Acceptance Criteria
 
@@ -148,10 +165,11 @@ Open questions for the QSL owner (PV-4 does not settle them, and the criteria th
 | FR-019-AC-7 | An envelope whose `capability_vocabulary` is not exactly `quire.capability-kind/v1`, or is absent, is refused as `invalid_capability`/`unsupported-version` with none of its kinds read. | Test (TC-030) |
 | FR-019-AC-8 | An item with an absent extent classification settles `invalid-request` with `invalid_capability`/`absent-extent`, and an absent or unknown kind settles before the candidate table is consulted. | Test (TC-030) |
 | FR-019-AC-9 | A backend kind added without a negotiation arm does not compile: the dispatch is an exhaustive `match` over the closed kind with no catch-all arm. | Analysis |
-| FR-019-AC-11 | `BackendKind` has the process-provider variant beside `Kani`, `BackendKind::ALL` lists both with `index` returning each position, and an item whose one candidate is a process-provider backend reaches that variant's arm and settles there. Planned: how a candidate reaches the arm waits on open question 2. | Test (TC-046) |
-| FR-019-AC-12 | The process-provider arm settles from the descriptor's advertised (kind, mode) pairs and the extent classification alone: a bounded extent settles `supported`; an unbounded extent settles `supported` against an advertised `unbounded`, `requires-bound` against `bounded`-only with a finite bound available, and `unsupported` with `unsupported_projection`/`unbounded-extent` against `bounded`-only with none; it never narrows an extent. A mutant that settles an unbounded extent `supported` against `bounded`-only, or that settles `requires-bound` without a finite bound, fails this. Domains and bounds wait on open question 1. | Test (TC-046) |
-| FR-019-AC-13 | Settling a process-provider item calls no plugin: a descriptor whose identity names an executable that records its own start leaves no record, and the arm takes no argument from which a plugin can be reached. A mutant arm that starts the descriptor's identity as a process leaves the record and fails this. | Test (TC-046) |
-| FR-019-AC-14 | A process-provider item settled `supported` is the disposition `supported` naming the backend and nothing more: no terminal value, no verification result and no artifact comes from settlement, and no non-`supported` process-provider settlement routes. A mutant arm that returns any other disposition for a `bounded` extent that the manifest advertises, or that routes an `unsupported` item, fails this. | Test (TC-046) |
+| FR-019-AC-11 | `BackendKind` has the process-provider variant beside `Kani`, `BackendKind::ALL` lists both with `index` returning each position, and an item whose one candidate is a process-provider backend reaches that variant's arm and settles there. A mutant that leaves the variant out of `ALL` fails this. Planned: how a candidate reaches the arm waits on open questions 2 and 3. | Test (TC-046) |
+| FR-019-AC-12 | The process-provider arm's disposition is a function of the descriptor's advertised (kind, mode) pairs and the extent classification alone: two descriptors with equal pairs and different identity text, manifest position or ambient state settle identically, and an unbounded extent against `bounded`-only never settles `supported`. A mutant arm that reads the identity text, or that settles that unbounded extent `supported`, fails this. The rows PV-4 leaves to the arm wait on open question 5, and domains and bounds on open question 1. | Test (TC-046) |
+| FR-019-AC-13 | Settling a process-provider item reaches no plugin: a descriptor whose identity names a non-existent executable settles identically to one with an ordinary identity and starts nothing, and a descriptor whose identity names an executable that records its own start leaves no record. A mutant arm that starts or resolves the identity as a process either changes the first disposition or leaves the record, and fails this. | Test (TC-046) |
+| FR-019-AC-14 | The process-provider arm's return type is `Disposition`, which has no terminal-value, verification-result or artifact member, so settling returns none of them. A change that returns one does not compile against that type. | Analysis |
+| FR-019-AC-15 | `BackendKind::from_identity` returns `Kani` for `kani` and `None` for an identity no variant names, with the process-provider variant added; an item naming such an identity settles `invalid-request`/`unknown-backend`. A mutant `from_identity` that returns the process-provider variant for an unnamed identity fails this. Planned: plugin identities wait on open questions 2 and 6. | Test (TC-046) |
 
 ## Dependencies
 
@@ -159,5 +177,6 @@ Open questions for the QSL owner (PV-4 does not settle them, and the criteria th
   `quire-spec-language` registry that computes `candidates`.
 - **Downstream**: [TC-030](../matrix/TC-030-capability-settlement.md),
   [TC-046](../matrix/TC-046-process-provider-settlement.md); quire-driver's pre-negotiation
-  conversion (IR-609), the paired adaptation to the new variant, filed by the driver lane at merge;
+  conversion, the paired adaptation to the new variant, to be added to quire-driver IR-609 (which does
+  not mention it today) or to a new driver ticket by the driver lane at merge;
   [FR-022](./FR-022-routed-generation.md), the generation arm of the same seam.
