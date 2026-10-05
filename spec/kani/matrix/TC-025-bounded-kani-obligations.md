@@ -178,10 +178,14 @@ unsatisfiable requires as `cover_unsatisfied`.
 
 ## A disposition for every state clause (IR-461)
 
-19. Negotiate one request of `StateFrame` items over one admitted package: first a
-    `precondition` clause (refused), then one clause in both roles that yields, one whose field
-    has no integer range, one comparing two fields, one whose frame grants a relationship and
-    one whose frame grants every field. Read one record per item in request order, `kind`
+19. Negotiate one request of `StateFrame` items over one admitted QSL-emitted package with
+    selected model declarations: first a `precondition` clause (refused), then one clause in
+    both roles that yields, one whose lowering is a `RequiresBound` record, one whose selected
+    model field has no representable `i64` range, one comparing two fields, one whose frame
+    grants a relationship and one whose frame grants every field. The `RequiresBound`
+    case must come from lowering in that same admitted package; a separate request or
+    a body-member target does not satisfy this mixed-disposition check. Read one record
+    per item in request order, `kind`
     `postcondition` or `frame`, and each later record equal to the record the same item has in
     a request of that item only; repeat with three refused items and read three records. An
     implementation that stops at the first refusal reads one record and fails
