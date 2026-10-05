@@ -155,6 +155,7 @@ The focused tests backing the ceiling slice are:
 - `bundle_proof_record_requires_and_records_each_request_ceiling`
 - `either_ceiling_changes_the_canonical_corpus_identity`
 - `identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory`
+- `zero_wall_ceiling_cannot_accept_an_already_exited_launcher`
 - `child_memory_overage_is_inconclusive_and_kills_the_entire_backend_tree`
 - `batch_memory_overage_refuses_every_member_without_classifying_a_partial_report`
 - `unequal_identity_memory_ceilings_run_in_separate_backend_processes`

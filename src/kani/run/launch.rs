@@ -215,6 +215,7 @@ fn run_monitored(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .process_group(0);
+    let deadline = Instant::now().checked_add(timeout);
     let mut child = command.spawn()?;
     let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
         let _ = child.kill();
@@ -229,7 +230,6 @@ fn run_monitored(
     let stdout_reader = spawn_capture(stdout, &flags, limit);
     let stderr_reader = spawn_capture(stderr, &flags, limit);
 
-    let deadline = Instant::now().checked_add(timeout);
     let exited = wait_until(&child, deadline, &flags.failed, &mut memory);
     if let Some((observer, _)) = &memory {
         observer.kill_known();
@@ -307,6 +307,7 @@ struct CaptureFlags {
 }
 
 /// The settled reason for stopping the unreaped launcher.
+#[derive(Debug)]
 enum WaitConclusion {
     Completed,
     TimedOut,
@@ -341,6 +342,12 @@ fn wait_until(
                 }
             }
         }
+        // An exited launcher cannot turn an already elapsed ceiling into completion.
+        if failed.load(Ordering::Acquire)
+            || deadline.is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            return Ok(WaitConclusion::TimedOut);
+        }
         match waitid(
             WaitId::Pid(pid),
             WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
@@ -348,11 +355,6 @@ fn wait_until(
             Ok(Some(_)) => return Ok(WaitConclusion::Completed),
             Ok(None) | Err(Errno::INTR) => {}
             Err(errno) => return Err(errno.into()),
-        }
-        if failed.load(Ordering::Acquire)
-            || deadline.is_some_and(|deadline| Instant::now() >= deadline)
-        {
-            return Ok(WaitConclusion::TimedOut);
         }
         thread::sleep(LAUNCHER_POLL_INTERVAL);
     }
@@ -496,6 +498,34 @@ mod tests {
 
     use super::*;
     use crate::kani::test_support::discover_scratch;
+
+    /// Trace: FR-028-AC-2.
+    #[test]
+    fn zero_wall_ceiling_cannot_accept_an_already_exited_launcher() {
+        let deadline = Instant::now();
+        let mut child = Command::new("sh")
+            .args(["-c", "exit 0"])
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let pid = Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap();
+        // Wait for a positive exit signal without reaping it. This models completion during
+        // observation, after the zero ceiling elapsed; it needs no scheduling assumption.
+        assert!(waitid(
+            WaitId::Pid(pid),
+            WaitIdOptions::EXITED | WaitIdOptions::NOWAIT,
+        )
+        .unwrap()
+        .is_some());
+        let conclusion =
+            wait_until(&child, Some(deadline), &AtomicBool::new(false), &mut None).unwrap();
+        kill_process_tree(&mut child);
+        child.wait().unwrap();
+        assert!(
+            matches!(conclusion, WaitConclusion::TimedOut),
+            "an expired zero ceiling must time out, observed {conclusion:?}"
+        );
+    }
 
     /// Trace: FR-028-AC-21.
     #[test]
