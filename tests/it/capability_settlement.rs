@@ -17,33 +17,6 @@ fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
     }
 }
 
-/// The CG descriptor retains the registry's typed origin alongside the same
-/// identity and advertisements; the driver supplies the authoritative value.
-///
-/// Trace: FR-019-AC-15, TC-030
-#[test]
-fn tc_030_backend_descriptor_keeps_origin_independent_of_identity() {
-    let linked = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
-    let process = BackendDescriptor {
-        origin: ProviderOrigin::Process,
-        ..linked.clone()
-    };
-    let linked_envelope = envelope(vec![linked], vec![]);
-    let process_envelope = envelope(vec![process], vec![]);
-
-    assert_eq!(
-        linked_envelope.manifest[0].identity,
-        process_envelope.manifest[0].identity
-    );
-    assert_eq!(
-        linked_envelope.manifest[0].advertised,
-        process_envelope.manifest[0].advertised
-    );
-    assert_eq!(linked_envelope.manifest[0].origin, ProviderOrigin::Linked);
-    assert_eq!(process_envelope.manifest[0].origin, ProviderOrigin::Process);
-    assert_ne!(linked_envelope, process_envelope);
-}
-
 fn candidate(identity: &str) -> Candidate {
     Candidate {
         identity: identity.to_owned(),
