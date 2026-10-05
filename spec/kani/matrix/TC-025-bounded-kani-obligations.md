@@ -221,12 +221,15 @@ unsatisfiable requires as `cover_unsatisfied`.
     an unwind bound outside the range, each with `StateFrame` items present or absent as the
     case allows, and read the existing `KaniObligationError` variant with no record
     (FR-015-AC-65).
-26. Build every `StateFrameRefusal` variant (each `BoundNotResolved` case the table separates,
-    each of the six `NotLowered` refusal arms) and call the mapping; read the table's record
-    for each. Build `UnwindOutOfRange`, `InvalidGeneratedSyntax` and `RecordSerialization`
-    directly, and reach `ResourceLimitExceeded` with a state-field list that passes the 1 MiB
-    ceiling or build it directly. Inspect that the mapping is a `match` with no wildcard arm
-    (FR-015-AC-66).
+26. Build every retained `StateFrameRefusal` variant and call the mapping; read the table's
+    record for each. Include `ModelFieldsUnavailable` for `UnknownNode`,
+    `NotModelObjectType` and `AmbiguousField`, `MemberAbsent`, and
+    `ModelMemberNotI64Range` with `NoMemberType`, `NonRangeType` and
+    `EndpointOutsideI64`, plus each of the six `NotLowered` refusal arms. Do not construct
+    retired body-member `BoundNotResolvedCause` cases. Build `UnwindOutOfRange`,
+    `InvalidGeneratedSyntax` and `RecordSerialization` directly, and reach
+    `ResourceLimitExceeded` with a state-field list that passes the 1 MiB ceiling or build
+    it directly. Inspect that the mapping is a `match` with no wildcard arm (FR-015-AC-66).
 27. Call the single-clause engine on a clause whose graph field name is not a Rust identifier
     and on a request whose caller-supplied field name is not an identifier: read
     `MalformedClause` and `InvalidField` (FR-015-AC-67).
@@ -336,7 +339,8 @@ path awaits CG's dependency update and implementation. The hand-built non-declar
 body-member range path is retired; an agreeing read does not make that body trusted. The code change
 replaces `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`, updates
 the typed accessor refusal and AC-66 mapping tests, and edits or supersedes the test of
-FR-024-AC-30 that calls `Twin::aligned`; AC-30's text stays as merged.
+FR-024-AC-30 that calls `Twin::aligned`; this PR restates AC-30 over the emitted-package
+harness, so its previous test evidence remains planned until that migration lands.
 
 ## Blocked
 
