@@ -344,7 +344,7 @@ whose harness it is. So a frame granting every field leaves the `contract` item 
 | `NotLowered` (`RequiresBound`) | `requires_bound`, `unbounded_type` the record's |
 | `BoundNotResolved`, where the clause field's member `value.target` is an unbounded type (a node that is not a bound) | `requires_bound`, `unbounded_type` that target node |
 | `BoundNotResolved`, where that target is a bound that is not an `integer_range`, or an `integer_range` with an endpoint that does not fit `i64`, or the object has no member of that name, or the member's value is not a reference and so has no `value.target` | `unsupported`, `StateFrameRefused` carrying the refusal, which names the field and the bound node |
-| `BoundNotResolved`, planned (IR-624, FR-015-AC-78): where a model declaration node's field has no read (`FieldNotRead`), its reads name two types (`ConflictingFieldReads`), or an object's member and a read of the field name two types (`MemberDisagreesWithRead`) | `unsupported`, `StateFrameRefused` carrying the refusal, which names the field and the nodes it has |
+| `BoundNotResolved`, planned (IR-624, FR-015-AC-78): `ModelFieldsUnavailable` for an accessor error, or `MemberAbsent` for a requested field absent from the accessor | `unsupported`, `StateFrameRefused` carrying the object, field where applicable, and accessor error |
 | `NotLowered` (`Unsupported`) | `unsupported`, `NoFiniteEncoding` naming the record's `unsupported_node_id` and its family, the mapping negotiate gives a scalar `ExactScalarRefusal::Unsupported` |
 | `NotAStateClause` | `unsupported`, `UnknownNodeKind` naming the node, family and form |
 | `ConditionNotSupported` (a shape other than one integer comparison of one pre and one post read of one field through `self`: negation, a literal operand, an operator other than the six integer comparisons, a read through another parameter), `ObservationsDiffer`, `ObservationsSameSide` | `unsupported`, `StateFrameRefused` carrying the refusal. Not `NoFiniteEncoding`: these shapes have a finite encoding (planned FR-015-AC-40 encodes `not` and the six comparisons for the same node), this arm does not render them |
@@ -419,103 +419,57 @@ about items in a negotiated request.
 - If a refusal concerns only one role of a clause, then the generator shall record the other
   role's item by that role's own result (FR-015-AC-68).
 
-IR-624 (planned): where a state field's declared range is read from. Measured on the package QSL
-emits (`qsl_replay::call_site`'s `CallSite::package`, admitted by `CheckedPackageV2::read` with the
-domain package document and `quire.value.complete/v1` as evidence; the twin of
-`tests/state_frame_support/native_twin.rs`, `Twin::emitted_package`): the framed object's
-`model`/`object_type` node has body `{"members": [], "term": "aggregate"}`, and QSpec FR-322
-("Model-owned members") says it stays so: a model declaration node's semantic type is its own id, it carries no
-declaration and its body is empty, and its fields are resolved against the selected domain package
-document, not against the node. The `bounded_domain`/`integer_range` node (0 to 1000 for `balance`
-and for `audit`, one node since the bounds are equal) is the `result_type` of each
-`expression`/`query` node that reads a field: an application of `quire.op.record.project` over a
-`quire.op.model.deref` whose `operation.member` is `{kind: "field", name, declaration}`, with
-`declaration` the framed object's node. The Contract IR reader admits such an application only when
-its `result_type` names the node of the field's member type, which it derives from the selected
-domain document by the model-owned member resolution (QSpec FR-322 step 4, FR-322-AC-31 and
-FR-322-AC-34; Contract IR FR-038 and FR-040 "Model forms"; `check_model_member` in the reader's
-`operations.rs`). That check is partial, and the limit is stated here and not buried. (1) It
-compares only the digest of `result_type` with the key of the derived member type. It never
-re-derives the key of an anonymous structural node such as a `bounded_domain` from that node's
-body, so a package whose `integer_range` node carries the key of `Int[0, 1000]` and the bounds 0 to
-10 or 0 to 5000 is admitted (measured in the review of CG #285, reproduced with a recomputed
-`package_id`; IR-627). (2) It runs only when the object is a model declaration node (QSpec FR-322
-step 2); for any other object the reader checks only that the field's name is declared
-(`check_field_member`), so a read's type is unchecked. The package therefore carries a range in one
-place, and the range a harness assumes from it is only as trustworthy as IR's admission, which today
-does not bind the bounds. CG cannot close that itself: the preimage of a structural node key is
-not published by QSpec ("QSpec does not publish", `structural.rs`) and IR exports no function for
-it, so re-deriving the key in CG would be a copy of an unpublished derivation, which this
-repository does not make. The dependency is on IR: either IR re-derives anonymous structural node
-keys at admission (IR-627) or it exports a typed accessor that returns the bounds as values
-(IR-628, Q-5 of FR-024). FR-015-AC-77 to FR-015-AC-81 and FR-024-AC-31 to FR-024-AC-35, every
-criterion that reads a range from an emitted package, are GATED on IR-627 or IR-628; they stay
-planned. IR-627's check is planned in Contract IR's open spec PR #295 (AC-123 to AC-127: an
-arithmetic check of the read's range node against the derived member type), and is not landed.
-The IR-624 code shall not emit a harness from the model declaration path until IR-627 has landed
-or IR-628's accessor is in use, so the unsound range of the stated limit is never accepted; the
-code change is gated on IR-627 or IR-628, either one. The planned order is IR-627 first, then IR-628.
+IR-624 (planned): read state fields of a model declaration object through Contract IR's
+`CheckedPackageV2::model_object_fields(&object_id)` (FR-038-AC-136 to AC-144, IR-628).
+The package QSL emits for the twin has an empty object body, as QSpec FR-322 requires, but
+IR resolves the effective fields from the selected domain document at admission. The accessor
+returns the own and inherited fields once each, sorted by name, with the most-derived member
+type. `fields.field(name)` returns `None` for an absent name; `field.member_type()` returns
+`Option<&CheckedMemberType>`. For `CheckedMemberType::IntRange { lower, upper }`, both endpoints
+are inclusive `i128` values. CG shall convert each endpoint to `i64` without narrowing and use
+them as the field's range; conversion failure is `EndpointOutsideI64`. An `Integer`, any other
+variant, or `None` is not an `i64` range. The reader shall take neither a model declaration's
+body member nor a field read's `result_type` as its range or field set. In particular, a model
+field with no read can still have a declared range. A model field absent from the accessor is
+`MemberAbsent`, and an accessor error (`UnknownNode`, `NotModelObjectType`, or
+`AmbiguousField(name)`) is a typed `ModelFieldsUnavailable` refusal naming the object and error;
+CG shall not fall back to a read or body on that error (FR-015-AC-77 and AC-78).
 
-The shared reader `field_range` separates two kinds of framed object:
+The hand-built state/frame fixture has an object that is not a model declaration node. Its
+existing `field_range` route reads the object body's member `value.target`; a read's
+`result_type` is not admission-bound to that member and shall never override it. This route
+remains gated on IR-627's validation of anonymous structural node keys before new positive
+range claims over body-member nodes can be closed. Until then, it must not provide a trusted
+range for a new positive proof case merely because the read agrees with the member. The existing
+`MemberAbsent`, `ValueNotReference`, `UnboundedType`, `NotIntegerRange`, and
+`EndpointOutsideI64` causes on this route remain. A field range reached through an in-group
+derived-shape node carrying `recursion_group` is not trusted: CG refuses the item before it
+emits an assumption or `domains` entry from that range; this is distinct from the safe value
+returned directly by `model_object_fields` for a model declaration (FR-015-AC-78).
 
-- A model declaration node is a `model`/`object_type` node whose body is the empty aggregate, with
-  no `declaration`, as QSL emits. A read of `field` on `object` is an `expression`/`query` node
-  whose application operation is `quire.op.record.project` with member kind `field`, member name
-  `field` and member declaration `object`; a `pre_read` node wraps such a read and names no member.
-- Where the object is a model declaration node and the package holds reads of `field` on it that
-  all name one `result_type`, `field_range` shall take that node as the field's declared type, and
-  as its range when the node is a `bounded_domain`/`integer_range` with `i64` endpoints
-  (FR-015-AC-77).
-- Where the object is any other node, `field_range` shall read the field's type from the object's
-  body member exactly as it does today, and shall trust no read's `result_type` in its place
-  (FR-015-AC-77).
-- If the object is not a model declaration node and a read of `field` names a `result_type` other
-  than the member's `value.target`, then `field_range` shall return `MemberDisagreesWithRead` naming
-  both nodes (FR-015-AC-78).
-- If the object is a model declaration node and no read of `field` names it, then `field_range` shall
-  return `FieldNotRead`; for the clause's own field that cannot happen, because the clause reads it
-  (FR-015-AC-78).
-- If two reads of `field` on a model declaration node name two different `result_type` nodes, then
-  `field_range` shall return `ConflictingFieldReads` naming both (FR-015-AC-78).
-- `field_range` shall pick neither of two reads that disagree (FR-015-AC-78).
-- The existing causes (`MemberAbsent`, `ValueNotReference`, `UnboundedType`, `NotIntegerRange`,
-  `EndpointOutsideI64`) are kept, with the names and payloads they have; no cause is renamed or
-  removed, so the Covered criteria that name them stand. `FieldNotRead`, `ConflictingFieldReads`
-  and `MemberDisagreesWithRead` are added, mapped to `unsupported`, `StateFrameRefused` by the
-  table above (FR-015-AC-78).
-- If a state field other than the clause's has no range, then the generator shall list it in
-  `state_fields`, as FR-024-AC-23 settled for the record (FR-015-AC-78).
-- If a state field other than the clause's has no range, then the generator shall give it no entry
-  in `domains` and draw it without an assumption (FR-015-AC-78).
-- If the clause's own field has no range, then the generator shall refuse the item (FR-015-AC-27,
-  FR-015-AC-61, FR-015-AC-63).
-- Where the generator draws a state field without a range, it shall record in the harness identity
-  that field and the reason it has none: `NoRead` (the package carries no read of it, so whether
-  the model declares a range is unknown to the package) or `TypeNotRange` (its type is known and is
-  no `i64` `integer_range`). `domains` alone cannot tell the two apart (FR-015-AC-81).
-- The generator shall take the field set and the draw order from the request's `state_fields`, the
-  fields of the subject's state struct (FR-025) in the caller's order, because the package carries
-  no field list: the object body is empty and the frame names only the granted fields
-  (FR-015-AC-79).
-- The generator shall keep its refusals that the clause's field and every granted field are among
-  `state_fields` (FR-015-AC-29, FR-015-AC-79).
+The request's `state_fields` remains the field set and draw order of the subject's state struct
+(FR-025), in caller order. CG shall check that every listed name occurs in the accessor's
+returned field list for a model declaration; it shall not silently drop an absent name or insert
+an unrequested inherited name. The clause field and every granted field must still occur in
+`state_fields` (FR-015-AC-29). A listed, present field whose member type is `None`, `Integer`,
+another non-range variant, or an `IntRange` outside `i64` has no usable range: if it is the
+clause's own field the item is refused; otherwise it remains in `state_fields`, has no `domains`
+entry, and is drawn without a range assumption. Its identity and persisted record name the
+field with `TypeNotRange`, deterministically. `NoRead` is retired for the model declaration
+route: whether a read exists cannot decide its range. Duplicate unranged names make the record
+invalid (FR-015-AC-78 and AC-81).
 
-An unranged draw is the main case of a frame harness, since the fields a frame does not grant are
-usually read by no clause. It is not refused, because refusing would refuse nearly every frame
-harness generated from an emitted package until IR-628 lands, and the unconstrained draw is sound
-for the proof: it is wider than the model. Its cost is at replay. A falsified run may bind a value
-outside the model's range for such a field, and QSL refuses an out-of-range pre state (QSL ruling,
-QSL-634), so that counterexample cannot reproduce. FR-024-AC-35 states how it settles.
-
-The code that follows this specification changes `field_range`, `state_domains`, the harness
-identity, the state-clause replay's field reader and its fixture in one change, so the generator
-and the replay cannot disagree on one package. It adds three causes to `BoundNotResolvedCause` (a
-new variant on a public enum, re-exported from `lib.rs`, so an exhaustive `match` of a consumer
-breaks) and three mapping arms (`outcome.rs`, the `StateFrameRefusal` mapping and its AC-66 test
-rows), and a fixture whose emitted-package case reads from the model declaration path. It retires
-`tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`, which measures the
-refusal this change removes. Until it lands, `field_range` reads the object body for every object,
-and the criteria below are planned.
+The generator and state-clause replay shall share this range resolution so that their domains
+for one package agree. Both paths shall refuse an absent name or accessor error. The generator
+and replay shall use no alternative source after an accessor failure. The emitted-package path
+awaits CG's dependency update and implementation of the merged IR-628 accessor. The body-member
+path retains the separate IR-627 gate.
+The change replaces the prior emitted-package refusal test with a positive accessor test, and
+updates `BoundNotResolvedCause`, the `StateFrameRefusal` mapping and AC-66 mapping tests for
+`ModelFieldsUnavailable`. It does not introduce `FieldNotRead`, `ConflictingFieldReads`, or
+`MemberDisagreesWithRead`: no `result_type` is authoritative on either route. Until the IR-624
+code lands, `field_range` still reads the object body for every object and these criteria remain
+planned.
 
 IR-264 (planned): the composite-equality family. Its shadow is the equality walk of QSpec FR-149's
 occurrence-pair plan over a fixed record, tuple and option shape, written as straight-line Rust over
@@ -648,11 +602,11 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-74 | With the installed backend, the harness of the corpus case (two record-typed and two tuple-typed values compared with `=` and `!=`, a record with an optional field and a nested option, Boolean and bounded-integer leaves) is classified `Verified` with its cover satisfied within the memory and wall-clock ceilings its identity records, and its execution evidence records the versions and options of FR-028-AC-23; the refinement run of the same case agrees on every case it runs, and the case's refinement domain is at most the case cap, so the run is classified `exhaustive` and records its case count; a second case whose domain exceeds the cap (two unconstrained `i64`-range leaves) is classified `sampled`, which shows both classes. PLANNED (IR-264). | Test (TC-025) |
 | FR-015-AC-75 | With the installed backend each seeded mutant of the shadow is `Falsified` with a concrete playback: an `absent` slot read equal to a `null` slot; one field of the left operand compared with the next field of the right; the pair count omitting the payload pair of two present options; the count stopping after the first unequal field; the operator `NotEqual` rendered as `Equal`; and a field left out of the comparison. Run natively, each seeded mutant of the production oracle settles `refinement_failed` naming the first disagreeing case: the opposite operator emitted; an `absent` slot compared equal to a `null` slot; one pair charged too many for two present options; an optional field's declaration emitted as required (caught as the construction refusal `MissingField` or `NullForRequiredField` of the oracle's own environment, FR-028-AC-14, since the verdict and count do not change); and an oracle that completes a legal pair as `Refused`. A seeded mutant of the closure reader that the shadow, its expectation and the production oracle share is caught by FR-018-AC-23's independent read, not by refinement: one that drops a member, narrows an integer bound by one, or reads an optional member as required. A mutation of the order of the members the reader returns is not a mutant of this set (the `order_only` exemption of FR-028-AC-18). The unmutated corpus case verifies and its refinement run agrees. PLANNED (IR-264). | Test (TC-025) |
 | FR-015-AC-76 | The identity of a composite-equality harness records family `composite_equality`, proof subject `bounded_shadow`, the closure's declaration keys each with its leaves' declared domains, the operator, the size budget and the closure's pair-node count, the abstractions `representation`, `integer_widening`, `absent_payload` and `unrolled_walk` each with its discharging evidence, and the behaviours the proof does not exercise (`meter_limits`, `ill_typed_operands`, `charge_amounts_other_than_pairs`, `foreign_reference`, `declaration_reconstruction`) each with the native criterion that covers it (FR-018-AC-9, FR-018-AC-8, FR-018-AC-2, FR-018-AC-7, FR-018-AC-23) and that criterion's backing state, `backed` where the test matrix lists it covered and `unbacked` otherwise, which a test asserts against the matrix rows (today FR-018-AC-7, AC-8 and AC-9 are planned and FR-018-AC-2 is partly covered, so each of those four reads `unbacked`); a result whose covering criterion is `unbacked` is reported with that state and is not offered as closing a family row; changing the closure, a bound, the operator or the budget changes the identity; and regeneration from equal inputs is byte-identical. PLANNED (IR-264). | Test (TC-025) |
-| FR-015-AC-77 | PLANNED (IR-624), GATED on IR-627 or IR-628. Over the package QSL emits for the twin's unit (`Twin::emitted_package`: a model declaration node, empty body), `field_range` returns 0 to 1000 for `balance` and for `audit` from the reads' `result_type`; over the hand-built fixture package, whose object is not a model declaration node, it returns the same range for each field from the object's body member, trusting no read's type; the harness generator's `domains` and the state-clause replay's declared ranges hold the same range for each field of one package. | Test (TC-025) |
-| FR-015-AC-78 | PLANNED (IR-624), GATED on IR-627 or IR-628. For a field of the framed object, `field_range` returns `FieldNotRead` for a model declaration node no read of the field names, `ConflictingFieldReads` naming both nodes for one whose reads name two types, `MemberDisagreesWithRead` naming both nodes for any other object whose member and read name two types (the fixture with `Member::RationalBound`, `Member::WideRange` or `Member::Literal` and reads typed `Int[0, 1000]`), and keeps `MemberAbsent`, `ValueNotReference`, `UnboundedType`, `NotIntegerRange` and `EndpointOutsideI64` unchanged; each cause of the clause's own field refuses the item, and each of the three new causes maps to `unsupported`, `StateFrameRefused` (FR-015-AC-66). For the package QSL emits from a unit whose clauses read only `balance`, a harness is generated whose `state_fields` lists `audit`, whose `domains` has no entry for it and whose draw of it is unconstrained. | Test (TC-025) |
-| FR-015-AC-79 | PLANNED (IR-624), GATED on IR-627 or IR-628. From the package QSL emits for the twin's unit, both roles of each clause (`BalanceNeverDrops`, `AuditNeverDrops`) are generated; each identity's `state_fields` equals the request's list in the request's order, its `domains` are the ranges of FR-015-AC-77, and its `scope.anchor` and `scope.frame` equal the ids `qsl_replay::call_site` names for the operation, asserted on the generated identity before any replay; a request whose list omits the clause's field or a granted field is refused as FR-015-AC-29 states. | Test (TC-025) |
-| FR-015-AC-80 | PLANNED (IR-624), GATED on IR-627 or IR-628. With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. | Test (TC-025) |
-| FR-015-AC-81 | PLANNED (IR-624), GATED on IR-627 or IR-628. A harness whose state field has no range records that field and its reason in `StateFrameIdentity` and its persisted record: `NoRead` for a model declaration node's field no read names, and `TypeNotRange` for a field whose type is known and is no `i64` `integer_range`; the two reasons give different records, a regenerated harness from equal inputs has a byte-identical record, and a record naming a field twice is not read as an identity. | Test (TC-025) |
+| FR-015-AC-77 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending for the emitted-package path; the hand-built body-member path remains gated on IR-627. For the QSL-emitted twin package, `field_range` calls `model_object_fields` on the framed object's model declaration node and obtains both `balance` and `audit` with `IntRange { lower: 0, upper: 1000 }`; it converts their `i128` endpoints to `i64` and returns 0 to 1000 for each. A second admitted unit with the same object declaration but no read of `audit` returns the same range for `audit`; IR FR-038-AC-140 independently shows that changing a read's range-node body after admission does not change the accessor's bound. The generator's `domains` and state-clause replay's declared ranges agree for one package. A separate hand-built non-declaration object gets its member range only after IR-627 validates that body-bound node. | Test (TC-025) |
+| FR-015-AC-78 | PLANNED (IR-624), IR-628 accessor merged; CG implementation pending, while body-member positives remain gated on IR-627. `field_range` returns `MemberAbsent` for a requested name absent from a model declaration's accessor, including a clause's own field; an accessor `UnknownNode`, `NotModelObjectType` or `AmbiguousField(name)` returns `ModelFieldsUnavailable` with that error and object id, with no body or read fallback. For a present model field, `member_type()` of `None`, `Integer`, `Boolean`, `Option`, `Collection` or `Reference` has no `i64` range; `IntRange` whose lower or upper cannot fit `i64` returns `EndpointOutsideI64`; only two inclusive `i64` endpoints yield a `domains` entry. A clause's own field without a range refuses its item; another listed field without a range remains drawn without an assumption. For a hand-built non-declaration object, `MemberAbsent`, `ValueNotReference`, `UnboundedType`, `NotIntegerRange` and `EndpointOutsideI64` remain body-member causes, and a range reached through a grouped derived-shape node never yields an assumption or `domains` entry. `ModelFieldsUnavailable` maps to `unsupported`, `StateFrameRefused` (FR-015-AC-66). | Test (TC-025) |
+| FR-015-AC-79 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. From the package QSL emits for the twin's unit, both roles of each clause (`BalanceNeverDrops`, `AuditNeverDrops`) are generated; each identity's `state_fields` equals the request's list in its order, its `domains` equal the accessor ranges of FR-015-AC-77, and its `scope.anchor` and `scope.frame` equal the ids `qsl_replay::call_site` names, asserted before replay. The accessor's ascending-name order does not reorder `state_fields`. A request naming a field absent from the accessor is refused; one omitting the clause's or a granted field is refused as FR-015-AC-29 states. | Test (TC-025) |
+| FR-015-AC-80 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. | Test (TC-025) |
+| FR-015-AC-81 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. A present listed model field with `member_type()` of `None`, a non-`IntRange` variant, or `IntRange` outside `i64` is recorded as unranged with `TypeNotRange` in `StateFrameIdentity` and its persisted record, even when no read names it; a present unread `IntRange` within `i64` is recorded in `domains` and is absent from the unranged list. Equal inputs produce byte-identical records; a record naming a field twice is invalid. The model declaration path records no `NoRead` reason. | Test (TC-025) |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 
@@ -671,11 +625,11 @@ families it names, each of which is owed a shadow or a production harness of its
 
 | ID | Mutation that breaks it |
 |----|-------------------------|
-| FR-015-AC-77 | Read the range from the object body's members for a model declaration node, which the emitted package leaves empty; trust a read's `result_type` for an object with body members (the fixture's, caught by AC-78's `MemberDisagreesWithRead`); or let the generator and the state-clause replay carry two readers that disagree on one package. |
-| FR-015-AC-78 | Pick the first of two disagreeing reads, let a read override a body member, treat a field no read names as the whole `i64` or as an error for a field that is not the clause's, return the `result_type` of another field's read, or collapse the causes into one. |
-| FR-015-AC-79 | Emit the hand-built fixture's anchor or frame id in the identity, reorder `state_fields` by name or by body position, or give an unread field a range of the whole `i64` in `domains`. |
-| FR-015-AC-80 | Generate the harness from the hand-built fixture and not from the emitted package, so the test never reads the emitted shape. |
-| FR-015-AC-81 | Record no reason, record `NoRead` for a field whose type is known and not a range, or record both reasons alike. |
+| FR-015-AC-77 | Read a model field from an empty object body or a read's `result_type`, omit unread `audit`, narrow an `i128` endpoint, or let generation and replay use different domains. |
+| FR-015-AC-78 | Fall back after an accessor error; treat an absent accessor field as an unranged present field; use an `Integer`, `Option` or out-of-`i64` range as a range; or trust a grouped derived-shape body bound. |
+| FR-015-AC-79 | Reorder request fields to the accessor's name order, insert an unrequested inherited field, or emit the hand-built fixture's scope ids. |
+| FR-015-AC-80 | Generate the harness from the hand-built fixture rather than the emitted package. |
+| FR-015-AC-81 | Mark an unread `IntRange` as `NoRead`, give an untyped member a range, omit its reason, or accept a duplicate unranged name. |
 
 ## Dependencies
 
