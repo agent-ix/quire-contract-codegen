@@ -8,12 +8,12 @@
 
 use qsl_replay::{
     std001_code, CallSiteRefusal, Category, ClauseName, Code, DeclineCode, DependencyInput,
-    DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause, FrameCounterexample,
-    Identifier, IncompleteCause, InconclusiveCause, MalformedTranscript, OperationName,
-    ProofRefusalCause, QualifiedName, ReplayRefusal, ReportedInconclusiveCause, ScalarLimits,
-    SourceIdentity, StageLimits, StateClauseCounterexample, Std001Code, SuppliedLibrary,
-    TerminalValue, UnavailabilityCause, Verdict, Witness, WitnessEnvelope, WitnessFailure,
-    WitnessPacket,
+    DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause, FieldName,
+    FrameCounterexample, Identifier, IncompleteCause, InconclusiveCause, MalformedTranscript,
+    OperationName, PopulationName, ProofRefusalCause, QualifiedName, ReplayRefusal,
+    ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StageLimits,
+    StateClauseCounterexample, Std001Code, SuppliedLibrary, TerminalValue, UnavailabilityCause,
+    Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
 };
 use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
@@ -402,8 +402,9 @@ fn reproduced_without_violation() -> EvidenceFailureCause {
     }
 }
 
-/// The fault reading is `Failed`. QSL's `InternalFault` cannot be built here, so FR-029-AC-10 is
-/// not tagged; the reading this crate owns is asserted all the same.
+/// The fault reading is `Failed`. The QSL `InternalFault` fault wrappers are not yet tested
+/// (it is now constructible; a follow-up backs FR-029-AC-10), so FR-029-AC-10 is not tagged; the
+/// reading this crate owns is asserted all the same.
 ///
 /// Trace: TC-040
 #[test]
@@ -500,6 +501,21 @@ fn for_each_setup_refusal(check: impl Fn(Code, ReplaySettlement<'_>)) {
             },
             CallSiteRefusal::UnknownClause {
                 selection: ClauseName(identifier("c")),
+                package,
+            },
+            CallSiteRefusal::UnknownField {
+                selection: FieldName {
+                    model: identifier("m"),
+                    object: identifier("o"),
+                    field: identifier("f"),
+                },
+                package,
+            },
+            CallSiteRefusal::UnknownPopulation {
+                selection: PopulationName {
+                    model: identifier("m"),
+                    population: identifier("p"),
+                },
                 package,
             },
         ]
@@ -1071,8 +1087,9 @@ fn tc_041_a_counterexample_disagreement_or_refusal_is_inconclusive_with_its_caus
 }
 
 /// Each failure this repository raises that carries no QSL catalog code settles a counterexample
-/// as `Failed`. QSL's `InternalFault` cannot be built here, so the fault half of FR-030-AC-10 is
-/// not tagged and the criterion stays planned.
+/// as `Failed`. The QSL `InternalFault` fault half of FR-030-AC-10 is not yet tested
+/// (it is now constructible; a follow-up backs it), so it is not tagged and the criterion stays
+/// planned.
 ///
 /// Trace: TC-041
 #[test]

@@ -555,7 +555,9 @@ impl<'a> From<&'a CallSiteRefusal> for ReplaySettlement<'a> {
             | CallSiteRefusal::Dependency { .. }
             | CallSiteRefusal::UnknownFunction { .. }
             | CallSiteRefusal::UnknownOperation { .. }
-            | CallSiteRefusal::UnknownClause { .. } => Self::SetupRefused(refusal.code()),
+            | CallSiteRefusal::UnknownClause { .. }
+            | CallSiteRefusal::UnknownField { .. }
+            | CallSiteRefusal::UnknownPopulation { .. } => Self::SetupRefused(refusal.code()),
         }
     }
 }
