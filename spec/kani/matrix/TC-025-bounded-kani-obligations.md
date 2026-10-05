@@ -289,9 +289,8 @@ set by the code change's measurement and recorded here.
     unit (`Twin::emitted_package`, a model declaration node, body empty) from the reads'
     `result_type`, and over the hand-built fixture (an object with body members) from its body
     member, and read 0 to 1000 for `balance` and for `audit` from both; read the generator's
-    `domains` and the state-clause replay's declared ranges for one package and find them equal;
-    make the emitted object's body non-empty and read that the reads are not used in place of
-    it (FR-015-AC-77, GATED on IR-627 or IR-628).
+    `domains` and the state-clause replay's declared ranges for one package and find them equal
+    (FR-015-AC-77, GATED on IR-627 or IR-628).
 38. Over the fixture, give a member and a read two types (`Member::RationalBound`,
     `Member::WideRange`, `Member::Literal` with reads typed `Int[0, 1000]`) and read
     `MemberDisagreesWithRead`; over an emitted package, give a model declaration node's field no
@@ -299,7 +298,7 @@ set by the code change's measurement and recorded here.
     existing causes unchanged; each refuses the item when it is the clause's own field, and each
     new cause maps to `unsupported`, `StateFrameRefused`. Generate from the package QSL emits for
     a unit whose clauses read only `balance`, and read `audit` in `state_fields` with no
-    `domains` entry (FR-015-AC-78).
+    `domains` entry (FR-015-AC-78, GATED on IR-627 or IR-628).
 39. Generate both roles of each of the twin's two clauses from the emitted package with no
     `Twin::aligned`, and read `state_fields` equal to the request's list in its order, the
     ranges of step 37, and the anchor and frame ids of the generated identity equal to
@@ -311,14 +310,17 @@ set by the code change's measurement and recorded here.
     FR-015-AC-30 and FR-015-AC-31 (FR-015-AC-80, GATED on IR-627 or IR-628).
 41. Generate a harness with a field no read names and one whose read type is a plain integer, and
     read `NoRead` and `TypeNotRange` in the two identities and their records, byte-identical on
-    regeneration (FR-015-AC-81).
+    regeneration (FR-015-AC-81, GATED on IR-627 or IR-628).
 
-Steps 37 to 41 are planned. The pre-IR-624 test
+Steps 37 to 41 are planned and every one is GATED on IR-627 or IR-628: the IR-624 code shall not
+emit a harness from the model declaration path before IR-627 (planned in IR's open spec PR #295)
+has landed, so it is ordered after IR-627 and IR-628. The pre-IR-624 test
 `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits` measures the refusal
 that the code change retires; it is replaced by step 37's test, not kept beside it. The code
 change also owes the edits FR-015's IR-624 section lists: three added causes and mapping arms
 (`outcome.rs`), their AC-66 mapping-test rows, a fixture for the emitted-package path, and the
-public re-export of `BoundNotResolvedCause` (`lib.rs`), an API break for an exhaustive `match`.
+public re-export of `BoundNotResolvedCause` (`lib.rs`), an API break for an exhaustive `match`,
+and the edit or supersession of FR-024-AC-30's test, which uses `Twin::aligned` (FR-024-AC-32).
 
 ## Blocked
 
