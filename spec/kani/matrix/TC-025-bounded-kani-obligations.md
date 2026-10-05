@@ -314,7 +314,8 @@ set by the code change's measurement and recorded here.
 
 Steps 37 to 41 are planned and every one is GATED on IR-627 or IR-628: the IR-624 code shall not
 emit a harness from the model declaration path before IR-627 (planned in IR's open spec PR #295)
-has landed, so it is ordered after IR-627 and IR-628. The pre-IR-624 test
+has landed or IR-628's accessor is in use, either one; the planned order is IR-627 first, then
+IR-628. The pre-IR-624 test
 `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits` measures the refusal
 that the code change retires; it is replaced by step 37's test, not kept beside it. The code
 change also owes the edits FR-015's IR-624 section lists: three added causes and mapping arms

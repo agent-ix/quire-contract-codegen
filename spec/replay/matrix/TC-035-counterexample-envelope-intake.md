@@ -183,7 +183,7 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 32. Replay a falsified run of a harness that draws an unranged field with that field bound outside
     the model's range, and read `Inconclusive` with `ReplayRefused` and the unranged field with
     its reason `NoRead` or `TypeNotRange`; replay one inside every range and read it unaffected
-    (FR-024-AC-35, planned, IR-624).
+    (FR-024-AC-35, planned, IR-624, GATED on IR-627 or IR-628).
 
 ## Status
 

@@ -454,7 +454,7 @@ planned. IR-627's check is planned in Contract IR's open spec PR #295 (AC-123 to
 arithmetic check of the read's range node against the derived member type), and is not landed.
 The IR-624 code shall not emit a harness from the model declaration path until IR-627 has landed
 or IR-628's accessor is in use, so the unsound range of the stated limit is never accepted; the
-code change is ordered after IR-627 and IR-628.
+code change is gated on IR-627 or IR-628, either one. The planned order is IR-627 first, then IR-628.
 
 The shared reader `field_range` separates two kinds of framed object:
 
