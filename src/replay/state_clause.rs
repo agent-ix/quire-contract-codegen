@@ -40,7 +40,7 @@ use crate::{
     core::canonical::{content_bytes, content_digest, DigestError},
     kani::{
         generate::{
-            frame::{field_range, graph_bindings, graph_literal, ClauseShape, Graph},
+            frame::{field_range, ClauseShape, Graph},
             outcome::StateFrameRefusal,
         },
         terminal::ReplaySettlement,
@@ -871,26 +871,16 @@ fn operation_declaration(
     shape: &ClauseShape,
 ) -> Result<OperationDeclaration, StateClauseReplayError> {
     let mut declaration = OperationDeclaration::default();
-    for parameter in shape.parameters.iter().skip(1) {
-        let unreadable = || {
-            StateClauseReplayError::Document(DocumentError::Clause {
-                refusal: StateFrameRefusal::MalformedClause {
-                    at: parameter.clone(),
-                },
-            })
-        };
-        let members = graph
-            .nodes
-            .get(parameter)
-            .and_then(|node| node.body.get("members")?.as_array())
-            .ok_or_else(unreadable)?;
-        let [name, level] = graph_bindings(members, ["name", "level"]).ok_or_else(unreadable)?;
-        let name = graph_literal(name, "text").ok_or_else(unreadable)?;
-        let level = graph_literal(level, "integer").ok_or_else(unreadable)?;
+    let declared = shape.declared_parameters(graph).map_err(|at| {
+        StateClauseReplayError::Document(DocumentError::Clause {
+            refusal: StateFrameRefusal::MalformedClause { at },
+        })
+    })?;
+    for (name, level) in declared {
         if name == "result" && level == "1" {
             declaration.result = true;
         } else {
-            declaration.parameters.push(name.to_owned());
+            declaration.parameters.push(name);
         }
     }
     Ok(declaration)

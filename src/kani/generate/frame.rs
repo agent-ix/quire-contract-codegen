@@ -50,10 +50,6 @@ use crate::{
     oracle::scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
 };
 
-// The member and literal readers of the clause's graph, shared with the state-clause replay,
-// which may import `kani` but not `oracle` (AD-004).
-pub(crate) use crate::oracle::scalar::{bound_members as graph_bindings, literal as graph_literal};
-
 /// Work budget for lowering one clause and its closure.
 const LOWERING_WORK_LIMIT: u64 = 65_536;
 
@@ -396,6 +392,40 @@ struct Condition {
 }
 
 impl ClauseShape {
+    /// The `name` and `level` of each parameter the clause binds after `self` (FR-341: `result`
+    /// when the operation has one, then its parameters in declared order), read from each
+    /// parameter node's body. The state-clause replay classifies them; the generator owns the
+    /// decode so the replay needs no graph-term reader of its own.
+    ///
+    /// # Errors
+    ///
+    /// The parameter node that is not a `name` and `level` aggregate, or is not in the graph.
+    pub(crate) fn declared_parameters(
+        &self,
+        graph: &Graph<'_>,
+    ) -> Result<Vec<(String, String)>, CheckedNodeId> {
+        self.parameters
+            .iter()
+            .skip(1)
+            .map(|parameter| {
+                let decoded = || {
+                    let members = graph
+                        .nodes
+                        .get(parameter)?
+                        .body
+                        .get("members")?
+                        .as_array()?;
+                    let [name, level] = bound_members(members, ["name", "level"])?;
+                    Some((
+                        literal(name, "text")?.to_owned(),
+                        literal(level, "integer")?.to_owned(),
+                    ))
+                };
+                decoded().ok_or_else(|| parameter.clone())
+            })
+            .collect()
+    }
+
     /// Decodes the clause, its anchor and its frame by QSpec FR-341 and FR-342.
     pub(crate) fn read<'g>(
         graph: &Graph<'g>,

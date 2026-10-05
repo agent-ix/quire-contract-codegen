@@ -553,6 +553,35 @@ fn l_2_every_import_follows_the_dependency_direction() {
     );
 }
 
+/// L-2, the third clause: no file but the crate root re-exports an item. A `pub use` or
+/// `pub(crate) use` in a directory would hand another directory an item of a directory it may not
+/// import (AD-004: the arrows are not transitive), and the second clause reads only the
+/// importer's own paths, so it could not see it.
+///
+/// Trace: AD-004 L-2
+#[test]
+fn l_2_no_file_but_the_crate_root_re_exports_an_item() {
+    let reexports: Vec<String> = source_files()
+        .iter()
+        .filter(|(file, _)| file.as_str() != "lib.rs")
+        .flat_map(|(file, source)| {
+            code_only(source)
+                .lines()
+                .map(str::trim_start)
+                .filter(|line| {
+                    line.starts_with("pub use ")
+                        || (line.starts_with("pub(") && line.contains(") use "))
+                })
+                .map(|line| format!("{file}: {line}"))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert!(
+        reexports.is_empty(),
+        "a re-export in a directory: {reexports:#?}"
+    );
+}
+
 /// The reason an import inside `kani/` breaks the AD's order, if it does: first among the
 /// top-level names of `kani/`, then among the files of `kani/generate/`.
 fn kani_order_violation(from: &[String], to: &[String]) -> Option<String> {
