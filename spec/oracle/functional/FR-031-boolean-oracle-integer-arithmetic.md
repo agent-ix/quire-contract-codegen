@@ -68,7 +68,7 @@ merged (see "Integer divide and remainder").
   it needs a checkout of the integration repository, and the run shall be recorded.
 - **The divide and remainder change (IR-602)** is planned: FR-031-AC-2, AC-6, AC-16 and AC-17
   (held until the division semantics were decided), the rewritten FR-031-AC-18, and the new
-  FR-031-AC-22 to AC-26. It removes the interim refusal `UnsupportedIntegerDivision` and states
+  FR-031-AC-22 to AC-27. It removes the interim refusal `UnsupportedIntegerDivision` and states
   what each consumer does with a divide or remainder node now.
 - **Prerequisite, not yet met.** Everything in the IR-602 change that calls `quire_exact::divide`
   is gated on the lock reaching a `quire-exact` that has it (see "Prerequisite: the one
@@ -266,10 +266,12 @@ would break the build of CG's QSL dependency. The order is therefore: QSL moves 
 single-member `divide`; then CG bumps its QSL dependency and `quire-exact` together. Until then,
 every criterion that needs `quire_exact::divide` is not buildable: FR-031-AC-2, AC-6, AC-16 and
 AC-17, the migration criteria AC-22 and AC-26, and the divide and remainder differential
-FR-031-AC-25 against the kernel. FR-031-AC-23 and AC-24 (the bundle's own operators, which call no
-kernel) could land first, with the native oracle still refusing a divide or remainder under the
-interim code, because removing that code before the native division exists would leave the native
-oracle with no divide outcome at all. This requirement does not require that split. Nothing that
+FR-031-AC-25 against the kernel, and the removal of the interim code, FR-031-AC-27.
+FR-031-AC-18 (the `saturate` divide and remainder refusals), AC-23 and AC-24 (the bundle's own
+operators), which call no kernel, could land first, with the native oracle still refusing a divide
+or remainder over `reject` under the interim code, because removing that code before the native
+division exists would leave the native oracle with no divide outcome at all. This requirement does
+not require that split. Nothing that
 calls `quire_exact::divide`, or that depends on the whole-oracle migration, is buildable before the
 prerequisite.
 
@@ -515,7 +517,8 @@ fixed-width and its comparison of two `i64` values has no failure mode.
 | FR-031-AC-15 | IMPLEMENTED (IR-596). In the native oracle, each of the six comparisons that has an arithmetic operand is emitted as the exact-kernel call the table names (for Equal and NotEqual, until the migration of FR-031-AC-22, the checked equality of Contract Runtime that the Comparison section records), with no Rust comparison operator between its two operands. | Test (TC-044) |
 | FR-031-AC-16 | PLANNED (IR-602), GATED on the lock prerequisite. Under a `reject` integer type of `-5..=5`, the minimum divided by negative one is out of domain and the minimum remainder negative one is not, and neither panics: O-3 `i64::MIN / -1` evaluates to `Refused(DivisionOutOfDomain)` whose member is `Quotient` and whose domain is `-5..=5`, with the refusal's code `division_out_of_domain` and cause `quotient-outside-domain`; O-5 `i64::MIN % -1` evaluates to `Completed(true)`, the remainder being the exact 0 and `0 <= 5` true. Each is built as TC-044 step 4 gives. On the tree before the change each construction is refused at generation with the interim code, and a raw operator would panic with an overflow message. | Test (TC-044) |
 | FR-031-AC-17 | PLANNED (IR-602), GATED on the lock prerequisite. In a generated crate, the outcome of a divide or remainder oracle equals a plain-integer model of IR's member-only semantics under the truncating law, computed with `i128` independently of the emitter and of any `exact::` call (zero divisor: `Undefined(DivisionByZero)`; the selected member in the type's interval: `Completed` with the comparison's Boolean over that member; otherwise `Refused(DivisionOutOfDomain)` with that member), on a grid of dividends and divisors inside the declared domain, at its edges and outside it, that includes the two reproductions as named vectors: R-1 `10 / y <= 10` over a `reject` type of `1..=10` at `y = 5`, which completes with `true` (the quotient 2 is in range and the remainder 0 is not), and R-2 `x % -1 <= 5` over `-10..=5` at `x = -10`, which completes with `true` (the remainder 0 is in range and the quotient 10 is not). The outcome kind is compared, so neither a `Refused` where the model completes, which is what a pair-admitting division returns on R-1 and R-2, nor a `Completed` where the model refuses, passes. The oracle returns `Outcome<bool>`, so the member's value is seen only through the comparison, and R-1 and R-2 complete `true` under every law; the law is pinned by AC-2 in the source and behaviourally by the grid vector `y != 0 && x / y <= -4` over a `reject` type of `-10..=10` (built through `check_expression`) at `x = -7`, `y = 2`, which is `Completed(false)` under truncating (quotient -3) and `Completed(true)` under floor and Euclidean (quotient -4). | Test (TC-044) |
-| FR-031-AC-18 | PLANNED (IR-602). A divide or remainder node over a `saturate` integer type is refused with `UnsupportedSaturatingArithmetic` at the node's span, with no artifact and no raw `/` or `%` in any output, for the `saturate` rows S-1 to S-4 of TC-044 step 11, in both consumers; the diagnostic message names the missing saturating operation and the refusal has terminal state `unsupported`. The code `UnsupportedIntegerDivision` does not exist: the crate's `GenerationErrorCode` has no such variant, no stable code string of that name is emitted, and no diagnostic message names IR-601. On the tree before the change each row is refused with `UnsupportedIntegerDivision` instead. | Test (TC-044) |
+| FR-031-AC-18 | PLANNED (IR-602). A divide or remainder node over a `saturate` integer type is refused with `UnsupportedSaturatingArithmetic` at the node's span, with no artifact and no raw `/` or `%` in any output, for the `saturate` rows S-1 to S-4 of TC-044 step 11, in both consumers; the diagnostic message names the missing saturating operation and the refusal has terminal state `unsupported`. On the tree before the change each row is refused with `UnsupportedIntegerDivision` instead. This criterion calls no kernel and can land before the lock prerequisite, while the interim code still exists for a divide or remainder over `reject`. | Test (TC-044) |
+| FR-031-AC-27 | PLANNED (IR-602), GATED on the lock prerequisite (it cannot land before the native division of AC-2 exists). The code `UnsupportedIntegerDivision` does not exist: the crate's `GenerationErrorCode` has no such variant, nothing under `src/`, `tests/` or `schemas/` spells it, no stable code string of that name is emitted, and no diagnostic message that generation can emit names IR-601. On the tree before the change the variant exists and a divide or remainder over `reject` is refused with it. | Test (TC-044) |
 | FR-031-AC-19 | IMPLEMENTED (IR-596). The Kani bundle oracle of an expression whose arithmetic nodes are add, subtract and multiply renders them as the infix `+`, `-` and `*` on `i64` with one binary operator per arithmetic node, contains no `exact::` call and no `checked_`, `wrapping_`, `saturating_` or `overflowing_` method (a remainder node's `wrapping_rem` is FR-031-AC-23's, not this criterion's), takes no meter, and its file states that its arithmetic is checked by Kani and is not a native evaluator. | Test (TC-044) |
 | FR-031-AC-20 | IMPLEMENTED (IR-596). Under real Kani, a harness that calls a bundle oracle with unconstrained operands at which IR's discharge does not hold fails with Kani's arithmetic-overflow check and a counterexample: the oracle of `x < 5 && x * 2 <= 10` over `0..=10` under `reject`, called with `x` unconstrained, fails the "attempt to multiply with overflow" check, and the counterexample's playback value satisfies `x < 5` and overflows `x * 2` (any such value is valid; the assertion does not name one); a hand-written probe harness that assumes the declared domain on `x`, calls the same bundle oracle and discards its value has no failing arithmetic-overflow check, and verifies. (The bundle's own `proof_for_contract` harness is not that probe: its `ensures` asserts the clause, which is false for `x` in `5..=10`.) Overflow in the bundle oracle is a falsifiable property, never a wrapped value. | Test (TC-044) |
 | FR-031-AC-21 | IMPLEMENTED (IR-596). For each of add, subtract and multiply, the bool the Kani bundle oracle returns equals the `bool` inside `Completed` of the native oracle of the same typed expression, on every vector of a grid inside the declared domain at which the expression's guards pass and IR's discharge holds, including the domain's edges, with the bundle oracle compiled and run natively in a generated crate against `quire-contract-runtime` in plain `cargo test`, with no Kani. This is the differential that holds the two implementations of the rule in step. | Test (TC-044) |
@@ -540,7 +543,7 @@ fixed-width and its comparison of two `i64` values has no failure mode.
 
 ## Open decisions
 
-OD-1, OD-2 and OD-4 are not settled here. Each is stated as a position this requirement takes,
+OD-1, OD-2, OD-4 and OD-6 are not settled here. Each is stated as a position this requirement takes,
 with who decides it, so that the code change does not hide a guess. OD-3 is closed.
 
 - **OD-1, the law.** The generator selects `DivisionProfile::Truncating`. IR's divide and
@@ -570,6 +573,13 @@ with who decides it, so that the code change does not hide a guess. OD-3 is clos
   CBMC; `quire-exact`'s is a `BigInt` newtype. If QSL or IR want the bundle to prove the kernel's own division, the
   kernel needs a fixed-width path CBMC can fold, and that is QSL's decision. Not verified here:
   any divide under Kani through `quire_exact`.
+- **OD-6, connective metering.** FR-031-AC-26 has the migrated oracle's connectives charge nothing,
+  which preserves the behaviour of the Contract Runtime operators they replace.
+  `quire_exact`'s documentation of `retain_boolean` says a caller's own short-circuit evaluation
+  retains its decided result through that function, which charges `boolean.result-retain`. For QSL
+  to decide whether native-oracle metering must match the kernel's, in which case the connectives
+  charge that point and AC-26 and the unchanged-outcome clause change with it. This requirement
+  does not pre-empt it.
 
 ## Out of Scope
 

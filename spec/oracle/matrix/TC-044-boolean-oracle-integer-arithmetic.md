@@ -33,13 +33,15 @@ integration repository) is pending: it needs a checkout of the integration repos
 run of the same bundle shape is the closest equivalent, not a substitute. The divide and remainder
 change (IR-602) is planned: the O-3 and O-5 rows of step 4, step 5, the divide and remainder half
 of step 7 and the rewritten step 11 (FR-031-AC-2, AC-6, AC-16, AC-17 and AC-18), and the new steps
-14 to 17 (FR-031-AC-22 to AC-26). Until that code lands the divide and remainder constructions are
+14 to 17 (FR-031-AC-22 to AC-27). Until that code lands the divide and remainder constructions are
 refused at generation with the interim code, which is the failing run those steps record first.
 The steps that call `quire_exact::divide` or migrate the native oracle (1's divide half, 4's O-3
-and O-5, 5, 7's divide and remainder half, 14 and 16) are gated on a prerequisite: QSL moves to the
+and O-5, 5, 7's divide and remainder half, 11's removed-code assertion (FR-031-AC-27), 14 and 16)
+are gated on a prerequisite: QSL moves to the
 single-member `divide`, and CG then bumps QSL and `quire-exact` together, because CG's one
 `quire-exact` lock entry is shared with QSL's crates. Step 14 is also contingent on the owner's
-decision OD-2. Steps 10's divide and remainder bundle shape and 15 call no kernel.
+decision OD-2. Steps 10's divide and remainder bundle shape, 15, and 11's `saturate` refusal rows
+(FR-031-AC-18) call no kernel and are buildable before the prerequisite.
 
 ## Test Procedure
 
@@ -177,12 +179,14 @@ decision OD-2. Steps 10's divide and remainder bundle shape and 15 call no kerne
     `wrapping_rem` method call and no `BinOp::Rem` for R-2, holds no `exact::` call and no other
     arithmetic method, and that its file states that the arithmetic is checked by Kani
     (FR-031-AC-23). Assert an arithmetic-free clause's bundle is unchanged.
-11. Saturate-division refusal and the removed interim code (FR-031-AC-18). For each of the
+11. Saturate-division refusal (FR-031-AC-18, buildable before the lock prerequisite) and the
+    removed interim code (FR-031-AC-27, gated on it). For each of the
     `saturate` rows below, in the native oracle and in the bundle, assert generation is refused
     with `UnsupportedSaturatingArithmetic` at the node's span, that its message names the missing
     saturating operation, that its terminal state is `unsupported`, and that no output holds a raw
     `/` or `%`. Run each first on the tree before the change and record that it is refused with
-    `UnsupportedIntegerDivision` instead, which fails the assertion. Then assert the interim code
+    `UnsupportedIntegerDivision` instead, which fails the assertion. Then, only once the prerequisite
+    has landed and the native division exists (FR-031-AC-27), assert the interim code
     is gone: `GenerationErrorCode` has no variant `UnsupportedIntegerDivision`, nothing under
     `src/`, `tests/` or `schemas/` spells it, and no diagnostic message that generation can emit
     names IR-601. The rows below are admitted by `check_expression`.
@@ -267,5 +271,5 @@ nowhere; the six comparisons agree with the kernel; every other consumer that ne
 refuses an arithmetic clause; and the overflow, zero-divisor, minimum-by-negative-one, `saturate`
 and differential cases each failed on the tree before the change and pass after it, with the code
 change recording both runs and the exemplar's runs. The divide and remainder rows (FR-031-AC-2,
-AC-6, AC-16, AC-17, AC-18 and AC-22 to AC-26) are verified by the IR-602 code change, which is
+AC-6, AC-16, AC-17, AC-18 and AC-22 to AC-27) are verified by the IR-602 code change, which is
 gated on the lock prerequisite as the status above states.
