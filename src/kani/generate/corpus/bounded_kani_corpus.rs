@@ -776,6 +776,48 @@ mod tests {
         quire_contract_ir::kani::ValidatedFiniteInput,
     );
 
+    /// Trace: FR-028-AC-1.
+    #[test]
+    fn either_ceiling_changes_the_canonical_corpus_identity() {
+        let (profile, dispatch, input) = fixture();
+        let original = crate::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(128 * 1024 * 1024).unwrap(),
+            wall_clock: std::time::Duration::from_secs(30),
+        };
+        let generate = |ceilings| {
+            generate_bounded_kani_corpus_case(
+                ceilings,
+                &profile,
+                &dispatch,
+                &input,
+                arithmetic("source", 1, 1),
+                &[],
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap()
+        };
+        let baseline = generate(original);
+        for ceilings in [
+            crate::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(64 * 1024 * 1024).unwrap(),
+                ..original
+            },
+            crate::ProofCeilings {
+                wall_clock: std::time::Duration::from_secs(15),
+                ..original
+            },
+        ] {
+            let changed = generate(ceilings);
+            assert_ne!(
+                baseline.artifacts.kani_harness.path,
+                changed.artifacts.kani_harness.path
+            );
+            let graph: CorpusProofDependencyGraph =
+                serde_json::from_str(&changed.artifacts.proof_graph.contents).unwrap();
+            assert_eq!(graph.ceilings, ceilings);
+        }
+    }
+
     fn fixture() -> Fixture {
         fixture_with(|_| {}, |_| {})
     }

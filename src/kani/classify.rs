@@ -40,7 +40,7 @@ pub enum KaniInconclusiveReason {
     /// could be decided, so no failure is a counterexample.
     UnwindBoundExhausted,
     /// The run did not conclude within
-    /// [`KaniExecutionRequest::timeout`](crate::kani::run::execute::KaniExecutionRequest::timeout).
+    /// [`ProofCeilings::wall_clock`](crate::ProofCeilings::wall_clock).
     /// The launcher and every
     /// process it forked were killed; no verdict, failed-check count or playback is available
     /// because none was ever printed.

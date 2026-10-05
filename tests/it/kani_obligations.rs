@@ -54,6 +54,37 @@ const ASSERTION: &str = "amount-nonnegative";
 /// time-heavy on these small obligations; this is a ceiling against a genuine hang, not a
 /// performance target.
 pub(crate) const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
+/// Trace: FR-028-AC-1.
+#[test]
+fn changing_either_request_ceiling_changes_the_generated_proof_identity() {
+    let package = bound_package(1000);
+    let clause = clause(PRECONDITION);
+    let items = [ObligationItem::BoundClause {
+        package: &package,
+        clause: &clause,
+    }];
+    let mut requested = request(&items, "crate::withdraw");
+    let original = emitted(negotiate_kani_obligations(&requested).unwrap())
+        .1
+        .remove(0);
+    requested.ceilings.memory_bytes =
+        std::num::NonZeroU64::new(requested.ceilings.memory_bytes.get() / 2).unwrap();
+    let memory_changed = emitted(negotiate_kani_obligations(&requested).unwrap())
+        .1
+        .remove(0);
+    assert_ne!(original.identity, memory_changed.identity);
+    assert_ne!(original.record.contents, memory_changed.record.contents);
+    assert_eq!(memory_changed.identity.ceilings, requested.ceilings);
+    requested.ceilings = original.identity.ceilings;
+    requested.ceilings.wall_clock /= 2;
+    let wall_changed = emitted(negotiate_kani_obligations(&requested).unwrap())
+        .1
+        .remove(0);
+    assert_ne!(original.identity, wall_changed.identity);
+    assert_ne!(original.record.contents, wall_changed.record.contents);
+    assert_eq!(wall_changed.identity.ceilings, requested.ceilings);
+}
+
 // ---- V1 fixture --------------------------------------------------------------
 
 fn span(line: u64) -> Value {

@@ -156,7 +156,7 @@ impl MemoryObserver {
                     continue;
                 };
                 if process.start == *start {
-                    let _ = pidfd_send_signal(&handle, Signal::Kill);
+                    let _ = pidfd_send_signal(&handle, Signal::KILL);
                 }
             }
         }
@@ -252,4 +252,20 @@ fn parse_process(text: &str) -> io::Result<Process> {
         group,
         start,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn available_observer_does_not_invent_a_peak_before_observing_a_tree() {
+        let observer = MemoryObserver::prepare(Path::new("/proc")).unwrap();
+        assert_eq!(
+            observer.observation().mechanism,
+            MemoryMechanism::LinuxProcfsTreeRss
+        );
+        assert_eq!(observer.observation().peak_resident_bytes, None);
+    }
 }

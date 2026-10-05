@@ -634,6 +634,32 @@ fn generate(fixture: &Fixture) -> StateFrameObligations {
         .unwrap_or_else(|refusal| panic!("the fixture must generate: {refusal}"))
 }
 
+/// Trace: FR-028-AC-1.
+#[test]
+fn both_state_obligation_identities_change_with_either_required_ceiling() {
+    let fixture = fixture(&Shape::HEALTHY);
+    let fields = ["balance", "audit"];
+    let mut requested = request(&fixture, &fields);
+    let baseline = generate_state_frame_obligations(&requested).unwrap();
+    for memory in [true, false] {
+        requested.ceilings = baseline.frame.identity.ceilings;
+        if memory {
+            requested.ceilings.memory_bytes = std::num::NonZeroU64::new(128 * 1024 * 1024).unwrap();
+        } else {
+            requested.ceilings.wall_clock /= 2;
+        }
+        let changed = generate_state_frame_obligations(&requested).unwrap();
+        for (original, changed) in [
+            (&baseline.frame, &changed.frame),
+            (&baseline.postcondition, &changed.postcondition),
+        ] {
+            assert_ne!(original.identity, changed.identity);
+            assert_ne!(original.record.contents, changed.record.contents);
+            assert_eq!(changed.identity.ceilings, requested.ceilings);
+        }
+    }
+}
+
 /// The check text of the frame harness's assertion over `audit`, as Kani prints it.
 const FORBIDDEN_CHECK: &str =
     "operation `deposit` changed `audit`, which its frame does not modify";

@@ -1,22 +1,9 @@
 //! Execution of generated Kani obligation harnesses, singly or as a batch (FR-017).
 //!
-//! For every outcome but one, the run outcome is read from the
-//! backend's own exported report -- read into a typed value by [`crate::kani::output::report`], the
-//! only place Kani's output is read -- and is never defaulted: a harness this module did not
-//! observe verifying is not `verified`, and a report it cannot read is a typed refusal, not an
-//! outcome. The one exception is [`KaniInconclusiveReason::TimedOut`], which is never read from
-//! output at all — a timed-out run is killed before it writes a report.
-//!
-//! The caller states a wall-clock budget on every request
-//! ([`KaniExecutionRequest::timeout`]); nothing here defaults one. A run that does
-//! not conclude within it is killed and classified `TimedOut` rather than left to
-//! block the caller forever (agent-ix/quire-contract-codegen#58). This module's
-//! own call always returns within that budget plus a small constant, regardless
-//! of what the launcher forked: the launcher runs as the leader of its own
-//! process group and a timeout kills the whole group, so CBMC and every other
-//! descendant die with it. A descendant that leaves the group is not reached, and
-//! the caller is never made to wait on output from it beyond a short, fixed drain.
-
+//! Completed outcomes are read from the backend's own exported report. A wall-clock or
+//! memory overage is observed by the bounded launcher and stops the tree before a verdict
+//! can be classified. Every execution uses the ceilings recorded in the harness identity;
+//! there is no independent execution budget that can weaken that identity.
 //!
 //! A batch ([`execute_kani_obligations`]) runs the harnesses that can share a launcher process in
 //! one, and splits its one exported report and its one console back into one evidence record per
@@ -414,7 +401,7 @@ pub struct KaniGroupRun {
 /// for each (FR-017-AC-21 to FR-017-AC-23).
 ///
 /// Harnesses are grouped by equal option vector (their `--harness <path> --exact` selection
-/// removed) and equal request timeout; a process also has one launcher, one crate directory and
+/// removed) and equal identity ceilings; a process also has one launcher, one crate directory and
 /// one target directory, so those must be equal as well. A group of one is the single run of
 /// [`execute_kani_obligation`], with its argument vector. A larger group is one process given one
 /// `--harness <module::harness> --exact` pair per member in request order, then
@@ -459,7 +446,7 @@ pub fn execute_kani_obligations(
 }
 
 /// Whether two requests can be run by one launcher process: the same option vector once the
-/// harness selection is removed, the same timeout, and the same launcher, crate and target
+/// harness selection is removed, the same identity ceilings, and the same launcher, crate and target
 /// directory.
 fn shares_process(first: &KaniExecutionRequest<'_>, other: &KaniExecutionRequest<'_>) -> bool {
     first.harness.view().ceilings == other.harness.view().ceilings
@@ -1156,6 +1143,175 @@ mod batch_tests {
         "--concrete-playback",
         "print",
     ];
+
+    /// A small shell launcher with two children, one of which allocates resident bytes.
+    const CHILD_MEMORY_OVERAGE: &str = r#"sleep 45 &
+echo $! > "$CALLS.sibling"
+python3 -c 'import os, pathlib, signal, sys
+root = pathlib.Path(sys.argv[1])
+parent = pathlib.Path("/proc") / str(os.getppid()) / "status"
+rss = next(line.split()[1] for line in parent.read_text().splitlines() if line.startswith("VmRSS:"))
+pathlib.Path(str(root) + ".parent-rss").write_text(rss)
+pathlib.Path(str(root) + ".child").write_text(str(os.getpid()))
+allocated = bytearray(64 * 1024 * 1024)
+signal.pause()
+' "$CALLS" &
+wait
+"#;
+
+    fn recorded_process_gone(path: &Path) {
+        let pid = fs::read_to_string(path).expect("a child must have started before the overage");
+        let status = PathBuf::from("/proc").join(pid.trim()).join("stat");
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            match fs::read_to_string(&status) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
+                Ok(stat)
+                    if stat.rsplit_once(')').unwrap().1.split_whitespace().next() == Some("Z") =>
+                {
+                    return
+                }
+                Ok(_) => {}
+                Err(error) => panic!("cannot observe the killed child: {error}"),
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the backend tree child must be killed"
+            );
+            std::thread::yield_now();
+        }
+    }
+
+    fn memory_member(module: &str, bytes: u64) -> StateFrameHarness {
+        let mut harness = member(module, "check", 4);
+        harness.identity.ceilings.memory_bytes = std::num::NonZeroU64::new(bytes).unwrap();
+        harness
+    }
+
+    /// Trace: FR-028-AC-3, FR-028-AC-21.
+    #[test]
+    fn child_memory_overage_is_inconclusive_and_kills_the_entire_backend_tree() {
+        let ceiling = 32 * 1024 * 1024;
+        let harness = memory_member("a", ceiling);
+        let stand_in = StandIn::running("child-memory-overage", CHILD_MEMORY_OVERAGE);
+        let evidence = execute_kani_obligation(&stand_in.request(&harness, T)).unwrap();
+        assert_eq!(
+            evidence.outcome,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::MemoryExhausted
+            }
+        );
+        assert_eq!(evidence.ceilings, harness.identity.ceilings);
+        assert_eq!(
+            evidence.memory.mechanism,
+            crate::MemoryMechanism::LinuxProcfsTreeRss
+        );
+        assert!(evidence.memory.peak_resident_bytes.unwrap() > ceiling);
+        let parent_kib: u64 = fs::read_to_string(stand_in.directory.join("calls.parent-rss"))
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(
+            parent_kib * 1024 < ceiling,
+            "the launcher's own resident memory must be below the ceiling"
+        );
+        recorded_process_gone(&stand_in.directory.join("calls.child"));
+        recorded_process_gone(&stand_in.directory.join("calls.sibling"));
+        assert_eq!(evidence.exit_code, None);
+        assert_eq!(evidence.success_checks, 0);
+        assert!(evidence.checks.is_empty());
+        assert_eq!(
+            serde_json::to_value(evidence).unwrap()["outcome"]["reason"],
+            "memory_exhausted"
+        );
+    }
+
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn batch_memory_overage_refuses_every_member_without_classifying_a_partial_report() {
+        let ceiling = 32 * 1024 * 1024;
+        let harnesses = [memory_member("a", ceiling), memory_member("b", ceiling)];
+        let stand_in = StandIn::running("batch-child-memory-overage", CHILD_MEMORY_OVERAGE);
+        let refusal = only_group(stand_in.batch(&harnesses, T)).unwrap_err();
+        match refusal {
+            KaniExecutionRefusal::BatchMemoryExhausted {
+                members,
+                memory_bytes,
+                memory,
+            } => {
+                assert_eq!(members, 2);
+                assert_eq!(memory_bytes, ceiling);
+                assert_eq!(memory.mechanism, crate::MemoryMechanism::LinuxProcfsTreeRss);
+                assert!(memory.peak_resident_bytes.unwrap() > ceiling);
+            }
+            other => panic!("a memory-overage batch must be refused as a whole: {other}"),
+        }
+        recorded_process_gone(&stand_in.directory.join("calls.child"));
+        recorded_process_gone(&stand_in.directory.join("calls.sibling"));
+        assert_eq!(stand_in.calls().len(), 1);
+    }
+
+    /// Trace: FR-028-AC-2, FR-028-AC-4, FR-028-AC-21.
+    #[test]
+    fn identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory() {
+        let mut harness = memory_member("a", 128 * 1024 * 1024);
+        let verifying = StandIn::verifying("successful-memory-bound");
+        let evidence = execute_kani_obligation(&verifying.request(&harness, T)).unwrap();
+        assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
+        assert_eq!(evidence.ceilings, harness.identity.ceilings);
+        assert_eq!(
+            evidence.memory.mechanism,
+            crate::MemoryMechanism::LinuxProcfsTreeRss
+        );
+        assert!(evidence.memory.peak_resident_bytes.is_some());
+        harness.identity.ceilings.wall_clock = Duration::from_millis(200);
+        let stopped = StandIn::running("identity-wall-clock-bound", "sleep 45");
+        let evidence =
+            execute_kani_obligation(&stopped.request(&harness, Duration::from_millis(200)))
+                .unwrap();
+        assert_eq!(evidence.ceilings.wall_clock, Duration::from_millis(200));
+        assert_eq!(
+            evidence.outcome,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::TimedOut
+            }
+        );
+        harness.identity.ceilings.memory_bytes = std::num::NonZeroU64::MIN;
+        let stopped = StandIn::running("identity-memory-bound", "sleep 45");
+        let evidence =
+            execute_kani_obligation(&stopped.request(&harness, Duration::from_millis(200)))
+                .unwrap();
+        assert_eq!(evidence.ceilings.memory_bytes, std::num::NonZeroU64::MIN);
+        assert_eq!(
+            evidence.outcome,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::MemoryExhausted
+            }
+        );
+    }
+
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn unequal_identity_memory_ceilings_run_in_separate_backend_processes() {
+        let harnesses = [
+            memory_member("a", 128 * 1024 * 1024),
+            memory_member("b", 256 * 1024 * 1024),
+        ];
+        let stand_in = StandIn::verifying("different-memory-ceilings");
+        let requests: Vec<_> = harnesses
+            .iter()
+            .map(|harness| stand_in.request(harness, T))
+            .collect();
+        let groups = execute_kani_obligations(&requests).unwrap();
+        assert_eq!(groups.len(), 2);
+        assert_eq!(stand_in.calls().len(), 2);
+        for (group, harness) in groups.into_iter().zip(&harnesses) {
+            let evidence = group.evidence.unwrap();
+            assert_eq!(evidence.len(), 1);
+            assert_eq!(evidence[0].ceilings, harness.identity.ceilings);
+            assert!(evidence[0].batch.is_none());
+        }
+    }
 
     /// What a launcher stand-in does before anything else: it records that it ran and what it was
     /// given, and finds the report path (its last argument) and the harnesses it was asked for.

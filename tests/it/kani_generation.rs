@@ -274,6 +274,42 @@ fn fixture_bundle(
     .expect("fixture bundle should generate")
 }
 
+/// Trace: FR-028-AC-1.
+#[test]
+fn bundle_proof_record_requires_and_records_each_request_ceiling() {
+    let environment = environment();
+    let (precondition, postcondition) = clauses(&environment);
+    let precondition_clause = ClauseId::new("precondition").unwrap();
+    let postcondition_clause = ClauseId::new("postcondition").unwrap();
+    let mut requested = request(
+        &environment,
+        &precondition,
+        &postcondition,
+        &precondition_clause,
+        &postcondition_clause,
+        &[],
+    );
+    let baseline = generate_kani_bundle(&requested).unwrap();
+    let original = requested.ceilings;
+    for memory in [true, false] {
+        requested.ceilings = original;
+        if memory {
+            requested.ceilings.memory_bytes = std::num::NonZeroU64::new(128 * 1024 * 1024).unwrap();
+        } else {
+            requested.ceilings.wall_clock /= 2;
+        }
+        let changed = generate_kani_bundle(&requested).unwrap();
+        assert_ne!(baseline.proof_graph.contents, changed.proof_graph.contents);
+        let graph: ProofDependencyGraph =
+            serde_json::from_str(&changed.proof_graph.contents).unwrap();
+        assert_eq!(graph.ceilings, requested.ceilings);
+        validate(
+            include_str!("../../schemas/kani-proof-graph-v2.schema.json"),
+            &serde_json::to_value(graph).unwrap(),
+        );
+    }
+}
+
 fn validate(schema: &str, instance: &serde_json::Value) {
     let schema: serde_json::Value =
         serde_json::from_str(schema).expect("repository schema should parse");

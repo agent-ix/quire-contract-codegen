@@ -25,7 +25,7 @@ use rustix::{
 };
 
 /// How the launcher's run within its caller-declared budget
-/// ([`KaniExecutionRequest::timeout`](super::execute::KaniExecutionRequest::timeout))
+/// (the wall-clock ceiling of its identity for a bounded backend launch)
 /// concluded.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -182,8 +182,16 @@ pub(super) fn run_bounded_launcher(
     ceilings: crate::ProofCeilings,
     harnesses: NonZeroUsize,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
-    let mut observer = MemoryObserver::prepare(std::path::Path::new("/proc"))
-        .map_err(BoundedLaunchError::Unavailable)?;
+    run_bounded_launcher_at(command, ceilings, harnesses, std::path::Path::new("/proc"))
+}
+
+fn run_bounded_launcher_at(
+    command: Command,
+    ceilings: crate::ProofCeilings,
+    harnesses: NonZeroUsize,
+    procfs: &std::path::Path,
+) -> Result<BoundedLaunch, BoundedLaunchError> {
+    let mut observer = MemoryObserver::prepare(procfs).map_err(BoundedLaunchError::Unavailable)?;
     let outcome = run_monitored(
         command,
         ceilings.wall_clock,
@@ -235,6 +243,16 @@ fn run_monitored(
     let stderr_bytes = finish_capture(stderr_reader);
     let exited = exited?;
     let reaped = reaped?;
+
+    // A measured memory stop owns the conclusion even if a pipe failed at the same time.
+    // Neither a partial stream nor a backend report can turn this stop into a verdict.
+    match exited {
+        WaitConclusion::MemoryExhausted => return Ok(LaunchOutcome::MemoryExhausted),
+        WaitConclusion::MemoryUnobserved { detail } => {
+            return Ok(LaunchOutcome::MemoryUnobserved { detail })
+        }
+        WaitConclusion::Completed | WaitConclusion::TimedOut => {}
+    }
 
     let stdout_bytes = match stream_bytes(CaptureStream::Stdout, stdout_bytes, limit, harnesses) {
         Ok(bytes) => bytes,
@@ -288,15 +306,9 @@ struct CaptureFlags {
     failed: Arc<AtomicBool>,
 }
 
-/// Polls `child` until it has exited (`true`), `deadline` passes (`false`) or a capture thread
-/// sets `failed` (`false`; the caller reports the failure, not a timeout). A `deadline` of `None`
-/// never passes.
-///
-/// An exited launcher is **not reaped**: `waitid` with `NOWAIT` reports it and leaves it a zombie,
-/// so its pid, which is its process group's id, stays allocated until the caller has signalled the
-/// group and then reaped it. Reaping first (`try_wait`) would free the id while a straggler of the
-/// group might not exist any more, and the group kill could then reach an unrelated process group
-/// that had been given the recycled id.
+/// Polls the unreaped launcher, with memory checked before its exit or deadline is accepted.
+/// An exited launcher remains unreaped until the group has been signalled: otherwise its pid,
+/// the group id, could be recycled and a later signal could reach an unrelated group.
 enum WaitConclusion {
     Completed,
     TimedOut,
@@ -483,6 +495,30 @@ mod tests {
 
     use super::*;
     use crate::kani::test_support::discover_scratch;
+
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn unavailable_tree_memory_observation_refuses_before_spawn() {
+        let directory = discover_scratch("no-tree-memory-mechanism");
+        let marker = directory.join("spawned");
+        let mut command = Command::new("sh");
+        command.arg("-c").arg("touch \"$1\"").arg("sh").arg(&marker);
+        let result = run_bounded_launcher_at(
+            command,
+            crate::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(1024).unwrap(),
+                wall_clock: Duration::from_secs(5),
+            },
+            NonZeroUsize::MIN,
+            &directory.join("unavailable-procfs"),
+        );
+        assert!(matches!(result, Err(BoundedLaunchError::Unavailable(_))));
+        assert!(
+            !marker.exists(),
+            "a backend without memory enforcement must never start"
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     /// The launcher's descendants are killed when the budget elapses, not only the immediate
     /// child, against a real process tree with a genuine grandchild. `sh -c '(sh -c "echo $$ >
