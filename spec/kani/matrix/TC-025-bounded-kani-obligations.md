@@ -190,18 +190,19 @@ unsatisfiable requires as `cover_unsatisfied`.
     order, with `generate_state_frame_role` for the same clause and role (and, for a clause
     whose roles both succeed, `generate_state_frame_obligations`), source byte
     for byte (FR-015-AC-60).
-21. Read `requires_bound` for a field whose member references a plain integer type (that
-    member's `value.target` as `unbounded_type`) and for a request whose lowering is a
-    requires-bound record (FR-015-AC-61).
+21. Over a hand-built non-declaration object, read `requires_bound` for a field whose body
+    member references a plain integer type (that member's `value.target` as `unbounded_type`)
+    and for a request whose lowering is a requires-bound record (FR-015-AC-61).
 22. Read `unsupported` `NoFiniteEncoding` for a lowering unsupported-family record and
     `UnknownNodeKind` for a node that is not a `state_clause` (FR-015-AC-62).
 23. Read `unsupported` `StateFrameRefused`, never `NoFiniteEncoding`, for a negation, a literal
     comparison, an operator outside the six comparisons, a read through another parameter, two
     fields, two reads of one side, a frame that creates, deletes or grants a relationship or a
-    foreign field (naming the effect), a member whose bound is not an `integer_range` and one
-    whose endpoint is outside `i64`, a member absent from the object, a member whose value is
-    not a reference, an invariant clause, a clause with a malformed shape, a
-    frame granting every field and an over-budget lowering (FR-015-AC-63).
+    foreign field (naming the effect), an invariant clause, a clause with a malformed shape,
+    a frame granting every field and an over-budget lowering. On a non-declaration object,
+    also check a clause field whose body member references a bound other than `integer_range`,
+    has an endpoint outside `i64`, is absent, or has a value that is not a reference
+    (FR-015-AC-63).
 24. Read `invalid_request` for an unparsable state path, an unparsable item subject path, an
     invalid state field name, a state lacking the clause's field, an absent node, a repeated
     item and an item of another package, and `Rejected` with every record and no harness bytes
@@ -285,43 +286,42 @@ set by the code change's measurement and recorded here.
 
 ## State field ranges from the package QSL emits (planned, IR-624)
 
-37. Read each state field's range with `field_range` over the package QSL emits for the twin's
-    unit (`Twin::emitted_package`, a model declaration node, body empty) from the reads'
-    `result_type`, and over the hand-built fixture (an object with body members) from its body
-    member, and read 0 to 1000 for `balance` and for `audit` from both; read the generator's
-    `domains` and the state-clause replay's declared ranges for one package and find them equal
-    (FR-015-AC-77, GATED on IR-627 or IR-628).
-38. Over the fixture, give a member and a read two types (`Member::RationalBound`,
-    `Member::WideRange`, `Member::Literal` with reads typed `Int[0, 1000]`) and read
-    `MemberDisagreesWithRead`; over an emitted package, give a model declaration node's field no
-    read and two reads of two types and read `FieldNotRead` and `ConflictingFieldReads`; read the
-    existing causes unchanged; each refuses the item when it is the clause's own field, and each
-    new cause maps to `unsupported`, `StateFrameRefused`. Generate from the package QSL emits for
-    a unit whose clauses read only `balance`, and read `audit` in `state_fields` with no
-    `domains` entry (FR-015-AC-78, GATED on IR-627 or IR-628).
-39. Generate both roles of each of the twin's two clauses from the emitted package with no
-    `Twin::aligned`, and read `state_fields` equal to the request's list in its order, the
-    ranges of step 37, and the anchor and frame ids of the generated identity equal to
-    `call_site`'s before any replay; submit a list that omits the clause's field and one that
-    omits a granted field and read the refusals of FR-015-AC-29 (FR-015-AC-79, GATED on IR-627
-    or IR-628).
-40. With the installed backend, run the healthy, debiting, granted-write and ungranted-write
-    subjects against harnesses generated from the emitted package and read the outcomes of
-    FR-015-AC-30 and FR-015-AC-31 (FR-015-AC-80, GATED on IR-627 or IR-628).
-41. Generate a harness with a field no read names and one whose read type is a plain integer, and
-    read `NoRead` and `TypeNotRange` in the two identities and their records, byte-identical on
-    regeneration (FR-015-AC-81, GATED on IR-627 or IR-628).
+37. Call `model_object_fields(&object_id)` for the QSL-emitted twin's model declaration
+    object and read both `balance` and unread `audit` as `IntRange { lower: 0, upper: 1000 }`;
+    convert their `i128` endpoints to `i64`, and compare the resulting `domains` with the
+    state-clause replay's declared ranges. Admit a second unit with the same declaration but
+    no read of `audit` and observe its range unchanged; cite IR FR-038-AC-140 for the
+    independent post-admission body mutation (FR-015-AC-77; emitted path awaits CG's dependency
+    update and implementation).
+38. For a model declaration, request an accessor-absent field; exercise each accessor error
+    (`UnknownNode`, `NotModelObjectType`, `AmbiguousField`) and check a typed refusal without
+    falling back to a body or read. Exercise a present `None`, `Integer`, `Option`, and an
+    `IntRange` with one endpoint outside `i64`; read `ModelMemberNotI64Range` with the object,
+    field and `NoMemberType`, `NonRangeType` or `EndpointOutsideI64` (exact `i128` endpoints)
+    rather than a fabricated bound node. Check that only a present range with two `i64`
+    endpoints enters `domains`, an unranged non-clause field is still drawn, and an unranged
+    clause field refuses its item as `unsupported`, `StateFrameRefused`. For a hand-built
+    non-declaration object, verify its old body-member causes, and refuse a range read through
+    a grouped derived-shape node without
+    an assumption or `domains` entry (FR-015-AC-78; body range positives gated on IR-627).
+39. Generate both roles of each twin clause from the emitted package with no `Twin::aligned`;
+    assert request order rather than accessor name order for `state_fields`, accessor ranges
+    for `domains`, and scope ids equal to `call_site`'s. An absent accessor field, an omitted
+    clause field and an omitted granted field each refuse (FR-015-AC-79).
+40. With installed Kani, run the healthy, debiting, granted-write and forbidden-write subjects
+    against harnesses generated from the emitted package (FR-015-AC-80).
+41. Generate a harness with an unread present ranged field, and another with a present
+    non-range field; check the first has a `domains` entry and no unranged reason, the second
+    has no range assumption and records `TypeNotRange` in identity and persisted record.
+    Regenerate for byte identity, and reject a record naming a field twice (FR-015-AC-81).
 
-Steps 37 to 41 are planned and every one is GATED on IR-627 or IR-628: the IR-624 code shall not
-emit a harness from the model declaration path before IR-627 (planned in IR's open spec PR #295)
-has landed or IR-628's accessor is in use, either one; the planned order is IR-627 first, then
-IR-628. The pre-IR-624 test
-`tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits` measures the refusal
-that the code change retires; it is replaced by step 37's test, not kept beside it. The code
-change also owes the edits FR-015's IR-624 section lists: three added causes and mapping arms
-(`outcome.rs`), their AC-66 mapping-test rows, a fixture for the emitted-package path, and the
-public re-export of `BoundNotResolvedCause` (`lib.rs`), an API break for an exhaustive `match`,
-and the edit or supersession of FR-024-AC-30's test, which uses `Twin::aligned` (FR-024-AC-32).
+Steps 37 to 41 are planned. The IR-628 accessor has merged; the QSL-emitted model declaration
+path awaits CG's dependency update and implementation. The hand-built fixture's non-declaration
+body-member range path is separately gated on IR-627: until its admission binds anonymous structural
+node keys to body bounds, an agreeing read does not make that range trusted. The code change
+replaces `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`, updates
+the typed accessor refusal and AC-66 mapping tests, and edits or supersedes the test of
+FR-024-AC-30 that calls `Twin::aligned`; AC-30's text stays as merged.
 
 ## Blocked
 
